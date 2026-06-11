@@ -36,7 +36,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * <p>spec §9.3 约束：保留所有现有 property key，不做破坏性重命名；每个子 auto configuration 聚焦
  * 一个能力域。
  */
-@ConfigurationProperties(prefix = "seahorse-agent.memory")
+@ConfigurationProperties(prefix = "seahorse.agent.memory")
 public class MemoryProperties {
 
     private final Policy policy = new Policy();
@@ -148,7 +148,7 @@ public class MemoryProperties {
     /**
      * Slice 4 续：策略阈值与开关，覆盖 capture / risk / refiner / 告警阈值 / 灰度。
      *
-     * <p>所有字段默认值与历史 {@code @Value("${seahorse-agent.memory.policy.*}")} 完全一致。
+     * <p>所有字段默认值与历史 {@code @Value("${seahorse.agent.memory.policy.*}")} 完全一致。
      */
     public static class Policy {
 
@@ -376,7 +376,7 @@ public class MemoryProperties {
     /**
      * Slice 4 第一个迁移子域：对话聚合策略。
      *
-     * <p>所有字段及默认值与历史 {@code @Value("${seahorse-agent.memory.aggregation.*}")}
+     * <p>所有字段及默认值与历史 {@code @Value("${seahorse.agent.memory.aggregation.*}")}
      * 完全一致；改动 default 必须同步升级集成测试。
      */
     public static class Aggregation {
@@ -792,7 +792,7 @@ public class MemoryProperties {
     /**
      * Slice 4 续：alias-resolution 段。
      *
-     * <p>保留 {@code seahorse-agent.memory.alias-resolution.dictionary} 顶层 map 形态，
+     * <p>保留 {@code seahorse.agent.memory.alias-resolution.dictionary} 顶层 map 形态，
      * 配合 starter bean 工厂将 {@link DictionaryEntry} 转换为内核侧 candidate；
      * Properties 自身仅作 POJO 绑定，避免内核类型反向依赖。
      */

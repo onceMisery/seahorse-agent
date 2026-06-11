@@ -40,7 +40,7 @@ public class SeahorseMemoryGarbageCollectionJob {
         this.lockPort = Objects.requireNonNullElse(lockPort, DistributedLockPort.noop());
     }
 
-    @Scheduled(cron = "${seahorse-agent.memory.gc.cron:0 10/30 * * * ?}")
+    @Scheduled(cron = "${seahorse.agent.memory.gc.cron:0 10/30 * * * ?}")
     public void runGarbageCollection() {
         if (!lockPort.tryLock(LOCK_NAME, Duration.ZERO, LOCK_LEASE)) {
             return;

@@ -37,7 +37,7 @@ import javax.sql.DataSource;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse-agent.tenant", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.tenant", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentTenantAutoConfiguration {
 
     @Bean

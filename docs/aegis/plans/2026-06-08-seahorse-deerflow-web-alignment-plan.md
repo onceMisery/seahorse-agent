@@ -271,6 +271,82 @@ Adopt the Seahorse-native Agent Workspace Runtime approach. Escalate to ADR only
 
 ## Phased Tasks
 
+### Task 0: P0 (前置) 修复sa-token Redis持久化和向量维度
+
+**优先级**: P0 - 必须在所有其他任务之前完成
+
+**Files:**
+- Modify `seahorse-agent-spring-boot-autoconfigure/src/main/java/com/miracle/ai/seahorse/agent/adapters/spring/SeahorseAgentAuthAdapterAutoConfiguration.java`
+- Modify `resources/database/seahorse_init.sql`
+- Create `resources/database/migrations/V20__fix_vector_dimension.sql`
+- Create `docs/PRE_EXECUTION_CHECKLIST.md`
+- Create `docs/TROUBLESHOOTING_GUIDE.md`
+
+**Why:** E2E测试在审查报告中识别出两个阻塞性问题：
+1. sa-token使用内存存储导致所有API返回"登录已过期"，无法进行功能测试
+2. 向量维度不匹配（数据库1024维 vs nomic-embed-text 768维）导致向量化失败
+
+**Impact/Compatibility:** 
+- 认证修复使token持久化到Redis，支持多实例部署和重启后会话保持
+- 向量维度修复确保知识库RAG功能正常工作
+- 添加详细日志帮助快速诊断Bean创建问题
+
+**Repair Track:**
+- **sa-token问题**:
+  - Root cause: `@ConditionalOnBean(RedisConnectionFactory.class)`条件可能在Bean创建前评估，导致回退到内存DAO
+  - Fix: 使用`ObjectProvider<RedisConnectionFactory>`延迟注入，添加INFO/WARN日志
+  - Verification: 启动后检查日志包含"创建SaTokenDaoForRedisTemplate"和"初始化成功"
+  - Verification: Redis中存在`satoken:login:token:*` keys
+- **向量维度问题**:
+  - Root cause: 初始SQL使用1024维（OpenAI ada-002规格），但nomic-embed-text生成768维
+  - Fix: 修改表定义为`vector(768)`，创建V20迁移脚本
+  - Verification: 向量化不再报维度错误
+
+**Documentation:**
+- `PRE_EXECUTION_CHECKLIST.md`: Maven依赖验证、运行时配置验证、编译验证、Docker部署验证
+- `TROUBLESHOOTING_GUIDE.md`: 10大类常见问题诊断和修复方案
+
+**Acceptance Criteria:**
+- [ ] Backend启动日志包含: `创建SaTokenDaoForRedisTemplate，使用RedisConnectionFactory`
+- [ ] Backend启动日志包含: `SaTokenDaoForRedisTemplate初始化成功，token将持久化到Redis`
+- [ ] `docker exec seahorse-redis redis-cli KEYS "satoken:*"` 返回token keys
+- [ ] 登录后调用`/knowledge-base` API不返回"登录已过期"
+- [ ] `\d t_knowledge_vector` 显示 `embedding | vector(768)`
+- [ ] 文档向量化成功（无维度错误）
+
+**Verification:**
+```bash
+# 1. 编译
+./mvnw package -pl seahorse-agent-bootstrap -am -DskipTests -Dspotless.check.skip=true
+
+# 2. 重新部署
+docker compose -f docker-compose.full.yml up -d --build backend
+
+# 3. 检查sa-token日志
+docker logs seahorse-backend 2>&1 | grep -i "SaTokenDao"
+
+# 4. 检查Redis keys
+docker exec seahorse-redis redis-cli KEYS "satoken:*"
+
+# 5. 测试认证
+TOKEN=$(curl -s -X POST http://localhost:9090/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}' | jq -r '.data.token')
+
+curl -X GET http://localhost:9090/knowledge-base \
+  -H "Authorization: Bearer $TOKEN"
+
+# 6. 检查向量维度
+docker exec seahorse-postgres psql -U postgres -d seahorse -c "\d t_knowledge_vector"
+
+# 7. 测试向量化
+# 创建知识库 -> 上传文档 -> 验证向量生成无错误
+```
+
+**Estimated Effort:** 0.5天（已完成代码修改，需验证部署）
+
+---
+
 ### Task 1: P0 Bind Live Stream Events to the Active Assistant Message
 
 **Files:**

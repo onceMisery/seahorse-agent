@@ -25,6 +25,7 @@ public class S3StorageProperties {
     private String accessKey;
     private String secretKey;
     private String region = "us-east-1";
+    private String bucket;
 
     public String getEndpoint() {
         return endpoint;
@@ -56,6 +57,14 @@ public class S3StorageProperties {
 
     public void setRegion(String region) {
         this.region = region;
+    }
+
+    public String getBucket() {
+        return bucket;
+    }
+
+    public void setBucket(String bucket) {
+        this.bucket = bucket;
     }
 
     public boolean isConfigured() {

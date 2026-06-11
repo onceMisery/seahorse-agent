@@ -41,12 +41,12 @@ import javax.sql.DataSource;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentIngestionRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(PipelineDefinitionRepositoryPort.class)
     public JdbcPipelineDefinitionRepositoryAdapter seahorseJdbcPipelineDefinitionRepositoryAdapter(
             DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
@@ -63,7 +63,7 @@ public class SeahorseAgentIngestionRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(IngestionTaskRepositoryPort.class)
     public JdbcIngestionTaskRepositoryAdapter seahorseJdbcIngestionTaskRepositoryAdapter(
             DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
@@ -72,7 +72,7 @@ public class SeahorseAgentIngestionRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({DataSource.class, IngestionPipelineRepositoryPort.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.kernel.pipeline", name = "auto-init", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.kernel.pipeline", name = "auto-init", havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(com.miracle.ai.seahorse.agent.adapters.repository.jdbc.DefaultPipelineInitializer.class)
     public com.miracle.ai.seahorse.agent.adapters.repository.jdbc.DefaultPipelineInitializer seahorseDefaultPipelineInitializer(
             DataSource dataSource, IngestionPipelineRepositoryPort pipelineRepository) {

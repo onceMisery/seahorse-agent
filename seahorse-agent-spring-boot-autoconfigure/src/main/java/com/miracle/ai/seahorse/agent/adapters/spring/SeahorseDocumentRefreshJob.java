@@ -53,7 +53,7 @@ public class SeahorseDocumentRefreshJob {
         this.batchSize = Math.max(batchSize, 1);
     }
 
-    @Scheduled(fixedDelayString = "${seahorse-agent.document-refresh.scan-delay-ms:10000}")
+    @Scheduled(fixedDelayString = "${seahorse.agent.document-refresh.scan-delay-ms:10000}")
     public void scanDueSchedules() {
         if (!lockPort.tryLock(LOCK_NAME, Duration.ZERO, LOCK_LEASE)) {
             return;

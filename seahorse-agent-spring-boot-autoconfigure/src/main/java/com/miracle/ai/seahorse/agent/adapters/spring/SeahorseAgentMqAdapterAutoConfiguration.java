@@ -44,16 +44,16 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentMqAdapterAutoConfiguration {
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.mq", name = "type", havingValue = "direct")
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.mq", name = "type", havingValue = "direct")
     @ConditionalOnMissingBean(MessageQueuePort.class)
     public ReliableMessageQueueAdapter seahorseDirectMessageQueueAdapter(
             ObjectProvider<OutboxEventRepositoryPort> outboxRepositoryPort,
             ObjectProvider<ObjectMapper> objectMapper,
-            @Value("${seahorse-agent.adapters.mq.reliable-outbox-enabled:true}")
+            @Value("${seahorse.agent.adapters.mq.reliable-outbox-enabled:true}")
             boolean reliableOutboxEnabled) {
         DirectMessageQueueAdapter delegate = new DirectMessageQueueAdapter();
         java.util.function.Supplier<OutboxEventRepositoryPort> outboxSupplier =
@@ -71,10 +71,10 @@ public class SeahorseAgentMqAdapterAutoConfiguration {
 
         @Bean(destroyMethod = "close")
         @ConditionalOnMissingBean(PulsarClient.class)
-        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.mq", name = "type",
+        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.mq", name = "type",
                 havingValue = "pulsar", matchIfMissing = true)
         public PulsarClient seahorsePulsarClient(
-                @org.springframework.beans.factory.annotation.Value("${seahorse-agent.adapters.mq.pulsar.service-url:pulsar://localhost:6650}")
+                @org.springframework.beans.factory.annotation.Value("${seahorse.agent.adapters.mq.pulsar.service-url:pulsar://localhost:6650}")
                 String serviceUrl) throws Exception {
             return PulsarClient.builder()
                     .serviceUrl(serviceUrl)
@@ -83,7 +83,7 @@ public class SeahorseAgentMqAdapterAutoConfiguration {
 
         @Bean
         @ConditionalOnBean(PulsarClient.class)
-        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.mq", name = "type",
+        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.mq", name = "type",
                 havingValue = "pulsar", matchIfMissing = true)
         @ConditionalOnMissingBean(MessageQueuePort.class)
         public PulsarMessageQueueAdapter seahorsePulsarMessageQueueAdapter(
@@ -100,7 +100,7 @@ public class SeahorseAgentMqAdapterAutoConfiguration {
                 PulsarMessageQueueAdapter pulsarAdapter,
                 ObjectProvider<OutboxEventRepositoryPort> outboxRepositoryPort,
                 ObjectProvider<ObjectMapper> objectMapperProvider,
-                @Value("${seahorse-agent.adapters.mq.reliable-outbox-enabled:true}")
+                @Value("${seahorse.agent.adapters.mq.reliable-outbox-enabled:true}")
                 boolean reliableOutboxEnabled) {
             java.util.function.Supplier<OutboxEventRepositoryPort> outboxSupplier =
                     reliableOutboxEnabled ? outboxRepositoryPort::getIfAvailable : () -> null;

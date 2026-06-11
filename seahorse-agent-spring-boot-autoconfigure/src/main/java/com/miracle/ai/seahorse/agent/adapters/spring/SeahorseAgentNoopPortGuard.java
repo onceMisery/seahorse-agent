@@ -50,8 +50,8 @@ import java.util.Objects;
  *
  * <p>配置开关：
  * <ul>
- *     <li>{@code seahorse-agent.runtime.noop-guard.enabled} — 默认 {@code true}；置为 {@code false} 关闭。</li>
- *     <li>{@code seahorse-agent.runtime.noop-guard.enforce-class-a} — 默认 {@code false}；置为 {@code true}
+ *     <li>{@code seahorse.agent.runtime.noop-guard.enabled} — 默认 {@code true}；置为 {@code false} 关闭。</li>
+ *     <li>{@code seahorse.agent.runtime.noop-guard.enforce-class-a} — 默认 {@code false}；置为 {@code true}
  *         时检测到 A 类 noop fallback 立即抛出 {@link NoopFallbackEnforcementException}。</li>
  * </ul>
  */

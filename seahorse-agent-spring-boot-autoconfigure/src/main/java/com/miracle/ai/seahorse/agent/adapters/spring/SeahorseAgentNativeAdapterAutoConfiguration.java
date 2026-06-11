@@ -31,7 +31,7 @@ import org.springframework.context.annotation.Import;
  */
 @AutoConfiguration
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @Import({
         SeahorseAgentAiAdapterAutoConfiguration.class,
         SeahorseAgentAuthAdapterAutoConfiguration.class,

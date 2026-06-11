@@ -54,25 +54,25 @@ import org.springframework.context.annotation.ConfigurationCondition.Configurati
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentCacheAdapterAutoConfiguration {
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.cache", name = "type",
             havingValue = "noop")
     public RateLimiterPort seahorseRateLimiterPort() {
         return RateLimiterPort.noop();
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type", havingValue = "local")
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.cache", name = "type", havingValue = "local")
     @ConditionalOnMissingBean(KeyValueCachePort.class)
     public LocalCacheAdapter seahorseLocalCacheAdapter() {
         return new LocalCacheAdapter();
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type", havingValue = "local")
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.cache", name = "type", havingValue = "local")
     @ConditionalOnMissingBean(DistributedSemaphorePort.class)
     public LocalSemaphoreAdapter seahorseLocalSemaphoreAdapter() {
         return new LocalSemaphoreAdapter();
@@ -86,7 +86,7 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
     static class RedisCacheAutoConfiguration {
 
         @Bean(destroyMethod = "shutdown")
-        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type", havingValue = "redis")
+        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.cache", name = "type", havingValue = "redis")
         @ConditionalOnBean(RedisProperties.class)
         @ConditionalOnMissingBean(RedissonClient.class)
         public RedissonClient redissonClient(RedisProperties redisProperties) {
@@ -99,7 +99,7 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
+        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.cache", name = "type",
                 havingValue = "redis")
         @ConditionalOnBean(RedissonClient.class)
         @ConditionalOnMissingBean(RedisCacheAdapter.class)
@@ -108,7 +108,7 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
+        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.cache", name = "type",
                 havingValue = "redis")
         @ConditionalOnBean(RedissonClient.class)
         @ConditionalOnMissingBean(DistributedSemaphorePort.class)
@@ -117,7 +117,7 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.stream-task", name = "type", havingValue = "redis")
+        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.stream-task", name = "type", havingValue = "redis")
         @ConditionalOnBean(RedissonClient.class)
         @ConditionalOnMissingBean(StreamTaskPort.class)
         public RedisStreamTaskPort seahorseRedisStreamTaskPort(RedissonClient redissonClient) {
@@ -125,7 +125,7 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.memory-aggregation", name = "type",
+        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.memory-aggregation", name = "type",
                 havingValue = "redis")
         @ConditionalOnBean({RedissonClient.class, MemoryAggregationPolicy.class})
         @ConditionalOnMissingBean(MemoryAggregationBufferPort.class)
@@ -136,7 +136,7 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.memory-aggregation", name = "type",
+        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.memory-aggregation", name = "type",
                 havingValue = "redis")
         @ConditionalOnBean(RedissonClient.class)
         @ConditionalOnMissingBean(MemoryAggregationSchedulerPort.class)
@@ -152,12 +152,12 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
             super(ConfigurationPhase.REGISTER_BEAN);
         }
 
-        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
+        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.cache", name = "type",
                 havingValue = "redis")
         static class RedisCacheSelected {
         }
 
-        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.stream-task", name = "type", havingValue = "redis")
+        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.stream-task", name = "type", havingValue = "redis")
         static class RedisStreamTaskSelected {
         }
     }

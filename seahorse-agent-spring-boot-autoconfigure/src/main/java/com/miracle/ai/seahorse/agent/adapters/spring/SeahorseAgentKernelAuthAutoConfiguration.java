@@ -51,7 +51,7 @@ import java.time.Clock;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({SeahorseAgentAuthAdapterAutoConfiguration.class, DataSourceAutoConfiguration.class})
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelAuthAutoConfiguration {
 
     @Bean

@@ -136,41 +136,41 @@ import java.util.List;
         SeahorseAgentKernelRegistryAutoConfiguration.class,
         SeahorseAgentKernelRetrievalAutoConfiguration.class
 })
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true",
         matchIfMissing = true)
 public class SeahorseAgentKernelAgentAutoConfiguration {
 
-    private static final String PROP_AGENT_ENABLED = "seahorse-agent.chat.agent-mode-enabled";
-    private static final String PROP_WEB_TASK_AGENT_ENABLED = "seahorse-agent.chat.web-task-agent-enabled";
-    private static final String PROP_MAX_STEPS = "seahorse-agent.chat.agent.max-steps";
-    private static final String PROP_PER_TOOL_TIMEOUT = "seahorse-agent.chat.agent.per-tool-timeout";
-    private static final String PROP_MAX_PARALLEL_TOOLS = "seahorse-agent.chat.agent.max-parallel-tools";
-    private static final String PROP_MCP_INCLUDE = "seahorse-agent.chat.agent.tools.mcp.include";
+    private static final String PROP_AGENT_ENABLED = "seahorse.agent.chat.agent-mode-enabled";
+    private static final String PROP_WEB_TASK_AGENT_ENABLED = "seahorse.agent.chat.web-task-agent-enabled";
+    private static final String PROP_MAX_STEPS = "seahorse.agent.chat.agent.max-steps";
+    private static final String PROP_PER_TOOL_TIMEOUT = "seahorse.agent.chat.agent.per-tool-timeout";
+    private static final String PROP_MAX_PARALLEL_TOOLS = "seahorse.agent.chat.agent.max-parallel-tools";
+    private static final String PROP_MCP_INCLUDE = "seahorse.agent.chat.agent.tools.mcp.include";
     private static final String PROP_DEFERRED_TOOL_SEARCH_ENABLED =
-            "seahorse-agent.chat.agent.tools.deferred-search.enabled";
-    private static final String PROP_SEARCH_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.search.enabled";
-    private static final String PROP_MEMORY_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.memory.enabled";
+            "seahorse.agent.chat.agent.tools.deferred-search.enabled";
+    private static final String PROP_SEARCH_TOOLS_ENABLED = "seahorse.agent.chat.agent.tools.search.enabled";
+    private static final String PROP_MEMORY_TOOLS_ENABLED = "seahorse.agent.chat.agent.tools.memory.enabled";
     private static final String PROP_WEB_RESEARCH_TOOLS_ENABLED =
-            "seahorse-agent.chat.agent.tools.web-research.enabled";
+            "seahorse.agent.chat.agent.tools.web-research.enabled";
     private static final String PROP_WEB_FETCH_TIMEOUT =
-            "seahorse-agent.chat.agent.tools.web-research.fetch-timeout";
+            "seahorse.agent.chat.agent.tools.web-research.fetch-timeout";
     private static final String PROP_WEB_FETCH_MAX_BYTES =
-            "seahorse-agent.chat.agent.tools.web-research.fetch-max-bytes";
+            "seahorse.agent.chat.agent.tools.web-research.fetch-max-bytes";
     private static final String PROP_WEB_FETCH_USER_AGENT =
-            "seahorse-agent.chat.agent.tools.web-research.user-agent";
+            "seahorse.agent.chat.agent.tools.web-research.user-agent";
     private static final String PROP_GITHUB_FETCH_TIMEOUT =
-            "seahorse-agent.chat.agent.tools.github.fetch-timeout";
+            "seahorse.agent.chat.agent.tools.github.fetch-timeout";
     private static final String PROP_GITHUB_USER_AGENT =
-            "seahorse-agent.chat.agent.tools.github.user-agent";
+            "seahorse.agent.chat.agent.tools.github.user-agent";
     private static final String PROP_IMAGE_MODEL =
-            "seahorse-agent.adapters.ai.image-model";
+            "seahorse.agent.adapters.ai.image-model";
     private static final String PROP_CHAT_MODEL =
-            "seahorse-agent.adapters.ai.chat-model";
-    private static final String PROP_PRODUCT_MODE = "seahorse-agent.product-mode";
+            "seahorse.agent.adapters.ai.chat-model";
+    private static final String PROP_PRODUCT_MODE = "seahorse.agent.product-mode";
     private static final String PROP_ADVANCED_AGENT_HANDOFF =
-            "seahorse-agent.advanced.agent-handoff-enabled";
+            "seahorse.agent.advanced.agent-handoff-enabled";
     private static final String PROP_ADVANCED_LOCAL_AGENT =
-            "seahorse-agent.advanced.local-agent-enabled";
+            "seahorse.agent.advanced.local-agent-enabled";
 
     @Bean
     @ConditionalOnAgentRuntimeEnabled

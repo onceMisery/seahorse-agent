@@ -26,7 +26,7 @@ import java.util.Objects;
 /**
  * Spring Boot binding model for Seahorse infrastructure adapter options.
  */
-@ConfigurationProperties(prefix = "seahorse-agent.adapters")
+@ConfigurationProperties(prefix = "seahorse.agent.adapters")
 public class AgentAdapterProperties {
 
     private Map<String, String> selectedAdapters = new LinkedHashMap<>();

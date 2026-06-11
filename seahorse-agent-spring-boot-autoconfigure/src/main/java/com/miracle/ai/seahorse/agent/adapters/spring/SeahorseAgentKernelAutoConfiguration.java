@@ -50,7 +50,7 @@ import org.springframework.context.annotation.Import;
         AgentPluginProperties.class,
         AgentAdapterProperties.class
 })
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @Import({
         SeahorseAgentKernelChatAutoConfiguration.class,
         SeahorseAgentKernelDocumentRefreshAutoConfiguration.class,

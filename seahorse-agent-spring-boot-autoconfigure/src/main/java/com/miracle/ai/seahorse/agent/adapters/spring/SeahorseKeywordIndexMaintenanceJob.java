@@ -66,7 +66,7 @@ public class SeahorseKeywordIndexMaintenanceJob {
         this.batchSize = batchSize <= 0 ? DEFAULT_BATCH_SIZE : batchSize;
     }
 
-    @Scheduled(fixedDelayString = "${seahorse-agent.keyword-index.maintenance.scan-delay-ms:60000}")
+    @Scheduled(fixedDelayString = "${seahorse.agent.keyword-index.maintenance.scan-delay-ms:60000}")
     public void rebuildConfiguredTargets() {
         if (docIds.isEmpty() && kbIds.isEmpty()) {
             return;

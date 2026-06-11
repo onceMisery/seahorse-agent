@@ -39,7 +39,7 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentOpsRepositoryAutoConfiguration.class})
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelTraceAutoConfiguration {
 
     @Bean
@@ -47,7 +47,7 @@ public class SeahorseAgentKernelTraceAutoConfiguration {
     @ConditionalOnMissingBean
     public KernelRagTraceRecorder seahorseRagTraceRecorder(
             RagTraceRepositoryPort traceRepositoryPort,
-            @Value("${seahorse-agent.rag-trace.sample-rate:1.0}") double sampleRate) {
+            @Value("${seahorse.agent.rag-trace.sample-rate:1.0}") double sampleRate) {
         return new KernelRagTraceRecorder(traceRepositoryPort, new RagTraceRecorderOptions(sampleRate));
     }
 
@@ -61,13 +61,13 @@ public class SeahorseAgentKernelTraceAutoConfiguration {
     @Bean
     @ConditionalOnBean(RagTraceRepositoryPort.class)
     @ConditionalOnMissingBean(SeahorseRagTraceCleanupJob.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.rag-trace.cleanup", name = "enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.rag-trace.cleanup", name = "enabled",
             havingValue = "true", matchIfMissing = true)
     public SeahorseRagTraceCleanupJob seahorseRagTraceCleanupJob(
             RagTraceRepositoryPort traceRepositoryPort,
             ObjectProvider<DistributedLockPort> lockPort,
-            @Value("${seahorse-agent.rag-trace.ttl-days:30}") int ttlDays,
-            @Value("${seahorse-agent.rag-trace.cleanup-batch-size:1000}") int batchSize) {
+            @Value("${seahorse.agent.rag-trace.ttl-days:30}") int ttlDays,
+            @Value("${seahorse.agent.rag-trace.cleanup-batch-size:1000}") int batchSize) {
         return new SeahorseRagTraceCleanupJob(traceRepositoryPort,
                 lockPort.getIfAvailable(DistributedLockPort::noop), ttlDays, batchSize);
     }

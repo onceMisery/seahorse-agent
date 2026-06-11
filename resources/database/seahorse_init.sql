@@ -413,7 +413,7 @@ CREATE TABLE t_knowledge_vector (
     id          VARCHAR(128) PRIMARY KEY,
     content     TEXT NOT NULL,
     metadata    JSONB NOT NULL,
-    embedding   vector(1024) NOT NULL
+    embedding   vector(768) NOT NULL  -- 匹配nomic-embed-text维度
 );
 
 CREATE INDEX idx_kv_metadata ON t_knowledge_vector USING gin(metadata);

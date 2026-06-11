@@ -17,6 +17,7 @@ import {
 } from "@/services/conversationAttachmentService";
 import { getQuotaSummary } from "@/services/quotaSummaryService";
 import { listTaskTemplates } from "@/services/taskTemplateService";
+import { listAgents, type AgentDefinition } from "@/services/agentService";
 import { useChatStore } from "@/stores/chatStore";
 import type {
   ConversationAttachment,
@@ -167,6 +168,9 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
   const [isFocused, setIsFocused] = React.useState(false);
   const [taskTemplates, setTaskTemplates] = React.useState<TaskTemplate[]>(DEFAULT_TASK_TEMPLATES);
   const [templatesLoading, setTemplatesLoading] = React.useState(false);
+  const [agents, setAgents] = React.useState<AgentDefinition[]>([]);
+  const [agentsLoading, setAgentsLoading] = React.useState(false);
+  const [selectedAgentId, setSelectedAgentId] = React.useState<string | null>(null);
   const [quotaSummary, setQuotaSummary] = React.useState<UserQuotaSummary | null>(null);
   const [quotaLoading, setQuotaLoading] = React.useState(false);
   const [attachments, setAttachments] = React.useState<AttachmentChip[]>([]);
@@ -252,6 +256,24 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
       active = false;
     };
   }, [selectedTaskTemplateId]);
+
+  React.useEffect(() => {
+    let active = true;
+    setAgentsLoading(true);
+    listAgents()
+      .then((data) => {
+        if (active) setAgents(data.records ?? []);
+      })
+      .catch(() => {
+        if (active) setAgents([]);
+      })
+      .finally(() => {
+        if (active) setAgentsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const focusInput = React.useCallback(() => {
     const el = textareaRef.current;
@@ -431,7 +453,9 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
     await sendMessage(next, {
       attachmentIds,
       conversationIdOverride,
-      selectedSkillNames: skillNames.length > 0 ? skillNames : undefined
+      selectedSkillNames: skillNames.length > 0 ? skillNames : undefined,
+      agentId: selectedAgentId || undefined,
+      versionId: selectedAgentId ? agents.find(a => a.agentId === selectedAgentId)?.versionId : undefined
     });
     setAttachments([]);
     setSelectedSkills([]);
@@ -622,6 +646,31 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                     {taskTemplates.map((template) => (
                       <SelectItem key={template.templateId} value={template.templateId}>
                         {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={selectedAgentId ?? "__none__"}
+                  onValueChange={(next) => setSelectedAgentId(next === "__none__" ? null : next)}
+                  disabled={isStreaming || agentsLoading}
+                >
+                  <SelectTrigger
+                    aria-label="Agent"
+                    className="h-9 w-[180px] rounded-xl border text-xs shadow-none focus:ring-1 focus:ring-offset-0"
+                    style={{
+                      backgroundColor: "var(--theme-bg-elevated)",
+                      borderColor: "var(--theme-accent-alpha-20)",
+                      color: "var(--theme-text-primary)"
+                    }}
+                  >
+                    <SelectValue placeholder={agentsLoading ? "Loading agents" : "Select agent (optional)"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No agent</SelectItem>
+                    {agents.map((agent) => (
+                      <SelectItem key={agent.agentId} value={agent.agentId}>
+                        {agent.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import cn.dev33.satoken.dao.SaTokenDao;
 import cn.dev33.satoken.stp.StpInterface;
 import com.miracle.ai.seahorse.agent.adapters.web.IpApiGeolocationAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.SaTokenCurrentUserAdapter;
@@ -33,11 +34,13 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.TokenServicePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 
 import javax.sql.DataSource;
 
@@ -47,13 +50,16 @@ import javax.sql.DataSource;
  * <p>本类只承接认证闭环所需的用户仓储、认证策略和 Web 当前用户桥接，避免把其他 JDBC 仓储混入认证配置。
  */
 @Configuration(proxyBeanMethods = false)
-@AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@AutoConfigureAfter({
+    DataSourceAutoConfiguration.class,
+    org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration.class
+})
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentAuthAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(UserRepositoryPort.class)
     public JdbcUserRepositoryAdapter seahorseJdbcUserRepositoryAdapter(DataSource dataSource) {
         return new JdbcUserRepositoryAdapter(dataSource);
@@ -80,7 +86,7 @@ public class SeahorseAgentAuthAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(UserRepositoryPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.auth", name = "current-user", havingValue = "sa-token",
+    @ConditionalOnProperty(prefix = "seahorse.agent.auth", name = "current-user", havingValue = "sa-token",
             matchIfMissing = true)
     @ConditionalOnMissingBean(CurrentUserPort.class)
     public SaTokenCurrentUserAdapter seahorseSaTokenCurrentUserAdapter(UserRepositoryPort userRepositoryPort) {
@@ -89,7 +95,7 @@ public class SeahorseAgentAuthAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(UserRepositoryPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.auth", name = "current-user", havingValue = "spring-header")
+    @ConditionalOnProperty(prefix = "seahorse.agent.auth", name = "current-user", havingValue = "spring-header")
     @ConditionalOnMissingBean(CurrentUserPort.class)
     public SpringCurrentUserAdapter seahorseSpringCurrentUserAdapter(UserRepositoryPort userRepositoryPort) {
         return new SpringCurrentUserAdapter(userRepositoryPort);
@@ -104,8 +110,32 @@ public class SeahorseAgentAuthAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(IpGeolocationPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.auth.geolocation", name = "enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.auth.geolocation", name = "enabled", havingValue = "true", matchIfMissing = true)
     public IpApiGeolocationAdapter seahorseIpGeolocationAdapter() {
         return new IpApiGeolocationAdapter();
+    }
+
+    /**
+     * sa-token Redis持久化配置.
+     * 使用ObjectProvider确保兼容性.
+     */
+    @Bean
+    @ConditionalOnMissingBean(SaTokenDao.class)
+    public SaTokenDao saTokenDao(org.springframework.beans.factory.ObjectProvider<org.springframework.data.redis.connection.RedisConnectionFactory> factoryProvider) {
+        var factory = factoryProvider.getIfAvailable();
+        if (factory != null) {
+            try {
+                org.slf4j.LoggerFactory.getLogger(getClass()).info("创建SaTokenDaoForRedisTemplate，使用RedisConnectionFactory: {}", factory.getClass().getName());
+                cn.dev33.satoken.dao.SaTokenDaoForRedisTemplate dao = new cn.dev33.satoken.dao.SaTokenDaoForRedisTemplate();
+                dao.init(factory);
+                org.slf4j.LoggerFactory.getLogger(getClass()).info("SaTokenDaoForRedisTemplate初始化成功，token将持久化到Redis");
+                return dao;
+            } catch (Exception e) {
+                org.slf4j.LoggerFactory.getLogger(getClass()).warn("SaTokenDaoForRedisTemplate创建失败，回退到内存存储: {}", e.getMessage());
+            }
+        } else {
+            org.slf4j.LoggerFactory.getLogger(getClass()).warn("RedisConnectionFactory不可用，sa-token使用内存存储（token在重启后丢失）");
+        }
+        return new cn.dev33.satoken.dao.SaTokenDaoDefaultImpl();
     }
 }

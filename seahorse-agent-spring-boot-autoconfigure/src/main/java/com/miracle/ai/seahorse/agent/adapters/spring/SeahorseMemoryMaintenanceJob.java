@@ -49,7 +49,7 @@ public class SeahorseMemoryMaintenanceJob {
         this.garbageCollectionEnabled = garbageCollectionEnabled;
     }
 
-    @Scheduled(cron = "${seahorse-agent.memory.maintenance.cron:0 30 3 * * ?}")
+    @Scheduled(cron = "${seahorse.agent.memory.maintenance.cron:0 30 3 * * ?}")
     public void runMaintenance() {
         if (!lockPort.tryLock(LOCK_NAME, Duration.ZERO, LOCK_LEASE)) {
             return;

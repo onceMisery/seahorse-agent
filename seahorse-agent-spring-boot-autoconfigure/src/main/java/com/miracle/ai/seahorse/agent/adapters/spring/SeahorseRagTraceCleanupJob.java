@@ -49,7 +49,7 @@ public class SeahorseRagTraceCleanupJob {
         this.batchSize = batchSize <= 0 ? DEFAULT_BATCH_SIZE : batchSize;
     }
 
-    @Scheduled(cron = "${seahorse-agent.rag-trace.cleanup-cron:0 0 3 * * ?}")
+    @Scheduled(cron = "${seahorse.agent.rag-trace.cleanup-cron:0 0 3 * * ?}")
     public void cleanupExpiredRuns() {
         if (!lockPort.tryLock(LOCK_NAME, Duration.ZERO, LOCK_LEASE)) {
             return;

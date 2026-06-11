@@ -36,7 +36,7 @@ import java.time.Duration;
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass(Cache.class)
-@ConditionalOnProperty(prefix = "seahorse-agent.cache.multi-level", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.cache.multi-level", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentMultiLevelCacheAutoConfiguration {
 
     @Bean
@@ -44,8 +44,8 @@ public class SeahorseAgentMultiLevelCacheAutoConfiguration {
     @ConditionalOnMissingBean(MultiLevelCacheService.class)
     public MultiLevelCacheService multiLevelCacheService(
             KeyValueCachePort keyValueCachePort,
-            @Value("${seahorse-agent.cache.multi-level.local-max-size:10000}") long maxSize,
-            @Value("${seahorse-agent.cache.multi-level.local-ttl-minutes:5}") long ttlMinutes) {
+            @Value("${seahorse.agent.cache.multi-level.local-max-size:10000}") long maxSize,
+            @Value("${seahorse.agent.cache.multi-level.local-ttl-minutes:5}") long ttlMinutes) {
         return new MultiLevelCacheService(keyValueCachePort, maxSize, Duration.ofMinutes(ttlMinutes));
     }
 }

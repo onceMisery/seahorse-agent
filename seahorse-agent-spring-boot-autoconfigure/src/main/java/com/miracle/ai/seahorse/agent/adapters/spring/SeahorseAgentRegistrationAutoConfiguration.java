@@ -58,7 +58,7 @@ import javax.sql.DataSource;
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({DataSourceAutoConfiguration.class, SeahorseAgentTenantAutoConfiguration.class})
 @AutoConfigureBefore(SeahorseAgentAuthAdapterAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentRegistrationAutoConfiguration {
 
     /**
@@ -90,7 +90,7 @@ public class SeahorseAgentRegistrationAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean(TrialRepositoryPort.class)
     public JdbcTrialRepositoryAdapter seahorseJdbcTrialRepositoryAdapter(DataSource dataSource) {

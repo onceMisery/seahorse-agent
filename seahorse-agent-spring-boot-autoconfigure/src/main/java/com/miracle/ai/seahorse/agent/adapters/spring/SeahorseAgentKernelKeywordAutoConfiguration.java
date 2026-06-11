@@ -40,7 +40,7 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKnowledgeRepositoryAutoConfiguration.class})
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelKeywordAutoConfiguration {
 
     @Bean
@@ -58,15 +58,15 @@ public class SeahorseAgentKernelKeywordAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(KeywordIndexMaintenanceInboundPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.keyword-index.maintenance", name = "scheduler-enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.keyword-index.maintenance", name = "scheduler-enabled",
             havingValue = "true")
     @ConditionalOnMissingBean
     public SeahorseKeywordIndexMaintenanceJob seahorseKeywordIndexMaintenanceJob(
             KeywordIndexMaintenanceInboundPort maintenanceInboundPort,
             ObjectProvider<DistributedLockPort> lockPort,
-            @Value("${seahorse-agent.keyword-index.maintenance.doc-ids:}") String docIds,
-            @Value("${seahorse-agent.keyword-index.maintenance.kb-ids:}") String kbIds,
-            @Value("${seahorse-agent.keyword-index.maintenance.batch-size:50}") int batchSize) {
+            @Value("${seahorse.agent.keyword-index.maintenance.doc-ids:}") String docIds,
+            @Value("${seahorse.agent.keyword-index.maintenance.kb-ids:}") String kbIds,
+            @Value("${seahorse.agent.keyword-index.maintenance.batch-size:50}") int batchSize) {
         return new SeahorseKeywordIndexMaintenanceJob(
                 maintenanceInboundPort,
                 lockPort.getIfAvailable(DistributedLockPort::noop),

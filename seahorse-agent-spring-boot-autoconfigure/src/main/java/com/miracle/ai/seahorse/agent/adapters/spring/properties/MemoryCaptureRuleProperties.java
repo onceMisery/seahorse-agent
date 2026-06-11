@@ -30,10 +30,10 @@ import java.util.List;
  * 默认值与 {@link MemoryCaptureRules#defaults()} 严格一致；通过 {@link #toRules()} 可转换为
  * kernel 端的不可变值对象，保持 kernel 对 Spring 无感知。
  *
- * <p>{@code @ConfigurationProperties("seahorse-agent.memory.capture")} 配置前缀；
+ * <p>{@code @ConfigurationProperties("seahorse.agent.memory.capture")} 配置前缀；
  * 子键见 {@link #getProfileStatementPrefixes()} 等 getter 名（kebab-case 自动映射）。
  */
-@ConfigurationProperties(prefix = "seahorse-agent.memory.capture")
+@ConfigurationProperties(prefix = "seahorse.agent.memory.capture")
 public class MemoryCaptureRuleProperties {
 
     private int minCandidateLength = MemoryCaptureRules.DEFAULT_MIN_CANDIDATE_LENGTH;

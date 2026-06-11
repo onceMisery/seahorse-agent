@@ -57,6 +57,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 import java.util.concurrent.Executor;
+import com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentS3StorageAutoConfiguration;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -74,9 +75,9 @@ import org.springframework.context.annotation.Configuration;
  * 知识域装配细节的直接承载。
  */
 @Configuration(proxyBeanMethods = false)
-@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKnowledgeRepositoryAutoConfiguration.class, SeahorseAgentVectorAdapterAutoConfiguration.class, SeahorseAgentStorageAdapterAutoConfiguration.class, SeahorseAgentIngestionRepositoryAutoConfiguration.class, SeahorseAgentMqAdapterAutoConfiguration.class, SeahorseAgentMetadataAdapterAutoConfiguration.class})
+@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKnowledgeRepositoryAutoConfiguration.class, SeahorseAgentVectorAdapterAutoConfiguration.class, SeahorseAgentStorageAdapterAutoConfiguration.class, SeahorseAgentS3StorageAutoConfiguration.class, SeahorseAgentIngestionRepositoryAutoConfiguration.class, SeahorseAgentMqAdapterAutoConfiguration.class, SeahorseAgentMetadataAdapterAutoConfiguration.class})
 @AutoConfigureBefore(SeahorseAgentKernelDocumentRefreshAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelKnowledgeAutoConfiguration {
 
     @Bean
@@ -173,7 +174,7 @@ public class SeahorseAgentKernelKnowledgeAutoConfiguration {
             ObjectProvider<DocumentRefreshSchedulePort> refreshSchedulePort,
             ObjectProvider<SchedulerPort> schedulerPort,
             ObjectProvider<com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService> quotaEnforcementProvider,
-            @Value("${seahorse-agent.adapters.mq.pulsar.topics.knowledge-document-chunk:"
+            @Value("${seahorse.agent.adapters.mq.pulsar.topics.knowledge-document-chunk:"
                     + KernelKnowledgeDocumentService.DEFAULT_CHUNK_TOPIC + "}") String chunkTopic) {
         return new KernelKnowledgeDocumentService(
                 servicePorts,

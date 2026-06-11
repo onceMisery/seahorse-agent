@@ -40,12 +40,12 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({SeahorseAgentMqAdapterAutoConfiguration.class, SeahorseAgentOpsRepositoryAutoConfiguration.class, JacksonAutoConfiguration.class})
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentOutboxRelayAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({OutboxEventRepositoryPort.class, MessageQueuePort.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.mq.outbox.relay", name = "enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.mq.outbox.relay", name = "enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(SeahorseOutboxRelayJob.class)
     public SeahorseOutboxRelayJob seahorseOutboxRelayJob(
@@ -54,7 +54,7 @@ public class SeahorseAgentOutboxRelayAutoConfiguration {
             ObjectProvider<ObjectMapper> objectMapperProvider,
             ObjectProvider<DistributedLockPort> lockPort,
             ObjectProvider<MetadataQuarantinePort> quarantinePort,
-            @Value("${seahorse-agent.adapters.mq.outbox.relay.batch-size:50}") int batchSize) {
+            @Value("${seahorse.agent.adapters.mq.outbox.relay.batch-size:50}") int batchSize) {
         return new SeahorseOutboxRelayJob(outboxEventRepositoryPort, messageQueuePort,
                 objectMapperProvider.getIfAvailable(ObjectMapper::new),
                 lockPort.getIfAvailable(DistributedLockPort::noop),

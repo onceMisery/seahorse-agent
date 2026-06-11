@@ -44,7 +44,7 @@ public class SeahorseMemoryAggregationJob {
         this.scanLimit = scanLimit <= 0 ? DEFAULT_SCAN_LIMIT : scanLimit;
     }
 
-    @Scheduled(fixedDelayString = "${seahorse-agent.memory.aggregation.scan-delay-ms:5000}")
+    @Scheduled(fixedDelayString = "${seahorse.agent.memory.aggregation.scan-delay-ms:5000}")
     public void flushIdleReady() {
         if (!lockPort.tryLock(LOCK_NAME, Duration.ZERO, LOCK_LEASE)) {
             return;

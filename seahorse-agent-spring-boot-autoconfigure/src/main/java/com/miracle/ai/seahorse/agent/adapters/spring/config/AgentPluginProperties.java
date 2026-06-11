@@ -27,7 +27,7 @@ import java.util.Objects;
 /**
  * Spring Boot binding model for Seahorse feature plugin options.
  */
-@ConfigurationProperties(prefix = "seahorse-agent.plugins")
+@ConfigurationProperties(prefix = "seahorse.agent.plugins")
 public class AgentPluginProperties {
 
     private boolean defaultEnabled = true;

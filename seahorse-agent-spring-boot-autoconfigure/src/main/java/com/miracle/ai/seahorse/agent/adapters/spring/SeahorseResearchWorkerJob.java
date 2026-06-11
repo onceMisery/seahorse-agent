@@ -38,7 +38,7 @@ public class SeahorseResearchWorkerJob {
         this.orchestrator = Objects.requireNonNull(orchestrator, "orchestrator must not be null");
     }
 
-    @Scheduled(fixedDelayString = "${seahorse-agent.research.worker.fixed-delay-ms:500}")
+    @Scheduled(fixedDelayString = "${seahorse.agent.research.worker.fixed-delay-ms:500}")
     public void tick() {
         try {
             int processed = 0;

@@ -38,7 +38,7 @@ import org.springframework.context.annotation.Configuration;
  *
  * <p>Registers the following beans:
  * <ul>
- *   <li>{@link JinaRerankModelAdapter} — when {@code seahorse-agent.jina.api-key} is set</li>
+ *   <li>{@link JinaRerankModelAdapter} — when {@code seahorse.agent.jina.api-key} is set</li>
  *   <li>{@link NoOpQueryRewriteAdapter} — when no other {@link QueryRewritePort} bean exists</li>
  *   <li>{@link CachedRetrievalEngine} — always, with default 10-minute TTL</li>
  *   <li>{@link KernelWorkflowVisualizationService} — when repository port is available</li>
@@ -54,11 +54,11 @@ public class SeahorseAgentRagWorkflowAutoConfiguration {
      * Jina AI rerank model adapter, activated only when the API key is provided.
      */
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.jina", name = "api-key")
+    @ConditionalOnProperty(prefix = "seahorse.agent.jina", name = "api-key")
     @ConditionalOnMissingBean(name = "advancedRagRerankModelPort")
     public RerankModelPort jinaRerankModelAdapter(
-            @Value("${seahorse-agent.jina.api-key}") String apiKey,
-            @Value("${seahorse-agent.jina.rerank-model:jina-reranker-v2-base-multilingual}") String model) {
+            @Value("${seahorse.agent.jina.api-key}") String apiKey,
+            @Value("${seahorse.agent.jina.rerank-model:jina-reranker-v2-base-multilingual}") String model) {
         return new JinaRerankModelAdapter(apiKey, model);
     }
 

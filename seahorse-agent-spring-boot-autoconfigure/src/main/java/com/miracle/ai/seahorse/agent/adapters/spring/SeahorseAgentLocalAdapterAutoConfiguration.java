@@ -58,11 +58,11 @@ import java.util.List;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentLocalAdapterAutoConfiguration {
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.chat.rewrite", name = "type", havingValue = "local",
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.chat.rewrite", name = "type", havingValue = "local",
             matchIfMissing = true)
     @ConditionalOnMissingBean(QueryRewritePort.class)
     public LocalQueryRewriteAdapter seahorseLocalQueryRewriteAdapter() {
@@ -70,7 +70,7 @@ public class SeahorseAgentLocalAdapterAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.chat.intent", name = "type", havingValue = "local",
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.chat.intent", name = "type", havingValue = "local",
             matchIfMissing = true)
     @ConditionalOnMissingBean(IntentResolutionPort.class)
     public LocalIntentResolutionAdapter seahorseLocalIntentResolutionAdapter() {
@@ -78,7 +78,7 @@ public class SeahorseAgentLocalAdapterAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.chat.guidance", name = "type", havingValue = "local",
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.chat.guidance", name = "type", havingValue = "local",
             matchIfMissing = true)
     @ConditionalOnMissingBean(IntentGuidancePort.class)
     public LocalIntentGuidanceAdapter seahorseLocalIntentGuidanceAdapter() {
@@ -86,7 +86,7 @@ public class SeahorseAgentLocalAdapterAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.prompt", name = "type", havingValue = "classpath",
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.prompt", name = "type", havingValue = "classpath",
             matchIfMissing = true)
     @ConditionalOnMissingBean(PromptTemplatePort.class)
     public ClasspathPromptTemplateAdapter seahorseClasspathPromptTemplateAdapter() {
@@ -94,7 +94,7 @@ public class SeahorseAgentLocalAdapterAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.rag-prompt", name = "type", havingValue = "local",
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.rag-prompt", name = "type", havingValue = "local",
             matchIfMissing = true)
     @ConditionalOnMissingBean(RagPromptPort.class)
     public LocalRagPromptAdapter seahorseLocalRagPromptAdapter(ObjectProvider<ContextWeaverPort> contextWeaverPort) {
@@ -102,7 +102,7 @@ public class SeahorseAgentLocalAdapterAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.retrieval-context", name = "type", havingValue = "local",
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.retrieval-context", name = "type", havingValue = "local",
             matchIfMissing = true)
     @ConditionalOnMissingBean(RetrievalContextFormatPort.class)
     public LocalRetrievalContextFormatAdapter seahorseLocalRetrievalContextFormatAdapter() {
@@ -144,7 +144,7 @@ public class SeahorseAgentLocalAdapterAutoConfiguration {
     static class TikaParserAutoConfiguration {
 
         @Bean
-        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.parser", name = "type", havingValue = "tika",
+        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.parser", name = "type", havingValue = "tika",
                 matchIfMissing = true)
         @ConditionalOnMissingBean(DocumentParserPort.class)
         public TikaDocumentParserAdapter seahorseTikaDocumentParserAdapter() {

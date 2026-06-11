@@ -163,11 +163,11 @@ import java.util.concurrent.Executor;
         SeahorseAgentKernelRetrievalAutoConfiguration.class,
         SeahorseAgentMemoryRepositoryAutoConfiguration.class
 })
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties({MemoryProperties.class, MemoryCaptureRuleProperties.class})
 public class SeahorseAgentKernelMemoryAutoConfiguration {
 
-    private static final String MEMORY_REFINER_ENABLED_PROPERTY = "seahorse-agent.memory.refiner.enabled";
+    private static final String MEMORY_REFINER_ENABLED_PROPERTY = "seahorse.agent.memory.refiner.enabled";
 
     @Bean
     @ConditionalOnMissingBean(UserMemoryPrivacySettingPort.class)
@@ -425,7 +425,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(MemoryGovernanceInboundPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.governance", name = "scheduler-enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.memory.governance", name = "scheduler-enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public SeahorseMemoryGovernanceJob seahorseMemoryGovernanceJob(

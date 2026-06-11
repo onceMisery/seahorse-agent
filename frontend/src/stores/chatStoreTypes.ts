@@ -4,6 +4,8 @@ export interface SendMessageOptions {
   attachmentIds?: string[];
   conversationIdOverride?: string | null;
   selectedSkillNames?: string[];
+  agentId?: string | null;
+  versionId?: string | null;
 }
 
 export interface SubmitFeedbackOptions {

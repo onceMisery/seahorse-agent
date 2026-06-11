@@ -157,7 +157,7 @@ import java.util.List;
         SeahorseAgentRegistryRepositoryAutoConfiguration.class,
         SeahorseAgentKernelAuthAutoConfiguration.class
 })
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelRegistryAutoConfiguration {
 
     @Bean

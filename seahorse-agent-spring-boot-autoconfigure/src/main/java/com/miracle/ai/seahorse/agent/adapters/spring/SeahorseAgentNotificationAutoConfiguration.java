@@ -30,7 +30,7 @@ import org.springframework.context.annotation.Configuration;
  * 通知中心自动配置。
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentNotificationAutoConfiguration {
 
     @Bean

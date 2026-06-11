@@ -34,7 +34,7 @@ import org.springframework.context.annotation.Configuration;
  * and this bean will not be created (due to {@code @ConditionalOnMissingBean}).
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(prefix = "seahorse-agent.adapters.observation", name = "type", havingValue = "micrometer", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.adapters.observation", name = "type", havingValue = "micrometer", matchIfMissing = true)
 public class SeahorseAgentSimpleMeterRegistryAutoConfiguration {
 
     @Bean

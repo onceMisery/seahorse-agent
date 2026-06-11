@@ -65,7 +65,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentMetadataAdapterAutoConfiguration.class,
         SeahorseAgentKernelRetrievalAutoConfiguration.class})
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelMetadataAutoConfiguration {
 
     @Bean
@@ -108,7 +108,7 @@ public class SeahorseAgentKernelMetadataAutoConfiguration {
     @ConditionalOnMissingBean(MetadataQuarantineInboundPort.class)
     public KernelMetadataQuarantineService seahorseMetadataQuarantineInboundPort(
             MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort,
-            @Value("${seahorse-agent.metadata.governance.quarantine.max-retry-count:3}") int maxRetryCount,
+            @Value("${seahorse.agent.metadata.governance.quarantine.max-retry-count:3}") int maxRetryCount,
             ObjectProvider<ObservationPort> observationPort) {
         return new KernelMetadataQuarantineService(quarantineRepositoryPort, maxRetryCount,
                 observationPort.getIfAvailable());

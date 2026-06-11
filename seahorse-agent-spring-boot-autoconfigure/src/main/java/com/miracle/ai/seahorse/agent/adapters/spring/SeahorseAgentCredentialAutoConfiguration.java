@@ -49,20 +49,20 @@ import java.time.Clock;
         SeahorseAgentAuthAdapterAutoConfiguration.class,
         SeahorseAgentKernelAuthAutoConfiguration.class
 })
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentCredentialAutoConfiguration {
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.credentials.jdbc", name = "aes-key-base64")
+    @ConditionalOnProperty(prefix = "seahorse.agent.credentials.jdbc", name = "aes-key-base64")
     @ConditionalOnMissingBean(SecretValueCipher.class)
     public AesGcmSecretValueCipher seahorseSecretValueCipher(
-            @Value("${seahorse-agent.credentials.jdbc.aes-key-base64}") String aesKeyBase64) {
+            @Value("${seahorse.agent.credentials.jdbc.aes-key-base64}") String aesKeyBase64) {
         return AesGcmSecretValueCipher.fromBase64Key(aesKeyBase64);
     }
 
     @Bean
     @ConditionalOnBean({DataSource.class, SecretValueCipher.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean({SecretStorePort.class, SecretWritePort.class})
     public JdbcSecretStoreAdapter seahorseJdbcSecretStoreAdapter(DataSource dataSource, SecretValueCipher cipher) {

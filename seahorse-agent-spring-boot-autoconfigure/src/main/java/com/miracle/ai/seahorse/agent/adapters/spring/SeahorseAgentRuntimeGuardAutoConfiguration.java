@@ -27,14 +27,14 @@ import org.springframework.context.annotation.Bean;
  * Spec §7 noop guard 自动装配。
  *
  * <p>Slice 2a 仅注册检测组件并在启动期登记日志，默认不强制 fail-fast。生产环境可通过属性
- * {@code seahorse-agent.runtime.noop-guard.enforce-class-a=true} 在检测到 A 类 noop fallback 时直接抛出。
+ * {@code seahorse.agent.runtime.noop-guard.enforce-class-a=true} 在检测到 A 类 noop fallback 时直接抛出。
  */
 @AutoConfiguration
-@ConditionalOnProperty(prefix = "seahorse-agent.runtime.noop-guard", name = "enabled",
+@ConditionalOnProperty(prefix = "seahorse.agent.runtime.noop-guard", name = "enabled",
         havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentRuntimeGuardAutoConfiguration {
 
-    private static final String PROP_ENFORCE_CLASS_A = "seahorse-agent.runtime.noop-guard.enforce-class-a";
+    private static final String PROP_ENFORCE_CLASS_A = "seahorse.agent.runtime.noop-guard.enforce-class-a";
 
     @Bean
     @ConditionalOnMissingBean

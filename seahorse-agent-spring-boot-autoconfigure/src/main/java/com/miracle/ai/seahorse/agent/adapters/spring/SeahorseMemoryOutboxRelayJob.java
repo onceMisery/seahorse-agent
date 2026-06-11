@@ -41,7 +41,7 @@ public class SeahorseMemoryOutboxRelayJob {
         this.batchSize = batchSize <= 0 ? 50 : batchSize;
     }
 
-    @Scheduled(fixedDelayString = "${seahorse-agent.memory.outbox.relay-delay-ms:5000}")
+    @Scheduled(fixedDelayString = "${seahorse.agent.memory.outbox.relay-delay-ms:5000}")
     public void relay() {
         if (!lockPort.tryLock(LOCK_NAME, Duration.ZERO, LOCK_LEASE)) {
             return;

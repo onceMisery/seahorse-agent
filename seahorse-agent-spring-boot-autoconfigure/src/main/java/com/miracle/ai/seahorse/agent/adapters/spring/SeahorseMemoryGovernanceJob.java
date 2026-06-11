@@ -42,7 +42,7 @@ public class SeahorseMemoryGovernanceJob {
         this.lockPort = Objects.requireNonNullElse(lockPort, DistributedLockPort.noop());
     }
 
-    @Scheduled(cron = "${seahorse-agent.memory.cleanup-cron:0 0/30 * * * ?}")
+    @Scheduled(cron = "${seahorse.agent.memory.cleanup-cron:0 0/30 * * * ?}")
     public void runDecay() {
         if (!lockPort.tryLock(LOCK_NAME, Duration.ZERO, LOCK_LEASE)) {
             return;

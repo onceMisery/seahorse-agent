@@ -192,7 +192,7 @@ public class SeahorseAgentMemoryMaintenanceAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(MemoryMaintenanceInboundPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.maintenance", name = "scheduler-enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.memory.maintenance", name = "scheduler-enabled",
             havingValue = "true")
     @ConditionalOnMissingBean
     public SeahorseMemoryMaintenanceJob seahorseMemoryMaintenanceJob(
@@ -210,10 +210,10 @@ public class SeahorseAgentMemoryMaintenanceAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(MemoryGarbageCollectionService.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.gc", name = "scheduler-enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.memory.gc", name = "scheduler-enabled",
             havingValue = "true", matchIfMissing = true)
-    @ConditionalOnExpression("!${seahorse-agent.memory.maintenance.scheduler-enabled:false}"
-            + " || !${seahorse-agent.memory.maintenance.gc-enabled:true}")
+    @ConditionalOnExpression("!${seahorse.agent.memory.maintenance.scheduler-enabled:false}"
+            + " || !${seahorse.agent.memory.maintenance.gc-enabled:true}")
     @ConditionalOnMissingBean
     public SeahorseMemoryGarbageCollectionJob seahorseMemoryGarbageCollectionJob(
             MemoryGarbageCollectionService garbageCollectionService,

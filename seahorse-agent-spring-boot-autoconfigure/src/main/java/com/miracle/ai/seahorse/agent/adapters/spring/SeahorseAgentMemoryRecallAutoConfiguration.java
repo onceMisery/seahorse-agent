@@ -110,7 +110,7 @@ public class SeahorseAgentMemoryRecallAutoConfiguration {
     @Bean
     @ConditionalOnBean({ShortTermMemoryPort.class, LongTermMemoryPort.class, SemanticMemoryPort.class})
     @ConditionalOnMissingBean(MemoryRetrievalPipelinePort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "hybrid-enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.memory.recall", name = "hybrid-enabled",
             havingValue = "false")
     public DefaultMemoryRetrievalPipeline seahorseMemoryRetrievalPipeline(
             ShortTermMemoryPort shortTermMemoryPort,
@@ -165,7 +165,7 @@ public class SeahorseAgentMemoryRecallAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(RerankModelPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "rerank-enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.memory.recall", name = "rerank-enabled",
             havingValue = "true")
     @ConditionalOnMissingBean(MemoryRecallRerankerPort.class)
     public ModelMemoryRecallReranker seahorseModelMemoryRecallReranker(
@@ -192,8 +192,8 @@ public class SeahorseAgentMemoryRecallAutoConfiguration {
             VectorSearchPort.class,
             EmbeddingModelPort.class
     })
-    @ConditionalOnExpression("'${seahorse-agent.memory.recall.hybrid-enabled:true}' == 'true'"
-            + " && '${seahorse-agent.memory.recall.vector-search-enabled:false}' == 'true'")
+    @ConditionalOnExpression("'${seahorse.agent.memory.recall.hybrid-enabled:true}' == 'true'"
+            + " && '${seahorse.agent.memory.recall.vector-search-enabled:false}' == 'true'")
     @ConditionalOnMissingBean(ScoredMemoryVectorPort.class)
     public VectorSearchScoredMemoryVectorPort seahorseVectorSearchScoredMemoryVectorPort(
             VectorSearchPort vectorSearchPort,
@@ -209,7 +209,7 @@ public class SeahorseAgentMemoryRecallAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({ShortTermMemoryPort.class, LongTermMemoryPort.class, SemanticMemoryPort.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "hybrid-enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.memory.recall", name = "hybrid-enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(ScoredMemoryVectorPort.class)
     public ScoredMemoryVectorPort seahorseScoredMemoryVectorPort(ObjectProvider<MemoryVectorPort> memoryVectorPort,
@@ -225,7 +225,7 @@ public class SeahorseAgentMemoryRecallAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(ScoredMemoryVectorPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "hybrid-enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.memory.recall", name = "hybrid-enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(name = "seahorseVectorMemoryRecallChannel")
     public VectorMemoryRecallChannel seahorseVectorMemoryRecallChannel(ScoredMemoryVectorPort vectorPort) {
@@ -234,7 +234,7 @@ public class SeahorseAgentMemoryRecallAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(MemoryKeywordSearchPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "hybrid-enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.memory.recall", name = "hybrid-enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(name = "seahorseKeywordMemoryRecallChannel")
     public KeywordMemoryRecallChannel seahorseKeywordMemoryRecallChannel(MemoryKeywordSearchPort keywordSearchPort) {
@@ -243,7 +243,7 @@ public class SeahorseAgentMemoryRecallAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(MemoryGraphPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "hybrid-enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.memory.recall", name = "hybrid-enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(name = "seahorseGraphMemoryRecallChannel")
     public GraphMemoryRecallChannel seahorseGraphMemoryRecallChannel(
@@ -254,7 +254,7 @@ public class SeahorseAgentMemoryRecallAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({ShortTermMemoryPort.class, LongTermMemoryPort.class, SemanticMemoryPort.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "hybrid-enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.memory.recall", name = "hybrid-enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(MemoryRetrievalPipelinePort.class)
     public HybridMemoryRecallPipeline seahorseHybridMemoryRecallPipeline(

@@ -224,13 +224,29 @@ export function AgentDetailPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="versions">
+      <Tabs defaultValue="instructions">
         <TabsList>
+          <TabsTrigger value="instructions">指令内容</TabsTrigger>
           <TabsTrigger value="versions">版本历史</TabsTrigger>
           <TabsTrigger value="tools">工具绑定</TabsTrigger>
           <TabsTrigger value="checks">发布检查</TabsTrigger>
           <TabsTrigger value="validation">校验结果</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="instructions">
+          <Card>
+            <CardHeader><CardTitle>Agent 指令</CardTitle></CardHeader>
+            <CardContent>
+              {agent.instructions ? (
+                <pre className="whitespace-pre-wrap text-sm bg-slate-50 p-4 rounded-lg overflow-auto max-h-[600px]">
+                  {agent.instructions}
+                </pre>
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">暂无指令内容</div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="versions">
           <Card>

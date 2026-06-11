@@ -65,14 +65,14 @@ import javax.sql.DataSource;
  *   <li>{@link KernelBillingService} — bill generation and invoice queries</li>
  * </ul>
  *
- * <p>Enabled by default; disable via {@code seahorse-agent.billing.enabled=false}.
+ * <p>Enabled by default; disable via {@code seahorse.agent.billing.enabled=false}.
  */
 @AutoConfiguration
 @AutoConfigureAfter({
         SeahorseAgentKernelAutoConfiguration.class,
         SeahorseAgentKernelAgentAutoConfiguration.class
 })
-@ConditionalOnProperty(prefix = "seahorse-agent.billing", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.billing", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentBillingAutoConfiguration {
 
     // ─── JDBC Adapter Beans ──────────────────────────────────────────────────

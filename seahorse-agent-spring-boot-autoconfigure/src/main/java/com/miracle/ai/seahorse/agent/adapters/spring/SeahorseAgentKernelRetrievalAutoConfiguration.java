@@ -73,16 +73,16 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentRetrievalRepositoryAutoConfiguration.class})
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelRetrievalAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(name = "ragRetrievalThreadPoolExecutor")
     public Executor ragRetrievalThreadPoolExecutor(
-            @Value("${seahorse-agent.retrieval.executor.core-size:4}") int coreSize,
-            @Value("${seahorse-agent.retrieval.executor.max-size:16}") int maxSize,
-            @Value("${seahorse-agent.retrieval.executor.queue-capacity:200}") int queueCapacity,
-            @Value("${seahorse-agent.retrieval.executor.thread-name-prefix:seahorse-rag-retrieval-}")
+            @Value("${seahorse.agent.retrieval.executor.core-size:4}") int coreSize,
+            @Value("${seahorse.agent.retrieval.executor.max-size:16}") int maxSize,
+            @Value("${seahorse.agent.retrieval.executor.queue-capacity:200}") int queueCapacity,
+            @Value("${seahorse.agent.retrieval.executor.thread-name-prefix:seahorse-rag-retrieval-}")
             String threadNamePrefix) {
         return threadPoolExecutor(coreSize, maxSize, queueCapacity, threadNamePrefix);
     }
@@ -90,10 +90,10 @@ public class SeahorseAgentKernelRetrievalAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = "ragInnerRetrievalThreadPoolExecutor")
     public Executor ragInnerRetrievalThreadPoolExecutor(
-            @Value("${seahorse-agent.retrieval.inner-executor.core-size:4}") int coreSize,
-            @Value("${seahorse-agent.retrieval.inner-executor.max-size:16}") int maxSize,
-            @Value("${seahorse-agent.retrieval.inner-executor.queue-capacity:200}") int queueCapacity,
-            @Value("${seahorse-agent.retrieval.inner-executor.thread-name-prefix:seahorse-rag-inner-}")
+            @Value("${seahorse.agent.retrieval.inner-executor.core-size:4}") int coreSize,
+            @Value("${seahorse.agent.retrieval.inner-executor.max-size:16}") int maxSize,
+            @Value("${seahorse.agent.retrieval.inner-executor.queue-capacity:200}") int queueCapacity,
+            @Value("${seahorse.agent.retrieval.inner-executor.thread-name-prefix:seahorse-rag-inner-}")
             String threadNamePrefix) {
         return threadPoolExecutor(coreSize, maxSize, queueCapacity, threadNamePrefix);
     }
@@ -101,10 +101,10 @@ public class SeahorseAgentKernelRetrievalAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = "ragContextThreadPoolExecutor")
     public Executor ragContextThreadPoolExecutor(
-            @Value("${seahorse-agent.retrieval.context-executor.core-size:2}") int coreSize,
-            @Value("${seahorse-agent.retrieval.context-executor.max-size:8}") int maxSize,
-            @Value("${seahorse-agent.retrieval.context-executor.queue-capacity:100}") int queueCapacity,
-            @Value("${seahorse-agent.retrieval.context-executor.thread-name-prefix:seahorse-rag-context-}")
+            @Value("${seahorse.agent.retrieval.context-executor.core-size:2}") int coreSize,
+            @Value("${seahorse.agent.retrieval.context-executor.max-size:8}") int maxSize,
+            @Value("${seahorse.agent.retrieval.context-executor.queue-capacity:100}") int queueCapacity,
+            @Value("${seahorse.agent.retrieval.context-executor.thread-name-prefix:seahorse-rag-context-}")
             String threadNamePrefix) {
         return threadPoolExecutor(coreSize, maxSize, queueCapacity, threadNamePrefix);
     }

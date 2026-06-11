@@ -259,11 +259,15 @@ export const useChatStore = create<ChatState>()(
 
       const conversationId = options?.conversationIdOverride || get().currentSessionId;
       const selectedSkillNames = options?.selectedSkillNames?.length ? options.selectedSkillNames : undefined;
+      const agentId = options?.agentId || undefined;
+      const versionId = options?.versionId || undefined;
       const query = buildQuery({
         question: trimmed,
         conversationId: conversationId || undefined,
         deepThinking: deepThinkingEnabled ? true : undefined,
-        chatMode: chatModeForTaskTemplate(selectedTaskTemplateId as TaskTemplateId | undefined),
+        chatMode: agentId ? "agent" : chatModeForTaskTemplate(selectedTaskTemplateId as TaskTemplateId | undefined),
+        agentId,
+        versionId,
         taskTemplateId: selectedTaskTemplateId || undefined,
         attachmentIds: attachmentIdsFiltered,
         selectedSkillNames

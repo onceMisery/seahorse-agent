@@ -98,12 +98,12 @@ import javax.sql.DataSource;
 
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentDefinitionRepositoryPort.class)
     public JdbcAgentDefinitionRepositoryAdapter seahorseJdbcAgentDefinitionRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentDefinitionRepositoryAdapter(dataSource);
@@ -111,7 +111,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentRunRepositoryPort.class)
     public JdbcAgentRunRepositoryAdapter seahorseJdbcAgentRunRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentRunRepositoryAdapter(dataSource);
@@ -119,7 +119,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentArtifactRepositoryPort.class)
     public JdbcAgentArtifactRepositoryAdapter seahorseJdbcAgentArtifactRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentArtifactRepositoryAdapter(dataSource);
@@ -127,7 +127,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentCheckpointRepositoryPort.class)
     public JdbcAgentCheckpointRepositoryAdapter seahorseJdbcAgentCheckpointRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentCheckpointRepositoryAdapter(dataSource);
@@ -135,7 +135,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(ContextPackRepositoryPort.class)
     public JdbcContextPackRepositoryAdapter seahorseJdbcContextPackRepositoryAdapter(DataSource dataSource) {
         return new JdbcContextPackRepositoryAdapter(dataSource);
@@ -143,7 +143,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AccessDecisionLogPort.class)
     public JdbcAccessDecisionRepositoryAdapter seahorseJdbcAccessDecisionRepositoryAdapter(DataSource dataSource) {
         return new JdbcAccessDecisionRepositoryAdapter(dataSource);
@@ -151,7 +151,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(ResourceAclRepositoryPort.class)
     public JdbcResourceAclRepositoryAdapter seahorseJdbcResourceAclRepositoryAdapter(DataSource dataSource) {
         return new JdbcResourceAclRepositoryAdapter(dataSource);
@@ -159,7 +159,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentRunLeaseRepositoryPort.class)
     public JdbcAgentRunLeaseRepositoryAdapter seahorseJdbcAgentRunLeaseRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentRunLeaseRepositoryAdapter(dataSource);
@@ -167,7 +167,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentRunQueueRepositoryPort.class)
     public JdbcAgentRunQueueRepositoryAdapter seahorseJdbcAgentRunQueueRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentRunQueueRepositoryAdapter(dataSource);
@@ -175,7 +175,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(ToolCatalogRepositoryPort.class)
     public JdbcToolCatalogRepositoryAdapter seahorseJdbcToolCatalogRepositoryAdapter(DataSource dataSource) {
         return new JdbcToolCatalogRepositoryAdapter(dataSource);
@@ -183,7 +183,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentToolBindingRepositoryPort.class)
     public JdbcAgentToolBindingRepositoryAdapter seahorseJdbcAgentToolBindingRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentToolBindingRepositoryAdapter(dataSource);
@@ -191,7 +191,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentSkillRepositoryPort.class)
     public JdbcAgentSkillRepositoryAdapter seahorseJdbcAgentSkillRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentSkillRepositoryAdapter(dataSource);
@@ -199,7 +199,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(ToolInvocationAuditPort.class)
     public JdbcToolInvocationAuditRepositoryAdapter seahorseJdbcToolInvocationAuditRepositoryAdapter(DataSource dataSource) {
         return new JdbcToolInvocationAuditRepositoryAdapter(dataSource);
@@ -207,7 +207,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(ToolApprovalRequestRepositoryPort.class)
     public JdbcToolApprovalRequestRepositoryAdapter seahorseJdbcToolApprovalRequestRepositoryAdapter(DataSource dataSource) {
         return new JdbcToolApprovalRequestRepositoryAdapter(dataSource);
@@ -215,7 +215,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(ConnectorRepositoryPort.class)
     public JdbcConnectorRepositoryAdapter seahorseJdbcConnectorRepositoryAdapter(DataSource dataSource) {
         return new JdbcConnectorRepositoryAdapter(dataSource);
@@ -223,7 +223,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(ConnectorCredentialBindingRepositoryPort.class)
     public JdbcConnectorCredentialBindingRepositoryAdapter seahorseJdbcConnectorCredentialBindingRepositoryAdapter(
             DataSource dataSource) {
@@ -232,7 +232,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentTemplateRepositoryPort.class)
     public JdbcAgentTemplateRepositoryAdapter seahorseJdbcAgentTemplateRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentTemplateRepositoryAdapter(dataSource);
@@ -240,7 +240,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentPublishCheckRepositoryPort.class)
     public JdbcAgentPublishCheckRepositoryAdapter seahorseJdbcAgentPublishCheckRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentPublishCheckRepositoryAdapter(dataSource);
@@ -248,7 +248,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentVersionActivationRepositoryPort.class)
     public JdbcAgentVersionActivationRepositoryAdapter seahorseJdbcAgentVersionActivationRepositoryAdapter(
             DataSource dataSource) {
@@ -257,7 +257,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentCatalogQueryPort.class)
     public JdbcAgentCatalogQueryAdapter seahorseJdbcAgentCatalogQueryAdapter(DataSource dataSource) {
         return new JdbcAgentCatalogQueryAdapter(dataSource);
@@ -265,7 +265,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentHandoffRepositoryPort.class)
     public JdbcAgentHandoffRepositoryAdapter seahorseJdbcAgentHandoffRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentHandoffRepositoryAdapter(dataSource);
@@ -273,7 +273,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentEvalSummaryRepositoryPort.class)
     public JdbcAgentEvalSummaryRepositoryAdapter seahorseJdbcAgentEvalSummaryRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentEvalSummaryRepositoryAdapter(dataSource);
@@ -281,7 +281,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentRolloutRepositoryPort.class)
     public JdbcAgentRolloutRepositoryAdapter seahorseJdbcAgentRolloutRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentRolloutRepositoryAdapter(dataSource);
@@ -289,7 +289,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(EnterprisePilotReadinessRepositoryPort.class)
     public JdbcEnterprisePilotReadinessRepositoryAdapter seahorseJdbcEnterprisePilotReadinessRepositoryAdapter(
             DataSource dataSource) {
@@ -298,7 +298,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AuditEventRepositoryPort.class)
     public JdbcAuditEventRepositoryAdapter seahorseJdbcAuditEventRepositoryAdapter(DataSource dataSource) {
         return new JdbcAuditEventRepositoryAdapter(dataSource);
@@ -306,7 +306,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(ProductionGateRepositoryPort.class)
     public JdbcProductionGateRepositoryAdapter seahorseJdbcProductionGateRepositoryAdapter(DataSource dataSource) {
         return new JdbcProductionGateRepositoryAdapter(dataSource);
@@ -314,7 +314,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(QuotaPolicyRepositoryPort.class)
     public JdbcQuotaPolicyRepositoryAdapter seahorseJdbcQuotaPolicyRepositoryAdapter(DataSource dataSource) {
         return new JdbcQuotaPolicyRepositoryAdapter(dataSource);
@@ -322,7 +322,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(CostUsageRepositoryPort.class)
     public JdbcCostUsageRepositoryAdapter seahorseJdbcCostUsageRepositoryAdapter(DataSource dataSource) {
         return new JdbcCostUsageRepositoryAdapter(dataSource);
@@ -330,7 +330,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(SandboxSessionRepositoryPort.class)
     public JdbcSandboxRepositoryAdapter seahorseJdbcSandboxRepositoryAdapter(DataSource dataSource) {
         return new JdbcSandboxRepositoryAdapter(dataSource);
@@ -338,7 +338,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentRunEventBufferPort.class)
     public JdbcAgentRunEventBufferAdapter seahorseJdbcAgentRunEventBufferAdapter(DataSource dataSource,
                                                                                  ObjectProvider<ObjectMapper> objectMapper) {
@@ -347,7 +347,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(DurableTaskQueuePort.class)
     public JdbcDurableTaskQueueAdapter seahorseJdbcDurableTaskQueueAdapter(DataSource dataSource) {
         return new JdbcDurableTaskQueueAdapter(dataSource);
@@ -355,7 +355,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(EvalCandidateRepositoryPort.class)
     public JdbcEvalCandidateRepositoryAdapter seahorseJdbcEvalCandidateRepositoryAdapter(DataSource dataSource) {
         return new JdbcEvalCandidateRepositoryAdapter(dataSource);
@@ -363,7 +363,7 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean({EvalDatasetRepositoryPort.class, EvalDatasetQueryPort.class})
     public JdbcEvalDatasetRepositoryAdapter seahorseJdbcEvalDatasetRepositoryAdapter(DataSource dataSource) {
         return new JdbcEvalDatasetRepositoryAdapter(dataSource);

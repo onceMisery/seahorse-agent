@@ -80,7 +80,7 @@ import org.springframework.context.annotation.Configuration;
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKernelMemoryAutoConfiguration.class,
         SeahorseAgentAiAdapterAutoConfiguration.class, SeahorseAgentKernelRegistryAutoConfiguration.class,
         SeahorseAgentKernelAgentAutoConfiguration.class})
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelChatAutoConfiguration {
 
     @Bean
@@ -102,7 +102,7 @@ public class SeahorseAgentKernelChatAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(ChatModelPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.query-optimizer", name = "llm-enabled", havingValue = "true")
+    @ConditionalOnProperty(prefix = "seahorse.agent.query-optimizer", name = "llm-enabled", havingValue = "true")
     @ConditionalOnMissingBean(QueryOptimizerPort.class)
     public QueryOptimizerPort seahorseLlmQueryOptimizer(
             ChatModelPort chatModelPort,
@@ -185,7 +185,7 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                                          ObjectProvider<ConversationAttachmentContextAssembler> attachmentContextAssembler,
                                                          org.springframework.core.env.Environment environment) {
         String configured = environment.getProperty(
-                "seahorse-agent.chat.empty-retrieval-fallback", "generic");
+                "seahorse.agent.chat.empty-retrieval-fallback", "generic");
         KernelChatPipeline.EmptyRetrievalStrategy strategy =
                 "strict".equalsIgnoreCase(configured) || "message".equalsIgnoreCase(configured)
                         ? KernelChatPipeline.EmptyRetrievalStrategy.STATIC_MESSAGE

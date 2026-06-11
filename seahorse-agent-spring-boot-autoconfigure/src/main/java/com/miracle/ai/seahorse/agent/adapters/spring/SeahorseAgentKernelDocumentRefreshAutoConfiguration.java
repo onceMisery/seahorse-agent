@@ -52,7 +52,7 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKernelKnowledgeAutoConfiguration.class, SeahorseAgentKnowledgeRepositoryAutoConfiguration.class, SeahorseAgentIngestionRepositoryAutoConfiguration.class, SeahorseAgentStorageAdapterAutoConfiguration.class, SeahorseAgentLocalAdapterAutoConfiguration.class, SeahorseAgentMqAdapterAutoConfiguration.class})
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelDocumentRefreshAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(SeahorseAgentKernelDocumentRefreshAutoConfiguration.class);
@@ -94,13 +94,13 @@ public class SeahorseAgentKernelDocumentRefreshAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DocumentRefreshInboundPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.document-refresh", name = "scheduler-enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.document-refresh", name = "scheduler-enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public SeahorseDocumentRefreshJob seahorseDocumentRefreshJob(
             DocumentRefreshInboundPort refreshInboundPort,
             ObjectProvider<DistributedLockPort> lockPort,
-            @Value("${seahorse-agent.document-refresh.batch-size:20}") int batchSize) {
+            @Value("${seahorse.agent.document-refresh.batch-size:20}") int batchSize) {
         return new SeahorseDocumentRefreshJob(refreshInboundPort,
                 lockPort.getIfAvailable(DistributedLockPort::noop), batchSize);
     }
@@ -120,7 +120,7 @@ public class SeahorseAgentKernelDocumentRefreshAutoConfiguration {
     public AutoCloseable seahorseKnowledgeDocumentChunkSubscription(
             KernelKnowledgeDocumentChunkHandler chunkHandler,
             MessageSubscriptionPort subscriptionPort,
-            @Value("${seahorse-agent.adapters.mq.pulsar.topics.knowledge-document-chunk:"
+            @Value("${seahorse.agent.adapters.mq.pulsar.topics.knowledge-document-chunk:"
                     + KernelKnowledgeDocumentService.DEFAULT_CHUNK_TOPIC + "}") String chunkTopic) {
         log.info("Creating Pulsar subscription for topic: {}, subscription: seahorse-knowledge-document-chunk", chunkTopic);
         AutoCloseable subscription = subscriptionPort.subscribe(chunkTopic, "seahorse-knowledge-document-chunk",

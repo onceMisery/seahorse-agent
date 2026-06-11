@@ -37,18 +37,18 @@ import java.util.List;
 /**
  * Spring Boot auto-configuration for the Seahorse Agent alert subsystem.
  *
- * <p>Activated by setting {@code seahorse-agent.observability.alert.enabled=true}.
+ * <p>Activated by setting {@code seahorse.agent.observability.alert.enabled=true}.
  * Configures DingTalk webhook notifier and the kernel alert evaluation service
  * with a sensible set of default alert rules.
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(prefix = "seahorse-agent.observability.alert", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "seahorse.agent.observability.alert", name = "enabled", havingValue = "true")
 public class SeahorseAgentAlertAutoConfiguration {
 
     private static final Logger LOG = LoggerFactory.getLogger(SeahorseAgentAlertAutoConfiguration.class);
 
     @Bean
-    @ConfigurationProperties(prefix = "seahorse-agent.observability.alert.dingtalk")
+    @ConfigurationProperties(prefix = "seahorse.agent.observability.alert.dingtalk")
     public DingTalkAlertProperties seahorseAlertDingTalkProperties() {
         return new DingTalkAlertProperties();
     }

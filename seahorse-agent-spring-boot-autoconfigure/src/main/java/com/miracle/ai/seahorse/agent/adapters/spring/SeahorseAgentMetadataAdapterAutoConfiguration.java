@@ -76,12 +76,12 @@ import java.util.Locale;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentMetadataAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(JdbcMetadataGovernanceRepositoryDelegate.class)
     public JdbcMetadataGovernanceRepositoryDelegate seahorseJdbcMetadataGovernanceRepositoryDelegate(
             DataSource dataSource, ObjectMapper objectMapper) {
@@ -90,8 +90,8 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.metadata-governance-compatibility",
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.metadata-governance-compatibility",
             name = "facade-bean-enabled", havingValue = "true")
     @ConditionalOnMissingBean(JdbcMetadataGovernanceRepositoryAdapter.class)
     public JdbcMetadataGovernanceRepositoryAdapter seahorseJdbcMetadataGovernanceRepositoryAdapter(
@@ -101,7 +101,7 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean({
             JdbcMetadataSchemaRepositoryAdapter.class,
             MetadataSchemaRegistryPort.class,
@@ -131,7 +131,7 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.metadata-schema-index", name = "type",
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.metadata-schema-index", name = "type",
             havingValue = "jdbc")
     @ConditionalOnMissingBean(MetadataSchemaIndexSyncPort.class)
     public JdbcMetadataSchemaIndexAdapter seahorseJdbcMetadataSchemaIndexAdapter(
@@ -145,7 +145,7 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean({
             JdbcMetadataDictionaryRepositoryAdapter.class,
             MetadataDictionaryPort.class,
@@ -158,7 +158,7 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean({
             JdbcMetadataExtractionResultRepositoryAdapter.class,
             MetadataExtractionResultRepositoryPort.class,
@@ -187,7 +187,7 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean({
             JdbcMetadataReviewRepositoryAdapter.class,
             MetadataReviewQueuePort.class,
@@ -207,7 +207,7 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean({
             JdbcMetadataQuarantineRepositoryAdapter.class,
             MetadataQuarantinePort.class,
@@ -227,7 +227,7 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean({
             JdbcMetadataCanonicalWriteRepositoryAdapter.class,
             MetadataCanonicalWritePort.class
@@ -247,7 +247,7 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean({
             JdbcMetadataBackfillJobRepositoryAdapter.class,
             MetadataBackfillJobRepositoryPort.class
@@ -267,7 +267,7 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class, MetadataSchemaRegistryPort.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean({
             JdbcMetadataQualityReportRepositoryAdapter.class,
             MetadataQualityReportRepositoryPort.class
@@ -313,7 +313,7 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({DataSource.class, MetadataSchemaManagementRepositoryPort.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean({
             JdbcMetadataSchemaUsageReportRepositoryAdapter.class,
             MetadataSchemaUsageReportRepositoryPort.class
@@ -369,7 +369,7 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
 
         @Bean
         @ConditionalOnBean({OkHttpClient.class, ObjectMapper.class})
-        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.metadata-schema-index", name = "type",
+        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.metadata-schema-index", name = "type",
                 havingValue = "elasticsearch")
         @ConditionalOnMissingBean(ElasticsearchMetadataSchemaIndexAdapter.class)
         public ElasticsearchMetadataSchemaIndexAdapter seahorseElasticsearchMetadataSchemaIndexAdapter(
@@ -377,16 +377,16 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
                 ObjectMapper objectMapper,
                 ObjectProvider<ObservationPort> observationPort,
                 ObjectProvider<MetadataSchemaIndexStatusPort> indexStatusPort,
-                @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.base-url:http://localhost:9200}")
+                @Value("${seahorse.agent.adapters.metadata-schema-index.elasticsearch.base-url:http://localhost:9200}")
                 String baseUrl,
-                @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.index-name:seahorse_keyword_chunk}")
+                @Value("${seahorse.agent.adapters.metadata-schema-index.elasticsearch.index-name:seahorse_keyword_chunk}")
                 String indexName,
-                @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.search-fields:content^3}")
+                @Value("${seahorse.agent.adapters.metadata-schema-index.elasticsearch.search-fields:content^3}")
                 String searchFields,
-                @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.api-key:}") String apiKey,
-                @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.username:}") String username,
-                @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.password:}") String password,
-                @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.timeout:10s}") String timeout) {
+                @Value("${seahorse.agent.adapters.metadata-schema-index.elasticsearch.api-key:}") String apiKey,
+                @Value("${seahorse.agent.adapters.metadata-schema-index.elasticsearch.username:}") String username,
+                @Value("${seahorse.agent.adapters.metadata-schema-index.elasticsearch.password:}") String password,
+                @Value("${seahorse.agent.adapters.metadata-schema-index.elasticsearch.timeout:10s}") String timeout) {
             return new ElasticsearchMetadataSchemaIndexAdapter(httpClient, objectMapper,
                     new ElasticsearchKeywordProperties(baseUrl, indexName, csv(searchFields),
                             apiKey, username, password, duration(timeout)),

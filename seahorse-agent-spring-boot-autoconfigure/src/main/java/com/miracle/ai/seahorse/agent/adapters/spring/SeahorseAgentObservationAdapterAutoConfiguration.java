@@ -37,11 +37,11 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentObservationAdapterAutoConfiguration {
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.observation", name = "type", havingValue = "noop")
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.observation", name = "type", havingValue = "noop")
     @ConditionalOnMissingBean(ObservationPort.class)
     public NoopObservationAdapter seahorseNoopObservationAdapter() {
         return new NoopObservationAdapter();
@@ -56,7 +56,7 @@ public class SeahorseAgentObservationAdapterAutoConfiguration {
 
         @Bean
         @ConditionalOnBean(MeterRegistry.class)
-        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.observation", name = "type", havingValue = "micrometer")
+        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.observation", name = "type", havingValue = "micrometer")
         @ConditionalOnMissingBean(ObservationPort.class)
         public MicrometerObservationAdapter seahorseMicrometerObservationAdapter(MeterRegistry meterRegistry) {
             return new MicrometerObservationAdapter(meterRegistry);

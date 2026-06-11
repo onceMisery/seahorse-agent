@@ -26,7 +26,7 @@ import java.util.Objects;
 /**
  * Spring Boot binding model for Seahorse kernel runtime options.
  */
-@ConfigurationProperties(prefix = "seahorse-agent.kernel")
+@ConfigurationProperties(prefix = "seahorse.agent.kernel")
 public class AgentKernelProperties {
 
     public static final KernelRuntimeMode DEFAULT_MODE = KernelRuntimeMode.KERNEL;

@@ -90,8 +90,8 @@ public class SeahorseOutboxRelayJob {
     }
 
     @Scheduled(
-            fixedDelayString = "${seahorse-agent.adapters.mq.outbox.relay.fixed-delay-ms:5000}",
-            initialDelayString = "${seahorse-agent.adapters.mq.outbox.relay.initial-delay-ms:10000}")
+            fixedDelayString = "${seahorse.agent.adapters.mq.outbox.relay.fixed-delay-ms:5000}",
+            initialDelayString = "${seahorse.agent.adapters.mq.outbox.relay.initial-delay-ms:10000}")
     public void relay() {
         if (!lockPort.tryLock(LOCK_NAME, Duration.ZERO, LOCK_LEASE)) {
             return;

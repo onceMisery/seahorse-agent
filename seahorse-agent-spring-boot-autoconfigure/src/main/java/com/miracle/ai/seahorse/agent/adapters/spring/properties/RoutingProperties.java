@@ -25,7 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-@ConfigurationProperties(prefix = "seahorse-agent.routing")
+@ConfigurationProperties(prefix = "seahorse.agent.routing")
 public class RoutingProperties {
 
     private Map<String, Tier> tiers = defaultTiers();

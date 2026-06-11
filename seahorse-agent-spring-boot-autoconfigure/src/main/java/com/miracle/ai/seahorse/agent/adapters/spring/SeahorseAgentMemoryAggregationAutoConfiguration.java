@@ -50,7 +50,7 @@ import java.time.Clock;
  * <p>从原 {@link SeahorseAgentKernelMemoryAutoConfiguration} 拆出 7 个 aggregation 相关 bean，
  * 聚焦"跨轮对话聚合 / topic shift 检测 / debounce flush"能力域。
  *
- * <p>aggregation 由 {@code seahorse-agent.memory.aggregation.enabled=true} 开启；关闭时
+ * <p>aggregation 由 {@code seahorse.agent.memory.aggregation.enabled=true} 开启；关闭时
  * 仍会注册 policy 与 topic-shift detector（供其他子配置或外部代码引用），但 service / inbound /
  * job 不会装配，保持原历史行为完全不变。
  */
@@ -81,7 +81,7 @@ public class SeahorseAgentMemoryAggregationAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.aggregation", name = "enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.memory.aggregation", name = "enabled",
             havingValue = "true")
     @ConditionalOnMissingBean(MemoryAggregationBufferPort.class)
     public InMemoryMemoryAggregationBufferPort seahorseInMemoryAggregationBufferPort(
@@ -96,7 +96,7 @@ public class SeahorseAgentMemoryAggregationAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.aggregation", name = "enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.memory.aggregation", name = "enabled",
             havingValue = "true")
     @ConditionalOnMissingBean(MemoryAggregationServicePort.class)
     public DefaultMemoryAggregationService seahorseMemoryAggregationService(
@@ -119,7 +119,7 @@ public class SeahorseAgentMemoryAggregationAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.aggregation", name = "enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.memory.aggregation", name = "enabled",
             havingValue = "true")
     @ConditionalOnBean(MemoryAggregationServicePort.class)
     @ConditionalOnMissingBean(MemoryAggregationInboundPort.class)
@@ -129,7 +129,7 @@ public class SeahorseAgentMemoryAggregationAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.aggregation", name = "enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.memory.aggregation", name = "enabled",
             havingValue = "true")
     @ConditionalOnBean(MemoryAggregationServicePort.class)
     @ConditionalOnMissingBean

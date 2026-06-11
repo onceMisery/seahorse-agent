@@ -62,11 +62,11 @@ import javax.sql.DataSource;
  *   <li>{@link KernelAuditLogService} — system audit log</li>
  * </ul>
  *
- * <p>Enabled by default; disable via {@code seahorse-agent.marketplace-admin.enabled=false}.
+ * <p>Enabled by default; disable via {@code seahorse.agent.marketplace-admin.enabled=false}.
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse-agent.marketplace-admin", name = "enabled",
+@ConditionalOnProperty(prefix = "seahorse.agent.marketplace-admin", name = "enabled",
         havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentMarketplaceAdminAutoConfiguration {
 

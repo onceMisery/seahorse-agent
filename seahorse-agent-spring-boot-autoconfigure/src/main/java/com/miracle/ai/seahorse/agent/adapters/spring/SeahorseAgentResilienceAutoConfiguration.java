@@ -40,7 +40,7 @@ import java.util.concurrent.Executors;
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass(CircuitBreakerRegistry.class)
-@ConditionalOnProperty(prefix = "seahorse-agent.resilience", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.resilience", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentResilienceAutoConfiguration {
 
     @Bean

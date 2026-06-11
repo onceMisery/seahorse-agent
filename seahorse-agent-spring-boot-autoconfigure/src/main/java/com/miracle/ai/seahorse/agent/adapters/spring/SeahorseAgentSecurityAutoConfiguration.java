@@ -37,7 +37,7 @@ import java.time.Clock;
  * Registers sandbox path validation, secret rotation, and forbidden exception handling.
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentSecurityAutoConfiguration {
 
     @Bean

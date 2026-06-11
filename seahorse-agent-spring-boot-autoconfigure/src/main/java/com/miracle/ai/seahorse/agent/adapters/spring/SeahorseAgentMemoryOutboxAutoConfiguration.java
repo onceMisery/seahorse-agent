@@ -49,7 +49,7 @@ import org.springframework.context.annotation.Configuration;
  *     <li>3 类 outbox task handler（vector / keyword / graph），各拆 upsert / delete。</li>
  *     <li>{@link MemoryOutboxRelayService} 负责按 handler 顺序 dispatch。</li>
  *     <li>{@link SeahorseMemoryOutboxRelayJob} 定时驱动 relay（由
- *         {@code seahorse-agent.memory.outbox.relay-enabled} 控制）。</li>
+ *         {@code seahorse.agent.memory.outbox.relay-enabled} 控制）。</li>
  * </ul>
  *
  * <p>调度顺序：依赖 main kernel memory 配置已加载，因此 {@code @AutoConfigureAfter}
@@ -129,7 +129,7 @@ public class SeahorseAgentMemoryOutboxAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(MemoryOutboxRelayService.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.outbox", name = "relay-enabled",
+    @ConditionalOnProperty(prefix = "seahorse.agent.memory.outbox", name = "relay-enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public SeahorseMemoryOutboxRelayJob seahorseMemoryOutboxRelayJob(
