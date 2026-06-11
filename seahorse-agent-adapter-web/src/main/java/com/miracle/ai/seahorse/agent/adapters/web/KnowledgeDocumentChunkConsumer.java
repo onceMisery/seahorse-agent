@@ -79,7 +79,10 @@ public class KnowledgeDocumentChunkConsumer {
                             chunkEvent.docId(), chunkEvent.kbId(), chunkEvent.operator(), chunkEvent.pipelineId());
 
                     try {
-                        documentService.executeChunk(chunkEvent.docId(), null, chunkEvent.operator());
+                        var pipeline = com.miracle.ai.seahorse.agent.kernel.domain.ingestion.PipelineDefinition.builder()
+                                .id(chunkEvent.pipelineId())
+                                .build();
+                        documentService.executeChunk(chunkEvent.docId(), pipeline, chunkEvent.operator());
                         log.info("Document chunk processing completed: docId={}", chunkEvent.docId());
                     } catch (Exception e) {
                         log.error("Failed to process document chunk: docId={}", chunkEvent.docId(), e);

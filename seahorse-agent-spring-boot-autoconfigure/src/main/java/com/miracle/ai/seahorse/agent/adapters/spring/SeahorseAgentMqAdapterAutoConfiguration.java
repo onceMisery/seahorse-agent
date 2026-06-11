@@ -96,7 +96,7 @@ public class SeahorseAgentMqAdapterAutoConfiguration {
         @Bean
         @ConditionalOnBean(PulsarMessageQueueAdapter.class)
         @ConditionalOnMissingBean(MessageQueuePort.class)
-        public ReliableMessageQueueAdapter seahorseReliableMessageQueueAdapter(
+        public MessageQueuePort seahorseMessageQueuePort(
                 PulsarMessageQueueAdapter pulsarAdapter,
                 ObjectProvider<OutboxEventRepositoryPort> outboxRepositoryPort,
                 ObjectProvider<ObjectMapper> objectMapperProvider,
@@ -110,10 +110,13 @@ public class SeahorseAgentMqAdapterAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnBean(ReliableMessageQueueAdapter.class)
+        @ConditionalOnBean(MessageQueuePort.class)
         @ConditionalOnMissingBean(MessageSubscriptionPort.class)
-        public MessageSubscriptionPort seahorseMessageSubscriptionPort(ReliableMessageQueueAdapter adapter) {
-            return adapter;
+        public MessageSubscriptionPort seahorseMessageSubscriptionPort(MessageQueuePort mqPort) {
+            if (mqPort instanceof MessageSubscriptionPort) {
+                return (MessageSubscriptionPort) mqPort;
+            }
+            throw new IllegalStateException("MessageQueuePort does not implement MessageSubscriptionPort");
         }
     }
 }
