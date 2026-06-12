@@ -1,0 +1,8 @@
+{
+  "intentCode": "ecommerce_service",
+  "name": "电商客服",
+  "level": 0,
+  "description": "电商平台客户服务意图",
+  "examples": ["我想咨询订单", "商品问题", "售后服务"],
+  "enabled": 1
+}
