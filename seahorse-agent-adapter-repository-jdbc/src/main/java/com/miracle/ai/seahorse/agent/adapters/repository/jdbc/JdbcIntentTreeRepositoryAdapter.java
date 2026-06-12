@@ -303,7 +303,11 @@ public class JdbcIntentTreeRepositoryAdapter implements IntentTreeRepositoryPort
         if (!hasText(value)) {
             return null;
         }
-        return toLongId(value);
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private long toLongId(String value) {

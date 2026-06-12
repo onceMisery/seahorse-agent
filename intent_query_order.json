@@ -1,0 +1,9 @@
+{
+  "intentCode": "query_order",
+  "name": "Query Order Status",
+  "level": 2,
+  "parentCode": "order_mgmt",
+  "description": "Check order status and tracking",
+  "topK": 3,
+  "enabled": 1
+}
