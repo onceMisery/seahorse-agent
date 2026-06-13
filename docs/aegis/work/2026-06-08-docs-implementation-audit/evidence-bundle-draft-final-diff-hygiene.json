@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "aegis.schema.v0",
-  "artifactKey": "final-diff-hygiene",
-  "type": "command",
-  "source": "git diff --check -- <touched docs, Aegis records, metadata JDBC adapters/tests, metadata autoconfigure files>",
-  "summary": "GREEN: diff hygiene check exited 0 with no whitespace errors; output only included line-ending conversion warnings for docs files.",
-  "verifier": "codex"
-}

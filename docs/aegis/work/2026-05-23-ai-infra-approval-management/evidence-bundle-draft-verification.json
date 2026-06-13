@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "aegis.schema.v0",
-  "artifactKey": "verification",
-  "type": "focused-test-evidence",
-  "source": "Local Maven focused test runs in D:\\code\\seahorse-agent\\.worktrees\\ai-infra-approval-management",
-  "summary": "Kernel focused tests passed 26/26; JDBC focused tests passed 7/7; Web focused tests passed 6/6; Spring starter focused tests passed 8/8.",
-  "verifier": "Codex"
-}

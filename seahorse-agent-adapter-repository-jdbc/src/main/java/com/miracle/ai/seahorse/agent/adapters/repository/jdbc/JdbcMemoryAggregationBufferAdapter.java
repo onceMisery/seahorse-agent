@@ -28,6 +28,8 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -46,13 +48,16 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final MemoryAggregationPolicy policy;
+    private final String turnsJsonPlaceholder;
 
     public JdbcMemoryAggregationBufferAdapter(DataSource dataSource,
                                               ObjectMapper objectMapper,
                                               MemoryAggregationPolicy policy) {
-        this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
+        DataSource safeDataSource = Objects.requireNonNull(dataSource, "dataSource must not be null");
+        this.jdbcTemplate = new JdbcTemplate(safeDataSource);
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.policy = Objects.requireNonNullElseGet(policy, MemoryAggregationPolicy::defaults);
+        this.turnsJsonPlaceholder = isPostgres(safeDataSource) ? "?::jsonb" : "?";
     }
 
     @Override
@@ -146,12 +151,13 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
 
     private void insert(StoredBuffer buffer) {
         Instant now = Instant.now();
-        jdbcTemplate.update("""
+        String sql = """
                 INSERT INTO t_memory_aggregation_buffer
                     (id, tenant_id, user_id, conversation_id, session_id, turn_count, total_tokens, turns_json,
                      version, first_activity_at, last_activity_at, create_time, update_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                VALUES (?, ?, ?, ?, ?, ?, ?, %s, ?, ?, ?, ?, ?)
+                """.formatted(turnsJsonPlaceholder);
+        jdbcTemplate.update(sql,
                 JdbcMemorySupport.toLongId(buffer.id()),
                 buffer.tenantId(),
                 JdbcMemorySupport.toLongId(buffer.userId()),
@@ -168,19 +174,20 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
     }
 
     private boolean update(StoredBuffer buffer, long expectedVersion) {
-        int updated = jdbcTemplate.update("""
+        String sql = """
                 UPDATE t_memory_aggregation_buffer
                 SET user_id = ?,
                     conversation_id = ?,
                     turn_count = ?,
                     total_tokens = ?,
-                    turns_json = ?,
+                    turns_json = %s,
                     first_activity_at = ?,
                     last_activity_at = ?,
                     version = ?,
                     update_time = ?
                 WHERE tenant_id = ? AND user_id = ? AND session_id = ? AND version = ?
-                """,
+                """.formatted(turnsJsonPlaceholder);
+        int updated = jdbcTemplate.update(sql,
                 JdbcMemorySupport.toLongId(buffer.userId()),
                 JdbcMemorySupport.toLongId(buffer.conversationId()),
                 buffer.turns().size(),
@@ -195,6 +202,16 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
                 buffer.sessionId(),
                 expectedVersion);
         return updated == 1;
+    }
+
+    private boolean isPostgres(DataSource dataSource) {
+        try (Connection connection = dataSource.getConnection()) {
+            DatabaseMetaData metaData = connection.getMetaData();
+            String productName = metaData == null ? "" : metaData.getDatabaseProductName();
+            return productName != null && productName.toLowerCase().contains("postgresql");
+        } catch (SQLException ex) {
+            return false;
+        }
     }
 
     private boolean isReady(StoredBuffer buffer, MemoryFlushTrigger trigger, Instant now) {

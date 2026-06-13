@@ -366,6 +366,59 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldCaptureProfileFactFromAggregatedMemoryContextBlock() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                profilePort,
+                CorrectionLedgerPort.noop());
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-aggregated-profile", "default", "memory-aggregation",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-aggregated-profile")
+                        .messageId("snapshot-1")
+                        .message(ChatMessage.user("""
+                                MEMORY_CONTEXT_BLOCK: v1
+                                snapshot_id: snapshot-1
+                                tenant_id: default
+                                user_id: user-1
+                                conversation_id: conv-aggregated-profile
+                                session_id: session-1
+                                trigger: IDLE
+                                turn_count: 1
+
+                                [turns]
+                                turn_1:
+                                  user_message_id: user-msg-1
+                                  assistant_message_id: assistant-msg-1
+                                  completed_at: 2026-06-13T00:00:00Z
+                                  estimated_tokens: 20
+                                  user: 请记住：我的职业是后端工程师，我偏好简洁中文回答。
+                                  assistant: 好的，我会记住。
+
+                                [source_spans]
+                                span_1: user-msg-1 -> assistant-msg-1
+                                """))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, result.status());
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        Assertions.assertEquals("我的职业是后端工程师，我偏好简洁中文回答。",
+                shortTermPort.savedRecords.get(0).content());
+        Assertions.assertEquals(2, profilePort.updates.size());
+        Assertions.assertEquals("identity.occupation", profilePort.updates.get(0).slotKey());
+        Assertions.assertEquals("后端工程师", profilePort.updates.get(0).valueText());
+        Assertions.assertEquals("preferences.response_style", profilePort.updates.get(1).slotKey());
+        Assertions.assertEquals("简洁中文回答", profilePort.updates.get(1).valueText());
+    }
+
+    @Test
     void shouldWriteProfileFactsForNameTechStackAndResponseStyle() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
@@ -445,6 +498,31 @@ class DefaultMemoryEnginePortTests {
         Assertions.assertEquals("Java \u548c Spring", profilePort.updates.get(1).valueText());
         Assertions.assertEquals("preferences.response_style", profilePort.updates.get(2).slotKey());
         Assertions.assertEquals("\u7b80\u77ed\u56de\u7b54", profilePort.updates.get(2).valueText());
+    }
+
+    @Test
+    void shouldWriteChineseResponseStyleProfileFactForGeneralPreferenceWording() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                profilePort,
+                CorrectionLedgerPort.noop());
+
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-profile-response-style-cn")
+                .messageId("msg-cn-response-style")
+                .message(ChatMessage.user("请记住：我偏好简洁中文回答。"))
+                .build());
+
+        Assertions.assertEquals(1, profilePort.updates.size());
+        Assertions.assertEquals("preferences.response_style", profilePort.updates.get(0).slotKey());
+        Assertions.assertEquals("简洁中文回答", profilePort.updates.get(0).valueText());
     }
 
     @Test

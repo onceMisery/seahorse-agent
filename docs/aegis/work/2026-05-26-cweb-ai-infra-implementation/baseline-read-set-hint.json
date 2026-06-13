@@ -1,6 +1,0 @@
-{
-  "schemaVersion": "aegis.schema.v0",
-  "candidateDocs": [],
-  "whyRelevant": "Baseline read-set requires agent review.",
-  "missingAuthority": []
-}

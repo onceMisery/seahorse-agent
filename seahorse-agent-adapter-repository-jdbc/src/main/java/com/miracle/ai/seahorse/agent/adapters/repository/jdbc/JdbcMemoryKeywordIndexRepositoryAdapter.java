@@ -24,6 +24,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordIndexPor
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Objects;
 
@@ -33,10 +36,13 @@ public class JdbcMemoryKeywordIndexRepositoryAdapter implements MemoryKeywordInd
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final String metadataJsonPlaceholder;
 
     public JdbcMemoryKeywordIndexRepositoryAdapter(DataSource dataSource, ObjectMapper objectMapper) {
-        this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
+        DataSource safeDataSource = Objects.requireNonNull(dataSource, "dataSource must not be null");
+        this.jdbcTemplate = new JdbcTemplate(safeDataSource);
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
+        this.metadataJsonPlaceholder = isPostgres(safeDataSource) ? "?::jsonb" : "?";
     }
 
     @Override
@@ -48,12 +54,12 @@ public class JdbcMemoryKeywordIndexRepositoryAdapter implements MemoryKeywordInd
         String tenantId = safeTenantId(document.tenantId());
         long userId = JdbcMemorySupport.toLongId(document.userId());
         Instant now = Instant.now();
-        int updated = jdbcTemplate.update("""
+        String updateSql = """
                 UPDATE t_memory_keyword_index
                 SET layer_name = ?,
                     memory_type = ?,
                     content = ?,
-                    metadata_json = ?,
+                    metadata_json = %s,
                     source_update_time = ?,
                     status = 'ACTIVE',
                     update_time = ?,
@@ -61,7 +67,8 @@ public class JdbcMemoryKeywordIndexRepositoryAdapter implements MemoryKeywordInd
                 WHERE memory_id = ?
                   AND user_id = ?
                   AND tenant_id = ?
-                """,
+                """.formatted(metadataJsonPlaceholder);
+        int updated = jdbcTemplate.update(updateSql,
                 document.layer(),
                 document.type(),
                 document.content(),
@@ -74,12 +81,13 @@ public class JdbcMemoryKeywordIndexRepositoryAdapter implements MemoryKeywordInd
         if (updated > 0) {
             return;
         }
-        jdbcTemplate.update("""
+        String insertSql = """
                 INSERT INTO t_memory_keyword_index
                     (id, user_id, tenant_id, memory_id, layer_name, memory_type, content, metadata_json,
                      source_update_time, status, create_time, update_time, deleted)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, 0)
-                """,
+                VALUES (?, ?, ?, ?, ?, ?, ?, %s, ?, 'ACTIVE', ?, ?, 0)
+                """.formatted(metadataJsonPlaceholder);
+        jdbcTemplate.update(insertSql,
                 JdbcMemorySupport.nextId(),
                 userId,
                 tenantId,
@@ -118,5 +126,15 @@ public class JdbcMemoryKeywordIndexRepositoryAdapter implements MemoryKeywordInd
     private String safeTenantId(String tenantId) {
         String normalized = Objects.requireNonNullElse(tenantId, DEFAULT_TENANT_ID).trim();
         return normalized.isBlank() ? DEFAULT_TENANT_ID : normalized;
+    }
+
+    private boolean isPostgres(DataSource dataSource) {
+        try (Connection connection = dataSource.getConnection()) {
+            DatabaseMetaData metaData = connection.getMetaData();
+            String productName = metaData == null ? "" : metaData.getDatabaseProductName();
+            return productName != null && productName.toLowerCase().contains("postgresql");
+        } catch (SQLException ex) {
+            return false;
+        }
     }
 }

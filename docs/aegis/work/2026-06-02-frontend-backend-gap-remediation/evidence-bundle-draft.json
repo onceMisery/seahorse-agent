@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "aegis.schema.v0",
-  "artifactKey": "final-remediation-verification",
-  "type": "test-build-browser",
-  "source": "vitest remediation/capability contracts, npm test, npm run build, Maven test-compile, Maven production compile, in-app browser local render check",
-  "summary": "Frontend remediation contracts passed 7/7, capability contracts passed 8/8, full frontend suite passed 12 files / 28 tests, frontend build passed, backend seahorse-agent-tests reactor test-compile passed, backend starter production compile passed, and local /admin/ai-infra rendered the admin shell with Chinese navigation and AI Infra/SRE text.",
-  "verifier": "codex"
-}

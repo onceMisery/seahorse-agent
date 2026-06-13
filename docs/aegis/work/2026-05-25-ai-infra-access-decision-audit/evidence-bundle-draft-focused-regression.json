@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "aegis.schema.v0",
-  "artifactKey": "focused-regression",
-  "type": "test",
-  "source": "mvn -nsu '-Dspotless.apply.skip=true' -pl seahorse-agent-kernel,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am '-Dtest=AuditedResourceAccessPolicyPortTests,KernelAccessDecisionQueryServiceTests,JdbcAccessDecisionRepositoryAdapterTests,SeahorseAgentControllerTests,SeahorseAgentRegistryAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false' test",
-  "summary": "Focused AccessDecision audit/query regression passed across kernel, JDBC, Web, and Spring starter.",
-  "verifier": "codex"
-}

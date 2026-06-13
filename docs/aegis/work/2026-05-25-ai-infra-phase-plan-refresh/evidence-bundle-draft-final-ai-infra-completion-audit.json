@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "aegis.schema.v0",
-  "artifactKey": "final-ai-infra-completion-audit",
-  "type": "verification",
-  "source": "Phase 4/5/7/8B/8C/8D focused Maven regressions, kernel dependency scan, raw-sensitive scan, and git diff --check",
-  "summary": "Final audit passed for the scoped section 21 AI Infra implementation: selected regressions all passed, kernel forbidden dependency scan had no matches, safety-filtered raw-sensitive scan had no matches, and diff hygiene had no whitespace errors.",
-  "verifier": "Codex, 2026-05-26"
-}

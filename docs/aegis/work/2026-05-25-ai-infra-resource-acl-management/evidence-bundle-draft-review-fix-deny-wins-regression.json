@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "aegis.schema.v0",
-  "artifactKey": "review-fix-deny-wins-regression",
-  "type": "test-command",
-  "source": "mvn -nsu -Dspotless.apply.skip=true focused Resource ACL kernel/JDBC tests after deny-wins review fix",
-  "summary": "Added cross-priority deny-wins coverage; ResourceAclRule.effectiveOrder and JDBC findEffective now rank DENY before priority; ResourceAclRepositoryPort.findEffective is mandatory. Kernel ACL 10 tests and JDBC ACL 2 tests passed.",
-  "verifier": "Codex 2026-05-25 23:30-23:32 Asia/Shanghai"
-}

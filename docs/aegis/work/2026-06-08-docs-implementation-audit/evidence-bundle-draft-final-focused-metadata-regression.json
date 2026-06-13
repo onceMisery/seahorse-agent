@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "aegis.schema.v0",
-  "artifactKey": "final-focused-metadata-regression",
-  "type": "command",
-  "source": ".\\mvnw.cmd -pl seahorse-agent-adapter-repository-jdbc,seahorse-agent-spring-boot-autoconfigure -am \"-Dtest=JdbcMetadataDictionaryManagementAdapterTests,JdbcMetadataCanonicalWriteAdapterTests,JdbcMetadataSchemaManagementAdapterTests,JdbcMetadataExtractionResultManagementAdapterTests,JdbcMetadataReviewQuarantineAdapterTests,JdbcMetadataBackfillJobAdapterTests,JdbcMetadataSchemaUsageReportAdapterTests,JdbcMetadataQualityReportAdapterTests,JdbcMetadataGovernanceRepositoryAdapterCompatibilityTests,SeahorseAgentKernelMetadataAutoConfigurationTests\" \"-Dsurefire.failIfNoSpecifiedTests=false\" test",
-  "summary": "GREEN: final focused regression passed. JDBC metadata module ran 28 targeted tests and Spring Boot autoconfigure ran 6 metadata auto-configuration tests; reactor build succeeded.",
-  "verifier": "codex"
-}

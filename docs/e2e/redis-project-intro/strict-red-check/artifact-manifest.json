@@ -1,8 +1,0 @@
-﻿{
-    "finalMarkdown":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\strict-red-check\\final-document.md",
-    "wholeDocumentHtml":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\strict-red-check\\project-intro-web-preview.html",
-    "newsletterMarkdown":  null,
-    "presentationMarkdown":  null,
-    "frontendDesignHtml":  null,
-    "source":  "tool_call_finished events plus final response artifacts"
-}

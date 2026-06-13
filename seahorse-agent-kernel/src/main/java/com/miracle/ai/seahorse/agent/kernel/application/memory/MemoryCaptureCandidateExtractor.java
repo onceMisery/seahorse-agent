@@ -22,8 +22,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 class MemoryCaptureCandidateExtractor {
+
+    private static final String MEMORY_CONTEXT_BLOCK_PREFIX = "MEMORY_CONTEXT_BLOCK";
+    private static final Pattern MEMORY_CONTEXT_BLOCK_USER_PATTERN = Pattern.compile(
+            "(?:^|\\s)user:\\s*(.*?)(?=\\s+assistant:|\\s+turn_\\d+:|\\s+\\[source_spans\\]|$)");
 
     private final MemoryCaptureRules rules;
     private MemoryCaptureRejectionReason lastRejection;
@@ -130,6 +136,7 @@ class MemoryCaptureCandidateExtractor {
         if (content.isBlank()) {
             return "";
         }
+        content = extractMemoryContextBlockUserText(content, signals);
         String before = content;
         content = content.replaceAll("\\s+", " ");
         content = content.replaceFirst("^我\\s*是\\s*", "我是");
@@ -148,6 +155,44 @@ class MemoryCaptureCandidateExtractor {
             signals.add("normalized_chinese_whitespace");
         }
         return content;
+    }
+
+    private String extractMemoryContextBlockUserText(String content, List<String> signals) {
+        if (!content.startsWith(MEMORY_CONTEXT_BLOCK_PREFIX)) {
+            return content;
+        }
+        Matcher matcher = MEMORY_CONTEXT_BLOCK_USER_PATTERN.matcher(content.replace("\r\n", "\n").replace('\r', '\n'));
+        List<String> userTexts = new ArrayList<>();
+        while (matcher.find()) {
+            String userText = matcher.group(1).replace("\\n", "\n").trim();
+            if (!userText.isBlank()) {
+                userTexts.add(userText);
+            }
+        }
+        if (userTexts.isEmpty()) {
+            return content;
+        }
+        signals.add("memory_context_block");
+        signals.add("memory_context_block_user_turn");
+        if (userTexts.size() > 1) {
+            signals.add("memory_context_block_multi_turn");
+        }
+        return selectHighValueUserText(userTexts);
+    }
+
+    private String selectHighValueUserText(List<String> userTexts) {
+        for (String userText : userTexts) {
+            String normalized = userText.replaceAll("\\s+", " ").trim();
+            PrefixRemoval removal = removeExplicitPrefix(normalized);
+            String candidate = removal.content();
+            if (!candidate.equals(normalized)
+                    || startsWithAny(candidate, rules.profileStatementPrefixes())
+                    || startsWithAny(candidate, rules.preferenceStatementPrefixes())
+                    || isPersonalFactStatement(candidate)) {
+                return userText;
+            }
+        }
+        return userTexts.get(0);
     }
 
     private String removeLowValueSocialTail(String content) {

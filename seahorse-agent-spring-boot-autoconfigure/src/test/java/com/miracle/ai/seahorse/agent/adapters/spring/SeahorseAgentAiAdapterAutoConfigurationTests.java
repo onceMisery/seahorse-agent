@@ -44,8 +44,8 @@ class SeahorseAgentAiAdapterAutoConfigurationTests {
     @Test
     void shouldConfigureMockEmbeddingDimensionFromVectorDimension() {
         contextRunner.withPropertyValues(
-                        "seahorse-agent.adapters.ai.type=mock",
-                        "seahorse-agent.adapters.vector.dimension=1024")
+                        "seahorse.agent.adapters.ai.type=mock",
+                        "seahorse.agent.adapters.vector.dimension=1024")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(EmbeddingModelPort.class);
@@ -58,12 +58,12 @@ class SeahorseAgentAiAdapterAutoConfigurationTests {
     @Test
     void shouldAllowMockEmbeddingWithOpenAiCompatibleChat() {
         contextRunner.withPropertyValues(
-                        "seahorse-agent.adapters.ai.type=openai-compatible",
-                        "seahorse-agent.adapters.ai.embedding-type=mock",
-                        "seahorse-agent.adapters.ai.base-url=https://apihub.agnes-ai.com/v1",
-                        "seahorse-agent.adapters.ai.api-key=test-key",
-                        "seahorse-agent.adapters.ai.chat-model=agnes-2.0-flash",
-                        "seahorse-agent.adapters.ai.mock.embedding-dimension=1024")
+                        "seahorse.agent.adapters.ai.type=openai-compatible",
+                        "seahorse.agent.adapters.ai.embedding-type=mock",
+                        "seahorse.agent.adapters.ai.base-url=https://apihub.agnes-ai.com/v1",
+                        "seahorse.agent.adapters.ai.api-key=test-key",
+                        "seahorse.agent.adapters.ai.chat-model=agnes-2.0-flash",
+                        "seahorse.agent.adapters.ai.mock.embedding-dimension=1024")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context.getBean(OpenAiCompatibleModelAdapter.class)).isNotNull();
@@ -75,7 +75,7 @@ class SeahorseAgentAiAdapterAutoConfigurationTests {
 
     @Test
     void shouldConfigureMockStreamingChatModelForAgentRuntimeE2e() {
-        contextRunner.withPropertyValues("seahorse-agent.adapters.ai.type=mock")
+        contextRunner.withPropertyValues("seahorse.agent.adapters.ai.type=mock")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(StreamingChatModelPort.class);
@@ -102,7 +102,7 @@ class SeahorseAgentAiAdapterAutoConfigurationTests {
 
     @Test
     void shouldExposeMockStreamingDiagnosticsForSkillSelectionE2e() {
-        contextRunner.withPropertyValues("seahorse-agent.adapters.ai.type=mock")
+        contextRunner.withPropertyValues("seahorse.agent.adapters.ai.type=mock")
                 .run(context -> {
                     StreamingChatModelPort model = context.getBean(StreamingChatModelPort.class);
                     AtomicReference<String> content = new AtomicReference<>("");

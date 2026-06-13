@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "aegis.schema.v0",
-  "artifactKey": "red-agent-factory-missing-contract",
-  "type": "test-red",
-  "source": "mvn -nsu '-Dspotless.apply.skip=true' -pl seahorse-agent-kernel '-Dtest=AgentTemplateTests,KernelAgentFactoryServiceTests' test",
-  "summary": "RED failed at testCompile because Agent Factory domain, inbound ports, outbound ports, and KernelAgentFactoryService did not exist.",
-  "verifier": "maven/javac exit 1 with missing symbol errors"
-}

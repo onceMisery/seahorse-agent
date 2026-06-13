@@ -4,9 +4,11 @@ import { useChatStore } from "@/stores/chatStore";
 import { getAgentRunCostSummary, getAgentRunSnapshot, listAgentRunEvents } from "@/services/agentRunService";
 import { listMessages } from "@/services/sessionService";
 import { AGENT_STREAM_EVENTS, type AgentRunSnapshot, type Message, type StreamEventEnvelope } from "@/types";
+import { storage } from "@/utils/storage";
 import { toast } from "sonner";
 
 const streamStarts: string[] = [];
+const streamRequests: Array<{ url: string; headers?: Record<string, string> }> = [];
 
 vi.mock("@/services/agentRunService", () => ({
   getAgentRunCostSummary: vi.fn(),
@@ -15,8 +17,9 @@ vi.mock("@/services/agentRunService", () => ({
 }));
 
 vi.mock("@/hooks/useStreamResponse", () => ({
-  createStreamResponse: vi.fn(({ url }) => {
+  createStreamResponse: vi.fn(({ url, headers }) => {
     streamStarts.push(url);
+    streamRequests.push({ url, headers });
     return {
       cancel: vi.fn(),
       start: vi.fn().mockResolvedValue(undefined)
@@ -65,6 +68,8 @@ describe("chatStore snapshot hydration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     streamStarts.length = 0;
+    streamRequests.length = 0;
+    storage.clearAuth();
     setMessages([]);
     useChatStore.setState({
       currentSessionId: null,
@@ -225,9 +230,21 @@ describe("chatStore snapshot hydration", () => {
 
     expect(streamStarts).toHaveLength(1);
     const url = new URL(streamStarts[0], "http://localhost");
-    expect(url.pathname).toBe("/api/rag/v3/chat");
+    expect(url.pathname).toMatch(/\/rag\/v3\/chat$/);
     expect(url.searchParams.get("taskTemplateId")).toBe("github-visual-project-intro");
     expect(url.searchParams.get("chatMode")).toBe("agent");
+  });
+
+  it("uses Bearer authorization for the chat stream request", async () => {
+    storage.setToken("stream-token");
+    useChatStore.setState({
+      currentSessionId: "conversation-1"
+    });
+
+    await useChatStore.getState().sendMessage("Hello");
+
+    expect(streamRequests).toHaveLength(1);
+    expect(streamRequests[0].headers?.Authorization).toBe("Bearer stream-token");
   });
 
   it("hydrates historical agent messages with snapshot, replay events, and cost after selecting a session", async () => {

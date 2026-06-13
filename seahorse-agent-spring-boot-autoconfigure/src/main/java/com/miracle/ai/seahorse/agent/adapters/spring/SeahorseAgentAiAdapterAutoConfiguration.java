@@ -167,6 +167,35 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
         return adapter;
     }
 
+    /**
+     * 独立 Embedding provider。
+     *
+     * <p>当 chat 模型供应商（如纯对话网关）不提供 {@code /embeddings} 端点时，可为向量化单独配置一个
+     * OpenAI-compatible 端点（如本地 Ollama: {@code http://ollama:11434/v1}）。配置
+     * {@code seahorse.agent.adapters.ai.embedding.base-url} 即启用，并以 {@link Primary} 覆盖
+     * 复用 chat 端点的 {@link #seahorseNativeEmbeddingModelPort} 与 mock 实现。
+     */
+    @Bean
+    @Primary
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.ai.embedding", name = "base-url")
+    @ConditionalOnMissingBean(name = "seahorseDedicatedEmbeddingModelPort")
+    public EmbeddingModelPort seahorseDedicatedEmbeddingModelPort(
+            OkHttpClient httpClient,
+            ObjectMapper objectMapper,
+            @Value("${seahorse.agent.adapters.ai.embedding.base-url}") String embeddingBaseUrl,
+            @Value("${seahorse.agent.adapters.ai.embedding.api-key:}") String embeddingApiKey,
+            @Value("${seahorse.agent.adapters.ai.embedding-model:}") String embeddingModel) {
+        OpenAiCompatibleModelProperties properties = new OpenAiCompatibleModelProperties(
+                embeddingBaseUrl, embeddingApiKey, "", embeddingModel, "", "", List.of());
+        // embedding 调用为同步请求，executor 仅用于流式对话，这里用调用线程执行即可。
+        OpenAiCompatibleModelAdapter delegate =
+                new OpenAiCompatibleModelAdapter(httpClient, objectMapper, properties, Runnable::run);
+        // 仅暴露 EmbeddingModelPort：OpenAiCompatibleModelAdapter 同时实现 ChatModelPort 等多个端口，
+        // 若直接以 @Primary 暴露该实例，会让它在 ChatModelPort 候选中也成为 primary，与 chat adapter 冲突。
+        // 用纯委托包装隔离，确保 @Primary 只作用于 embedding 端口。
+        return (modelId, text) -> delegate.embed(modelId, text);
+    }
+
     @Bean
     @ConditionalOnBean(OpenAiCompatibleModelAdapter.class)
     @ConditionalOnMissingBean(EmbeddingModelPort.class)

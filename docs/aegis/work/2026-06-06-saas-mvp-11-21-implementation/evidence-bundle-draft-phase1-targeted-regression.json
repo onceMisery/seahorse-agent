@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "aegis.schema.v0",
-  "artifactKey": "phase1-targeted-regression",
-  "type": "test",
-  "source": "phase1-targeted-maven-regression",
-  "summary": "phase1-targeted-tests-exited-0-idempotency-error-response-exception-handler-auto-config",
-  "verifier": "codex"
-}

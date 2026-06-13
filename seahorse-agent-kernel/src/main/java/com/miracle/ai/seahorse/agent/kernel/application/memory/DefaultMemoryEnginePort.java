@@ -1075,13 +1075,21 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                                              ChatMessage message,
                                                              MemoryClassificationResult classification) {
         MemoryCaptureDecision decision = classification.decision();
-        String profileSlot = profileValueNormalizer.resolveSlot(decision, classification);
-        String profileGenerationId = isBlank(profileSlot) ? "" : profileSlot + ":" + SnowflakeIds.nextIdString();
+        List<MemoryProfileValueNormalizer.ProfileSlotValue> profileValues =
+                profileValueNormalizer.resolveValues(decision, classification);
+        Map<String, String> profileGenerationIds = profileGenerationIds(profileValues);
         Map<String, Object> metadata = captureMetadata(operationId, tenantId, request, message, decision);
         refinerMetadataWriter.appendRefined(metadata, classification);
-        if (!isBlank(profileSlot)) {
-            metadata.put("profileSlot", profileSlot);
-            metadata.put("generationId", profileGenerationId);
+        if (!profileValues.isEmpty()) {
+            MemoryProfileValueNormalizer.ProfileSlotValue primaryProfile = profileValues.get(0);
+            metadata.put("profileSlot", primaryProfile.slotKey());
+            metadata.put("generationId", profileGenerationIds.get(primaryProfile.slotKey()));
+            if (profileValues.size() > 1) {
+                metadata.put("profileSlots", profileValues.stream()
+                        .map(MemoryProfileValueNormalizer.ProfileSlotValue::slotKey)
+                        .toList());
+                metadata.put("profileGenerationIds", profileGenerationIds);
+            }
         }
         canonicalAliasResolver.attachIfResolved(metadata, request.userId(), tenantId, decision.content());
         MemoryLayer targetLayer = targetLayer(classification);
@@ -1094,7 +1102,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 java.time.Instant.now());
         List<String> operations = new ArrayList<>();
         operations.add(saveMemory(record, targetLayer));
-        if (captureProfileFact(request, tenantId, decision, profileSlot, profileGenerationId)) {
+        if (captureProfileFacts(request, tenantId, decision, profileValues, profileGenerationIds)) {
             operations.add("PROFILE_UPSERT");
         }
         operations.addAll(indexMemoryOrEnqueueOutbox(record, request.userId(), tenantId));
@@ -1633,23 +1641,35 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return result.operations();
     }
 
-    private boolean captureProfileFact(MemoryWriteRequest request,
-                                       String tenantId,
-                                       MemoryCaptureDecision decision,
-                                       String slotKey,
-                                       String generationId) {
-        if (isBlank(slotKey)) {
+    private Map<String, String> profileGenerationIds(
+            List<MemoryProfileValueNormalizer.ProfileSlotValue> profileValues) {
+        Map<String, String> generationIds = new LinkedHashMap<>();
+        for (MemoryProfileValueNormalizer.ProfileSlotValue profileValue : profileValues) {
+            generationIds.put(profileValue.slotKey(), profileValue.slotKey() + ":" + SnowflakeIds.nextIdString());
+        }
+        return generationIds;
+    }
+
+    private boolean captureProfileFacts(MemoryWriteRequest request,
+                                        String tenantId,
+                                        MemoryCaptureDecision decision,
+                                        List<MemoryProfileValueNormalizer.ProfileSlotValue> profileValues,
+                                        Map<String, String> profileGenerationIds) {
+        if (profileValues.isEmpty()) {
             return false;
         }
-        String value = profileValueNormalizer.normalize(slotKey, decision.content());
-        return trackWriteService.writeProfileFact(
-                request.userId(),
-                tenantId,
-                slotKey,
-                value,
-                decision.confidenceLevel(),
-                request.messageId(),
-                generationId);
+        boolean captured = false;
+        for (MemoryProfileValueNormalizer.ProfileSlotValue profileValue : profileValues) {
+            captured |= trackWriteService.writeProfileFact(
+                    request.userId(),
+                    tenantId,
+                    profileValue.slotKey(),
+                    profileValue.valueText(),
+                    decision.confidenceLevel(),
+                    request.messageId(),
+                    profileGenerationIds.getOrDefault(profileValue.slotKey(), ""));
+        }
+        return captured;
     }
 
     private Map<String, Object> captureMetadata(String operationId,

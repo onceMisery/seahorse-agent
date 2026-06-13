@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "aegis.schema.v0",
-  "artifactKey": "focused-regression",
-  "type": "command",
-  "source": "mvn -nsu '-Dspotless.apply.skip=true' -pl seahorse-agent-kernel,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am '-Dtest=KernelSecretManagementServiceTests,JdbcSecretStoreAdapterTests,JdbcSecretSchemaAlignmentTests,SeahorseAgentControllerTests#shouldExposeSecretCreationApiWithoutEchoingPlaintext,SeahorseAgentCredentialAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false' test",
-  "summary": "Passed. Covered secret management service, JDBC encrypted store, schema alignment, Web POST /api/secrets response shape, and Spring credential auto-configuration.",
-  "verifier": "codex"
-}

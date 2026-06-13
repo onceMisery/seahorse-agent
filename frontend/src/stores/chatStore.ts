@@ -275,7 +275,7 @@ export const useChatStore = create<ChatState>()(
       const url = `${API_BASE_URL}/rag/v3/chat${query}`;
       const token = storage.getToken();
       const headers: Record<string, string> = { Accept: "text/event-stream" };
-      if (token) headers.Authorization = token;
+      if (token) headers.Authorization = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
 
       let currentAssistantMessageId = assistantId;
       const buffer = new RenderBuffer((flushedText) => {

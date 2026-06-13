@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "aegis.schema.v0",
-  "artifactKey": "red-sandbox-missing-contract",
-  "type": "test-red",
-  "source": "mvn -nsu '-Dspotless.apply.skip=true' -pl seahorse-agent-kernel '-Dtest=DefaultSandboxPolicyPortTests,KernelSandboxRuntimeServiceTests,SandboxPolicyDecisionTests,SandboxExecutionTests,SandboxArtifactTests' test",
-  "summary": "RED failed at testCompile because sandbox domain, inbound ports, outbound ports, and KernelSandboxRuntimeService did not exist.",
-  "verifier": "maven-surefire/javac exit 1 with missing symbol errors"
-}

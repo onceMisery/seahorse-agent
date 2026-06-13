@@ -18,6 +18,12 @@
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import java.util.Objects;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Slice 3 续 cut 5：profile slot 解析与 slot value 规整。
@@ -37,6 +43,9 @@ import java.util.Objects;
 public final class MemoryProfileValueNormalizer {
 
     private static final String TARGET_KIND_PROFILE_SLOT = "PROFILE_SLOT";
+    private static final Pattern OCCUPATION_TRAILING_STATEMENT = Pattern.compile(
+            "[，,；;。]\\s*(我(喜欢|偏好|习惯|常用|希望)|i\\s+(prefer|like)\\b).*$",
+            Pattern.CASE_INSENSITIVE);
 
     private final ProfileSlotResolver profileSlotResolver;
 
@@ -53,13 +62,41 @@ public final class MemoryProfileValueNormalizer {
      * 按 type + content 启发式判定。
      */
     public String resolveSlot(MemoryCaptureDecision decision, MemoryClassificationResult classification) {
+        List<ProfileSlotValue> values = resolveValues(decision, classification);
+        return values.isEmpty() ? "" : values.get(0).slotKey();
+    }
+
+    public List<ProfileSlotValue> resolveValues(MemoryCaptureDecision decision,
+                                                MemoryClassificationResult classification) {
+        if (decision == null) {
+            return List.of();
+        }
+        List<String> slotKeys = resolveSlotKeys(decision, classification);
+        if (slotKeys.isEmpty()) {
+            return List.of();
+        }
+        List<ProfileSlotValue> values = new ArrayList<>();
+        for (String slotKey : slotKeys) {
+            String value = normalize(slotKey, decision.content());
+            if (!isBlank(value)) {
+                values.add(new ProfileSlotValue(slotKey, value));
+            }
+        }
+        return values;
+    }
+
+    private List<String> resolveSlotKeys(MemoryCaptureDecision decision, MemoryClassificationResult classification) {
         RefinedMemoryDelta delta = classification == null ? null : classification.refinedDelta();
+        Map<String, Boolean> slotKeys = new LinkedHashMap<>();
         if (delta != null
                 && TARGET_KIND_PROFILE_SLOT.equalsIgnoreCase(delta.targetKind())
                 && !isBlank(delta.targetKey())) {
-            return delta.targetKey();
+            slotKeys.put(delta.targetKey(), Boolean.TRUE);
         }
-        return decision == null ? "" : profileSlotResolver.resolve(decision.type(), decision.content(), "");
+        for (String slotKey : profileSlotResolver.resolveAll(decision.type(), decision.content(), "")) {
+            slotKeys.putIfAbsent(slotKey, Boolean.TRUE);
+        }
+        return List.copyOf(slotKeys.keySet());
     }
 
     /**
@@ -88,14 +125,17 @@ public final class MemoryProfileValueNormalizer {
             return stripPrefix(value, "^我主要使用\\s*");
         }
         if ("preferences.response_style".equals(slotKey)) {
+            value = responseStyleSegment(value);
             value = stripPrefix(value, "(?i)^i prefer\\s+");
             value = stripPrefix(value, "(?i)^i like\\s+");
             value = stripPrefix(value, "^我喜欢");
             value = stripPrefix(value, "^我偏好");
-            return value;
+            value = stripPrefix(value, "^我习惯");
+            value = stripPrefix(value, "^我希望");
+            return stripTrailingSentencePunctuation(value);
         }
         if ("identity.occupation".equals(slotKey)) {
-            return OccupationCorrection.normalizeOccupationValue(stripProfilePrefix(value));
+            return OccupationCorrection.normalizeOccupationValue(stripOccupationTrailingStatement(stripProfilePrefix(value)));
         }
         return "";
     }
@@ -116,7 +156,47 @@ public final class MemoryProfileValueNormalizer {
                 .trim();
     }
 
+    private static String stripOccupationTrailingStatement(String content) {
+        return OCCUPATION_TRAILING_STATEMENT.matcher(Objects.requireNonNullElse(content, "")).replaceFirst("").trim();
+    }
+
+    private static String responseStyleSegment(String content) {
+        String value = Objects.requireNonNullElse(content, "").trim();
+        int englishIndex = firstIndex(value.toLowerCase(Locale.ROOT), List.of("i prefer ", "i like "));
+        int chineseIndex = firstIndex(value, List.of("我喜欢", "我偏好", "我习惯", "我希望"));
+        int start = minNonNegative(englishIndex, chineseIndex);
+        return start >= 0 ? value.substring(start).trim() : value;
+    }
+
+    private static String stripTrailingSentencePunctuation(String content) {
+        return Objects.requireNonNullElse(content, "").replaceFirst("[。！!\\s]+$", "").trim();
+    }
+
+    private static int firstIndex(String content, List<String> markers) {
+        int first = -1;
+        for (String marker : markers) {
+            int index = content.indexOf(marker);
+            if (index >= 0 && (first < 0 || index < first)) {
+                first = index;
+            }
+        }
+        return first;
+    }
+
+    private static int minNonNegative(int first, int second) {
+        if (first < 0) {
+            return second;
+        }
+        if (second < 0) {
+            return first;
+        }
+        return Math.min(first, second);
+    }
+
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    public record ProfileSlotValue(String slotKey, String valueText) {
     }
 }

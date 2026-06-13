@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "aegis.schema.v0",
-  "artifactKey": "green-low-risk-metadata-adapters",
-  "type": "command",
-  "source": "mvnw focused metadata adapter and autoconfigure tests",
-  "summary": "GREEN: 25 focused tests passed across JDBC metadata low-risk subdomain adapters and Spring metadata auto-configuration.",
-  "verifier": "codex"
-}

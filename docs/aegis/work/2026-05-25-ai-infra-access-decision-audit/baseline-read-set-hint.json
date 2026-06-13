@@ -1,9 +1,0 @@
-{
-  "schemaVersion": "aegis.schema.v0",
-  "candidateDocs": [
-    "docs/company-agent/ai-infra-phases/04-context-db-resource-acl.md",
-    "docs/company-agent/ai-infra-phases/99-current-implementation-handoff.md"
-  ],
-  "whyRelevant": "Phase 4 schema already includes sa_access_decision_log, while query/log ports and API were missing.",
-  "missingAuthority": []
-}

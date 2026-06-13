@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.knowledge;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService;
 import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionEngine;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeConfig;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.PipelineDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
@@ -256,7 +257,33 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
                         "fileName", document.docName(),
                         "collectionName", knowledgeBase.collectionName()))
                 .build();
-        return ingestionEngine.execute(Objects.requireNonNull(pipeline, "pipeline must not be null"), context);
+        PipelineDefinition effectivePipeline = withDefaultNodes(
+                Objects.requireNonNull(pipeline, "pipeline must not be null"));
+        return ingestionEngine.execute(effectivePipeline, context);
+    }
+
+    /**
+     * 当流水线未显式定义节点时，回退到内置的标准入库链：parser → chunker → embedder → indexer。
+     *
+     * <p>消费端（如 {@code KnowledgeDocumentChunkConsumer}）通常只携带 pipelineId 而不携带节点定义，
+     * 若直接执行会导致引擎遍历空节点链、文档被标记为成功却产出 0 个分块。此处补齐标准节点，
+     * 各节点 settings 留空以使用默认分块大小，并通过 context metadata（collectionName/kbId/docId）
+     * 完成索引；embedding 模型 ID 留空时由 EmbeddingModelPort 使用其默认模型。
+     */
+    private PipelineDefinition withDefaultNodes(PipelineDefinition pipeline) {
+        if (pipeline.getNodes() != null && !pipeline.getNodes().isEmpty()) {
+            return pipeline;
+        }
+        List<NodeConfig> nodes = List.of(
+                NodeConfig.builder().nodeId("parser").nodeType("parser").nextNodeId("chunker").build(),
+                NodeConfig.builder().nodeId("chunker").nodeType("chunker").nextNodeId("embedder").build(),
+                NodeConfig.builder().nodeId("embedder").nodeType("embedder").nextNodeId("indexer").build(),
+                NodeConfig.builder().nodeId("indexer").nodeType("indexer").build());
+        return PipelineDefinition.builder()
+                .id(hasText(pipeline.getId()) ? pipeline.getId() : "default-knowledge-pipeline")
+                .name(hasText(pipeline.getName()) ? pipeline.getName() : "Default Knowledge Pipeline")
+                .nodes(nodes)
+                .build();
     }
 
     private String resolvePipelineId(KnowledgeDocumentRecord document, PipelineDefinition pipeline) {

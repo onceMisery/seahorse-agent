@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -38,47 +39,56 @@ final class ProfileSlotResolver {
     }
 
     String resolve(String type, String content, String metadataJson) {
+        List<String> slots = resolveAll(type, content, metadataJson);
+        return slots.isEmpty() ? "" : slots.get(0);
+    }
+
+    List<String> resolveAll(String type, String content, String metadataJson) {
         String metadataSlot = metadataSlot(metadataJson);
         if (!metadataSlot.isBlank()) {
-            return metadataSlot;
+            return List.of(metadataSlot);
         }
         if (!isProfileLike(type)) {
-            return "";
+            return List.of();
         }
         String safeContent = Objects.requireNonNullElse(content, "");
         String normalized = safeContent.toLowerCase(java.util.Locale.ROOT);
+        List<String> slots = new ArrayList<>();
         if (normalized.startsWith("my name is ")) {
-            return "identity.name";
+            addSlot(slots, "identity.name");
         }
         if (safeContent.startsWith("\u6211\u53eb")
                 || safeContent.startsWith("\u6211\u7684\u540d\u5b57\u662f")
                 || safeContent.startsWith("\u6211\u7684\u6635\u79f0\u662f")) {
-            return "identity.name";
+            addSlot(slots, "identity.name");
         }
         if (normalized.startsWith("my tech stack is ")) {
-            return "skills.tech_stack";
+            addSlot(slots, "skills.tech_stack");
         }
         if (safeContent.startsWith("\u6211\u7684\u6280\u672f\u6808\u662f")
                 || safeContent.startsWith("\u6211\u4e3b\u8981\u4f7f\u7528")) {
-            return "skills.tech_stack";
-        }
-        if (normalized.startsWith("i prefer ")
-                || normalized.startsWith("i like concise answers")
-                || normalized.startsWith("i like detailed answers")) {
-            return "preferences.response_style";
-        }
-        if (safeContent.startsWith("\u6211\u559c\u6b22\u7b80\u77ed\u56de\u7b54")
-                || safeContent.startsWith("\u6211\u559c\u6b22\u8be6\u7ec6\u56de\u7b54")
-                || safeContent.startsWith("\u6211\u504f\u597d\u7b80\u77ed\u56de\u7b54")
-                || safeContent.startsWith("\u6211\u504f\u597d\u8be6\u7ec6\u56de\u7b54")) {
-            return "preferences.response_style";
+            addSlot(slots, "skills.tech_stack");
         }
         if (containsAny(normalized, "occupation", "profession", "job", "student", "teacher")
                 || containsAny(safeContent, "\u804c\u4e1a", "\u8eab\u4efd", "\u5de5\u4f5c",
                 "\u5b66\u751f", "\u8001\u5e08", "\u6559\u5e08")) {
-            return "identity.occupation";
+            addSlot(slots, "identity.occupation");
         }
-        return "";
+        if (normalized.contains("i prefer ")
+                || normalized.contains("i like concise answers")
+                || normalized.contains("i like detailed answers")) {
+            addSlot(slots, "preferences.response_style");
+        }
+        if (safeContent.contains("\u6211\u559c\u6b22\u7b80\u77ed\u56de\u7b54")
+                || safeContent.contains("\u6211\u559c\u6b22\u8be6\u7ec6\u56de\u7b54")
+                || safeContent.contains("\u6211\u504f\u597d\u7b80\u77ed\u56de\u7b54")
+                || safeContent.contains("\u6211\u504f\u597d\u8be6\u7ec6\u56de\u7b54")) {
+            addSlot(slots, "preferences.response_style");
+        }
+        if (isChineseResponseStylePreference(safeContent)) {
+            addSlot(slots, "preferences.response_style");
+        }
+        return slots;
     }
 
     String correctionTargetSlot(MemoryItem correction) {
@@ -105,6 +115,33 @@ final class ProfileSlotResolver {
             }
         }
         return "";
+    }
+
+    private boolean isChineseResponseStylePreference(String content) {
+        return containsAny(content,
+                "\u6211\u559c\u6b22",
+                "\u6211\u504f\u597d",
+                "\u6211\u4e60\u60ef",
+                "\u6211\u5e0c\u671b")
+                && containsAny(content, "\u56de\u7b54", "\u56de\u590d");
+    }
+
+    private void addSlot(List<String> slots, String slot) {
+        if (!slots.contains(slot)) {
+            slots.add(slot);
+        }
+    }
+
+    private boolean startsWithAny(String content, String... prefixes) {
+        if (content == null || prefixes == null) {
+            return false;
+        }
+        for (String prefix : prefixes) {
+            if (prefix != null && !prefix.isBlank() && content.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean metadataContainsValue(String metadata, String key, String value) {

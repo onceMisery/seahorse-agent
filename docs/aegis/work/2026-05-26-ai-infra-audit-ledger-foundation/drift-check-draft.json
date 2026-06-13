@@ -1,9 +1,0 @@
-{
-  "scopeStatus": "Phase 8A Audit Ledger foundation completed within acceptance boundary",
-  "compatibilityStatus": "kernel remains port-driven; JDBC/Web/Spring stay adapters",
-  "retirementStatus": "existing tool invocation audit and publish check remain active in this slice",
-  "newRiskSignals": [
-    "Production Gate report generation must not publish or roll back Agent definitions"
-  ],
-  "advisoryDecision": "continue to Phase 4"
-}

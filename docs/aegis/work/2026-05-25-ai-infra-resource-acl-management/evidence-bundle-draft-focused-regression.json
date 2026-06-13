@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "aegis.schema.v0",
-  "artifactKey": "focused-regression",
-  "type": "test-command",
-  "source": "mvn -nsu -Dspotless.apply.skip=true focused kernel/jdbc/web/starter Resource ACL tests plus git diff --check",
-  "summary": "Resource ACL domain, management service, policy composition, JDBC adapter, Web API, and starter wiring all passed focused regression; git diff --check reported no whitespace errors.",
-  "verifier": "Codex 2026-05-25 23:18-23:20 Asia/Shanghai"
-}
