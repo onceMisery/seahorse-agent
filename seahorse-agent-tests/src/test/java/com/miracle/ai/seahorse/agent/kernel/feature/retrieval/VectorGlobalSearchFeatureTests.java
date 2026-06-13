@@ -71,6 +71,29 @@ class VectorGlobalSearchFeatureTests {
         assertThat(chunks).hasSize(2);
     }
 
+    @Test
+    void shouldContinueSearchingWhenOneCollectionFails() {
+        RecordingVectorSearchPort vectorSearchPort = new RecordingVectorSearchPort();
+        vectorSearchPort.failingCollections.add("missing-collection");
+        KnowledgeBaseQueryPort knowledgeBaseQueryPort = new StaticKnowledgeBaseQueryPort(List.of(
+                new KnowledgeBaseRef(1L, "Missing", "missing-collection"),
+                new KnowledgeBaseRef(2L, "Valid", "valid-collection")));
+        VectorGlobalSearchFeature feature = new VectorGlobalSearchFeature(knowledgeBaseQueryPort, vectorSearchPort);
+
+        var result = feature.search(SearchContext.builder()
+                .rewrittenQuestion("Seahorse Agent vector model")
+                .topK(3)
+                .build());
+
+        assertThat(vectorSearchPort.requests)
+                .extracting(VectorSearchRequest::collectionName)
+                .containsExactly("missing-collection", "valid-collection");
+        assertThat(result.getChunks())
+                .extracting(RetrievedChunk::getId)
+                .containsExactly("valid-collection-chunk");
+        assertThat(result.getMetadata()).containsEntry("failedCollectionCount", 1);
+    }
+
     private VectorGlobalSearchFeature featureWithCollections(List<KnowledgeBaseRef> refs) {
         return new VectorGlobalSearchFeature(new StaticKnowledgeBaseQueryPort(refs), request -> List.of());
     }
@@ -103,10 +126,14 @@ class VectorGlobalSearchFeatureTests {
     private static class RecordingVectorSearchPort implements com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort {
 
         private final List<VectorSearchRequest> requests = new ArrayList<>();
+        private final List<String> failingCollections = new ArrayList<>();
 
         @Override
         public List<RetrievedChunk> search(VectorSearchRequest request) {
             requests.add(request);
+            if (failingCollections.contains(request.collectionName())) {
+                throw new IllegalStateException("collection not found: " + request.collectionName());
+            }
             return List.of(RetrievedChunk.builder()
                     .id(request.collectionName() + "-chunk")
                     .text("content")

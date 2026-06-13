@@ -28,6 +28,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRef;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,6 +43,8 @@ import java.util.Objects;
  * VectorGlobalSearchChannel 对 MyBatis Mapper 和 RetrieverService 的直接依赖。
  */
 public class VectorGlobalSearchFeature implements SearchChannelFeature {
+
+    private static final Logger LOG = LoggerFactory.getLogger(VectorGlobalSearchFeature.class);
 
     private static final String NAME = "VectorGlobalSearch";
     private static final double DEFAULT_CONFIDENCE_THRESHOLD = 0.6D;
@@ -100,26 +104,34 @@ public class VectorGlobalSearchFeature implements SearchChannelFeature {
     @Override
     public SearchChannelResult search(SearchContext context) {
         long start = System.currentTimeMillis();
-        List<RetrievedChunk> chunks = retrieveAll(context);
+        List<String> collections = collectionNames();
+        RetrievalResult retrieval = retrieveAll(context, collections);
         return SearchChannelResult.builder()
                 .channelType(channelType())
                 .channelName(name())
-                .chunks(chunks)
+                .chunks(retrieval.chunks())
                 .latencyMs(System.currentTimeMillis() - start)
-                .metadata(Map.of("collectionCount", collectionNames().size()))
+                .metadata(Map.of(
+                        "collectionCount", collections.size(),
+                        "failedCollectionCount", retrieval.failedCollectionCount()))
                 .build();
     }
 
-    private List<RetrievedChunk> retrieveAll(SearchContext context) {
-        List<String> collections = collectionNames();
+    private RetrievalResult retrieveAll(SearchContext context, List<String> collections) {
         if (collections.isEmpty()) {
-            return List.of();
+            return new RetrievalResult(List.of(), 0);
         }
         List<RetrievedChunk> chunks = new ArrayList<>();
+        int failedCollectionCount = 0;
         for (String collectionName : collections) {
-            chunks.addAll(searchCollection(context, collectionName));
+            try {
+                chunks.addAll(searchCollection(context, collectionName));
+            } catch (RuntimeException ex) {
+                failedCollectionCount++;
+                LOG.warn("Vector global search skipped collection after failure: collection={}", collectionName, ex);
+            }
         }
-        return chunks;
+        return new RetrievalResult(chunks, failedCollectionCount);
     }
 
     private List<RetrievedChunk> searchCollection(SearchContext context, String collectionName) {
@@ -176,5 +188,8 @@ public class VectorGlobalSearchFeature implements SearchChannelFeature {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private record RetrievalResult(List<RetrievedChunk> chunks, int failedCollectionCount) {
     }
 }
