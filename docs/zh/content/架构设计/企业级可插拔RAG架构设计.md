@@ -629,8 +629,8 @@ flowchart LR
 
 项目中可参考以下资源启动基础设施：
 
-- `resources/docker/milvus-stack-2.6.6.compose.yaml`
-- `resources/docker/pulsar-stack-3.1.3.compose.yaml`
+- `docker-compose.full.yml`
+- `docker-compose.full.yml`
 
 ### 9.3 生产部署建议
 

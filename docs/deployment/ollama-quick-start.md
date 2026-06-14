@@ -1,151 +1,124 @@
-# Seahorse Agent - Ollama 本地向量模型快速部署
+# Ollama 本地 Embedding 快速开始
 
-## 已配置内容
+全量部署默认使用容器内 Ollama 提供 Embedding，Chat 模型仍由 `SEAHORSE_AGENT_ADAPTERS_AI_BASE_URL` 指向的 OpenAI 兼容服务提供。
 
-### 向量模型
-- **模型**: nomic-embed-text (英文优化)
-- **大小**: 274MB
-- **维度**: 768
-- **性能**: 快速,适合小型部署
+## 当前默认配置
 
-### Docker服务
-- **Ollama容器**: seahorse-ollama (端口11434)
-- **自动初始化**: 启动时自动下载模型
+| 项 | 值 |
+|---|---|
+| 容器 | `seahorse-ollama` |
+| 宿主机端口 | `11434` |
+| 模型 | `nomic-embed-text` |
+| 维度 | 768 |
+| 后端 Embedding Base URL | `http://ollama:11434/v1` |
+| 向量库 | Milvus |
 
-## 启动命令
+`docker-compose.full.yml` 中的 `ollama-init` 会自动拉取 `nomic-embed-text`。
+
+## 启动
 
 ```bash
-# 启动所有服务(包括Ollama)
-docker compose -f docker-compose.full.yml up -d
-
-# 首次启动会自动下载模型,需等待2-5分钟
+docker compose -f docker-compose.full.yml up -d --build
 ```
 
-## 验证部署
+首次启动需要等待模型下载：
 
 ```bash
-# 1. 检查Ollama容器状态
-docker ps | grep ollama
+docker logs -f seahorse-ollama-init
+```
 
-# 2. 查看已安装模型
+## 验证
+
+查看模型：
+
+```bash
 docker exec seahorse-ollama ollama list
-
-# 3. 测试向量化API
-curl http://localhost:11434/api/embeddings -d '{
-  "model": "nomic-embed-text",
-  "prompt": "测试文本"
-}'
-
-# 4. 验证backend连接
-docker logs seahorse-backend | grep -i "embedding"
 ```
 
-## 硬件需求
-
-### CPU-only部署 (已配置)
-- CPU: 4核以上
-- 内存: 8GB (推荐16GB)
-- 存储: 5GB (模型+数据)
-- 显卡: **不需要**
-
-### 性能预估
-- 单文档嵌入: 0.5-2秒
-- 批量100文档: 1-3分钟
-- 适用场景: 个人开发,小团队测试
-
-## 升级到中文模型
-
-如果需要更好的中文支持,可以更换模型:
+测试 Embedding：
 
 ```bash
-# 1. 拉取中文模型
-docker exec seahorse-ollama ollama pull bge-m3
-
-# 2. 修改 docker-compose.full.yml
-SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL: bge-m3
-SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION: 1024
-
-# 3. 重启backend
-docker compose -f docker-compose.full.yml restart backend
-
-# 注意: 更换模型后需要重新向量化所有文档!
+curl -s http://localhost:11434/api/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{"model":"nomic-embed-text","prompt":"测试文本"}' \
+  | jq '.embedding | length'
 ```
 
-### 推荐中文模型
+预期输出：
 
-| 模型名 | 大小 | 维度 | 语言 | 备注 |
-|--------|------|------|------|------|
-| nomic-embed-text | 274MB | 768 | 英文 | **当前使用,速度快** |
-| bge-m3 | 2.2GB | 1024 | 中英 | 多语言,推荐 |
-| bge-small-zh | 95MB | 512 | 中文 | 超小模型 |
-| bge-base-zh | 400MB | 768 | 中文 | 平衡性能 |
+```text
+768
+```
+
+检查后端健康：
+
+```bash
+curl http://localhost:9090/actuator/health
+```
+
+## 切换模型
+
+切换模型时必须同时处理三件事：
+
+1. 拉取新模型。
+2. 修改后端 Embedding 模型和向量维度。
+3. 清理或重建旧文档向量索引。
+
+示例：切换到 `bge-m3`：
+
+```bash
+docker exec seahorse-ollama ollama pull bge-m3
+```
+
+然后同步修改 compose 或环境变量：
+
+```env
+SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL=bge-m3
+SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION=1024
+```
+
+重启后端：
+
+```bash
+docker compose -f docker-compose.full.yml restart backend
+```
+
+已有知识库需要重新向量化，否则会出现维度不匹配或召回异常。
 
 ## 常见问题
 
-**Q: CPU部署够用吗?**  
-A: 个人使用够用,并发多时建议升级GPU。
+### 模型没有自动下载
 
-**Q: 如何添加GPU支持?**  
-A: 修改docker-compose.yml添加:
-```yaml
-ollama:
-  deploy:
-    resources:
-      reservations:
-        devices:
-          - driver: nvidia
-            count: 1
-            capabilities: [gpu]
+```bash
+docker logs seahorse-ollama-init
+docker exec seahorse-ollama ollama pull nomic-embed-text
 ```
 
-**Q: 模型存储在哪里?**  
-A: Docker卷 `ollama-data`,可用 `docker volume inspect seahorse-agent_ollama-data` 查看。
+如果本机需要代理，先配置 Docker 或在容器内临时设置代理后再拉取。
 
-**Q: 如何清理模型?**  
+### 请求超时
+
+首次调用模型可能较慢。确认 Docker Desktop 内存充足，并重试：
+
 ```bash
-# 删除模型
-docker exec seahorse-ollama ollama rm nomic-embed-text
+time curl -s http://localhost:11434/api/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{"model":"nomic-embed-text","prompt":"test"}' \
+  | jq '.embedding | length'
+```
 
-# 清理所有数据
+### CPU-only 是否可用
+
+可以。`nomic-embed-text` 体积较小，适合本地开发和小规模验证。大批量文档或高并发建议使用更强机器、独立 Ollama 服务或外部 Embedding 服务。
+
+### 如何清理模型数据
+
+```bash
+docker exec seahorse-ollama ollama rm nomic-embed-text
+```
+
+删除全部全量部署数据卷前务必确认不需要旧数据：
+
+```bash
 docker compose -f docker-compose.full.yml down -v
 ```
-
-**Q: Ollama占用多少资源?**  
-- 闲时: 内存 ~200MB, CPU 0%
-- 推理时: 内存 ~1-2GB, CPU 50-200%
-
-## 监控与调试
-
-```bash
-# 查看Ollama日志
-docker logs -f seahorse-ollama
-
-# 查看模型下载进度
-docker logs -f seahorse-ollama-init
-
-# 测试嵌入性能
-time curl -X POST http://localhost:11434/api/embeddings \
-  -d '{"model":"nomic-embed-text","prompt":"测试"}'
-```
-
-## 生产环境建议
-
-**小团队 (5-10人)**:
-- 继续使用nomic-embed-text
-- 升级到16GB内存
-- 考虑独立Ollama服务器
-
-**中型团队 (10-50人)**:
-- 升级到bge-m3或bge-large-zh
-- 添加GPU (RTX 3060+)
-- 启用Ollama集群
-
-**大型企业 (50+人)**:
-- 使用OpenAI API或专业向量服务
-- 或部署GPU集群 (A4000/V100+)
-
----
-
-**配置时间**: 2026-06-10  
-**模型版本**: nomic-embed-text latest  
-**文档版本**: v1.0

@@ -1,477 +1,306 @@
-# Seahorse Agent 故障排除指南
+# Seahorse Agent 故障排查指南
 
-**目标**: 快速诊断和修复常见部署/运行时问题
+本指南按当前本地 Docker 部署整理，优先覆盖登录过期、RAG 无上下文、记忆不召回、向量维度和数据卷问题。
 
----
+## 快速定位
 
-## 1. 认证问题
+| 现象 | 第一检查点 |
+|---|---|
+| 登录后马上“登录已过期” | 请求头是否为 `Authorization: Bearer <token>` |
+| 默认账号无法登录 | 当前数据卷是否仍保留旧密码 `admin` |
+| 前端正常但直调后端 404 | 直连 `9090` 时不要给基础接口额外加 `/api` |
+| RAG 没引用知识库 | 文档是否完成分块和索引，Milvus/Ollama 是否健康 |
+| 记忆不召回 | `t_short_term_memory`、`t_user_profile_fact` 是否有当前用户数据 |
+| 向量维度报错 | 当前全量默认为 `nomic-embed-text` + 768 维 |
+| Grafana 打不开 | 端口是 `13001`，不是 `3001` |
 
-### 问题1.1: "登录已过期，请重新登录"
+## 1. 认证和登录
 
-**症状**:
+### 登录后返回“登录已过期”
+
+先确认登录响应能取到 token：
+
 ```bash
-$ curl -X GET /knowledge-base -H "Authorization: Bearer $TOKEN"
-{"code":"1","message":"登录已过期，请重新登录"}
-```
-
-**根因**: sa-token使用内存存储，token在请求间不持久化
-
-**诊断步骤**:
-```bash
-# 1. 检查Redis是否有token数据
-docker exec seahorse-redis redis-cli DBSIZE
-# 预期 > 0，实际 = 0 说明token未写入Redis
-
-# 2. 检查Redis key前缀
-docker exec seahorse-redis redis-cli KEYS "*"
-# 正确: satoken:login:token:*
-# 错误: Authorization:login:token:* 或为空
-
-# 3. 检查sa-token Bean创建日志
-docker logs seahorse-backend 2>&1 | grep -i "SaTokenDao"
-# 应该看到: "创建SaTokenDaoForRedisTemplate"
-# 如果没有，说明Bean未创建
-```
-
-**修复方案**:
-
-**方案A: 确认依赖存在**
-```bash
-# 检查依赖树
-./mvnw dependency:tree -pl seahorse-agent-bootstrap | grep sa-token-redis-template
-
-# 如果不存在，在bootstrap/pom.xml添加：
-<dependency>
-    <groupId>cn.dev33</groupId>
-    <artifactId>sa-token-redis-template</artifactId>
-</dependency>
-```
-
-**方案B: 确认Bean创建**
-```java
-// 在SeahorseAgentAuthAdapterAutoConfiguration中
-// 确保@AutoConfigureAfter包含RedisAutoConfiguration
-@AutoConfigureAfter({
-    DataSourceAutoConfiguration.class,
-    org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration.class
-})
-```
-
-**方案C: 临时禁用认证（仅开发环境）**
-```yaml
-# application.yml
-sa-token:
-  check-login: false
-```
-
----
-
-## 2. 编译和打包问题
-
-### 问题2.1: NoClassDefFoundError: SaTokenDaoForRedisTemplate
-
-**症状**:
-```
-java.lang.NoClassDefFoundError: cn/dev33/satoken/dao/SaTokenDaoForRedisTemplate
-```
-
-**根因**: Maven optional依赖不传递，Spring Boot打包时未包含
-
-**诊断步骤**:
-```bash
-# 检查JAR内容
-jar -tf seahorse-agent-bootstrap/target/*-exec.jar | grep -i satoken
-# 如果没有SaTokenDaoForRedisTemplate类，说明依赖未打包
-```
-
-**修复**: 在bootstrap/pom.xml中**显式声明**（已修复）
-```xml
-<dependency>
-    <groupId>cn.dev33</groupId>
-    <artifactId>sa-token-redis-template</artifactId>
-</dependency>
-```
-
----
-
-### 问题2.2: 编译失败 - 找不到PaymentCallbackLogRepositoryPort等符号
-
-**症状**:
-```
-[ERROR] symbol: class PaymentCallbackLogRepositoryPort
-[ERROR] location: package com.miracle.ai.seahorse.agent.ports.outbound.billing
-```
-
-**根因**: kernel模块未先install，其他模块找不到接口定义
-
-**修复**:
-```bash
-# 先install kernel
-./mvnw install -pl seahorse-agent-kernel -am -DskipTests
-
-# 再构建bootstrap
-./mvnw package -pl seahorse-agent-bootstrap -am -DskipTests
-```
-
----
-
-### 问题2.3: Spotless格式检查失败
-
-**症状**:
-```
-[ERROR] Run 'mvn spotless:apply' to fix these violations.
-```
-
-**快速修复**:
-```bash
-# 方案A: 自动修复格式
-./mvnw spotless:apply
-
-# 方案B: 跳过格式检查（快速构建）
-./mvnw package -DskipTests -Dspotless.check.skip=true
-```
-
----
-
-## 3. Docker部署问题
-
-### 问题3.1: Backend容器启动失败
-
-**诊断步骤**:
-```bash
-# 1. 查看容器状态
-docker compose -f docker-compose.full.yml ps
-
-# 2. 查看最近日志
-docker logs seahorse-backend --tail 50
-
-# 3. 查看完整启动日志
-docker logs seahorse-backend 2>&1 | less
-```
-
-**常见错误**:
-
-**错误A: 数据库连接失败**
-```
-Unable to open JDBC Connection for DDL execution
-```
-**修复**:
-```bash
-# 检查PostgreSQL是否启动
-docker compose -f docker-compose.full.yml ps postgres
-
-# 检查数据库配置
-docker logs seahorse-postgres | grep "database system is ready"
-```
-
-**错误B: Redis连接失败**
-```
-Unable to connect to Redis
-```
-**修复**:
-```bash
-# 检查Redis是否启动
-docker compose -f docker-compose.full.yml ps redis
-
-# 测试Redis连接
-docker exec seahorse-redis redis-cli PING
-```
-
----
-
-### 问题3.2: Ollama模型拉取失败
-
-**症状**:
-```bash
-$ docker exec seahorse-ollama ollama list
-# 输出为空或没有nomic-embed-text
-```
-
-**根因**: 网络代理配置问题
-
-**修复**:
-```bash
-# 方案A: 使用HTTP代理（如有）
-docker exec seahorse-ollama bash -c "export http_proxy=http://host.docker.internal:7890 && ollama pull nomic-embed-text"
-
-# 方案B: 宿主机拉取后复制
-ollama pull nomic-embed-text
-docker cp ~/.ollama/models seahorse-ollama:/root/.ollama/
-
-# 验证
-docker exec seahorse-ollama ollama list
-```
-
----
-
-### 问题3.3: Maven构建在Docker内失败
-
-**症状**: docker-compose.full.yml中backend服务构建超时或失败
-
-**根因**: Docker内Maven无法访问外网仓库
-
-**修复**: 使用本地构建 + Docker打包（推荐）
-```bash
-# 1. 宿主机上构建JAR
-./mvnw package -pl seahorse-agent-bootstrap -am -DskipTests -Dspotless.check.skip=true
-
-# 2. 使用本地JAR构建镜像
-docker build -t seahorse-agent-backend:latest -f - . <<'EOF'
-FROM eclipse-temurin:17-jre
-WORKDIR /app
-COPY seahorse-agent-bootstrap/target/seahorse-agent-bootstrap-*-exec.jar app.jar
-EXPOSE 9090
-ENTRYPOINT ["java", "-jar", "app.jar"]
-EOF
-
-# 3. 启动服务
-docker compose -f docker-compose.full.yml up -d backend
-```
-
----
-
-## 4. 向量化问题
-
-### 问题4.1: 向量维度不匹配
-
-**症状**:
-```sql
-ERROR: dimension mismatch: expected 1024, got 768
-```
-
-**根因**: 数据库表定义为1024维，但nomic-embed-text生成768维
-
-**诊断**:
-```bash
-# 检查当前表定义
-docker exec seahorse-postgres psql -U postgres -d seahorse -c "
-SELECT column_name, udt_name, character_maximum_length 
-FROM information_schema.columns 
-WHERE table_name='t_knowledge_vector' AND column_name='embedding';
-"
-
-# 检查Ollama模型维度
-curl -X POST http://localhost:11434/api/embeddings \
+TOKEN=$(curl -s -X POST http://localhost:9090/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"model":"nomic-embed-text","prompt":"test"}' | jq '.embedding | length'
+  -d '{"username":"admin","password":"admin123"}' \
+  | jq -r '.data.token')
+
+echo "$TOKEN"
 ```
 
-**修复**:
-```sql
--- 修改向量维度为768
-ALTER TABLE t_knowledge_vector ALTER COLUMN embedding TYPE vector(768);
-```
+再确认请求头格式：
 
----
-
-### 问题4.2: Ollama API调用超时
-
-**症状**:
-```
-java.net.SocketTimeoutException: Read timed out
-```
-
-**诊断**:
 ```bash
-# 测试Ollama响应时间
-time curl -X POST http://localhost:11434/api/embeddings \
-  -H "Content-Type: application/json" \
-  -d '{"model":"nomic-embed-text","prompt":"测试文本"}'
-```
-
-**修复**:
-```yaml
-# application.yml - 增加超时时间
-seahorse:
-  agent:
-    adapters:
-      ai:
-        openai-compatible:
-          timeout: 60000  # 60秒
-```
-
----
-
-## 5. RAG查询问题
-
-### 问题5.1: 查询无返回结果
-
-**诊断步骤**:
-```sql
--- 1. 检查知识库是否有数据
-SELECT COUNT(*) FROM t_knowledge_chunk;
-
--- 2. 检查向量是否已生成
-SELECT COUNT(*) FROM t_knowledge_vector WHERE embedding IS NOT NULL;
-
--- 3. 检查文档状态
-SELECT doc_name, status FROM t_knowledge_document WHERE status='processing';
-```
-
-**修复**: 手动触发向量化
-```bash
-# 重新触发文档处理
-curl -X POST http://localhost:9090/knowledge-base/{kb_id}/documents/{doc_id}/reindex \
+curl http://localhost:9090/knowledge-base \
   -H "Authorization: Bearer $TOKEN"
 ```
 
----
+常见原因：
 
-### 问题5.2: 语义检索不准确
+- 少了 `Bearer ` 前缀。
+- 前端代理和后端直连路径混用。前端走 `/api/auth/login`，后端直连走 `/auth/login`。
+- 使用旧数据卷，默认账号密码仍不符合当前校验。
+- 后端重启后，轻量部署的本地 token 缓存失效。
+- 全量部署 Redis 不健康，Sa-Token 无法持久化登录状态。
 
-**可能原因**:
-1. chunk size过大或过小
-2. 检索top_k设置不当
-3. 向量模型不匹配内容语言
-
-**优化建议**:
-```yaml
-seahorse:
-  agent:
-    knowledge:
-      chunk-size: 500        # 调整为500字符
-      chunk-overlap: 50      # 10%重叠
-      retrieval-top-k: 5     # 检索前5个相关块
-```
-
----
-
-## 6. 多租户和权限问题
-
-### 问题6.1: RLS策略阻止数据访问
-
-**症状**:
-```sql
-ERROR: new row violates row-level security policy for table "t_knowledge_base"
-```
-
-**诊断**:
-```sql
--- 检查当前租户ID
-SELECT current_setting('app.current_tenant_id', true);
-
--- 检查RLS策略
-SELECT schemaname, tablename, policyname, permissive 
-FROM pg_policies 
-WHERE tablename='t_knowledge_base';
-```
-
-**修复**:
-```sql
--- 设置租户上下文
-SET app.current_tenant_id = 1;
-
--- 或在应用层确保TenantContext正确设置
-```
-
----
-
-## 7. 性能问题
-
-### 问题7.1: 向量检索慢
-
-**诊断**:
-```sql
--- 检查索引
-SELECT indexname, indexdef 
-FROM pg_indexes 
-WHERE tablename='t_knowledge_vector';
-
--- 检查查询计划
-EXPLAIN ANALYZE 
-SELECT * FROM t_knowledge_vector 
-ORDER BY embedding <-> '[0.1, 0.2, ...]'::vector 
-LIMIT 10;
-```
-
-**优化**: 创建IVFFlat索引
-```sql
-CREATE INDEX IF NOT EXISTS idx_knowledge_vector_embedding 
-ON t_knowledge_vector 
-USING ivfflat (embedding vector_cosine_ops) 
-WITH (lists = 100);
-```
-
----
-
-## 8. 日志分析
-
-### 获取关键日志
+全量部署下检查 Redis：
 
 ```bash
-# Backend启动日志
-docker logs seahorse-backend 2>&1 | grep "Started SeahorseAgentApplication"
-
-# sa-token初始化
-docker logs seahorse-backend 2>&1 | grep -i "satoken"
-
-# Redis连接
-docker logs seahorse-backend 2>&1 | grep -i "redis"
-
-# 错误日志
-docker logs seahorse-backend 2>&1 | grep -i "error\|exception" | tail -50
-
-# 最近5分钟日志
-docker logs seahorse-backend --since 5m
+docker compose -f docker-compose.full.yml ps redis
+docker exec seahorse-redis redis-cli PING
+docker exec seahorse-redis redis-cli KEYS "satoken:*"
 ```
 
----
+轻量部署默认没有 Redis，不能用 Redis key 数量判断登录是否正常。
 
-## 9. 紧急恢复
+### 默认账号无法登录
 
-### 完全重置开发环境
+当前初始化脚本默认账号为：
+
+```text
+admin / admin123
+```
+
+如果数据库卷创建于旧版本，可能仍是 `admin / admin`。保留数据时可执行迁移：
+
+```sql
+UPDATE t_user
+SET password = 'admin123'
+WHERE username = 'admin'
+  AND password = 'admin';
+```
+
+也可以执行仓库迁移脚本：
+
+```text
+resources/database/migrations/V17__default_admin_password_validation_alignment.sql
+```
+
+确认不需要旧数据时再重建数据卷。
+
+## 2. Docker 启动
+
+查看服务：
 
 ```bash
-# 1. 停止所有容器
+docker compose -f docker-compose.full.yml ps
+```
+
+查看后端日志：
+
+```bash
+docker logs seahorse-backend --tail 100
+```
+
+健康检查：
+
+```bash
+curl http://localhost:9090/actuator/health
+```
+
+常见端口：
+
+| 服务 | 端口 |
+|---|---:|
+| 前端 | 80 |
+| 后端 | 9090 |
+| PostgreSQL | 5432 |
+| Redis | 16379 |
+| Elasticsearch | 9200 |
+| MinIO | 9000 / 9001 |
+| Milvus | 19530 / 9091 |
+| Attu | 8000 |
+| Pulsar | 6650 / 8080 |
+| Prometheus | 19090 |
+| Grafana | 13001 |
+
+端口冲突时，修改 compose 端口映射后重启对应服务。
+
+## 3. 数据库和数据卷
+
+PostgreSQL 初始化脚本只会在数据卷第一次创建时执行：
+
+```text
+resources/database/seahorse_init.sql
+```
+
+所以旧数据卷可能带来：
+
+- 默认密码仍是旧值。
+- 表结构缺列。
+- 向量维度仍是 1024。
+- 记忆、画像、Trace 或企业能力表不存在。
+
+检查关键表：
+
+```bash
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "\dt t_user"
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "\dt t_user_profile_fact"
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "\dt t_rag_trace_run"
+```
+
+不要在有重要数据的环境直接执行：
+
+```bash
 docker compose -f docker-compose.full.yml down -v
-
-# 2. 清理所有数据卷
-docker volume prune -f
-
-# 3. 重新构建
-./mvnw clean package -DskipTests -Dspotless.check.skip=true
-
-# 4. 重新启动
-docker compose -f docker-compose.full.yml up -d --build
-
-# 5. 验证
-bash scripts/e2e-full-test.sh
 ```
 
----
+这会删除数据库、Milvus、Redis、Ollama 等数据卷。
 
-## 10. 获取帮助
+## 4. 向量和 Embedding
 
-### 收集诊断信息
+全量部署默认：
+
+| 项 | 当前值 |
+|---|---|
+| Embedding 模型 | `nomic-embed-text` |
+| Embedding 服务 | `http://ollama:11434/v1` |
+| 宿主机 Ollama | `http://localhost:11434` |
+| 向量维度 | 768 |
+| 向量库 | Milvus |
+| Milvus collection | `seahorse_default` 或知识库配置的 collection |
+
+验证 Ollama：
 
 ```bash
-#!/bin/bash
-# 生成完整诊断报告
+docker exec seahorse-ollama ollama list
 
-echo "=== Docker状态 ===" > diagnostic.log
-docker compose -f docker-compose.full.yml ps >> diagnostic.log
-
-echo -e "\n=== Backend日志 ===" >> diagnostic.log
-docker logs seahorse-backend --tail 100 >> diagnostic.log 2>&1
-
-echo -e "\n=== Redis状态 ===" >> diagnostic.log
-docker exec seahorse-redis redis-cli INFO >> diagnostic.log
-
-echo -e "\n=== 数据库状态 ===" >> diagnostic.log
-docker exec seahorse-postgres psql -U postgres -d seahorse -c "
-SELECT 'knowledge_base' as table, COUNT(*) as count FROM t_knowledge_base
-UNION ALL
-SELECT 'documents', COUNT(*) FROM t_knowledge_document
-UNION ALL
-SELECT 'chunks', COUNT(*) FROM t_knowledge_chunk
-UNION ALL
-SELECT 'vectors', COUNT(*) FROM t_knowledge_vector;
-" >> diagnostic.log 2>&1
-
-echo -e "\n=== Ollama模型 ===" >> diagnostic.log
-docker exec seahorse-ollama ollama list >> diagnostic.log 2>&1
-
-cat diagnostic.log
+curl -s http://localhost:11434/api/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{"model":"nomic-embed-text","prompt":"test"}' \
+  | jq '.embedding | length'
 ```
 
-提交issue时附上 `diagnostic.log` 文件。
+预期长度是 `768`。
+
+如果报维度不匹配，优先检查：
+
+- 是否切换过 embedding 模型。
+- 旧数据卷中的 `t_knowledge_vector` 或 Milvus collection 是否仍是旧维度。
+- 文档是否需要重新向量化。
+
+仓库已有迁移：
+
+```text
+resources/database/migrations/V20__fix_vector_dimension.sql
+```
+
+## 5. RAG 没有上下文
+
+先区分部署模式：
+
+- 轻量部署默认 `SEAHORSE_AGENT_ADAPTERS_VECTOR_TYPE=noop`，适合页面/API 冒烟，不代表真实向量检索质量。
+- 全量部署才默认启用 Milvus、Ollama、Elasticsearch 和 Pulsar。
+
+检查知识库数据：
+
+```bash
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT COUNT(*) FROM t_knowledge_base;"
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT COUNT(*) FROM t_knowledge_document;"
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT COUNT(*) FROM t_knowledge_chunk;"
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT doc_name, status FROM t_knowledge_document ORDER BY create_time DESC LIMIT 10;"
+```
+
+检查检索 Trace：
+
+```bash
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT trace_id, user_question, status, create_time FROM t_rag_trace_run ORDER BY create_time DESC LIMIT 5;"
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT trace_id, node_type, status, error_message FROM t_rag_trace_node ORDER BY create_time DESC LIMIT 20;"
+```
+
+常见修复：
+
+- 重新上传或重新分块文档。
+- 确认 Ollama 模型已拉取。
+- 确认 Milvus 健康：`docker compose -f docker-compose.full.yml ps milvus-standalone`。
+- 确认 Elasticsearch 健康：`curl http://localhost:9200/_cluster/health`。
+- 如果换过 embedding 模型，清理旧 collection 后重建索引。
+
+## 6. 记忆和用户画像不生效
+
+全量部署默认开启：
+
+```env
+SEAHORSE_AGENT_MEMORY_AGGREGATION_ENABLED=true
+SEAHORSE_AGENT_MEMORY_AGGREGATION_IDLE_FLUSH_MILLIS=30000
+SEAHORSE_AGENT_MEMORY_AGGREGATION_MAX_TURNS=5
+```
+
+检查关键表：
+
+```bash
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT COUNT(*) FROM t_short_term_memory;"
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT COUNT(*) FROM t_memory_aggregation_buffer;"
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT COUNT(*) FROM t_memory_outbox;"
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT user_id, slot_key, slot_value, status FROM t_user_profile_fact ORDER BY update_time DESC LIMIT 20;"
+```
+
+通过 API 检查：
+
+```bash
+curl "http://localhost:9090/memories/profile-facts?userId=2001523723396308993&tenantId=default&limit=20" \
+  -H "Authorization: Bearer $TOKEN"
+
+curl "http://localhost:9090/memories/health?userId=2001523723396308993&tenantId=default" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+常见原因：
+
+- 对话没有落到同一个用户 ID。
+- 记忆聚合窗口未到。
+- 用户表达过于含糊，无法抽取稳定画像事实。
+- Outbox 或派生索引任务失败。
+- 新会话没有携带相同登录态。
+
+可以手动触发维护：
+
+```bash
+curl -X POST "http://localhost:9090/memories/maintenance/run?reason=manual-check&compaction=true&alias=true&gc=true" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## 7. 前端路径和 API 路径
+
+前端容器使用 `/api` 代理后端，浏览器里请求看起来可能是：
+
+```text
+/api/auth/login
+/api/conversations
+/api/tools
+```
+
+后端直连 `localhost:9090` 时：
+
+```text
+/auth/login
+/conversations
+/rag/v3/chat
+/knowledge-base
+```
+
+部分企业管理接口本身就是 `/api/...`，例如：
+
+```text
+/api/tools
+/api/skills
+/api/agent-runs
+/api/admin/tenants
+```
+
+判断标准以 Controller 注解为准。
+
+## 8. 收集诊断信息
+
+```bash
+docker compose -f docker-compose.full.yml ps
+docker logs seahorse-backend --tail 200
+curl http://localhost:9090/actuator/health
+docker exec seahorse-ollama ollama list
+docker exec seahorse-redis redis-cli INFO keyspace
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT COUNT(*) FROM t_knowledge_chunk;"
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT COUNT(*) FROM t_user_profile_fact;"
+```
+
+如果要提交问题，附上 compose 状态、后端最近日志、部署模式、是否使用旧数据卷、登录接口响应结构和失败接口的完整路径。

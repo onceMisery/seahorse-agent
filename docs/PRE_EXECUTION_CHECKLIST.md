@@ -1,224 +1,202 @@
 # Seahorse Agent 部署前检查清单
 
-**适用场景**: 本地开发部署、生产环境部署、CI/CD流水线
+本清单用于本地 Docker 部署、E2E 验证前自检。轻量部署用于页面和基础 API 冒烟；全量部署用于真实 RAG、记忆、用户画像和观测链路。
 
----
+## 1. 选择部署模式
 
-## Maven依赖验证
+| 模式 | 命令 | 适用范围 |
+|---|---|---|
+| 轻量 | `docker compose up -d --build` | PostgreSQL、后端、前端、本地缓存、direct MQ、noop 向量 |
+| 全量 | `docker compose -f docker-compose.full.yml up -d --build` | PostgreSQL、Redis、Elasticsearch、MinIO、Ollama、Milvus、Pulsar、Prometheus、Grafana |
 
-### 构建顺序
-- [ ] **kernel模块已install**: 其他模块依赖kernel的接口定义
-  ```bash
-  ./mvnw install -pl seahorse-agent-kernel -am -DskipTests
-  ```
+全量部署建议 Docker Desktop 至少分配 8 GB 内存。首次拉取镜像和 Ollama 模型会比较慢。
 
-- [ ] **Optional依赖显式声明**: 检查bootstrap/pom.xml中必需的optional依赖
-  ```bash
-  # 必须显式声明的依赖
-  grep -A2 "sa-token-redis-template" seahorse-agent-bootstrap/pom.xml
-  ```
+## 2. 构建后端
 
-- [ ] **@AutoConfigureAfter顺序正确**: Auth配置必须在Redis配置之后
-  ```java
-  @AutoConfigureAfter({
-      DataSourceAutoConfiguration.class,
-      RedisAutoConfiguration.class  // 关键：必须等Redis配置完成
-  })
-  ```
-
-### 依赖验证命令
-```bash
-# 验证依赖树（确认sa-token-redis-template存在）
-./mvnw dependency:tree -pl seahorse-agent-bootstrap | grep sa-token
-
-# 检查JAR内容
-jar -tf seahorse-agent-bootstrap/target/seahorse-agent-bootstrap-*-exec.jar | grep -i satoken
-```
-
----
-
-## 运行时配置验证
-
-### Redis配置
-- [ ] **RedisConnectionFactory Bean存在**
-  ```bash
-  # 启动后检查Bean创建日志
-  docker logs seahorse-backend 2>&1 | grep -i "RedisConnectionFactory"
-  ```
-
-- [ ] **SaTokenDao Bean正确注册**
-  ```bash
-  # 检查sa-token初始化日志
-  docker logs seahorse-backend 2>&1 | grep -i "SaTokenDao"
-  
-  # 预期输出包含
-  # "创建SaTokenDaoForRedisTemplate，使用RedisConnectionFactory"
-  # "SaTokenDaoForRedisTemplate初始化成功，token将持久化到Redis"
-  ```
-
-- [ ] **Redis keys前缀正确**
-  ```bash
-  # 登录后验证token存储
-  docker exec seahorse-redis redis-cli KEYS "satoken:*"
-  # 应该看到 satoken:login:token:* 等key
-  ```
-
-### Ollama配置
-- [ ] **Ollama服务可访问**
-  ```bash
-  curl http://localhost:11434/api/tags
-  ```
-
-- [ ] **向量模型已拉取**
-  ```bash
-  docker exec seahorse-ollama ollama list | grep nomic-embed-text
-  ```
-
-- [ ] **Backend配置正确**
-  ```bash
-  docker logs seahorse-backend | grep "OPENAI_COMPATIBLE"
-  # 验证环境变量：
-  # SEAHORSE_AGENT_ADAPTERS_AI_OPENAI_COMPATIBLE_BASE_URL=http://ollama:11434/v1
-  # SEAHORSE_AGENT_ADAPTERS_AI_OPENAI_COMPATIBLE_EMBEDDING_MODEL=nomic-embed-text
-  ```
-
-### 数据库配置
-- [ ] **PostgreSQL连接正常**
-  ```bash
-  docker exec seahorse-postgres psql -U postgres -d seahorse -c "SELECT version();"
-  ```
-
-- [ ] **向量扩展已安装**
-  ```bash
-  docker exec seahorse-postgres psql -U postgres -d seahorse -c "SELECT * FROM pg_extension WHERE extname='vector';"
-  ```
-
-- [ ] **向量维度匹配**
-  ```sql
-  -- 检查t_knowledge_vector表定义
-  SELECT column_name, udt_name 
-  FROM information_schema.columns 
-  WHERE table_name='t_knowledge_vector' AND column_name='embedding';
-  
-  -- 应该是 vector(768)，匹配nomic-embed-text
-  ```
-
----
-
-## 编译验证
-
-### 编译命令
-```bash
-# 完整构建（包含所有检查）
-./mvnw clean install -DskipTests
-
-# 快速构建（跳过格式检查）
-./mvnw clean package -DskipTests -Dspotless.check.skip=true
-
-# 仅构建bootstrap模块
-./mvnw package -pl seahorse-agent-bootstrap -am -DskipTests
-```
-
-### 构建产物验证
-- [ ] **JAR文件生成**
-  ```bash
-  ls -lh seahorse-agent-bootstrap/target/seahorse-agent-bootstrap-*-exec.jar
-  ```
-
-- [ ] **JAR可执行**
-  ```bash
-  java -jar seahorse-agent-bootstrap/target/seahorse-agent-bootstrap-*-exec.jar --help
-  ```
-
----
-
-## Docker部署验证
-
-### 镜像构建
-- [ ] **使用本地JAR构建镜像**（避免Maven代理问题）
-  ```bash
-  docker build -t seahorse-agent-backend:latest -f - . <<'EOF'
-  FROM eclipse-temurin:17-jre
-  WORKDIR /app
-  COPY seahorse-agent-bootstrap/target/seahorse-agent-bootstrap-*-exec.jar app.jar
-  EXPOSE 9090
-  ENTRYPOINT ["java", "-jar", "app.jar"]
-  EOF
-  ```
-
-### 服务启动
-- [ ] **所有容器启动成功**
-  ```bash
-  docker compose -f docker-compose.full.yml ps
-  # 所有服务状态应该是 "Up"
-  ```
-
-- [ ] **Backend健康检查通过**
-  ```bash
-  curl http://localhost:9090/actuator/health
-  # 预期: {"status":"UP"}
-  ```
-
----
-
-## E2E测试前验证
-
-### 认证测试
-- [ ] **登录成功**
-  ```bash
-  TOKEN=$(curl -s -X POST http://localhost:9090/auth/login \
-    -H "Content-Type: application/json" \
-    -d '{"username":"admin","password":"admin123"}' | jq -r '.data.token')
-  echo $TOKEN
-  ```
-
-- [ ] **Token持久化到Redis**
-  ```bash
-  docker exec seahorse-redis redis-cli KEYS "satoken:*" | wc -l
-  # 应该 > 0
-  ```
-
-- [ ] **Token可用于API调用**
-  ```bash
-  curl -X GET http://localhost:9090/knowledge-base \
-    -H "Authorization: Bearer $TOKEN"
-  # 应该返回列表，而非"登录已过期"
-  ```
-
-### 向量化测试
-- [ ] **Ollama向量生成正常**
-  ```bash
-  curl -X POST http://localhost:11434/api/embeddings \
-    -H "Content-Type: application/json" \
-    -d '{"model":"nomic-embed-text","prompt":"测试文本"}' | jq '.embedding | length'
-  # 应该返回 768
-  ```
-
----
-
-## 常见问题快速检查
-
-| 问题现象 | 检查命令 | 预期结果 |
-|---------|---------|---------|
-| "登录已过期" | `docker exec seahorse-redis redis-cli DBSIZE` | > 0 |
-| NoClassDefFoundError | `jar -tf target/*-exec.jar \| grep SaTokenDao` | 存在多个satoken类 |
-| Backend启动失败 | `docker logs seahorse-backend \| tail -50` | 无ERROR日志 |
-| 向量维度错误 | `psql -c "\\d t_knowledge_vector"` | embedding vector(768) |
-
----
-
-## 检查清单完成确认
-
-完成上述所有检查项后，可以开始执行E2E测试：
+后端镜像复制已构建的 Spring Boot exec jar，启动 compose 前先打包：
 
 ```bash
-bash scripts/e2e-full-test.sh
+./mvnw -pl seahorse-agent-bootstrap -am -DskipTests package
 ```
 
-**预期结果**:
-- ✅ 登录成功，token持久化
-- ✅ 知识库创建成功
-- ✅ 文档向量化完成
-- ✅ RAG查询返回相关内容
-- ✅ Chat对话使用知识库
-- ✅ 多轮记忆正常
+Windows PowerShell：
+
+```powershell
+.\mvnw.cmd -pl seahorse-agent-bootstrap -am -DskipTests package
+```
+
+如果只是快速打包并跳过格式检查：
+
+```bash
+./mvnw -B -pl seahorse-agent-bootstrap -am -DskipTests -Dspotless.check.skip=true package
+```
+
+## 3. 环境变量
+
+轻量部署：
+
+```bash
+cp .env.example .env
+```
+
+全量部署：
+
+```bash
+cp .env.full.example .env
+```
+
+至少确认 Chat 模型：
+
+```env
+SEAHORSE_AGENT_ADAPTERS_AI_BASE_URL=https://api.openai.com/v1
+SEAHORSE_AGENT_ADAPTERS_AI_API_KEY=sk-your-key
+SEAHORSE_AGENT_ADAPTERS_AI_CHAT_MODEL=gpt-4o-mini
+```
+
+全量 compose 当前将 Embedding 指向容器内 Ollama：
+
+```env
+SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL=nomic-embed-text
+SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_BASE_URL=http://ollama:11434/v1
+SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION=768
+```
+
+如果换 Embedding 模型，必须同步调整向量维度并重建已有向量索引。
+
+## 4. 启动后检查
+
+```bash
+docker compose -f docker-compose.full.yml ps
+curl http://localhost:9090/actuator/health
+```
+
+预期：
+
+- `seahorse-backend` 为 Up/healthy。
+- 前端可打开 `http://localhost`。
+- 后端健康接口返回 `UP`。
+
+全量服务额外检查：
+
+```bash
+docker exec seahorse-redis redis-cli PING
+curl http://localhost:9200/_cluster/health
+docker exec seahorse-ollama ollama list
+curl http://localhost:11434/api/tags
+```
+
+## 5. 登录检查
+
+默认账号：
+
+```text
+admin / admin123
+```
+
+登录：
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:9090/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}' \
+  | jq -r '.data.token')
+
+echo "$TOKEN"
+```
+
+验证 token：
+
+```bash
+curl http://localhost:9090/knowledge-base \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+全量部署下 Redis 应看到 Sa-Token key：
+
+```bash
+docker exec seahorse-redis redis-cli KEYS "satoken:*"
+```
+
+轻量部署不使用 Redis，不要用 Redis key 数量判断登录是否成功。
+
+## 6. RAG 检查
+
+全量部署的真实 RAG 至少需要：
+
+- Chat 模型配置有效。
+- Ollama 有 `nomic-embed-text`。
+- Milvus 健康。
+- Elasticsearch 健康。
+- 知识库文档已完成分块和索引。
+
+检查 Embedding 维度：
+
+```bash
+curl -s http://localhost:11434/api/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{"model":"nomic-embed-text","prompt":"test"}' \
+  | jq '.embedding | length'
+```
+
+预期为 `768`。
+
+检查知识库数据：
+
+```bash
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT COUNT(*) FROM t_knowledge_chunk;"
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT COUNT(*) FROM t_rag_trace_run;"
+```
+
+## 7. 记忆检查
+
+全量部署默认开启：
+
+```env
+SEAHORSE_AGENT_MEMORY_AGGREGATION_ENABLED=true
+```
+
+检查表是否存在：
+
+```bash
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "\dt t_short_term_memory"
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "\dt t_user_profile_fact"
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "\dt t_memory_outbox"
+```
+
+发起一次个人事实对话后，检查：
+
+```bash
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT COUNT(*) FROM t_short_term_memory;"
+docker exec seahorse-postgres psql -U seahorse -d seahorse -c "SELECT user_id, slot_key, slot_value, status FROM t_user_profile_fact ORDER BY update_time DESC LIMIT 20;"
+```
+
+## 8. 数据卷安全
+
+旧数据卷不会自动重放 `resources/database/seahorse_init.sql`。如果遇到默认密码、表结构、向量维度或记忆表异常，先判断是否来自旧卷。
+
+高风险命令：
+
+```bash
+docker compose -f docker-compose.full.yml down -v
+```
+
+只有确认不需要旧数据时才执行。
+
+## 9. E2E 前最后确认
+
+- 前端 `http://localhost` 可登录。
+- `admin / admin123` 登录成功。
+- 带 `Authorization: Bearer <token>` 的接口不再返回“登录已过期”。
+- 全量部署下 `nomic-embed-text` 返回 768 维向量。
+- 知识库文档可以上传、分块并产生 chunk。
+- `/admin/traces` 能看到 RAG 请求。
+- 记忆链路有 `t_short_term_memory` 和 `t_user_profile_fact` 数据。
+
+可用脚本：
+
+```text
+scripts/e2e-full-test.sh
+scripts/e2e-knowledge-test.sh
+scripts/memory-e2e-test.sh
+scripts/e2e-backend-smoke.ps1
+```

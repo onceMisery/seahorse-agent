@@ -1,211 +1,133 @@
-# Seahorse Agent 本地向量化模型部署指南
+# 本地 Embedding 模型部署指南
 
-## 当前状态
+本文说明 Seahorse Agent 当前如何使用本地 Embedding，以及切换模型时需要同步修改哪些配置。
 
-**嵌入模型类型**: `mock` (测试用,不进行真实向量化)  
-**向量维度**: 1024  
-**向量数据库**: Milvus
+## 当前运行态
 
-## 本地部署选项
+全量部署默认不是 mock，也不是 1024 维。当前事实如下：
 
-### 方案1: 使用OpenAI API (推荐,无需本地GPU)
+| 项 | 当前值 |
+|---|---|
+| Embedding 类型 | OpenAI-compatible |
+| 默认模型 | `nomic-embed-text` |
+| 服务 | 容器内 Ollama |
+| Base URL | `http://ollama:11434/v1` |
+| 向量维度 | 768 |
+| 向量库 | Milvus |
+| 关键词检索 | Elasticsearch |
 
-**优势**: 无需本地硬件,按量付费  
-**配置**:
-```yaml
-SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_TYPE: openai-compatible
-SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL: text-embedding-3-small
-SEAHORSE_AGENT_ADAPTERS_AI_OPENAI_API_KEY: sk-your-key
-SEAHORSE_AGENT_ADAPTERS_AI_OPENAI_BASE_URL: https://api.openai.com/v1
-```
+轻量部署默认使用 `noop` 向量适配器，仅适合页面和基础 API 冒烟。
 
-**成本**: 
-- text-embedding-3-small: $0.02 / 1M tokens
-- text-embedding-3-large: $0.13 / 1M tokens
+## 推荐方案
 
-**硬件需求**: 无
+### 方案 A：使用全量部署内置 Ollama
 
----
+适合本地开发和闭环验证。
 
-### 方案2: 本地部署开源嵌入模型 (需要GPU)
-
-#### 推荐模型
-
-| 模型 | 维度 | 显存需求 | 性能 | 适用场景 |
-|------|------|---------|------|---------|
-| **bge-small-zh-v1.5** | 512 | 1-2GB | 中文优化 | **推荐首选** |
-| **bge-base-zh-v1.5** | 768 | 2-3GB | 中文优化 | 平衡性能 |
-| **bge-large-zh-v1.5** | 1024 | 4-6GB | 中文最佳 | 高精度需求 |
-| all-MiniLM-L6-v2 | 384 | 0.5-1GB | 英文通用 | 资源受限 |
-| gte-large-zh | 1024 | 4-6GB | 中文通用 | 高精度 |
-
-#### 最小硬件配置 (bge-small-zh-v1.5)
-
-**显卡**:
-- **最低**: GTX 1050 Ti (4GB显存) - 勉强可用,较慢
-- **推荐**: GTX 1660 / RTX 3050 (6GB显存) - 流畅运行
-- **最佳**: RTX 3060 / RTX 4060 (8-12GB显存) - 高性能
-
-**CPU**: 
-- 最低: 4核 (Intel i5 / AMD Ryzen 5)
-- 推荐: 8核以上
-
-**内存**:
-- 最低: 8GB
-- 推荐: 16GB (考虑到其他容器)
-- 理想: 32GB (企业级,多并发)
-
-**磁盘**:
-- 模型文件: 1-2GB
-- Milvus数据: 根据文档量,10GB起步
-- 总计推荐: 50GB+ SSD
-
-#### 完整系统推荐 (bge-base-zh-v1.5)
-
-```
-显卡: RTX 3060 12GB / RTX 4060 8GB
-CPU: 8核 (Ryzen 7 / i7)
-内存: 16GB DDR4
-存储: 256GB SSD + 1TB HDD
-```
-
-**预估成本**: ¥6000-8000 (仅GPU部分)
-
----
-
-### 方案3: 使用本地Ollama部署 (简化版)
-
-**优势**: 一键部署,自动管理模型
-
-**硬件需求**:
-```
-显卡: 6GB+ (如RTX 3060)
-内存: 16GB
-存储: 20GB
-```
-
-**配置步骤**:
 ```bash
-# 1. 安装Ollama
-curl -fsSL https://ollama.com/install.sh | sh
-
-# 2. 下载嵌入模型
-ollama pull nomic-embed-text  # 英文,274M
-ollama pull bge-large-zh      # 中文,1.3GB
-
-# 3. 配置Seahorse
-SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_TYPE: openai-compatible
-SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL: bge-large-zh
-SEAHORSE_AGENT_ADAPTERS_AI_OPENAI_BASE_URL: http://localhost:11434/v1
+docker compose -f docker-compose.full.yml up -d --build
+docker exec seahorse-ollama ollama list
 ```
 
----
+验证维度：
 
-### 方案4: CPU-only部署 (无GPU)
-
-**可行性**: ✅ 可以,但较慢  
-**适用场景**: 测试环境,低并发
-
-**硬件需求**:
-```
-CPU: 8核以上 (推荐16核)
-内存: 32GB (模型会占用大量内存)
-存储: SSD必须
+```bash
+curl -s http://localhost:11434/api/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{"model":"nomic-embed-text","prompt":"test"}' \
+  | jq '.embedding | length'
 ```
 
-**性能预估**:
-- 单文档嵌入: 2-5秒 (GPU约0.1秒)
-- 批量100文档: 3-10分钟 (GPU约5-30秒)
+预期为 `768`。
 
-**建议**: 仅用于开发测试,生产环境必须使用GPU
+### 方案 B：使用外部 OpenAI 兼容 Embedding 服务
 
----
+适合生产或希望统一模型网关的环境。
 
-## 性能对比
+需要修改：
 
-| 配置 | 单文档嵌入 | 1000文档批量 | 并发10用户 | 月成本 |
-|------|-----------|-------------|-----------|--------|
-| OpenAI API | 0.5s | 30s | 流畅 | ¥100-500 |
-| 本地RTX 3060 | 0.1s | 10s | 流畅 | ¥0 (电费忽略) |
-| 本地GTX 1050 Ti | 0.3s | 45s | 卡顿 | ¥0 |
-| CPU-only (16核) | 3s | 300s | 排队 | ¥0 |
-
----
-
-## 推荐方案总结
-
-### 个人开发/测试
-→ **Ollama + bge-small-zh-v1.5**  
-硬件: GTX 1660 6GB / RTX 3050 8GB + 16GB内存
-
-### 小团队 (5-20人)
-→ **本地GPU + bge-base-zh-v1.5**  
-硬件: RTX 3060 12GB + 32GB内存
-
-### 企业生产 (20+人)
-→ **OpenAI API** 或 **专用GPU服务器**  
-硬件: RTX 4090 / A4000 + 64GB内存 + 集群
-
-### 极简/无GPU
-→ **OpenAI API**  
-硬件: 无要求,按量付费
-
----
-
-## 当前修改为真实嵌入模型
-
-### 使用OpenAI (最简单)
-
-修改 `docker-compose.full.yml`:
-```yaml
-SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_TYPE: openai-compatible
-SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL: text-embedding-3-small
-SEAHORSE_AGENT_ADAPTERS_AI_OPENAI_API_KEY: sk-your-key
+```env
+SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_TYPE=openai-compatible
+SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_BASE_URL=https://your-embedding-endpoint/v1
+SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_API_KEY=your-key
+SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL=your-embedding-model
+SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION=<模型输出维度>
 ```
 
-### 使用本地Ollama
+如果使用 `text-embedding-3-small`，输出维度通常是 1536。需要同步调整 Milvus collection、知识库配置和已有向量数据。
 
-1. 启动Ollama容器:
-```yaml
-ollama:
-  image: ollama/ollama:latest
-  ports:
-    - "11434:11434"
-  volumes:
-    - ollama-data:/root/.ollama
-  deploy:
-    resources:
-      reservations:
-        devices:
-          - driver: nvidia
-            count: 1
-            capabilities: [gpu]
+### 方案 C：使用宿主机 Ollama
+
+适合已经在宿主机管理 Ollama 的情况。容器内后端访问宿主机可用：
+
+```env
+SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_BASE_URL=http://host.docker.internal:11434/v1
 ```
 
-2. 配置Seahorse:
-```yaml
-SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_TYPE: openai-compatible
-SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL: bge-large-zh
-SEAHORSE_AGENT_ADAPTERS_AI_OPENAI_BASE_URL: http://ollama:11434/v1
+同时确认 compose 网络和 Docker Desktop 支持 `host.docker.internal`。
+
+## 模型选择
+
+| 模型 | 维度 | 特点 |
+|---|---:|---|
+| `nomic-embed-text` | 768 | 当前默认，小、快，适合本地验证 |
+| `bge-base-zh` | 768 | 中文效果更稳，资源需求适中 |
+| `bge-m3` | 1024 | 多语言，质量较好，资源需求更高 |
+| `text-embedding-3-small` | 1536 | 外部 API，稳定，按量计费 |
+
+模型一旦切换，旧向量索引通常不能复用。
+
+## 切换模型步骤
+
+1. 拉取或准备模型。
+2. 修改 Embedding 模型名、Base URL、API Key。
+3. 修改向量维度。
+4. 清理或重建 Milvus collection。
+5. 重新处理知识库文档。
+6. 用 `/admin/traces` 或 `t_rag_trace_*` 验证 retrieval 节点。
+
+示例：
+
+```bash
+docker exec seahorse-ollama ollama pull bge-m3
 ```
 
----
+```env
+SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL=bge-m3
+SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION=1024
+```
 
-## 常见问题
+## 排错
 
-**Q: 没有GPU可以运行吗?**  
-A: 可以,但推荐使用OpenAI API,性价比最高。
+### 维度不匹配
 
-**Q: RTX 3060能跑多大的模型?**  
-A: bge-large-zh (1024维) 轻松,支持并发5-10个请求。
+症状：
 
-**Q: 嵌入模型可以更换吗?**  
-A: 可以,但更换后需要重新向量化所有已存储文档。
+```text
+dimension mismatch
+```
 
-**Q: Milvus占用多少资源?**  
-A: 内存2-4GB,CPU 1-2核,磁盘视数据量而定。
+处理：
 
----
+- 确认模型输出维度。
+- 确认后端向量维度配置。
+- 清理旧 collection 或重新建库。
+- 重新向量化文档。
 
-**更新时间**: 2026-06-10  
-**适用版本**: Seahorse Agent 0.0.1-SNAPSHOT
+### 模型下载慢
+
+```bash
+docker logs -f seahorse-ollama-init
+docker exec seahorse-ollama ollama pull nomic-embed-text
+```
+
+如需代理，配置 Docker 代理或容器内代理。
+
+### RAG 仍无上下文
+
+Embedding 正常不代表 RAG 完整闭环已经完成。还要检查：
+
+- 文档是否有 `t_knowledge_chunk`。
+- Milvus 是否有对应 collection。
+- Elasticsearch 是否健康。
+- RAG Trace 中 retrieval 节点是否成功。

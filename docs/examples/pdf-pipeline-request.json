@@ -23,7 +23,7 @@
       "nodeId": "enhancer-1",
       "nodeType": "enhancer",
       "settings": {
-        "modelId": "qwen-plus",
+        "modelId": "",
         "tasks": [
           {
             "type": "context_enhance",
@@ -48,7 +48,7 @@
       "nodeId": "indexer-1",
       "nodeType": "indexer",
       "settings": {
-        "embeddingModel": "qwen-emb-8b",
+        "embeddingModel": "nomic-embed-text",
         "includeEnhancedContent": true,
         "metadataFields": [
           "category",

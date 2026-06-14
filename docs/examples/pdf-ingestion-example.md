@@ -1,287 +1,155 @@
-# PDF文档摄取完整示例
+# PDF 文档摄取示例
 
-本文档演示如何使用 **nextNodeId** 创建PDF摄取流水线并上传文档。
+本文演示如何通过当前后端入库接口创建 Pipeline 并上传 PDF。接口路径以 `seahorse-agent-adapter-web` 中的 Controller 为准。
 
-## 📋 流程说明
+示例请求中的 `modelId` 为空字符串，表示使用当前运行时默认 Chat 模型；`embeddingModel` 使用全量部署默认的 `nomic-embed-text`，对应 768 维向量。
 
-```
-上传PDF → fetcher-1 → parser-1 → enhancer-1 → chunker-1 → indexer-1
-          (获取)     (解析)     (AI增强)    (分块)      (向量化)
-```
+## 前置条件
 
-**架构特点**：
-- ✅ 使用 `nextNodeId` 明确连线关系
-- ✅ 链式执行，简单清晰
-- ✅ 自动检测循环依赖
+- 使用全量部署或已开启入库高级能力。
+- 后端地址：`http://localhost:9090`
+- 已登录并拿到 token。
 
----
-
-## 🚀 完整操作步骤
-
-### Step 1: 创建流水线
-
-**请求**:
 ```bash
-curl -X POST "http://localhost:8080/api/seahorse-agent/ingestion/pipelines" \
+TOKEN=$(curl -s -X POST http://localhost:9090/auth/login \
   -H "Content-Type: application/json" \
-  -d @pdf-pipeline-request.json
+  -d '{"username":"admin","password":"admin123"}' \
+  | jq -r '.data.token')
 ```
 
-**请求体** (`pdf-pipeline-request.json`):
+## 流程
 
-**说明**:
-- `nextNodeId`: 指向下一个要执行的节点
-- 最后一个节点 (indexer-1) 不需要 `nextNodeId` 字段
-- 引擎自动找到起始节点（没有被引用的节点）
-
-**响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "name": "pdf-ingestion-pipeline",
-    "description": "PDF文档摄取流水线 - 解析、AI增强、分块、向量化",
-    "nodeCount": 5
-  }
-}
+```text
+上传 PDF -> fetcher-1 -> parser-1 -> enhancer-1 -> chunker-1 -> indexer-1
 ```
 
----
+节点通过 `nextNodeId` 串联。最后一个节点不需要 `nextNodeId`。
 
-### Step 2: 上传PDF文档
+## 1. 创建 Pipeline
 
-**请求**:
 ```bash
-curl -X POST "http://localhost:8080/api/seahorse-agent/ingestion/tasks/upload" \
-  -F "pipelineId=1" \
-  -F "file=@/path/to/your/document.pdf" \
-  -F "metadata={\"category\":\"manual\",\"department\":\"IT\"}"
+PIPELINE_ID=$(curl -s -X POST "http://localhost:9090/ingestion/pipelines" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d @docs/examples/pdf-pipeline-request.json \
+  | jq -r '.data.id')
+
+echo "$PIPELINE_ID"
 ```
 
-**说明**:
-- `file`: 本地PDF文件路径
-- `metadata`: 自定义元数据（可选）
-- `pipelineId`: 第一步返回的流水线 ID（若已设置默认流水线可省略）
+响应形状：
 
-**响应**:
 ```json
 {
-  "success": true,
+  "code": "0",
   "data": {
-    "taskId": 123,
-    "status": "RUNNING",
-    "pipelineId": 1
+    "id": "pipeline-id",
+    "name": "pdf-ingestion-pipeline"
   }
 }
 ```
 
----
+## 2. 上传 PDF
 
-### Step 3: 查看任务状态
-
-**请求**:
 ```bash
-curl "http://localhost:8080/api/seahorse-agent/ingestion/tasks/123"
+TASK_ID=$(curl -s -X POST "http://localhost:9090/ingestion/tasks/upload" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "pipelineId=$PIPELINE_ID" \
+  -F "file=@/path/to/document.pdf" \
+  | jq -r '.data.taskId // .data.id')
+
+echo "$TASK_ID"
 ```
 
-**响应（执行中）**:
-```json
-{
-  "success": true,
-  "data": {
-    "taskId": 123,
-    "pipelineId": 1,
-    "status": "RUNNING",
-    "startTime": "2026-01-22T14:30:00"
-  }
-}
+当前上传接口接收：
+
+| 字段 | 说明 |
+|---|---|
+| `pipelineId` | Pipeline ID |
+| `file` | 上传文件 |
+
+如需传入业务元数据，可使用 `POST /ingestion/tasks` 创建任务，并在 JSON 中提供 `metadata`。
+
+## 3. 查询任务
+
+```bash
+curl "http://localhost:9090/ingestion/tasks/$TASK_ID" \
+  -H "Authorization: Bearer $TOKEN"
+
+curl "http://localhost:9090/ingestion/tasks/$TASK_ID/nodes" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-**响应（完成）**:
-```json
-{
-  "success": true,
-  "data": {
-    "taskId": 123,
-    "pipelineId": 1,
-    "status": "COMPLETED",
-    "startTime": "2026-01-22T14:30:00",
-    "completeTime": "2026-01-22T14:30:45",
-    "chunks": 35
-  }
-}
-```
+## 4. 常见错误
 
----
-
-## 🎯 节点连线说明
-
-### 核心概念
-
-**nextNodeId**: 下一个节点ID
-- 每个节点通过 `nextNodeId` 指向下一个要执行的节点
-- 最后一个节点不需要设置 `nextNodeId`
-- 形成链式执行: A → B → C → D
-
-**执行流程**:
-1. 引擎自动找到起始节点（fetcher-1，没有被任何节点引用）
-2. 执行 fetcher-1，完成后查看 `nextNodeId`
-3. 执行 parser-1，完成后查看 `nextNodeId`
-4. 依次执行后续节点，直到没有 `nextNodeId`
-
----
-
-## 📊 配置字段说明
-
-### NodeConfig 字段
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `nodeId` | String | ✅ | 节点唯一ID |
-| `nodeType` | String | ✅ | 节点类型 (FETCHER/PARSER/ENHANCER等) |
-| `nextNodeId` | String | - | 下一个节点ID（最后一个节点不需要） |
-| `settings` | Object | - | 节点配置 |
-| `condition` | String | - | 条件表达式 |
-
----
-
-## ⚠️ 常见错误
-
-### 错误1: 循环依赖
+### 循环依赖
 
 ```json
 {
   "nodes": [
     {"nodeId": "a", "nextNodeId": "b"},
-    {"nodeId": "b", "nextNodeId": "c"},
-    {"nodeId": "c", "nextNodeId": "a"}  // ❌ 循环!
+    {"nodeId": "b", "nextNodeId": "a"}
   ]
 }
 ```
 
-**错误信息**:
-```
-Pipeline contains cycle: a
-```
+Pipeline 中不能出现环。
 
-### 错误2: 引用不存在的节点
+### 引用不存在的节点
 
 ```json
 {
   "nodes": [
-    {"nodeId": "parser-1", "nextNodeId": "enhancer-999"}  // ❌ 节点不存在
+    {"nodeId": "parser-1", "nextNodeId": "enhancer-999"}
   ]
 }
 ```
 
-**错误信息**:
-```
-Next node not found: enhancer-999 referenced by parser-1
-```
+`nextNodeId` 必须指向同一个 Pipeline 内存在的节点。
 
-### 错误3: 没有起始节点
+### 高级能力未开启
 
-```json
-{
-  "nodes": [
-    {"nodeId": "a", "nextNodeId": "b"},
-    {"nodeId": "b", "nextNodeId": "a"}  // ❌ 所有节点都被引用
-  ]
-}
+如果返回能力不可用，检查：
+
+```env
+SEAHORSE_AGENT_ADVANCED_INGESTION_PIPELINE_MANAGEMENT_ENABLED=true
+SEAHORSE_AGENT_ADVANCED_INGESTION_TASK_MANAGEMENT_ENABLED=true
 ```
 
-**错误信息**:
-```
-No start node found in pipeline
-```
+## 快速脚本
 
----
-
-## 🧪 快速测试脚本
-
-**完整自动化测试**:
 ```bash
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-API_BASE="http://localhost:8080/api/seahorse-agent"
+API_BASE="http://localhost:9090"
 
-# 1. 创建流水线
-echo "📝 Creating pipeline..."
-PIPELINE_RESPONSE=$(curl -s -X POST "${API_BASE}/ingestion/pipelines" \
+TOKEN=$(curl -s -X POST "$API_BASE/auth/login" \
   -H "Content-Type: application/json" \
-  -d @pdf-pipeline-request.json)
+  -d '{"username":"admin","password":"admin123"}' \
+  | jq -r '.data.token')
 
-PIPELINE_ID=$(echo $PIPELINE_RESPONSE | jq -r '.data.id')
-echo "✅ Pipeline created: ID=${PIPELINE_ID}"
+PIPELINE_ID=$(curl -s -X POST "$API_BASE/ingestion/pipelines" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d @docs/examples/pdf-pipeline-request.json \
+  | jq -r '.data.id')
 
-# 2. 上传PDF
-echo "📤 Uploading PDF..."
-TASK_RESPONSE=$(curl -s -X POST "${API_BASE}/ingestion/tasks/upload" \
+TASK_ID=$(curl -s -X POST "$API_BASE/ingestion/tasks/upload" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "pipelineId=$PIPELINE_ID" \
   -F "file=@test.pdf" \
-  -F "metadata={\"test\":true}")
+  | jq -r '.data.taskId // .data.id')
 
-TASK_ID=$(echo $TASK_RESPONSE | jq -r '.data.taskId')
-echo "✅ Task created: ID=${TASK_ID}"
+curl -s "$API_BASE/ingestion/tasks/$TASK_ID" \
+  -H "Authorization: Bearer $TOKEN" | jq .
 
-# 3. 等待完成
-echo "⏳ Waiting for completion..."
-while true; do
-  STATUS_RESPONSE=$(curl -s "${API_BASE}/ingestion/tasks/${TASK_ID}")
-  STATUS=$(echo $STATUS_RESPONSE | jq -r '.data.status')
-
-  if [ "$STATUS" == "COMPLETED" ]; then
-    echo "✅ Task completed!"
-    break
-  elif [ "$STATUS" == "FAILED" ]; then
-    echo "❌ Task failed!"
-    exit 1
-  fi
-
-  sleep 2
-done
-
-# 4. 查看结果
-echo "📊 Task summary:"
-echo $STATUS_RESPONSE | jq '.data'
-
-echo "📋 Node details:"
-curl -s "${API_BASE}/ingestion/tasks/${TASK_ID}/nodes" | jq '.data[] | {nodeType, status, durationMs}'
-
-echo "🎉 Test completed successfully!"
+curl -s "$API_BASE/ingestion/tasks/$TASK_ID/nodes" \
+  -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
----
+## 相关文件
 
-## 📝 一键创建命令
-
-**简化版（单行）**:
-```bash
-curl -X POST "http://localhost:8080/api/seahorse-agent/ingestion/pipelines" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "pdf-pipeline",
-    "description": "PDF摄取流水线",
-    "nodes": [
-      {"nodeId": "fetcher-1", "nodeType": "FETCHER", "nextNodeId": "parser-1"},
-      {"nodeId": "parser-1", "nodeType": "PARSER", "settings": {"rules": [{"mimeType": "PDF"}]}, "nextNodeId": "enhancer-1"},
-      {"nodeId": "enhancer-1", "nodeType": "ENHANCER", "settings": {"modelId": "qwen-max", "tasks": [{"type": "CONTEXT_ENHANCE"}]}, "nextNodeId": "chunker-1"},
-      {"nodeId": "chunker-1", "nodeType": "CHUNKER", "settings": {"strategy": "FIXED_SIZE", "chunkSize": 512, "overlapSize": 128}, "nextNodeId": "indexer-1"},
-      {"nodeId": "indexer-1", "nodeType": "INDEXER", "settings": {"collectionName": "pdf_documents", "includeEnhancedContent": true}}
-    ]
-  }'
-```
-
----
-
-## 📚 相关文档
-
-- [配置指南](../ingestion-pipeline-config-guide.md)
-- [执行示例](../pipeline-execution-guide.md)
-- [领域提示词库](../domain-specific-prompts-guide.md)
-
----
-
-**创建时间**: 2026-01-22
-**更新时间**: 2026-01-22
-**维护者**: Seahorse Agent Team
+- `docs/examples/pdf-pipeline-request.json`
+- `docs/USER_GUIDE.md`
+- `docs/TROUBLESHOOTING_GUIDE.md`
