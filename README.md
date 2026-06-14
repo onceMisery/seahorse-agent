@@ -1,184 +1,217 @@
 # Seahorse Agent
 
-Seahorse Agent 是一个面向企业知识问答、RAG 检索增强生成和 Agent 应用治理的工程平台。后端采用 Java 17、Spring Boot 3.5、多模块 Maven 和端口适配器架构；前端采用 React 18、TypeScript、Vite 和 TailwindCSS。项目当前提供聊天入口、知识库管理、文档入库、RAG 评测与 Trace、Agent/Skill/Tool 管理、记忆治理、审计、计费、租户、模型配置和系统设置等后台能力。
+Seahorse Agent 是一个面向企业知识、长期记忆和可治理智能体的工程化平台。它不是单一聊天 Demo，而是一套用于构建企业级 AI 应用的参考实现：把 RAG、用户记忆、用户画像、Agent/Skill/Tool、租户治理、审计和可观测性放在同一条可部署、可验证、可扩展的系统链路里。
 
-## 当前状态
+项目的核心目标是让智能体从“能回答一次问题”进化为“能在组织知识、用户偏好、工具能力和治理边界中长期工作”的平台。
 
-- 默认本地部署方式：`docker-compose.yml`，启动 PostgreSQL/pgvector、后端和前端。
-- 默认访问地址：前端 `http://localhost`，后端 `http://localhost:9090`。
-- 默认管理员账号：`admin / admin123`，由 `resources/database/seahorse_init.sql` 初始化。
-- 前端 Docker 与 Vite 开发服务通过 `/api` 反向代理访问后端，并在代理层去掉 `/api` 前缀；直接调后端 `9090` 端口时使用 Controller 的真实路径。
-- 后端入口：`seahorse-agent-bootstrap`。
-- 前端入口：`frontend`。
-- 数据库初始化脚本：`resources/database/seahorse_init.sql`。
-- 增量迁移脚本：`resources/database/migrations/`。
+## 愿景
 
-## 架构
+企业 AI 应用的难点通常不在一次模型调用，而在长期运行中的四件事：
 
-后端按六边形架构组织：
+- **知识可信**：回答必须来自可追踪、可更新、可评测的知识链路。
+- **记忆可控**：系统需要记住用户和任务上下文，也需要能解释、治理和遗忘。
+- **能力可编排**：Agent 不只聊天，还要可靠调用工具、Skill、外部系统和流程。
+- **治理可落地**：租户、权限、审计、成本、评测和观测必须成为默认能力。
 
-- `seahorse-agent-kernel`：领域模型、Inbound/Outbound Port、应用服务、RAG/Agent/Memory/Ingestion 编排。
-- `seahorse-agent-adapter-web`：REST/SSE Controller、Sa-Token 登录鉴权、后台管理 API。
-- `seahorse-agent-adapter-repository-jdbc`：PostgreSQL 仓储适配器，当前包含 MyBatis Plus mapper、Spring JDBC 兼容实现、租户隔离、RAG Trace、知识库、Agent、审计等表访问。
-- `seahorse-agent-adapter-ai-openai-compatible`：OpenAI-compatible Chat/Streaming Chat/Embedding/Rerank 适配器。
-- `seahorse-agent-adapter-vector-*`：Milvus、pgvector、noop 向量适配器。
-- `seahorse-agent-adapter-search-*`：Elasticsearch、Lucene 关键词检索适配器。
-- `seahorse-agent-adapter-cache-*`：local、Redis/Redisson 缓存适配器。
-- `seahorse-agent-adapter-mq-*`：direct、Pulsar 消息适配器。
-- `seahorse-agent-adapter-parser-tika`：Apache Tika 文档解析适配器。
-- `seahorse-agent-adapter-source-feishu`：飞书文档源适配器。
-- `seahorse-agent-adapter-storage-*`：local、S3 兼容对象存储适配器。
-- `seahorse-agent-adapter-mcp-http`：MCP HTTP 工具适配器。
-- `seahorse-agent-adapter-openapi`：OpenAPI 连接器与规范解析适配器。
-- `seahorse-agent-mcp-server`：MCP Server 模块。
-- `seahorse-agent-spring-boot-starter*`：自动装配与运行时聚合。
+Seahorse Agent 的定位是这四件事的工程底座。它强调可插拔适配器、稳定领域内核、真实闭环验证和面向生产的可观测性。
 
-Port 接口位于 kernel，外部依赖通过 adapter 实现接入。新增能力应优先保持 Port 契约稳定，在 Adapter、Controller 或配置层扩展。
+## 设计原则
 
-## 技术栈
+- **内核稳定，外部可换**：业务编排集中在 kernel，数据库、模型、向量库、搜索、缓存、消息队列、存储和外部工具通过 adapter 接入。
+- **闭环优先**：RAG、记忆、用户画像、Trace、评测和治理不是孤立功能，必须能在真实会话中形成数据回流。
+- **本地可复现**：轻量部署用于快速启动，全量部署用于验证真实 RAG、记忆、画像和观测链路。
+- **治理默认存在**：权限、审计、租户、成本、配额和安全边界作为平台能力，而不是后期补丁。
+- **可观测即产品能力**：RAG Trace、Memory Trace、健康检查和指标用于定位质量问题，也是平台演进的依据。
 
-后端：
+## 架构总览
 
-- Java 17
-- Spring Boot 3.5.7
-- Maven 多模块
-- MyBatis Plus 3.5.14 与 Spring JDBC 兼容仓储
-- PostgreSQL 16 / pgvector
-- Sa-Token 1.43.0
-- Resilience4j 2.2.0
-- Redisson 4.0.0
-- Apache Pulsar 3.1.3
-- Apache Tika 3.2.3
-- Milvus SDK 2.6.6
-- OkHttp 4.12.0
+后端采用端口适配器架构。`seahorse-agent-kernel` 承载领域模型、端口和核心应用服务，外部依赖通过各类 adapter 接入，Spring Boot 自动装配负责运行期组合。
 
-前端：
+```mermaid
+flowchart TB
+  FE["Frontend<br/>React + TypeScript"] --> WEB["adapter-web<br/>REST / SSE / Auth"]
+  WEB --> KERNEL["kernel<br/>Domain / Ports / Application Services"]
 
-- React 18.3.1
-- TypeScript 5.5.4
-- Vite 5.4.x
-- TailwindCSS 3.4.x
-- Radix UI
-- Zustand
-- React Router 6
-- Axios
-- Vitest 4
-
-## 认证与会话
-
-后端认证入口由 `SeahorseAuthController` 提供：
-
-- `POST /auth/login`：用户名密码登录，默认管理员为 `admin / admin123`。
-- `POST /auth/logout`：退出登录。
-- `POST /auth/refresh`：刷新访问令牌；刷新令牌持久化在 `t_user.refresh_token` 和 `t_user.refresh_token_expires_at`。
-
-`LoginResult` 当前返回 `userId`、`role`、`token`、`avatar`、`tenantId`、`refreshToken` 和 `refreshTokenExpiresAt`。前端当前登录态仍以访问令牌为主，刷新令牌接口已由后端提供，便于后续接入自动续期。
-
-## 模型与凭据管理
-
-当前代码支持按租户维护模型注册表。后台路径：
-
-- 模型配置：`/admin/model-config`
-- 供应商凭据：`/admin/secrets`
-- 系统设置概览：`/admin/settings`
-
-模型注册表存储在 `sa_ai_model_config` 表中，核心 key 为 `ai.models`。该表包含 `tenant_id`，并使用 `(tenant_id, config_key)` 唯一约束。`ai.models` 的值是 JSON 数组，示例：
-
-```json
-[
-  {
-    "id": "bge-m3-default",
-    "capability": "embedding",
-    "provider": "ollama",
-    "model": "bge-m3",
-    "baseUrl": "http://ollama:11434",
-    "secretRef": "",
-    "dimension": 1024,
-    "priority": 1,
-    "enabled": true,
-    "defaultModel": true
-  },
-  {
-    "id": "qwen-chat-default",
-    "capability": "chat",
-    "provider": "openai-compatible",
-    "model": "qwen-plus",
-    "baseUrl": "https://api.openai.com/v1",
-    "secretRef": "openai-prod",
-    "priority": 2,
-    "enabled": true,
-    "defaultModel": true
-  }
-]
+  KERNEL --> AI["AI Adapter<br/>OpenAI-compatible Chat / Embedding"]
+  KERNEL --> VECTOR["Vector Adapter<br/>Milvus / pgvector / noop"]
+  KERNEL --> SEARCH["Search Adapter<br/>Elasticsearch / Lucene"]
+  KERNEL --> REPO["Repository Adapter<br/>PostgreSQL / JDBC"]
+  KERNEL --> MQ["MQ Adapter<br/>Direct / Pulsar"]
+  KERNEL --> CACHE["Cache Adapter<br/>Local / Redis"]
+  KERNEL --> STORAGE["Storage Adapter<br/>Local / S3-compatible"]
+  KERNEL --> TOOLING["Tooling Adapters<br/>MCP / OpenAPI / Feishu"]
+  KERNEL --> OBS["Observation Adapter<br/>Micrometer / noop"]
 ```
 
-知识库创建弹窗会优先读取当前租户 `ai.models` 中启用的 `embedding` 模型；如果没有租户模型注册表，再回退到旧的模型配置和 RAG settings。
+### 核心层次
 
-`.env` 或 Docker 环境变量中的 `SEAHORSE_AGENT_ADAPTERS_AI_*` 仍作为运行时 adapter 的基础配置和兼容回退。生产或多租户场景下，推荐在后台模型配置页维护租户级模型，并用供应商凭据页保存供应商 API Key 或连接器凭据引用，再通过 `secretRef` 绑定到模型配置。
+| 层次 | 责任 |
+|---|---|
+| Frontend | 聊天、知识库、记忆中心、Agent 管理、治理后台和观测页面 |
+| adapter-web | 认证、REST API、SSE 流式响应、后台管理入口 |
+| kernel | RAG、记忆、用户画像、Agent、治理和 Trace 的核心编排 |
+| adapter-* | 数据库、模型、向量库、搜索、缓存、消息队列、存储、工具和观测接入 |
+| bootstrap / autoconfigure | Spring Boot 启动入口和自动装配 |
 
-## 快速开始
+## 关键闭环
 
-### 1. 准备环境
+### RAG 闭环
 
-需要：
+```mermaid
+flowchart LR
+  Upload["文档上传"] --> Parse["解析与分块"]
+  Parse --> Chunk["知识分块"]
+  Chunk --> Vector["向量索引"]
+  Chunk --> Keyword["关键词索引"]
+  Vector --> Retrieve["多通道检索"]
+  Keyword --> Retrieve
+  Retrieve --> Rerank["重排 / 过滤"]
+  Rerank --> Prompt["构建上下文"]
+  Prompt --> Answer["流式回答"]
+  Answer --> Trace["RAG Trace / 评测"]
+  Trace --> Improve["策略优化"]
+  Improve --> Retrieve
+```
 
+全量部署使用 Milvus、Ollama Embedding、Elasticsearch、PostgreSQL 和 RAG Trace 形成完整检索链路。轻量部署可以快速启动，但默认不代表完整 RAG 检索质量。
+
+### 记忆与用户画像闭环
+
+```mermaid
+flowchart LR
+  Turn["用户对话"] --> Capture["轮次捕获"]
+  Capture --> Short["短期记忆"]
+  Capture --> Buffer["聚合缓冲"]
+  Buffer --> Extract["事实抽取"]
+  Extract --> Profile["用户画像"]
+  Extract --> Index["关键词 / 图谱索引"]
+  Profile --> Recall["后续召回"]
+  Index --> Recall
+  Recall --> Context["记忆上下文注入"]
+  Context --> Personalized["个性化回答"]
+  Personalized --> MemoryTrace["Memory Trace / 治理"]
+```
+
+用户画像不是独立表单，而是从对话事实中沉淀出来的可治理记忆。例如用户说“我的职业是平台可靠性后端工程师，我偏好极简中文回答”，系统应能抽取职业和回答风格，并在后续新会话中召回。
+
+### Agent 能力闭环
+
+```mermaid
+flowchart LR
+  Intent["用户任务"] --> Plan["Agent 编排"]
+  Plan --> Skills["Skill 选择"]
+  Plan --> Tools["Tool / MCP / OpenAPI 调用"]
+  Skills --> Result["执行结果"]
+  Tools --> Result
+  Result --> Audit["审计 / Trace / 成本"]
+  Audit --> Governance["治理与优化"]
+  Governance --> Plan
+```
+
+Agent 能力围绕可管理的 Skill、Tool、运行记录、审批、审计和成本分析展开，目标是支持可控的企业级自动化，而不是不可追踪的黑盒调用。
+
+## 模块地图
+
+```text
+.
+|-- frontend/                                      React 前端
+|-- resources/database/                            初始化 SQL 与迁移脚本
+|-- seahorse-agent-bootstrap/                      Spring Boot 启动入口
+|-- seahorse-agent-kernel/                         领域模型、端口与核心应用服务
+|-- seahorse-agent-adapter-web/                    REST、SSE、认证和后台 API
+|-- seahorse-agent-adapter-repository-jdbc/        PostgreSQL 仓储适配器
+|-- seahorse-agent-adapter-ai-openai-compatible/   OpenAI 兼容模型适配器
+|-- seahorse-agent-adapter-vector-*/               Milvus / pgvector / noop 向量适配器
+|-- seahorse-agent-adapter-search-*/               Elasticsearch / Lucene 搜索适配器
+|-- seahorse-agent-adapter-cache-*/                local / Redis 缓存适配器
+|-- seahorse-agent-adapter-mq-*/                   direct / Pulsar 消息适配器
+|-- seahorse-agent-adapter-storage-*/              local / S3 兼容存储适配器
+|-- seahorse-agent-adapter-parser-tika/            文档解析适配器
+|-- seahorse-agent-adapter-mcp-http/               MCP HTTP 工具适配器
+|-- seahorse-agent-adapter-openapi/                OpenAPI 连接器适配器
+|-- seahorse-agent-adapter-source-feishu/          飞书文档源适配器
+|-- seahorse-agent-adapter-observation-*/          noop / Micrometer 观测适配器
+|-- seahorse-agent-mcp-server/                     MCP Server
+|-- seahorse-agent-spring-boot-autoconfigure/      自动装配
+|-- seahorse-agent-spring-boot-starter*/           Starter 聚合
+`-- seahorse-agent-tests/                          跨模块测试
+```
+
+## 快速部署
+
+### 环境要求
+
+- Docker Desktop 和 Docker Compose v2
 - JDK 17
 - Maven 3.9+，或使用仓库内 `mvnw`
-- Node.js 20+
-- Docker Desktop
+- Node.js 20+，仅前端本地开发需要
+- 可用的 OpenAI 兼容 Chat 模型服务
 
-### 2. 配置环境变量
+全量部署建议给 Docker Desktop 分配至少 8 GB 内存。首次启动会拉取 Milvus、Ollama、Pulsar、Elasticsearch 等镜像，耗时较长。
+
+### 轻量部署
+
+适合页面开发、登录和基础 API 冒烟。
 
 ```bash
 cp .env.example .env
+./mvnw -pl seahorse-agent-bootstrap -am -DskipTests package
+docker compose up -d --build
 ```
 
-按需填写 `.env` 中的模型服务地址和 key。没有外部模型服务时，系统仍可启动，但真实聊天、Embedding、Rerank 会受限。
+Windows PowerShell:
 
-### 3. 构建后端 jar
+```powershell
+copy .env.example .env
+.\mvnw.cmd -pl seahorse-agent-bootstrap -am -DskipTests package
+docker compose up -d --build
+```
 
-`Dockerfile.backend.simplified` 会复制已生成的 Spring Boot exec jar，因此构建后端镜像前需要先打包：
+### 全量部署
+
+适合验证真实 RAG、记忆、用户画像、索引、消息队列和观测链路。
 
 ```bash
-mvn -pl seahorse-agent-bootstrap -am -DskipTests package
+cp .env.full.example .env
+./mvnw -pl seahorse-agent-bootstrap -am -DskipTests package
+docker compose -f docker-compose.full.yml up -d --build
 ```
 
-### 4. 启动 Docker
+Windows PowerShell:
 
-```bash
-docker compose build backend frontend
-docker compose up -d postgres backend frontend
+```powershell
+copy .env.full.example .env
+.\mvnw.cmd -pl seahorse-agent-bootstrap -am -DskipTests package
+docker compose -f docker-compose.full.yml up -d --build
 ```
 
-健康检查：
+默认访问：
 
-```bash
-curl http://localhost:9090/actuator/health
-```
+| 服务 | 地址 |
+|---|---|
+| 前端 | `http://localhost` |
+| 后端健康检查 | `http://localhost:9090/actuator/health` |
+| Attu / Milvus 管理 | `http://localhost:8000` |
+| Prometheus | `http://localhost:19090` |
+| Grafana | `http://localhost:13001` |
 
-打开前端：
-
-```text
-http://localhost
-```
-
-登录：
+默认管理员账号：
 
 ```text
 admin / admin123
 ```
 
-如果本地 Docker 已经有旧的 PostgreSQL 数据卷，`seahorse_init.sql` 不会自动重新执行。旧库仍是 `admin / admin` 或缺少新字段时，应执行对应迁移脚本，或在确认不需要保留数据后重建数据库数据卷。
+如果本地已有旧 PostgreSQL 数据卷，初始化脚本不会自动重放。遇到默认密码、表结构或模型配置不一致时，优先检查迁移脚本和数据卷状态，不要直接删除数据卷。
 
 ## 本地开发
 
-后端本地启动：
+后端：
 
 ```bash
-mvn -pl seahorse-agent-bootstrap -am spring-boot:run
+./mvnw -pl seahorse-agent-bootstrap -am spring-boot:run
 ```
 
-前端本地启动：
+前端：
 
 ```bash
 cd frontend
@@ -186,157 +219,71 @@ npm install
 npm run dev
 ```
 
-如需指定 API 地址，可设置：
+前端 Docker 和 Vite 开发服务默认通过 `/api` 代理访问后端。直接访问后端 `9090` 端口时使用后端真实路径。
 
-```bash
-VITE_API_BASE_URL=http://localhost:9090
-```
+## 验证重点
 
-## 常用验证命令
+完整验证不应只看服务是否启动，还要看闭环是否成立：
 
-后端编译/打包：
+1. 登录后发起 SSE 聊天，请求头必须携带 `Authorization: Bearer <token>`。
+2. 上传或准备知识文档，确认分块、索引、检索和 RAG Trace 都有证据。
+3. 在对话中输入明确个人事实，确认短期记忆、用户画像和派生索引写入。
+4. 开新会话询问历史事实，确认记忆和画像能被召回并影响回答。
+5. 查看 Trace、审计、成本和健康检查，确认故障可定位。
 
-```bash
-mvn -pl seahorse-agent-bootstrap -am -DskipTests package
-```
+常用验证入口：
 
-指定后端测试示例：
+- `/chat`
+- `/memories`
+- `/admin/knowledge`
+- `/admin/traces`
+- `/admin/memory-governance`
+- `/admin/model-config`
 
-```bash
-mvn -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseAuthControllerTests" -DfailIfNoTests=false "-Dsurefire.failIfNoSpecifiedTests=false" test
-mvn -pl seahorse-agent-adapter-repository-jdbc -am -Dtest=JdbcAiModelConfigRepositoryAdapterTests -DfailIfNoTests=false "-Dsurefire.failIfNoSpecifiedTests=false" test
-mvn -pl seahorse-agent-adapter-repository-jdbc -am "-Dtest=JdbcRefreshTokenRepositoryAdapterTests" -DfailIfNoTests=false "-Dsurefire.failIfNoSpecifiedTests=false" test
-```
+## 路线图
 
-前端验证：
+### 近期：闭环质量和本地可验证性
 
-```bash
-cd frontend
-npx tsc --noEmit
-npm run build
-npx vitest run src/components/admin/CreateKnowledgeBaseDialog.test.ts --pool forks --no-file-parallelism --maxWorkers 1
-```
+- 强化 RAG 空检索、坏集合、索引不一致等场景的容错能力。
+- 完善记忆聚合、画像抽取、关键词索引和跨会话召回的 E2E 验证。
+- 补齐全量 Docker 部署的健康检查、初始化脚本和故障排查文档。
+- 建立更稳定的示例知识库、示例用户画像和可重复测试数据。
 
-API 冒烟示例：
+### 中期：企业级知识与记忆治理
 
-```bash
-curl http://localhost:9090/actuator/health
-curl -X POST http://localhost:9090/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"admin123"}'
-```
+- 建设更完整的混合检索策略：向量、关键词、结构化过滤、重排和评测联动。
+- 引入记忆生命周期治理：确认、冲突、过期、遗忘、来源追踪和用户可控。
+- 加强多租户隔离、资源 ACL、配额、审计和成本统计。
+- 提供面向管理员的 RAG 质量面板、记忆质量面板和策略调优入口。
 
-登录后可验证：
+### 长期：可治理 Agent 平台
 
-- `GET /admin/ai-config?tenantId=default`
-- `GET /intent-tree/trees`
-- `GET /ingestion/pipelines?page=1&size=10`
-- `GET /ingestion/tasks?page=1&size=10`
+- 将 Agent、Skill、Tool、MCP、OpenAPI 和审批流组合成可观测的执行网络。
+- 支持团队级、组织级知识与记忆边界，区分个人记忆、项目记忆和企业知识。
+- 建立 Agent 市场和版本治理，支持评测、灰度、回滚和运行时审计。
+- 形成从知识接入、智能体编排、工具执行到治理评估的企业 AI 操作系统。
 
-## 主要功能入口
+## 未来展望
 
-前台：
+Seahorse Agent 希望成为一个“可解释、可治理、可演进”的智能体平台样板：
 
-- `/login`：登录
-- `/register`：注册
-- `/chat`：聊天/RAG/Agent 对话
-- `/chat/:sessionId`：指定会话对话
-- `/memories`：个人记忆中心
-- `/marketplace`：Agent 市场
+- 对开发者，它提供清晰的端口适配器架构和可替换基础设施。
+- 对平台团队，它提供本地可复现的 RAG、记忆、画像和 Agent 治理闭环。
+- 对企业用户，它追求稳定、可信、长期可维护的 AI 工作流，而不是一次性的模型封装。
 
-后台：
-
-- `/admin/dashboard`：仪表盘
-- `/admin/knowledge`：知识库管理
-- `/admin/rag-evaluation`：RAG 评测
-- `/admin/rag-strategies`：RAG 策略模板
-- `/admin/rag-version-compare`：版本质量对比
-- `/admin/traces`：RAG Trace
-- `/admin/model-config`：租户模型配置
-- `/admin/secrets`：供应商凭据
-- `/admin/settings`：系统设置入口
-- `/admin/context-packs`：上下文包
-- `/admin/task-templates`：任务模板
-- `/admin/sample-questions`：样例问题
-- `/admin/mappings`：查询术语映射
-- `/admin/memory-governance`：记忆治理
-- `/admin/metadata-governance`：元数据治理
-- `/admin/intent-tree` 与 `/admin/intent-list`：意图树与意图列表
-- `/admin/ingestion?tab=pipelines`：流水线管理
-- `/admin/ingestion?tab=tasks`：流水线任务
-- `/admin/ai-infra` 与 `/admin/agent-inspector`：Agent 控制台与运行检视
-- `/admin/agents`：Agent 管理
-- `/admin/agent-runs`：Agent 运行管理
-- `/admin/approvals`：审批中心
-- `/admin/skills`：Skill 管理
-- `/admin/tools`：工具目录
-- `/admin/tool-invocations`：工具调用审计
-- `/admin/security/resource-acl`、`/admin/security/access-decisions`、`/admin/security/quotas`：安全与配额治理
-- `/admin/integrations/connectors`：OpenAPI 连接器
-- `/admin/plugins`：插件管理
-- `/admin/audit`：审计事件
-- `/admin/audit-logs`：租户审计日志
-- `/admin/billing`：计费管理
-- `/admin/cost`：成本分析
-- `/admin/sandbox`：沙箱
-- `/admin/tenants`：租户管理
-- `/admin/users`：用户管理
-- `/admin/marketplace-review`：市场审核
-
-## 数据库说明
-
-`resources/database/seahorse_init.sql` 是 Docker 首次初始化数据库时使用的完整脚本。已存在数据库不会自动重新执行该脚本；需要保留数据时，应通过 `resources/database/migrations/` 中的迁移脚本或应用内 schema upgrade 逻辑升级。
-
-当前 README 提到的关键迁移：
-
-- `resources/database/migrations/V17__default_admin_password_validation_alignment.sql`
-- `resources/database/migrations/V18__tenant_scoped_ai_model_config.sql`
-- `resources/database/migrations/V19__add_refresh_token_columns.sql`
-
-`V17` 将默认管理员密码对齐为 `admin123`；`V18` 为 `sa_ai_model_config` 增加 `tenant_id`，删除旧的全局 `config_key` 唯一约束，并建立 `(tenant_id, config_key)` 唯一约束；`V19` 为 `t_user` 增加 refresh token 字段和索引。应用启动时的 `JdbcTenantSchemaUpgrade` 也会对部分新字段和索引做幂等升级。
-
-## 目录结构
-
-```text
-.
-|-- frontend/
-|-- resources/
-|   |-- database/
-|   `-- database/migrations/
-|-- seahorse-agent-mcp-server/
-|-- seahorse-agent-bootstrap/
-|-- seahorse-agent-kernel/
-|-- seahorse-agent-adapter-web/
-|-- seahorse-agent-adapter-repository-jdbc/
-|-- seahorse-agent-adapter-ai-openai-compatible/
-|-- seahorse-agent-adapter-mcp-http/
-|-- seahorse-agent-adapter-openapi/
-|-- seahorse-agent-adapter-source-feishu/
-|-- seahorse-agent-adapter-vector-milvus/
-|-- seahorse-agent-adapter-vector-pgvector/
-|-- seahorse-agent-adapter-vector-noop/
-|-- seahorse-agent-adapter-search-elasticsearch/
-|-- seahorse-agent-adapter-search-lucene/
-|-- seahorse-agent-adapter-parser-tika/
-|-- seahorse-agent-adapter-cache-local/
-|-- seahorse-agent-adapter-cache-redis/
-|-- seahorse-agent-adapter-mq-direct/
-|-- seahorse-agent-adapter-mq-pulsar/
-|-- seahorse-agent-adapter-storage-local/
-|-- seahorse-agent-adapter-storage-s3/
-|-- seahorse-agent-adapter-observation-noop/
-|-- seahorse-agent-adapter-observation-micrometer/
-|-- seahorse-agent-spring-boot-starter/
-|-- seahorse-agent-spring-boot-starter-core/
-|-- seahorse-agent-spring-boot-starter-all/
-`-- seahorse-agent-tests/
-```
+未来的演进重点会继续围绕真实业务闭环展开：知识如何进入系统，智能体如何使用知识，用户偏好如何被安全记住，工具调用如何被治理，质量问题如何被定位和改进。
 
 ## 参考文档
 
-- `DEPLOY.md`
-- `docs/`
-- `resources/database/migrations/`
-- `frontend/src/services/backendEndpointManifest.ts`
+- [部署指南](DEPLOY.md)
+- [用户指南](docs/USER_GUIDE.md)
+- [故障排查指南](docs/TROUBLESHOOTING_GUIDE.md)
+- [本地 Embedding 模型指南](docs/deployment/local-embedding-model-guide.md)
+- [Ollama 快速开始](docs/deployment/ollama-quick-start.md)
+- [企业模式说明](docs/deployment/enterprise-mode.md)
+- [API 文档目录](docs/zh/content/API%20接口文档)
+- [架构设计目录](docs/zh/content/架构设计)
 
 ## License
 
-Apache License 2.0，详见 `LICENSE`。
+Apache License 2.0，详见 [LICENSE](LICENSE)。
