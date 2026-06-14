@@ -45,16 +45,26 @@ final class KernelSearchContextFactory {
     private final MetadataSchemaRegistryPort schemaRegistryPort;
     private final MetadataFilterCompiler metadataFilterCompiler;
     private final KernelRetrievalObservationSupport observationSupport;
+    private final String defaultEmbeddingModel;
 
     KernelSearchContextFactory(FeatureActivationContext activationContext,
                                MetadataSchemaRegistryPort schemaRegistryPort,
                                MetadataFilterCompiler metadataFilterCompiler,
                                KernelRetrievalObservationSupport observationSupport) {
+        this(activationContext, schemaRegistryPort, metadataFilterCompiler, observationSupport, "");
+    }
+
+    KernelSearchContextFactory(FeatureActivationContext activationContext,
+                               MetadataSchemaRegistryPort schemaRegistryPort,
+                               MetadataFilterCompiler metadataFilterCompiler,
+                               KernelRetrievalObservationSupport observationSupport,
+                               String defaultEmbeddingModel) {
         this.activationContext = Objects.requireNonNullElse(activationContext, FeatureActivationContext.empty());
         this.schemaRegistryPort = Objects.requireNonNullElseGet(schemaRegistryPort, MetadataSchemaRegistryPort::empty);
         this.metadataFilterCompiler = Objects.requireNonNullElseGet(metadataFilterCompiler,
                 DefaultMetadataFilterCompiler::new);
         this.observationSupport = Objects.requireNonNull(observationSupport, "observationSupport must not be null");
+        this.defaultEmbeddingModel = Objects.requireNonNullElse(defaultEmbeddingModel, "").trim();
     }
 
     SearchContext build(List<SubQuestionIntent> subIntents,
@@ -64,17 +74,29 @@ final class KernelSearchContextFactory {
                         TraceRunScope traceRunScope) {
         List<SubQuestionIntent> safeSubIntents = Objects.requireNonNullElse(subIntents, List.of());
         String question = safeSubIntents.isEmpty() ? "" : safeSubIntents.get(0).subQuestion();
+        RetrievalOptions effectiveOptions = applyDefaultEmbeddingModel(topK, options);
         return SearchContext.builder()
                 .originalQuestion(question)
                 .rewrittenQuestion(question)
                 .intents(safeSubIntents)
                 .topK(topK)
                 .filter(filter)
-                .options(options)
+                .options(effectiveOptions)
                 .compiledFilter(compileFilter(filter))
                 .traceRunScope(traceRunScope)
-                .metadata(metadataFromOptions(options))
+                .metadata(metadataFromOptions(effectiveOptions))
                 .build();
+    }
+
+    private RetrievalOptions applyDefaultEmbeddingModel(int topK, RetrievalOptions options) {
+        if (!hasText(defaultEmbeddingModel)) {
+            return options;
+        }
+        RetrievalOptions effectiveOptions = options == null ? RetrievalOptions.defaults(topK) : options;
+        if (hasText(effectiveOptions.embeddingModel())) {
+            return effectiveOptions;
+        }
+        return effectiveOptions.withEmbeddingModel(defaultEmbeddingModel);
     }
 
     private Map<String, Object> metadataFromOptions(RetrievalOptions options) {
@@ -92,6 +114,10 @@ final class KernelSearchContextFactory {
         if (value != null) {
             target.put(key, value);
         }
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private CompiledMetadataFilter compileFilter(RetrievalFilter filter) {

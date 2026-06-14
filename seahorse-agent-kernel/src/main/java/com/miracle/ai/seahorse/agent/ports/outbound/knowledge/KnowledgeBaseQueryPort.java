@@ -37,6 +37,16 @@ public interface KnowledgeBaseQueryPort {
     }
 
     /**
+     * 查询与当前向量模型兼容的可检索知识库。
+     *
+     * @param embeddingModel 当前检索使用的向量模型
+     * @return 知识库引用列表
+     */
+    default List<KnowledgeBaseRef> listSearchableKnowledgeBases(String embeddingModel) {
+        return listSearchableKnowledgeBases();
+    }
+
+    /**
      * 根据关键词搜索文档。
      *
      * @param keyword 搜索关键词

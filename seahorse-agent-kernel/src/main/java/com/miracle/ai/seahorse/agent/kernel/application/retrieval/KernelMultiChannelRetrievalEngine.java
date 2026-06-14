@@ -69,6 +69,15 @@ public class KernelMultiChannelRetrievalEngine {
     public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
                                              Executor retrievalExecutor,
                                              FeatureActivationContext activationContext,
+                                             String defaultEmbeddingModel) {
+        this(extensionRegistry, retrievalExecutor, activationContext,
+                MetadataSchemaRegistryPort.empty(), new DefaultMetadataFilterCompiler(), KernelRagTraceRecorder.noop(),
+                null, MetadataSchemaUsageReportRepositoryPort.empty(), defaultEmbeddingModel);
+    }
+
+    public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
+                                             Executor retrievalExecutor,
+                                             FeatureActivationContext activationContext,
                                              MetadataSchemaRegistryPort schemaRegistryPort,
                                              MetadataFilterCompiler metadataFilterCompiler) {
         this(extensionRegistry, retrievalExecutor, activationContext, schemaRegistryPort, metadataFilterCompiler,
@@ -104,6 +113,19 @@ public class KernelMultiChannelRetrievalEngine {
                                              KernelRagTraceRecorder traceRecorder,
                                              ObservationPort observationPort,
                                              MetadataSchemaUsageReportRepositoryPort schemaUsageRepositoryPort) {
+        this(extensionRegistry, retrievalExecutor, activationContext, schemaRegistryPort, metadataFilterCompiler,
+                traceRecorder, observationPort, schemaUsageRepositoryPort, "");
+    }
+
+    public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
+                                             Executor retrievalExecutor,
+                                             FeatureActivationContext activationContext,
+                                             MetadataSchemaRegistryPort schemaRegistryPort,
+                                             MetadataFilterCompiler metadataFilterCompiler,
+                                             KernelRagTraceRecorder traceRecorder,
+                                             ObservationPort observationPort,
+                                             MetadataSchemaUsageReportRepositoryPort schemaUsageRepositoryPort,
+                                             String defaultEmbeddingModel) {
         ExtensionRegistry safeExtensionRegistry = Objects.requireNonNull(extensionRegistry, "extensionRegistry must not be null");
         Executor safeRetrievalExecutor = Objects.requireNonNull(retrievalExecutor, "retrievalExecutor must not be null");
         FeatureActivationContext safeActivationContext = Objects.requireNonNullElse(activationContext,
@@ -128,7 +150,8 @@ public class KernelMultiChannelRetrievalEngine {
                 safeActivationContext,
                 safeSchemaRegistryPort,
                 safeMetadataFilterCompiler,
-                this.observationSupport);
+                this.observationSupport,
+                defaultEmbeddingModel);
         this.channelExecutor = new KernelSearchChannelExecutor(
                 safeExtensionRegistry,
                 safeRetrievalExecutor,

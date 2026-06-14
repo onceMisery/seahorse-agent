@@ -71,6 +71,22 @@ class MemoryWorkflowRoutingTests {
     }
 
     @Test
+    void shouldRouteChineseLongTermMemoryProfileRecallToProfileTrack() {
+        MemoryRouterPort router = new DefaultMemoryRouter();
+
+        MemoryRoutePlan plan = router.route(new MemoryRouteRequest(
+                "user-1",
+                "default",
+                "\u8bf7\u6839\u636e\u4f60\u5bf9\u6211\u7684\u957f\u671f\u8bb0\u5fc6\uff0c"
+                        + "\u53ea\u7528\u4ee5\u4e0b\u683c\u5f0f\u56de\u7b54\uff1a"
+                        + "\u804c\u4e1a=<\u804c\u4e1a>;"
+                        + "\u56de\u7b54\u98ce\u683c=<\u56de\u7b54\u98ce\u683c>\u3002"));
+
+        Assertions.assertTrue(plan.isActive(MemoryTrack.PROFILE));
+        Assertions.assertTrue(plan.isActive(MemoryTrack.EPISODIC));
+    }
+
+    @Test
     void shouldRouteGeneralChatToShortWindowWithoutProfileOrEpisodicTracks() {
         MemoryRouterPort router = new DefaultMemoryRouter();
 

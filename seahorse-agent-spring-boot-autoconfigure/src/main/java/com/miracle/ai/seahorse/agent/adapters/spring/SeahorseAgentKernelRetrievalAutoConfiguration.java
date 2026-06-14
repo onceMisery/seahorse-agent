@@ -125,14 +125,17 @@ public class SeahorseAgentKernelRetrievalAutoConfiguration {
             ObjectProvider<MetadataFilterCompiler> metadataFilterCompiler,
             ObjectProvider<KernelRagTraceRecorder> traceRecorder,
             ObjectProvider<ObservationPort> observationPort,
-            ObjectProvider<MetadataSchemaUsageReportRepositoryPort> schemaUsageReportRepositoryPort) {
+            ObjectProvider<MetadataSchemaUsageReportRepositoryPort> schemaUsageReportRepositoryPort,
+            @Value("${seahorse.agent.retrieval.embedding-model:${seahorse.agent.adapters.ai.embedding-model:}}")
+            String defaultEmbeddingModel) {
         return new KernelMultiChannelRetrievalEngine(extensionRegistry,
                 retrievalExecutor.getIfAvailable(() -> Runnable::run), activationContext,
                 schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
                 metadataFilterCompiler.getIfAvailable(DefaultMetadataFilterCompiler::new),
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
                 observationPort.getIfAvailable(),
-                schemaUsageReportRepositoryPort.getIfAvailable(MetadataSchemaUsageReportRepositoryPort::empty));
+                schemaUsageReportRepositoryPort.getIfAvailable(MetadataSchemaUsageReportRepositoryPort::empty),
+                defaultEmbeddingModel);
     }
 
     @Bean

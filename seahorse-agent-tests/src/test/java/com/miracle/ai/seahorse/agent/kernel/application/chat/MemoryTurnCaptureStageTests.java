@@ -59,6 +59,22 @@ class MemoryTurnCaptureStageTests {
     }
 
     @Test
+    void shouldCaptureBeforeSignalingComplete() {
+        RecordingAggregationService aggregationService = new RecordingAggregationService();
+        CompletionOrderCallback delegate = new CompletionOrderCallback(aggregationService);
+        StreamCallback callback = MemoryTurnCaptureStage.wrap(
+                delegate,
+                aggregationService,
+                MemoryAggregationPolicy.defaults().withEnabled(true),
+                context("\u8bf7\u8bb0\u4f4f\uff1a\u6211\u7684\u804c\u4e1a\u662f\u5e73\u53f0\u53ef\u9760\u6027\u5de5\u7a0b\u5e08"));
+
+        callback.onContent("Saved");
+        callback.onComplete();
+
+        Assertions.assertTrue(delegate.capturedBeforeComplete.get());
+    }
+
+    @Test
     void shouldSkipAggregationOnErrorByDefault() {
         RecordingAggregationService aggregationService = new RecordingAggregationService();
         RecordingCallback delegate = new RecordingCallback();
@@ -151,6 +167,29 @@ class MemoryTurnCaptureStageTests {
         @Override
         public void onError(Throwable error) {
             this.error = error;
+        }
+    }
+
+    private static final class CompletionOrderCallback implements StreamCallback {
+
+        private final RecordingAggregationService aggregationService;
+        private final AtomicBoolean capturedBeforeComplete = new AtomicBoolean(false);
+
+        private CompletionOrderCallback(RecordingAggregationService aggregationService) {
+            this.aggregationService = aggregationService;
+        }
+
+        @Override
+        public void onContent(String content) {
+        }
+
+        @Override
+        public void onComplete() {
+            capturedBeforeComplete.set(aggregationService.lastEvent != null);
+        }
+
+        @Override
+        public void onError(Throwable error) {
         }
     }
 }

@@ -21,11 +21,13 @@ import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentNode;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScore;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRef;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentSummary;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchRequest;
 import org.junit.jupiter.api.Test;
 
@@ -94,6 +96,68 @@ class VectorGlobalSearchFeatureTests {
         assertThat(result.getMetadata()).containsEntry("failedCollectionCount", 1);
     }
 
+    @Test
+    void shouldEmbedQueryOnlyOnceForAllCollections() {
+        RecordingVectorSearchPort vectorSearchPort = new RecordingVectorSearchPort();
+        CountingEmbeddingModelPort embeddingModelPort = new CountingEmbeddingModelPort();
+        KnowledgeBaseQueryPort knowledgeBaseQueryPort = new StaticKnowledgeBaseQueryPort(List.of(
+                new KnowledgeBaseRef(1L, "A", "collection-a"),
+                new KnowledgeBaseRef(2L, "B", "collection-b"),
+                new KnowledgeBaseRef(3L, "C", "collection-c")));
+        VectorGlobalSearchFeature feature =
+                new VectorGlobalSearchFeature(knowledgeBaseQueryPort, vectorSearchPort, embeddingModelPort);
+
+        feature.search(SearchContext.builder()
+                .rewrittenQuestion("Seahorse Agent vector model")
+                .topK(3)
+                .build());
+
+        assertThat(embeddingModelPort.callCount).isOne();
+        assertThat(vectorSearchPort.requests)
+                .extracting(VectorSearchRequest::vector)
+                .containsOnly(List.of(0.1F, 0.2F, 0.3F));
+    }
+
+    @Test
+    void shouldLimitGlobalCollectionScanToKeepRetrievalResponsive() {
+        RecordingVectorSearchPort vectorSearchPort = new RecordingVectorSearchPort();
+        KnowledgeBaseQueryPort knowledgeBaseQueryPort = new StaticKnowledgeBaseQueryPort(List.of(
+                new KnowledgeBaseRef(1L, "A", "collection-a"),
+                new KnowledgeBaseRef(2L, "B", "collection-b"),
+                new KnowledgeBaseRef(3L, "C", "collection-c"),
+                new KnowledgeBaseRef(4L, "D", "collection-d"),
+                new KnowledgeBaseRef(5L, "E", "collection-e"),
+                new KnowledgeBaseRef(6L, "F", "collection-f")));
+        VectorGlobalSearchFeature feature = new VectorGlobalSearchFeature(knowledgeBaseQueryPort, vectorSearchPort);
+
+        var result = feature.search(SearchContext.builder()
+                .rewrittenQuestion("Seahorse Agent vector model")
+                .topK(3)
+                .build());
+
+        assertThat(vectorSearchPort.requests)
+                .extracting(VectorSearchRequest::collectionName)
+                .containsExactly("collection-a", "collection-b", "collection-c", "collection-d", "collection-e");
+        assertThat(result.getMetadata())
+                .containsEntry("searchableCollectionCount", 6)
+                .containsEntry("collectionCount", 5);
+    }
+
+    @Test
+    void shouldRequestSearchableCollectionsForCurrentEmbeddingModel() {
+        RecordingKnowledgeBaseQueryPort knowledgeBaseQueryPort = new RecordingKnowledgeBaseQueryPort(List.of(
+                new KnowledgeBaseRef(1L, "A", "collection-a")));
+        VectorGlobalSearchFeature feature =
+                new VectorGlobalSearchFeature(knowledgeBaseQueryPort, new RecordingVectorSearchPort());
+
+        feature.search(SearchContext.builder()
+                .rewrittenQuestion("Seahorse Agent vector model")
+                .options(RetrievalOptions.builder().embeddingModel("nomic-embed-text").build())
+                .build());
+
+        assertThat(knowledgeBaseQueryPort.embeddingModels).containsExactly("nomic-embed-text");
+    }
+
     private VectorGlobalSearchFeature featureWithCollections(List<KnowledgeBaseRef> refs) {
         return new VectorGlobalSearchFeature(new StaticKnowledgeBaseQueryPort(refs), request -> List.of());
     }
@@ -109,6 +173,32 @@ class VectorGlobalSearchFeatureTests {
 
         @Override
         public List<KnowledgeBaseRef> listSearchableKnowledgeBases() {
+            return refs;
+        }
+
+        @Override
+        public List<KnowledgeDocumentSummary> searchDocuments(String keyword, int limit) {
+            return List.of();
+        }
+
+        @Override
+        public List<KnowledgeChunkSummary> listChunksByDocId(Long docId) {
+            return List.of();
+        }
+    }
+
+    private static final class RecordingKnowledgeBaseQueryPort implements KnowledgeBaseQueryPort {
+
+        private final List<KnowledgeBaseRef> refs;
+        private final List<String> embeddingModels = new ArrayList<>();
+
+        private RecordingKnowledgeBaseQueryPort(List<KnowledgeBaseRef> refs) {
+            this.refs = refs;
+        }
+
+        @Override
+        public List<KnowledgeBaseRef> listSearchableKnowledgeBases(String embeddingModel) {
+            embeddingModels.add(embeddingModel);
             return refs;
         }
 
@@ -139,6 +229,17 @@ class VectorGlobalSearchFeatureTests {
                     .text("content")
                     .score(0.9F)
                     .build());
+        }
+    }
+
+    private static class CountingEmbeddingModelPort implements EmbeddingModelPort {
+
+        private int callCount;
+
+        @Override
+        public List<Float> embed(String modelId, String text) {
+            callCount++;
+            return List.of(0.1F, 0.2F, 0.3F);
         }
     }
 }

@@ -89,9 +89,13 @@ final class MemoryTurnCaptureStage {
         @Override
         public void onComplete() {
             try {
-                delegate.onComplete();
-            } finally {
                 captureTurnOnce();
+                delegate.onComplete();
+            } catch (RuntimeException ex) {
+                if (!captured.get()) {
+                    captureTurnOnce();
+                }
+                throw ex;
             }
         }
 

@@ -21,6 +21,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 class ProfileSlotResolverTests {
 
     private final ProfileSlotResolver resolver = new ProfileSlotResolver();
@@ -55,6 +57,51 @@ class ProfileSlotResolverTests {
                 .build();
 
         Assertions.assertEquals("preferences.response_style", resolver.resolve(item));
+    }
+
+    @Test
+    void shouldResolveContentSlotsInAdditionToMetadataSlot() {
+        String content = "\u6211\u7684\u804c\u4e1a\u662f\u95ed\u73af\u9a8c\u8bc1\u5e73\u53f0"
+                + "\u53ef\u9760\u6027\u5de5\u7a0b\u5e08-20260614104936\u3002"
+                + "\u6211\u7684\u56de\u7b54\u98ce\u683c\u504f\u597d\u662f"
+                + "\u4e09\u53e5\u5185\u4e2d\u6587\u56de\u7b54-20260614104936\u3002";
+
+        List<String> slots = resolver.resolveAll("PREFERENCE", content,
+                "{\"profileSlot\":\"identity.occupation\"}");
+
+        Assertions.assertEquals(List.of("identity.occupation", "preferences.response_style"), slots);
+    }
+
+    @Test
+    void shouldNormalizeChineseMultiSlotProfileValuesIndependently() {
+        MemoryProfileValueNormalizer normalizer = new MemoryProfileValueNormalizer(resolver);
+        String content = "\u6211\u7684\u804c\u4e1a\u662f\u95ed\u73af\u9a8c\u8bc1\u5e73\u53f0"
+                + "\u53ef\u9760\u6027\u5de5\u7a0b\u5e08-20260614104936\u3002"
+                + "\u6211\u7684\u56de\u7b54\u98ce\u683c\u504f\u597d\u662f"
+                + "\u4e09\u53e5\u5185\u4e2d\u6587\u56de\u7b54-20260614104936\u3002";
+
+        Assertions.assertEquals("\u95ed\u73af\u9a8c\u8bc1\u5e73\u53f0\u53ef\u9760\u6027"
+                        + "\u5de5\u7a0b\u5e08-20260614104936",
+                normalizer.normalize("identity.occupation", content));
+        Assertions.assertEquals("\u4e09\u53e5\u5185\u4e2d\u6587\u56de\u7b54-20260614104936",
+                normalizer.normalize("preferences.response_style", content));
+    }
+
+    @Test
+    void shouldNormalizeProfileValuesFromExplicitMemoryInstruction() {
+        MemoryProfileValueNormalizer normalizer = new MemoryProfileValueNormalizer(resolver);
+        String content = "\u8bf7\u8bb0\u4f4f\u4ee5\u4e0b\u4e2a\u4eba\u4fe1\u606f\uff1a"
+                + "\u6211\u7684\u804c\u4e1a\u662f\u95ed\u73af\u9a8c\u8bc1\u5e73\u53f0"
+                + "\u53ef\u9760\u6027\u5de5\u7a0b\u5e08-20260614053719\uff1b"
+                + "\u6211\u7684\u56de\u7b54\u98ce\u683c\u504f\u597d\u662f"
+                + "\u4e09\u53e5\u5185\u4e2d\u6587\u56de\u7b54-20260614053719\u3002"
+                + "\u8bf7\u53ea\u56de\u590d\u201c\u5df2\u8bb0\u4f4f\u201d\u3002";
+
+        Assertions.assertEquals("\u95ed\u73af\u9a8c\u8bc1\u5e73\u53f0\u53ef\u9760\u6027"
+                        + "\u5de5\u7a0b\u5e08-20260614053719",
+                normalizer.normalize("identity.occupation", content));
+        Assertions.assertEquals("\u4e09\u53e5\u5185\u4e2d\u6587\u56de\u7b54-20260614053719",
+                normalizer.normalize("preferences.response_style", content));
     }
 
     @Test

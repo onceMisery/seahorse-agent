@@ -44,17 +44,21 @@ public class DefaultMemoryRouter implements MemoryRouterPort {
         }
         String lower = question.toLowerCase(Locale.ROOT);
         EnumSet<MemoryTrack> tracks = EnumSet.of(MemoryTrack.CORRECTION, MemoryTrack.SHORT_WINDOW);
-        boolean profileQuestion = containsAny(question, "我是谁", "我的职业", "我的身份", "我的技术栈", "我的偏好", "我喜欢")
+        boolean profileQuestion = containsAny(question, "我是谁", "我的职业", "我的身份", "我的技术栈", "我的偏好", "我喜欢",
+                "我的回答风格", "我的回复风格", "用户画像", "个人画像")
+                || isChineseProfileRecallQuestion(question)
                 || containsAny(lower, "who am i", "my occupation", "my profession", "my job",
-                "my identity", "my tech stack", "my preference", "what do i like", "profile");
+                "my identity", "my tech stack", "my preference", "what do i like", "profile",
+                "user profile", "memory about me", "remember about me");
         boolean correctionQuestion = containsAny(question, "不是", "错了", "改成", "以后别", "忘记")
                 || containsAny(lower, "not anymore", "wrong", "correct", "change to", "forget");
         boolean businessQuestion = containsAny(question, "知识库", "文档", "规则", "制度", "流程", "阈值", "接口", "API")
                 || containsAny(lower, "knowledge", "document", "policy", "rule", "process",
                 "threshold", "api");
-        boolean episodicQuestion = containsAny(question, "上次", "之前", "历史", "项目", "决策", "讨论过", "做过")
+        boolean episodicQuestion = containsAny(question, "上次", "之前", "历史", "项目", "决策", "讨论过", "做过",
+                "长期记忆", "记忆", "记得")
                 || containsAny(lower, "last time", "previous", "history", "project", "decision",
-                "discussed", "remember when");
+                "discussed", "remember when", "long-term memory");
 
         if (profileQuestion || correctionQuestion || businessQuestion || episodicQuestion) {
             tracks.add(MemoryTrack.PROFILE);
@@ -78,5 +82,10 @@ public class DefaultMemoryRouter implements MemoryRouterPort {
             }
         }
         return false;
+    }
+
+    private boolean isChineseProfileRecallQuestion(String question) {
+        return containsAny(question, "职业", "身份", "偏好", "回答风格", "回复风格", "画像")
+                && containsAny(question, "我", "用户", "个人", "长期记忆", "记忆", "记得");
     }
 }

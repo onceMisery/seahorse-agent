@@ -62,6 +62,25 @@ class JdbcKnowledgeBaseQueryAdapterTests {
     }
 
     @Test
+    void listSearchableKnowledgeBasesShouldFilterByEmbeddingModel() {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource());
+        LocalDateTime now = LocalDateTime.of(2026, 5, 10, 11, 0);
+        jdbcTemplate.update(
+                "INSERT INTO t_knowledge_base(id, name, collection_name, embedding_model, deleted, update_time, tenant_id) VALUES (?, ?, ?, ?, ?, ?, 'default')",
+                6L, "Mock Knowledge Base", "collection-mock", "mock", 0, now);
+        jdbcTemplate.update(
+                "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted, update_time, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'default')",
+                60L, 6L, 60L, 0, "mock chunk", "", 10, 1, 0, now);
+
+        assertThat(adapter.listSearchableKnowledgeBases("nomic-embed-text"))
+                .extracting("id", "collectionName")
+                .containsExactly(tuple(1L, "collection-a"));
+        assertThat(adapter.listSearchableKnowledgeBases("mock"))
+                .extracting("id", "collectionName")
+                .containsExactly(tuple(6L, "collection-mock"));
+    }
+
+    @Test
     void searchDocumentsShouldClampLimitAndJoinKnowledgeBaseName() {
         List<KnowledgeDocumentSummary> documents = adapter.searchDocuments("guide", 50);
 
@@ -106,7 +125,7 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                         1L,
                         "policy.pdf",
                         new KnowledgeDocumentFileRef("local://policy.pdf", "pdf", 12L),
-                        new KnowledgeDocumentProcessRef("ignored", "pipeline", "pipeline-1"),
+                        new KnowledgeDocumentProcessRef("ignored", "pipeline", "1"),
                         "tester"));
 
         assertThat(document.id()).isNotNull();
@@ -130,7 +149,7 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                 new JdbcPipelineDefinitionRepositoryAdapter(dataSource(), new ObjectMapper());
 
         com.miracle.ai.seahorse.agent.kernel.domain.ingestion.PipelineDefinition pipeline =
-                pipelineRepository.findById("pipeline-1").orElseThrow();
+                pipelineRepository.findById("1").orElseThrow();
 
         assertThat(pipeline.getName()).isEqualTo("Default ingestion pipeline");
         assertThat(pipeline.getNodes()).hasSize(2);
@@ -149,6 +168,7 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                 CREATE TABLE t_knowledge_base (
                     id BIGINT PRIMARY KEY,
                     name varchar(128),
+                    embedding_model varchar(128) not null default 'nomic-embed-text',
                     collection_name varchar(128),
                     deleted int,
                     update_time timestamp,
@@ -188,6 +208,7 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                     char_count int,
                     enabled int,
                     deleted int,
+                    update_time timestamp,
                     tenant_id varchar(64) not null default 'default'
                 )
                 """);
@@ -223,6 +244,10 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                 2L, "Empty Collection", "", 0, baseTime.minusMinutes(1));
         jdbcTemplate.update("INSERT INTO t_knowledge_base(id, name, collection_name, deleted, update_time, tenant_id) VALUES (?, ?, ?, ?, ?, 'default')",
                 3L, "Deleted Knowledge Base", "collection-deleted", 1, baseTime.minusMinutes(2));
+        jdbcTemplate.update("INSERT INTO t_knowledge_base(id, name, collection_name, deleted, update_time, tenant_id) VALUES (?, ?, ?, ?, ?, 'default')",
+                4L, "Collection Without Chunks", "collection-empty", 0, baseTime.minusMinutes(3));
+        jdbcTemplate.update("INSERT INTO t_knowledge_base(id, name, collection_name, deleted, update_time, tenant_id) VALUES (?, ?, ?, ?, ?, 'default')",
+                5L, "Collection With Disabled Chunks", "collection-disabled", 0, baseTime.minusMinutes(4));
         for (int index = 0; index < 25; index++) {
             jdbcTemplate.update(
                     """
@@ -248,23 +273,37 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                 0L, "pipeline", null, "pending", "tester", "tester", 1,
                 baseTime.plusDays(1), baseTime.plusDays(1));
         jdbcTemplate.update(
-                "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'default')",
-                11L, 1L, 1L, 1, "second chunk", "", 12, 0, 0);
+                """
+                        INSERT INTO t_knowledge_document(
+                            id, kb_id, doc_name, source_type, enabled, chunk_count, file_url, file_type,
+                            file_size, process_mode, pipeline_id, status, created_by, updated_by,
+                            deleted, create_time, update_time, tenant_id
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'default')
+                        """,
+                50L, 5L, "disabled-only", "file", 1, 1, "", "pdf",
+                0L, "pipeline", null, "pending", "tester", "tester", 0,
+                baseTime.plusDays(2), baseTime.plusDays(2));
         jdbcTemplate.update(
-                "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'default')",
-                10L, 1L, 1L, 0, "first chunk", "", 11, 1, 0);
+                "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted, update_time, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'default')",
+                11L, 1L, 1L, 1, "second chunk", "", 12, 0, 0, baseTime.plusMinutes(1));
         jdbcTemplate.update(
-                "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'default')",
-                12L, 1L, 1L, 2, "deleted chunk", "", 13, 1, 1);
+                "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted, update_time, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'default')",
+                10L, 1L, 1L, 0, "first chunk", "", 11, 1, 0, baseTime.plusMinutes(2));
+        jdbcTemplate.update(
+                "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted, update_time, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'default')",
+                12L, 1L, 1L, 2, "deleted chunk", "", 13, 1, 1, baseTime.plusMinutes(3));
+        jdbcTemplate.update(
+                "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted, update_time, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'default')",
+                13L, 5L, 50L, 0, "disabled chunk", "", 14, 0, 0, baseTime.plusMinutes(4));
         jdbcTemplate.update("INSERT INTO t_ingestion_pipeline(id, name, description, deleted) VALUES (?, ?, ?, ?)",
-                "pipeline-1", "Default ingestion pipeline", "Default", 0);
+                "1", "Default ingestion pipeline", "Default", 0);
         jdbcTemplate.update("""
                         INSERT INTO t_ingestion_pipeline_node(
                             id, pipeline_id, node_id, node_type, next_node_id, settings_json,
                             condition_json, deleted, create_time
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
-                "node-1", "pipeline-1", "parser", "parser", "indexer",
+                "node-1", "1", "parser", "parser", "indexer",
                 "{\"parserType\":\"tika\"}", null, 0, baseTime);
         jdbcTemplate.update("""
                         INSERT INTO t_ingestion_pipeline_node(
@@ -272,7 +311,7 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                             condition_json, deleted, create_time
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
-                "node-2", "pipeline-1", "indexer", "indexer", null,
+                "node-2", "1", "indexer", "indexer", null,
                 "{}", null, 0, baseTime.plusMinutes(1));
     }
 

@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrato
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelMultiChannelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine.KernelRetrievalEnginePorts;
+import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.QueryOptimizationResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentKind;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentNode;
@@ -32,6 +33,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelType;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.plugin.AgentFeatureProperties;
 import com.miracle.ai.seahorse.agent.kernel.plugin.DefaultExtensionRegistry;
@@ -41,7 +44,17 @@ import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureType;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolExecutorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalContextFormatPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNode;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNodeFinish;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTracePage;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTracePageRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRun;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRunFinish;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -173,6 +186,72 @@ class KernelRetrievalEngineTests {
         Assertions.assertTrue(keywordChannel.keywordEnabled);
         Assertions.assertEquals(QUESTION, keywordChannel.mainQuestion);
         Assertions.assertEquals(List.of("Pulsar", "Kafka"), keywordChannel.expandedTerms);
+    }
+
+    @Test
+    void shouldApplyDefaultEmbeddingModelWhenRetrievalOptionsAreAbsent() {
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        RecordingEmbeddingModelChannel channel = new RecordingEmbeddingModelChannel();
+        registerChannel(registry, channel, 1);
+        KernelMultiChannelRetrievalEngine multiChannelEngine =
+                new KernelMultiChannelRetrievalEngine(registry, directExecutor, activationContext(),
+                        "nomic-embed-text");
+        KernelRetrievalEngine engine = new KernelRetrievalEngine(multiChannelEngine);
+
+        engine.retrieveKnowledgeChannels(singleQuestionIntent(), TOP_K);
+
+        Assertions.assertEquals("nomic-embed-text", channel.embeddingModel);
+    }
+
+    @Test
+    void shouldRecordChannelResultMetadataInTraceExtraData() {
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        RecordingEmbeddingModelChannel channel = new RecordingEmbeddingModelChannel();
+        registerChannel(registry, channel, 1);
+        RecordingTraceRepository traceRepository = new RecordingTraceRepository();
+        KernelRagTraceRecorder traceRecorder = new KernelRagTraceRecorder(traceRepository);
+        KernelMultiChannelRetrievalEngine multiChannelEngine =
+                new KernelMultiChannelRetrievalEngine(registry,
+                        directExecutor,
+                        activationContext(),
+                        MetadataSchemaRegistryPort.empty(),
+                        new DefaultMetadataFilterCompiler(),
+                        traceRecorder,
+                        ObservationPort.noop(),
+                        MetadataSchemaUsageReportRepositoryPort.empty(),
+                        "nomic-embed-text");
+        TraceRunScope runScope = traceRecorder.startRun(new TraceRunStartCommand(
+                "stream-chat", "KernelChatInboundService#streamChat", "conv-1", "task-1", "user-1"));
+
+        multiChannelEngine.retrieveKnowledgeChannels(singleQuestionIntent(), TOP_K, null, null, runScope);
+
+        Assertions.assertEquals(1, traceRepository.finishedNodes.size());
+        String extraData = traceRepository.finishedNodes.get(0).extraData();
+        Assertions.assertTrue(extraData.contains("\"metadata\""));
+        Assertions.assertTrue(extraData.contains("\"embeddingModel\":\"nomic-embed-text\""));
+        Assertions.assertTrue(extraData.contains("\"collectionCount\":1"));
+    }
+
+    @Test
+    void shouldApplyDefaultEmbeddingModelToExpandedRetrievalOptions() {
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        RecordingEmbeddingModelChannel channel = new RecordingEmbeddingModelChannel();
+        registerChannel(registry, channel, 1);
+        KernelMultiChannelRetrievalEngine multiChannelEngine =
+                new KernelMultiChannelRetrievalEngine(registry, directExecutor, activationContext(),
+                        "nomic-embed-text");
+        KernelRetrievalEngine engine = new KernelRetrievalEngine(multiChannelEngine);
+        QueryOptimizationResult optimizationResult = new QueryOptimizationResult(
+                QUESTION,
+                QUESTION,
+                Map.of(),
+                List.of("Pulsar"),
+                List.of("term_expansion"));
+
+        engine.retrieve(singleQuestionIntent(), TOP_K, null, optimizationResult);
+
+        Assertions.assertEquals("nomic-embed-text", channel.embeddingModel);
+        Assertions.assertEquals(List.of("Pulsar"), channel.expandedTerms);
     }
 
     private void registerChannel(DefaultExtensionRegistry registry, SearchChannelFeature feature, int order) {
@@ -447,6 +526,84 @@ class KernelRetrievalEngineTests {
                             .build()))
                     .latencyMs(1L)
                     .build();
+        }
+    }
+
+    private static class RecordingEmbeddingModelChannel implements SearchChannelFeature {
+
+        private String embeddingModel;
+        private List<String> expandedTerms = List.of();
+
+        @Override
+        public String name() {
+            return "recording-embedding-model";
+        }
+
+        @Override
+        public SearchChannelType channelType() {
+            return SearchChannelType.VECTOR_GLOBAL;
+        }
+
+        @Override
+        public boolean enabled(SearchContext context) {
+            return true;
+        }
+
+        @Override
+        public SearchChannelResult search(SearchContext context) {
+            embeddingModel = context.effectiveOptions().embeddingModel();
+            Object metadataValue = context.getMetadata().get(SearchContext.METADATA_QUERY_EXPANDED_TERMS);
+            if (metadataValue instanceof List<?> values) {
+                expandedTerms = values.stream().map(Object::toString).toList();
+            }
+            return SearchChannelResult.builder()
+                    .channelType(channelType())
+                    .channelName(name())
+                    .chunks(List.of(RetrievedChunk.builder()
+                            .id("embedding-model-context-chunk")
+                            .text("embedding model context")
+                            .score(0.8F)
+                            .build()))
+                    .metadata(Map.of("embeddingModel", embeddingModel, "collectionCount", 1))
+                    .latencyMs(1L)
+                    .build();
+        }
+    }
+
+    private static final class RecordingTraceRepository implements RagTraceRepositoryPort {
+
+        private final List<RagTraceNodeFinish> finishedNodes = new ArrayList<>();
+
+        @Override
+        public RagTracePage<RagTraceRun> pageRuns(RagTracePageRequest request) {
+            return new RagTracePage<>(1, 10, 0, List.of());
+        }
+
+        @Override
+        public Optional<RagTraceRun> findRun(String traceId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<RagTraceNode> listNodes(String traceId) {
+            return List.of();
+        }
+
+        @Override
+        public void startRun(RagTraceRun run) {
+        }
+
+        @Override
+        public void finishRun(RagTraceRunFinish finish) {
+        }
+
+        @Override
+        public void startNode(RagTraceNode node) {
+        }
+
+        @Override
+        public void finishNode(RagTraceNodeFinish finish) {
+            finishedNodes.add(finish);
         }
     }
 

@@ -67,6 +67,22 @@ class MemoryAggregationServiceTests {
     }
 
     @Test
+    void shouldFlushExplicitMemoryRequestImmediately() {
+        RecordingWorkflow workflow = new RecordingWorkflow();
+        DefaultMemoryAggregationService service = service(policy(10, 60_000), workflow, new RecordingScheduler());
+
+        MemoryAggregationAppendResult result = service.appendTurn(turn("task-1",
+                "\u8bf7\u8bb0\u4f4f\uff1a\u6211\u7684\u804c\u4e1a\u662f\u5e73\u53f0\u53ef\u9760\u6027\u5de5\u7a0b\u5e08",
+                "Saved", 9));
+
+        Assertions.assertTrue(result.flushed());
+        Assertions.assertEquals(MemoryFlushTrigger.MANUAL, result.snapshot().trigger());
+        Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, result.ingestionResult().status());
+        Assertions.assertEquals(1, workflow.commands.size());
+        Assertions.assertTrue(service.state("user-1", "conversation-1", "default").isEmpty());
+    }
+
+    @Test
     void shouldForceFlushWhenMaxTurnsReachedAndSubmitContextBlock() {
         RecordingWorkflow workflow = new RecordingWorkflow();
         DefaultMemoryAggregationService service = service(policy(2, 60_000), workflow, new RecordingScheduler());

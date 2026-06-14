@@ -43,6 +43,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -81,6 +82,18 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
     private static final String REASON_EMPTY_SNAPSHOT = "empty_snapshot";
     private static final String REASON_NULL_RESULT = "null_result";
     private static final String REASON_AGGREGATION_FLUSH_FAILED = "aggregation_flush_failed";
+    private static final List<String> EXPLICIT_MEMORY_FLUSH_PREFIXES = List.of(
+            "please remember",
+            "remember:",
+            "remember that",
+            "note that",
+            "keep in mind",
+            "\u8bf7\u8bb0\u4f4f",
+            "\u8bf7\u4f60\u8bb0\u4f4f",
+            "\u5e2e\u6211\u8bb0\u4f4f",
+            "\u9ebb\u70e6\u4f60\u8bb0\u4f4f",
+            "\u8bb0\u4f4f\uff1a",
+            "\u8bb0\u4f4f:");
 
     static final String OBSERVATION_FLUSH_EVENT = "memory-aggregation-flush";
     static final String OBSERVATION_ATTR_TRIGGER = "trigger";
@@ -174,6 +187,10 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
                 details(DETAIL_TURN_COUNT, state.turnCount(),
                         DETAIL_TOKEN_COUNT, state.totalTokens(),
                         DETAIL_FORCE_FLUSH_REQUIRED, state.forceFlushRequired()));
+        MemoryAggregationAppendResult explicitMemoryFlush = flushExplicitMemoryIfNeeded(event, state);
+        if (explicitMemoryFlush != null) {
+            return explicitMemoryFlush;
+        }
         if (topicShiftFlush != null) {
             schedulerPort.scheduleIdleCheck(
                     state.sessionId(),
@@ -202,6 +219,37 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
                 state.tenantId(),
                 state.lastActivityAt().plusMillis(policy.idleFlushMillis()));
         return MemoryAggregationAppendResult.pending(state);
+    }
+
+    private MemoryAggregationAppendResult flushExplicitMemoryIfNeeded(MemoryTurnEvent event, MemoryBufferState state) {
+        if (!isExplicitMemoryRequest(event)) {
+            return null;
+        }
+        MemoryFlushTrigger trigger = MemoryFlushTrigger.MANUAL;
+        Optional<MemoryBufferSnapshot> snapshot = bufferPort.flushReady(
+                event.userId(), event.sessionId(), event.tenantId(), trigger, Instant.now(clock));
+        if (snapshot.isEmpty()) {
+            return null;
+        }
+        MemoryIngestionResult result = submit(snapshot.get());
+        recordTrace(TRACE_EVENT_FLUSH_READY, result.status() == MemoryIngestionStatus.ACCEPTED
+                        ? MemoryTraceEvent.STATUS_SUCCESS
+                        : MemoryTraceEvent.STATUS_FAILED,
+                snapshot.get().snapshotId(), traceContext(snapshot.get()), flushDetails(snapshot.get(), trigger, result));
+        return MemoryAggregationAppendResult.flushed(state, snapshot.get(), result);
+    }
+
+    private boolean isExplicitMemoryRequest(MemoryTurnEvent event) {
+        if (event == null) {
+            return false;
+        }
+        String text = Objects.requireNonNullElse(event.userText(), "")
+                .trim()
+                .toLowerCase(Locale.ROOT);
+        if (text.isBlank()) {
+            return false;
+        }
+        return EXPLICIT_MEMORY_FLUSH_PREFIXES.stream().anyMatch(text::startsWith);
     }
 
     private MemoryAggregationAppendResult flushForTopicShiftIfNeeded(MemoryTurnEvent event) {

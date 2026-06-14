@@ -45,15 +45,15 @@ final class ProfileSlotResolver {
 
     List<String> resolveAll(String type, String content, String metadataJson) {
         String metadataSlot = metadataSlot(metadataJson);
+        List<String> slots = new ArrayList<>();
         if (!metadataSlot.isBlank()) {
-            return List.of(metadataSlot);
+            addSlot(slots, metadataSlot);
         }
         if (!isProfileLike(type)) {
-            return List.of();
+            return slots;
         }
         String safeContent = Objects.requireNonNullElse(content, "");
         String normalized = safeContent.toLowerCase(java.util.Locale.ROOT);
-        List<String> slots = new ArrayList<>();
         if (normalized.startsWith("my name is ")) {
             addSlot(slots, "identity.name");
         }
@@ -85,7 +85,7 @@ final class ProfileSlotResolver {
                 || safeContent.contains("\u6211\u504f\u597d\u8be6\u7ec6\u56de\u7b54")) {
             addSlot(slots, "preferences.response_style");
         }
-        if (isChineseResponseStylePreference(safeContent)) {
+        if (isChineseResponseStylePreference(safeContent) || isChineseResponseStyleLabel(safeContent)) {
             addSlot(slots, "preferences.response_style");
         }
         return slots;
@@ -124,6 +124,12 @@ final class ProfileSlotResolver {
                 "\u6211\u4e60\u60ef",
                 "\u6211\u5e0c\u671b")
                 && containsAny(content, "\u56de\u7b54", "\u56de\u590d");
+    }
+
+    private boolean isChineseResponseStyleLabel(String content) {
+        return containsAny(content, "\u56de\u7b54\u98ce\u683c", "\u56de\u590d\u98ce\u683c")
+                && containsAny(content, "\u504f\u597d", "\u559c\u6b22", "\u4e60\u60ef",
+                "\u5e0c\u671b", "\u662f", "\u4e3a");
     }
 
     private void addSlot(List<String> slots, String slot) {

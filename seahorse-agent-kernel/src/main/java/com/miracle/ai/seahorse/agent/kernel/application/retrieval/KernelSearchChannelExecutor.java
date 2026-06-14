@@ -213,6 +213,7 @@ final class KernelSearchChannelExecutor {
         payload.put("output", result == null || result.getChunks() == null
                 ? "0 hits"
                 : result.getChunks().size() + " hits");
+        payload.put("metadata", result == null || result.getMetadata() == null ? Map.of() : result.getMetadata());
         payload.put("hits", traceHits(result));
         if (error != null) {
             payload.put("errorType", error.getClass().getSimpleName());

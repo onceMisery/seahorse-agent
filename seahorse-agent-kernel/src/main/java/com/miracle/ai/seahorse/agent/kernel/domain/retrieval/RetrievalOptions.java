@@ -65,6 +65,12 @@ public record RetrievalOptions(
                 embeddingModel, rerankModel, vectorTimeout, keywordTimeout, rerankTimeout, channelSettings);
     }
 
+    public RetrievalOptions withEmbeddingModel(String model) {
+        return new RetrievalOptions(finalTopK, vectorTopK, keywordTopK, fusionTopK, rerankTopK,
+                enableVector, enableIntentDirected, enableKeyword, enableRrf, enableRerank,
+                model, rerankModel, vectorTimeout, keywordTimeout, rerankTimeout, channelSettings);
+    }
+
     public RetrievalOptions withAdditionalChannelSettings(Map<String, Object> additionalSettings) {
         if (additionalSettings == null || additionalSettings.isEmpty()) {
             return this;

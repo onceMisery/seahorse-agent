@@ -256,8 +256,8 @@ services:
       - pulsar-bookie-data:/pulsar/data
     healthcheck:
       test: ["CMD-SHELL", "bin/bookkeeper shell bookiesanity || exit 1"]
-      interval: 15s
-      timeout: 10s
+      interval: 30s
+      timeout: 30s
       retries: 10
       start_period: 60s
     restart: unless-stopped

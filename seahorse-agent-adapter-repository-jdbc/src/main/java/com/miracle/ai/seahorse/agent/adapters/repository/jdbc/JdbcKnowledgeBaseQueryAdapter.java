@@ -56,9 +56,48 @@ public class JdbcKnowledgeBaseQueryAdapter implements KnowledgeBaseQueryPort {
             """;
     private static final String SQL_LIST_SEARCHABLE_KNOWLEDGE_BASES = """
             SELECT id, name, collection_name
-            FROM t_knowledge_base
-            WHERE deleted = 0 AND collection_name IS NOT NULL AND collection_name <> ''
-            ORDER BY update_time DESC
+            FROM t_knowledge_base kb
+            WHERE kb.deleted = 0
+              AND kb.collection_name IS NOT NULL
+              AND kb.collection_name <> ''
+              AND EXISTS (
+                  SELECT 1
+                  FROM t_knowledge_chunk chunk
+                  WHERE chunk.kb_id = kb.id
+                    AND chunk.deleted = 0
+                    AND chunk.enabled = 1
+              )
+            ORDER BY (
+                SELECT MAX(chunk.update_time)
+                FROM t_knowledge_chunk chunk
+                WHERE chunk.kb_id = kb.id
+                  AND chunk.deleted = 0
+                  AND chunk.enabled = 1
+            ) DESC NULLS LAST,
+            kb.update_time DESC
+            """;
+    private static final String SQL_LIST_SEARCHABLE_KNOWLEDGE_BASES_BY_EMBEDDING_MODEL = """
+            SELECT id, name, collection_name
+            FROM t_knowledge_base kb
+            WHERE kb.deleted = 0
+              AND kb.embedding_model = ?
+              AND kb.collection_name IS NOT NULL
+              AND kb.collection_name <> ''
+              AND EXISTS (
+                  SELECT 1
+                  FROM t_knowledge_chunk chunk
+                  WHERE chunk.kb_id = kb.id
+                    AND chunk.deleted = 0
+                    AND chunk.enabled = 1
+              )
+            ORDER BY (
+                SELECT MAX(chunk.update_time)
+                FROM t_knowledge_chunk chunk
+                WHERE chunk.kb_id = kb.id
+                  AND chunk.deleted = 0
+                  AND chunk.enabled = 1
+            ) DESC NULLS LAST,
+            kb.update_time DESC
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -78,6 +117,15 @@ public class JdbcKnowledgeBaseQueryAdapter implements KnowledgeBaseQueryPort {
     @Override
     public List<KnowledgeBaseRef> listSearchableKnowledgeBases() {
         return jdbcTemplate.query(SQL_LIST_SEARCHABLE_KNOWLEDGE_BASES, this::toKnowledgeBaseRef);
+    }
+
+    @Override
+    public List<KnowledgeBaseRef> listSearchableKnowledgeBases(String embeddingModel) {
+        if (embeddingModel == null || embeddingModel.isBlank()) {
+            return listSearchableKnowledgeBases();
+        }
+        return jdbcTemplate.query(SQL_LIST_SEARCHABLE_KNOWLEDGE_BASES_BY_EMBEDDING_MODEL,
+                this::toKnowledgeBaseRef, embeddingModel.trim());
     }
 
     @Override

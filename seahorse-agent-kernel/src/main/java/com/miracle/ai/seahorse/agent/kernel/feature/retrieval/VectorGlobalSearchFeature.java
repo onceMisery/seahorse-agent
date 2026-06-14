@@ -50,6 +50,7 @@ public class VectorGlobalSearchFeature implements SearchChannelFeature {
     private static final double DEFAULT_CONFIDENCE_THRESHOLD = 0.6D;
     private static final double DEFAULT_SINGLE_INTENT_SUPPLEMENT_THRESHOLD = 0.85D;
     private static final int DEFAULT_TOP_K_MULTIPLIER = 2;
+    private static final int DEFAULT_MAX_COLLECTIONS = 5;
     private static final int ORDER = 10;
 
     private final KnowledgeBaseQueryPort knowledgeBaseQueryPort;
@@ -104,20 +105,27 @@ public class VectorGlobalSearchFeature implements SearchChannelFeature {
     @Override
     public SearchChannelResult search(SearchContext context) {
         long start = System.currentTimeMillis();
-        List<String> collections = collectionNames();
-        RetrievalResult retrieval = retrieveAll(context, collections);
+        String embeddingModel = embeddingModel(context);
+        List<String> searchableCollections = collectionNames(embeddingModel);
+        List<String> collections = searchableCollections.stream()
+                .limit(DEFAULT_MAX_COLLECTIONS)
+                .toList();
+        List<Float> queryVector = collections.isEmpty() ? List.of() : queryVector(context);
+        RetrievalResult retrieval = retrieveAll(context, collections, queryVector);
         return SearchChannelResult.builder()
                 .channelType(channelType())
                 .channelName(name())
                 .chunks(retrieval.chunks())
                 .latencyMs(System.currentTimeMillis() - start)
                 .metadata(Map.of(
+                        "embeddingModel", embeddingModel,
+                        "searchableCollectionCount", searchableCollections.size(),
                         "collectionCount", collections.size(),
                         "failedCollectionCount", retrieval.failedCollectionCount()))
                 .build();
     }
 
-    private RetrievalResult retrieveAll(SearchContext context, List<String> collections) {
+    private RetrievalResult retrieveAll(SearchContext context, List<String> collections, List<Float> queryVector) {
         if (collections.isEmpty()) {
             return new RetrievalResult(List.of(), 0);
         }
@@ -125,20 +133,21 @@ public class VectorGlobalSearchFeature implements SearchChannelFeature {
         int failedCollectionCount = 0;
         for (String collectionName : collections) {
             try {
-                chunks.addAll(searchCollection(context, collectionName));
+                chunks.addAll(searchCollection(context, collectionName, queryVector));
             } catch (RuntimeException ex) {
                 failedCollectionCount++;
-                LOG.warn("Vector global search skipped collection after failure: collection={}", collectionName, ex);
+                LOG.warn("Vector global search skipped collection after failure: collection={}, error={}",
+                        collectionName, ex.toString());
             }
         }
         return new RetrievalResult(chunks, failedCollectionCount);
     }
 
-    private List<RetrievedChunk> searchCollection(SearchContext context, String collectionName) {
+    private List<RetrievedChunk> searchCollection(SearchContext context, String collectionName, List<Float> queryVector) {
         VectorSearchRequest request = new VectorSearchRequest(
                 collectionName,
                 context == null ? "" : context.getMainQuestion(),
-                queryVector(context),
+                queryVector,
                 topK(context),
                 Map.of(),
                 context == null ? null : context.getCompiledFilter());
@@ -157,14 +166,21 @@ public class VectorGlobalSearchFeature implements SearchChannelFeature {
                 embeddingModelPort.embed(context.effectiveOptions().embeddingModel(), question), List.of());
     }
 
-    private List<String> collectionNames() {
-        return knowledgeBaseQueryPort.listSearchableKnowledgeBases()
+    private List<String> collectionNames(String embeddingModel) {
+        return knowledgeBaseQueryPort.listSearchableKnowledgeBases(embeddingModel)
                 .stream()
                 .filter(Objects::nonNull)
                 .map(KnowledgeBaseRef::collectionName)
                 .filter(this::hasText)
                 .distinct()
                 .toList();
+    }
+
+    private String embeddingModel(SearchContext context) {
+        if (context == null) {
+            return "";
+        }
+        return Objects.requireNonNullElse(context.effectiveOptions().embeddingModel(), "");
     }
 
     private int topK(SearchContext context) {

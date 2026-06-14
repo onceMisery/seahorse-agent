@@ -44,8 +44,12 @@ public final class MemoryProfileValueNormalizer {
 
     private static final String TARGET_KIND_PROFILE_SLOT = "PROFILE_SLOT";
     private static final Pattern OCCUPATION_TRAILING_STATEMENT = Pattern.compile(
-            "[，,；;。]\\s*(我(喜欢|偏好|习惯|常用|希望)|i\\s+(prefer|like)\\b).*$",
+            "[，,；;。]\\s*((我的)?(回答|回复)风格(偏好)?是|我(喜欢|偏好|习惯|常用|希望)|i\\s+(prefer|like)\\b).*$",
             Pattern.CASE_INSENSITIVE);
+    private static final Pattern TRAILING_REPLY_INSTRUCTION = Pattern.compile(
+            "(.+?)[\u3002.!\uff01?\uff1f\uff1b;,，]\\s*(\u8bf7|\u9ebb\u70e6|\u65e0\u9700|\u4e0d\u7528)"
+                    + ".*(\u56de\u590d|\u56de\u7b54|\u8f93\u51fa|\u8bf4\u660e).*$",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
     private final ProfileSlotResolver profileSlotResolver;
 
@@ -128,14 +132,19 @@ public final class MemoryProfileValueNormalizer {
             value = responseStyleSegment(value);
             value = stripPrefix(value, "(?i)^i prefer\\s+");
             value = stripPrefix(value, "(?i)^i like\\s+");
+            value = stripPrefix(value, "^我的(回答|回复)风格偏好是\\s*");
+            value = stripPrefix(value, "^我的(回答|回复)风格是\\s*");
+            value = stripPrefix(value, "^(回答|回复)风格偏好是\\s*");
+            value = stripPrefix(value, "^(回答|回复)风格是\\s*");
             value = stripPrefix(value, "^我喜欢");
             value = stripPrefix(value, "^我偏好");
             value = stripPrefix(value, "^我习惯");
             value = stripPrefix(value, "^我希望");
-            return stripTrailingSentencePunctuation(value);
+            return stripTrailingSentencePunctuation(stripTrailingReplyInstruction(value));
         }
         if ("identity.occupation".equals(slotKey)) {
-            return OccupationCorrection.normalizeOccupationValue(stripOccupationTrailingStatement(stripProfilePrefix(value)));
+            return OccupationCorrection.normalizeOccupationValue(
+                    stripProfilePrefix(stripOccupationTrailingStatement(occupationSegment(value))));
         }
         return "";
     }
@@ -160,10 +169,49 @@ public final class MemoryProfileValueNormalizer {
         return OCCUPATION_TRAILING_STATEMENT.matcher(Objects.requireNonNullElse(content, "")).replaceFirst("").trim();
     }
 
+    private static String stripTrailingReplyInstruction(String content) {
+        String value = Objects.requireNonNullElse(content, "").trim();
+        var matcher = TRAILING_REPLY_INSTRUCTION.matcher(value);
+        return matcher.matches() ? matcher.group(1).trim() : value;
+    }
+
+    private static String occupationSegment(String content) {
+        String value = Objects.requireNonNullElse(content, "").trim();
+        int englishIndex = firstIndex(value.toLowerCase(Locale.ROOT), List.of(
+                "my occupation is ",
+                "my profession is ",
+                "my job is ",
+                "i am a ",
+                "i am an "));
+        int chineseIndex = firstIndex(value, List.of(
+                "\u6211\u7684\u804c\u4e1a\u662f",
+                "\u6211\u7684\u8eab\u4efd\u662f",
+                "\u6211\u7684\u5de5\u4f5c\u662f",
+                "\u6211\u7684\u5c97\u4f4d\u662f",
+                "\u6211\u7684\u89d2\u8272\u662f",
+                "\u6211\u662f\u4e00\u540d",
+                "\u6211\u662f\u4e00\u4f4d",
+                "\u6211\u662f"));
+        int start = minNonNegative(englishIndex, chineseIndex);
+        return start >= 0 ? value.substring(start).trim() : value;
+    }
+
     private static String responseStyleSegment(String content) {
         String value = Objects.requireNonNullElse(content, "").trim();
         int englishIndex = firstIndex(value.toLowerCase(Locale.ROOT), List.of("i prefer ", "i like "));
-        int chineseIndex = firstIndex(value, List.of("我喜欢", "我偏好", "我习惯", "我希望"));
+        int chineseIndex = firstIndex(value, List.of(
+                "我的回答风格偏好是",
+                "我的回答风格是",
+                "回答风格偏好是",
+                "回答风格是",
+                "我的回复风格偏好是",
+                "我的回复风格是",
+                "回复风格偏好是",
+                "回复风格是",
+                "我喜欢",
+                "我偏好",
+                "我习惯",
+                "我希望"));
         int start = minNonNegative(englishIndex, chineseIndex);
         return start >= 0 ? value.substring(start).trim() : value;
     }
