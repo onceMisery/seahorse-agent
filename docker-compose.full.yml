@@ -317,7 +317,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.backend.simplified
+      dockerfile: Dockerfile.backend
     container_name: seahorse-backend
     ports:
       - "9090:9090"
@@ -430,7 +430,7 @@ services:
       SEAHORSE_AGENT_ADAPTERS_AI_CHAT_MODEL: ${SEAHORSE_AGENT_ADAPTERS_AI_CHAT_MODEL:-}
       # 向量化模型 → Ollama (本地小模型 nomic-embed-text)
       # chat 走 agnes 网关（不提供 /embeddings），embedding 单独指向 ollama。
-      SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_TYPE: openai-compatible
+      SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_TYPE: ${SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_TYPE:-openai-compatible}
       SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL: ${SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL:-nomic-embed-text}
       SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL_DIMENSIONS: ${SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL_DIMENSIONS:-}
       SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_BASE_URL: http://ollama:11434/v1

@@ -180,6 +180,11 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
      */
     @Bean
     @Primary
+    @ConditionalOnProperty(
+            prefix = "seahorse.agent.adapters.ai",
+            name = "embedding-type",
+            havingValue = "openai-compatible",
+            matchIfMissing = true)
     @ConditionalOnProperty(prefix = "seahorse.agent.adapters.ai.embedding", name = "base-url")
     @ConditionalOnMissingBean(name = "seahorseDedicatedEmbeddingModelPort")
     public EmbeddingModelPort seahorseDedicatedEmbeddingModelPort(

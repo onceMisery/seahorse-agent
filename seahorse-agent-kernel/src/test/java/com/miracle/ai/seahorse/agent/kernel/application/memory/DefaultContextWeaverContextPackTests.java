@@ -24,11 +24,15 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitiv
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -91,6 +95,30 @@ class DefaultContextWeaverContextPackTests {
         assertFalse(prompt.contains("legacy memory"));
     }
 
+    @Test
+    void shouldRecordTraceWhenWeavingContextPack() {
+        RecordingMemoryTraceRecorder recorder = new RecordingMemoryTraceRecorder();
+        DefaultContextWeaver weaver = new DefaultContextWeaver(recorder);
+
+        String prompt = weaver.weave(contextPack(List.of(
+                item("profile-1", ContextItemSourceType.MEMORY, "user name is Zhang San",
+                        ContextSensitivity.INTERNAL, "decision-profile-1", "{\"slotKey\":\"user_name\"}"))),
+                ContextBudget.defaults());
+
+        assertFalse(prompt.isBlank());
+        assertEquals(1, recorder.events.size());
+        MemoryTraceEvent event = recorder.events.get(0);
+        assertEquals("memory-context-weaver", event.component());
+        assertEquals("weave", event.eventType());
+        assertEquals(MemoryTraceEvent.STATUS_SUCCESS, event.status());
+        assertEquals("tenant-1", event.tenantId());
+        assertEquals("user-1", event.userId());
+        assertEquals("ctx-1", event.subjectId());
+        assertEquals("context-pack", event.subjectType());
+        assertEquals(1, event.details().get("selectedItemCount"));
+        assertEquals("ctx-1", event.details().get("contextPackId"));
+    }
+
     private static ContextPack contextPack(List<ContextItem> items) {
         return new ContextPack(
                 "ctx-1",
@@ -126,5 +154,20 @@ class DefaultContextWeaverContextPackTests {
                 20,
                 null,
                 NOW);
+    }
+
+    private static final class RecordingMemoryTraceRecorder implements MemoryTraceRecorder {
+
+        private final List<MemoryTraceEvent> events = new ArrayList<>();
+
+        @Override
+        public void record(MemoryTraceEvent event) {
+            events.add(event);
+        }
+
+        @Override
+        public List<MemoryTraceEvent> listRecent(int limit) {
+            return events;
+        }
     }
 }

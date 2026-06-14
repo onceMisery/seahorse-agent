@@ -31,6 +31,7 @@ public final class EmbeddingModelDimensions {
     public static final int DEFAULT_DIMENSION = 768;
 
     private static final Map<String, Integer> BUILT_IN_DIMENSIONS = Map.ofEntries(
+            Map.entry("local-mock-embedding", 768),
             Map.entry("nomic-embed-text", 768),
             Map.entry("bge-base-zh", 768),
             Map.entry("bge-base-zh-v1.5", 768),

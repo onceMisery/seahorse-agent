@@ -31,6 +31,20 @@ class JdbcDockerInitScriptMountTests {
         assertComposeMountsSqlResources(Path.of("..", "docker-compose.full.yml"));
     }
 
+    @Test
+    void shouldBuildBackendFromSourceInDockerComposeFiles() throws Exception {
+        assertComposeBuildsBackendFromSource(Path.of("..", "docker-compose.yml"));
+        assertComposeBuildsBackendFromSource(Path.of("..", "docker-compose.full.yml"));
+    }
+
+    @Test
+    void shouldKeepFullComposeEmbeddingTypeConfigurable() throws Exception {
+        String compose = Files.readString(Path.of("..", "docker-compose.full.yml"));
+
+        assertThat(compose)
+                .contains("SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_TYPE: ${SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_TYPE:-openai-compatible}");
+    }
+
     private void assertComposeMountsSqlResources(Path composePath) throws Exception {
         String compose = Files.readString(composePath);
         assertThat(compose).contains("resources/database/seahorse_init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro");
@@ -38,5 +52,11 @@ class JdbcDockerInitScriptMountTests {
         assertThat(compose).doesNotContain("eval-dataset-postgresql.sql:/docker-entrypoint-initdb.d/");
         assertThat(compose).doesNotContain("metadata-governance-postgresql.sql:/docker-entrypoint-initdb.d/");
         assertThat(compose).doesNotContain("retrieval-governance-postgresql.sql:/docker-entrypoint-initdb.d/");
+    }
+
+    private void assertComposeBuildsBackendFromSource(Path composePath) throws Exception {
+        String compose = Files.readString(composePath);
+        assertThat(compose).contains("dockerfile: Dockerfile.backend");
+        assertThat(compose).doesNotContain("dockerfile: Dockerfile.backend.simplified");
     }
 }

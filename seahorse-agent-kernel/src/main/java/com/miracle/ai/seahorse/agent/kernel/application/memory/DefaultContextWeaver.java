@@ -102,7 +102,9 @@ public class DefaultContextWeaver implements ContextWeaverPort {
             return "";
         }
         builder.appendFooter(CONTEXT_PACK_NOTE);
-        return builder.build();
+        String prompt = builder.build();
+        recordContextPackTrace(contextPack, safeBudget, builder, prompt);
+        return prompt;
     }
 
     @Override
@@ -272,6 +274,47 @@ public class DefaultContextWeaver implements ContextWeaverPort {
         int totalInputItems = correctionCount + profileCount + shortTermCount
                 + businessDocumentCount + semanticCount + longTermCount;
         emitWeaveMetric(builder.itemCount < totalInputItems);
+    }
+
+    private void recordContextPackTrace(ContextPack contextPack,
+                                        ContextBudget budget,
+                                        BudgetedBuilder builder,
+                                        String prompt) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("promptChars", prompt.length());
+        details.put("selectedItemCount", builder.itemCount);
+        details.put("maxItems", budget.maxItems());
+        details.put("maxChars", budget.maxChars());
+        details.put("contextPackId", contextPack.contextPackId());
+        details.put("inputItemCount", contextPack.itemCount());
+        details.put("sourceTypeCounts", contextPackSourceTypeCounts(contextPack.items()));
+        traceRecorder.record(new MemoryTraceEvent(
+                contextPack.runId(),
+                contextPack.tenantId(),
+                contextPack.userId(),
+                "",
+                contextPack.runId(),
+                COMPONENT,
+                "weave",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                contextPack.contextPackId(),
+                "context-pack",
+                details,
+                null));
+        emitWeaveMetric(builder.itemCount < contextPack.itemCount());
+    }
+
+    private static Map<String, Long> contextPackSourceTypeCounts(List<ContextItem> items) {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (ContextItem item : safeContextItems(items)) {
+            String sourceType = item.sourceType().name();
+            counts.put(sourceType, counts.getOrDefault(sourceType, 0L) + 1L);
+        }
+        return counts;
+    }
+
+    private static List<ContextItem> safeContextItems(List<ContextItem> items) {
+        return Objects.requireNonNullElse(items, List.of());
     }
 
     private void emitWeaveMetric(boolean truncated) {

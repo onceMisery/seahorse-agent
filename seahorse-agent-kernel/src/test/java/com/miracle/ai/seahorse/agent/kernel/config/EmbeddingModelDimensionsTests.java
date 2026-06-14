@@ -30,6 +30,13 @@ class EmbeddingModelDimensionsTests {
     }
 
     @Test
+    void shouldResolveLocalMockEmbeddingModelDimension() {
+        int dimension = EmbeddingModelDimensions.resolveOrThrow("", "local-mock-embedding", "");
+
+        Assertions.assertEquals(768, dimension);
+    }
+
+    @Test
     void shouldResolveBgeM3DimensionFromModelName() {
         int dimension = EmbeddingModelDimensions.resolveOrThrow("", "bge-m3", "");
 

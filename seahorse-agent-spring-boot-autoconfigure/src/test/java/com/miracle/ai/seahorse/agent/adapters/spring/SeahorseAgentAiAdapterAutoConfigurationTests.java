@@ -76,6 +76,7 @@ class SeahorseAgentAiAdapterAutoConfigurationTests {
                         "seahorse.agent.adapters.ai.base-url=https://apihub.agnes-ai.com/v1",
                         "seahorse.agent.adapters.ai.api-key=test-key",
                         "seahorse.agent.adapters.ai.chat-model=agnes-2.0-flash",
+                        "seahorse.agent.adapters.ai.embedding.base-url=http://ollama:11434/v1",
                         "seahorse.agent.adapters.ai.mock.embedding-dimension=1024")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
