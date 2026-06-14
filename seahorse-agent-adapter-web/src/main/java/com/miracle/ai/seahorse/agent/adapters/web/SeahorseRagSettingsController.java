@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import com.miracle.ai.seahorse.agent.kernel.config.EmbeddingModelDimensions;
 import org.springframework.core.env.Environment;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.util.unit.DataSize;
@@ -64,7 +65,7 @@ public class SeahorseRagSettingsController {
                 "defaultConfig", Map.of(
                         "collectionName", stringValue(
                                 "seahorse-agent.adapters.vector.collection-name", ""),
-                        "dimension", intValue("seahorse-agent.adapters.vector.dimension", 1024),
+                        "dimension", resolvedVectorDimension(),
                         "metricType", stringValue(
                                 "seahorse-agent.adapters.vector.metric-type", "COSINE")),
                 "queryRewrite", Map.of(
@@ -122,6 +123,21 @@ public class SeahorseRagSettingsController {
 
     private long dataSizeBytes(String key, String defaultValue) {
         return DataSize.parse(stringValue(key, defaultValue)).toBytes();
+    }
+
+    private int resolvedVectorDimension() {
+        return EmbeddingModelDimensions.resolveOrThrow(
+                bindString("seahorse.agent.adapters.vector.dimension"),
+                bindString("seahorse.agent.adapters.ai.embedding-model"),
+                bindString("seahorse.agent.adapters.ai.embedding-model-dimensions"));
+    }
+
+    private String bindString(String key) {
+        String value = Binder.get(environment).bind(key, String.class).orElse("");
+        if (!value.isBlank()) {
+            return value;
+        }
+        return environment.getProperty(key.replace("seahorse.agent", "seahorse-agent"), "");
     }
 
     private String stringValue(String key, String defaultValue) {

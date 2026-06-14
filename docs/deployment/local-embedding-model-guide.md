@@ -51,10 +51,10 @@ SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_TYPE=openai-compatible
 SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_BASE_URL=https://your-embedding-endpoint/v1
 SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_API_KEY=your-key
 SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL=your-embedding-model
-SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION=<模型输出维度>
+SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL_DIMENSIONS=your-embedding-model=<模型输出维度>
 ```
 
-如果使用 `text-embedding-3-small`，输出维度通常是 1536。需要同步调整 Milvus collection、知识库配置和已有向量数据。
+已知模型会自动解析维度；自定义模型用 `SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL_DIMENSIONS` 声明。`SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION` 仍可作为显式覆盖，但不建议作为默认事实源。切换模型后需要重建 Milvus collection、知识库配置和已有向量数据。
 
 ### 方案 C：使用宿主机 Ollama
 
@@ -81,7 +81,7 @@ SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_BASE_URL=http://host.docker.internal:11434/
 
 1. 拉取或准备模型。
 2. 修改 Embedding 模型名、Base URL、API Key。
-3. 修改向量维度。
+3. 如果是自定义模型，配置 `SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL_DIMENSIONS=模型名=维度`。
 4. 清理或重建 Milvus collection。
 5. 重新处理知识库文档。
 6. 用 `/admin/traces` 或 `t_rag_trace_*` 验证 retrieval 节点。
@@ -94,7 +94,6 @@ docker exec seahorse-ollama ollama pull bge-m3
 
 ```env
 SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL=bge-m3
-SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION=1024
 ```
 
 ## 排错

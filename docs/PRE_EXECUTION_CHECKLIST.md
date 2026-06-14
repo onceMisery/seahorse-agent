@@ -58,10 +58,9 @@ SEAHORSE_AGENT_ADAPTERS_AI_CHAT_MODEL=gpt-4o-mini
 ```env
 SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL=nomic-embed-text
 SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_BASE_URL=http://ollama:11434/v1
-SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION=768
 ```
 
-如果换 Embedding 模型，必须同步调整向量维度并重建已有向量索引。
+向量维度由 Embedding 模型解析，`nomic-embed-text` 对应 768。如果换自定义 Embedding 模型，需要配置 `SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL_DIMENSIONS=模型名=维度`，并重建已有向量索引。
 
 ## 4. 启动后检查
 

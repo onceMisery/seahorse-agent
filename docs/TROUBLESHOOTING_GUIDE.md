@@ -129,7 +129,7 @@ resources/database/seahorse_init.sql
 
 - 默认密码仍是旧值。
 - 表结构缺列。
-- 向量维度仍是 1024。
+- 向量库或 pgvector 表仍是切换模型前的旧维度。
 - 记忆、画像、Trace 或企业能力表不存在。
 
 检查关键表：
@@ -157,7 +157,7 @@ docker compose -f docker-compose.full.yml down -v
 | Embedding 模型 | `nomic-embed-text` |
 | Embedding 服务 | `http://ollama:11434/v1` |
 | 宿主机 Ollama | `http://localhost:11434` |
-| 向量维度 | 768 |
+| 向量维度 | 由模型解析，`nomic-embed-text` 为 768 |
 | 向量库 | Milvus |
 | Milvus collection | `seahorse_default` 或知识库配置的 collection |
 
@@ -177,6 +177,7 @@ curl -s http://localhost:11434/api/embeddings \
 如果报维度不匹配，优先检查：
 
 - 是否切换过 embedding 模型。
+- 自定义 embedding 模型是否配置了 `SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL_DIMENSIONS=模型名=维度`，或显式 `MILVUS_DIMENSION` / `SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION`。
 - 旧数据卷中的 `t_knowledge_vector` 或 Milvus collection 是否仍是旧维度。
 - 文档是否需要重新向量化。
 

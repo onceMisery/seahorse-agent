@@ -56,6 +56,19 @@ class SeahorseAgentAiAdapterAutoConfigurationTests {
     }
 
     @Test
+    void shouldConfigureMockEmbeddingDimensionFromEmbeddingModelWhenVectorDimensionIsUnset() {
+        contextRunner.withPropertyValues(
+                        "seahorse.agent.adapters.ai.type=mock",
+                        "seahorse.agent.adapters.ai.embedding-model=bge-m3")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(EmbeddingModelPort.class);
+                    assertThat(context.getBean(EmbeddingModelPort.class).embed("mock", "knowledge chunk"))
+                            .hasSize(1024);
+                });
+    }
+
+    @Test
     void shouldAllowMockEmbeddingWithOpenAiCompatibleChat() {
         contextRunner.withPropertyValues(
                         "seahorse.agent.adapters.ai.type=openai-compatible",

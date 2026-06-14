@@ -61,7 +61,7 @@ curl http://localhost:9090/actuator/health
 切换模型时必须同时处理三件事：
 
 1. 拉取新模型。
-2. 修改后端 Embedding 模型和向量维度。
+2. 修改后端 Embedding 模型；已知模型维度会自动解析。
 3. 清理或重建旧文档向量索引。
 
 示例：切换到 `bge-m3`：
@@ -74,7 +74,12 @@ docker exec seahorse-ollama ollama pull bge-m3
 
 ```env
 SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL=bge-m3
-SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION=1024
+```
+
+自定义模型需要额外声明维度映射：
+
+```env
+SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL_DIMENSIONS=your-embed-model=1024
 ```
 
 重启后端：

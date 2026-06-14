@@ -23,12 +23,14 @@ import com.miracle.ai.seahorse.agent.adapters.vector.milvus.MilvusVectorProperti
 import com.miracle.ai.seahorse.agent.adapters.vector.noop.NoopVectorStoreAdapter;
 import com.miracle.ai.seahorse.agent.adapters.vector.pgvector.PgVectorAdapter;
 import com.miracle.ai.seahorse.agent.adapters.vector.pgvector.PgVectorProperties;
+import com.miracle.ai.seahorse.agent.kernel.config.EmbeddingModelDimensions;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import io.milvus.v2.client.ConnectConfig;
 import io.milvus.v2.client.MilvusClientV2;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -37,6 +39,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 import javax.sql.DataSource;
 
@@ -103,14 +106,15 @@ public class SeahorseAgentVectorAdapterAutoConfiguration {
         @ConditionalOnMissingBean(MilvusVectorAdapter.class)
         public MilvusVectorAdapter seahorseMilvusVectorAdapter(
                 MilvusClientV2 milvusClient,
+                Environment environment,
                 @Value("${seahorse.agent.adapters.vector.collection-name:}") String collectionName,
-                @Value("${seahorse.agent.adapters.vector.dimension:1024}") int dimension,
                 @Value("${seahorse.agent.adapters.vector.metric-type:COSINE}") String metricType,
                 @Value("${seahorse.agent.adapters.vector.milvus.content-max-length:65535}") int contentMaxLength,
                 @Value("${seahorse.agent.adapters.vector.milvus.hnsw.m:48}") int hnswM,
                 @Value("${seahorse.agent.adapters.vector.milvus.hnsw.ef-construction:200}") int hnswEfConstruction,
                 @Value("${seahorse.agent.adapters.vector.milvus.mmap-enabled:false}") boolean mmapEnabled,
                 @Value("${seahorse.agent.adapters.vector.milvus.search-ef:128}") int searchEf) {
+            int dimension = resolveVectorDimension(environment);
             return new MilvusVectorAdapter(milvusClient, new MilvusVectorProperties(
                     collectionName, dimension, metricType, contentMaxLength,
                     hnswM, hnswEfConstruction, mmapEnabled, searchEf));
@@ -149,7 +153,8 @@ public class SeahorseAgentVectorAdapterAutoConfiguration {
         public PgVectorAdapter seahorsePgVectorAdapter(
                 DataSource dataSource,
                 ObjectMapper objectMapper,
-                @Value("${seahorse.agent.adapters.vector.dimension:1024}") int dimension) {
+                Environment environment) {
+            int dimension = resolveVectorDimension(environment);
             return new PgVectorAdapter(dataSource, objectMapper,
                     new PgVectorProperties("t_knowledge_vector", dimension));
         }
@@ -174,5 +179,20 @@ public class SeahorseAgentVectorAdapterAutoConfiguration {
         public VectorCollectionAdminPort seahorseNativePgVectorAdminPort(PgVectorAdapter adapter) {
             return adapter;
         }
+    }
+
+    static int resolveVectorDimension(Environment environment) {
+        return EmbeddingModelDimensions.resolveOrThrow(
+                bindString(environment, "seahorse.agent.adapters.vector.dimension"),
+                bindString(environment, "seahorse.agent.adapters.ai.embedding-model"),
+                bindString(environment, "seahorse.agent.adapters.ai.embedding-model-dimensions"));
+    }
+
+    static String bindString(Environment environment, String name) {
+        String value = Binder.get(environment).bind(name, String.class).orElse("");
+        if (!value.isBlank()) {
+            return value;
+        }
+        return environment.getProperty(name.replace("seahorse.agent", "seahorse-agent"), "");
     }
 }

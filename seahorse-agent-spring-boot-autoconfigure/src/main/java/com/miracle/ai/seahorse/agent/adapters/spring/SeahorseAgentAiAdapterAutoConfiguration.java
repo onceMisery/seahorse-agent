@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelAdapter;
 import com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelProperties;
+import com.miracle.ai.seahorse.agent.kernel.config.EmbeddingModelDimensions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
@@ -43,10 +44,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.boot.convert.DurationStyle;
+import org.springframework.core.env.Environment;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.time.Duration;
@@ -207,9 +210,9 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
     @Primary
     @ConditionalOnProperty(prefix = "seahorse.agent.adapters.ai", name = "embedding-type", havingValue = "mock")
     public EmbeddingModelPort seahorseMockEmbeddingModelPortForOpenAiCompatible(
-            @Value("${seahorse.agent.adapters.ai.mock.embedding-dimension:${seahorse.agent.adapters.vector.dimension:768}}")
-            int embeddingDimension) {
-        return new com.miracle.ai.seahorse.agent.adapters.ai.openai.MockEmbeddingAdapter(embeddingDimension);
+            Environment environment) {
+        return new com.miracle.ai.seahorse.agent.adapters.ai.openai.MockEmbeddingAdapter(
+                resolveMockEmbeddingDimension(environment));
     }
 
     @Bean
@@ -252,9 +255,9 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
     @ConditionalOnProperty(prefix = "seahorse.agent.adapters.ai", name = "type", havingValue = "mock")
     @ConditionalOnMissingBean(EmbeddingModelPort.class)
     public EmbeddingModelPort seahorseMockEmbeddingModelPort(
-            @Value("${seahorse.agent.adapters.ai.mock.embedding-dimension:${seahorse.agent.adapters.vector.dimension:768}}")
-            int embeddingDimension) {
-        return new com.miracle.ai.seahorse.agent.adapters.ai.openai.MockEmbeddingAdapter(embeddingDimension);
+            Environment environment) {
+        return new com.miracle.ai.seahorse.agent.adapters.ai.openai.MockEmbeddingAdapter(
+                resolveMockEmbeddingDimension(environment));
     }
 
     @Bean
@@ -312,5 +315,24 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
             }
         }
         return "none";
+    }
+
+    static int resolveMockEmbeddingDimension(Environment environment) {
+        String mockDimension = bindString(environment, "seahorse.agent.adapters.ai.mock.embedding-dimension");
+        String explicitDimension = mockDimension.isBlank()
+                ? bindString(environment, "seahorse.agent.adapters.vector.dimension")
+                : mockDimension;
+        return EmbeddingModelDimensions.resolveOrThrow(
+                explicitDimension,
+                bindString(environment, "seahorse.agent.adapters.ai.embedding-model"),
+                bindString(environment, "seahorse.agent.adapters.ai.embedding-model-dimensions"));
+    }
+
+    private static String bindString(Environment environment, String name) {
+        String value = Binder.get(environment).bind(name, String.class).orElse("");
+        if (!value.isBlank()) {
+            return value;
+        }
+        return environment.getProperty(name.replace("seahorse.agent", "seahorse-agent"), "");
     }
 }

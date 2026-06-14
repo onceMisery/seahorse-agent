@@ -89,23 +89,30 @@ docker compose -f docker-compose.full.yml up -d --build
 SEAHORSE_AGENT_ADAPTERS_AI_BASE_URL=https://api.openai.com/v1
 SEAHORSE_AGENT_ADAPTERS_AI_API_KEY=sk-your-key
 SEAHORSE_AGENT_ADAPTERS_AI_CHAT_MODEL=gpt-4o-mini
-SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL=text-embedding-3-small
+SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL=nomic-embed-text
 ```
 
 支持任何 OpenAI 兼容 API（OpenAI、DeepSeek、通义千问、Ollama 等）。
 
 ### 向量维度
 
-根据使用的 Embedding 模型设置：
+向量维度默认由 Embedding 模型解析：
 
 | 模型 | 维度 |
 |------|------|
+| nomic-embed-text | 768 |
 | text-embedding-3-small | 1536 |
 | text-embedding-3-large | 3072 |
 | bge-m3 | 1024 |
 | bge-large-zh | 1024 |
 
-在 `.env` 中设置 `MILVUS_DIMENSION=1024`。
+自定义模型请在 `.env` 中配置：
+
+```env
+SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL_DIMENSIONS=your-embed-model=1024
+```
+
+`MILVUS_DIMENSION` 仅作为显式覆盖使用。切换 Embedding 模型后仍需重建已有向量索引。
 
 ## 访问地址
 

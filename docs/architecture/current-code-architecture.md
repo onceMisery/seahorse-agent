@@ -73,7 +73,7 @@ sa-token.token-prefix=Bearer
 | Chat 模型 | `SEAHORSE_AGENT_ADAPTERS_AI_*` 指向 OpenAI-compatible 服务 |
 | Embedding | Ollama `nomic-embed-text` |
 | Embedding Base URL | `http://ollama:11434/v1` |
-| 向量维度 | 768 |
+| 向量维度 | 由 Embedding 模型解析，`nomic-embed-text` 为 768 |
 | 向量库 | Milvus |
 | 关键词检索/索引 | Elasticsearch |
 | 缓存与登录态 | Redis |
@@ -200,7 +200,7 @@ flowchart TD
 
 常见误读：
 
-- `docker-compose.full.yml` 当前把 Embedding 固定为 Ollama `nomic-embed-text` + 768 维；不要再把 1024 维写成全量默认。
+- `docker-compose.full.yml` 当前默认使用 Ollama `nomic-embed-text`，模型名和自定义维度注册可通过 `.env` 配置，向量维度由模型解析；不要再把 1024 维写成全量默认。
 - `docker-compose.yml` 是轻量冒烟，不代表真实 Milvus RAG。
 - MinIO 已编排，但当前后端存储默认还是 local。
 - 前端页面路径 `/admin/model-config` 对应用户界面，后端模型配置 API 是 `/admin/ai-config`。

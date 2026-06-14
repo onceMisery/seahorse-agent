@@ -655,6 +655,7 @@ class SeahorseWebApiContractTests {
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("seahorse-agent.adapters.vector.collection-name", "native_collection")
                 .withProperty("seahorse-agent.plugins.memory.history-keep-turns", "8")
+                .withProperty("seahorse-agent.adapters.ai.embedding-model", "bge-m3")
                 .withProperty("seahorse-agent.adapters.ai.providers.openai.url", "https://api.openai.com/v1")
                 .withProperty("seahorse-agent.adapters.ai.providers.openai.api-key", "sk-secret-value")
                 .withProperty("seahorse-agent.adapters.ai.providers.openai.endpoints.chat", "/chat/completions");
@@ -721,9 +722,23 @@ class SeahorseWebApiContractTests {
         mvc.perform(get("/rag/settings"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.rag.defaultConfig.collectionName").value("native_collection"))
+                .andExpect(jsonPath("$.data.rag.defaultConfig.dimension").value(1024))
                 .andExpect(jsonPath("$.data.ai.providers.openai.url").value("https://api.openai.com/v1"))
                 .andExpect(jsonPath("$.data.ai.providers.openai.apiKey").doesNotExist())
                 .andExpect(jsonPath("$.data.ai.providers.openai.apiKeyConfigured").value(true));
+    }
+
+    @Test
+    void shouldReturnCustomEmbeddingModelDimensionInRagSettings() throws Exception {
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("seahorse-agent.adapters.ai.embedding-model", "acme-embed-v2")
+                .withProperty("seahorse-agent.adapters.ai.embedding-model-dimensions", "acme-embed-v2=1024");
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseRagSettingsController(environment)).build();
+
+        mvc.perform(get("/rag/settings"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.rag.defaultConfig.dimension").value(1024));
     }
 
     @Test
