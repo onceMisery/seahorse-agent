@@ -37,7 +37,7 @@ import java.util.Objects;
 import java.util.Optional;
 public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
 
-    private static final String SELECT_COLUMNS = "id, username, password, role, avatar, create_time, update_time";
+    private static final String SELECT_COLUMNS = "id, username, password, role, avatar, tenant_id, create_time, update_time";
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -187,6 +187,7 @@ public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
                 resultSet.getString("password"),
                 resultSet.getString("role"),
                 resultSet.getString("avatar"),
+                resultSet.getString("tenant_id"),
                 toInstant(resultSet.getTimestamp("create_time")),
                 toInstant(resultSet.getTimestamp("update_time")));
     }

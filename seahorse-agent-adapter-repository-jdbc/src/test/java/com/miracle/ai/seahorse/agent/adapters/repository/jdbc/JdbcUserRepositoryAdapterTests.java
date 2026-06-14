@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserCreateValues;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserUpdateValues;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,6 +61,15 @@ class JdbcUserRepositoryAdapterTests {
         assertThat(updated).isTrue();
         assertThat(deleted).isTrue();
         assertThat(adapter.findById(id)).isEmpty();
+    }
+
+    @Test
+    void shouldPreserveTenantIdWhenFindingUserByUsername() {
+        insertUser(1L, "alice", "admin");
+
+        UserRecord user = adapter.findByUsername("alice").orElseThrow();
+
+        assertThat(user.tenantId()).isEqualTo("default");
     }
 
     private void insertUser(Long id, String username, String role) {

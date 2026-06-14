@@ -112,7 +112,7 @@ SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL=nomic-embed-text
 SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL_DIMENSIONS=your-embed-model=1024
 ```
 
-`MILVUS_DIMENSION` 仅作为显式覆盖使用。切换 Embedding 模型后仍需重建已有向量索引。
+`SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION` 仅作为低层显式覆盖使用；默认不要配置它，让后端根据 Embedding 模型或 `SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL_DIMENSIONS` 推导维度。旧的 `MILVUS_DIMENSION` 不再作为应用向量维度事实源。切换 Embedding 模型后仍需重建已有向量索引。
 
 ## 访问地址
 
@@ -130,7 +130,7 @@ SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL_DIMENSIONS=your-embed-model=1024
 | http://localhost:8000 | Milvus Attu（全量） |
 | http://localhost:8080 | Pulsar 管理台（全量） |
 
-默认账号：`admin` / `admin`
+默认账号：`admin` / `admin123`
 
 ## 健康检查
 

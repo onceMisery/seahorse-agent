@@ -177,7 +177,7 @@ curl -s http://localhost:11434/api/embeddings \
 如果报维度不匹配，优先检查：
 
 - 是否切换过 embedding 模型。
-- 自定义 embedding 模型是否配置了 `SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL_DIMENSIONS=模型名=维度`，或显式 `MILVUS_DIMENSION` / `SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION`。
+- 自定义 embedding 模型是否配置了 `SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL_DIMENSIONS=模型名=维度`；如必须显式覆盖，使用 `SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION`。旧 `.env` 中的 `MILVUS_DIMENSION` 不再作为应用向量维度事实源。
 - 旧数据卷中的 `t_knowledge_vector` 或 Milvus collection 是否仍是旧维度。
 - 文档是否需要重新向量化。
 
