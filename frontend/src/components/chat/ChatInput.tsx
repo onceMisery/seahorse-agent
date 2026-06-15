@@ -33,11 +33,46 @@ const HIGH_COST_TIER = "HIGH";
 const QUOTA_EXCEEDED_STATUS = "EXCEEDED";
 const ATTACHMENT_INPUT_ACCEPT = ".pdf,.md,.markdown,.txt,.docx,.csv,.xlsx,image/*";
 
+const TASK_TEMPLATE_LABELS: Record<string, { name: string; description: string }> = {
+  "quick-answer": {
+    name: "快速回答",
+    description: "适合日常问题的简短回答。"
+  },
+  "deep-research": {
+    name: "深度研究",
+    description: "搜索公开来源并生成带引用的报告。"
+  },
+  "web-summary": {
+    name: "网页摘要",
+    description: "总结网页或公开来源。"
+  },
+  "compare-analysis": {
+    name: "对比分析",
+    description: "用结构化表格对比方案、来源或产品。"
+  },
+  "github-visual-project-intro": {
+    name: "GitHub 项目图文介绍",
+    description: "读取 GitHub 仓库并生成图文项目介绍产物。"
+  }
+};
+
+const COST_TIER_LABELS: Record<string, string> = {
+  LOW: "低成本",
+  MEDIUM: "中成本",
+  HIGH: "高成本"
+};
+
+const DURATION_LABELS: Record<string, string> = {
+  SHORT: "短时",
+  MEDIUM: "中等",
+  LONG: "较长"
+};
+
 const DEFAULT_TASK_TEMPLATES: TaskTemplate[] = [
   {
     templateId: "quick-answer",
-    name: "Quick answer",
-    description: "Short answer for everyday questions.",
+    name: "快速回答",
+    description: "适合日常问题的简短回答。",
     category: "RESEARCH",
     defaultOutputType: "PLAIN_TEXT",
     maxCostTier: "LOW",
@@ -47,8 +82,8 @@ const DEFAULT_TASK_TEMPLATES: TaskTemplate[] = [
   },
   {
     templateId: "deep-research",
-    name: "Deep research",
-    description: "Cited report for broader research.",
+    name: "深度研究",
+    description: "适合广泛研究的带引用报告。",
     category: "RESEARCH",
     defaultOutputType: "MARKDOWN_REPORT",
     maxCostTier: HIGH_COST_TIER,
@@ -58,8 +93,8 @@ const DEFAULT_TASK_TEMPLATES: TaskTemplate[] = [
   },
   {
     templateId: "web-summary",
-    name: "Web summary",
-    description: "Summarize a page or topic.",
+    name: "网页摘要",
+    description: "总结网页或主题。",
     category: "WRITING",
     defaultOutputType: "SOURCE_DIGEST",
     maxCostTier: "MEDIUM",
@@ -69,8 +104,8 @@ const DEFAULT_TASK_TEMPLATES: TaskTemplate[] = [
   },
   {
     templateId: "github-visual-project-intro",
-    name: "GitHub visual intro",
-    description: "Read a GitHub repo and generate visual project artifacts.",
+    name: "GitHub 可视化介绍",
+    description: "读取 GitHub 仓库并生成可视化项目产物。",
     category: "ANALYSIS",
     defaultAgentId: "github-visual-project-intro-agent",
     defaultOutputType: "MARKDOWN_REPORT",
@@ -115,28 +150,50 @@ type SpeechWindow = Window & {
 };
 
 function quotaTone(status?: QuotaSummaryStatus | string | null) {
-  if (status === QUOTA_EXCEEDED_STATUS) return { color: "#ef4444", label: "Limit reached" };
-  if (status === "NEAR_LIMIT") return { color: "#f59e0b", label: "Running low" };
-  if (status === "AVAILABLE") return { color: "#22c55e", label: "Available" };
-  return { color: "var(--theme-text-muted)", label: "Quota unavailable" };
+  if (status === QUOTA_EXCEEDED_STATUS) return { color: "#ef4444", label: "已达上限" };
+  if (status === "NEAR_LIMIT") return { color: "#f59e0b", label: "余量不足" };
+  if (status === "AVAILABLE") return { color: "#22c55e", label: "可用" };
+  return { color: "var(--theme-text-muted)", label: "配额不可用" };
 }
 
 function parseStatusTone(status?: ConversationAttachmentParseStatus | string | null) {
-  if (status === "PARSED") return { color: "#22c55e", label: "Parsed" };
-  if (status === "FAILED") return { color: "#ef4444", label: "Failed" };
-  if (status === "BLOCKED") return { color: "#ef4444", label: "Blocked" };
-  return { color: "#f59e0b", label: "Pending" };
+  if (status === "PARSED") return { color: "#22c55e", label: "已解析" };
+  if (status === "FAILED") return { color: "#ef4444", label: "失败" };
+  if (status === "BLOCKED") return { color: "#ef4444", label: "已阻止" };
+  return { color: "#f59e0b", label: "等待中" };
 }
 
 function formatQuota(summary: UserQuotaSummary | null) {
-  if (!summary) return "Quota unavailable";
+  if (!summary) return "配额不可用";
   if (typeof summary.remainingCalls === "number" && typeof summary.callLimit === "number") {
-    return `${Math.max(summary.remainingCalls, 0)}/${summary.callLimit} runs left`;
+    return `剩余 ${Math.max(summary.remainingCalls, 0)}/${summary.callLimit} 次运行`;
   }
   if (summary.defaultCostTier || summary.estimatedDuration) {
-    return [summary.defaultCostTier, summary.estimatedDuration].filter(Boolean).join(" / ");
+    return [
+      formatCostTier(summary.defaultCostTier),
+      formatEstimatedDuration(summary.estimatedDuration)
+    ].filter(Boolean).join(" / ");
   }
   return quotaTone(summary.status).label;
+}
+
+function displayTaskTemplateName(template: TaskTemplate) {
+  return TASK_TEMPLATE_LABELS[template.templateId]?.name || template.name;
+}
+
+function displayTaskTemplateDescription(template?: TaskTemplate | null) {
+  if (!template) return undefined;
+  return TASK_TEMPLATE_LABELS[template.templateId]?.description || template.description || undefined;
+}
+
+function formatCostTier(value?: string | null) {
+  if (!value) return "";
+  return COST_TIER_LABELS[value] || value;
+}
+
+function formatEstimatedDuration(value?: string | null) {
+  if (!value) return "";
+  return DURATION_LABELS[value] || value;
 }
 
 function formatBytes(value: number) {
@@ -338,15 +395,15 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
           return {
             ...attachment,
             uploadState: "failed",
-            errorMessage: (result.reason as Error)?.message || "Upload failed"
+            errorMessage: (result.reason as Error)?.message || "上传失败"
           };
         })
       );
       if (uploadedCount > 0) {
-        toast.success(uploadedCount === 1 ? "File attached" : `${uploadedCount} files attached`);
+        toast.success(uploadedCount === 1 ? "文件已附加" : `已附加 ${uploadedCount} 个文件`);
       }
       if (failedCount > 0) {
-        toast.error(failedCount === 1 ? "1 upload failed" : `${failedCount} uploads failed`);
+        toast.error(failedCount === 1 ? "1 个文件上传失败" : `${failedCount} 个文件上传失败`);
       }
     } finally {
       setUploadingCount((count) => Math.max(0, count - selectedFiles.length));
@@ -365,7 +422,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
   const startVoiceInput = () => {
     const SpeechRecognition = (window as SpeechWindow).SpeechRecognition ?? (window as SpeechWindow).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      toast.error("Voice input is not supported by this browser");
+      toast.error("当前浏览器不支持语音输入");
       return;
     }
     if (listening) {
@@ -386,7 +443,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
     recognition.onend = () => setListening(false);
     recognition.onerror = () => {
       setListening(false);
-      toast.error("Voice input failed");
+      toast.error("语音输入失败");
     };
     speechRecognitionRef.current = recognition;
     setListening(true);
@@ -403,7 +460,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
       await deleteConversationAttachment(attachment.conversationId, attachment.attachmentId);
       setAttachments((current) => current.filter((item) => item.attachmentId !== attachment.attachmentId));
     } catch (error) {
-      toast.error((error as Error).message || "Delete attachment failed");
+      toast.error((error as Error).message || "删除附件失败");
     }
   };
 
@@ -431,16 +488,16 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
     const next = value.trim();
     if (!next) return;
     if (uploadingCount > 0) {
-      toast.error("Wait for file upload to finish");
+      toast.error("请等待文件上传完成");
       return;
     }
     if (quotaSummary?.status === QUOTA_EXCEEDED_STATUS) {
-      toast.error(quotaSummary.message || "Quota limit reached");
+      toast.error(quotaSummary.message || "配额已达上限");
       return;
     }
     const selectedTemplate = taskTemplates.find((template) => template.templateId === selectedTaskTemplateId);
     if (selectedTemplate?.maxCostTier === HIGH_COST_TIER) {
-      const confirmed = window.confirm("This task may take longer and use more quota. Continue?");
+      const confirmed = window.confirm("此任务可能需要更长时间并消耗更多配额。是否继续？");
       if (!confirmed) return;
     }
     const conversationIdOverride = currentSessionId ? null : pendingConversationId;
@@ -495,7 +552,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                 className="rounded-2xl border border-dashed px-4 py-3 text-center text-sm"
                 style={{ borderColor: "var(--theme-accent)", color: "var(--theme-accent)" }}
               >
-                Drop files to attach
+                将文件拖到此处以附加
               </div>
             ) : null}
             {attachments.length > 0 || uploadingCount > 0 ? (
@@ -504,9 +561,9 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                   const isUploading = attachment.uploadState === "uploading";
                   const isFailed = attachment.uploadState === "failed";
                   const status = isUploading
-                    ? { color: "var(--theme-accent)", label: "Uploading" }
+                    ? { color: "var(--theme-accent)", label: "上传中" }
                     : isFailed
-                      ? { color: "#ef4444", label: "Failed" }
+                      ? { color: "#ef4444", label: "失败" }
                       : parseStatusTone(attachment.parseStatus);
                   return (
                     <span
@@ -531,7 +588,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                         type="button"
                         className="rounded-full p-0.5 transition-colors hover:bg-white/10"
                         onClick={() => handleDeleteAttachment(attachment)}
-                        aria-label={`Remove ${attachment.fileName}`}
+                        aria-label={`移除 ${attachment.fileName}`}
                         disabled={isStreaming || isUploading}
                       >
                         <X className="h-3.5 w-3.5" />
@@ -589,7 +646,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                   {value.trim() ? (
                     <MarkdownRenderer content={value} />
                   ) : (
-                    <span style={{ color: "var(--theme-text-muted)" }}>Markdown preview</span>
+                    <span style={{ color: "var(--theme-text-muted)" }}>Markdown 预览</span>
                   )}
                 </div>
               ) : (
@@ -597,7 +654,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                   ref={textareaRef}
                   value={value}
                   onChange={(event) => setValue(event.target.value)}
-                  placeholder={deepThinkingEnabled ? "Ask for deeper analysis..." : "Ask about research, analysis, writing, or uploaded files..."}
+                  placeholder={deepThinkingEnabled ? "请输入需要深入分析的问题..." : "请输入关于研究、分析、写作或上传文件的问题..."}
                   className="max-h-40 min-h-[44px] w-full resize-none border-0 bg-transparent px-2 pb-2 pr-2 pt-2 text-[15px] shadow-none focus-visible:ring-0"
                   style={{ color: "var(--theme-text-primary)" }}
                   rows={1}
@@ -617,7 +674,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                       handleSubmit();
                     }
                   }}
-                  aria-label="Chat input"
+                  aria-label="聊天输入"
                 />
               )}
             </div>
@@ -632,7 +689,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                   disabled={isStreaming || templatesLoading}
                 >
                   <SelectTrigger
-                    aria-label="Task type"
+                    aria-label="任务类型"
                     className="h-9 w-[164px] rounded-xl border text-xs shadow-none focus:ring-1 focus:ring-offset-0"
                     style={{
                       backgroundColor: "var(--theme-bg-elevated)",
@@ -640,12 +697,12 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                       color: "var(--theme-text-primary)"
                     }}
                   >
-                    <SelectValue placeholder={templatesLoading ? "Loading" : "Task"} />
+                    <SelectValue placeholder={templatesLoading ? "加载中" : "任务"} />
                   </SelectTrigger>
                   <SelectContent>
                     {taskTemplates.map((template) => (
                       <SelectItem key={template.templateId} value={template.templateId}>
-                        {template.name}
+                        {displayTaskTemplateName(template)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -664,10 +721,10 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                       color: "var(--theme-text-primary)"
                     }}
                   >
-                    <SelectValue placeholder={agentsLoading ? "Loading agents" : "Select agent (optional)"} />
+                    <SelectValue placeholder={agentsLoading ? "正在加载 Agent" : "选择 Agent（可选）"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">No agent</SelectItem>
+                    <SelectItem value="__none__">不使用 Agent</SelectItem>
                     {agents.map((agent) => (
                       <SelectItem key={agent.agentId} value={agent.agentId}>
                         {agent.name}
@@ -682,14 +739,14 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                     border: "1px solid var(--theme-accent-alpha-10)",
                     color: "var(--theme-text-secondary)"
                   }}
-                  title={quotaSummary?.message ?? selectedTemplate?.description ?? undefined}
+                  title={quotaSummary?.message ?? displayTaskTemplateDescription(selectedTemplate)}
                 >
                   {quotaLoading ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: "var(--theme-accent)" }} />
                   ) : (
                     <Gauge className="h-3.5 w-3.5" style={{ color: quota.color }} />
                   )}
-                  <span className="truncate">{quotaLoading ? "Checking quota" : formatQuota(quotaSummary)}</span>
+                  <span className="truncate">{quotaLoading ? "正在检查配额" : formatQuota(quotaSummary)}</span>
                 </span>
                 <input
                   ref={fileInputRef}
@@ -703,7 +760,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isStreaming || uploadingCount > 0}
-                  aria-label="Attach files"
+                  aria-label="附加文件"
                   className="flex h-9 w-9 items-center justify-center rounded-xl transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                   style={{
                     backgroundColor: "var(--theme-bg-elevated)",
@@ -717,7 +774,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                   type="button"
                   onClick={startVoiceInput}
                   disabled={isStreaming}
-                  aria-label="Voice input"
+                  aria-label="语音输入"
                   className="flex h-9 w-9 items-center justify-center rounded-xl transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                   style={{
                     backgroundColor: "var(--theme-bg-elevated)",
@@ -745,7 +802,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                   type="button"
                   onClick={() => setPreviewOpen((current) => !current)}
                   aria-pressed={previewOpen}
-                  aria-label="Toggle Markdown preview"
+                  aria-label="切换 Markdown 预览"
                   className="flex h-9 w-9 items-center justify-center rounded-xl transition-colors"
                   style={{
                     backgroundColor: "var(--theme-bg-elevated)",
@@ -766,7 +823,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                     className="text-xs font-bold uppercase tracking-widest"
                     style={{ color: "var(--theme-text-muted)" }}
                   >
-                    Deep
+                    深度
                   </span>
                   <button
                     type="button"
@@ -797,7 +854,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                 type="button"
                 onClick={handleSubmit}
                 disabled={!canSend}
-                aria-label={isStreaming ? "Stop generation" : "Send message"}
+                aria-label={isStreaming ? "停止生成" : "发送消息"}
                 className={cn(
                   "flex h-14 w-14 items-center justify-center rounded-2xl shadow-lg transition-all group/send",
                   !canSend && "cursor-not-allowed opacity-50"
@@ -818,7 +875,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
         <p className="text-xs" style={{ color: "var(--theme-accent)" }}>
           <span className="inline-flex items-center gap-1.5">
             <Lightbulb className="h-3.5 w-3.5" />
-            Deep mode is on. The model will spend more effort on reasoning.
+            深度模式已开启，模型会投入更多推理力度。
           </span>
         </p>
       ) : null}
@@ -829,7 +886,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
         >
           Enter
         </kbd>{" "}
-        send
+        发送
         <span className="px-1.5">/</span>
         <kbd
           className="rounded px-1.5 py-0.5"
@@ -837,8 +894,8 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
         >
           Shift + Enter
         </kbd>{" "}
-        new line
-        {isStreaming ? <span className="ml-2 animate-pulse-soft">Generating...</span> : null}
+        换行
+        {isStreaming ? <span className="ml-2 animate-pulse-soft">生成中...</span> : null}
       </p>
       <PromptEnhancerDialog
         open={enhancerOpen}

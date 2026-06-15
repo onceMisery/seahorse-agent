@@ -32,6 +32,7 @@ export interface ChatState {
   selectedTaskTemplateId: TaskTemplateId | string | null;
   fetchSessions: () => Promise<void>;
   createSession: () => Promise<string>;
+  startNewSessionDraft: () => void;
   deleteSession: (sessionId: string) => Promise<void>;
   renameSession: (sessionId: string, title: string) => Promise<void>;
   selectSession: (sessionId: string) => Promise<void>;

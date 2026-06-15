@@ -23,7 +23,8 @@ export function ChatPage() {
     isCreating,
     fetchSessions,
     selectSession,
-    createSession
+    createSession,
+    startNewSessionDraft
   } = useChatStore();
   const { activeMessageId, inspectorOpen, closeInspector } = useWorkbenchStore();
   const showWelcome = messages.length === 0 && !isLoading;
@@ -60,12 +61,8 @@ export function ChatPage() {
           return;
         }
         invalidSessionHandledRef.current = sessionId;
-        void createSession().catch(() => null);
-        if (currentSessionId) {
-          navigate(`/chat/${currentSessionId}`, { replace: true });
-        } else {
-          navigate("/chat", { replace: true });
-        }
+        startNewSessionDraft();
+        navigate("/chat", { replace: true });
         return;
       }
       invalidSessionHandledRef.current = null;
@@ -79,10 +76,9 @@ export function ChatPage() {
     if (isCreatingNew || isCreating) {
       return;
     }
-    if (currentSessionId) {
-      return;
+    if (!currentSessionId && messages.length === 0) {
+      createSession().catch(() => null);
     }
-    createSession().catch(() => null);
   }, [
     sessionId,
     sessionsReady,
@@ -90,16 +86,24 @@ export function ChatPage() {
     isCreatingNew,
     isCreating,
     currentSessionId,
+    messages.length,
     selectSession,
     createSession,
+    startNewSessionDraft,
     navigate
   ]);
 
   React.useEffect(() => {
-    if (currentSessionId && currentSessionId !== sessionId) {
+    if (sessionId && currentSessionId && currentSessionId !== sessionId) {
       navigate(`/chat/${currentSessionId}`, { replace: true });
     }
   }, [currentSessionId, sessionId, navigate]);
+
+  React.useEffect(() => {
+    if (!sessionId && sessionsReady && currentSessionId && messages.length === 0 && isCreatingNew) {
+      startNewSessionDraft();
+    }
+  }, [sessionId, sessionsReady, currentSessionId, messages.length, isCreatingNew, startNewSessionDraft]);
 
   return (
     <MainLayout>

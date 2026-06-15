@@ -50,7 +50,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     isLoading,
     sessionsLoaded,
     isCreating,
-    createSession,
+    startNewSessionDraft,
     deleteSession,
     renameSession,
     selectSession,
@@ -203,7 +203,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 className="mt-2 flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left glass-hover transition-all hover:-translate-y-[1px]"
                 disabled={isCreating}
                 onClick={() => {
-                  createSession().catch(() => null);
+                  startNewSessionDraft();
                   navigate("/chat");
                   onClose();
                 }}

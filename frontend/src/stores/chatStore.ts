@@ -138,6 +138,27 @@ export const useChatStore = create<ChatState>()(
       }
     },
 
+    startNewSessionDraft: () => {
+      const state = get();
+      if (state.isStreaming) {
+        state.cancelGeneration();
+      }
+      set((s) => {
+        s.currentSessionId = null;
+        s.messages = [];
+        s.isLoading = false;
+        s.isCreatingNew = true;
+        s.isCreating = false;
+        s.deepThinkingEnabled = false;
+        s.thinkingStartAt = null;
+        s.streamTaskId = null;
+        s.streamAbort = null;
+        s.streamingMessageId = null;
+        s.cancelRequested = false;
+        s.inputFocusKey = Date.now();
+      });
+    },
+
     deleteSession: async (sessionId) => {
       try {
         await deleteSessionRequest(sessionId);
