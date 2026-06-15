@@ -24,7 +24,7 @@ export function AgentToolsView({ events }: { events: StreamEventEnvelope[] }) {
   if (toolEvents.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-        No tool or approval events
+        暂无工具或审批事件
       </div>
     );
   }
@@ -42,7 +42,7 @@ export function AgentToolsView({ events }: { events: StreamEventEnvelope[] }) {
               {event.eventType}
             </span>
             {event.stepId ? (
-              <span className="text-xs text-slate-400">step: {event.stepId}</span>
+              <span className="text-xs text-slate-400">步骤：{event.stepId}</span>
             ) : null}
             <span className="ml-auto text-xs text-slate-400">{formatTimestamp(event.timestamp)}</span>
           </div>

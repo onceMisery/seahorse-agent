@@ -24,7 +24,7 @@ export function MemoryRecallEvalPanel() {
     try {
       const data = await evaluateRecallQuality();
       setResult(data);
-      toast.success("Recall 评测已触发");
+      toast.success("召回评测已触发");
     } catch (error) {
       toast.error(getErrorMessage(error, "评测失败"));
     } finally {
@@ -35,7 +35,7 @@ export function MemoryRecallEvalPanel() {
   const handleRunProfile = async (profileId: string) => {
     try {
       await runGoldenProfileEval(profileId);
-      toast.success(`Profile ${profileId} 评测已触发`);
+      toast.success(`画像 ${profileId} 评测已触发`);
     } catch (error) {
       toast.error(getErrorMessage(error, "评测失败"));
     }
@@ -44,7 +44,7 @@ export function MemoryRecallEvalPanel() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-slate-700">Recall 评测</h3>
+        <h3 className="text-sm font-medium text-slate-700">召回评测</h3>
         <Button size="sm" onClick={handleRunEval} disabled={running}>
           <Play className={`mr-1 h-3 w-3 ${running ? "animate-spin" : ""}`} />
           运行评测
@@ -57,7 +57,7 @@ export function MemoryRecallEvalPanel() {
         </pre>
       ) : (
         <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-500">
-          点击"运行评测"触发 Recall 质量评估
+          点击“运行评测”触发召回质量评估
         </div>
       )}
     </div>

@@ -77,7 +77,7 @@ export function AgentToolBindingPanel({ agentId, versionId }: AgentToolBindingPa
           <TableRow>
             <TableHead className="w-[50px]">绑定</TableHead>
             <TableHead>工具名称</TableHead>
-            <TableHead>Provider</TableHead>
+            <TableHead>供应商</TableHead>
             <TableHead>风险等级</TableHead>
             <TableHead>审批要求</TableHead>
           </TableRow>

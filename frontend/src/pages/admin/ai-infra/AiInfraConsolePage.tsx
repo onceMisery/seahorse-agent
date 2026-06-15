@@ -721,7 +721,7 @@ export function AiInfraConsolePage() {
     }
     const datasetId = evalRegressionForm.datasetId.trim();
     if (!datasetId) {
-      toast.error("datasetId 必填");
+      toast.error("数据集 ID 必填");
       return;
     }
     const baseline =
@@ -729,7 +729,7 @@ export function AiInfraConsolePage() {
         ? undefined
         : Number(evalRegressionForm.baselinePassRate);
     if (baseline !== undefined && (!Number.isFinite(baseline) || baseline < 0 || baseline > 1)) {
-      toast.error("baselinePassRate 必须在 0 到 1 之间");
+      toast.error("基线通过率必须在 0 到 1 之间");
       return;
     }
     setActionLoading("eval:regression");
@@ -923,7 +923,7 @@ export function AiInfraConsolePage() {
                 value={feedbackUserId}
                 onChange={(event) => setFeedbackUserId(event.target.value)}
                 className="w-[180px] bg-white"
-                placeholder="userId"
+                placeholder="用户 ID"
               />
               <Input
                 value={feedbackRunId}
@@ -1070,20 +1070,20 @@ export function AiInfraConsolePage() {
           <DataPanel title="评估回归" description="使用当前模型运行评估数据集，并与基线结果对比。">
             <OperationFeatureNotice featureState={feedbackFeatureState} label="评估回归" />
             <div className="grid gap-3 md:grid-cols-3">
-              <Field label="datasetId">
+              <Field label="数据集 ID">
                 <Input
                   value={evalRegressionForm.datasetId}
                   onChange={(event) => updateEvalRegressionForm("datasetId", event.target.value)}
                 />
               </Field>
-              <Field label="modelId">
+              <Field label="模型 ID">
                 <Input
                   value={evalRegressionForm.modelId}
                   onChange={(event) => updateEvalRegressionForm("modelId", event.target.value)}
                   placeholder="可选"
                 />
               </Field>
-              <Field label="baselinePassRate">
+              <Field label="基线通过率">
                 <Input
                   value={evalRegressionForm.baselinePassRate}
                   onChange={(event) => updateEvalRegressionForm("baselinePassRate", event.target.value)}
@@ -1105,28 +1105,28 @@ export function AiInfraConsolePage() {
           <DataPanel title="发布管理" description="调用灰度、最新、暂停、发布和回滚接口。">
             <OperationFeatureNotice featureState={rolloutFeatureState} label="发布管理" />
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label="tenantId">
+              <Field label="租户 ID">
                 <Input value={rolloutForm.tenantId} onChange={(event) => updateRolloutForm("tenantId", event.target.value)} />
               </Field>
-              <Field label="operator">
+              <Field label="操作人">
                 <Input value={rolloutForm.operator} onChange={(event) => updateRolloutForm("operator", event.target.value)} />
               </Field>
-              <Field label="agentId">
+              <Field label="Agent ID">
                 <Input value={rolloutForm.agentId} onChange={(event) => updateRolloutForm("agentId", event.target.value)} />
               </Field>
-              <Field label="versionId">
+              <Field label="版本 ID">
                 <Input value={rolloutForm.versionId} onChange={(event) => updateRolloutForm("versionId", event.target.value)} />
               </Field>
-              <Field label="rolloutId">
+              <Field label="发布 ID">
                 <Input value={rolloutForm.rolloutId} onChange={(event) => updateRolloutForm("rolloutId", event.target.value)} />
               </Field>
-              <Field label="canaryPercent">
+              <Field label="Canary 百分比">
                 <Input value={rolloutForm.canaryPercent} onChange={(event) => updateRolloutForm("canaryPercent", event.target.value)} />
               </Field>
-              <Field label="targetVersionId">
+              <Field label="目标版本 ID">
                 <Input value={rolloutForm.targetVersionId} onChange={(event) => updateRolloutForm("targetVersionId", event.target.value)} />
               </Field>
-              <Field label="comment">
+              <Field label="备注">
                 <Input value={rolloutForm.comment} onChange={(event) => updateRolloutForm("comment", event.target.value)} />
               </Field>
             </div>
@@ -1160,7 +1160,7 @@ export function AiInfraConsolePage() {
       ) : null}
 
       <section className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-        Consumer Web 模式会将本地 Agent、主机 Shell、沙箱、企业连接器、凭据管理和远程 Agent Mesh 保持在高级功能开关之后。
+        消费者 Web 模式会将本地 Agent、主机 Shell、沙箱、企业连接器、凭据管理和远程 Agent Mesh 保持在高级功能开关之后。
       </section>
     </div>
   );

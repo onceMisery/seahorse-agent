@@ -57,7 +57,7 @@ export function PluginManagementPage() {
       <div className="admin-page-header">
         <div>
           <h1 className="admin-page-title">插件管理</h1>
-          <p className="admin-page-subtitle">管理 Feature Plugin 注册表、健康状态和启停</p>
+          <p className="admin-page-subtitle">管理功能 Plugin 注册表、健康状态和启停</p>
         </div>
         <Button variant="outline" onClick={fetchData} disabled={loading}>
           <RefreshCw className={`mr-1 h-4 w-4 ${loading ? "animate-spin" : ""}`} />

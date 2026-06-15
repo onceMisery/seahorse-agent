@@ -131,7 +131,7 @@ export function ToolDetailPage() {
         <CardContent className="pt-6">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div>
-              <div className="text-xs text-slate-500">Provider</div>
+              <div className="text-xs text-slate-500">供应商</div>
               <div className="mt-1 font-medium">{tool.provider || "-"}</div>
             </div>
             <div>

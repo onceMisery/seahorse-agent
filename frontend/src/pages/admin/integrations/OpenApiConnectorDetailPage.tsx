@@ -37,7 +37,7 @@ export function OpenApiConnectorDetailPage() {
         const data = await getConnectorOperations(connectorId);
         setOperations(data || []);
       } catch (error) {
-        toast.error(getErrorMessage(error, "加载 Operations 失败"));
+        toast.error(getErrorMessage(error, "加载操作失败"));
         console.error(error);
       } finally {
         setLoading(false);
@@ -49,7 +49,7 @@ export function OpenApiConnectorDetailPage() {
   const handleToggle = async (op: ConnectorOperation) => {
     if (!connectorId) return;
     const action = op.enabled ? "禁用" : "启用";
-    if (!confirm(`确认${action}此 Operation？`)) return;
+    if (!confirm(`确认${action}此操作？`)) return;
 
     try {
       setTogglingOpId(op.operationId || null);
@@ -58,7 +58,7 @@ export function OpenApiConnectorDetailPage() {
       } else {
         await enableOperation(connectorId, op.operationId || "");
       }
-      toast.success(`Operation 已${action}`);
+      toast.success(`操作已${action}`);
       setOperations((prev) =>
         prev.map((o) => o.operationId === op.operationId ? { ...o, enabled: !o.enabled } : o)
       );
@@ -103,19 +103,19 @@ export function OpenApiConnectorDetailPage() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle>Operations</CardTitle></CardHeader>
+        <CardHeader><CardTitle>操作列表</CardTitle></CardHeader>
         <CardContent>
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">加载中...</div>
           ) : operations.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">暂无 Operations</div>
+            <div className="text-center py-8 text-muted-foreground">暂无操作</div>
           ) : (
             <Table className="min-w-[900px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[80px]">Method</TableHead>
-                  <TableHead>Path</TableHead>
-                  <TableHead className="w-[160px]">Operation</TableHead>
+                  <TableHead className="w-[80px]">方法</TableHead>
+                  <TableHead>路径</TableHead>
+                  <TableHead className="w-[160px]">操作</TableHead>
                   <TableHead className="w-[80px]">风险</TableHead>
                   <TableHead className="w-[80px]">状态</TableHead>
                   <TableHead className="w-[80px]">凭据</TableHead>

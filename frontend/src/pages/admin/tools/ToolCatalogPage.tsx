@@ -158,7 +158,7 @@ export function ToolCatalogPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[200px]">名称</TableHead>
-                  <TableHead className="w-[120px]">Provider</TableHead>
+                  <TableHead className="w-[120px]">供应商</TableHead>
                   <TableHead className="w-[100px]">资源类型</TableHead>
                   <TableHead className="w-[100px]">风险等级</TableHead>
                   <TableHead className="w-[100px]">状态</TableHead>

@@ -119,7 +119,7 @@ export function AgentPublishDialog({
             <Textarea
               value={form.instructions}
               onChange={(event) => setForm((prev) => ({ ...prev, instructions: event.target.value }))}
-              placeholder="请输入本版本 Agent instructions"
+              placeholder="请输入本版本 Agent 指令"
               rows={4}
             />
           </div>

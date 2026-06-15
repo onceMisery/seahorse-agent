@@ -9,10 +9,10 @@ import { getErrorMessage } from "@/utils/error";
 type DataView = "operations" | "outbox" | "profile-facts" | "corrections";
 
 const VIEWS: { key: DataView; label: string; endpoint: string }[] = [
-  { key: "operations", label: "Operations", endpoint: "/memories/operations" },
-  { key: "outbox", label: "Outbox", endpoint: "/memories/outbox" },
-  { key: "profile-facts", label: "Profile Facts", endpoint: "/memories/profile-facts" },
-  { key: "corrections", label: "Corrections", endpoint: "/memories/corrections" }
+  { key: "operations", label: "操作记录", endpoint: "/memories/operations" },
+  { key: "outbox", label: "发件箱", endpoint: "/memories/outbox" },
+  { key: "profile-facts", label: "画像事实", endpoint: "/memories/profile-facts" },
+  { key: "corrections", label: "修正记录", endpoint: "/memories/corrections" }
 ];
 
 export function MemoryOperationsPanel() {

@@ -119,7 +119,7 @@ export function ApprovalCenterPage() {
       <div className="admin-page-header">
         <div>
           <h1 className="admin-page-title">审批中心</h1>
-          <p className="admin-page-subtitle">管理 Human-in-the-loop 审批请求</p>
+          <p className="admin-page-subtitle">管理人工介入审批请求</p>
         </div>
         <div className="admin-page-actions">
           <Input

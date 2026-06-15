@@ -48,9 +48,9 @@ export function RunsTable({
             <Table className="trace-list-table">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="trace-col-trace">Trace Name</TableHead>
-                  <TableHead className="trace-col-run-id">Trace Id</TableHead>
-                  <TableHead className="trace-col-meta">会话ID / TaskID</TableHead>
+                  <TableHead className="trace-col-trace">Trace 名称</TableHead>
+                  <TableHead className="trace-col-run-id">Trace ID</TableHead>
+                  <TableHead className="trace-col-meta">会话 ID / Task ID</TableHead>
                   <TableHead className="trace-col-user">用户名</TableHead>
                   <TableHead className="trace-col-duration">耗时</TableHead>
                   <TableHead className="trace-col-status">状态</TableHead>

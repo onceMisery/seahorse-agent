@@ -360,7 +360,7 @@ const DashboardHeader = ({
   onTimeWindowChange: (window: DashboardTimeWindow) => void;
 }) => (
     <header className="mb-3 flex items-center justify-between">
-      <h1 className="text-4xl font-bold tracking-tight text-slate-900">Dashboard</h1>
+      <h1 className="text-4xl font-bold tracking-tight text-slate-900">仪表盘</h1>
 
       <div className="flex items-center gap-3">
         <div className="inline-flex rounded-lg bg-white p-1 shadow-sm">

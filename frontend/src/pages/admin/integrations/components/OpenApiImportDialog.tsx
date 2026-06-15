@@ -26,7 +26,7 @@ export function OpenApiImportDialog({ open, onOpenChange, onSuccess }: OpenApiIm
       return;
     }
     if (!specContent.trim()) {
-      toast.error("请输入或粘贴 OpenAPI Spec 内容");
+      toast.error("请输入或粘贴 OpenAPI 规范内容");
       return;
     }
 
@@ -37,12 +37,12 @@ export function OpenApiImportDialog({ open, onOpenChange, onSuccess }: OpenApiIm
         specContent: specContent.trim(),
         specFormat
       });
-      toast.success("Spec 导入成功");
+      toast.success("规范导入成功");
       setName("");
       setSpecContent("");
       onSuccess();
     } catch (error) {
-      toast.error(getErrorMessage(error, "导入 Spec 失败"));
+      toast.error(getErrorMessage(error, "导入规范失败"));
       console.error(error);
     } finally {
       setImporting(false);
@@ -53,8 +53,8 @@ export function OpenApiImportDialog({ open, onOpenChange, onSuccess }: OpenApiIm
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent className="sm:max-w-[600px]">
         <AlertDialogHeader>
-          <AlertDialogTitle>导入 OpenAPI Spec</AlertDialogTitle>
-          <AlertDialogDescription>上传 OpenAPI JSON/YAML 或粘贴 spec 文本</AlertDialogDescription>
+          <AlertDialogTitle>导入 OpenAPI 规范</AlertDialogTitle>
+          <AlertDialogDescription>上传 OpenAPI JSON/YAML 或粘贴规范文本</AlertDialogDescription>
         </AlertDialogHeader>
 
         <div className="space-y-3">
@@ -63,7 +63,7 @@ export function OpenApiImportDialog({ open, onOpenChange, onSuccess }: OpenApiIm
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="请输入连接器名称" />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Spec 格式</label>
+            <label className="text-sm font-medium">规范格式</label>
             <Select value={specFormat} onValueChange={(v) => setSpecFormat(v as "json" | "yaml")}>
               <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -73,11 +73,11 @@ export function OpenApiImportDialog({ open, onOpenChange, onSuccess }: OpenApiIm
             </Select>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Spec 内容</label>
+            <label className="text-sm font-medium">规范内容</label>
             <Textarea
               value={specContent}
               onChange={(e) => setSpecContent(e.target.value)}
-              placeholder="请粘贴 OpenAPI Spec JSON 或 YAML 内容"
+              placeholder="请粘贴 OpenAPI 规范 JSON 或 YAML 内容"
               rows={12}
               className="font-mono text-sm"
             />

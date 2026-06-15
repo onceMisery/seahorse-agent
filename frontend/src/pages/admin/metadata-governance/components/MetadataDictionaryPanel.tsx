@@ -92,8 +92,8 @@ export function MetadataDictionaryPanel() {
           <TableHeader>
             <TableRow>
               <TableHead>ID</TableHead>
-              <TableHead>Key</TableHead>
-              <TableHead>Value</TableHead>
+              <TableHead>键</TableHead>
+              <TableHead>值</TableHead>
               <TableHead>操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -121,12 +121,12 @@ export function MetadataDictionaryPanel() {
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="mb-1 block text-xs text-slate-500">Key</label>
-              <Input value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder="输入 key" />
+              <label className="mb-1 block text-xs text-slate-500">键</label>
+              <Input value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder="输入键" />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-500">Value</label>
-              <Input value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder="输入 value" />
+              <label className="mb-1 block text-xs text-slate-500">值</label>
+              <Input value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder="输入值" />
             </div>
           </div>
           <DialogFooter>

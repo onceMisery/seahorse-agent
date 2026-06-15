@@ -68,8 +68,8 @@ export function AccessDecisionPage() {
             <SelectTrigger className="w-[120px]"><SelectValue placeholder="决策结果" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部</SelectItem>
-              <SelectItem value="allow">Allow</SelectItem>
-              <SelectItem value="deny">Deny</SelectItem>
+              <SelectItem value="allow">允许</SelectItem>
+              <SelectItem value="deny">拒绝</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={() => loadDecisions(pageNo, keyword)}>

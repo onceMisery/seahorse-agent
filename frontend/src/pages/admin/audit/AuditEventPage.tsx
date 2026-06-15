@@ -196,13 +196,13 @@ export function AuditEventPage() {
                 <div><span className="text-slate-500">操作人:</span> {displayActor(selectedEvent)}</div>
                 <div><span className="text-slate-500">事件类型:</span> {EVENT_TYPE_LABELS[selectedEvent.eventType || ""] || selectedEvent.eventType || "-"}</div>
                 <div><span className="text-slate-500">Agent:</span> {selectedEvent.agentId || "-"}</div>
-                <div><span className="text-slate-500">Run:</span> {selectedEvent.runId || "-"}</div>
+                <div><span className="text-slate-500">Run ID:</span> {selectedEvent.runId || "-"}</div>
                 <div><span className="text-slate-500">资源:</span> {displayResource(selectedEvent)}</div>
                 <div><span className="text-slate-500">时间:</span> {displayTime(selectedEvent)}</div>
               </div>
               {displayPayload(selectedEvent) && (
                 <div>
-                  <div className="text-sm text-slate-500 mb-1">Payload</div>
+                  <div className="text-sm text-slate-500 mb-1">载荷</div>
                   <pre className="bg-slate-50 p-3 rounded-lg text-xs font-mono overflow-auto max-h-[300px]">
                     {typeof displayPayload(selectedEvent) === "string"
                       ? displayPayload(selectedEvent)

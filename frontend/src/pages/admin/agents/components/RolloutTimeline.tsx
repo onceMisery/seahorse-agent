@@ -13,11 +13,11 @@ export function RolloutTimeline({ rollout }: { rollout: AgentRollout }) {
       <h3 className="mb-3 text-sm font-medium text-slate-700">发布信息</h3>
       <div className="space-y-2 text-xs text-slate-600">
         <div className="flex gap-4">
-          <span className="w-24 text-slate-400">Rollout ID</span>
+          <span className="w-24 text-slate-400">发布 ID</span>
           <span className="font-mono">{rollout.rolloutId?.slice(0, 16) ?? "-"}</span>
         </div>
         <div className="flex gap-4">
-          <span className="w-24 text-slate-400">Version</span>
+          <span className="w-24 text-slate-400">版本</span>
           <span className="font-mono">{rollout.versionId?.slice(0, 16) ?? "-"}</span>
         </div>
         <div className="flex gap-4">

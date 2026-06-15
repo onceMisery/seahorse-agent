@@ -30,9 +30,9 @@ type TabKey = "schema" | "review" | "quarantine" | "quality" | "dictionary" | "e
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "schema", label: "Schema" },
-  { key: "review", label: "Review" },
-  { key: "quarantine", label: "Quarantine" },
-  { key: "quality", label: "Quality" },
+  { key: "review", label: "审核" },
+  { key: "quarantine", label: "隔离" },
+  { key: "quality", label: "质量" },
   { key: "dictionary", label: "字典" },
   { key: "extraction", label: "抽取结果" }
 ];
@@ -98,7 +98,7 @@ export function MetadataGovernancePage() {
       return;
     }
     if ((activeTab === "schema" || activeTab === "quality") && !safeKb) {
-      toast.error("Schema 与 Quality 需要知识库 ID");
+      toast.error("Schema 与质量报表需要知识库 ID");
       return;
     }
     try {
@@ -147,14 +147,14 @@ export function MetadataGovernancePage() {
       <div className="admin-page-header">
         <div>
           <h1 className="admin-page-title">元数据治理</h1>
-          <p className="admin-page-subtitle">Schema、Review、Quarantine 与质量报表的统一管理入口</p>
+          <p className="admin-page-subtitle">Schema、审核、隔离与质量报表的统一管理入口</p>
         </div>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>查询范围</CardTitle>
-          <CardDescription>Review 与 Quarantine 支持只按租户查询；Schema 与 Quality 需要指定知识库。</CardDescription>
+          <CardDescription>审核与隔离支持只按租户查询；Schema 与质量报表需要指定知识库。</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-[180px_1fr_auto]">
           <Input value={tenantId} onChange={(event) => setTenantId(event.target.value)} placeholder="tenantId" />
@@ -227,7 +227,7 @@ export function MetadataGovernancePage() {
       {activeTab === "review" ? (
         <Card>
           <CardHeader>
-            <CardTitle>Review 队列</CardTitle>
+            <CardTitle>审核队列</CardTitle>
             <CardDescription>对低置信度或冲突字段执行通过、拒绝或转隔离。</CardDescription>
           </CardHeader>
           <CardContent>
@@ -271,7 +271,7 @@ export function MetadataGovernancePage() {
       {activeTab === "quarantine" ? (
         <Card>
           <CardHeader>
-            <CardTitle>Quarantine 隔离区</CardTitle>
+            <CardTitle>隔离区</CardTitle>
             <CardDescription>隔离项默认不进入索引，处理后可标记解决或安排重试。</CardDescription>
           </CardHeader>
           <CardContent>
@@ -314,7 +314,7 @@ export function MetadataGovernancePage() {
       {activeTab === "quality" ? (
         <Card>
           <CardHeader>
-            <CardTitle>Quality 报表</CardTitle>
+            <CardTitle>质量报表</CardTitle>
             <CardDescription>覆盖率、低置信度与隔离原因用于评估治理策略质量。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

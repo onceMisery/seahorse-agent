@@ -13,7 +13,7 @@ export function AgentStateView({ snapshot }: { snapshot: AgentRunSnapshot | null
   if (!snapshot) {
     return (
       <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-        No snapshot loaded
+        暂未加载快照
       </div>
     );
   }
@@ -24,22 +24,22 @@ export function AgentStateView({ snapshot }: { snapshot: AgentRunSnapshot | null
     <div className="space-y-4">
       <dl className="grid gap-3 sm:grid-cols-2">
         <Field label="Run ID" value={run?.runId} />
-        <Field label="Status" value={run?.status} />
-        <Field label="Current Step" value={snapshot.currentStepId} />
-        <Field label="Conversation" value={run?.conversationId} />
-        <Field label="Input" value={run?.inputSummary} />
-        <Field label="Error Code" value={run?.errorCode} />
-        <Field label="Error Message" value={run?.errorMessage} />
-        <Field label="Started At" value={run?.startedAt} />
-        <Field label="Finished At" value={run?.finishedAt} />
-        <Field label="Last Event Seq" value={snapshot.lastEventSeq != null ? String(snapshot.lastEventSeq) : null} />
-        <Field label="Can Resume" value={snapshot.canResume != null ? String(snapshot.canResume) : null} />
-        <Field label="Can Retry" value={snapshot.canRetry != null ? String(snapshot.canRetry) : null} />
+        <Field label="状态" value={run?.status} />
+        <Field label="当前步骤" value={snapshot.currentStepId} />
+        <Field label="会话" value={run?.conversationId} />
+        <Field label="输入" value={run?.inputSummary} />
+        <Field label="错误代码" value={run?.errorCode} />
+        <Field label="错误消息" value={run?.errorMessage} />
+        <Field label="开始时间" value={run?.startedAt} />
+        <Field label="结束时间" value={run?.finishedAt} />
+        <Field label="最后事件序号" value={snapshot.lastEventSeq != null ? String(snapshot.lastEventSeq) : null} />
+        <Field label="可恢复" value={snapshot.canResume != null ? String(snapshot.canResume) : null} />
+        <Field label="可重试" value={snapshot.canRetry != null ? String(snapshot.canRetry) : null} />
       </dl>
 
       {snapshot.steps && snapshot.steps.length > 0 ? (
         <div>
-          <h3 className="mb-2 text-sm font-medium text-slate-700">Steps ({snapshot.steps.length})</h3>
+          <h3 className="mb-2 text-sm font-medium text-slate-700">步骤 ({snapshot.steps.length})</h3>
           <div className="space-y-1.5">
             {snapshot.steps.map((step) => (
               <div

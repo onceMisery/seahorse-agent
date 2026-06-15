@@ -54,7 +54,7 @@ export function OpenApiConnectorPage() {
       <div className="admin-page-header">
         <div>
           <h1 className="admin-page-title">OpenAPI 连接器</h1>
-          <p className="admin-page-subtitle">导入和管理 OpenAPI 规格的连接器</p>
+          <p className="admin-page-subtitle">导入和管理 OpenAPI 规范连接器</p>
         </div>
         <div className="admin-page-actions">
           <Button variant="outline" onClick={loadConnectors}>
@@ -63,7 +63,7 @@ export function OpenApiConnectorPage() {
           </Button>
           <Button className="admin-primary-gradient" onClick={() => setImportOpen(true)}>
             <Plus className="w-4 h-4 mr-1" />
-            导入 Spec
+            导入规范
           </Button>
         </div>
       </div>
@@ -73,13 +73,13 @@ export function OpenApiConnectorPage() {
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">加载中...</div>
           ) : connectors.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">暂无连接器，点击"导入 Spec"创建</div>
+            <div className="text-center py-8 text-muted-foreground">暂无连接器，点击“导入规范”创建</div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>名称</TableHead>
-                  <TableHead className="w-[100px]">Operation 数</TableHead>
+                  <TableHead className="w-[100px]">操作数</TableHead>
                   <TableHead className="w-[100px]">解析错误</TableHead>
                   <TableHead className="w-[160px]">创建时间</TableHead>
                   <TableHead className="w-[80px] text-left">操作</TableHead>

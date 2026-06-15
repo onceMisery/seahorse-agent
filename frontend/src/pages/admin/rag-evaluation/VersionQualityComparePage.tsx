@@ -39,7 +39,7 @@ export function VersionQualityComparePage() {
 
   const handleCompare = async () => {
     if (!selectedKbId || !baseVersionId.trim() || !candidateVersionId.trim()) {
-      toast.error("请输入 Base 和 Candidate 版本 ID");
+      toast.error("请输入基础版本和候选版本 ID");
       return;
     }
 
@@ -83,11 +83,11 @@ export function VersionQualityComparePage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Base 版本 ID</label>
+              <label className="text-sm font-medium">基础版本 ID</label>
               <Input value={baseVersionId} onChange={(e) => setBaseVersionId(e.target.value)} placeholder="基础版本 ID" className="w-[200px]" />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Candidate 版本 ID</label>
+              <label className="text-sm font-medium">候选版本 ID</label>
               <Input value={candidateVersionId} onChange={(e) => setCandidateVersionId(e.target.value)} placeholder="候选版本 ID" className="w-[200px]" />
             </div>
             <Button className="admin-primary-gradient" disabled={comparing} onClick={handleCompare}>
@@ -104,11 +104,11 @@ export function VersionQualityComparePage() {
             <CardContent>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <div className="text-slate-500 text-sm">Base 覆盖率</div>
+                  <div className="text-slate-500 text-sm">基础版本覆盖率</div>
                   <div className="text-2xl font-bold">{((result.baseCoverage ?? 0) * 100).toFixed(1)}%</div>
                 </div>
                 <div>
-                  <div className="text-slate-500 text-sm">Candidate 覆盖率</div>
+                  <div className="text-slate-500 text-sm">候选版本覆盖率</div>
                   <div className="text-2xl font-bold">{((result.candidateCoverage ?? 0) * 100).toFixed(1)}%</div>
                 </div>
                 <div>
@@ -129,7 +129,7 @@ export function VersionQualityComparePage() {
                   {result.degradedSamples.map((sample, idx) => (
                     <div key={idx} className="p-3 bg-red-50 rounded-lg text-sm">
                       <div className="font-medium">{sample.documentId || "-"}</div>
-                      <div className="text-muted-foreground">Base: {((sample.baseQuality ?? 0) * 100).toFixed(1)}% → Candidate: {((sample.candidateQuality ?? 0) * 100).toFixed(1)}%</div>
+                      <div className="text-muted-foreground">基础版本：{((sample.baseQuality ?? 0) * 100).toFixed(1)}% → 候选版本：{((sample.candidateQuality ?? 0) * 100).toFixed(1)}%</div>
                     </div>
                   ))}
                 </div>
@@ -145,7 +145,7 @@ export function VersionQualityComparePage() {
                   {result.improvedSamples.map((sample, idx) => (
                     <div key={idx} className="p-3 bg-green-50 rounded-lg text-sm">
                       <div className="font-medium">{sample.documentId || "-"}</div>
-                      <div className="text-muted-foreground">Base: {((sample.baseQuality ?? 0) * 100).toFixed(1)}% → Candidate: {((sample.candidateQuality ?? 0) * 100).toFixed(1)}%</div>
+                      <div className="text-muted-foreground">基础版本：{((sample.baseQuality ?? 0) * 100).toFixed(1)}% → 候选版本：{((sample.candidateQuality ?? 0) * 100).toFixed(1)}%</div>
                     </div>
                   ))}
                 </div>

@@ -42,7 +42,7 @@ export function AgentArtifactsView({ runId }: { runId: string }) {
         if (!cancelled) setArtifacts(Array.isArray(data) ? data : []);
       })
       .catch((error) => {
-        if (!cancelled) toast.error(getErrorMessage(error, "加载 artifacts 失败"));
+        if (!cancelled) toast.error(getErrorMessage(error, "加载产物失败"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -57,7 +57,7 @@ export function AgentArtifactsView({ runId }: { runId: string }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `artifact-${artifactId.slice(0, 8)}`;
+      a.download = `产物-${artifactId.slice(0, 8)}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
@@ -72,7 +72,7 @@ export function AgentArtifactsView({ runId }: { runId: string }) {
   if (artifacts.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-        No artifacts
+        暂无产物
       </div>
     );
   }
@@ -124,10 +124,10 @@ export function AgentArtifactsView({ runId }: { runId: string }) {
       <Dialog open={!!previewItem} onOpenChange={() => setPreviewItem(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{previewItem?.title ?? "Artifact Preview"}</DialogTitle>
+            <DialogTitle>{previewItem?.title ?? "产物预览"}</DialogTitle>
           </DialogHeader>
           <pre className="max-h-[480px] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs text-slate-700">
-            {previewItem?.previewText ?? "No preview available"}
+            {previewItem?.previewText ?? "暂无可用预览"}
           </pre>
         </DialogContent>
       </Dialog>

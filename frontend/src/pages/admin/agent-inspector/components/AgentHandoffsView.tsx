@@ -81,7 +81,7 @@ export function AgentHandoffsView({ runId }: { runId: string }) {
   if (handoffs.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-        No handoffs
+        暂无 Handoff
       </div>
     );
   }
@@ -93,11 +93,11 @@ export function AgentHandoffsView({ runId }: { runId: string }) {
           <thead>
             <tr className="border-b border-slate-200 text-xs text-slate-500">
               <th className="pb-2 pr-3 font-medium">ID</th>
-              <th className="pb-2 pr-3 font-medium">From Agent</th>
-              <th className="pb-2 pr-3 font-medium">To Agent</th>
-              <th className="pb-2 pr-3 font-medium">Status</th>
-              <th className="pb-2 pr-3 font-medium">Summary</th>
-              <th className="pb-2 pr-3 font-medium">Actions</th>
+              <th className="pb-2 pr-3 font-medium">来源 Agent</th>
+              <th className="pb-2 pr-3 font-medium">目标 Agent</th>
+              <th className="pb-2 pr-3 font-medium">状态</th>
+              <th className="pb-2 pr-3 font-medium">摘要</th>
+              <th className="pb-2 pr-3 font-medium">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -123,7 +123,7 @@ export function AgentHandoffsView({ runId }: { runId: string }) {
                       className="text-red-600 hover:text-red-700"
                     >
                       <XCircle className="mr-1 h-3 w-3" />
-                      Cancel
+                      取消
                     </Button>
                   ) : null}
                 </td>
@@ -138,7 +138,7 @@ export function AgentHandoffsView({ runId }: { runId: string }) {
           <DialogHeader>
             <DialogTitle>确认取消 Handoff</DialogTitle>
             <DialogDescription>
-              取消 handoff {cancelTarget?.handoffId?.slice(0, 8)} ({cancelTarget?.fromAgentId?.slice(0, 12)} → {cancelTarget?.toAgentId?.slice(0, 12)})？
+              取消 Handoff {cancelTarget?.handoffId?.slice(0, 8)} ({cancelTarget?.fromAgentId?.slice(0, 12)} → {cancelTarget?.toAgentId?.slice(0, 12)})？
               此操作不可撤销。
             </DialogDescription>
           </DialogHeader>

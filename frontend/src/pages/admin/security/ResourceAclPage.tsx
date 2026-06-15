@@ -130,7 +130,7 @@ export function ResourceAclPage() {
       const result = await dryRunImportAclRules(parsed);
       setDryRunResult(result);
     } catch (error) {
-      toast.error(getErrorMessage(error, "Dry-run 失败"));
+      toast.error(getErrorMessage(error, "试运行失败"));
       console.error(error);
     }
   };
@@ -174,8 +174,8 @@ export function ResourceAclPage() {
             <SelectTrigger className="w-[100px]"><SelectValue placeholder="效果" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部</SelectItem>
-              <SelectItem value="allow">Allow</SelectItem>
-              <SelectItem value="deny">Deny</SelectItem>
+              <SelectItem value="allow">允许</SelectItem>
+              <SelectItem value="deny">拒绝</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={() => setImportOpen(true)}>批量导入</Button>
@@ -247,7 +247,7 @@ export function ResourceAclPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Scope</label>
+                <label className="text-sm font-medium">作用域</label>
               <Input value={form.scope} onChange={(e) => setForm((prev) => ({ ...prev, scope: e.target.value }))} placeholder="作用域" />
             </div>
             <div className="space-y-2">
@@ -264,8 +264,8 @@ export function ResourceAclPage() {
                 <Select value={form.effect} onValueChange={(v) => setForm((prev) => ({ ...prev, effect: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="allow">Allow</SelectItem>
-                    <SelectItem value="deny">Deny</SelectItem>
+                    <SelectItem value="allow">允许</SelectItem>
+                    <SelectItem value="deny">拒绝</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -295,14 +295,14 @@ export function ResourceAclPage() {
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>批量导入 ACL 规则</DialogTitle>
-            <DialogDescription>先执行 Dry-run 检查，确认后再导入</DialogDescription>
+            <DialogDescription>先执行试运行检查，确认后再导入</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
               <label className="text-sm font-medium">导入内容 (JSON)</label>
               <Textarea value={importJson} onChange={(e) => setImportJson(e.target.value)} rows={8} className="font-mono text-sm" placeholder="请粘贴 ACL 规则 JSON" />
             </div>
-            <Button variant="outline" onClick={handleDryRunImport}>Dry-run 预检</Button>
+            <Button variant="outline" onClick={handleDryRunImport}>试运行预检</Button>
             {dryRunResult && (
               <div className="p-3 bg-slate-50 rounded-lg text-sm space-y-1">
                 <div>新增: <span className="font-medium">{dryRunResult.added ?? 0}</span></div>

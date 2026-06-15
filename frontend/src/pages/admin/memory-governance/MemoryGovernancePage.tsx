@@ -37,12 +37,12 @@ export function MemoryGovernancePage() {
 
       <Tabs defaultValue="review">
         <TabsList>
-          <TabsTrigger value="review">Review 队列</TabsTrigger>
+          <TabsTrigger value="review">审核队列</TabsTrigger>
           <TabsTrigger value="conflicts">冲突处理</TabsTrigger>
           <TabsTrigger value="quality">质量快照</TabsTrigger>
           <TabsTrigger value="maintenance">维护任务</TabsTrigger>
           <TabsTrigger value="traces">Trace</TabsTrigger>
-          <TabsTrigger value="recall">Recall 评测</TabsTrigger>
+          <TabsTrigger value="recall">召回评测</TabsTrigger>
           <TabsTrigger value="policy">策略配置</TabsTrigger>
           <TabsTrigger value="operations">运维视图</TabsTrigger>
         </TabsList>

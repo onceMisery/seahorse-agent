@@ -79,11 +79,11 @@ export function AgentRolloutPage() {
       {/* Query params */}
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <label className="mb-1 block text-xs text-slate-500">Version ID</label>
+          <label className="mb-1 block text-xs text-slate-500">版本 ID</label>
           <Input value={versionId} onChange={(e) => setVersionId(e.target.value)} placeholder="版本 ID" className="w-[240px]" />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-slate-500">Tenant ID</label>
+          <label className="mb-1 block text-xs text-slate-500">租户 ID</label>
           <Input value={tenantId} onChange={(e) => setTenantId(e.target.value)} placeholder="租户 ID" className="w-[200px]" />
         </div>
         <Button variant="outline" onClick={fetchRollout} disabled={loading || !versionId || !tenantId}>
@@ -104,7 +104,7 @@ export function AgentRolloutPage() {
                   <div className="font-medium">{rollout.status ?? "-"}</div>
                 </div>
                 <div>
-                  <span className="text-xs text-slate-500">Canary</span>
+                  <span className="text-xs text-slate-500">灰度比例</span>
                   <div className="font-medium">{rollout.canaryPercent ?? 0}%</div>
                 </div>
                 <div>

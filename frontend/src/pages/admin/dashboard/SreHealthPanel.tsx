@@ -44,7 +44,7 @@ export function SreHealthPanel() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium text-slate-700">SRE Health</h3>
+          <h3 className="text-sm font-medium text-slate-700">SRE 健康</h3>
           {overallConfig && (
             <Badge variant="outline" className={`${overallConfig.color} border-current`}>
               {overallConfig.label}

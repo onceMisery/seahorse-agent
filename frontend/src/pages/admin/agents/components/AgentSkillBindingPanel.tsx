@@ -111,7 +111,7 @@ export function AgentSkillBindingPanel({ agentId, onSnapshotChange }: Props) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-base font-semibold text-slate-900">Skill 绑定</h2>
-            <p className="text-sm text-slate-500">选择随 Agent 版本发布的 Skill revision。</p>
+            <p className="text-sm text-slate-500">选择随 Agent 版本发布的 Skill 修订版。</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={refresh} disabled={loading}>

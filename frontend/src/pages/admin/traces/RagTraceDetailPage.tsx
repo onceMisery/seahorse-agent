@@ -414,7 +414,7 @@ function RunOverview({
           />
           <InsightCard
             icon={Gauge}
-            label="Top-level 累计"
+            label="顶层累计"
             value={formatDuration(topLevelDuration)}
             detail="根级阶段耗时之和，用于快速判断主流程分布"
           />
@@ -434,11 +434,11 @@ function RunOverview({
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div>
-                <p className="mb-1 text-xs text-slate-500">Input</p>
+                <p className="mb-1 text-xs text-slate-500">输入</p>
                 <CodeBlock value={runInput(runExtra)} empty="暂无运行输入，可在 trace extra_data 中写入 input/prompt/query 字段。" />
               </div>
               <div>
-                <p className="mb-1 text-xs text-slate-500">Output</p>
+                <p className="mb-1 text-xs text-slate-500">输出</p>
                 <CodeBlock value={runOutput(runExtra)} empty="暂无运行输出，可在 trace extra_data 中写入 output/answer/response 字段。" />
               </div>
             </div>
@@ -452,7 +452,7 @@ function RunOverview({
               </div>
               <div className="space-y-2">
                 <KeyValue label="入口方法" value={run.entryMethod} mono />
-                <KeyValue label="模型 / Provider" value={model || "-"} />
+                <KeyValue label="模型 / 供应商" value={model || "-"} />
               </div>
             </div>
 
@@ -561,11 +561,11 @@ function SpanDetailPanel({ node }: { node?: EnrichedNode }) {
           </h3>
           <div className="space-y-3">
             <div>
-              <p className="mb-1 text-xs text-slate-500">Input</p>
+              <p className="mb-1 text-xs text-slate-500">输入</p>
               <CodeBlock value={input} empty="暂无节点输入" />
             </div>
             <div>
-              <p className="mb-1 text-xs text-slate-500">Output</p>
+              <p className="mb-1 text-xs text-slate-500">输出</p>
               <CodeBlock value={output} empty="暂无节点输出" />
             </div>
           </div>
@@ -615,12 +615,12 @@ function SpanDetailPanel({ node }: { node?: EnrichedNode }) {
             属性
           </h3>
           <div className="grid gap-2">
-            <KeyValue label="Node ID" value={node.nodeId} mono />
-            <KeyValue label="Parent" value={node.parentNodeId || "-"} mono />
-            <KeyValue label="Class" value={node.className || "-"} mono />
-            <KeyValue label="Method" value={node.methodName || "-"} mono />
-            <KeyValue label="Start / End" value={`${formatDateTime(node.startTime)} -> ${formatDateTime(node.endTime)}`} mono />
-            <KeyValue label="Offset / Depth" value={`${formatDuration(node.offsetMs)} / ${node.depthValue}`} mono />
+            <KeyValue label="节点 ID" value={node.nodeId} mono />
+            <KeyValue label="父节点" value={node.parentNodeId || "-"} mono />
+            <KeyValue label="类" value={node.className || "-"} mono />
+            <KeyValue label="方法" value={node.methodName || "-"} mono />
+            <KeyValue label="开始 / 结束" value={`${formatDateTime(node.startTime)} -> ${formatDateTime(node.endTime)}`} mono />
+            <KeyValue label="偏移 / 深度" value={`${formatDuration(node.offsetMs)} / ${node.depthValue}`} mono />
           </div>
         </section>
 
@@ -884,7 +884,7 @@ export function RagTraceDetailPage() {
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base text-slate-900">
                 <GitBranch className="h-4 w-4 text-blue-600" />
-                Span Waterfall
+                Span 瀑布图
               </CardTitle>
               <span className="font-mono text-xs text-slate-500">窗口 {formatDuration(timeline.totalWindowMs)}</span>
             </div>

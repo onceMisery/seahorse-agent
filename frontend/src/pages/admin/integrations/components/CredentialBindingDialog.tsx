@@ -53,7 +53,7 @@ export function CredentialBindingDialog({ open, onOpenChange, connectorId, opera
         <AlertDialogHeader>
           <AlertDialogTitle>凭据绑定</AlertDialogTitle>
           <AlertDialogDescription>
-            为 Operation {operation?.operationName || operation?.operationId} 绑定凭据
+            为操作 {operation?.operationName || operation?.operationId} 绑定凭据
           </AlertDialogDescription>
         </AlertDialogHeader>
 

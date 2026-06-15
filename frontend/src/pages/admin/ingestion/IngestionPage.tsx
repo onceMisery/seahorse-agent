@@ -51,24 +51,24 @@ const PIPELINE_PAGE_SIZE = 10;
 const TASK_PAGE_SIZE = 10;
 
 const STATUS_OPTIONS = [
-  { value: "pending", label: "pending" },
-  { value: "running", label: "running" },
-  { value: "completed", label: "completed" },
-  { value: "failed", label: "failed" }
+  { value: "pending", label: "待处理" },
+  { value: "running", label: "运行中" },
+  { value: "completed", label: "已完成" },
+  { value: "failed", label: "失败" }
 ];
 
 const SOURCE_OPTIONS = [
-  { value: "file", label: "Local File" },
-  { value: "url", label: "Remote URL" },
-  { value: "feishu", label: "Feishu" },
+  { value: "file", label: "本地文件" },
+  { value: "url", label: "远程 URL" },
+  { value: "feishu", label: "飞书" },
   { value: "s3", label: "S3" }
 ];
 
 const NODE_TYPE_OPTIONS = [
-  { value: "fetcher", label: "fetcher" },
-  { value: "parser", label: "parser" },
-  { value: "enhancer", label: "enhancer" },
-  { value: "chunker", label: "chunker" },
+  { value: "fetcher", label: "抓取器" },
+  { value: "parser", label: "解析器" },
+  { value: "enhancer", label: "增强器" },
+  { value: "chunker", label: "分块器" },
   { value: "enricher", label: "enricher" },
   { value: "indexer", label: "indexer" }
 ];
@@ -1209,7 +1209,7 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
 
                     {node.nodeType === "fetcher" ? (
                       <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-                        Fetcher 无额外配置
+                        抓取器无额外配置
                       </div>
                     ) : null}
 
@@ -1262,7 +1262,7 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <label className="text-sm font-medium">Chunk Size</label>
+                          <label className="text-sm font-medium">分块大小</label>
                           <Input
                             type="number"
                             value={node.chunker.chunkSize}
@@ -1279,7 +1279,7 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
                           />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-sm font-medium">Overlap Size</label>
+                          <label className="text-sm font-medium">重叠大小</label>
                           <Input
                             type="number"
                             value={node.chunker.overlapSize}
@@ -1427,7 +1427,7 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
                                   </Select>
                                 </div>
                                 <div className="space-y-2">
-                                  <label className="text-sm font-medium">System Prompt</label>
+                                  <label className="text-sm font-medium">系统 Prompt</label>
                                   <Textarea
                                     rows={2}
                                     value={task.systemPrompt}
@@ -1454,7 +1454,7 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
                                   />
                                 </div>
                                 <div className="space-y-2">
-                                  <label className="text-sm font-medium">User Prompt 模板</label>
+                                  <label className="text-sm font-medium">用户 Prompt 模板</label>
                                   <Textarea
                                     rows={2}
                                     value={task.userPromptTemplate}
@@ -1631,7 +1631,7 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
                                   </Select>
                                 </div>
                                 <div className="space-y-2">
-                                  <label className="text-sm font-medium">System Prompt</label>
+                                  <label className="text-sm font-medium">系统 Prompt</label>
                                   <Textarea
                                     rows={2}
                                     value={task.systemPrompt}
@@ -1658,7 +1658,7 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
                                   />
                                 </div>
                                 <div className="space-y-2">
-                                  <label className="text-sm font-medium">User Prompt 模板</label>
+                                  <label className="text-sm font-medium">用户 Prompt 模板</label>
                                   <Textarea
                                     rows={2}
                                     value={task.userPromptTemplate}
@@ -1980,7 +1980,7 @@ function TaskDialog({ open, pipelineOptions, onOpenChange, onSubmit, onUpload }:
       <DialogContent className="max-h-[90vh] overflow-y-auto sidebar-scroll sm:max-w-[720px]">
         <DialogHeader>
           <DialogTitle>新建通道任务</DialogTitle>
-          <DialogDescription>支持 Local File / URL / Feishu / S3 来源，Local File 会直接上传文件</DialogDescription>
+          <DialogDescription>支持本地文件 / URL / 飞书 / S3 来源，本地文件会直接上传文件</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form className="space-y-4" onSubmit={form.handleSubmit(handleSubmit)}>
@@ -2273,19 +2273,19 @@ function TaskDetailDialog({ open, taskId, onOpenChange }: TaskDetailDialogProps)
                 <div className="flex items-center gap-2">
                   <Badge variant={statusBadgeVariant(task.status)}>{task.status || "-"}</Badge>
                   {task.errorMessage ? (
-                    <Badge variant="destructive">error</Badge>
+                    <Badge variant="destructive">错误</Badge>
                   ) : null}
                 </div>
-                <div className="text-sm text-muted-foreground">Pipeline: {task.pipelineId}</div>
+                <div className="text-sm text-muted-foreground">流水线：{task.pipelineId}</div>
                 <div className="text-sm text-muted-foreground">
-                  Source: {task.sourceType || "-"} {task.sourceFileName || task.sourceLocation || ""}
+                  来源：{task.sourceType || "-"} {task.sourceFileName || task.sourceLocation || ""}
                 </div>
-                <div className="text-sm text-muted-foreground">Chunks: {task.chunkCount ?? "-"}</div>
+                <div className="text-sm text-muted-foreground">分块数：{task.chunkCount ?? "-"}</div>
               </div>
               <div className="space-y-2 text-sm text-muted-foreground">
-                <div>Created: {formatDate(task.createTime)}</div>
-                <div>Started: {formatDate(task.startedAt)}</div>
-                <div>Completed: {formatDate(task.completedAt)}</div>
+                <div>创建：{formatDate(task.createTime)}</div>
+                <div>开始：{formatDate(task.startedAt)}</div>
+                <div>完成：{formatDate(task.completedAt)}</div>
               </div>
             </div>
 

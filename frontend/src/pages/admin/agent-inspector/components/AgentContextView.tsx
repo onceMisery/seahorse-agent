@@ -4,7 +4,7 @@ export function AgentContextView({ snapshot }: { snapshot: AgentRunSnapshot | nu
   if (!snapshot) {
     return (
       <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-        No snapshot loaded
+        暂未加载快照
       </div>
     );
   }
@@ -17,10 +17,10 @@ export function AgentContextView({ snapshot }: { snapshot: AgentRunSnapshot | nu
     <div className="space-y-4">
       <div>
         <h3 className="mb-2 text-sm font-medium text-slate-700">
-          Sources ({sources.length})
+          来源 ({sources.length})
         </h3>
         {sources.length === 0 ? (
-          <p className="text-sm text-slate-400">No sources</p>
+          <p className="text-sm text-slate-400">暂无来源</p>
         ) : (
           <div className="space-y-1.5">
             {sources.map((source) => (
@@ -39,7 +39,7 @@ export function AgentContextView({ snapshot }: { snapshot: AgentRunSnapshot | nu
                   ) : null}
                   {source.score != null ? (
                     <span className="ml-auto text-xs text-slate-400">
-                      score: {source.score.toFixed(3)}
+                      分数：{source.score.toFixed(3)}
                     </span>
                   ) : null}
                 </div>
@@ -54,10 +54,10 @@ export function AgentContextView({ snapshot }: { snapshot: AgentRunSnapshot | nu
 
       <div>
         <h3 className="mb-2 text-sm font-medium text-slate-700">
-          Artifacts ({artifacts.length})
+          产物 ({artifacts.length})
         </h3>
         {artifacts.length === 0 ? (
-          <p className="text-sm text-slate-400">No artifacts</p>
+          <p className="text-sm text-slate-400">暂无产物</p>
         ) : (
           <div className="space-y-1.5">
             {artifacts.map((artifact) => (
@@ -80,10 +80,10 @@ export function AgentContextView({ snapshot }: { snapshot: AgentRunSnapshot | nu
 
       <div>
         <h3 className="mb-2 text-sm font-medium text-slate-700">
-          Pending Approvals ({pendingApprovals.length})
+          待处理审批 ({pendingApprovals.length})
         </h3>
         {pendingApprovals.length === 0 ? (
-          <p className="text-sm text-slate-400">No pending approvals</p>
+          <p className="text-sm text-slate-400">暂无待处理审批</p>
         ) : (
           <pre className="max-h-[200px] overflow-auto rounded-lg border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">
             {JSON.stringify(pendingApprovals, null, 2)}

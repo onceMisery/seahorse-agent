@@ -25,7 +25,7 @@ export function AgentEventStream({ events }: { events: StreamEventEnvelope[] }) 
   if (events.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-        No events
+        暂无事件
       </div>
     );
   }
@@ -44,7 +44,7 @@ export function AgentEventStream({ events }: { events: StreamEventEnvelope[] }) 
                 {event.eventType}
               </span>
               {event.stepId ? (
-                <span className="text-xs text-slate-400">step: {event.stepId}</span>
+                <span className="text-xs text-slate-400">步骤：{event.stepId}</span>
               ) : null}
             </div>
             <div className="text-xs text-slate-400">{formatTimestamp(event.timestamp)}</div>
@@ -54,7 +54,7 @@ export function AgentEventStream({ events }: { events: StreamEventEnvelope[] }) 
             onClick={() => copyJson(event.typedPayload)}
             className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
           >
-            Copy JSON
+            复制 JSON
           </button>
         </div>
       ))}

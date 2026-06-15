@@ -41,7 +41,7 @@ export function ContextPackPage() {
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
-          <h1 className="admin-page-title">Context Pack 管理</h1>
+          <h1 className="admin-page-title">上下文包管理</h1>
           <p className="admin-page-subtitle">查看上下文包及其配置项</p>
         </div>
       </div>
@@ -70,7 +70,7 @@ export function ContextPackPage() {
                   <div className="font-medium">{pack.name ?? "-"}</div>
                 </div>
                 <div>
-                  <span className="text-xs text-slate-500">Tenant</span>
+                  <span className="text-xs text-slate-500">租户</span>
                   <div className="font-mono text-xs">{pack.tenantId ?? "-"}</div>
                 </div>
                 <div>
@@ -86,16 +86,16 @@ export function ContextPackPage() {
 
           <Card>
             <CardContent className="pt-6">
-              <h3 className="mb-3 text-sm font-medium">Items ({items.length})</h3>
+              <h3 className="mb-3 text-sm font-medium">配置项 ({items.length})</h3>
               {items.length === 0 ? (
                 <div className="py-4 text-center text-sm text-slate-500">暂无配置项</div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Key</TableHead>
-                      <TableHead>Value</TableHead>
-                      <TableHead>Type</TableHead>
+                      <TableHead>键</TableHead>
+                      <TableHead>值</TableHead>
+                      <TableHead>类型</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

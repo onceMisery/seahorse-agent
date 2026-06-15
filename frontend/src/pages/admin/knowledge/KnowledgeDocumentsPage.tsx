@@ -42,14 +42,14 @@ const PAGE_SIZE = 10;
 
 const STATUS_OPTIONS = [
   { value: "pending", label: "pending" },
-  { value: "running", label: "running" },
-  { value: "failed", label: "failed" },
-  { value: "success", label: "success" }
+  { value: "running", label: "运行中" },
+  { value: "failed", label: "失败" },
+  { value: "success", label: "成功" }
 ];
 
 const SOURCE_OPTIONS = [
-  { value: "file", label: "Local File" },
-  { value: "url", label: "Remote URL" }
+  { value: "file", label: "本地文件" },
+  { value: "url", label: "远程 URL" }
 ];
 
 const PROCESS_MODE_OPTIONS = [
@@ -105,8 +105,8 @@ const formatSize = (size?: number | null) => {
 
 const formatSourceLabel = (sourceType?: string | null) => {
   const normalized = sourceType?.toLowerCase();
-  if (normalized === "url") return "Remote URL";
-  if (normalized === "file") return "Local File";
+  if (normalized === "url") return "远程 URL";
+  if (normalized === "file") return "本地文件";
   return "-";
 };
 

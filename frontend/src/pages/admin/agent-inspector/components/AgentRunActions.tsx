@@ -22,9 +22,9 @@ import { Textarea } from "@/components/ui/textarea";
 type ActionType = "cancel" | "retry" | "resume";
 
 const ACTION_CONFIG: Record<ActionType, { label: string; icon: typeof XCircle; variant: "destructive" | "default"; description: string }> = {
-  cancel: { label: "Cancel", icon: XCircle, variant: "destructive", description: "取消运行中的 Agent Run？此操作不可撤销。" },
-  retry: { label: "Retry", icon: RotateCcw, variant: "default", description: "重试此 Agent Run？将从失败点重新开始。" },
-  resume: { label: "Resume", icon: Play, variant: "default", description: "恢复等待中的 Agent Run？" }
+  cancel: { label: "取消", icon: XCircle, variant: "destructive", description: "取消运行中的 Agent Run？此操作不可撤销。" },
+  retry: { label: "重试", icon: RotateCcw, variant: "default", description: "重试此 Agent Run？将从失败点重新开始。" },
+  resume: { label: "恢复", icon: Play, variant: "default", description: "恢复等待中的 Agent Run？" }
 };
 
 export function AgentRunActions({
@@ -51,15 +51,15 @@ export function AgentRunActions({
       switch (actionType) {
         case "cancel":
           await cancelAgentRun(runId);
-          toast.success("Run 已取消");
+          toast.success("运行已取消");
           break;
         case "retry":
           await retryAgentRunAction(runId);
-          toast.success("Run 已重试");
+          toast.success("运行已重试");
           break;
         case "resume":
           await resumeAgentRunAction(runId);
-          toast.success("Run 已恢复");
+          toast.success("运行已恢复");
           break;
       }
       setActionType(null);
@@ -80,19 +80,19 @@ export function AgentRunActions({
         {canCancel ? (
           <Button variant="outline" size="sm" onClick={() => setActionType("cancel")} className="text-red-600">
             <XCircle className="mr-1 h-3.5 w-3.5" />
-            Cancel
+            取消
           </Button>
         ) : null}
         {canRetry ? (
           <Button variant="outline" size="sm" onClick={() => setActionType("retry")}>
             <RotateCcw className="mr-1 h-3.5 w-3.5" />
-            Retry
+            重试
           </Button>
         ) : null}
         {canResume ? (
           <Button variant="outline" size="sm" onClick={() => setActionType("resume")}>
             <Play className="mr-1 h-3.5 w-3.5" />
-            Resume
+            恢复
           </Button>
         ) : null}
       </div>

@@ -123,7 +123,7 @@ export function SandboxPage() {
             ) : (
               <>
                 <div className="text-sm">
-                  <span className="text-slate-500">Session ID:</span> {session.sessionId}
+                  <span className="text-slate-500">会话 ID：</span> {session.sessionId}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">工具 ID（可选）</label>
@@ -170,7 +170,7 @@ export function SandboxPage() {
 
           {artifacts.length > 0 && (
             <Card>
-              <CardHeader><CardTitle>Artifacts</CardTitle></CardHeader>
+              <CardHeader><CardTitle>产物</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-2">
                   {artifacts.map((art) => (

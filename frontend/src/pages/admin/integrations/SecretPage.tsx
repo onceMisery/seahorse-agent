@@ -102,7 +102,7 @@ export function SecretPage() {
       <div className="admin-page-header">
         <div>
           <h1 className="admin-page-title">供应商凭据</h1>
-          <p className="admin-page-subtitle">为模型供应商、OpenAPI 连接器和工具调用保存租户级 Secret Ref</p>
+          <p className="admin-page-subtitle">为模型供应商、OpenAPI 连接器和工具调用保存租户级 Secret 引用</p>
         </div>
         <div className="admin-page-actions">
           <Button className="admin-primary-gradient" onClick={() => setCreateOpen(true)}>

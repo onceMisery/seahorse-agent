@@ -58,11 +58,11 @@ export function PilotReadinessPanel({ agentId }: { agentId: string }) {
 
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <label className="mb-1 block text-xs text-slate-500">Version ID</label>
+          <label className="mb-1 block text-xs text-slate-500">版本 ID</label>
           <Input value={versionId} onChange={(e) => setVersionId(e.target.value)} placeholder="版本 ID" className="w-[220px]" />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-slate-500">Tenant ID</label>
+          <label className="mb-1 block text-xs text-slate-500">租户 ID</label>
           <Input value={tenantId} onChange={(e) => setTenantId(e.target.value)} placeholder="租户 ID" className="w-[180px]" />
         </div>
         <Button variant="outline" size="sm" onClick={handleGenerate} disabled={generating || !versionId || !tenantId}>

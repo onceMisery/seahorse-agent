@@ -146,12 +146,12 @@ export function MemoryReviewQueue() {
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">加载中...</div>
           ) : items.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">暂无 Review 项目</div>
+            <div className="text-center py-8 text-muted-foreground">暂无审核项目</div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[80px]">Layer</TableHead>
+                  <TableHead className="w-[80px]">层级</TableHead>
                   <TableHead>内容</TableHead>
                   <TableHead className="w-[80px]">状态</TableHead>
                   <TableHead className="w-[160px]">操作</TableHead>

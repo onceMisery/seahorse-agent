@@ -136,7 +136,7 @@ export function AgentEditorPage() {
           <TabsTrigger value="model">模型</TabsTrigger>
           <TabsTrigger value="context">上下文</TabsTrigger>
           <TabsTrigger value="risk">风险</TabsTrigger>
-          <TabsTrigger value="skills">Skills</TabsTrigger>
+          <TabsTrigger value="skills">Skill</TabsTrigger>
         </TabsList>
 
         <TabsContent value="basic">
@@ -158,7 +158,7 @@ export function AgentEditorPage() {
           <Card>
             <CardContent className="pt-6">
               <div className="space-y-2">
-                <label className="text-sm font-medium">系统指令 (Instructions)</label>
+                <label className="text-sm font-medium">系统指令</label>
                 <Textarea value={form.instructions || ""} onChange={(event) => setForm((prev) => ({ ...prev, instructions: event.target.value }))} placeholder="请输入 Agent 的系统指令" rows={16} className="font-mono text-sm" />
               </div>
             </CardContent>

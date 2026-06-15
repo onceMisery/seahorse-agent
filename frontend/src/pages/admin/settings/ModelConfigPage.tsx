@@ -174,7 +174,7 @@ export function ModelConfigPage() {
           configValue: value,
           configType: "JSON",
           encrypted: false,
-          description: "Tenant model registry"
+          description: "租户模型注册表"
         });
       }
       toast.success("模型注册表已保存");
@@ -293,11 +293,11 @@ export function ModelConfigPage() {
                     <Input value={item.model} onChange={(event) => updateModel(index, { model: event.target.value })} placeholder="BAAI/bge-m3" />
                   </div>
                   <div className="space-y-2">
-                    <Label>Base URL</Label>
+                    <Label>基础 URL</Label>
                     <Input value={item.baseUrl} onChange={(event) => updateModel(index, { baseUrl: event.target.value })} placeholder="https://api.example.com/v1" />
                   </div>
                   <div className="space-y-2">
-                    <Label>Secret Ref</Label>
+                    <Label>Secret 引用</Label>
                     <Input value={item.secretRef} onChange={(event) => updateModel(index, { secretRef: event.target.value })} placeholder="secret_..." />
                   </div>
                   <div className="space-y-2">

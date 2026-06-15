@@ -422,7 +422,7 @@ export function SkillManagementPage() {
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editing ? "编辑 Skill" : "新建 Skill"}</DialogTitle>
-            <DialogDescription>保存 CUSTOM Skill 会创建新的不可变 revision。</DialogDescription>
+            <DialogDescription>保存 CUSTOM Skill 会创建新的不可变修订版。</DialogDescription>
           </DialogHeader>
           <Textarea className="min-h-[420px] font-mono text-sm" value={markdown} onChange={(event) => setMarkdown(event.target.value)} />
           <DialogFooter>
@@ -439,7 +439,7 @@ export function SkillManagementPage() {
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>安装 Skill</DialogTitle>
-            <DialogDescription>上传 SKILL.md 文件或粘贴内容，安装后将作为 CUSTOM Skill 可编辑管理。</DialogDescription>
+            <DialogDescription>上传 SKILL.md 文件或粘贴内容，安装后将作为 CUSTOM Skill 进行可编辑管理。</DialogDescription>
           </DialogHeader>
 
           {/* 模式切换 */}

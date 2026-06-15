@@ -39,8 +39,8 @@ export function MetadataReviewDetailDrawer({ open, onOpenChange, item, onAction 
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-[600px] overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>Review 详情</SheetTitle>
-          <SheetDescription>查看和操作元数据 Review 项目</SheetDescription>
+          <SheetTitle>审核详情</SheetTitle>
+          <SheetDescription>查看和操作元数据审核项目</SheetDescription>
         </SheetHeader>
 
         <div className="mt-6 space-y-4">
@@ -54,14 +54,14 @@ export function MetadataReviewDetailDrawer({ open, onOpenChange, item, onAction 
           </div>
 
           <div className="flex flex-wrap gap-2 pt-2 border-t">
-            <Button variant="outline" size="sm" onClick={() => onAction("approve")}>Approve</Button>
-            <Button variant="outline" size="sm" className="text-destructive" onClick={() => onAction("reject")}>Reject</Button>
-            <Button variant="outline" size="sm" onClick={() => onAction("re-extract")}>Re-extract</Button>
-            <Button variant="outline" size="sm" onClick={() => onAction("ignore-field")}>Ignore Field</Button>
+            <Button variant="outline" size="sm" onClick={() => onAction("approve")}>通过</Button>
+            <Button variant="outline" size="sm" className="text-destructive" onClick={() => onAction("reject")}>拒绝</Button>
+            <Button variant="outline" size="sm" onClick={() => onAction("re-extract")}>重新抽取</Button>
+            <Button variant="outline" size="sm" onClick={() => onAction("ignore-field")}>忽略字段</Button>
           </div>
 
           <div className="space-y-2 pt-2 border-t">
-            <h4 className="text-sm font-medium">Correct 修正</h4>
+            <h4 className="text-sm font-medium">修正</h4>
             <Input value={correctFieldKey} onChange={(e) => setCorrectFieldKey(e.target.value)} placeholder="字段 Key" />
             <Textarea value={correctValue} onChange={(e) => setCorrectValue(e.target.value)} placeholder="修正后的值" rows={3} />
             <Button size="sm" onClick={handleCorrect}>提交修正</Button>

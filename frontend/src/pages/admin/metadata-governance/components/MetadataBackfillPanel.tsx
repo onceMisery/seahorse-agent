@@ -29,7 +29,7 @@ export function MetadataBackfillPanel() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          <span>Backfill 任务</span>
+          <span>回填任务</span>
           <div className="flex items-center gap-2">
             <Select value={selectedKbId} onValueChange={setSelectedKbId}>
               <SelectTrigger className="w-[180px]"><SelectValue placeholder="选择知识库" /></SelectTrigger>
@@ -45,14 +45,14 @@ export function MetadataBackfillPanel() {
       </CardHeader>
       <CardContent>
         <div className="text-center py-8 text-muted-foreground">
-          <p>Backfill 任务管理</p>
-          <p className="text-sm mt-1">创建、运行、暂停、恢复、取消 backfill 任务</p>
+          <p>回填任务管理</p>
+          <p className="text-sm mt-1">创建、运行、暂停、恢复、取消回填任务</p>
         </div>
       </CardContent>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-[420px]">
-          <DialogHeader><DialogTitle>创建 Backfill 任务</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>创建回填任务</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
               <label className="text-sm font-medium">任务名称</label>
@@ -61,7 +61,7 @@ export function MetadataBackfillPanel() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>取消</Button>
-            <Button className="admin-primary-gradient" onClick={() => { toast.info("Backfill 任务创建功能待后端 API 接入"); setCreateOpen(false); }}>创建</Button>
+            <Button className="admin-primary-gradient" onClick={() => { toast.info("回填任务创建功能待后端 API 接入"); setCreateOpen(false); }}>创建</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -53,12 +53,12 @@ export function AgentStepsView({ runId }: { runId: string }) {
         if (stepsResult.status === "fulfilled") {
           setSteps(Array.isArray(stepsResult.value) ? stepsResult.value : []);
         } else {
-          toast.error(getErrorMessage(stepsResult.reason, "Failed to load steps"));
+          toast.error(getErrorMessage(stepsResult.reason, "加载步骤失败"));
           setSteps([]);
         }
       })
       .catch((error) => {
-        if (!cancelled) toast.error(getErrorMessage(error, "Failed to load steps"));
+        if (!cancelled) toast.error(getErrorMessage(error, "加载步骤失败"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -80,7 +80,7 @@ export function AgentStepsView({ runId }: { runId: string }) {
   if (steps.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-        No steps
+        暂无步骤
       </div>
     );
   }
@@ -97,10 +97,10 @@ export function AgentStepsView({ runId }: { runId: string }) {
           <thead>
             <tr className="border-b border-slate-200 text-xs text-slate-500">
               <th className="pb-2 pr-3 font-medium">#</th>
-              <th className="pb-2 pr-3 font-medium">Type</th>
-              <th className="pb-2 pr-3 font-medium">Status</th>
-              <th className="pb-2 pr-3 font-medium">Summary</th>
-              <th className="pb-2 pr-3 font-medium">Duration</th>
+              <th className="pb-2 pr-3 font-medium">类型</th>
+              <th className="pb-2 pr-3 font-medium">状态</th>
+              <th className="pb-2 pr-3 font-medium">摘要</th>
+              <th className="pb-2 pr-3 font-medium">耗时</th>
             </tr>
           </thead>
           <tbody>

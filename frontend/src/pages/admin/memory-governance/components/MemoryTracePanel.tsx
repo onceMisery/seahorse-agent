@@ -44,7 +44,7 @@ export function MemoryTracePanel() {
   return (
     <>
       <div className="flex items-center gap-2 mb-4">
-        <Input value={memoryIdFilter} onChange={(e) => setMemoryIdFilter(e.target.value)} placeholder="Memory ID" className="w-[180px]" />
+        <Input value={memoryIdFilter} onChange={(e) => setMemoryIdFilter(e.target.value)} placeholder="记忆 ID" className="w-[180px]" />
         <Input value={runIdFilter} onChange={(e) => setRunIdFilter(e.target.value)} placeholder="Run ID" className="w-[180px]" />
         <Button variant="outline" size="sm" onClick={() => { setPageNo(1); loadTraces(); }}>
           <Search className="w-4 h-4 mr-1" />搜索
@@ -64,7 +64,7 @@ export function MemoryTracePanel() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Memory ID</TableHead>
+                  <TableHead>记忆 ID</TableHead>
                   <TableHead>Run ID</TableHead>
                   <TableHead>操作</TableHead>
                   <TableHead>详情</TableHead>

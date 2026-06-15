@@ -52,7 +52,7 @@ export function QuotaPolicyPage() {
     const tenantId = createForm.tenantId.trim();
     const subjectId = createForm.subjectId.trim() || (createForm.scope === "TENANT" ? tenantId : "");
     if (!createForm.policyId.trim() || !tenantId || !subjectId) {
-      toast.error("请填写策略 ID、租户 ID 和 Subject ID");
+      toast.error("请填写策略 ID、租户 ID 和主体 ID");
       return;
     }
     try {
@@ -140,19 +140,19 @@ export function QuotaPolicyPage() {
                 <Input value={simForm.agentId} onChange={(e) => setSimForm((p) => ({ ...p, agentId: e.target.value }))} placeholder="agent-id" />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Tool ID</label>
+                <label className="text-sm font-medium">工具 ID</label>
                 <Input value={simForm.toolId} onChange={(e) => setSimForm((p) => ({ ...p, toolId: e.target.value }))} placeholder="tool-id" />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Tokens</label>
+                <label className="text-sm font-medium">Token 数</label>
                 <Input value={simForm.tokens} onChange={(e) => setSimForm((p) => ({ ...p, tokens: e.target.value }))} type="number" />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Calls</label>
+                <label className="text-sm font-medium">调用次数</label>
                 <Input value={simForm.calls} onChange={(e) => setSimForm((p) => ({ ...p, calls: e.target.value }))} type="number" />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Cost</label>
+                <label className="text-sm font-medium">成本</label>
                 <Input value={simForm.cost} onChange={(e) => setSimForm((p) => ({ ...p, cost: e.target.value }))} type="number" />
               </div>
             </div>
@@ -191,8 +191,8 @@ export function QuotaPolicyPage() {
                 <Input value={createForm.tenantId} onChange={(e) => setCreateForm((p) => ({ ...p, tenantId: e.target.value }))} placeholder="tenant-id" />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Subject ID</label>
-                <Input value={createForm.subjectId} onChange={(e) => setCreateForm((p) => ({ ...p, subjectId: e.target.value }))} placeholder="agent/user id" />
+                <label className="text-sm font-medium">主体 ID</label>
+                <Input value={createForm.subjectId} onChange={(e) => setCreateForm((p) => ({ ...p, subjectId: e.target.value }))} placeholder="Agent / 用户 ID" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Token 限额</label>
@@ -236,7 +236,7 @@ export function QuotaPolicyPage() {
                 <Input value={createForm.tenantId} onChange={(e) => setCreateForm((p) => ({ ...p, tenantId: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Subject ID</label>
+                <label className="text-sm font-medium">主体 ID</label>
                 <Input value={createForm.subjectId} onChange={(e) => setCreateForm((p) => ({ ...p, subjectId: e.target.value }))} />
               </div>
             </div>
