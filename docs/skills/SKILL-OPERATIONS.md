@@ -189,12 +189,12 @@ version-bound skill > per-turn selected skill
 
 ```bash
 # 禁用
-curl -X POST http://localhost:8080/api/skills/deep-research/disable \
+curl -X POST http://localhost:9090/api/skills/deep-research/disable \
   -H "Content-Type: application/json" \
   -d '{"tenantId": "default"}'
 
 # 启用
-curl -X POST http://localhost:8080/api/skills/deep-research/enable \
+curl -X POST http://localhost:9090/api/skills/deep-research/enable \
   -H "Content-Type: application/json" \
   -d '{"tenantId": "default"}'
 ```
@@ -203,10 +203,10 @@ curl -X POST http://localhost:8080/api/skills/deep-research/enable \
 
 ```bash
 # 查看历史
-curl http://localhost:8080/api/skills/custom/my-skill/history
+curl http://localhost:9090/api/skills/custom/my-skill/history
 
 # 回滚到指定 revision
-curl -X POST http://localhost:8080/api/skills/custom/my-skill/rollback \
+curl -X POST http://localhost:9090/api/skills/custom/my-skill/rollback \
   -H "Content-Type: application/json" \
   -d '{"tenantId": "default", "revisionId": "rev-xxx"}'
 ```
