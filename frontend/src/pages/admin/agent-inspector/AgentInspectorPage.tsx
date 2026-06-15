@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import * as Tabs from "@radix-ui/react-tabs";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -24,17 +24,21 @@ import { AgentArtifactsView } from "./components/AgentArtifactsView";
 import { AgentRunActions } from "./components/AgentRunActions";
 
 const TABS = [
-  { value: "events", label: "Events" },
-  { value: "state", label: "State" },
-  { value: "context", label: "Context" },
-  { value: "tools", label: "Tools" },
-  { value: "steps", label: "Steps" },
-  { value: "checkpoints", label: "Checkpoints" },
-  { value: "handoffs", label: "Handoffs" },
-  { value: "artifacts", label: "Artifacts" }
+  { value: "events", label: "事件" },
+  { value: "state", label: "状态" },
+  { value: "context", label: "上下文" },
+  { value: "tools", label: "工具" },
+  { value: "steps", label: "步骤" },
+  { value: "checkpoints", label: "检查点" },
+  { value: "handoffs", label: "交接" },
+  { value: "artifacts", label: "产物" }
 ] as const;
 
 type InspectorTab = (typeof TABS)[number]["value"];
+
+function toInspectorTab(value: string | null): InspectorTab | null {
+  return TABS.some((tab) => tab.value === value) ? (value as InspectorTab) : null;
+}
 
 function normalizeEventSeq(eventSeq: StreamEventEnvelope["eventSeq"]): number | null {
   if (typeof eventSeq === "string" && !/^\d+$/.test(eventSeq)) {
@@ -60,9 +64,11 @@ function normalizeReplayEvents(events: StreamEventEnvelope[]): StreamEventEnvelo
 
 export function AgentInspectorPage() {
   const { runId: routeRunId } = useParams<{ runId?: string }>();
+  const [searchParams] = useSearchParams();
+  const queryTab = toInspectorTab(searchParams.get("tab"));
   const [inputRunId, setInputRunId] = useState(routeRunId ?? "");
   const [activeRunId, setActiveRunId] = useState(routeRunId ?? "");
-  const [activeTab, setActiveTab] = useState<InspectorTab>("events");
+  const [activeTab, setActiveTab] = useState<InspectorTab>(queryTab ?? "events");
   const [loading, setLoading] = useState(false);
   const [snapshot, setSnapshot] = useState<AgentRunSnapshot | null>(null);
   const [costSummary, setCostSummary] = useState<AgentRunCostSummary | null>(null);
@@ -74,6 +80,12 @@ export function AgentInspectorPage() {
       setActiveRunId(routeRunId);
     }
   }, [routeRunId]);
+
+  useEffect(() => {
+    if (queryTab) {
+      setActiveTab(queryTab);
+    }
+  }, [queryTab]);
 
   useEffect(() => {
     if (!activeRunId) return;
@@ -92,7 +104,7 @@ export function AgentInspectorPage() {
       })
       .catch((error) => {
         if (cancelled) return;
-        toast.error(getErrorMessage(error, "Failed to load run data"));
+        toast.error(getErrorMessage(error, "加载运行数据失败"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -112,9 +124,9 @@ export function AgentInspectorPage() {
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
-          <h1 className="admin-page-title">Agent Inspector</h1>
+          <h1 className="admin-page-title">Agent 检视器</h1>
           <p className="admin-page-subtitle">
-            Web inspector-style debug view for agent run events, state, context, and tool calls.
+            以 Web Inspector 风格查看 Agent Run 的事件、状态、上下文和工具调用。
           </p>
         </div>
       </div>
@@ -124,22 +136,22 @@ export function AgentInspectorPage() {
           value={inputRunId}
           onChange={(e) => setInputRunId(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleLoad()}
-          placeholder="Enter run ID..."
+          placeholder="输入 Run ID..."
           className="max-w-[480px]"
         />
         <Button onClick={handleLoad} disabled={loading || !inputRunId.trim()}>
           <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          Load
+          加载
         </Button>
       </div>
 
       {activeRunId ? (
         <div className="flex items-center justify-between">
           <div className="space-y-1 text-sm text-slate-500">
-            Inspecting: <span className="font-mono text-slate-700">{activeRunId}</span>
+            正在检视：<span className="font-mono text-slate-700">{activeRunId}</span>
             {costSummary ? (
               <span className="ml-4">
-                Tokens: {costSummary.totalTokens} · Calls: {costSummary.totalCalls} · Cost:{" "}
+                Token: {costSummary.totalTokens} · 调用：{costSummary.totalCalls} · 成本：{" "}
                 {costSummary.totalCost.toLocaleString("zh-CN", { minimumFractionDigits: 4 })}
               </span>
             ) : null}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Edit, RefreshCw } from "lucide-react";
+import { ArrowLeft, Edit, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { getAdvancedFeatureState, ADVANCED_ADMIN_FEATURES } from "@/config/produ
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
 import {
   getAgent,
+  getAgentVersion,
   getLatestPublishChecks,
   validateAgent,
   type AgentDefinition,
@@ -22,6 +23,9 @@ import { AgentRollbackDialog } from "./components/AgentRollbackDialog";
 import { AgentToolBindingPanel } from "../tools/components/AgentToolBindingPanel";
 import { getErrorMessage } from "@/utils/error";
 import { getAgentSkillSnapshot } from "@/services/skillService";
+import { listAgentRuns } from "@/services/agentRunService";
+
+type RunRecord = Record<string, unknown>;
 
 export function AgentDetailPage() {
   const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT);
@@ -37,6 +41,11 @@ export function AgentDetailPage() {
   const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false);
   const [validating, setValidating] = useState(false);
   const [skillSetJson, setSkillSetJson] = useState("{}");
+  const [currentVersion, setCurrentVersion] = useState<AgentVersion | null>(null);
+  const [versionLoading, setVersionLoading] = useState(false);
+  const [versionError, setVersionError] = useState<string | null>(null);
+  const [recentRuns, setRecentRuns] = useState<RunRecord[]>([]);
+  const [runsLoading, setRunsLoading] = useState(false);
 
   const loadAgent = useCallback(async () => {
     if (!agentId) return;
@@ -79,19 +88,72 @@ export function AgentDetailPage() {
   }, [featureState.enabled, loadAgent, loadPublishChecks, loadSkillSnapshot]);
 
   useEffect(() => {
-    const currentVersion =
-      agent && (agent.currentVersionId || agent.latestPublishedVersionId)
+    const versionId = resolveCurrentVersionId(agent);
+    if (!agentId || !versionId) {
+      setCurrentVersion(null);
+      setVersionError(null);
+      return;
+    }
+    let cancelled = false;
+    setVersionLoading(true);
+    setVersionError(null);
+    getAgentVersion(agentId, versionId)
+      .then((version) => {
+        if (!cancelled) setCurrentVersion(version);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error(error);
+          setCurrentVersion(null);
+          setVersionError(getErrorMessage(error, "当前版本详情加载失败"));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setVersionLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agent, agentId]);
+
+  useEffect(() => {
+    if (!featureState.enabled || !agentId) return;
+    let cancelled = false;
+    setRunsLoading(true);
+    listAgentRuns({ agentId, current: 1, size: 5 })
+      .then((result) => {
+        if (!cancelled) setRecentRuns(result.records ?? []);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error(error);
+          setRecentRuns([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setRunsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, featureState.enabled]);
+
+  useEffect(() => {
+    const currentVersionRows =
+      agent && resolveCurrentVersionId(agent)
         ? [{
-            versionId: agent.currentVersionId || agent.latestPublishedVersionId,
-            versionNumber: agent.currentVersionNumber || agent.latestPublishedVersionNumber,
+            versionId: resolveCurrentVersionId(agent),
+            versionNumber: resolveCurrentVersionNumber(agent, currentVersion),
             agentId,
             status: agent.status,
             publishStatus: agent.latestPublishStatus,
-            createTime: agent.updateTime
+            publishedAt: currentVersion?.publishedAt,
+            createTime: currentVersion?.publishedAt || agent.updateTime,
+            changeSummary: currentVersion?.changeSummary
           }]
         : [];
-    setVersions(currentVersion);
-  }, [agent, agentId]);
+    setVersions(currentVersionRows);
+  }, [agent, agentId, currentVersion]);
 
   const handleValidate = async () => {
     if (!agentId) return;
@@ -140,6 +202,15 @@ export function AgentDetailPage() {
         return <Badge variant="outline">{status || "-"}</Badge>;
     }
   };
+
+  const currentVersionId = resolveCurrentVersionId(agent);
+  const currentVersionNumber = resolveCurrentVersionNumber(agent, currentVersion);
+  const versionInstructions = currentVersion?.instructions || agent?.instructions || "";
+  const versionToolIds = parseToolIds(currentVersion?.toolSetJson);
+  const versionLabel = formatVersionLabel(currentVersionNumber, currentVersionId, versionLoading);
+  const displayedToolCount = typeof agent?.toolCount === "number" && agent.toolCount > 0
+    ? agent.toolCount
+    : versionToolIds.length;
 
   if (!featureState.enabled) {
     return <FeatureUnavailableState featureState={featureState} featureName="Agent 管理" />;
@@ -204,7 +275,7 @@ export function AgentDetailPage() {
             </div>
             <div>
               <div className="text-xs text-slate-500">当前版本</div>
-              <div className="mt-1 font-medium">v{agent.currentVersionNumber ?? "-"}</div>
+              <div className="mt-1 font-medium">{versionLabel}</div>
             </div>
             <div>
               <div className="text-xs text-slate-500">风险等级</div>
@@ -212,7 +283,7 @@ export function AgentDetailPage() {
             </div>
             <div>
               <div className="text-xs text-slate-500">工具数量</div>
-              <div className="mt-1">{agent.toolCount ?? 0}</div>
+              <div className="mt-1">{versionLoading ? "..." : displayedToolCount}</div>
             </div>
           </div>
           {agent.description && (
@@ -229,6 +300,7 @@ export function AgentDetailPage() {
           <TabsTrigger value="instructions">指令内容</TabsTrigger>
           <TabsTrigger value="versions">版本历史</TabsTrigger>
           <TabsTrigger value="tools">工具绑定</TabsTrigger>
+          <TabsTrigger value="runs">运行记录</TabsTrigger>
           <TabsTrigger value="checks">发布检查</TabsTrigger>
           <TabsTrigger value="validation">校验结果</TabsTrigger>
         </TabsList>
@@ -237,12 +309,18 @@ export function AgentDetailPage() {
           <Card>
             <CardHeader><CardTitle>Agent 指令</CardTitle></CardHeader>
             <CardContent>
-              {agent.instructions ? (
+              {versionLoading ? (
+                <div className="text-center py-4 text-muted-foreground">正在加载当前版本指令...</div>
+              ) : versionInstructions ? (
                 <pre className="whitespace-pre-wrap text-sm bg-slate-50 p-4 rounded-lg overflow-auto max-h-[600px]">
-                  {agent.instructions}
+                  {versionInstructions}
                 </pre>
+              ) : versionError && currentVersionId ? (
+                <div className="text-center py-4 text-muted-foreground">
+                  当前版本 {currentVersionId} 的详情暂时不可用，请确认后端已启用版本详情接口。
+                </div>
               ) : (
-                <div className="text-center py-4 text-muted-foreground">暂无指令内容</div>
+                <div className="text-center py-4 text-muted-foreground">当前定义还没有发布版本指令，请编辑草稿后发布。</div>
               )}
             </CardContent>
           </Card>
@@ -280,11 +358,81 @@ export function AgentDetailPage() {
 
         <TabsContent value="tools">
           <Card>
-            <CardContent className="pt-6">
-              {agentId && agent.currentVersionId ? (
-                <AgentToolBindingPanel agentId={agentId} versionId={agent.currentVersionId} />
+            <CardContent className="space-y-4 pt-6">
+              {versionToolIds.length > 0 ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-sm font-medium text-slate-700">当前版本工具快照</div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {versionToolIds.map((toolId) => (
+                      <Badge key={toolId} variant="secondary" className="font-mono">
+                        {toolId}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ) : versionError && currentVersionId ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                  当前版本工具快照暂时不可用，请确认后端已启用版本详情接口。
+                </div>
+              ) : null}
+              {agentId && currentVersionId ? (
+                <AgentToolBindingPanel agentId={agentId} versionId={currentVersionId} />
               ) : (
-                <div className="text-center py-4 text-muted-foreground">暂无版本，无法绑定工具</div>
+                <div className="text-center py-4 text-muted-foreground">暂无发布版本，无法绑定工具</div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="runs">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>最近运行</span>
+                <Button variant="outline" size="sm" onClick={() => navigate(`/admin/agent-runs?agentId=${agentId}`)}>
+                  查看全部
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {runsLoading ? (
+                <div className="text-center py-4 text-muted-foreground">正在加载运行记录...</div>
+              ) : recentRuns.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground">暂无运行记录。Steps 属于单次运行，可在 Agent 检视器中查看。</div>
+              ) : (
+                <div className="space-y-2">
+                  {recentRuns.map((run) => {
+                    const runId = readString(run.runId);
+                    const status = readString(run.status);
+                    return (
+                      <div key={runId || JSON.stringify(run)} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-sm text-slate-700">{runId ? runId.slice(0, 16) : "-"}</span>
+                            {getRunStatusBadge(status)}
+                          </div>
+                          <div className="mt-1 truncate text-sm text-muted-foreground">
+                            {readString(run.inputSummary) || "无输入摘要"}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {formatTime(readString(run.startedAt))}
+                          </div>
+                        </div>
+                        {runId ? (
+                          <div className="flex shrink-0 gap-2">
+                            <Button variant="outline" size="sm" onClick={() => navigate(`/admin/agent-inspector/${runId}`)}>
+                              <Search className="mr-1 h-3 w-3" />
+                              检视
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/agent-inspector/${runId}?tab=steps`)}>
+                              查看 Steps
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -360,4 +508,63 @@ export function AgentDetailPage() {
       />
     </div>
   );
+}
+
+function resolveCurrentVersionId(agent?: AgentDefinition | null) {
+  return agent?.currentVersionId || agent?.latestPublishedVersionId || agent?.latestVersionId || "";
+}
+
+function resolveCurrentVersionNumber(agent?: AgentDefinition | null, version?: AgentVersion | null) {
+  return agent?.currentVersionNumber
+    ?? agent?.latestPublishedVersionNumber
+    ?? agent?.latestVersionNumber
+    ?? agent?.latestVersionNo
+    ?? version?.versionNumber
+    ?? version?.versionNo;
+}
+
+function formatVersionLabel(versionNumber?: number, versionId?: string, loading?: boolean) {
+  if (loading) return "加载中...";
+  if (typeof versionNumber === "number") return `v${versionNumber}`;
+  return versionId || "-";
+}
+
+function parseToolIds(toolSetJson?: string | null) {
+  if (!toolSetJson?.trim()) return [];
+  try {
+    const parsed = JSON.parse(toolSetJson);
+    const tools = Array.isArray(parsed) ? parsed : parsed?.tools;
+    if (!Array.isArray(tools)) return [];
+    return tools
+      .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      .map((item) => item.trim());
+  } catch {
+    return [];
+  }
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function getRunStatusBadge(status?: string) {
+  switch (status) {
+    case "RUNNING":
+    case "ACTIVE":
+      return <Badge className="bg-blue-100 text-blue-700">运行中</Badge>;
+    case "COMPLETED":
+      return <Badge className="bg-green-100 text-green-700">已完成</Badge>;
+    case "FAILED":
+    case "ERROR":
+      return <Badge variant="destructive">失败</Badge>;
+    case "WAITING":
+      return <Badge className="bg-amber-100 text-amber-700">等待中</Badge>;
+    case "CANCELLED":
+      return <Badge variant="secondary">已取消</Badge>;
+    case "PAUSED":
+    case "SUSPENDED":
+      return <Badge className="bg-slate-100 text-slate-600">已暂停</Badge>;
+    default:
+      return <Badge variant="outline">{status || "-"}</Badge>;
+  }
 }

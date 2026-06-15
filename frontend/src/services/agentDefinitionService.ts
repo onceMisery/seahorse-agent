@@ -9,6 +9,9 @@ export interface AgentDefinition {
   description?: string;
   tenantId?: string;
   status?: string;
+  latestVersionId?: string;
+  latestVersionNumber?: number;
+  latestVersionNo?: number;
   currentVersionId?: string;
   currentVersionNumber?: number;
   latestPublishedVersionId?: string;
@@ -27,8 +30,15 @@ export interface AgentDefinition {
 }
 
 export interface AgentDefinitionDraft {
+  agentId?: string;
+  tenantId?: string;
   name?: string;
   description?: string;
+  ownerUserId?: string;
+  ownerTeam?: string;
+  agentType?: string;
+  baseAgentId?: string;
+  riskLevel?: string;
   instructions?: string;
   modelStrategy?: Record<string, unknown>;
   contextStrategy?: Record<string, unknown>;
@@ -55,12 +65,20 @@ export interface AgentPublishCheckItem {
 export interface AgentVersion {
   versionId?: string;
   versionNumber?: number;
+  versionNo?: number;
   agentId?: string;
   status?: string;
   publishStatus?: string;
+  instructions?: string;
+  toolSetJson?: string;
+  modelConfigJson?: string;
+  memoryConfigJson?: string;
+  guardrailConfigJson?: string;
+  skillSetJson?: string;
   publishedAt?: string;
   publishedBy?: string;
   summary?: string;
+  changeSummary?: string;
   createTime?: string;
 }
 
@@ -97,6 +115,12 @@ export function listAgents(params: {
 
 export function getAgent(agentId: string) {
   return api.get<AgentDefinition>(`/api/agents/${encodeURIComponent(agentId)}`);
+}
+
+export function getAgentVersion(agentId: string, versionId: string) {
+  return api.get<AgentVersion, AgentVersion>(
+    `/api/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}`
+  );
 }
 
 export function createAgent(payload: AgentDefinitionDraft) {

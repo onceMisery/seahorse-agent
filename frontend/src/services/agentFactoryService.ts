@@ -4,10 +4,16 @@ import { api } from "@/services/api";
 
 export interface AgentTemplate {
   templateId?: string;
+  status?: string;
   name?: string;
   description?: string;
   category?: string;
+  agentType?: string;
+  riskCap?: string;
+  allowedToolIds?: string[];
+  baseInstructions?: string;
   instructions?: string;
+  guardrailConfigJson?: string;
   modelStrategy?: Record<string, unknown>;
   contextStrategy?: Record<string, unknown>;
   riskStrategy?: Record<string, unknown>;
@@ -30,6 +36,10 @@ export interface CreateFromTemplatePayload {
   name?: string;
   description?: string;
   tenantId?: string;
+  ownerTeam?: string;
+  requestedToolIds?: string[];
+  riskLevel?: string;
+  instructionsOverlay?: string;
 }
 
 // ── API 调用 ──
