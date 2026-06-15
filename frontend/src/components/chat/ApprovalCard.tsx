@@ -35,20 +35,20 @@ export function ApprovalCard({ approval }: ApprovalCardProps) {
     setStatus(nextStatus);
     try {
       if (action === "approve") {
-        await approveApprovalRequest(approval.id, "Reviewed from chat");
+        await approveApprovalRequest(approval.id, "已在聊天中审核");
       } else if (action === "reject") {
-        await rejectApprovalRequest(approval.id, "Rejected from chat");
+        await rejectApprovalRequest(approval.id, "已在聊天中拒绝");
       } else {
         await modifyApprovalRequest(
           approval.id,
           modifiedArguments.trim(),
-          "Modified and approved from chat"
+          "已在聊天中修改并通过"
         );
       }
-      toast.success(action === "reject" ? "Rejection submitted" : "Approval submitted");
+      toast.success(action === "reject" ? "已提交拒绝决定" : "已提交审批决定");
     } catch {
       setStatus(previousStatus);
-      toast.error("Approval action failed");
+      toast.error("审批操作失败");
     } finally {
       setLoading(null);
     }
@@ -91,7 +91,7 @@ export function ApprovalCard({ approval }: ApprovalCardProps) {
           ) : null}
           {approval.requestedBy ? (
             <p className="mt-1 text-[11px]" style={{ color: "var(--theme-text-muted)" }}>
-              Requested by {approval.requestedBy}
+              申请人：{approval.requestedBy}
             </p>
           ) : null}
           {pending ? (
@@ -99,11 +99,11 @@ export function ApprovalCard({ approval }: ApprovalCardProps) {
               value={modifiedArguments}
               onChange={(event) => setModifiedArguments(event.target.value)}
               className="mt-3 min-h-20 text-xs"
-              placeholder="Adjust the approved parameters before allowing"
+              placeholder="允许前可调整审批参数"
             />
           ) : (
             <p className="mt-2 text-xs" style={{ color: "var(--theme-text-muted)" }}>
-              {loading ? "Submitting decision..." : "Decision recorded"}
+              {loading ? "正在提交决定..." : "决定已记录"}
             </p>
           )}
         </div>
@@ -117,7 +117,7 @@ export function ApprovalCard({ approval }: ApprovalCardProps) {
           onClick={() => runAction("reject")}
         >
           <X className="h-3.5 w-3.5" />
-          Reject
+          拒绝
         </Button>
         <Button
           type="button"
@@ -127,7 +127,7 @@ export function ApprovalCard({ approval }: ApprovalCardProps) {
           onClick={() => runAction("modify")}
         >
           <Check className="h-3.5 w-3.5" />
-          Modify
+          修改
         </Button>
         <Button
           type="button"
@@ -136,7 +136,7 @@ export function ApprovalCard({ approval }: ApprovalCardProps) {
           onClick={() => runAction("approve")}
         >
           <Check className="h-3.5 w-3.5" />
-          Approve
+          通过
         </Button>
       </div>
     </div>

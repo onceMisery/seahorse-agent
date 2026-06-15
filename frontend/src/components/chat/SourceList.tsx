@@ -8,11 +8,11 @@ interface SourceListProps {
 }
 
 export const TRUST_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  HIGH: { bg: "var(--sh-trust-high-bg)", text: "var(--sh-trust-high)", label: "High trust" },
-  MEDIUM: { bg: "var(--sh-trust-medium-bg)", text: "var(--sh-trust-medium)", label: "Medium trust" },
-  LOW: { bg: "var(--sh-trust-low-bg)", text: "var(--sh-trust-low)", label: "Low trust" },
-  UNTRUSTED: { bg: "var(--sh-trust-untrusted-bg)", text: "var(--sh-trust-untrusted)", label: "Untrusted" },
-  UNKNOWN: { bg: "var(--sh-trust-unknown-bg)", text: "var(--sh-trust-unknown)", label: "Unknown" }
+  HIGH: { bg: "var(--sh-trust-high-bg)", text: "var(--sh-trust-high)", label: "高可信" },
+  MEDIUM: { bg: "var(--sh-trust-medium-bg)", text: "var(--sh-trust-medium)", label: "中可信" },
+  LOW: { bg: "var(--sh-trust-low-bg)", text: "var(--sh-trust-low)", label: "低可信" },
+  UNTRUSTED: { bg: "var(--sh-trust-untrusted-bg)", text: "var(--sh-trust-untrusted)", label: "不可信" },
+  UNKNOWN: { bg: "var(--sh-trust-unknown-bg)", text: "var(--sh-trust-unknown)", label: "未知" }
 };
 
 export function trustLevelFromSource(source: AgentSource): string {
@@ -33,7 +33,7 @@ export function SourceList({ sources }: SourceListProps) {
   return (
     <div className="space-y-2">
       <div className="text-xs font-semibold uppercase" style={{ color: "var(--theme-text-muted)" }}>
-        Sources ({sources.length})
+        来源 ({sources.length})
       </div>
       <div className="space-y-1.5">
         {sources.map((source, index) => {
@@ -86,7 +86,7 @@ export function SourceList({ sources }: SourceListProps) {
                       </span>
                     )}
                     {typeof source.score === "number" && (
-                      <span>Relevance {Math.round(source.score * 100)}%</span>
+                      <span>相关性 {Math.round(source.score * 100)}%</span>
                     )}
                   </div>
                   {source.url && (

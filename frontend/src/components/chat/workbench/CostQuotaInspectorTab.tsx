@@ -74,7 +74,7 @@ export function CostQuotaInspectorTab({
           </p>
           <div className="grid grid-cols-3 gap-2">
             <div>
-              <p className="text-[10px]" style={{ color: "var(--theme-text-muted)" }}>Tokens</p>
+              <p className="text-[10px]" style={{ color: "var(--theme-text-muted)" }}>Token</p>
               <p className="text-sm font-semibold" style={{ color: "var(--theme-text-primary)" }}>
                 {formatNumber(costSummary.totalTokens)}
               </p>

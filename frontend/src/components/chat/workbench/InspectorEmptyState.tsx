@@ -15,7 +15,7 @@ export function InspectorEmptyState() {
           选择一条带有运行信息的回复
         </p>
         <p className="mt-1 text-xs" style={{ color: "var(--theme-text-muted)" }}>
-          Artifact、来源、审批和成本会在这里集中查看。
+          产物、来源、审批和成本会在这里集中查看。
         </p>
       </div>
     </div>

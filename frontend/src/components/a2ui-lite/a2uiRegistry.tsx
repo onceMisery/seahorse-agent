@@ -214,7 +214,7 @@ export function renderNode(node: A2UILiteNode, onAction: (action: A2UILiteAction
     default:
       return (
         <div key={node.id} role="alert" className="text-xs" style={{ color: "var(--theme-text-muted)" }}>
-          Unsupported UI component: {node.type}
+          不支持的 UI 组件：{node.type}
         </div>
       );
   }

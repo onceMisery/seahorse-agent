@@ -12,15 +12,15 @@ interface StatusMeta {
 }
 
 const STATUS_MAP: Record<string, StatusMeta> = {
-  COMPLETED: { icon: CheckCircle, color: "#10b981", bg: "rgba(16,185,129,0.12)", label: "Completed" },
-  SUCCESS:   { icon: CheckCircle, color: "#10b981", bg: "rgba(16,185,129,0.12)", label: "Completed" },
-  FAILED:    { icon: AlertCircle, color: "#ef4444", bg: "rgba(239,68,68,0.12)", label: "Failed" },
-  ERROR:     { icon: AlertCircle, color: "#ef4444", bg: "rgba(239,68,68,0.12)", label: "Failed" },
-  RUNNING:   { icon: Loader2, color: "#3b82f6", bg: "rgba(59,130,246,0.12)", label: "Running" },
-  SKIPPED:   { icon: MinusCircle, color: "#94a3b8", bg: "rgba(148,163,184,0.14)", label: "Skipped" },
+  COMPLETED: { icon: CheckCircle, color: "#10b981", bg: "rgba(16,185,129,0.12)", label: "已完成" },
+  SUCCESS:   { icon: CheckCircle, color: "#10b981", bg: "rgba(16,185,129,0.12)", label: "已完成" },
+  FAILED:    { icon: AlertCircle, color: "#ef4444", bg: "rgba(239,68,68,0.12)", label: "失败" },
+  ERROR:     { icon: AlertCircle, color: "#ef4444", bg: "rgba(239,68,68,0.12)", label: "失败" },
+  RUNNING:   { icon: Loader2, color: "#3b82f6", bg: "rgba(59,130,246,0.12)", label: "运行中" },
+  SKIPPED:   { icon: MinusCircle, color: "#94a3b8", bg: "rgba(148,163,184,0.14)", label: "已跳过" },
 };
 
-const DEFAULT_STATUS: StatusMeta = { icon: Clock, color: "#f59e0b", bg: "rgba(245,158,11,0.12)", label: "Pending" };
+const DEFAULT_STATUS: StatusMeta = { icon: Clock, color: "#f59e0b", bg: "rgba(245,158,11,0.12)", label: "等待中" };
 
 function statusMeta(status?: string): StatusMeta {
   const key = status?.toUpperCase() ?? "";

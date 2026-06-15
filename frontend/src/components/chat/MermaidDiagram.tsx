@@ -63,7 +63,7 @@ export function MermaidDiagram({ code }: MermaidDiagramProps) {
       setCopied(true);
       copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
     } catch {
-      toast.error("Copy failed");
+      toast.error("复制失败");
     }
   };
 

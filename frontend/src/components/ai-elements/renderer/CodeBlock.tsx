@@ -31,7 +31,7 @@ export function CodeBlock({ code, language, editable = false, onChange }: CodeBl
       setCopied(true);
       copyTimerRef.current = window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      toast.error("Copy failed");
+      toast.error("复制失败");
     }
   };
 
@@ -66,12 +66,12 @@ export function CodeBlock({ code, language, editable = false, onChange }: CodeBl
               size="icon"
               className="h-7 w-7"
               onClick={() => setIsEditing((current) => !current)}
-              aria-label={isEditing ? "Preview code" : "Edit code"}
+              aria-label={isEditing ? "预览代码" : "编辑代码"}
             >
               {isEditing ? <Eye className="h-3.5 w-3.5" /> : <Edit className="h-3.5 w-3.5" />}
             </Button>
           ) : null}
-          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={copy} aria-label="Copy code">
+          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={copy} aria-label="复制代码">
             {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
           </Button>
         </div>

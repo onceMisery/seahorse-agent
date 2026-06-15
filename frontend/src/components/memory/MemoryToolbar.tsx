@@ -52,10 +52,10 @@ export function MemoryToolbar({
         }}
       >
         <option value="">全部类型</option>
-        <option value="PROFILE">Profile</option>
-        <option value="PREFERENCE">Preference</option>
-        <option value="PROJECT_CONTEXT">Project Context</option>
-        <option value="LONG_TERM_FACT">Long Term Fact</option>
+        <option value="PROFILE">用户画像</option>
+        <option value="PREFERENCE">偏好</option>
+        <option value="PROJECT_CONTEXT">项目上下文</option>
+        <option value="LONG_TERM_FACT">长期事实</option>
       </select>
 
       <select

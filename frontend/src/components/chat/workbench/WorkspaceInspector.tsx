@@ -107,28 +107,28 @@ export function WorkspaceInspector({ message, open, onClose }: WorkspaceInspecto
           style={{ borderBottom: "1px solid var(--sh-workbench-border)" }}
           aria-label="检查器标签"
         >
-          <InspectorTabButton value="timeline" label="Timeline" count={timelineCount}>
+          <InspectorTabButton value="timeline" label="时间线" count={timelineCount}>
             <Activity className="h-3.5 w-3.5" />
           </InspectorTabButton>
-          <InspectorTabButton value="artifacts" label="Artifacts" count={artifactCount}>
+          <InspectorTabButton value="artifacts" label="产物" count={artifactCount}>
             <Boxes className="h-3.5 w-3.5" />
           </InspectorTabButton>
-          <InspectorTabButton value="sources" label="Sources" count={sourceCount}>
+          <InspectorTabButton value="sources" label="来源" count={sourceCount}>
             <Globe className="h-3.5 w-3.5" />
           </InspectorTabButton>
-          <InspectorTabButton value="approvals" label="Approvals" count={approvalCount}>
+          <InspectorTabButton value="approvals" label="审批" count={approvalCount}>
             <CheckSquare className="h-3.5 w-3.5" />
           </InspectorTabButton>
-          <InspectorTabButton value="tools" label="Tool Calls" count={toolCallCount}>
+          <InspectorTabButton value="tools" label="工具调用" count={toolCallCount}>
             <Wrench className="h-3.5 w-3.5" />
           </InspectorTabButton>
-          <InspectorTabButton value="skills" label="Skills" count={skillCount}>
+          <InspectorTabButton value="skills" label="Skill" count={skillCount}>
             <Library className="h-3.5 w-3.5" />
           </InspectorTabButton>
-          <InspectorTabButton value="cost" label="Cost" count={hasCost ? 1 : 0}>
+          <InspectorTabButton value="cost" label="成本" count={hasCost ? 1 : 0}>
             <Coins className="h-3.5 w-3.5" />
           </InspectorTabButton>
-          <InspectorTabButton value="memory" label="Memory" count={memoryCount}>
+          <InspectorTabButton value="memory" label="记忆" count={memoryCount}>
             <Brain className="h-3.5 w-3.5" />
           </InspectorTabButton>
           <InspectorTabButton value="ui" label="UI">

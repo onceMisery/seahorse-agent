@@ -23,7 +23,7 @@ export function A2UILiteRenderer({ surface, onAction }: A2UILiteRendererProps) {
   if (surface.version !== "seahorse-a2ui-lite/v1") {
     return (
       <div role="alert" className="text-xs p-3" style={{ color: "var(--theme-text-muted)" }}>
-        Unsupported surface version: {String((surface as { version?: unknown }).version ?? "")}
+        不支持的界面版本：{String((surface as { version?: unknown }).version ?? "")}
       </div>
     );
   }

@@ -92,8 +92,8 @@ export function ArtifactSandbox({ artifact }: ArtifactSandboxProps) {
             onClick={handleCopy}
             className="flex h-7 w-7 items-center justify-center rounded transition-colors"
             style={{ color: "var(--theme-text-muted)" }}
-            aria-label="Copy artifact code"
-            title="Copy"
+            aria-label="复制产物代码"
+            title="复制"
           >
             {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
           </button>
@@ -112,8 +112,8 @@ export function ArtifactSandbox({ artifact }: ArtifactSandboxProps) {
             onClick={() => setExpanded((value) => !value)}
             className="flex h-7 w-7 items-center justify-center rounded transition-colors"
             style={{ color: "var(--theme-text-muted)" }}
-            aria-label={expanded ? "Collapse artifact preview" : "Expand artifact preview"}
-            title={expanded ? "Collapse" : "Expand"}
+            aria-label={expanded ? "收起产物预览" : "展开产物预览"}
+            title={expanded ? "收起" : "展开"}
           >
             {expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
           </button>

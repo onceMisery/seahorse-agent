@@ -43,7 +43,7 @@ function mergeArtifacts(artifacts: ArtifactBlock[], serverArtifacts: AgentArtifa
     if (!items.some((i) => i.id === sa.artifactId)) {
       items.push({
         id: sa.artifactId,
-        title: sa.title ?? "Artifact",
+        title: sa.title ?? "产物",
         code: sa.previewText ?? undefined,
         server: sa,
         isComplete: true,
@@ -131,7 +131,7 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
       setCopied(true);
       copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
     } catch {
-      toast.error("Copy failed");
+      toast.error("复制失败");
     }
   };
 
@@ -149,7 +149,7 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
         link.remove();
         URL.revokeObjectURL(href);
       } catch {
-        toast.error("Download failed");
+        toast.error("下载失败");
       }
       return;
     }
@@ -158,7 +158,7 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
     const href = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = href;
-    link.download = `${active.title || "artifact"}.txt`;
+    link.download = `${active.title || "产物"}.txt`;
     link.click();
     URL.revokeObjectURL(href);
   };
@@ -167,7 +167,7 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
     if (!active) return;
     if (!activeServerArtifact) {
       setEditing(false);
-      toast.success("Saved locally");
+      toast.success("已保存到本地");
       return;
     }
     setSaving(true);
@@ -187,9 +187,9 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
         [active.id]: updated.previewText ?? activeCode
       }));
       setEditing(false);
-      toast.success("Artifact saved");
+      toast.success("产物已保存");
     } catch {
-      toast.error("Save failed");
+      toast.error("保存失败");
     } finally {
       setSaving(false);
     }
@@ -236,7 +236,7 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
                   )}
                   {!item.isComplete && (
                     <span className="text-[10px] animate-pulse" style={{ color: "var(--sh-workbench-accent)" }}>
-                      streaming
+                      生成中
                     </span>
                   )}
                 </button>
@@ -263,7 +263,7 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
                     color: "var(--sh-workbench-accent)"
                   }}
                 >
-                  streaming
+                  生成中
                 </span>
               )}
             </div>
@@ -281,7 +281,7 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
               <button
                 type="button"
                 onClick={() => setEditing((current) => !current)}
-                aria-label={editing ? "Preview content" : "Edit content"}
+                aria-label={editing ? "预览内容" : "编辑内容"}
                 className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/10"
               >
                 <Edit3
@@ -294,7 +294,7 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
                   type="button"
                   onClick={handleSave}
                   disabled={saving}
-                  aria-label="Save content"
+                  aria-label="保存内容"
                   className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Save className="h-3.5 w-3.5" style={{ color: "var(--sh-workbench-accent)" }} />
@@ -353,14 +353,14 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
                     className="mb-2 text-[11px]"
                     style={{ color: "rgb(239,68,68)" }}
                   >
-                    JSON parse error: {a2uiParseError}
+                    JSON 解析错误：{a2uiParseError}
                   </p>
                 )}
                 <pre
                   className="text-xs font-mono whitespace-pre-wrap break-words leading-relaxed"
                   style={{ color: "var(--theme-text-primary)" }}
                 >
-                  {activeCode || "(No content)"}
+                  {activeCode || "（暂无内容）"}
                 </pre>
               </div>
             )}

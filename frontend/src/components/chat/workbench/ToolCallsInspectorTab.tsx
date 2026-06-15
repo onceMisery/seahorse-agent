@@ -30,7 +30,7 @@ function formatDuration(durationMs?: number): string | null {
 }
 
 function formatPreview(value?: string): string {
-  if (!value) return "No preview";
+  if (!value) return "暂无预览";
   try {
     return JSON.stringify(JSON.parse(value), null, 2);
   } catch {
@@ -101,7 +101,7 @@ export function ToolCallsInspectorTab({ toolCalls }: ToolCallsInspectorTabProps)
             ) : null}
             {toolCall.approvalId ? (
               <p className="mt-2 font-mono text-[10px]" style={{ color: "var(--theme-text-muted)" }}>
-                approval: {toolCall.approvalId}
+                审批：{toolCall.approvalId}
               </p>
             ) : null}
           </div>

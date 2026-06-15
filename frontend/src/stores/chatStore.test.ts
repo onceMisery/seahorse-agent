@@ -230,7 +230,7 @@ describe("chatStore snapshot hydration", () => {
 
     expect(streamStarts).toHaveLength(1);
     const url = new URL(streamStarts[0], "http://localhost");
-    expect(url.pathname).toMatch(/\/rag\/v3\/chat$/);
+    expect(url.pathname).toBe("/api/rag/v3/chat");
     expect(url.searchParams.get("taskTemplateId")).toBe("github-visual-project-intro");
     expect(url.searchParams.get("chatMode")).toBe("agent");
   });

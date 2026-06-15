@@ -280,7 +280,7 @@ export function LoginPage() {
                 <span className="text-xs font-mono">记住会话</span>
               </label>
               <span className="text-xs font-mono" style={{ color: "var(--theme-text-muted)" }}>
-                v1.0 · admin init
+                v1.0 · 管理员初始化
               </span>
             </div>
 

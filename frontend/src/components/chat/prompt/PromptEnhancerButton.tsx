@@ -11,7 +11,7 @@ export function PromptEnhancerButton({ disabled, onClick }: PromptEnhancerButton
       type="button"
       onClick={onClick}
       disabled={disabled}
-      aria-label="Improve prompt"
+      aria-label="优化提示词"
       title="整理问题"
       className="flex h-9 w-9 items-center justify-center rounded-xl transition-colors disabled:cursor-not-allowed disabled:opacity-60 hover:opacity-80"
       style={{

@@ -26,14 +26,14 @@ interface FeedbackButtonsProps {
 }
 
 const FEEDBACK_REASON_LABELS: Record<FeedbackReason, string> = {
-  INCORRECT: "Incorrect answer",
-  NO_CITATION: "Missing citations",
-  OUTDATED_SOURCE: "Outdated source",
-  TOO_SLOW: "Too slow",
-  FORMAT_BAD: "Poor format",
-  TASK_INCOMPLETE: "Incomplete task",
-  UNSAFE: "Unsafe response",
-  OTHER: "Other"
+  INCORRECT: "回答不正确",
+  NO_CITATION: "缺少引用",
+  OUTDATED_SOURCE: "来源过期",
+  TOO_SLOW: "响应太慢",
+  FORMAT_BAD: "格式不佳",
+  TASK_INCOMPLETE: "任务未完成",
+  UNSAFE: "响应不安全",
+  OTHER: "其他"
 };
 
 export function FeedbackButtons({
@@ -79,9 +79,9 @@ export function FeedbackButtons({
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(content);
-      toast.success("Copied");
+      toast.success("已复制");
     } catch {
-      toast.error("Copy failed");
+      toast.error("复制失败");
     }
   };
 
@@ -98,7 +98,7 @@ export function FeedbackButtons({
           variant="ghost"
           size="icon"
           onClick={handleCopy}
-          aria-label="Copy answer"
+          aria-label="复制回答"
           className="h-8 w-8 transition-colors"
           style={{ color: "var(--theme-text-muted)" }}
         >
@@ -108,7 +108,7 @@ export function FeedbackButtons({
           variant="ghost"
           size="icon"
           onClick={handleLike}
-          aria-label="Like answer"
+          aria-label="点赞回答"
           className="h-8 w-8 transition-colors"
           style={{ color: feedback === "like" ? "#10b981" : "var(--theme-text-muted)" }}
         >
@@ -118,7 +118,7 @@ export function FeedbackButtons({
           variant="ghost"
           size="icon"
           onClick={handleDislike}
-          aria-label="Dislike answer"
+          aria-label="点踩回答"
           className="h-8 w-8 transition-colors"
           style={{ color: feedback === "dislike" ? "#ef4444" : "var(--theme-text-muted)" }}
         >
@@ -128,15 +128,15 @@ export function FeedbackButtons({
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Tell us what went wrong</DialogTitle>
+            <DialogTitle>告诉我们哪里有问题</DialogTitle>
             <DialogDescription>
-              This feedback is saved with the message so evaluation can target real failures.
+              这条反馈会随消息保存，便于评测定位真实失败。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor={`feedback-reason-${messageId}`}>
-                Reason
+                原因
               </label>
               <Select value={reason} onValueChange={(next) => setReason(next as FeedbackReason)}>
                 <SelectTrigger id={`feedback-reason-${messageId}`}>
@@ -153,23 +153,23 @@ export function FeedbackButtons({
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor={`feedback-comment-${messageId}`}>
-                Comment
+                备注
               </label>
               <Textarea
                 id={`feedback-comment-${messageId}`}
                 value={comment}
                 onChange={(event) => setComment(event.target.value)}
-                placeholder="Optional detail"
+                placeholder="可选补充说明"
                 rows={4}
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDialogOpen(false)} disabled={submitting}>
-              Cancel
+              取消
             </Button>
             <Button onClick={handleDislikeSubmit} disabled={submitting}>
-              {submitting ? "Saving" : "Submit"}
+              {submitting ? "保存中" : "提交"}
             </Button>
           </DialogFooter>
         </DialogContent>

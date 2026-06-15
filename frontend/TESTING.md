@@ -4,19 +4,19 @@
 
 前端开发服务器通过 `vite.config.ts` 将 `/api` 请求代理到后端。
 
-默认 API 前缀为 `/api/seahorse-agent`，配置位置为 `frontend/.env`：
+默认 API 前缀为 `/api`，配置位置为 `frontend/.env`：
 
 ```env
-VITE_API_BASE_URL=/api/seahorse-agent
+VITE_API_BASE_URL=/api
 VITE_APP_NAME=Seahorse Agent
 ```
 
 ## 快速检查
 
-1. 启动后端服务，确认 Seahorse Agent API 可访问：
+1. 启动后端服务，直连确认 Seahorse Agent API 可访问：
 
 ```bash
-curl http://localhost:8080/api/seahorse-agent/knowledge-base
+curl http://localhost:9090/knowledge-base
 ```
 
 未登录时返回 401 属于正常现象，说明请求已经到达后端。
@@ -28,11 +28,17 @@ cd frontend
 npm run dev
 ```
 
+通过 Vite 代理检查同一个接口：
+
+```bash
+curl http://localhost:5173/api/knowledge-base
+```
+
 3. 打开浏览器访问 `http://localhost:5173`，登录后进入聊天页或管理后台。
 
 ## 常见问题
 
-- `No static resource /api/seahorse-agent/...`：通常是 Vite 代理未生效，重启前端开发服务器后再试。
+- `No static resource /api/...`：通常是 Vite 代理未生效，重启前端开发服务器后再试。
 - `401 Unauthorized`：未登录或 token 失效，重新登录即可。
 - 端口被占用：Vite 会自动尝试下一个端口，也可以按终端输出访问实际端口。
 
@@ -40,7 +46,7 @@ npm run dev
 
 | 前端请求 | 代理目标 | 后端实际路径 |
 | --- | --- | --- |
-| `/api/seahorse-agent/knowledge-base` | `http://localhost:8080/api/seahorse-agent/knowledge-base` | 由后端 `context-path` 处理 |
+| `/api/knowledge-base` | `http://localhost:9090/knowledge-base` | Vite 代理去掉 `/api` 前缀 |
 
 ## 管理员账号
 
