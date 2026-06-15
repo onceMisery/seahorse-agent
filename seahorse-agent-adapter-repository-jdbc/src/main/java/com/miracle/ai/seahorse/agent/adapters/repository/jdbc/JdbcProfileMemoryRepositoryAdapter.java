@@ -151,6 +151,31 @@ public class JdbcProfileMemoryRepositoryAdapter implements ProfileMemoryPort {
                 slotKey);
     }
 
+    @Override
+    public boolean disable(String userId, String tenantId, String slotKey, Instant disabledAt) {
+        if (!JdbcMemorySupport.hasText(userId) || !JdbcMemorySupport.hasText(slotKey)) {
+            return false;
+        }
+        Instant now = Instant.now();
+        int updated = jdbcTemplate.update("""
+                UPDATE t_user_profile_fact
+                SET status = 'DISABLED',
+                    valid_until = ?,
+                    update_time = ?
+                WHERE user_id = ?
+                  AND tenant_id = ?
+                  AND slot_key = ?
+                  AND status = 'ACTIVE'
+                  AND deleted = 0
+                """,
+                JdbcMemorySupport.timestamp(Objects.requireNonNullElse(disabledAt, now)),
+                JdbcMemorySupport.timestamp(now),
+                JdbcMemorySupport.toLongId(userId),
+                defaultTenant(tenantId),
+                slotKey);
+        return updated > 0;
+    }
+
     private ProfileFact mapFact(ResultSet rs, int rowNum) throws SQLException {
         return new ProfileFact(
                 rs.getString("id"),

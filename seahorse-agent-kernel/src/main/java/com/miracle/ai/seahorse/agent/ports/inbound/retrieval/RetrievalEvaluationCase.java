@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.retrieval;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 
@@ -35,21 +37,41 @@ import java.util.Objects;
  * @param options          样本级检索策略参数，缺省时使用命令级 options
  */
 public record RetrievalEvaluationCase(
-        String caseId,
-        String question,
-        List<String> expectedKbIds,
-        List<String> expectedDocIds,
-        List<String> expectedChunkIds,
-        RetrievalFilter filter,
-        RetrievalOptions options
+        @JsonProperty("caseId") String caseId,
+        @JsonProperty("question") String question,
+        @JsonProperty("expectedKbIds") List<String> expectedKbIds,
+        @JsonProperty("expectedDocIds") List<String> expectedDocIds,
+        @JsonProperty("expectedChunkIds") List<String> expectedChunkIds,
+        @JsonProperty("filter") RetrievalFilter filter,
+        @JsonProperty("options") RetrievalOptions options,
+        @JsonProperty("negativeChunkIds") List<String> negativeChunkIds,
+        @JsonProperty("tags") List<String> tags,
+        @JsonProperty("minRecall") Double minRecall,
+        @JsonProperty("minPrecision") Double minPrecision
 ) {
 
+    public RetrievalEvaluationCase(String caseId,
+                                   String question,
+                                   List<String> expectedKbIds,
+                                   List<String> expectedDocIds,
+                                   List<String> expectedChunkIds,
+                                   RetrievalFilter filter,
+                                   RetrievalOptions options) {
+        this(caseId, question, expectedKbIds, expectedDocIds, expectedChunkIds, filter, options,
+                List.of(), List.of(), null, null);
+    }
+
+    @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
     public RetrievalEvaluationCase {
         caseId = Objects.requireNonNullElse(caseId, "");
         question = Objects.requireNonNullElse(question, "");
         expectedKbIds = copyTextList(expectedKbIds);
         expectedDocIds = copyTextList(expectedDocIds);
         expectedChunkIds = copyTextList(expectedChunkIds);
+        negativeChunkIds = copyTextList(negativeChunkIds);
+        tags = copyTextList(tags);
+        minRecall = normalizeThreshold(minRecall);
+        minPrecision = normalizeThreshold(minPrecision);
     }
 
     private static List<String> copyTextList(List<String> values) {
@@ -62,5 +84,12 @@ public record RetrievalEvaluationCase(
                 .filter(value -> !value.isBlank())
                 .distinct()
                 .toList();
+    }
+
+    private static Double normalizeThreshold(Double value) {
+        if (value == null || value.isNaN() || value.isInfinite()) {
+            return null;
+        }
+        return value;
     }
 }

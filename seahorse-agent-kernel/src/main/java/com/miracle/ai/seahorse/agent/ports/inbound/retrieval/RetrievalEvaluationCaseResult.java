@@ -17,6 +17,9 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.retrieval;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
 import java.util.Objects;
 
@@ -24,20 +27,40 @@ import java.util.Objects;
  * 单条评测样本结果。
  */
 public record RetrievalEvaluationCaseResult(
-        String caseId,
-        String question,
-        List<String> retrievedChunkIds,
-        List<String> retrievedDocIds,
-        int retrievedCount,
-        int hitCount,
-        double recallAtK,
-        double reciprocalRank,
-        double ndcgAtK,
-        long latencyMs,
-        String status,
-        String errorMessage
+        @JsonProperty("caseId") String caseId,
+        @JsonProperty("question") String question,
+        @JsonProperty("retrievedChunkIds") List<String> retrievedChunkIds,
+        @JsonProperty("retrievedDocIds") List<String> retrievedDocIds,
+        @JsonProperty("retrievedCount") int retrievedCount,
+        @JsonProperty("hitCount") int hitCount,
+        @JsonProperty("recallAtK") double recallAtK,
+        @JsonProperty("reciprocalRank") double reciprocalRank,
+        @JsonProperty("ndcgAtK") double ndcgAtK,
+        @JsonProperty("latencyMs") long latencyMs,
+        @JsonProperty("status") String status,
+        @JsonProperty("errorMessage") String errorMessage,
+        @JsonProperty("precisionAtK") double precisionAtK,
+        @JsonProperty("negativeHitCount") int negativeHitCount,
+        @JsonProperty("negativeHitChunkIds") List<String> negativeHitChunkIds
 ) {
 
+    public RetrievalEvaluationCaseResult(String caseId,
+                                         String question,
+                                         List<String> retrievedChunkIds,
+                                         List<String> retrievedDocIds,
+                                         int retrievedCount,
+                                         int hitCount,
+                                         double recallAtK,
+                                         double reciprocalRank,
+                                         double ndcgAtK,
+                                         long latencyMs,
+                                         String status,
+                                         String errorMessage) {
+        this(caseId, question, retrievedChunkIds, retrievedDocIds, retrievedCount, hitCount, recallAtK,
+                reciprocalRank, ndcgAtK, latencyMs, status, errorMessage, 0D, 0, List.of());
+    }
+
+    @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
     public RetrievalEvaluationCaseResult {
         caseId = Objects.requireNonNullElse(caseId, "");
         question = Objects.requireNonNullElse(question, "");
@@ -48,5 +71,15 @@ public record RetrievalEvaluationCaseResult(
         latencyMs = Math.max(0, latencyMs);
         status = Objects.requireNonNullElse(status, "");
         errorMessage = Objects.requireNonNullElse(errorMessage, "");
+        precisionAtK = normalizeRatio(precisionAtK);
+        negativeHitChunkIds = List.copyOf(Objects.requireNonNullElse(negativeHitChunkIds, List.of()));
+        negativeHitCount = Math.max(0, Math.max(negativeHitCount, negativeHitChunkIds.size()));
+    }
+
+    private static double normalizeRatio(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return 0D;
+        }
+        return Math.max(0D, Math.min(1D, value));
     }
 }

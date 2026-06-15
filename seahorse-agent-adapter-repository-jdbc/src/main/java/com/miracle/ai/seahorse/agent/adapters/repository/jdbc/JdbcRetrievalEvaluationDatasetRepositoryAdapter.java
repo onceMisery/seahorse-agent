@@ -391,11 +391,12 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
     }
 
     private List<RetrievalEvaluationCase> cases(String casesJson) {
-        if (casesJson == null || casesJson.isBlank()) {
+        String json = normalizeJsonPayload(casesJson);
+        if (json.isBlank()) {
             return List.of();
         }
         try {
-            return objectMapper.readValue(casesJson, caseListType);
+            return objectMapper.readValue(json, caseListType);
         } catch (JsonProcessingException ex) {
             // 单个评测集样本 JSON 损坏时降级为空，避免列表页整体不可用。
             return List.of();
@@ -411,22 +412,24 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
     }
 
     private RetrievalEvaluationReport report(String reportJson) {
-        if (reportJson == null || reportJson.isBlank()) {
+        String json = normalizeJsonPayload(reportJson);
+        if (json.isBlank()) {
             return emptyReport();
         }
         try {
-            return objectMapper.readValue(reportJson, reportType);
+            return objectMapper.readValue(json, reportType);
         } catch (JsonProcessingException ex) {
             return emptyReport();
         }
     }
 
     private RetrievalEvaluationComparisonReport comparisonReport(String reportJson) {
-        if (reportJson == null || reportJson.isBlank()) {
+        String json = normalizeJsonPayload(reportJson);
+        if (json.isBlank()) {
             return emptyComparisonReport();
         }
         try {
-            return objectMapper.readValue(reportJson, comparisonReportType);
+            return objectMapper.readValue(json, comparisonReportType);
         } catch (JsonProcessingException ex) {
             return emptyComparisonReport();
         }
@@ -454,6 +457,18 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
 
     private RetrievalEvaluationComparisonReport emptyComparisonReport() {
         return new RetrievalEvaluationComparisonReport("", "", List.of(), List.of());
+    }
+
+    private String normalizeJsonPayload(String json) {
+        String value = Objects.requireNonNullElse(json, "").trim();
+        if (value.startsWith("\"") && value.endsWith("\"")) {
+            try {
+                return Objects.requireNonNullElse(objectMapper.readValue(value, String.class), "").trim();
+            } catch (JsonProcessingException ex) {
+                return value;
+            }
+        }
+        return value;
     }
 
     private Instant instant(Timestamp timestamp) {

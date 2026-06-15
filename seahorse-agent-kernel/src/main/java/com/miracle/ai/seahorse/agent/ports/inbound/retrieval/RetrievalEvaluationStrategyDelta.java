@@ -17,21 +17,37 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.retrieval;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.Objects;
 
 /**
  * 策略相对基线的评测指标差值。
  */
 public record RetrievalEvaluationStrategyDelta(
-        String strategyName,
-        double recallAtKDelta,
-        double mrrDelta,
-        double ndcgAtKDelta,
-        double emptyRecallRateDelta,
-        double averageLatencyMsDelta,
-        double p95LatencyMsDelta
+        @JsonProperty("strategyName") String strategyName,
+        @JsonProperty("recallAtKDelta") double recallAtKDelta,
+        @JsonProperty("precisionAtKDelta") double precisionAtKDelta,
+        @JsonProperty("mrrDelta") double mrrDelta,
+        @JsonProperty("ndcgAtKDelta") double ndcgAtKDelta,
+        @JsonProperty("emptyRecallRateDelta") double emptyRecallRateDelta,
+        @JsonProperty("averageLatencyMsDelta") double averageLatencyMsDelta,
+        @JsonProperty("p95LatencyMsDelta") double p95LatencyMsDelta
 ) {
 
+    public RetrievalEvaluationStrategyDelta(String strategyName,
+                                            double recallAtKDelta,
+                                            double mrrDelta,
+                                            double ndcgAtKDelta,
+                                            double emptyRecallRateDelta,
+                                            double averageLatencyMsDelta,
+                                            double p95LatencyMsDelta) {
+        this(strategyName, recallAtKDelta, 0D, mrrDelta, ndcgAtKDelta, emptyRecallRateDelta,
+                averageLatencyMsDelta, p95LatencyMsDelta);
+    }
+
+    @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
     public RetrievalEvaluationStrategyDelta {
         strategyName = Objects.requireNonNullElse(strategyName, "");
     }

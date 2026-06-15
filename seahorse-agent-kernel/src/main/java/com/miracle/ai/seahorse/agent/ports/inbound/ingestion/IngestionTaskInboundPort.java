@@ -33,6 +33,8 @@ public interface IngestionTaskInboundPort {
 
     IngestionTaskExecutionResult upload(IngestionTaskUploadCommand command);
 
+    IngestionTaskExecutionResult retry(String taskId, String operator);
+
     IngestionTaskRecord get(String taskId);
 
     List<IngestionTaskNodeRecord> listNodes(String taskId);

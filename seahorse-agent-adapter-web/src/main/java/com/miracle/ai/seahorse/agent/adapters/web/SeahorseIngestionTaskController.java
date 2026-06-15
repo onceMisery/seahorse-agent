@@ -129,6 +129,13 @@ public class SeahorseIngestionTaskController {
         return ApiResponses.requireServiceOrError(taskPortProvider, port -> port.listNodes(id));
     }
 
+    @PostMapping("/ingestion/tasks/{id}/retry")
+    public ApiResponse<Object> retry(@PathVariable String id,
+                                     @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_TASK_MANAGEMENT);
+        return ApiResponses.requireServiceOrError(taskPortProvider, port -> port.retry(id, operator(userId)));
+    }
+
     @GetMapping("/ingestion/tasks")
     public ApiResponse<Object> page(@RequestParam(value = "pageNo", defaultValue = "1") long pageNo,
                                     @RequestParam(value = "pageSize", defaultValue = "10") long pageSize,

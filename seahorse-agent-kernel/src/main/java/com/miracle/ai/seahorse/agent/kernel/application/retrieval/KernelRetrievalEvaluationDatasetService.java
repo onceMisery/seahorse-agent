@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.retrieval;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCase;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
@@ -37,6 +38,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluatio
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
 
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -196,7 +199,47 @@ public class KernelRetrievalEvaluationDatasetService implements RetrievalEvaluat
     private RetrievalEvaluationDatasetPayload validate(RetrievalEvaluationDatasetPayload payload) {
         RetrievalEvaluationDatasetPayload safePayload = Objects.requireNonNull(payload, "payload must not be null");
         requireText(safePayload.name(), "name must not be blank");
+        List<?> cases = Objects.requireNonNullElse(safePayload.cases(), List.of());
+        if (cases.isEmpty()) {
+            throw new IllegalArgumentException("cases must not be empty");
+        }
+        Map<String, Integer> questionIndexes = new LinkedHashMap<>();
+        for (int index = 0; index < safePayload.cases().size(); index++) {
+            RetrievalEvaluationCase evaluationCase = safePayload.cases().get(index);
+            validateCase(index, evaluationCase);
+            String normalizedQuestion = normalizeQuestion(evaluationCase.question());
+            Integer previousIndex = questionIndexes.putIfAbsent(normalizedQuestion, index);
+            if (previousIndex != null) {
+                throw new IllegalArgumentException("cases[" + index + "].question duplicates cases["
+                        + previousIndex + "].question");
+            }
+        }
         return safePayload;
+    }
+
+    private void validateCase(int index, RetrievalEvaluationCase evaluationCase) {
+        if (evaluationCase == null) {
+            throw new IllegalArgumentException("cases[" + index + "] must not be null");
+        }
+        requireText(evaluationCase.question(), "cases[" + index + "].question must not be blank");
+        if (evaluationCase.expectedKbIds().isEmpty()
+                && evaluationCase.expectedDocIds().isEmpty()
+                && evaluationCase.expectedChunkIds().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "cases[" + index + "] must define at least one expected kb, document, or chunk target");
+        }
+        validateThreshold(index, "minRecall", evaluationCase.minRecall());
+        validateThreshold(index, "minPrecision", evaluationCase.minPrecision());
+    }
+
+    private void validateThreshold(int index, String field, Double value) {
+        if (value != null && (value < 0D || value > 1D)) {
+            throw new IllegalArgumentException("cases[" + index + "]." + field + " must be between 0 and 1");
+        }
+    }
+
+    private String normalizeQuestion(String question) {
+        return Objects.requireNonNullElse(question, "").trim();
     }
 
     private String defaultText(String value, String fallback) {

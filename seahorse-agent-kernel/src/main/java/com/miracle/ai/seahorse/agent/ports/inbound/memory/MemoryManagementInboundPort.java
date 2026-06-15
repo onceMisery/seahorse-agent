@@ -49,6 +49,10 @@ public interface MemoryManagementInboundPort {
         return List.of();
     }
 
+    default boolean disableProfileFact(String userId, String tenantId, String slotKey, String operator) {
+        return false;
+    }
+
     default List<CorrectionRule> listCorrectionRules(String userId, String tenantId, int limit) {
         return List.of();
     }

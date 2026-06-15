@@ -62,6 +62,8 @@ public class KernelIngestionTaskService implements IngestionTaskInboundPort {
     private static final String KEY_SOURCE = "source";
     private static final String KEY_KEYWORDS = "keywords";
     private static final String KEY_QUESTIONS = "questions";
+    private static final String KEY_VECTOR_SPACE_ID = "vectorSpaceId";
+    private static final String KEY_RETRY_OF_TASK_ID = "retryOfTaskId";
 
     private final KernelIngestionEngine ingestionEngine;
     private final PipelineDefinitionRepositoryPort pipelineRepositoryPort;
@@ -106,6 +108,28 @@ public class KernelIngestionTaskService implements IngestionTaskInboundPort {
                         Map.of(KEY_FILE_NAME, fileName),
                         null),
                 safeCommand.operator()));
+    }
+
+    @Override
+    public IngestionTaskExecutionResult retry(String taskId, String operator) {
+        String safeTaskId = requireText(taskId, "taskId");
+        IngestionTaskRecord record = taskRepositoryPort.findById(safeTaskId)
+                .orElseThrow(() -> new IllegalArgumentException("入库任务不存在：" + safeTaskId));
+        if (!STATUS_FAILED.equalsIgnoreCase(record.getStatus())) {
+            throw new IllegalStateException("only failed ingestion tasks can be retried: " + safeTaskId);
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>(Objects.requireNonNullElse(record.getMetadata(), Map.of()));
+        metadata.put(KEY_RETRY_OF_TASK_ID, safeTaskId);
+        IngestionDocumentSource source = new IngestionDocumentSource(
+                record.getSourceType(),
+                record.getSourceLocation(),
+                record.getSourceFileName(),
+                Map.of());
+        return executeInternal(new ExecutionInput(
+                requireText(record.getPipelineId(), "pipelineId"),
+                requireSource(source),
+                new ExecutionContent(resolveInlineBytes(source), "", metadata, metadata.get(KEY_VECTOR_SPACE_ID)),
+                operator));
     }
 
     @Override
@@ -176,6 +200,9 @@ public class KernelIngestionTaskService implements IngestionTaskInboundPort {
         metadata.putIfAbsent(KEY_SOURCE, input.source());
         if (hasText(input.source().fileName())) {
             metadata.putIfAbsent(KEY_FILE_NAME, input.source().fileName());
+        }
+        if (input.content().vectorSpaceId() != null) {
+            metadata.putIfAbsent(KEY_VECTOR_SPACE_ID, input.content().vectorSpaceId());
         }
         return metadata;
     }

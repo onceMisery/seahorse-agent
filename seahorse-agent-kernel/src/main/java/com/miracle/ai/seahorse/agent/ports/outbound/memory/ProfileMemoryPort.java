@@ -32,6 +32,10 @@ public interface ProfileMemoryPort {
 
     void upsert(ProfileFactUpdate update);
 
+    default boolean disable(String userId, String tenantId, String slotKey, Instant disabledAt) {
+        return false;
+    }
+
     default void recordRead(String userId, String tenantId, String slotKey, Instant referencedAt) {
     }
 

@@ -91,6 +91,17 @@ public class SeahorseMemoryController {
                 port -> port.listProfileFacts(userIdOrDefault(userId), tenantId, limit));
     }
 
+    @PostMapping("/memories/profile-facts/{slotKey}/disable")
+    public ApiResponse<Object> disableProfileFact(@PathVariable String slotKey,
+                                                  @RequestParam(required = false) String userId,
+                                                  @RequestParam(defaultValue = "default") String tenantId,
+                                                  @RequestHeader(value = HEADER_USER_ID, required = false)
+                                                  String operatorUserId) {
+        return ApiResponses.requireServiceOrError(managementPortProvider,
+                port -> Map.of("disabled", port.disableProfileFact(
+                        userIdOrDefault(userId), tenantId, slotKey, operator(operatorUserId))));
+    }
+
     @GetMapping("/memories/corrections")
     public ApiResponse<Object> correctionRules(@RequestParam(required = false) String userId,
                                                @RequestParam(defaultValue = "default") String tenantId,

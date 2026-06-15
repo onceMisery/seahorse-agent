@@ -101,6 +101,13 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
     }
 
     @Override
+    public boolean disableProfileFact(String userId, String tenantId, String slotKey, String operator) {
+        return ports.profileMemoryPort()
+                .disable(requireText(userId, "userId"), defaultTenant(tenantId),
+                        requireText(slotKey, "slotKey"), Instant.now());
+    }
+
+    @Override
     public List<CorrectionRule> listCorrectionRules(String userId, String tenantId, int limit) {
         return ports.correctionLedgerPort()
                 .listActive(requireText(userId, "userId"), tenantId, limit <= 0 ? DEFAULT_LIMIT : limit);

@@ -79,6 +79,7 @@ public class KernelRetrievalEvaluationService implements RetrievalEvaluationInbo
                 results.size(),
                 evaluableCount,
                 average(evaluableResults, RetrievalEvaluationCaseResult::recallAtK),
+                average(evaluableResults, RetrievalEvaluationCaseResult::precisionAtK),
                 average(evaluableResults, RetrievalEvaluationCaseResult::reciprocalRank),
                 average(evaluableResults, RetrievalEvaluationCaseResult::ndcgAtK),
                 ratio(evaluableResults.stream().filter(result -> result.retrievedCount() == 0).count(), evaluableCount),
@@ -141,6 +142,7 @@ public class KernelRetrievalEvaluationService implements RetrievalEvaluationInbo
         return new RetrievalEvaluationStrategyDelta(
                 report.strategyName(),
                 report.recallAtK() - baseline.recallAtK(),
+                report.precisionAtK() - baseline.precisionAtK(),
                 report.mrr() - baseline.mrr(),
                 report.ndcgAtK() - baseline.ndcgAtK(),
                 report.emptyRecallRate() - baseline.emptyRecallRate(),
@@ -158,6 +160,10 @@ public class KernelRetrievalEvaluationService implements RetrievalEvaluationInbo
         int byRecall = Double.compare(left.recallAtK(), right.recallAtK());
         if (byRecall != 0) {
             return byRecall;
+        }
+        int byPrecision = Double.compare(left.precisionAtK(), right.precisionAtK());
+        if (byPrecision != 0) {
+            return byPrecision;
         }
         int byMrr = Double.compare(left.mrr(), right.mrr());
         if (byMrr != 0) {
@@ -191,17 +197,20 @@ public class KernelRetrievalEvaluationService implements RetrievalEvaluationInbo
         List<RetrievedChunk> topChunks = Objects.requireNonNullElse(chunks, List.<RetrievedChunk>of()).stream()
                 .limit(topK)
                 .toList();
+        List<String> negativeHitChunkIds = negativeHitChunkIds(topChunks, safeCase);
         if (expectedTargets.isEmpty()) {
-            return result(safeCase, topChunks, 0, 0D, 0D, 0D, elapsedMs(started),
-                    STATUS_NO_EXPECTED_TARGETS, "");
+            return result(safeCase, topChunks, 0, 0D, 0D, 0D, 0D, negativeHitChunkIds,
+                    elapsedMs(started), STATUS_NO_EXPECTED_TARGETS, "");
         }
 
         Set<String> matchedTargets = new LinkedHashSet<>();
+        int positiveHitChunkCount = 0;
         double reciprocalRank = 0D;
         double dcg = 0D;
         for (int index = 0; index < topChunks.size(); index++) {
             Set<String> matchedAtRank = matchedTargets(topChunks.get(index), expectedTargets);
             if (!matchedAtRank.isEmpty()) {
+                positiveHitChunkCount++;
                 matchedTargets.addAll(matchedAtRank);
                 int rank = index + 1;
                 if (reciprocalRank == 0D) {
@@ -211,12 +220,13 @@ public class KernelRetrievalEvaluationService implements RetrievalEvaluationInbo
             }
         }
         double recall = ratio(matchedTargets.size(), expectedTargets.size());
+        double precision = ratio(positiveHitChunkCount, topK);
         double ndcg = idealDcg(Math.min(expectedTargets.size(), topK)) == 0D
                 ? 0D
                 : dcg / idealDcg(Math.min(expectedTargets.size(), topK));
         String status = topChunks.isEmpty() ? STATUS_EMPTY : matchedTargets.isEmpty() ? STATUS_MISS : STATUS_SUCCESS;
-        return result(safeCase, topChunks, matchedTargets.size(), recall, reciprocalRank, ndcg, elapsedMs(started),
-                status, "");
+        return result(safeCase, topChunks, matchedTargets.size(), recall, reciprocalRank, ndcg, precision,
+                negativeHitChunkIds, elapsedMs(started), status, "");
     }
 
     private RetrievalEvaluationCaseResult failedResult(RetrievalEvaluationCase evaluationCase,
@@ -234,18 +244,23 @@ public class KernelRetrievalEvaluationService implements RetrievalEvaluationInbo
                 0D,
                 latencyMs,
                 STATUS_FAILED,
-                ex.getClass().getSimpleName());
+                ex.getClass().getSimpleName(),
+                0D,
+                0,
+                List.of());
     }
 
     private RetrievalEvaluationCaseResult result(RetrievalEvaluationCase evaluationCase,
                                                  List<RetrievedChunk> chunks,
                                                  int hitCount,
-                                                 double recall,
-                                                 double reciprocalRank,
-                                                 double ndcg,
-                                                 long latencyMs,
-                                                 String status,
-                                                 String errorMessage) {
+                                                  double recall,
+                                                  double reciprocalRank,
+                                                  double ndcg,
+                                                  double precision,
+                                                  List<String> negativeHitChunkIds,
+                                                  long latencyMs,
+                                                  String status,
+                                                  String errorMessage) {
         return new RetrievalEvaluationCaseResult(
                 evaluationCase.caseId(),
                 evaluationCase.question(),
@@ -265,7 +280,10 @@ public class KernelRetrievalEvaluationService implements RetrievalEvaluationInbo
                 ndcg,
                 latencyMs,
                 status,
-                errorMessage);
+                errorMessage,
+                precision,
+                negativeHitChunkIds.size(),
+                negativeHitChunkIds);
     }
 
     private Set<String> expectedTargets(RetrievalEvaluationCase evaluationCase) {
@@ -274,6 +292,19 @@ public class KernelRetrievalEvaluationService implements RetrievalEvaluationInbo
         evaluationCase.expectedDocIds().forEach(id -> targets.add("doc:" + id));
         evaluationCase.expectedKbIds().forEach(id -> targets.add("kb:" + id));
         return targets;
+    }
+
+    private List<String> negativeHitChunkIds(List<RetrievedChunk> chunks, RetrievalEvaluationCase evaluationCase) {
+        if (chunks.isEmpty() || evaluationCase.negativeChunkIds().isEmpty()) {
+            return List.of();
+        }
+        Set<String> negativeChunkIds = new LinkedHashSet<>(evaluationCase.negativeChunkIds());
+        return chunks.stream()
+                .map(RetrievedChunk::getId)
+                .filter(this::hasText)
+                .filter(negativeChunkIds::contains)
+                .distinct()
+                .toList();
     }
 
     private Set<String> matchedTargets(RetrievedChunk chunk, Set<String> expectedTargets) {
