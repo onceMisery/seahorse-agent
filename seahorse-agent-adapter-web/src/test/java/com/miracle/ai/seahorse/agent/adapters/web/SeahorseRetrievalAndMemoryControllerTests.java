@@ -22,6 +22,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityComparisonInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenHarnessInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
@@ -224,6 +226,28 @@ class SeahorseRetrievalAndMemoryControllerTests {
         mvc.perform(get("/memories/traces")
                         .param("limit", "50"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldDisableProfileFact() throws Exception {
+        MemoryManagementInboundPort port = mock(MemoryManagementInboundPort.class);
+        when(port.disableProfileFact("user-1", "default", "preferences.response_style", "admin-1"))
+                .thenReturn(true);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMemoryController(
+                        provider(MemoryManagementInboundPort.class, port),
+                        provider(MemoryGovernanceInboundPort.class, mock(MemoryGovernanceInboundPort.class))))
+                .build();
+
+        mvc.perform(post("/memories/profile-facts/preferences.response_style/disable")
+                        .param("userId", "user-1")
+                        .param("tenantId", "default")
+                        .header("X-User-Id", "admin-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.disabled").value(true));
+
+        verify(port).disableProfileFact("user-1", "default", "preferences.response_style", "admin-1");
     }
 
     // --- RagTrace ---

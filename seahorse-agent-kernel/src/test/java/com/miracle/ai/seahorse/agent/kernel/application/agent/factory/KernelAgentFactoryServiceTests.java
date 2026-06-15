@@ -499,6 +499,11 @@ class KernelAgentFactoryServiceTests {
         }
 
         @Override
+        public Optional<AgentVersion> findVersion(String agentId, String versionId) {
+            return Optional.empty();
+        }
+
+        @Override
         public AgentDefinitionPage page(String tenantId, long current, long size, String keyword) {
             return new AgentDefinitionPage(List.copyOf(definitions.values()), definitions.size(), size, current, 1);
         }

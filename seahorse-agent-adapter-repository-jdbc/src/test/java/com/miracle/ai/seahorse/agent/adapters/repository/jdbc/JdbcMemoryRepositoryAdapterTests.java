@@ -444,6 +444,34 @@ class JdbcMemoryRepositoryAdapterTests {
     }
 
     @Test
+    void shouldDisableProfileFactSoRecallNoLongerListsIt() {
+        profileAdapter.upsert(new ProfileFactUpdate(
+                "user-1",
+                "default",
+                "preferences.response_style",
+                "concise",
+                0.9D,
+                "explicit_user_memory",
+                java.util.List.of("msg-1"),
+                "preferences.response_style:g1"));
+
+        boolean disabled = profileAdapter.disable("user-1", "default", "preferences.response_style", Instant.now());
+
+        assertThat(disabled).isTrue();
+        assertThat(profileAdapter.findActive("user-1", "default", "preferences.response_style")).isEmpty();
+        assertThat(profileAdapter.listActive("user-1", "default", 10)).isEmpty();
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                SELECT status, valid_until
+                FROM t_user_profile_fact
+                WHERE user_id = ?
+                  AND tenant_id = 'default'
+                  AND slot_key = 'preferences.response_style'
+                """, JdbcMemorySupport.toLongId("user-1"));
+        assertThat(row).containsEntry("STATUS", "DISABLED");
+        assertThat(row.get("VALID_UNTIL")).isNotNull();
+    }
+
+    @Test
     void shouldUpsertAndListActiveCorrectionRules() {
         correctionAdapter.upsert(new CorrectionCommand(
                 "user-1",

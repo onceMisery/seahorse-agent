@@ -136,6 +136,20 @@ class SeahorseIngestionAndIntentControllerTests {
     }
 
     @Test
+    void shouldRetryFailedIngestionTask() throws Exception {
+        IngestionTaskInboundPort port = mock(IngestionTaskInboundPort.class);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseIngestionTaskController(provider(IngestionTaskInboundPort.class, port))).build();
+
+        mvc.perform(post("/ingestion/tasks/task-1/retry")
+                        .header("X-User-Id", "operator-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"));
+
+        verify(port).retry("task-1", "operator-1");
+    }
+
+    @Test
     void shouldPageIngestionTasks() throws Exception {
         IngestionTaskInboundPort port = mock(IngestionTaskInboundPort.class);
         when(port.page(1L, 10L, "COMPLETED")).thenReturn(mock(IngestionTaskPage.class));
