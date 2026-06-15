@@ -6,7 +6,7 @@ export interface KnowledgeBase {
   embeddingModel: string;
   collectionName: string;
   createdBy?: string | null;
-  documentCount?: number;
+  documentCount?: number | string;
   createTime?: string;
   updateTime?: string;
 }
