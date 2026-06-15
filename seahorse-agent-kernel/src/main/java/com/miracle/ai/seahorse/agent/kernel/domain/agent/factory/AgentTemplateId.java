@@ -23,7 +23,8 @@ public enum AgentTemplateId {
     KNOWLEDGE_ASSISTANT("knowledge-assistant"),
     WORKFLOW_ASSISTANT("workflow-assistant"),
     TOOL_OPERATOR("tool-operator"),
-    COMPLIANCE_REVIEWER("compliance-reviewer");
+    COMPLIANCE_REVIEWER("compliance-reviewer"),
+    GITHUB_VISUAL_PROJECT_INTRO("github-visual-project-intro");
 
     private final String value;
 

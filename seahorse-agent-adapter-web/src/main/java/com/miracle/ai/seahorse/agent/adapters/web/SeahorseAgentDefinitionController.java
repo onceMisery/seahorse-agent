@@ -125,6 +125,14 @@ public class SeahorseAgentDefinitionController {
                 .orElseThrow(() -> new ResourceNotFoundException("Agent not found")));
     }
 
+    @GetMapping({"/agents/{agentId}/versions/{versionId}", "/api/agents/{agentId}/versions/{versionId}"})
+    public ApiResponse<Object> findVersion(@PathVariable String agentId,
+                                           @PathVariable String versionId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
+        return ApiResponses.requireService(agentDefinitionPortProvider, port -> port.findVersion(agentId, versionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Agent version not found")));
+    }
+
     @PutMapping({"/agents/{agentId}/draft", "/api/agents/{agentId}/draft"})
     public ApiResponse<Object> updateDraft(@PathVariable String agentId,
                                            @RequestBody AgentDefinitionUpdateDraftRequest request) {

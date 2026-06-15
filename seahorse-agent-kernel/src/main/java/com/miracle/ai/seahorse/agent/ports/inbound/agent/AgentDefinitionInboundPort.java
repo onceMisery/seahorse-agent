@@ -59,6 +59,11 @@ public interface AgentDefinitionInboundPort {
     Optional<AgentDefinition> findById(String agentId);
 
     /**
+     * 查询指定 Agent 的不可变版本快照。
+     */
+    Optional<AgentVersion> findVersion(String agentId, String versionId);
+
+    /**
      * 分页查询 Agent 定义列表。
      */
     AgentDefinitionPage page(String tenantId, long current, long size, String keyword);

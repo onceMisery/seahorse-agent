@@ -139,6 +139,14 @@ public class KernelAgentDefinitionService implements AgentDefinitionInboundPort 
     }
 
     @Override
+    public Optional<AgentVersion> findVersion(String agentId, String versionId) {
+        currentUserPort.requireRole(ADMIN_ROLE);
+        return repository.findVersion(
+                requireText(agentId, "agentId 不能为空"),
+                requireText(versionId, "versionId 不能为空"));
+    }
+
+    @Override
     public AgentDefinitionPage page(String tenantId, long current, long size, String keyword) {
         currentUserPort.requireRole(ADMIN_ROLE);
         return repository.page(tenantId, current, size, keyword);
