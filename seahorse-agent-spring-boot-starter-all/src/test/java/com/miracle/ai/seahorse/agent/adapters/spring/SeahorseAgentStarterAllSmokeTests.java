@@ -17,7 +17,11 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.starter.all.StarterAllAdapterAcceptanceMatrix;
+import com.miracle.ai.seahorse.agent.starter.all.StarterAllAdapterAcceptanceMatrix.AdapterAcceptance;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.context.annotation.ImportCandidates;
@@ -66,6 +70,57 @@ class SeahorseAgentStarterAllSmokeTests {
                 .getCandidates();
 
         assertThat(candidates).containsAll(HEAVY_ADAPTER_AUTO_CONFIGURATIONS);
+    }
+
+    @Test
+    void starterAllAcceptanceMatrixCoversEveryOfficialHeavyAdapter() {
+        assertThat(StarterAllAdapterAcceptanceMatrix.entries())
+                .extracting(AdapterAcceptance::adapterClassName)
+                .containsExactlyInAnyOrderElementsOf(OFFICIAL_HEAVY_ADAPTER_CLASSES);
+    }
+
+    @Test
+    void starterAllAcceptanceMatrixDocumentsRuntimeBeanChecks() {
+        ClassLoader classLoader = getClass().getClassLoader();
+        List<AdapterAcceptance> entries = StarterAllAdapterAcceptanceMatrix.entries();
+
+        assertThat(entries).extracting(AdapterAcceptance::id).doesNotHaveDuplicates();
+        assertThat(entries).allSatisfy(entry -> {
+            assertThat(entry.id()).isNotBlank();
+            assertThat(entry.moduleArtifactId()).startsWith("seahorse-agent-adapter-");
+            assertThat(entry.activationProperties())
+                    .isNotEmpty()
+                    .allSatisfy(property -> assertThat(property).contains("="));
+            assertThat(entry.requiredInfrastructure()).isNotEmpty().allSatisfy(value -> assertThat(value).isNotBlank());
+            assertThat(entry.healthCheck()).isNotBlank();
+            assertThat(entry.minimalBusinessAction()).isNotBlank();
+            assertThat(entry.expectedBeanTypes())
+                    .isNotEmpty()
+                    .allSatisfy(className -> assertThat(loadClass(classLoader, className)).as(className).isNotNull());
+        });
+    }
+
+    @Test
+    void starterAllAcceptanceMatrixUsesCanonicalSeahorseAgentProperties() {
+        assertThat(StarterAllAdapterAcceptanceMatrix.entries())
+                .flatExtracting(AdapterAcceptance::activationProperties)
+                .filteredOn(property -> !property.startsWith("spring."))
+                .allSatisfy(property -> assertThat(property)
+                        .as(property)
+                        .doesNotStartWith("seahorse.agent.")
+                        .startsWith("seahorse-agent."));
+    }
+
+    @Test
+    void starterAllAcceptanceMatrixAutoConfigurationsAreDiscoverable() {
+        Set<String> candidates = ImportCandidates.load(AutoConfiguration.class, getClass().getClassLoader())
+                .getCandidates()
+                .stream()
+                .collect(Collectors.toSet());
+
+        assertThat(StarterAllAdapterAcceptanceMatrix.entries())
+                .extracting(AdapterAcceptance::autoConfigurationClassName)
+                .allSatisfy(autoConfiguration -> assertThat(candidates).contains(autoConfiguration));
     }
 
     private static Class<?> loadClass(ClassLoader classLoader, String className) {

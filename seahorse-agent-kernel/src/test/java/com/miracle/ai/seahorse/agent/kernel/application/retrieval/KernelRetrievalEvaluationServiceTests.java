@@ -21,21 +21,33 @@ import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.plugin.DefaultExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
+import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCase;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationStrategy;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNode;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNodeFinish;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTracePage;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTracePageRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRun;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRunFinish;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KernelRetrievalEvaluationServiceTests {
 
@@ -88,6 +100,60 @@ class KernelRetrievalEvaluationServiceTests {
         assertClose(1D, report.deltas().get(1).precisionAtKDelta());
     }
 
+    @Test
+    void shouldAttachCaseDiagnosticsForFailedCaseDrillDown() {
+        FixedRetrievalEngine retrievalEngine = new FixedRetrievalEngine(Map.of(
+                "question-a", List.of(
+                        chunk("expected-1", "doc-hit", "kb-1"),
+                        chunk("negative-1", "doc-noise", "kb-1"),
+                        chunk("neutral-1", "doc-neutral", "kb-1"))));
+        KernelRetrievalEvaluationService service = new KernelRetrievalEvaluationService(retrievalEngine);
+
+        RetrievalEvaluationReport report = service.evaluate(new RetrievalEvaluationCommand(
+                "baseline",
+                3,
+                RetrievalOptions.defaults(3),
+                List.of(new RetrievalEvaluationCase("case-1", "question-a",
+                        List.of("kb-1"), List.of("doc-hit", "doc-missing"),
+                        List.of("expected-1", "missing-1"), null, null,
+                        List.of("negative-1"), List.of("drill-down"), 1D, 0.3D))));
+
+        var diagnostics = report.cases().get(0).diagnostics();
+        assertIterableEquals(List.of("missing-1"), diagnostics.missingExpectedChunkIds());
+        assertIterableEquals(List.of("doc-missing"), diagnostics.missingExpectedDocIds());
+        assertEquals(3, diagnostics.retrievedChunks().size());
+        assertEquals(1, diagnostics.retrievedChunks().get(0).rank());
+        assertIterableEquals(List.of("chunk:expected-1", "doc:doc-hit", "kb:kb-1"),
+                diagnostics.retrievedChunks().get(0).matchedExpectedTargets());
+        assertEquals(true, diagnostics.retrievedChunks().get(1).negativeHit());
+    }
+
+    @Test
+    void shouldAttachTraceIdToEvaluationCaseDiagnostics() {
+        FixedRetrievalEngine retrievalEngine = new FixedRetrievalEngine(Map.of(
+                "question-a", List.of(chunk("expected-1", "doc-hit", "kb-1"))));
+        RecordingTraceRepository traceRepository = new RecordingTraceRepository();
+        KernelRetrievalEvaluationService service = new KernelRetrievalEvaluationService(
+                retrievalEngine,
+                new KernelRagTraceRecorder(traceRepository));
+
+        RetrievalEvaluationReport report = service.evaluate(new RetrievalEvaluationCommand(
+                "baseline",
+                1,
+                RetrievalOptions.defaults(1),
+                List.of(new RetrievalEvaluationCase("case-1", "question-a",
+                        List.of("kb-1"), List.of("doc-hit"), List.of("expected-1"), null, null))));
+
+        String traceId = report.cases().get(0).diagnostics().traceId();
+        assertNotNull(traceRepository.startedRun);
+        assertEquals(traceRepository.startedRun.getTraceId(), traceId);
+        assertTrue(retrievalEngine.receivedTraceRunScope.active());
+        assertEquals(traceId, retrievalEngine.receivedTraceRunScope.traceId());
+        assertNotNull(traceRepository.finishedRun);
+        assertEquals(traceId, traceRepository.finishedRun.traceId());
+        assertEquals(KernelRagTraceRecorder.STATUS_SUCCESS, traceRepository.finishedRun.status());
+    }
+
     private static RetrievedChunk chunk(String chunkId, String docId, String kbId) {
         return RetrievedChunk.builder()
                 .id(chunkId)
@@ -106,6 +172,7 @@ class KernelRetrievalEvaluationServiceTests {
 
         private final Map<String, List<RetrievedChunk>> chunksByQuestion;
         private final Map<String, List<RetrievedChunk>> keywordChunksByQuestion;
+        private TraceRunScope receivedTraceRunScope = TraceRunScope.disabled();
 
         private FixedRetrievalEngine(Map<String, List<RetrievedChunk>> chunksByQuestion) {
             this(chunksByQuestion, Map.of());
@@ -124,6 +191,16 @@ class KernelRetrievalEvaluationServiceTests {
                                                               int topK,
                                                               RetrievalFilter filter,
                                                               RetrievalOptions options) {
+            return retrieveKnowledgeChannels(subIntents, topK, filter, options, TraceRunScope.disabled());
+        }
+
+        @Override
+        public List<RetrievedChunk> retrieveKnowledgeChannels(List<SubQuestionIntent> subIntents,
+                                                              int topK,
+                                                              RetrievalFilter filter,
+                                                              RetrievalOptions options,
+                                                              TraceRunScope traceRunScope) {
+            receivedTraceRunScope = traceRunScope == null ? TraceRunScope.disabled() : traceRunScope;
             String question = subIntents == null || subIntents.isEmpty() ? "" : subIntents.get(0).subQuestion();
             Map<String, List<RetrievedChunk>> source = options != null && options.enableKeyword()
                     ? keywordChunksByQuestion
@@ -131,6 +208,45 @@ class KernelRetrievalEvaluationServiceTests {
             return source.getOrDefault(question, List.of()).stream()
                     .limit(topK)
                     .toList();
+        }
+    }
+
+    private static final class RecordingTraceRepository implements RagTraceRepositoryPort {
+
+        private RagTraceRun startedRun;
+        private RagTraceRunFinish finishedRun;
+
+        @Override
+        public RagTracePage<RagTraceRun> pageRuns(RagTracePageRequest request) {
+            return new RagTracePage<>(1, 10, 0, List.of());
+        }
+
+        @Override
+        public Optional<RagTraceRun> findRun(String traceId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<RagTraceNode> listNodes(String traceId) {
+            return List.of();
+        }
+
+        @Override
+        public void startRun(RagTraceRun run) {
+            startedRun = run;
+        }
+
+        @Override
+        public void finishRun(RagTraceRunFinish finish) {
+            finishedRun = finish;
+        }
+
+        @Override
+        public void startNode(RagTraceNode node) {
+        }
+
+        @Override
+        public void finishNode(RagTraceNodeFinish finish) {
         }
     }
 }

@@ -45,6 +45,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.KernelAgen
 import com.miracle.ai.seahorse.agent.kernel.application.agent.quota.KernelQuotaDecisionService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.quota.KernelQuotaSummaryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.readiness.KernelEnterprisePilotReadinessService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.rollout.KernelAgentRolloutCostSummaryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.rollout.KernelAgentRolloutService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.KernelSandboxRuntimeService;
@@ -84,6 +85,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaSummaryInboundPort
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ResourceAclManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SreHealthInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutCostSummaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.TaskTemplateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
@@ -605,6 +607,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             ObjectProvider<AgentEvalSummaryRepositoryPort> agentEvalSummaryRepositoryPort,
             ObjectProvider<QuotaPolicyRepositoryPort> quotaPolicyRepositoryPort,
             ObjectProvider<SreHealthReportProviderPort> sreHealthReportProviderPort,
+            ObjectProvider<AgentPublishCheckRepositoryPort> agentPublishCheckRepositoryPort,
             ObjectProvider<Clock> clockProvider) {
         return new KernelProductionGateService(
                 productionGateRepositoryPort,
@@ -612,6 +615,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 agentEvalSummaryRepositoryPort.getIfAvailable(),
                 quotaPolicyRepositoryPort.getIfAvailable(),
                 sreHealthReportProviderPort.getIfAvailable(),
+                agentPublishCheckRepositoryPort.getIfAvailable(),
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
@@ -626,11 +630,30 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             AgentRolloutRepositoryPort agentRolloutRepositoryPort,
             ProductionGateRepositoryPort productionGateRepositoryPort,
             AgentFactoryInboundPort agentFactoryInboundPort,
+            ObjectProvider<KernelAuditLedgerService> auditLedgerService,
             ObjectProvider<Clock> clockProvider) {
         return new KernelAgentRolloutService(
                 agentRolloutRepositoryPort,
                 productionGateRepositoryPort,
                 agentFactoryInboundPort,
+                auditLedgerService.getIfAvailable(),
+                clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnBean({AgentRolloutRepositoryPort.class, CostUsageRepositoryPort.class})
+    @ConditionalOnMissingBean(AgentRolloutCostSummaryInboundPort.class)
+    public KernelAgentRolloutCostSummaryService seahorseAgentRolloutCostSummaryInboundPort(
+            AgentRolloutRepositoryPort agentRolloutRepositoryPort,
+            CostUsageRepositoryPort costUsageRepositoryPort,
+            ObjectProvider<AgentRunRepositoryPort> agentRunRepositoryPort,
+            ObjectProvider<ApprovalRequestQueryPort> approvalRequestQueryPort,
+            ObjectProvider<Clock> clockProvider) {
+        return new KernelAgentRolloutCostSummaryService(
+                agentRolloutRepositoryPort,
+                costUsageRepositoryPort,
+                agentRunRepositoryPort.getIfAvailable(),
+                approvalRequestQueryPort.getIfAvailable(),
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 

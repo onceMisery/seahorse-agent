@@ -41,7 +41,8 @@ public record RetrievalEvaluationCaseResult(
         @JsonProperty("errorMessage") String errorMessage,
         @JsonProperty("precisionAtK") double precisionAtK,
         @JsonProperty("negativeHitCount") int negativeHitCount,
-        @JsonProperty("negativeHitChunkIds") List<String> negativeHitChunkIds
+        @JsonProperty("negativeHitChunkIds") List<String> negativeHitChunkIds,
+        @JsonProperty("diagnostics") RetrievalEvaluationCaseDiagnostics diagnostics
 ) {
 
     public RetrievalEvaluationCaseResult(String caseId,
@@ -57,7 +58,28 @@ public record RetrievalEvaluationCaseResult(
                                          String status,
                                          String errorMessage) {
         this(caseId, question, retrievedChunkIds, retrievedDocIds, retrievedCount, hitCount, recallAtK,
-                reciprocalRank, ndcgAtK, latencyMs, status, errorMessage, 0D, 0, List.of());
+                reciprocalRank, ndcgAtK, latencyMs, status, errorMessage, 0D, 0, List.of(),
+                RetrievalEvaluationCaseDiagnostics.empty());
+    }
+
+    public RetrievalEvaluationCaseResult(String caseId,
+                                         String question,
+                                         List<String> retrievedChunkIds,
+                                         List<String> retrievedDocIds,
+                                         int retrievedCount,
+                                         int hitCount,
+                                         double recallAtK,
+                                         double reciprocalRank,
+                                         double ndcgAtK,
+                                         long latencyMs,
+                                         String status,
+                                         String errorMessage,
+                                         double precisionAtK,
+                                         int negativeHitCount,
+                                         List<String> negativeHitChunkIds) {
+        this(caseId, question, retrievedChunkIds, retrievedDocIds, retrievedCount, hitCount, recallAtK,
+                reciprocalRank, ndcgAtK, latencyMs, status, errorMessage, precisionAtK, negativeHitCount,
+                negativeHitChunkIds, RetrievalEvaluationCaseDiagnostics.empty());
     }
 
     @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
@@ -74,6 +96,7 @@ public record RetrievalEvaluationCaseResult(
         precisionAtK = normalizeRatio(precisionAtK);
         negativeHitChunkIds = List.copyOf(Objects.requireNonNullElse(negativeHitChunkIds, List.of()));
         negativeHitCount = Math.max(0, Math.max(negativeHitCount, negativeHitChunkIds.size()));
+        diagnostics = diagnostics == null ? RetrievalEvaluationCaseDiagnostics.empty() : diagnostics;
     }
 
     private static double normalizeRatio(double value) {

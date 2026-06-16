@@ -35,7 +35,6 @@ import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -50,10 +49,11 @@ import javax.sql.DataSource;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
+        matchIfMissing = true)
 public class SeahorseAgentVectorAdapterAutoConfiguration {
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.vector", name = "type", havingValue = "noop")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.vector", name = "type", havingValue = "noop")
     @ConditionalOnMissingBean(NoopVectorStoreAdapter.class)
     public NoopVectorStoreAdapter seahorseNoopVectorStoreAdapter() {
         return new NoopVectorStoreAdapter();
@@ -89,7 +89,8 @@ public class SeahorseAgentVectorAdapterAutoConfiguration {
 
         @Bean(destroyMethod = "close")
         @ConditionalOnMissingBean(MilvusClientV2.class)
-        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.vector", name = "type", havingValue = "milvus", matchIfMissing = true)
+        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.vector", name = "type",
+                havingValue = "milvus", matchIfMissing = true)
         public MilvusClientV2 seahorseMilvusClient(
                 @Value("${seahorse.agent.adapters.vector.milvus.host:localhost}") String host,
                 @Value("${seahorse.agent.adapters.vector.milvus.port:19530}") int port) {
@@ -101,7 +102,7 @@ public class SeahorseAgentVectorAdapterAutoConfiguration {
 
         @Bean
         @ConditionalOnBean(MilvusClientV2.class)
-        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.vector", name = "type",
+        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.vector", name = "type",
                 havingValue = "milvus", matchIfMissing = true)
         @ConditionalOnMissingBean(MilvusVectorAdapter.class)
         public MilvusVectorAdapter seahorseMilvusVectorAdapter(
@@ -148,7 +149,8 @@ public class SeahorseAgentVectorAdapterAutoConfiguration {
 
         @Bean
         @ConditionalOnBean(DataSource.class)
-        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.vector", name = "type", havingValue = "pgvector")
+        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.vector", name = "type",
+                havingValue = "pgvector")
         @ConditionalOnMissingBean(PgVectorAdapter.class)
         public PgVectorAdapter seahorsePgVectorAdapter(
                 DataSource dataSource,

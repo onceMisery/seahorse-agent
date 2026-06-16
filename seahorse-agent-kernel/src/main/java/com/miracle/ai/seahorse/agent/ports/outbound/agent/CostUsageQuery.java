@@ -22,6 +22,29 @@ import java.time.Instant;
 public record CostUsageQuery(String tenantId,
                              String agentId,
                              String runId,
+                             String rolloutId,
                              Instant from,
                              Instant to) {
+
+    public CostUsageQuery(String tenantId,
+                          String agentId,
+                          String runId,
+                          Instant from,
+                          Instant to) {
+        this(tenantId, agentId, runId, null, from, to);
+    }
+
+    public CostUsageQuery {
+        tenantId = trimToNull(tenantId);
+        agentId = trimToNull(agentId);
+        runId = trimToNull(runId);
+        rolloutId = trimToNull(rolloutId);
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
+    }
 }

@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelMultiChannelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
@@ -28,7 +29,9 @@ import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceReco
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLayer;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.DefaultMetadataFilterCompiler;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.MetadataFilterCompiler;
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionRegistry;
@@ -52,6 +55,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -176,27 +180,57 @@ public class SeahorseAgentKernelRetrievalAutoConfiguration {
     @ConditionalOnMissingBean(MemoryBusinessDocumentRetrieverPort.class)
     public MemoryBusinessDocumentRetrieverPort seahorseMemoryBusinessDocumentRetrieverPort(
             KernelRetrievalEngine retrievalEngine) {
-        return (tenantId, query, topK) -> retrievalEngine
-                .retrieveKnowledgeChannels(List.of(new SubQuestionIntent(query, List.of())), topK)
-                .stream()
-                .map(chunk -> toBusinessDocumentMemoryItem(tenantId, chunk))
-                .toList();
+        return new MemoryBusinessDocumentRetrieverPort() {
+            @Override
+            public List<MemoryItem> retrieve(String tenantId, String query, int topK) {
+                return toBusinessDocumentMemoryItems(tenantId, retrievalEngine
+                        .retrieveKnowledgeChannels(List.of(new SubQuestionIntent(query, List.of())), topK));
+            }
+
+            @Override
+            public List<MemoryItem> retrieve(String tenantId,
+                                             String query,
+                                             int topK,
+                                             List<String> knowledgeBaseIds) {
+                List<String> normalizedKnowledgeBaseIds = normalizeIds(knowledgeBaseIds);
+                if (normalizedKnowledgeBaseIds.isEmpty()) {
+                    return retrieve(tenantId, query, topK);
+                }
+                RetrievalFilter filter = RetrievalFilter.builder()
+                        .system(SystemRetrievalFilter.builder()
+                                .tenantId(tenantId)
+                                .knowledgeBaseIds(normalizedKnowledgeBaseIds)
+                                .build())
+                        .build();
+                return toBusinessDocumentMemoryItems(tenantId, retrievalEngine
+                        .retrieveKnowledgeChannels(List.of(new SubQuestionIntent(query, List.of())), topK, filter,
+                                null));
+            }
+        };
     }
 
     @Bean
     @ConditionalOnBean(KernelRetrievalEngine.class)
     @ConditionalOnMissingBean(RetrievalEvaluationInboundPort.class)
     public KernelRetrievalEvaluationService seahorseRetrievalEvaluationInboundPort(
-            KernelRetrievalEngine retrievalEngine) {
-        return new KernelRetrievalEvaluationService(retrievalEngine);
+            KernelRetrievalEngine retrievalEngine,
+            ObjectProvider<KernelRagTraceRecorder> traceRecorder) {
+        return new KernelRetrievalEvaluationService(
+                retrievalEngine,
+                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop));
     }
 
     @Bean
     @ConditionalOnMissingBean(RetrievalStrategyTemplateInboundPort.class)
     public KernelRetrievalStrategyTemplateService seahorseRetrievalStrategyTemplateInboundPort(
-            ObjectProvider<RetrievalStrategyTemplateRepositoryPort> repositoryPort) {
+            ObjectProvider<RetrievalStrategyTemplateRepositoryPort> repositoryPort,
+            ObjectProvider<RetrievalEvaluationComparisonRepositoryPort> comparisonRepositoryPort,
+            ObjectProvider<KernelAuditLedgerService> auditLedgerService) {
         return new KernelRetrievalStrategyTemplateService(
-                repositoryPort.getIfAvailable(RetrievalStrategyTemplateRepositoryPort::empty));
+                repositoryPort.getIfAvailable(RetrievalStrategyTemplateRepositoryPort::empty),
+                comparisonRepositoryPort.getIfAvailable(RetrievalEvaluationComparisonRepositoryPort::empty),
+                auditLedgerService.getIfAvailable(),
+                null);
     }
 
     @Bean
@@ -247,6 +281,24 @@ public class SeahorseAgentKernelRetrievalAutoConfiguration {
                 .relevanceScore(chunk.getScore() == null ? null : chunk.getScore().doubleValue())
                 .createTime(LocalDateTime.now())
                 .build();
+    }
+
+    private static List<MemoryItem> toBusinessDocumentMemoryItems(String tenantId, List<RetrievedChunk> chunks) {
+        return chunks.stream()
+                .map(chunk -> toBusinessDocumentMemoryItem(tenantId, chunk))
+                .toList();
+    }
+
+    private static List<String> normalizeIds(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        return values.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .toList();
     }
 
     private static String toJsonObject(Map<String, Object> metadata) {

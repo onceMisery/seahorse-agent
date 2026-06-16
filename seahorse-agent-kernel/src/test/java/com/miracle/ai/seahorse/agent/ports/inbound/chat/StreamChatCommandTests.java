@@ -33,6 +33,14 @@ class StreamChatCommandTests {
     }
 
     @Test
+    void knowledgeBaseIdsNormalizedAndDeduplicated() {
+        var cmd = new StreamChatCommand("q", "c", "t", "u", false,
+                ChatMode.RAG, null, null, null, List.of(), List.of(),
+                List.of(" 42 ", "", "42", "43"));
+        assertEquals(List.of("42", "43"), cmd.knowledgeBaseIds());
+    }
+
+    @Test
     void selectedSkillNamesOverLimitThrows() {
         assertThrows(IllegalArgumentException.class, () -> new StreamChatCommand(
                 "q", "c", "t", "u", false, ChatMode.AGENT,
@@ -52,5 +60,6 @@ class StreamChatCommandTests {
     void backwardCompatibleConstructorDefaultsSelectedSkillsToEmpty() {
         var cmd = new StreamChatCommand("q", "c", "t", "u", false);
         assertTrue(cmd.selectedSkillNames().isEmpty());
+        assertTrue(cmd.knowledgeBaseIds().isEmpty());
     }
 }

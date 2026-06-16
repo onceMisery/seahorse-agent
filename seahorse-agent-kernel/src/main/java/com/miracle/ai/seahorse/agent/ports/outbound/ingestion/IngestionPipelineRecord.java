@@ -29,6 +29,7 @@ public class IngestionPipelineRecord {
     private String id;
     private String name;
     private String description;
+    private int version;
     private String createdBy;
     private Instant createTime;
     private Instant updateTime;
@@ -56,6 +57,14 @@ public class IngestionPipelineRecord {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public int getVersion() {
+        return version;
+    }
+
+    public void setVersion(int version) {
+        this.version = Math.max(0, version);
     }
 
     public String getCreatedBy() {

@@ -117,6 +117,33 @@ class MemoryRetrievalPipelineTests {
     }
 
     @Test
+    void shouldPassKnowledgeBaseScopeToBusinessDocumentRetriever() {
+        RecordingBusinessDocumentRetrieverPort businessDocumentRetrieverPort =
+                new RecordingBusinessDocumentRetrieverPort();
+        MemoryRetrievalPipelinePort pipeline = new DefaultMemoryRetrievalPipeline(
+                new EmptyShortTermMemoryPort(),
+                new EmptyLongTermMemoryPort(),
+                new EmptySemanticMemoryPort(),
+                new ObjectMapper(),
+                MemoryEngineOptions.defaults(),
+                new RecordingProfileMemoryPort(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                MemoryVectorPort.noop(),
+                businessDocumentRetrieverPort,
+                MemoryLifecyclePort.noop());
+
+        pipeline.load(MemoryLoadRequest.builder()
+                .userId("user-1")
+                .conversationId("conv-1")
+                .currentQuestion("policy document")
+                .knowledgeBaseIds(List.of("42", "43"))
+                .build());
+
+        assertThat(businessDocumentRetrieverPort.lastKnowledgeBaseIds).containsExactly("42", "43");
+    }
+
+    @Test
     void shouldSuppressProfileSlotWhenCorrectionTargetsSameSlot() {
         RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
         profilePort.upsert(new ProfileFactUpdate(
@@ -164,6 +191,22 @@ class MemoryRetrievalPipelineTests {
                 .containsExactly("用户纠正职业画像：不是 student，而是 teacher");
         assertThat(context.getProfileMemories()).isEmpty();
         assertThat(profilePort.readSlots).isEmpty();
+    }
+
+    private static class RecordingBusinessDocumentRetrieverPort implements MemoryBusinessDocumentRetrieverPort {
+
+        private List<String> lastKnowledgeBaseIds = List.of();
+
+        @Override
+        public List<MemoryItem> retrieve(String tenantId, String query, int topK) {
+            return List.of();
+        }
+
+        @Override
+        public List<MemoryItem> retrieve(String tenantId, String query, int topK, List<String> knowledgeBaseIds) {
+            lastKnowledgeBaseIds = knowledgeBaseIds;
+            return List.of();
+        }
     }
 
     private static class RecordingProfileMemoryPort implements ProfileMemoryPort {

@@ -127,6 +127,19 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
             SET status = ?, updated_by = ?, update_time = CURRENT_TIMESTAMP
             WHERE id = ? AND deleted = 0 AND tenant_id = ?
             """;
+    private static final String SQL_INSERT_CHUNK_LOG = """
+            INSERT INTO t_knowledge_document_chunk_log(
+                id, doc_id, status, process_mode, chunk_strategy, pipeline_id,
+                extract_duration, chunk_duration, embed_duration, persist_duration,
+                total_duration, chunk_count, error_message, start_time, end_time,
+                create_time, update_time, tenant_id
+            )
+            SELECT ?, doc.id, ?, doc.process_mode, doc.chunk_strategy, doc.pipeline_id,
+                   0, 0, 0, 0, 0, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+                   CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, doc.tenant_id
+            FROM t_knowledge_document doc
+            WHERE doc.id = ? AND doc.deleted = 0 AND doc.tenant_id = ?
+            """;
     private static final String SQL_UPDATE_ENABLED_DOCUMENT = """
             UPDATE t_knowledge_document
             SET enabled = ?, updated_by = ?, update_time = CURRENT_TIMESTAMP
@@ -267,14 +280,21 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
 
     @Override
     public void markSuccess(Long docId, int chunkCount, String operator) {
-        jdbcTemplate.update(SQL_MARK_SUCCESS, STATUS_SUCCESS, Math.max(chunkCount, 0),
+        int safeChunkCount = Math.max(chunkCount, 0);
+        int updated = jdbcTemplate.update(SQL_MARK_SUCCESS, STATUS_SUCCESS, safeChunkCount,
                 parseOperatorId(operator), docId, JdbcTenantSupport.resolveTenantId());
+        if (updated > 0) {
+            appendChunkLog(docId, STATUS_SUCCESS, safeChunkCount, null);
+        }
     }
 
     @Override
     public void markFailed(Long docId, String operator, String errorMessage) {
-        jdbcTemplate.update(SQL_MARK_FAILED, STATUS_FAILED,
+        int updated = jdbcTemplate.update(SQL_MARK_FAILED, STATUS_FAILED,
                 parseOperatorId(operator), docId, JdbcTenantSupport.resolveTenantId());
+        if (updated > 0) {
+            appendChunkLog(docId, STATUS_FAILED, 0, errorMessage);
+        }
     }
 
     @Override
@@ -466,6 +486,16 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
         } catch (Exception ex) {
             return Map.of();
         }
+    }
+
+    private void appendChunkLog(Long docId, String status, int chunkCount, String errorMessage) {
+        jdbcTemplate.update(SQL_INSERT_CHUNK_LOG,
+                SnowflakeIds.nextId(),
+                status,
+                chunkCount,
+                errorMessage,
+                docId,
+                JdbcTenantSupport.resolveTenantId());
     }
 
     private KnowledgeDocumentProcessRef normalizeProcess(KnowledgeDocumentProcessRef process) {

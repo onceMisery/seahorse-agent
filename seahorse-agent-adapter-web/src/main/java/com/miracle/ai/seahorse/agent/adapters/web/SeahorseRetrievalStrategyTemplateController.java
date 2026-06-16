@@ -74,4 +74,16 @@ public class SeahorseRetrievalStrategyTemplateController {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
                 Map.of("deleted", templatePortProvider.getIfAvailable().deleteTemplate(kbId, templateKey)));
     }
+
+    @PostMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/comparisons/{comparison-id}/promote")
+    public Map<String, Object> promoteFromComparison(@PathVariable("kb-id") String kbId,
+                                                     @PathVariable("dataset-id") String datasetId,
+                                                     @PathVariable("comparison-id") String comparisonId,
+                                                     @RequestBody RetrievalStrategyPromotionRequest request) {
+        RetrievalStrategyPromotionRequest safeRequest = Objects.requireNonNull(request,
+                "request must not be null");
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                templatePortProvider.getIfAvailable()
+                        .promoteTemplateFromComparison(kbId, safeRequest.toCommand(datasetId, comparisonId)));
+    }
 }

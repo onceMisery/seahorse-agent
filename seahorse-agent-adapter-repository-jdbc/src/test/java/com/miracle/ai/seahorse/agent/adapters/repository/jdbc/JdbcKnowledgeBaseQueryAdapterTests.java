@@ -81,6 +81,15 @@ class JdbcKnowledgeBaseQueryAdapterTests {
     }
 
     @Test
+    void findByIdShouldReturnKnowledgeBaseEvenBeforeFirstChunkExists() {
+        assertThat(adapter.findById(4L))
+                .isPresent()
+                .get()
+                .extracting("id", "collectionName")
+                .containsExactly(4L, "collection-empty");
+    }
+
+    @Test
     void searchDocumentsShouldClampLimitAndJoinKnowledgeBaseName() {
         List<KnowledgeDocumentSummary> documents = adapter.searchDocuments("guide", 50);
 
@@ -159,6 +168,7 @@ class JdbcKnowledgeBaseQueryAdapterTests {
     }
 
     private void resetSchema(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_knowledge_document_chunk_log");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_knowledge_chunk");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_knowledge_document");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_knowledge_base");
@@ -187,11 +197,34 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                     file_type varchar(64),
                     file_size bigint,
                     process_mode varchar(32),
+                    chunk_strategy varchar(64),
                     pipeline_id varchar(64),
                     status varchar(32),
                     created_by varchar(64),
                     updated_by varchar(64),
                     deleted int,
+                    create_time timestamp,
+                    update_time timestamp,
+                    tenant_id varchar(64) not null default 'default'
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_knowledge_document_chunk_log (
+                    id BIGINT PRIMARY KEY,
+                    doc_id BIGINT,
+                    status varchar(32),
+                    process_mode varchar(32),
+                    chunk_strategy varchar(64),
+                    pipeline_id varchar(64),
+                    extract_duration bigint,
+                    chunk_duration bigint,
+                    embed_duration bigint,
+                    persist_duration bigint,
+                    total_duration bigint,
+                    chunk_count int,
+                    error_message varchar(512),
+                    start_time timestamp,
+                    end_time timestamp,
                     create_time timestamp,
                     update_time timestamp,
                     tenant_id varchar(64) not null default 'default'
@@ -217,6 +250,7 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                     id varchar(64) PRIMARY KEY,
                     name varchar(128),
                     description varchar(256),
+                    version int not null default 1,
                     deleted int
                 )
                 """);
@@ -295,8 +329,9 @@ class JdbcKnowledgeBaseQueryAdapterTests {
         jdbcTemplate.update(
                 "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted, update_time, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'default')",
                 13L, 5L, 50L, 0, "disabled chunk", "", 14, 0, 0, baseTime.plusMinutes(4));
-        jdbcTemplate.update("INSERT INTO t_ingestion_pipeline(id, name, description, deleted) VALUES (?, ?, ?, ?)",
-                "1", "Default ingestion pipeline", "Default", 0);
+        jdbcTemplate.update(
+                "INSERT INTO t_ingestion_pipeline(id, name, description, version, deleted) VALUES (?, ?, ?, ?, ?)",
+                "1", "Default ingestion pipeline", "Default", 1, 0);
         jdbcTemplate.update("""
                         INSERT INTO t_ingestion_pipeline_node(
                             id, pipeline_id, node_id, node_type, next_node_id, settings_json,

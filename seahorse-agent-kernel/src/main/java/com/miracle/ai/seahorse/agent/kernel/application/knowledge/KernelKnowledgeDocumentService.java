@@ -296,10 +296,7 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
     }
 
     private KnowledgeBaseRef requireKnowledgeBase(Long kbId) {
-        List<KnowledgeBaseRef> refs = knowledgeBaseQueryPort.listSearchableKnowledgeBases();
-        return refs.stream()
-                .filter(ref -> Objects.equals(ref.id(), kbId))
-                .findFirst()
+        return knowledgeBaseQueryPort.findById(kbId)
                 .orElseThrow(() -> new IllegalArgumentException("知识库不存在或未配置向量集合：" + kbId));
     }
 

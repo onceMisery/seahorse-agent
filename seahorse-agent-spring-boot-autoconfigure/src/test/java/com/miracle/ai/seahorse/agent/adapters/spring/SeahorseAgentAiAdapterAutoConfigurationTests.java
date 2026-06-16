@@ -56,6 +56,20 @@ class SeahorseAgentAiAdapterAutoConfigurationTests {
     }
 
     @Test
+    void shouldConfigureMockEmbeddingFromCanonicalAdapterProperties() {
+        contextRunner.withPropertyValues(
+                        "seahorse-agent.adapters.ai.type=mock",
+                        "seahorse-agent.adapters.vector.dimension=384")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(EmbeddingModelPort.class);
+                    assertThat(context.getBean(EmbeddingModelPort.class)).isInstanceOf(MockEmbeddingAdapter.class);
+                    assertThat(context.getBean(EmbeddingModelPort.class).embed("mock", "knowledge chunk"))
+                            .hasSize(384);
+                });
+    }
+
+    @Test
     void shouldConfigureMockEmbeddingDimensionFromEmbeddingModelWhenVectorDimensionIsUnset() {
         contextRunner.withPropertyValues(
                         "seahorse.agent.adapters.ai.type=mock",

@@ -32,6 +32,8 @@ public class IngestionTaskRecord {
 
     private String id;
     private String pipelineId;
+    private int pipelineVersion;
+    private Map<String, Object> pipelineSnapshot = Map.of();
     private String sourceType;
     private String sourceLocation;
     private String sourceFileName;
@@ -40,6 +42,8 @@ public class IngestionTaskRecord {
     private String errorMessage;
     private List<NodeLog> logs = List.of();
     private Map<String, Object> metadata = Map.of();
+    private int unresolvedQuarantineCount;
+    private boolean hasQuarantineItems;
     private Instant startedAt;
     private Instant completedAt;
     private String createdBy;
@@ -60,6 +64,22 @@ public class IngestionTaskRecord {
 
     public void setPipelineId(String pipelineId) {
         this.pipelineId = pipelineId;
+    }
+
+    public int getPipelineVersion() {
+        return pipelineVersion;
+    }
+
+    public void setPipelineVersion(int pipelineVersion) {
+        this.pipelineVersion = Math.max(0, pipelineVersion);
+    }
+
+    public Map<String, Object> getPipelineSnapshot() {
+        return pipelineSnapshot;
+    }
+
+    public void setPipelineSnapshot(Map<String, Object> pipelineSnapshot) {
+        this.pipelineSnapshot = new LinkedHashMap<>(Objects.requireNonNullElse(pipelineSnapshot, Map.of()));
     }
 
     public String getSourceType() {
@@ -124,6 +144,23 @@ public class IngestionTaskRecord {
 
     public void setMetadata(Map<String, Object> metadata) {
         this.metadata = new LinkedHashMap<>(Objects.requireNonNullElse(metadata, Map.of()));
+    }
+
+    public int getUnresolvedQuarantineCount() {
+        return unresolvedQuarantineCount;
+    }
+
+    public void setUnresolvedQuarantineCount(int unresolvedQuarantineCount) {
+        this.unresolvedQuarantineCount = Math.max(0, unresolvedQuarantineCount);
+        this.hasQuarantineItems = this.unresolvedQuarantineCount > 0;
+    }
+
+    public boolean isHasQuarantineItems() {
+        return hasQuarantineItems;
+    }
+
+    public void setHasQuarantineItems(boolean hasQuarantineItems) {
+        this.hasQuarantineItems = hasQuarantineItems;
     }
 
     public Instant getStartedAt() {

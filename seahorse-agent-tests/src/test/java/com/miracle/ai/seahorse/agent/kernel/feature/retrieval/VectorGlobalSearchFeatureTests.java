@@ -21,8 +21,10 @@ import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentNode;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScore;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRef;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkSummary;
@@ -156,6 +158,29 @@ class VectorGlobalSearchFeatureTests {
                 .build());
 
         assertThat(knowledgeBaseQueryPort.embeddingModels).containsExactly("nomic-embed-text");
+    }
+
+    @Test
+    void shouldOnlySearchCollectionsMatchingSystemKnowledgeBaseFilter() {
+        RecordingVectorSearchPort vectorSearchPort = new RecordingVectorSearchPort();
+        KnowledgeBaseQueryPort knowledgeBaseQueryPort = new StaticKnowledgeBaseQueryPort(List.of(
+                new KnowledgeBaseRef(1L, "Stale", "missing-collection"),
+                new KnowledgeBaseRef(2L, "Current", "current-collection")));
+        VectorGlobalSearchFeature feature = new VectorGlobalSearchFeature(knowledgeBaseQueryPort, vectorSearchPort);
+
+        feature.search(SearchContext.builder()
+                .rewrittenQuestion("Seahorse Agent vector model")
+                .topK(3)
+                .filter(RetrievalFilter.builder()
+                        .system(SystemRetrievalFilter.builder()
+                                .knowledgeBaseIds(List.of("2"))
+                                .build())
+                        .build())
+                .build());
+
+        assertThat(vectorSearchPort.requests)
+                .extracting(VectorSearchRequest::collectionName)
+                .containsExactly("current-collection");
     }
 
     private VectorGlobalSearchFeature featureWithCollections(List<KnowledgeBaseRef> refs) {

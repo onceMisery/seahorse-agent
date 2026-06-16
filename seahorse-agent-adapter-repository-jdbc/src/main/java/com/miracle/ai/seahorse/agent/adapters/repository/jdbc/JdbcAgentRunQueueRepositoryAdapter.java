@@ -34,7 +34,7 @@ import java.util.Objects;
 public class JdbcAgentRunQueueRepositoryAdapter implements AgentRunQueueRepositoryPort {
 
     private static final String RUN_COLUMNS = """
-            r.run_id, r.agent_id, r.version_id, r.tenant_id, r.user_id, r.conversation_id, r.trigger_type,
+            r.run_id, r.agent_id, r.version_id, r.rollout_id, r.tenant_id, r.user_id, r.conversation_id, r.trigger_type,
             r.input_summary, r.status, r.trace_id, r.token_input, r.token_output, r.cost_total, r.error_code,
             r.error_message, r.started_at, r.finished_at
             """;
@@ -76,6 +76,7 @@ public class JdbcAgentRunQueueRepositoryAdapter implements AgentRunQueueReposito
                 resultSet.getString("run_id"),
                 resultSet.getString("agent_id"),
                 resultSet.getString("version_id"),
+                resultSet.getString("rollout_id"),
                 resultSet.getString("tenant_id"),
                 resultSet.getString("user_id"),
                 resultSet.getString("conversation_id"),

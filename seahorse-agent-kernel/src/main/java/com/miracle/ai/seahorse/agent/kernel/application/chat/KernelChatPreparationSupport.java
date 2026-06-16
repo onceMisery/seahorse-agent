@@ -27,6 +27,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,6 +82,7 @@ final class KernelChatPreparationSupport {
                 .conversationId(context.getConversationId())
                 .userId(context.getUserId())
                 .currentQuestion(context.getQuestion())
+                .knowledgeBaseIds(context.getKnowledgeBaseIds())
                 .build();
         try {
             MemoryContext memoryContext = preparationPorts.memoryEnginePort().loadMemory(request);
@@ -137,8 +140,20 @@ final class KernelChatPreparationSupport {
 
     RetrievalContext retrieve(StreamChatContext context) {
         return preparationPorts.retrievalContextPort()
-                .retrieve(safeSubIntents(context), DEFAULT_TOP_K, context.getTraceRunScope(),
+                .retrieve(safeSubIntents(context), DEFAULT_TOP_K, retrievalFilter(context), context.getTraceRunScope(),
                         context.getQueryOptimizationResult());
+    }
+
+    private RetrievalFilter retrievalFilter(StreamChatContext context) {
+        List<String> knowledgeBaseIds = context == null ? List.of() : context.getKnowledgeBaseIds();
+        if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty()) {
+            return null;
+        }
+        return RetrievalFilter.builder()
+                .system(SystemRetrievalFilter.builder()
+                        .knowledgeBaseIds(knowledgeBaseIds)
+                        .build())
+                .build();
     }
 
     List<ChatMessage> safeHistory(StreamChatContext context) {

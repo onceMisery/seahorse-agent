@@ -89,6 +89,7 @@ class KernelAgentRunResumeServiceTests {
         assertEquals(1, toolGateway.requests.size());
         ToolInvocationRequest request = toolGateway.requests.get(0);
         assertEquals("run-1:call-1", request.idempotencyKey());
+        assertEquals("rollout-1", request.rolloutId());
         assertEquals("memory-forget", request.toolId());
         assertEquals("mem-1", request.arguments().get("memoryId"));
         assertEquals(1, model.requests.size());
@@ -175,6 +176,7 @@ class KernelAgentRunResumeServiceTests {
                 "tenant-1",
                 "user-1",
                 "agent-1",
+                "rollout-1",
                 "memory-forget",
                 ApprovalType.TOOL_EXECUTION,
                 ToolRiskLevel.HIGH,

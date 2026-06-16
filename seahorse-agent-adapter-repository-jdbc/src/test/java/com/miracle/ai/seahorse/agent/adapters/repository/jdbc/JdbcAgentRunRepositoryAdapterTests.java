@@ -92,6 +92,70 @@ class JdbcAgentRunRepositoryAdapterTests {
     }
 
     @Test
+    void shouldPageRunsByTenantAndStartedWindow() {
+        DriverManagerDataSource dataSource = dataSource("agent-run-window");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createRunSchema(jdbcTemplate);
+        JdbcAgentRunRepositoryAdapter adapter = new JdbcAgentRunRepositoryAdapter(dataSource);
+        Instant startedAt = Instant.parse("2026-05-23T00:00:00Z");
+        adapter.createRun(new AgentRun("run-in-window", "agent-1", "version-1", "tenant-a", "user-1",
+                null, AgentRunTriggerType.API, "in", AgentRunStatus.RUNNING, null,
+                0L, 0L, BigDecimal.ZERO, null, null, startedAt.plusSeconds(60), null));
+        adapter.createRun(new AgentRun("run-other-tenant", "agent-1", "version-1", "tenant-b", "user-1",
+                null, AgentRunTriggerType.API, "tenant", AgentRunStatus.RUNNING, null,
+                0L, 0L, BigDecimal.ZERO, null, null, startedAt.plusSeconds(60), null));
+        adapter.createRun(new AgentRun("run-too-old", "agent-1", "version-1", "tenant-a", "user-1",
+                null, AgentRunTriggerType.API, "old", AgentRunStatus.RUNNING, null,
+                0L, 0L, BigDecimal.ZERO, null, null, startedAt.minusSeconds(60), null));
+        adapter.createRun(new AgentRun("run-failed", "agent-1", "version-1", "tenant-a", "user-1",
+                null, AgentRunTriggerType.API, "failed", AgentRunStatus.FAILED, null,
+                0L, 0L, BigDecimal.ZERO, null, null, startedAt.plusSeconds(60), null));
+
+        AgentRunPage page = adapter.page(new AgentRunQuery(
+                "tenant-a",
+                "agent-1",
+                null,
+                "RUNNING",
+                startedAt,
+                startedAt.plusSeconds(120),
+                1L,
+                10L));
+
+        assertThat(page.total()).isEqualTo(1L);
+        assertThat(page.records()).extracting(AgentRun::runId).containsExactly("run-in-window");
+    }
+
+    @Test
+    void shouldPageRunsByExactRolloutId() {
+        DriverManagerDataSource dataSource = dataSource("agent-run-rollout");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createRunSchema(jdbcTemplate);
+        JdbcAgentRunRepositoryAdapter adapter = new JdbcAgentRunRepositoryAdapter(dataSource);
+        Instant startedAt = Instant.parse("2026-05-23T00:00:00Z");
+        adapter.createRun(new AgentRun("run-rollout-1", "agent-1", "version-1", "rollout-1", "tenant-a", "user-1",
+                null, AgentRunTriggerType.API, "rollout", AgentRunStatus.RUNNING, null,
+                0L, 0L, BigDecimal.ZERO, null, null, startedAt.plusSeconds(60), null));
+        adapter.createRun(new AgentRun("run-rollout-2", "agent-1", "version-1", "rollout-2", "tenant-a", "user-1",
+                null, AgentRunTriggerType.API, "other rollout", AgentRunStatus.RUNNING, null,
+                0L, 0L, BigDecimal.ZERO, null, null, startedAt.plusSeconds(90), null));
+
+        AgentRunPage page = adapter.page(new AgentRunQuery(
+                "tenant-a",
+                "agent-1",
+                null,
+                "rollout-1",
+                "RUNNING",
+                startedAt,
+                startedAt.plusSeconds(120),
+                1L,
+                10L));
+
+        assertThat(page.total()).isEqualTo(1L);
+        assertThat(page.records()).extracting(AgentRun::runId).containsExactly("run-rollout-1");
+        assertThat(page.records().get(0).rolloutId()).isEqualTo("rollout-1");
+    }
+
+    @Test
     void shouldAppendAndListStepsInStepOrder() {
         DriverManagerDataSource dataSource = dataSource("agent-step");
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
@@ -124,6 +188,7 @@ class JdbcAgentRunRepositoryAdapterTests {
                     run_id VARCHAR(64) PRIMARY KEY,
                     agent_id VARCHAR(64),
                     version_id VARCHAR(64),
+                    rollout_id VARCHAR(64),
                     tenant_id VARCHAR(64) NOT NULL,
                     user_id VARCHAR(64) NOT NULL,
                     conversation_id VARCHAR(64),
@@ -147,6 +212,10 @@ class JdbcAgentRunRepositoryAdapterTests {
         jdbcTemplate.execute("""
                 CREATE INDEX idx_sa_agent_run_user
                 ON sa_agent_run(tenant_id, user_id, started_at)
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX idx_sa_agent_run_rollout
+                ON sa_agent_run(tenant_id, agent_id, rollout_id, started_at)
                 """);
     }
 

@@ -102,6 +102,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
                 nextRunId(),
                 definition == null ? safeCommand.agentId() : definition.agentId(),
                 versionId,
+                safeCommand.rolloutId(),
                 safeCommand.tenantId(),
                 currentUser.operator(),
                 safeCommand.conversationId(),
@@ -152,6 +153,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
         return runRepository.page(new AgentRunQuery(
                 safeQuery.agentId(),
                 safeQuery.runId(),
+                safeQuery.rolloutId(),
                 normalizeStatus(safeQuery.status()),
                 safeQuery.from(),
                 safeQuery.to(),

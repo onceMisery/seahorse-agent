@@ -204,8 +204,50 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
         snapshot.put("singularProfileConflictCount", report.getSingularProfileConflictCount());
         snapshot.put("multiValueProfileOverloadCount", report.getMultiValueProfileOverloadCount());
         snapshot.put("autoDowngradedConflictCount", report.getAutoDowngradedConflictCount());
+        List<Map<String, Object>> cleanupSuggestions = cleanupSuggestions(report);
+        snapshot.put("cleanupSuggestionCount", cleanupSuggestions.size());
+        snapshot.put("cleanupSuggestions", cleanupSuggestions);
         snapshot.put("createdBy", "KernelMemoryGovernanceService");
         return snapshot;
+    }
+
+    private List<Map<String, Object>> cleanupSuggestions(MemoryQualityReport report) {
+        List<Map<String, Object>> suggestions = new ArrayList<>();
+        if (report.getConflictCount() > 0) {
+            suggestions.add(cleanupSuggestion(
+                    "MERGE_OR_CORRECT_CONFLICTS",
+                    "memory_conflict_log",
+                    report.getConflictCount(),
+                    "Pending memory conflicts require manual merge, correction, or forget decision."));
+        }
+        if (report.getMultiValueProfileOverloadCount() > 0) {
+            suggestions.add(cleanupSuggestion(
+                    "REVIEW_PROFILE_OVERLOAD",
+                    "user_profile_fact",
+                    report.getMultiValueProfileOverloadCount(),
+                    "Profile slots have too many active values and need manual pruning."));
+        }
+        if (report.getAutoDowngradedConflictCount() > 0) {
+            suggestions.add(cleanupSuggestion(
+                    "REVIEW_DOWNGRADED_FACTS",
+                    "memory_correction_ledger",
+                    report.getAutoDowngradedConflictCount(),
+                    "Auto-downgraded conflicts need human confirmation before cleanup."));
+        }
+        return List.copyOf(suggestions);
+    }
+
+    private Map<String, Object> cleanupSuggestion(String action,
+                                                  String target,
+                                                  int candidateCount,
+                                                  String reason) {
+        Map<String, Object> suggestion = new LinkedHashMap<>();
+        suggestion.put("action", action);
+        suggestion.put("target", target);
+        suggestion.put("candidateCount", candidateCount);
+        suggestion.put("reason", reason);
+        suggestion.put("requiresManualConfirmation", true);
+        return suggestion;
     }
 
     private MemoryRecord toInferredRecord(String userId, InferredMemory candidate) {

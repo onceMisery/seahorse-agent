@@ -76,7 +76,7 @@ class McpToolAllowlistRegistrarTests {
 
                     RecordingToolCatalogRepository catalog =
                             context.getBean(RecordingToolCatalogRepository.class);
-                    assertThat(catalog.savedEntries()).hasSize(1);
+                    assertThat(mcpSavedEntries(catalog)).hasSize(1);
                     assertThat(catalog.findById(WEATHER_TOOL_ID)).hasValueSatisfying(entry -> {
                         assertThat(entry.toolId()).isEqualTo(WEATHER_TOOL_ID);
                         assertThat(entry.provider()).isEqualTo(ToolProvider.MCP);
@@ -111,7 +111,10 @@ class McpToolAllowlistRegistrarTests {
 
                     InMemoryToolRegistry registry = context.getBean(InMemoryToolRegistry.class);
                     assertThat(registry.find(WEATHER_TOOL_ID)).isEmpty();
-                    assertThat(context.getBean(RecordingToolCatalogRepository.class).savedEntries()).isEmpty();
+                    RecordingToolCatalogRepository catalog =
+                            context.getBean(RecordingToolCatalogRepository.class);
+                    assertThat(mcpSavedEntries(catalog)).isEmpty();
+                    assertThat(catalog.findById(WEATHER_TOOL_ID)).isEmpty();
                 });
     }
 
@@ -121,6 +124,12 @@ class McpToolAllowlistRegistrarTests {
         } catch (Exception ex) {
             throw new IllegalStateException(ex);
         }
+    }
+
+    private static List<ToolCatalogEntry> mcpSavedEntries(RecordingToolCatalogRepository catalog) {
+        return catalog.savedEntries().stream()
+                .filter(entry -> entry.provider() == ToolProvider.MCP)
+                .toList();
     }
 
     @Configuration(proxyBeanMethods = false)

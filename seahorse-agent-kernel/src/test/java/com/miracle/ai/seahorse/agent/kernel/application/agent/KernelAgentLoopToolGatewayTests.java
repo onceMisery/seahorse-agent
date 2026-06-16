@@ -95,15 +95,17 @@ class KernelAgentLoopToolGatewayTests {
                 .memoryContext(MemoryContext.builder()
                         .conversationId("conversation-1")
                         .userId("user-1")
-                        .currentQuestion("weather?")
+                .currentQuestion("weather?")
                         .build())
                 .runId("run-1")
+                .rolloutId("rollout-1")
                 .build());
 
         assertEquals("done", result.finalAnswer());
         assertEquals(1, gateway.requests.size());
         ToolInvocationRequest request = gateway.requests.get(0);
         assertEquals("run-1", request.runId());
+        assertEquals("rollout-1", request.rolloutId());
         assertEquals("call-1", request.toolCallId());
         assertEquals("call-1", request.stepId());
         assertEquals("weather", request.toolId());

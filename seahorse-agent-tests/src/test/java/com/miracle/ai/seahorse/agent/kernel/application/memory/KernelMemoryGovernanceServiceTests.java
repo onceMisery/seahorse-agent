@@ -104,6 +104,7 @@ class KernelMemoryGovernanceServiceTests {
                 .shortTermCount(2)
                 .conflictCount(1)
                 .singularProfileConflictCount(1)
+                .multiValueProfileOverloadCount(2)
                 .build();
         KernelMemoryGovernanceService service = new KernelMemoryGovernanceService(
                 new MemoryGovernanceServicePorts(shortTerm, longTerm, semantic, memoryEngine,
@@ -117,10 +118,20 @@ class KernelMemoryGovernanceServiceTests {
 
         assertThat(result.errors()).isEmpty();
         assertThat(qualitySnapshots.snapshots).hasSize(1);
-        assertThat(qualitySnapshots.snapshots.get(0).snapshot())
+        Map<String, Object> snapshot = qualitySnapshots.snapshots.get(0).snapshot();
+        assertThat(snapshot)
                 .containsEntry("governancePolicyVersion", "memory-governance-v1")
                 .containsEntry("shortTermCount", 2)
-                .containsEntry("singularProfileConflictCount", 1);
+                .containsEntry("singularProfileConflictCount", 1)
+                .containsEntry("cleanupSuggestionCount", 2);
+        List<?> cleanupSuggestions = (List<?>) snapshot.get("cleanupSuggestions");
+        assertThat(cleanupSuggestions.stream()
+                .map(suggestion -> String.valueOf(((Map<?, ?>) suggestion).get("action")))
+                .toList())
+                .containsExactly("MERGE_OR_CORRECT_CONFLICTS", "REVIEW_PROFILE_OVERLOAD");
+        assertThat(cleanupSuggestions)
+                .allSatisfy(suggestion -> assertThat(((Map<?, ?>) suggestion).get("requiresManualConfirmation"))
+                        .isEqualTo(true));
         assertThat(conflicts.records).hasSize(1);
         assertThat(conflicts.records.get(0).userId()).isEqualTo("user-1");
         assertThat(conflicts.records.get(0).memoryId1()).isEqualTo("m1");

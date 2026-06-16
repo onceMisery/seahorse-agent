@@ -190,6 +190,7 @@ public class SeahorseChatController {
                            @RequestParam(required = false) String taskTemplateId,
                            @RequestParam(required = false) List<String> attachmentIds,
                            @RequestParam(required = false) List<String> selectedSkillNames,
+                           @RequestParam(required = false) List<String> knowledgeBaseIds,
                            @RequestParam(required = false) String resumeRunId,
                            @RequestParam(required = false) Long lastEventSeq) {
         String actualConversationId = resolveId(conversationId);
@@ -223,7 +224,8 @@ public class SeahorseChatController {
                 versionId,
                 taskTemplateId,
                 attachmentIds,
-                selectedSkillNames);
+                selectedSkillNames,
+                knowledgeBaseIds);
         try {
             ChatInboundPort chatInboundPort = chatInboundPortProvider.getIfAvailable();
             if (chatInboundPort == null) {

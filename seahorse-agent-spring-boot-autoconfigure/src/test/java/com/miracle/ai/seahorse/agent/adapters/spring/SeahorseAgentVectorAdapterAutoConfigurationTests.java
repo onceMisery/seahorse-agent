@@ -49,6 +49,20 @@ class SeahorseAgentVectorAdapterAutoConfigurationTests {
     }
 
     @Test
+    void shouldSelectMilvusFromCanonicalAdapterProperties() {
+        contextRunner.withPropertyValues(
+                        "seahorse.agent.adapters.vector.type=noop",
+                        "seahorse-agent.adapters.vector.type=milvus",
+                        "seahorse-agent.adapters.vector.collection-name=kb_chunks",
+                        "seahorse-agent.adapters.ai.embedding-model=nomic-embed-text")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MilvusVectorAdapter.class);
+                    assertThat(dimension(context.getBean(MilvusVectorAdapter.class))).isEqualTo(768);
+                });
+    }
+
+    @Test
     void shouldLetExplicitVectorDimensionOverrideEmbeddingModelDimension() {
         contextRunner.withPropertyValues(
                         "seahorse.agent.adapters.vector.type=milvus",

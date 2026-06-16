@@ -21,9 +21,11 @@ import java.time.Instant;
 
 public record AgentRunQuery(String agentId,
                             String runId,
+                            String rolloutId,
                             String status,
                             Instant from,
                             Instant to,
+                            String tenantId,
                             long current,
                             long size) {
 
@@ -31,10 +33,45 @@ public record AgentRunQuery(String agentId,
     public static final long DEFAULT_PAGE_SIZE = 15L;
     public static final long MAX_PAGE_SIZE = 100L;
 
+    public AgentRunQuery(String agentId,
+                         String runId,
+                         String status,
+                         Instant from,
+                         Instant to,
+                         long current,
+                         long size) {
+        this(agentId, runId, null, status, from, to, null, current, size);
+    }
+
+    public AgentRunQuery(String tenantId,
+                         String agentId,
+                         String runId,
+                         String status,
+                         Instant from,
+                         Instant to,
+                         long current,
+                         long size) {
+        this(agentId, runId, null, status, from, to, tenantId, current, size);
+    }
+
+    public AgentRunQuery(String tenantId,
+                         String agentId,
+                         String runId,
+                         String rolloutId,
+                         String status,
+                         Instant from,
+                         Instant to,
+                         long current,
+                         long size) {
+        this(agentId, runId, rolloutId, status, from, to, tenantId, current, size);
+    }
+
     public AgentRunQuery {
         agentId = trimToNull(agentId);
         runId = trimToNull(runId);
+        rolloutId = trimToNull(rolloutId);
         status = trimToNull(status);
+        tenantId = trimToNull(tenantId);
         current = current <= 0 ? DEFAULT_CURRENT : current;
         size = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
     }

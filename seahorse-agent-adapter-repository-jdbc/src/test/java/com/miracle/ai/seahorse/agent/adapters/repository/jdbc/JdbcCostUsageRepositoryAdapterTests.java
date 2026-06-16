@@ -70,6 +70,32 @@ class JdbcCostUsageRepositoryAdapterTests {
     }
 
     @Test
+    void shouldAggregateUsageByExactRolloutId() {
+        DriverManagerDataSource dataSource = dataSource("cost-usage-rollout");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createCostUsageSchema(jdbcTemplate);
+        JdbcCostUsageRepositoryAdapter adapter = new JdbcCostUsageRepositoryAdapter(dataSource);
+
+        adapter.append(record("usage-rollout-1", "tenant-a", "agent-1", "run-1", "rollout-1",
+                100L, 1L, 0.25d, NOW));
+        adapter.append(record("usage-rollout-2", "tenant-a", "agent-1", "run-2", "rollout-2",
+                999L, 9L, 9.99d, NOW.plusSeconds(30)));
+
+        CostUsageAggregate aggregate = adapter.aggregate(new CostUsageQuery(
+                "tenant-a",
+                "agent-1",
+                null,
+                "rollout-1",
+                NOW.minusSeconds(1),
+                NOW.plusSeconds(120)));
+
+        assertThat(aggregate.totalTokens()).isEqualTo(100L);
+        assertThat(aggregate.totalCalls()).isEqualTo(1L);
+        assertThat(aggregate.totalCost()).isEqualTo(0.25d);
+        assertThat(aggregate.recordCount()).isEqualTo(1L);
+    }
+
+    @Test
     void shouldRejectInvalidSourceAndNegativeUsageAtDatabaseBoundary() {
         DriverManagerDataSource dataSource = dataSource("cost-usage-invalid");
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
@@ -128,6 +154,7 @@ class JdbcCostUsageRepositoryAdapterTests {
                     user_id VARCHAR(64),
                     tool_id VARCHAR(128),
                     model_id VARCHAR(128),
+                    rollout_id VARCHAR(64),
                     source VARCHAR(32) NOT NULL,
                     tokens BIGINT NOT NULL,
                     calls BIGINT NOT NULL,
@@ -144,6 +171,10 @@ class JdbcCostUsageRepositoryAdapterTests {
                 CREATE INDEX idx_sa_cost_usage_aggregate
                 ON sa_cost_usage_record(tenant_id, agent_id, run_id, created_at)
                 """);
+        jdbcTemplate.execute("""
+                CREATE INDEX idx_sa_cost_usage_rollout
+                ON sa_cost_usage_record(tenant_id, agent_id, rollout_id, created_at)
+                """);
     }
 
     private static CostUsageRecord record(String usageId,
@@ -154,11 +185,24 @@ class JdbcCostUsageRepositoryAdapterTests {
                                           long calls,
                                           double cost,
                                           Instant createdAt) {
+        return record(usageId, tenantId, agentId, runId, null, tokens, calls, cost, createdAt);
+    }
+
+    private static CostUsageRecord record(String usageId,
+                                          String tenantId,
+                                          String agentId,
+                                          String runId,
+                                          String rolloutId,
+                                          long tokens,
+                                          long calls,
+                                          double cost,
+                                          Instant createdAt) {
         return new CostUsageRecord(
                 usageId,
                 tenantId,
                 agentId,
                 runId,
+                rolloutId,
                 "user-1",
                 "tool-1",
                 "model-1",

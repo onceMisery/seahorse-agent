@@ -40,6 +40,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReason
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
@@ -50,6 +51,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
@@ -135,6 +138,61 @@ class KernelChatAgentRunStoreTests {
         assertEquals(AgentStepStatus.SUCCEEDED, steps.get(1).status());
         assertTrue(steps.get(1).inputJson().contains("weather"));
         assertTrue(steps.get(1).outputJson().contains("temp"));
+    }
+
+    @Test
+    void shouldPropagateAgentRunRolloutIdToToolGatewayRequest() {
+        AgentToolCall toolCall = AgentToolCall.of("call-1", "weather", Map.of("city", "Shanghai"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need weather", List.of(toolCall)),
+                Turn.finalAnswer("Shanghai 21C")));
+        InMemoryToolRegistry toolRegistry = new InMemoryToolRegistry();
+        toolRegistry.register(new ToolDescriptor("weather", "Weather", "Weather lookup", "{}"),
+                (callId, toolId, arguments) -> ToolInvocationResult.ok("{\"temp\":21}"));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("{\"temp\":21}"));
+        KernelAgentLoop agentLoop = new KernelAgentLoop(
+                model,
+                toolRegistry,
+                gateway,
+                KernelAgentLoopOptions.defaults());
+        AgentRun run = new AgentRun(
+                "run-rollout-1",
+                "legacy-react-agent",
+                null,
+                "rollout-1",
+                "default",
+                "user-1",
+                "conversation-1",
+                AgentRunTriggerType.CHAT,
+                "What is the weather?",
+                AgentRunStatus.RUNNING,
+                "trace-1",
+                0L,
+                0L,
+                BigDecimal.ZERO,
+                null,
+                null,
+                FIXED_CLOCK.instant(),
+                null);
+        RecordingAgentRunInboundPort runPort = new RecordingAgentRunInboundPort(run);
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.of(agentLoop),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.of(runPort));
+
+        service.streamChat(new StreamChatCommand(
+                "What is the weather?", "conversation-1", "task-1", "user-1", false, ChatMode.AGENT), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertEquals("run-rollout-1", runPort.startedRun.runId());
+        assertEquals(1, gateway.requests.size());
+        assertEquals("run-rollout-1", gateway.requests.get(0).runId());
+        assertEquals("rollout-1", gateway.requests.get(0).rolloutId());
     }
 
     @Test
@@ -607,6 +665,66 @@ class KernelChatAgentRunStoreTests {
 
     private static ToolGatewayPort successfulWeatherGateway() {
         return request -> ToolInvocationResult.ok("{\"temp\":21}");
+    }
+
+    private static final class RecordingToolGateway implements ToolGatewayPort {
+        private final ToolInvocationResult result;
+        private final List<ToolInvocationRequest> requests = new ArrayList<>();
+
+        private RecordingToolGateway(ToolInvocationResult result) {
+            this.result = result;
+        }
+
+        @Override
+        public ToolInvocationResult invoke(ToolInvocationRequest request) {
+            requests.add(request);
+            return result;
+        }
+    }
+
+    private static final class RecordingAgentRunInboundPort implements AgentRunInboundPort {
+        private final AgentRun startedRun;
+        private AgentRunStartCommand startCommand;
+
+        private RecordingAgentRunInboundPort(AgentRun startedRun) {
+            this.startedRun = startedRun;
+        }
+
+        @Override
+        public AgentRun startRun(AgentRunStartCommand command) {
+            this.startCommand = command;
+            return startedRun;
+        }
+
+        @Override
+        public Optional<AgentRun> findRunById(String runId) {
+            return startedRun.runId().equals(runId) ? Optional.of(startedRun) : Optional.empty();
+        }
+
+        @Override
+        public List<AgentStep> listSteps(String runId) {
+            return List.of();
+        }
+
+        @Override
+        public AgentRun cancel(String runId) {
+            return startedRun;
+        }
+
+        @Override
+        public AgentRun retry(String runId) {
+            return startedRun;
+        }
+
+        @Override
+        public AgentRun succeed(String runId) {
+            return startedRun;
+        }
+
+        @Override
+        public AgentRun fail(String runId, String errorCode, String errorMessage) {
+            return startedRun;
+        }
     }
 
     private static KernelChatPipeline newPipeline() {

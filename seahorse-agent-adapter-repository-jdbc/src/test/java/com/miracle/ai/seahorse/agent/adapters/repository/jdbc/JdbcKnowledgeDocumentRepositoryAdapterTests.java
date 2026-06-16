@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentChunkLogPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentChunkLogRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentDetail;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentUpdateValues;
@@ -56,7 +57,7 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
         KnowledgeDocumentUpdateValues values = new KnowledgeDocumentUpdateValues();
         values.setDocName("Updated Guide");
         values.setProcessMode("pipeline");
-        values.setPipelineId("pipeline-1");
+        values.setPipelineId("1");
         values.setOperator("tester");
 
         boolean updated = adapter.update(1L, values);
@@ -97,6 +98,46 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
                 .orElseThrow();
         assertThat(chunk.getMetadata()).containsEntry("department", "R&D");
         assertThat(chunk.getMetadata().get("acl_subjects")).asList().contains("user-1");
+    }
+
+    @Test
+    void markSuccessShouldAppendChunkLog() {
+        jdbcTemplate.update("DELETE FROM t_knowledge_document_chunk_log WHERE doc_id = 1");
+
+        adapter.markSuccess(1L, 3, "100");
+
+        KnowledgeDocumentChunkLogPage logs = adapter.chunkLogs(1L, 1, 10);
+        assertThat(logs.total()).isEqualTo(1);
+        KnowledgeDocumentChunkLogRecord log = logs.records().get(0);
+        assertThat(log.getDocId()).isEqualTo(1L);
+        assertThat(log.getStatus()).isEqualTo("success");
+        assertThat(log.getProcessMode()).isEqualTo("pipeline");
+        assertThat(log.getPipelineId()).isEqualTo("1");
+        assertThat(log.getChunkCount()).isEqualTo(3);
+        assertThat(log.getErrorMessage()).isNull();
+        assertThat(log.getStartTime()).isNotNull();
+        assertThat(log.getEndTime()).isNotNull();
+        assertThat(log.getCreateTime()).isNotNull();
+    }
+
+    @Test
+    void markFailedShouldAppendChunkLogWithErrorMessage() {
+        jdbcTemplate.update("DELETE FROM t_knowledge_document_chunk_log WHERE doc_id = 1");
+
+        adapter.markFailed(1L, "100", "parser failed");
+
+        KnowledgeDocumentChunkLogPage logs = adapter.chunkLogs(1L, 1, 10);
+        assertThat(logs.total()).isEqualTo(1);
+        KnowledgeDocumentChunkLogRecord log = logs.records().get(0);
+        assertThat(log.getDocId()).isEqualTo(1L);
+        assertThat(log.getStatus()).isEqualTo("failed");
+        assertThat(log.getProcessMode()).isEqualTo("pipeline");
+        assertThat(log.getPipelineId()).isEqualTo("1");
+        assertThat(log.getChunkCount()).isZero();
+        assertThat(log.getErrorMessage()).isEqualTo("parser failed");
+        assertThat(log.getStartTime()).isNotNull();
+        assertThat(log.getEndTime()).isNotNull();
+        assertThat(log.getCreateTime()).isNotNull();
     }
 
     private void createSchema() {
@@ -202,7 +243,7 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
                 """);
         jdbcTemplate.update("""
                 INSERT INTO t_ingestion_pipeline(id, name, deleted)
-                VALUES ('pipeline-1', 'Default Pipeline', 0)
+                VALUES ('1', 'Default Pipeline', 0)
                 """);
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_document
@@ -212,7 +253,7 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
                  created_by, updated_by, create_time, update_time, deleted, tenant_id)
                 VALUES
                 (1, 1, 'Guide', 'file', null, 0, null, 1, 2,
-                 'local://guide.pdf', 'pdf', 12, null, 'pipeline', null, 'pipeline-1',
+                 'local://guide.pdf', 'pdf', 12, null, 'pipeline', null, '1',
                  'success', 'tester', 'tester', ?, ?, 0, 'default')
                 """, now, now);
         jdbcTemplate.update("""
@@ -235,7 +276,7 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
                  extract_duration, chunk_duration, embed_duration, persist_duration,
                  total_duration, chunk_count, error_message, start_time, end_time,
                  create_time, update_time, tenant_id)
-                VALUES (1, 1, 'success', 'pipeline', null, 'pipeline-1',
+                VALUES (1, 1, 'success', 'pipeline', null, '1',
                         0, 50, 0, 20, 100, 2, null, ?, ?, ?, ?, 'default')
                 """, now, now, now, now);
     }

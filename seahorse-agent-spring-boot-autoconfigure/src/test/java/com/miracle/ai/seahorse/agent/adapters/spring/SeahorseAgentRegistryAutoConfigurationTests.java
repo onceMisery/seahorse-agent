@@ -40,6 +40,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.KernelAgen
 import com.miracle.ai.seahorse.agent.kernel.application.agent.quota.KernelQuotaDecisionService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.quota.KernelQuotaSummaryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.readiness.KernelEnterprisePilotReadinessService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.rollout.KernelAgentRolloutCostSummaryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.rollout.KernelAgentRolloutService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sre.KernelSreHealthQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.task.KernelTaskTemplateQueryService;
@@ -55,6 +56,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshotInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutCostSummaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
@@ -202,6 +204,7 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(SreHealthInboundPort.class);
                     assertThat(context).hasSingleBean(SreHealthReportProviderPort.class);
                     assertThat(context).hasSingleBean(AgentRolloutInboundPort.class);
+                    assertThat(context).hasSingleBean(AgentRolloutCostSummaryInboundPort.class);
                     assertThat(context).hasSingleBean(EnterprisePilotReadinessInboundPort.class);
                     assertThat(context).hasSingleBean(ReadinessAgentDefinitionEvidencePort.class);
                     assertThat(context).hasSingleBean(ReadinessToolRiskEvidencePort.class);
@@ -246,6 +249,7 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(KernelSreHealthQueryService.class);
                     assertThat(context).hasSingleBean(KernelProductionGateService.class);
                     assertThat(context).hasSingleBean(KernelAgentRolloutService.class);
+                    assertThat(context).hasSingleBean(KernelAgentRolloutCostSummaryService.class);
                     assertThat(context).hasSingleBean(KernelEnterprisePilotReadinessService.class);
                     assertThat(context).hasSingleBean(ProductionGateInboundPort.class);
                     assertThat(context).hasSingleBean(ProductionGateRepositoryPort.class);
@@ -255,6 +259,8 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                             .isSameAs(context.getBean(QuotaPolicyRepositoryPort.class));
                     assertThat(field(context.getBean(KernelProductionGateService.class), "sreHealthReportProvider"))
                             .isSameAs(context.getBean(SreHealthReportProviderPort.class));
+                    assertThat(field(context.getBean(KernelProductionGateService.class), "publishCheckRepository"))
+                            .isSameAs(context.getBean(AgentPublishCheckRepositoryPort.class));
                     assertThat(field(context.getBean(KernelAgentHandoffService.class), "handoffRepository"))
                             .isSameAs(context.getBean(AgentHandoffRepositoryPort.class));
                     assertThat(field(context.getBean(KernelAgentHandoffService.class), "auditLedger"))
@@ -271,6 +277,12 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                             .isSameAs(context.getBean(ProductionGateRepositoryPort.class));
                     assertThat(field(context.getBean(KernelAgentRolloutService.class), "agentFactoryPort"))
                             .isSameAs(context.getBean(AgentFactoryInboundPort.class));
+                    assertThat(field(context.getBean(KernelAgentRolloutService.class), "auditLedger"))
+                            .isSameAs(context.getBean(KernelAuditLedgerService.class));
+                    assertThat(field(context.getBean(KernelAgentRolloutCostSummaryService.class), "rolloutRepository"))
+                            .isSameAs(context.getBean(AgentRolloutRepositoryPort.class));
+                    assertThat(field(context.getBean(KernelAgentRolloutCostSummaryService.class), "costUsageRepository"))
+                            .isSameAs(context.getBean(CostUsageRepositoryPort.class));
                     assertThat(field(context.getBean(KernelEnterprisePilotReadinessService.class), "repository"))
                             .isSameAs(context.getBean(EnterprisePilotReadinessRepositoryPort.class));
                     assertThat(field(context.getBean(KernelEnterprisePilotReadinessService.class),

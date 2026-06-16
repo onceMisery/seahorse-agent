@@ -101,7 +101,7 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
 
     @Override
     public RetrievalContext retrieve(List<SubQuestionIntent> subIntents, int topK, TraceRunScope traceRunScope) {
-        return retrieveInternal(subIntents, topK, traceRunScope, null);
+        return retrieveInternal(subIntents, topK, null, traceRunScope, null);
     }
 
     @Override
@@ -109,11 +109,21 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
                                      int topK,
                                      TraceRunScope traceRunScope,
                                      QueryOptimizationResult queryOptimizationResult) {
-        return retrieveInternal(subIntents, topK, traceRunScope, queryOptimizationResult);
+        return retrieveInternal(subIntents, topK, null, traceRunScope, queryOptimizationResult);
+    }
+
+    @Override
+    public RetrievalContext retrieve(List<SubQuestionIntent> subIntents,
+                                     int topK,
+                                     RetrievalFilter filter,
+                                     TraceRunScope traceRunScope,
+                                     QueryOptimizationResult queryOptimizationResult) {
+        return retrieveInternal(subIntents, topK, filter, traceRunScope, queryOptimizationResult);
     }
 
     private RetrievalContext retrieveInternal(List<SubQuestionIntent> subIntents,
                                               int topK,
+                                              RetrievalFilter filter,
                                               TraceRunScope traceRunScope,
                                               QueryOptimizationResult queryOptimizationResult) {
         List<SubQuestionIntent> safeIntents = Objects.requireNonNullElse(subIntents, List.of());
@@ -126,7 +136,7 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
         List<CompletableFuture<SubQuestionContext>> tasks = safeIntents.stream()
                 .map(intent -> CompletableFuture.supplyAsync(
                         () -> buildSubQuestionContext(intent, resolveSubQuestionTopK(intent, finalTopK),
-                                traceRunScope, queryExpansionOptions),
+                                filter, traceRunScope, queryExpansionOptions),
                         ragContextExecutor))
                 .toList();
         List<SubQuestionContext> contexts = tasks.stream()
@@ -164,15 +174,25 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
         return multiChannelRetrievalEngine.retrieveKnowledgeChannels(subIntents, topK, filter, options);
     }
 
+    public List<RetrievedChunk> retrieveKnowledgeChannels(List<SubQuestionIntent> subIntents,
+                                                          int topK,
+                                                          RetrievalFilter filter,
+                                                          RetrievalOptions options,
+                                                          TraceRunScope traceRunScope) {
+        return multiChannelRetrievalEngine.retrieveKnowledgeChannels(subIntents, topK, filter, options, traceRunScope);
+    }
+
     private SubQuestionContext buildSubQuestionContext(SubQuestionIntent intent,
                                                        int topK,
+                                                       RetrievalFilter filter,
                                                        TraceRunScope traceRunScope,
                                                        RetrievalOptions queryExpansionOptions) {
         SubQuestionIntent safeIntent = safeIntent(intent);
         List<IntentScore> scores = safeScores(safeIntent);
         List<IntentScore> kbIntents = IntentScoreFilters.kb(scores);
         List<IntentScore> mcpIntents = IntentScoreFilters.mcp(scores);
-        KbResult kbResult = retrieveAndRerank(safeIntent, kbIntents, topK, traceRunScope, queryExpansionOptions);
+        KbResult kbResult = retrieveAndRerank(safeIntent, kbIntents, topK, filter, traceRunScope,
+                queryExpansionOptions);
         String mcpContext = mcpIntents.isEmpty() ? "" : executeMcpAndMerge(safeIntent.subQuestion(), mcpIntents);
         return new SubQuestionContext(safeIntent.subQuestion(), kbResult.groupedContext(), mcpContext,
                 kbResult.intentChunks());
@@ -228,12 +248,14 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
     private KbResult retrieveAndRerank(SubQuestionIntent intent,
                                        List<IntentScore> kbIntents,
                                        int topK,
+                                       RetrievalFilter filter,
                                        TraceRunScope traceRunScope,
                                        RetrievalOptions queryExpansionOptions) {
         List<RetrievedChunk> chunks = queryExpansionOptions == null
-                ? retrieveKnowledgeChannels(List.of(intent), topK, traceRunScope)
+                ? multiChannelRetrievalEngine.retrieveKnowledgeChannels(List.of(intent), topK, filter, null,
+                traceRunScope)
                 : multiChannelRetrievalEngine.retrieveKnowledgeChannels(
-                        List.of(intent), topK, null, queryExpansionOptions, traceRunScope);
+                        List.of(intent), topK, filter, queryExpansionOptions, traceRunScope);
         if (chunks == null || chunks.isEmpty()) {
             return KbResult.empty();
         }

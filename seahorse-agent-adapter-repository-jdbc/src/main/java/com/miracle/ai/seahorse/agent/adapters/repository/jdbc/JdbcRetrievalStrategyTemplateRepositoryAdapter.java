@@ -56,12 +56,13 @@ public class JdbcRetrievalStrategyTemplateRepositoryAdapter implements Retrieval
         String safeKbId = Objects.requireNonNullElse(kbId, "").trim();
         try {
             List<RetrievalStrategyTemplate> rows = jdbcTemplate.query("""
-                    SELECT template_key, display_name, description, options_json
+                    SELECT template_key, display_name, description, options_json, recommended
                     FROM t_retrieval_strategy_template
                     WHERE enabled = 1
                       AND deleted = 0
                       AND (kb_id = ? OR kb_id IS NULL OR kb_id = '')
                     ORDER BY CASE WHEN kb_id = ? THEN 1 ELSE 0 END,
+                             recommended DESC,
                              sort_order ASC,
                              update_time DESC,
                              template_key ASC
@@ -85,6 +86,7 @@ public class JdbcRetrievalStrategyTemplateRepositoryAdapter implements Retrieval
                     description = ?,
                     options_json = ?,
                     sort_order = ?,
+                    recommended = 0,
                     enabled = ?,
                     deleted = 0,
                     update_time = CURRENT_TIMESTAMP
@@ -96,13 +98,59 @@ public class JdbcRetrievalStrategyTemplateRepositoryAdapter implements Retrieval
             jdbcTemplate.update("""
                     INSERT INTO t_retrieval_strategy_template(
                         id, kb_id, template_key, display_name, description, options_json,
-                        sort_order, enabled, create_time, update_time, deleted
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                        sort_order, recommended, enabled, create_time, update_time, deleted
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
                     """, SnowflakeIds.nextIdString(), safeKbId, safePayload.templateKey(),
                     safePayload.displayName(), safePayload.description(), optionsJson,
                     safePayload.sortOrder(), enabled);
         }
         return findTemplate(safeKbId, safePayload.templateKey()).orElseGet(safePayload::toTemplate);
+    }
+
+    @Override
+    public RetrievalStrategyTemplate promoteRecommendedTemplate(String kbId, RetrievalStrategyTemplatePayload payload) {
+        String safeKbId = Objects.requireNonNullElse(kbId, "").trim();
+        RetrievalStrategyTemplatePayload safePayload = Objects.requireNonNull(payload, "payload must not be null");
+        String optionsJson = json(safePayload.options());
+        int enabled = Boolean.FALSE.equals(safePayload.enabled()) ? 0 : 1;
+        jdbcTemplate.update("""
+                UPDATE t_retrieval_strategy_template
+                SET recommended = 0,
+                    update_time = CURRENT_TIMESTAMP
+                WHERE COALESCE(kb_id, '') = ?
+                  AND recommended = 1
+                  AND deleted = 0
+                """, safeKbId);
+        int updated = jdbcTemplate.update("""
+                UPDATE t_retrieval_strategy_template
+                SET display_name = ?,
+                    description = ?,
+                    options_json = ?,
+                    sort_order = ?,
+                    recommended = 1,
+                    enabled = ?,
+                    deleted = 0,
+                    update_time = CURRENT_TIMESTAMP
+                WHERE COALESCE(kb_id, '') = ?
+                  AND template_key = ?
+                """, safePayload.displayName(), safePayload.description(), optionsJson,
+                safePayload.sortOrder(), enabled, safeKbId, safePayload.templateKey());
+        if (updated <= 0) {
+            jdbcTemplate.update("""
+                    INSERT INTO t_retrieval_strategy_template(
+                        id, kb_id, template_key, display_name, description, options_json,
+                        sort_order, recommended, enabled, create_time, update_time, deleted
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                    """, SnowflakeIds.nextIdString(), safeKbId, safePayload.templateKey(),
+                    safePayload.displayName(), safePayload.description(), optionsJson,
+                    safePayload.sortOrder(), enabled);
+        }
+        return findTemplate(safeKbId, safePayload.templateKey()).orElseGet(() -> new RetrievalStrategyTemplate(
+                safePayload.templateKey(),
+                safePayload.displayName(),
+                safePayload.description(),
+                safePayload.options(),
+                true));
     }
 
     @Override
@@ -140,13 +188,14 @@ public class JdbcRetrievalStrategyTemplateRepositoryAdapter implements Retrieval
                 resultSet.getString("template_key"),
                 resultSet.getString("display_name"),
                 resultSet.getString("description"),
-                options(resultSet.getString("options_json")));
+                options(resultSet.getString("options_json")),
+                resultSet.getInt("recommended") == 1);
     }
 
     private Optional<RetrievalStrategyTemplate> findTemplate(String kbId, String templateKey) {
         try {
             return jdbcTemplate.query("""
-                    SELECT template_key, display_name, description, options_json
+                    SELECT template_key, display_name, description, options_json, recommended
                     FROM t_retrieval_strategy_template
                     WHERE COALESCE(kb_id, '') = ?
                       AND template_key = ?

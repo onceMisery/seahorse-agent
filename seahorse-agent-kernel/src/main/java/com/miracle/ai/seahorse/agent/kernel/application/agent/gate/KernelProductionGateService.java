@@ -23,6 +23,10 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLev
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.eval.AgentEvalStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.eval.AgentEvalSummary;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.eval.AgentEvalType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentPublishCheckCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentPublishCheckItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentPublishCheckReport;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentPublishCheckStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateCheckCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateCheckItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateReport;
@@ -34,6 +38,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthStatus;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ProductionGateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentEvalSummaryRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentPublishCheckRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ProductionGateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.QuotaPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthReportProviderPort;
@@ -57,6 +62,7 @@ public class KernelProductionGateService implements ProductionGateInboundPort {
     private final AgentEvalSummaryRepositoryPort evalSummaryRepository;
     private final QuotaPolicyRepositoryPort quotaPolicyRepository;
     private final SreHealthReportProviderPort sreHealthReportProvider;
+    private final AgentPublishCheckRepositoryPort publishCheckRepository;
     private final Clock clock;
 
     public KernelProductionGateService(ProductionGateRepositoryPort repository, Clock clock) {
@@ -82,11 +88,23 @@ public class KernelProductionGateService implements ProductionGateInboundPort {
                                        QuotaPolicyRepositoryPort quotaPolicyRepository,
                                        SreHealthReportProviderPort sreHealthReportProvider,
                                        Clock clock) {
+        this(repository, agentRepository, evalSummaryRepository, quotaPolicyRepository, sreHealthReportProvider,
+                null, clock);
+    }
+
+    public KernelProductionGateService(ProductionGateRepositoryPort repository,
+                                       AgentDefinitionRepositoryPort agentRepository,
+                                       AgentEvalSummaryRepositoryPort evalSummaryRepository,
+                                       QuotaPolicyRepositoryPort quotaPolicyRepository,
+                                       SreHealthReportProviderPort sreHealthReportProvider,
+                                       AgentPublishCheckRepositoryPort publishCheckRepository,
+                                       Clock clock) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
         this.agentRepository = agentRepository;
         this.evalSummaryRepository = evalSummaryRepository;
         this.quotaPolicyRepository = quotaPolicyRepository;
         this.sreHealthReportProvider = sreHealthReportProvider;
+        this.publishCheckRepository = publishCheckRepository;
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
@@ -119,24 +137,83 @@ public class KernelProductionGateService implements ProductionGateInboundPort {
 
     private List<ProductionGateCheckItem> checks(AgentDefinition agent) {
         List<ProductionGateCheckItem> items = new ArrayList<>();
+        Optional<AgentPublishCheckReport> publishCheck = publishCheck(agent.agentId());
         items.add(ownerPresent(agent));
         items.add(publishedVersionPresent(agent));
-        items.add(ProductionGateCheckItem.pass(
+        items.add(publishCheckItem(agent, publishCheck,
+                AgentPublishCheckCode.TOOLS_ENABLED,
                 ProductionGateCheckCode.TOOL_RISK_REVIEWED,
-                "Tool risk review is owned by publish validation in this foundation slice."));
-        items.add(ProductionGateCheckItem.pass(
+                ProductionGateCheckItem.pass(
+                        ProductionGateCheckCode.TOOL_RISK_REVIEWED,
+                        "Tool risk review is owned by publish validation in this foundation slice.")));
+        items.add(publishCheckItem(agent, publishCheck,
+                AgentPublishCheckCode.HIGH_RISK_APPROVAL_PRESENT,
                 ProductionGateCheckCode.HIGH_RISK_APPROVAL_PRESENT,
-                "High risk approval policy is owned by publish validation in this foundation slice."));
+                ProductionGateCheckItem.pass(
+                        ProductionGateCheckCode.HIGH_RISK_APPROVAL_PRESENT,
+                        "High risk approval policy is owned by publish validation in this foundation slice.")));
         items.add(ProductionGateCheckItem.pass(
                 ProductionGateCheckCode.AUDIT_LEDGER_ENABLED,
                 "Audit ledger repository is configured."));
-        items.add(ProductionGateCheckItem.warn(
+        items.add(publishCheckItem(agent, publishCheck,
+                AgentPublishCheckCode.RESOURCE_ACL_PRESENT,
                 ProductionGateCheckCode.RESOURCE_ACL_PRESENT,
-                "Resource ACL gate bridge is not connected in this foundation slice."));
+                ProductionGateCheckItem.warn(
+                        ProductionGateCheckCode.RESOURCE_ACL_PRESENT,
+                        "Resource ACL gate bridge is not connected in this foundation slice.")));
         items.add(evalPassing(agent));
         items.add(quotaConfigured(agent));
         items.add(sreHealthGreen());
         return items;
+    }
+
+    private Optional<AgentPublishCheckReport> publishCheck(String agentId) {
+        if (publishCheckRepository == null) {
+            return Optional.empty();
+        }
+        return publishCheckRepository.latest(agentId);
+    }
+
+    private ProductionGateCheckItem publishCheckItem(AgentDefinition agent,
+                                                    Optional<AgentPublishCheckReport> publishCheck,
+                                                    AgentPublishCheckCode sourceCode,
+                                                    ProductionGateCheckCode targetCode,
+                                                    ProductionGateCheckItem disconnectedFallback) {
+        if (publishCheckRepository == null) {
+            return disconnectedFallback;
+        }
+        if (publishCheck.isEmpty()) {
+            return ProductionGateCheckItem.warn(targetCode, "Latest publish check is missing: " + sourceCode.name());
+        }
+        AgentPublishCheckReport report = publishCheck.orElseThrow();
+        if (hasText(agent.latestVersionId()) && hasText(report.versionId())
+                && !agent.latestVersionId().equals(report.versionId())) {
+            return ProductionGateCheckItem.fail(targetCode,
+                    "Latest publish check version does not match published version: "
+                            + report.checkId() + " " + report.versionId());
+        }
+        return report.item(sourceCode)
+                .map(item -> fromPublishCheck(report, item, targetCode))
+                .orElseGet(() -> ProductionGateCheckItem.warn(
+                        targetCode,
+                        "Publish check item is missing: " + report.checkId() + " " + sourceCode.name()));
+    }
+
+    private ProductionGateCheckItem fromPublishCheck(AgentPublishCheckReport report,
+                                                    AgentPublishCheckItem item,
+                                                    ProductionGateCheckCode targetCode) {
+        return new ProductionGateCheckItem(
+                targetCode,
+                toProductionStatus(item.status()),
+                "Publish check " + report.checkId() + ": " + item.message());
+    }
+
+    private ProductionGateStatus toProductionStatus(AgentPublishCheckStatus status) {
+        return switch (Objects.requireNonNullElse(status, AgentPublishCheckStatus.FAIL)) {
+            case PASS -> ProductionGateStatus.PASS;
+            case WARN -> ProductionGateStatus.WARN;
+            case FAIL -> ProductionGateStatus.FAIL;
+        };
     }
 
     private ProductionGateCheckItem quotaConfigured(AgentDefinition agent) {

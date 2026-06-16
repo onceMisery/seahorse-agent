@@ -73,6 +73,7 @@ class SeahorseCostUsageControllerTests {
                                   "tenantId": "tenant-a",
                                   "agentId": "agent-1",
                                   "runId": "run-1",
+                                  "rolloutId": "rollout-1",
                                   "userId": "user-1",
                                   "toolId": "tool-1",
                                   "modelId": "model-1",
@@ -95,12 +96,14 @@ class SeahorseCostUsageControllerTests {
         ArgumentCaptor<CostUsageRecord> recordCaptor = ArgumentCaptor.forClass(CostUsageRecord.class);
         verify(port).append(recordCaptor.capture());
         assertThat(recordCaptor.getValue().tenantId()).isEqualTo("tenant-a");
+        assertThat(recordCaptor.getValue().rolloutId()).isEqualTo("rollout-1");
         assertThat(recordCaptor.getValue().source()).isEqualTo(CostUsageSource.MODEL);
 
         mvc.perform(get("/api/cost-usage:aggregate")
                         .param("tenantId", "tenant-a")
                         .param("agentId", "agent-1")
                         .param("runId", "run-1")
+                        .param("rolloutId", "rollout-1")
                         .param("from", "2026-05-26T00:00:00Z")
                         .param("to", "2026-05-26T01:00:00Z"))
                 .andExpect(status().isOk())
@@ -110,6 +113,7 @@ class SeahorseCostUsageControllerTests {
         ArgumentCaptor<CostUsageQuery> queryCaptor = ArgumentCaptor.forClass(CostUsageQuery.class);
         verify(port).aggregate(queryCaptor.capture());
         assertThat(queryCaptor.getValue().runId()).isEqualTo("run-1");
+        assertThat(queryCaptor.getValue().rolloutId()).isEqualTo("rollout-1");
     }
 
     @Test

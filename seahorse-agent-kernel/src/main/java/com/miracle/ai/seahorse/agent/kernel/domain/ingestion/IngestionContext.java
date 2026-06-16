@@ -38,6 +38,7 @@ public class IngestionContext {
 
     private String taskId;
     private String pipelineId;
+    private String startNodeId;
     private Object source;
     private byte[] rawBytes;
     private String mimeType;

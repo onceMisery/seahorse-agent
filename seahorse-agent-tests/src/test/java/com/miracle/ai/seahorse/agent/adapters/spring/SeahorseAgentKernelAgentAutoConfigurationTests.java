@@ -26,11 +26,13 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.output.JsonSchemaO
 import com.miracle.ai.seahorse.agent.kernel.application.agent.output.OutputGovernanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.output.SelfHealingOutputRepairService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryForgetToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryWriteToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.QueryMetadataToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
@@ -213,7 +215,8 @@ class SeahorseAgentKernelAgentAutoConfigurationTests {
                         "seahorse-agent.chat.agent-mode-enabled=true",
                         "seahorse-agent.chat.agent.tools.search.enabled=false",
                         "seahorse-agent.chat.agent.tools.memory.enabled=false",
-                        "seahorse-agent.chat.agent.tools.web-research.enabled=false")
+                        "seahorse-agent.chat.agent.tools.web-research.enabled=false",
+                        "seahorse-agent.chat.agent.tools.deferred-search.enabled=false")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).doesNotHaveBean(SearchKnowledgeBaseToolPortAdapter.class);
@@ -221,6 +224,8 @@ class SeahorseAgentKernelAgentAutoConfigurationTests {
                     assertThat(context).doesNotHaveBean(MemoryReadToolPortAdapter.class);
                     assertThat(context).doesNotHaveBean(MemoryWriteToolPortAdapter.class);
                     assertThat(context).doesNotHaveBean(MemoryForgetToolPortAdapter.class);
+                    assertThat(context).doesNotHaveBean(ToolSearchToolPortAdapter.class);
+                    assertThat(context).hasSingleBean(LoadSkillResourceToolPortAdapter.class);
                     assertThat(context).hasSingleBean(GetDateTimeToolPortAdapter.class);
 
                     context.getBeansOfType(ApplicationRunner.class)
@@ -228,7 +233,9 @@ class SeahorseAgentKernelAgentAutoConfigurationTests {
                             .forEach(runner -> run(runner));
 
                     assertThat(toolIds(context.getBean(InMemoryToolRegistry.class)))
-                            .containsExactly("get_current_datetime");
+                            .containsExactlyInAnyOrder(
+                                    LoadSkillResourceToolPortAdapter.TOOL_ID,
+                                    GetDateTimeToolPortAdapter.TOOL_ID);
                 });
     }
 

@@ -99,6 +99,14 @@ public class JdbcKnowledgeBaseQueryAdapter implements KnowledgeBaseQueryPort {
             ) DESC NULLS LAST,
             kb.update_time DESC
             """;
+    private static final String SQL_FIND_BY_ID = """
+            SELECT id, name, collection_name
+            FROM t_knowledge_base kb
+            WHERE kb.id = ?
+              AND kb.deleted = 0
+              AND kb.collection_name IS NOT NULL
+              AND kb.collection_name <> ''
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -112,6 +120,14 @@ public class JdbcKnowledgeBaseQueryAdapter implements KnowledgeBaseQueryPort {
             return List.of();
         }
         return jdbcTemplate.query(SQL_SEARCH_DOCUMENTS, this::toDocumentSummary, like(keyword), clampLimit(limit));
+    }
+
+    @Override
+    public java.util.Optional<KnowledgeBaseRef> findById(Long kbId) {
+        if (kbId == null) {
+            return java.util.Optional.empty();
+        }
+        return jdbcTemplate.query(SQL_FIND_BY_ID, this::toKnowledgeBaseRef, kbId).stream().findFirst();
     }
 
     @Override

@@ -25,6 +25,10 @@ public interface MemoryBusinessDocumentRetrieverPort {
 
     List<MemoryItem> retrieve(String tenantId, String query, int topK);
 
+    default List<MemoryItem> retrieve(String tenantId, String query, int topK, List<String> knowledgeBaseIds) {
+        return retrieve(tenantId, query, topK);
+    }
+
     static MemoryBusinessDocumentRetrieverPort noop() {
         return (tenantId, query, topK) -> List.of();
     }

@@ -35,8 +35,13 @@ public class IngestionTaskNodeRecord {
     private int nodeOrder;
     private String status;
     private long durationMs;
+    private String inputSummary;
+    private String outputSummary;
+    private String errorCode;
     private String message;
     private String errorMessage;
+    private int retryCount;
+    private String downstreamImpact;
     private Map<String, Object> output = Map.of();
     private Instant createTime;
     private Instant updateTime;
@@ -105,6 +110,30 @@ public class IngestionTaskNodeRecord {
         this.durationMs = durationMs;
     }
 
+    public String getInputSummary() {
+        return inputSummary;
+    }
+
+    public void setInputSummary(String inputSummary) {
+        this.inputSummary = inputSummary;
+    }
+
+    public String getOutputSummary() {
+        return outputSummary;
+    }
+
+    public void setOutputSummary(String outputSummary) {
+        this.outputSummary = outputSummary;
+    }
+
+    public String getErrorCode() {
+        return errorCode;
+    }
+
+    public void setErrorCode(String errorCode) {
+        this.errorCode = errorCode;
+    }
+
     public String getMessage() {
         return message;
     }
@@ -119,6 +148,22 @@ public class IngestionTaskNodeRecord {
 
     public void setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
+    }
+
+    public int getRetryCount() {
+        return retryCount;
+    }
+
+    public void setRetryCount(int retryCount) {
+        this.retryCount = Math.max(0, retryCount);
+    }
+
+    public String getDownstreamImpact() {
+        return downstreamImpact;
+    }
+
+    public void setDownstreamImpact(String downstreamImpact) {
+        this.downstreamImpact = downstreamImpact;
     }
 
     public Map<String, Object> getOutput() {

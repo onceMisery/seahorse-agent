@@ -80,6 +80,23 @@ class KernelIngestionEngineTests {
     }
 
     @Test
+    void shouldStartFromRequestedNodeWhenContextCarriesResumeNode() {
+        List<String> executedNodes = new ArrayList<>();
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        register(registry, new RecordingNodeFeature(FETCHER, executedNodes, NodeResult.ok()));
+        register(registry, new RecordingNodeFeature(PARSER, executedNodes, NodeResult.ok()));
+        register(registry, new RecordingNodeFeature(INDEXER, executedNodes, NodeResult.ok()));
+        KernelIngestionEngine engine = new KernelIngestionEngine(registry, FeatureActivationContext.empty());
+
+        IngestionContext context = engine.execute(pipeline(node(FETCHER, PARSER), node(PARSER, INDEXER),
+                        node(INDEXER, null)),
+                IngestionContext.builder().taskId("task-a").startNodeId(PARSER).build());
+
+        Assertions.assertEquals(List.of(PARSER, INDEXER), executedNodes);
+        Assertions.assertEquals(IngestionStatus.COMPLETED, context.getStatus());
+    }
+
+    @Test
     void shouldSkipNodeWhenConditionPortRejectsExecutionAndRecordLog() {
         List<String> executedNodes = new ArrayList<>();
         List<NodeResult> recordedResults = new ArrayList<>();

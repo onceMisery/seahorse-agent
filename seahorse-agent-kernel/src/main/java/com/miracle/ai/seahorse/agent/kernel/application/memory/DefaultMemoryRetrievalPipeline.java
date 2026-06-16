@@ -139,7 +139,8 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
         }
         List<MemoryItem> businessDocuments = Collections.emptyList();
         if (loadBusinessDocument) {
-            businessDocuments = loadBusinessDocuments(userId, request.currentQuestion(), options.semanticLimit());
+            businessDocuments = loadBusinessDocuments(userId, request.currentQuestion(), options.semanticLimit(),
+                    request.knowledgeBaseIds());
         }
         Set<String> activeProfileSlots = activeProfileSlots(profile);
         Set<String> suppressedProfileSlots = new LinkedHashSet<>();
@@ -264,12 +265,15 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
         }
     }
 
-    private List<MemoryItem> loadBusinessDocuments(String userId, String question, int limit) {
+    private List<MemoryItem> loadBusinessDocuments(String userId,
+                                                   String question,
+                                                   int limit,
+                                                   List<String> knowledgeBaseIds) {
         if (isBlank(question)) {
             return Collections.emptyList();
         }
         try {
-            return businessDocumentRetrieverPort.retrieve("default", question, limit);
+            return businessDocumentRetrieverPort.retrieve("default", question, limit, knowledgeBaseIds);
         } catch (RuntimeException ex) {
             LOG.warn("加载业务文档记忆候选失败: userId={}", userId, ex);
             return Collections.emptyList();

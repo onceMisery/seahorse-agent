@@ -133,6 +133,32 @@ class SeahorseChatControllerTests {
     }
 
     @Test
+    void shouldPassKnowledgeBaseIdsIntoStreamChatCommand() throws Exception {
+        ChatInboundPort chatPort = mock(ChatInboundPort.class);
+        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseChatController(
+                        provider(ChatInboundPort.class, chatPort),
+                        (emitter, conversationId, taskId) -> new NoopStreamCallback(),
+                        streamTaskPort,
+                        1_000L,
+                        provider(AgentRunSnapshotInboundPort.class, null))).build();
+
+        mvc.perform(get("/rag/v3/chat")
+                        .param("question", "Search this knowledge base")
+                        .param("conversationId", "conversation-1")
+                        .param("userId", "user-1")
+                        .param("knowledgeBaseIds", "42", " 43 ", "42"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+
+        ArgumentCaptor<StreamChatCommand> captor = ArgumentCaptor.forClass(StreamChatCommand.class);
+        verify(chatPort).streamChat(captor.capture(), org.mockito.ArgumentMatchers.any());
+        assertThat(captor.getValue().knowledgeBaseIds()).containsExactly("42", "43");
+    }
+
+    @Test
     void resumeRunShouldEmitSnapshotWithoutStartingNewChat() throws Exception {
         ChatInboundPort chatPort = mock(ChatInboundPort.class);
         StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);

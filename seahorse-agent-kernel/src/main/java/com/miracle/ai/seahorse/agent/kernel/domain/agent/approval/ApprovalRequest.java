@@ -51,6 +51,7 @@ public record ApprovalRequest(String approvalId,
                               String tenantId,
                               String userId,
                               String agentId,
+                              String rolloutId,
                               String toolId,
                               ApprovalType approvalType,
                               ToolRiskLevel riskLevel,
@@ -63,6 +64,45 @@ public record ApprovalRequest(String approvalId,
                               Instant decidedAt,
                               String decisionComment) {
 
+    public ApprovalRequest(String approvalId,
+                           String runId,
+                           String stepId,
+                           String toolInvocationId,
+                           String tenantId,
+                           String userId,
+                           String agentId,
+                           String toolId,
+                           ApprovalType approvalType,
+                           ToolRiskLevel riskLevel,
+                           String summary,
+                           String argumentsPreviewJson,
+                           ApprovalRequestStatus status,
+                           Instant requestedAt,
+                           Instant expiresAt,
+                           String decidedBy,
+                           Instant decidedAt,
+                           String decisionComment) {
+        this(approvalId,
+                runId,
+                stepId,
+                toolInvocationId,
+                tenantId,
+                userId,
+                agentId,
+                null,
+                toolId,
+                approvalType,
+                riskLevel,
+                summary,
+                argumentsPreviewJson,
+                status,
+                requestedAt,
+                expiresAt,
+                decidedBy,
+                decidedAt,
+                decisionComment);
+    }
+
     public ApprovalRequest {
         approvalId = requireText(approvalId, "approvalId 不能为空");
         runId = requireText(runId, "runId 不能为空");
@@ -71,6 +111,7 @@ public record ApprovalRequest(String approvalId,
         tenantId = requireText(tenantId, "tenantId 不能为空");
         userId = requireText(userId, "userId 不能为空");
         agentId = trimToNull(agentId);
+        rolloutId = trimToNull(rolloutId);
         toolId = requireText(toolId, "toolId 不能为空");
         approvalType = Objects.requireNonNullElse(approvalType, ApprovalType.TOOL_EXECUTION);
         riskLevel = Objects.requireNonNullElse(riskLevel, ToolRiskLevel.HIGH);

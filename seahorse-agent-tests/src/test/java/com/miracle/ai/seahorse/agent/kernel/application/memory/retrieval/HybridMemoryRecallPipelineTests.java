@@ -100,6 +100,38 @@ class HybridMemoryRecallPipelineTests {
     }
 
     @Test
+    void shouldPassKnowledgeBaseScopeToBusinessDocumentRetriever() {
+        RecordingMemoryStore shortTerm = new RecordingMemoryStore();
+        RecordingMemoryStore longTerm = new RecordingMemoryStore();
+        RecordingMemoryStore semantic = new RecordingMemoryStore();
+        RecordingBusinessDocumentRetrieverPort businessDocumentRetrieverPort =
+                new RecordingBusinessDocumentRetrieverPort();
+        HybridMemoryRecallPipeline pipeline = new HybridMemoryRecallPipeline(
+                shortTerm,
+                longTerm,
+                semantic,
+                new ObjectMapper(),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                businessDocumentRetrieverPort,
+                new RecordingLifecyclePort(List.of(shortTerm, longTerm, semantic)),
+                List.of(),
+                new RrfMemoryFusion(),
+                MemoryFusionPolicy.defaults(),
+                10);
+
+        pipeline.load(MemoryLoadRequest.builder()
+                .conversationId("conv-1")
+                .userId("user-1")
+                .currentQuestion("policy document")
+                .knowledgeBaseIds(List.of("42", "43"))
+                .build());
+
+        assertThat(businessDocumentRetrieverPort.lastKnowledgeBaseIds).containsExactly("42", "43");
+    }
+
+    @Test
     void shouldContinueWhenOneRecallChannelFails() {
         RecordingMemoryStore semantic = new RecordingMemoryStore();
         semantic.save(record("semantic-keyword", "SEMANTIC", "Keyword fallback memory."));
@@ -694,6 +726,22 @@ class HybridMemoryRecallPipelineTests {
                 content,
                 Map.of("userId", "user-1", "importanceScore", 0.8D, "confidenceLevel", 0.9D),
                 Instant.parse("2026-05-21T00:00:00Z"));
+    }
+
+    private static class RecordingBusinessDocumentRetrieverPort implements MemoryBusinessDocumentRetrieverPort {
+
+        private List<String> lastKnowledgeBaseIds = List.of();
+
+        @Override
+        public List<MemoryItem> retrieve(String tenantId, String query, int topK) {
+            return List.of();
+        }
+
+        @Override
+        public List<MemoryItem> retrieve(String tenantId, String query, int topK, List<String> knowledgeBaseIds) {
+            lastKnowledgeBaseIds = knowledgeBaseIds;
+            return List.of();
+        }
     }
 
     @SuppressWarnings("unchecked")

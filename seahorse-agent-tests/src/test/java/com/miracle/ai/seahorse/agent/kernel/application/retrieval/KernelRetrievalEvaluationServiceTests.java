@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.plugin.DefaultExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCase;
@@ -144,6 +145,15 @@ class KernelRetrievalEvaluationServiceTests {
                                                               int topK,
                                                               RetrievalFilter filter,
                                                               RetrievalOptions options) {
+            return retrieveKnowledgeChannels(subIntents, topK, filter, options, TraceRunScope.disabled());
+        }
+
+        @Override
+        public List<RetrievedChunk> retrieveKnowledgeChannels(List<SubQuestionIntent> subIntents,
+                                                              int topK,
+                                                              RetrievalFilter filter,
+                                                              RetrievalOptions options,
+                                                              TraceRunScope traceRunScope) {
             String question = subIntents == null || subIntents.isEmpty() ? "" : subIntents.get(0).subQuestion();
             topKByQuestion.put(question, topK);
             Map<String, List<RetrievedChunk>> source = options != null && options.enableKeyword()

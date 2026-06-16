@@ -28,5 +28,7 @@ public interface RetrievalStrategyTemplateInboundPort {
 
     RetrievalStrategyTemplate upsertTemplate(String kbId, RetrievalStrategyTemplatePayload payload);
 
+    RetrievalStrategyTemplate promoteTemplateFromComparison(String kbId, RetrievalStrategyPromotionCommand command);
+
     boolean deleteTemplate(String kbId, String templateKey);
 }

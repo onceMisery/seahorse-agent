@@ -37,6 +37,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInbo
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionConditionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionNodeLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskCompensationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.PipelineDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshSchedulePort;
@@ -124,15 +125,32 @@ public class SeahorseAgentKernelKnowledgeAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean
+    public IngestionTaskCompensationPort seahorseIngestionTaskCompensationPort(
+            ObjectProvider<KnowledgeDocumentInboundPort> documentInboundPort) {
+        return (target, operator) -> {
+            KnowledgeDocumentInboundPort documentPort = documentInboundPort.getIfAvailable();
+            if (documentPort == null) {
+                throw new UnsupportedOperationException("knowledge document service is not available for rollback");
+            }
+            documentPort.delete(target.docId(), operator);
+        };
+    }
+
+    @Bean
     @ConditionalOnBean({KernelIngestionEngine.class, PipelineDefinitionRepositoryPort.class,
             IngestionTaskRepositoryPort.class})
     @ConditionalOnMissingBean(IngestionTaskInboundPort.class)
     public KernelIngestionTaskService seahorseIngestionTaskInboundPort(
             KernelIngestionEngine ingestionEngine,
             PipelineDefinitionRepositoryPort pipelineDefinitionRepositoryPort,
-            IngestionTaskRepositoryPort taskRepositoryPort) {
+            IngestionTaskRepositoryPort taskRepositoryPort,
+            ObjectProvider<IngestionTaskCompensationPort> compensationPort) {
         return new KernelIngestionTaskService(
-                ingestionEngine, pipelineDefinitionRepositoryPort, taskRepositoryPort);
+                ingestionEngine,
+                pipelineDefinitionRepositoryPort,
+                taskRepositoryPort,
+                compensationPort.getIfAvailable(IngestionTaskCompensationPort::unsupported));
     }
 
     @Bean

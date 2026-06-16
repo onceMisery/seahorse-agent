@@ -41,20 +41,21 @@ import java.util.Optional;
 public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
 
     private static final String RUN_COLUMNS = """
-            run_id, agent_id, version_id, tenant_id, user_id, conversation_id, trigger_type, input_summary,
+            run_id, agent_id, version_id, rollout_id, tenant_id, user_id, conversation_id, trigger_type, input_summary,
             status, trace_id, token_input, token_output, cost_total, error_code, error_message, started_at,
             finished_at
             """;
     private static final String SQL_INSERT_RUN = """
             INSERT INTO sa_agent_run
-            (run_id, agent_id, version_id, tenant_id, user_id, conversation_id, trigger_type, input_summary,
+            (run_id, agent_id, version_id, rollout_id, tenant_id, user_id, conversation_id, trigger_type, input_summary,
              status, trace_id, token_input, token_output, cost_total, error_code, error_message, started_at, finished_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String SQL_UPDATE_RUN = """
             UPDATE sa_agent_run
             SET agent_id = ?,
                 version_id = ?,
+                rollout_id = ?,
                 tenant_id = ?,
                 user_id = ?,
                 conversation_id = ?,
@@ -103,6 +104,7 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
                 safeRun.runId(),
                 safeRun.agentId(),
                 safeRun.versionId(),
+                safeRun.rolloutId(),
                 safeRun.tenantId(),
                 safeRun.userId(),
                 safeRun.conversationId(),
@@ -125,6 +127,7 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
         jdbcTemplate.update(SQL_UPDATE_RUN,
                 safeRun.agentId(),
                 safeRun.versionId(),
+                safeRun.rolloutId(),
                 safeRun.tenantId(),
                 safeRun.userId(),
                 safeRun.conversationId(),
@@ -206,6 +209,7 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
                 resultSet.getString("run_id"),
                 resultSet.getString("agent_id"),
                 resultSet.getString("version_id"),
+                resultSet.getString("rollout_id"),
                 resultSet.getString("tenant_id"),
                 resultSet.getString("user_id"),
                 resultSet.getString("conversation_id"),
@@ -263,7 +267,9 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
     private QueryParts buildQueryParts(AgentRunQuery query) {
         List<String> conditions = new ArrayList<>();
         List<Object> parameters = new ArrayList<>();
+        addEqualCondition(conditions, parameters, "tenant_id", query.tenantId());
         addEqualCondition(conditions, parameters, "agent_id", query.agentId());
+        addEqualCondition(conditions, parameters, "rollout_id", query.rolloutId());
         addLikeCondition(conditions, parameters, "run_id", query.runId());
         addEqualCondition(conditions, parameters, "status", query.status());
         if (query.from() != null) {

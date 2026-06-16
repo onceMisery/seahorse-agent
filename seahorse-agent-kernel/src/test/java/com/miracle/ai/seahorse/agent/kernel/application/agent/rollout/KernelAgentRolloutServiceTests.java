@@ -17,6 +17,10 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.rollout;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditRedactionPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditWriteFailurePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentCatalogPage;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentRollbackReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentRollbackResult;
@@ -38,6 +42,9 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutActionComma
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutRollbackCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentVersionRollbackCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRolloutRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ProductionGateRepositoryPort;
 import org.junit.jupiter.api.Test;
@@ -153,6 +160,78 @@ class KernelAgentRolloutServiceTests {
         assertEquals(AgentRollbackReasonCode.CANARY_FAILED, factoryPort.lastRollbackCommand.reasonCode());
     }
 
+    @Test
+    void shouldAppendAuditEventsForRolloutLifecycleActions() {
+        MemoryRolloutRepository rolloutRepository = new MemoryRolloutRepository();
+        MemoryProductionGateRepository gateRepository = new MemoryProductionGateRepository();
+        gateRepository.report = report("gate-pass", ProductionGateStatus.PASS, "version-2");
+        RecordingAuditEventRepository auditRepository = new RecordingAuditEventRepository();
+        KernelAgentRolloutService service = new KernelAgentRolloutService(
+                rolloutRepository,
+                gateRepository,
+                new RecordingFactoryPort(),
+                new KernelAuditLedgerService(
+                        auditRepository,
+                        new AuditRedactionPolicy(),
+                        AuditWriteFailurePolicy.FAIL_CLOSED),
+                CLOCK);
+
+        AgentVersionRollout created = service.createCanary(new AgentRolloutCreateCommand(
+                "tenant-1",
+                "agent-1",
+                "version-2",
+                AgentRolloutLimits.DEFAULT_CANARY_PERCENT,
+                "operator-1"));
+        service.pause(new AgentRolloutActionCommand(
+                "tenant-1",
+                "agent-1",
+                created.rolloutId(),
+                "operator-2",
+                "pause rollout"));
+        AgentVersionRollout second = service.createCanary(new AgentRolloutCreateCommand(
+                "tenant-1",
+                "agent-1",
+                "version-2",
+                AgentRolloutLimits.DEFAULT_CANARY_PERCENT,
+                "operator-1"));
+        service.promote(new AgentRolloutActionCommand(
+                "tenant-1",
+                "agent-1",
+                second.rolloutId(),
+                "operator-3",
+                "promote rollout"));
+        AgentVersionRollout third = service.createCanary(new AgentRolloutCreateCommand(
+                "tenant-1",
+                "agent-1",
+                "version-2",
+                AgentRolloutLimits.DEFAULT_CANARY_PERCENT,
+                "operator-1"));
+        service.rollback(new AgentRolloutRollbackCommand(
+                "tenant-1",
+                "agent-1",
+                third.rolloutId(),
+                "version-1",
+                "operator-4",
+                "rollback rollout"));
+
+        assertEquals(List.of(
+                        "AGENT_ROLLOUT_STARTED",
+                        "AGENT_ROLLOUT_PAUSED",
+                        "AGENT_ROLLOUT_STARTED",
+                        "AGENT_ROLLOUT_PROMOTED",
+                        "AGENT_ROLLOUT_STARTED",
+                        "AGENT_ROLLOUT_ROLLED_BACK"),
+                auditRepository.records.stream()
+                        .map(event -> event.eventType().name())
+                        .toList());
+        AuditEvent promoted = auditRepository.records.get(3);
+        assertEquals("tenant-1", promoted.tenantId());
+        assertEquals("operator-3", promoted.actorId());
+        assertEquals("agent-1", promoted.agentId());
+        assertEquals("AGENT_ROLLOUT", promoted.resourceType());
+        assertEquals(second.rolloutId(), promoted.resourceId());
+    }
+
     private static KernelAgentRolloutService service(MemoryRolloutRepository rolloutRepository,
                                                      MemoryProductionGateRepository gateRepository,
                                                      RecordingFactoryPort factoryPort) {
@@ -212,6 +291,29 @@ class KernelAgentRolloutServiceTests {
         public Optional<ProductionGateReport> latest(String agentId) {
             return Optional.ofNullable(report)
                     .filter(value -> value.agentId().equals(agentId));
+        }
+    }
+
+    private static final class RecordingAuditEventRepository implements AuditEventRepositoryPort {
+
+        private final List<AuditEvent> records = new java.util.ArrayList<>();
+
+        @Override
+        public AuditEvent save(AuditEvent event) {
+            records.add(event);
+            return event;
+        }
+
+        @Override
+        public Optional<AuditEvent> findById(String auditId) {
+            return records.stream()
+                    .filter(event -> event.auditId().equals(auditId))
+                    .findFirst();
+        }
+
+        @Override
+        public AuditEventPage page(AuditEventQuery query) {
+            return new AuditEventPage(records, records.size(), query.size(), query.current(), 1L);
         }
     }
 

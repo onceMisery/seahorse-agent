@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelType;
@@ -30,6 +31,7 @@ import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureType;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBusinessDocumentRetrieverPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -62,6 +64,20 @@ class SeahorseAgentKernelRetrievalAutoConfigurationTests {
                 });
     }
 
+    @Test
+    void shouldPassKnowledgeBaseScopeIntoMemoryBusinessDocumentRetrievalFilter() {
+        contextRunner.run(context -> {
+            assertThat(context).hasNotFailed();
+
+            context.getBean(MemoryBusinessDocumentRetrieverPort.class)
+                    .retrieve("tenant-a", "policy", 3, List.of("42"));
+
+            assertThat(channel.lastFilter).isNotNull();
+            assertThat(channel.lastFilter.system().tenantId()).isEqualTo("tenant-a");
+            assertThat(channel.lastFilter.system().knowledgeBaseIds()).containsExactly("42");
+        });
+    }
+
     private ExtensionRegistry extensionRegistry() {
         DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
         registry.register(new ExtensionDescriptor(channel.name(), SearchChannelFeature.class,
@@ -72,6 +88,7 @@ class SeahorseAgentKernelRetrievalAutoConfigurationTests {
     private static final class RecordingEmbeddingModelChannel implements SearchChannelFeature {
 
         private String embeddingModel = "";
+        private RetrievalFilter lastFilter;
 
         @Override
         public String name() {
@@ -91,6 +108,7 @@ class SeahorseAgentKernelRetrievalAutoConfigurationTests {
         @Override
         public SearchChannelResult search(SearchContext context) {
             embeddingModel = context.effectiveOptions().embeddingModel();
+            lastFilter = context.getFilter();
             return SearchChannelResult.builder()
                     .channelType(channelType())
                     .channelName(name())

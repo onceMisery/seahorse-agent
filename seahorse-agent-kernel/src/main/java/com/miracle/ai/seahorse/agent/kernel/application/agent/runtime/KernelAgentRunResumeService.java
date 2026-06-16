@@ -167,12 +167,17 @@ public class KernelAgentRunResumeService implements AgentRunResumeInboundPort {
 
     private ToolInvocationRequest pendingToolInvocation(AgentCheckpoint checkpoint, ApprovalRequest approval) {
         JsonNode root = readTree(checkpoint.pendingToolCallJson(), "pendingToolCallJson");
+        String rolloutId = text(root, "rolloutId");
+        if (isBlank(rolloutId)) {
+            rolloutId = approval.rolloutId();
+        }
         return new ToolInvocationRequest(
                 text(root, "runId"),
                 text(root, "toolCallId"),
                 text(root, "toolCallId"),
                 text(root, "agentId"),
                 text(root, "versionId"),
+                rolloutId,
                 text(root, "tenantId"),
                 text(root, "userId"),
                 text(root, "agentIdentityId"),

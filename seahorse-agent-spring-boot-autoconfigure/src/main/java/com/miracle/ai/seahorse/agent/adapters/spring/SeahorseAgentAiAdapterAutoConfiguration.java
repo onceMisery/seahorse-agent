@@ -42,7 +42,6 @@ import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
@@ -68,7 +67,8 @@ import java.util.regex.Pattern;
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnClass(name = "com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelAdapter")
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
+        matchIfMissing = true)
 public class SeahorseAgentAiAdapterAutoConfiguration {
 
     @Bean
@@ -120,7 +120,8 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.ai", name = "type", havingValue = "openai-compatible")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.ai", name = "type",
+            havingValue = "openai-compatible")
     @ConditionalOnMissingBean(name = "openAiStreamingExecutor")
     public ThreadPoolTaskExecutor openAiStreamingExecutor(
             @Value("${seahorse.agent.adapters.ai.streaming-executor.core-size:4}") int coreSize,
@@ -139,7 +140,8 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(OkHttpClient.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.ai", name = "type", havingValue = "openai-compatible")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.ai", name = "type",
+            havingValue = "openai-compatible")
     @ConditionalOnMissingBean(OpenAiCompatibleModelAdapter.class)
     public OpenAiCompatibleModelAdapter seahorseOpenAiCompatibleModelAdapter(
             OkHttpClient httpClient,
@@ -180,12 +182,14 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
      */
     @Bean
     @Primary
-    @ConditionalOnProperty(
-            prefix = "seahorse.agent.adapters.ai",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.ai", name = "type",
+            havingValue = "openai-compatible")
+    @ConditionalOnSeahorseAgentProperty(
+            prefix = "seahorse-agent.adapters.ai",
             name = "embedding-type",
             havingValue = "openai-compatible",
             matchIfMissing = true)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.ai.embedding", name = "base-url")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.ai.embedding", name = "base-url")
     @ConditionalOnMissingBean(name = "seahorseDedicatedEmbeddingModelPort")
     public EmbeddingModelPort seahorseDedicatedEmbeddingModelPort(
             OkHttpClient httpClient,
@@ -213,7 +217,8 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
 
     @Bean
     @Primary
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.ai", name = "embedding-type", havingValue = "mock")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.ai", name = "embedding-type",
+            havingValue = "mock")
     public EmbeddingModelPort seahorseMockEmbeddingModelPortForOpenAiCompatible(
             Environment environment) {
         return new com.miracle.ai.seahorse.agent.adapters.ai.openai.MockEmbeddingAdapter(
@@ -257,7 +262,7 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
 
     // Mock Embedding Adapter for E2E Testing
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.ai", name = "type", havingValue = "mock")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.ai", name = "type", havingValue = "mock")
     @ConditionalOnMissingBean(EmbeddingModelPort.class)
     public EmbeddingModelPort seahorseMockEmbeddingModelPort(
             Environment environment) {
@@ -266,7 +271,7 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.ai", name = "type", havingValue = "mock")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.ai", name = "type", havingValue = "mock")
     @ConditionalOnMissingBean(StreamingChatModelPort.class)
     public StreamingChatModelPort seahorseMockStreamingChatModelPort() {
         return new StreamingChatModelPort() {

@@ -54,6 +54,7 @@ public final class AgentLoopRequest {
     private final String runId;
     private final String agentId;
     private final String versionId;
+    private final String rolloutId;
     private final String tenantId;
     private final String userId;
     private final String agentIdentityId;
@@ -80,6 +81,7 @@ public final class AgentLoopRequest {
         this.runId = trimToNull(b.runId);
         this.agentId = defaultText(b.agentId, AgentRuntimeConstants.LEGACY_REACT_AGENT_ID);
         this.versionId = trimToNull(b.versionId);
+        this.rolloutId = trimToNull(b.rolloutId);
         this.tenantId = defaultText(b.tenantId, AgentDefinition.DEFAULT_TENANT_ID);
         this.userId = defaultText(b.userId, defaultUserId(contextPack, memoryContext));
         this.agentIdentityId = defaultText(b.agentIdentityId, this.userId);
@@ -143,6 +145,10 @@ public final class AgentLoopRequest {
         return versionId;
     }
 
+    public String rolloutId() {
+        return rolloutId;
+    }
+
     public String tenantId() {
         return tenantId;
     }
@@ -182,6 +188,7 @@ public final class AgentLoopRequest {
         private String runId;
         private String agentId;
         private String versionId;
+        private String rolloutId;
         private String tenantId;
         private String userId;
         private String agentIdentityId;
@@ -255,6 +262,11 @@ public final class AgentLoopRequest {
 
         public Builder versionId(String versionId) {
             this.versionId = versionId;
+            return this;
+        }
+
+        public Builder rolloutId(String rolloutId) {
+            this.rolloutId = rolloutId;
             return this;
         }
 

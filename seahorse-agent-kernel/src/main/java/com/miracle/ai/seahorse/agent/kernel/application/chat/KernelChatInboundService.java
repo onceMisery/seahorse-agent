@@ -325,6 +325,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .callback(callback)
                 .traceRunScope(traceRunScope)
                 .attachmentIds(command.attachmentIds())
+                .knowledgeBaseIds(command.knowledgeBaseIds())
                 .build();
     }
 
@@ -333,6 +334,7 @@ public class KernelChatInboundService implements ChatInboundPort {
         String runId = run == null ? null : run.runId();
         String agentId = run == null ? AgentRuntimeConstants.LEGACY_REACT_AGENT_ID : run.agentId();
         String versionId = run == null ? command.versionId() : run.versionId();
+        String rolloutId = run == null ? null : run.rolloutId();
         if (run == null) {
             agentId = selectedAgentId(command);
             versionId = selectedVersion(agentId, versionId).map(AgentVersion::versionId).orElse(versionId);
@@ -366,6 +368,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .runId(runId)
                 .agentId(agentId)
                 .versionId(versionId)
+                .rolloutId(rolloutId)
                 .tenantId(tenantId)
                 .userId(command.userId())
                 .expectedOutputArtifactType(expectedOutputArtifactType(command))
@@ -622,6 +625,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                     .conversationId(command.conversationId())
                     .userId(command.userId())
                     .currentQuestion(command.question())
+                    .knowledgeBaseIds(command.knowledgeBaseIds())
                     .build());
             if (loaded == null) {
                 return fallback;

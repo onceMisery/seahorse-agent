@@ -52,7 +52,7 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
         IngestionPipelineRepositoryPort {
 
     private static final String SQL_FIND_PIPELINE = """
-            SELECT p.id AS pipeline_id, p.name, p.description,
+            SELECT p.id AS pipeline_id, p.name, p.description, p.version,
                    n.node_id, n.node_type, n.next_node_id, n.settings_json, n.condition_json
             FROM t_ingestion_pipeline p
             LEFT JOIN t_ingestion_pipeline_node n
@@ -62,12 +62,12 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
             """;
     private static final String SQL_INSERT_PIPELINE = """
             INSERT INTO t_ingestion_pipeline
-            (id, name, description, created_by, updated_by, create_time, update_time, deleted)
-            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+            (id, name, description, version, created_by, updated_by, create_time, update_time, deleted)
+            VALUES (?, ?, ?, 1, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
             """;
     private static final String SQL_UPDATE_PIPELINE = """
             UPDATE t_ingestion_pipeline
-            SET name = ?, description = ?, updated_by = ?, update_time = CURRENT_TIMESTAMP
+            SET name = ?, description = ?, version = version + 1, updated_by = ?, update_time = CURRENT_TIMESTAMP
             WHERE id = ? AND deleted = 0
             """;
     private static final String SQL_DELETE_PIPELINE = """
@@ -84,7 +84,7 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
             VALUES (?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
             """;
     private static final String SQL_FIND_RECORD = """
-            SELECT p.id AS pipeline_id, p.name, p.description, p.created_by, p.create_time, p.update_time,
+            SELECT p.id AS pipeline_id, p.name, p.description, p.version, p.created_by, p.create_time, p.update_time,
                    n.id AS node_pk, n.node_id, n.node_type, n.next_node_id, n.settings_json, n.condition_json
             FROM t_ingestion_pipeline p
             LEFT JOIN t_ingestion_pipeline_node n
@@ -98,7 +98,7 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
             WHERE deleted = 0
             """;
     private static final String SQL_PAGE = """
-            SELECT id AS pipeline_id, name, description, created_by, create_time, update_time
+            SELECT id AS pipeline_id, name, description, version, created_by, create_time, update_time
             FROM t_ingestion_pipeline
             WHERE deleted = 0
             """;
@@ -207,6 +207,7 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
                 .id(first.pipelineId)
                 .name(first.name)
                 .description(first.description)
+                .version(first.version)
                 .nodes(toNodeConfigs(rows))
                 .build();
     }
@@ -217,6 +218,7 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
         record.setId(first.pipelineId);
         record.setName(first.name);
         record.setDescription(first.description);
+        record.setVersion(first.version);
         record.setCreatedBy(first.createdBy);
         record.setCreateTime(first.createTime);
         record.setUpdateTime(first.updateTime);
@@ -262,6 +264,7 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
         row.pipelineId = resultSet.getString("pipeline_id");
         row.name = resultSet.getString("name");
         row.description = resultSet.getString("description");
+        row.version = resultSet.getInt("version");
         row.nodeId = resultSet.getString("node_id");
         row.nodeType = resultSet.getString("node_type");
         row.nextNodeId = resultSet.getString("next_node_id");
@@ -275,6 +278,7 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
         row.pipelineId = resultSet.getString("pipeline_id");
         row.name = resultSet.getString("name");
         row.description = resultSet.getString("description");
+        row.version = resultSet.getInt("version");
         row.createdBy = resultSet.getString("created_by");
         row.createTime = toInstant(resultSet.getTimestamp("create_time"));
         row.updateTime = toInstant(resultSet.getTimestamp("update_time"));
@@ -293,6 +297,7 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
         record.setId(resultSet.getString("pipeline_id"));
         record.setName(resultSet.getString("name"));
         record.setDescription(resultSet.getString("description"));
+        record.setVersion(resultSet.getInt("version"));
         record.setCreatedBy(resultSet.getString("created_by"));
         record.setCreateTime(toInstant(resultSet.getTimestamp("create_time")));
         record.setUpdateTime(toInstant(resultSet.getTimestamp("update_time")));
@@ -397,6 +402,7 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
         String pipelineId;
         String name;
         String description;
+        int version;
         String nodeId;
         String nodeType;
         String nextNodeId;

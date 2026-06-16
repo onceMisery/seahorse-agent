@@ -17,12 +17,23 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.retrieval;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditActorType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonRecord;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyPromotionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplate;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplatePayload;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationComparisonRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 
+import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,14 +47,28 @@ import java.util.Objects;
 public class KernelRetrievalStrategyTemplateService implements RetrievalStrategyTemplateInboundPort {
 
     private final RetrievalStrategyTemplateRepositoryPort repositoryPort;
+    private final RetrievalEvaluationComparisonRepositoryPort comparisonRepositoryPort;
+    private final KernelAuditLedgerService auditLedger;
+    private final Clock clock;
 
     public KernelRetrievalStrategyTemplateService() {
         this(RetrievalStrategyTemplateRepositoryPort.empty());
     }
 
     public KernelRetrievalStrategyTemplateService(RetrievalStrategyTemplateRepositoryPort repositoryPort) {
+        this(repositoryPort, RetrievalEvaluationComparisonRepositoryPort.empty(), null, Clock.systemUTC());
+    }
+
+    public KernelRetrievalStrategyTemplateService(RetrievalStrategyTemplateRepositoryPort repositoryPort,
+                                                  RetrievalEvaluationComparisonRepositoryPort comparisonRepositoryPort,
+                                                  KernelAuditLedgerService auditLedger,
+                                                  Clock clock) {
         this.repositoryPort = Objects.requireNonNullElse(repositoryPort,
                 RetrievalStrategyTemplateRepositoryPort.empty());
+        this.comparisonRepositoryPort = Objects.requireNonNullElse(comparisonRepositoryPort,
+                RetrievalEvaluationComparisonRepositoryPort.empty());
+        this.auditLedger = auditLedger;
+        this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
     @Override
@@ -59,10 +84,95 @@ public class KernelRetrievalStrategyTemplateService implements RetrievalStrategy
     }
 
     @Override
+    public RetrievalStrategyTemplate promoteTemplateFromComparison(String kbId,
+                                                                   RetrievalStrategyPromotionCommand command) {
+        String safeKbId = requireText(kbId, "kbId must not be blank");
+        RetrievalStrategyPromotionCommand safeCommand = Objects.requireNonNull(command,
+                "command must not be null");
+        requireText(safeCommand.datasetId(), "datasetId must not be blank");
+        requireText(safeCommand.comparisonId(), "comparisonId must not be blank");
+        RetrievalStrategyTemplatePayload safePayload = validate(safeCommand.template());
+        RetrievalEvaluationComparisonRecord comparison = comparisonRepositoryPort
+                .findComparison(safeKbId, safeCommand.datasetId(), safeCommand.comparisonId())
+                .orElseThrow(() -> new IllegalArgumentException("retrieval evaluation comparison not found: "
+                        + safeCommand.comparisonId()));
+        validatePromotionGates(safePayload.templateKey(), comparison.report());
+        RetrievalStrategyTemplate promoted = repositoryPort.promoteRecommendedTemplate(safeKbId, safePayload);
+        appendPromotionAudit(safeKbId, safeCommand, comparison);
+        return promoted;
+    }
+
+    @Override
     public boolean deleteTemplate(String kbId, String templateKey) {
         String safeKbId = requireText(kbId, "kbId must not be blank");
         String safeTemplateKey = requireText(templateKey, "templateKey must not be blank");
         return repositoryPort.deleteTemplate(safeKbId, safeTemplateKey);
+    }
+
+    private void validatePromotionGates(String templateKey, RetrievalEvaluationComparisonReport report) {
+        RetrievalEvaluationComparisonReport safeReport = Objects.requireNonNull(report, "report must not be null");
+        String winner = requireText(safeReport.winnerStrategyName(),
+                "comparison winner must not be blank before promotion");
+        if (!winner.equals(templateKey)) {
+            throw new IllegalStateException("comparison winner does not match promoted template: " + winner);
+        }
+        String baselineName = requireText(safeReport.baselineStrategyName(),
+                "comparison baseline must not be blank before promotion");
+        RetrievalEvaluationReport baseline = reportFor(safeReport, baselineName);
+        RetrievalEvaluationReport candidate = reportFor(safeReport, winner);
+        if (candidate.evaluableCaseCount() <= 0
+                || candidate.recallAtK() < baseline.recallAtK()
+                || candidate.precisionAtK() < baseline.precisionAtK()
+                || candidate.mrr() < baseline.mrr()
+                || candidate.ndcgAtK() < baseline.ndcgAtK()
+                || candidate.emptyRecallRate() > baseline.emptyRecallRate()) {
+            throw new IllegalStateException("retrieval strategy comparison did not pass promotion gates");
+        }
+    }
+
+    private RetrievalEvaluationReport reportFor(RetrievalEvaluationComparisonReport report, String strategyName) {
+        return report.reports().stream()
+                .filter(strategyReport -> strategyName.equals(strategyReport.strategyName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "comparison report is missing strategy metrics: " + strategyName));
+    }
+
+    private void appendPromotionAudit(String kbId,
+                                      RetrievalStrategyPromotionCommand command,
+                                      RetrievalEvaluationComparisonRecord comparison) {
+        if (auditLedger == null) {
+            return;
+        }
+        auditLedger.append(new AuditEvent(
+                "audit_" + SnowflakeIds.nextIdString(),
+                command.tenantId(),
+                AuditEventType.RETRIEVAL_STRATEGY_PROMOTED,
+                AuditActorType.USER,
+                command.operatorId(),
+                null,
+                null,
+                "RETRIEVAL_STRATEGY_TEMPLATE",
+                kbId + ":" + command.template().templateKey(),
+                promotionPayload(kbId, command, comparison),
+                clock.instant()));
+    }
+
+    private String promotionPayload(String kbId,
+                                    RetrievalStrategyPromotionCommand command,
+                                    RetrievalEvaluationComparisonRecord comparison) {
+        RetrievalEvaluationComparisonReport report = comparison.report();
+        RetrievalEvaluationReport candidate = reportFor(report, command.template().templateKey());
+        return "{\"knowledgeBaseId\":\"" + escape(kbId)
+                + "\",\"datasetId\":\"" + escape(command.datasetId())
+                + "\",\"comparisonId\":\"" + escape(command.comparisonId())
+                + "\",\"templateKey\":\"" + escape(command.template().templateKey())
+                + "\",\"baselineStrategyName\":\"" + escape(report.baselineStrategyName())
+                + "\",\"winnerStrategyName\":\"" + escape(report.winnerStrategyName())
+                + "\",\"recallAtK\":" + candidate.recallAtK()
+                + ",\"precisionAtK\":" + candidate.precisionAtK()
+                + ",\"emptyRecallRate\":" + candidate.emptyRecallRate()
+                + ",\"comment\":\"" + escape(command.comment()) + "\"}";
     }
 
     private List<RetrievalStrategyTemplate> defaultTemplates() {
@@ -99,6 +209,12 @@ public class KernelRetrievalStrategyTemplateService implements RetrievalStrategy
             throw new IllegalArgumentException(message);
         }
         return value.trim();
+    }
+
+    private String escape(String value) {
+        return Objects.requireNonNullElse(value, "")
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"");
     }
 
     private RetrievalStrategyTemplate vectorOnly() {

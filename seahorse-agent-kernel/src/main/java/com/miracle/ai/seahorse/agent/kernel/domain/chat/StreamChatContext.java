@@ -61,6 +61,8 @@ public class StreamChatContext {
 
     private List<String> attachmentIds;
 
+    private List<String> knowledgeBaseIds;
+
     public static Builder builder() {
         return new Builder();
     }
@@ -115,7 +117,18 @@ public class StreamChatContext {
             return this;
         }
 
+        public Builder knowledgeBaseIds(List<String> knowledgeBaseIds) {
+            context.setKnowledgeBaseIds(knowledgeBaseIds == null ? List.of() : List.copyOf(knowledgeBaseIds));
+            return this;
+        }
+
         public StreamChatContext build() {
+            if (context.getAttachmentIds() == null) {
+                context.setAttachmentIds(List.of());
+            }
+            if (context.getKnowledgeBaseIds() == null) {
+                context.setKnowledgeBaseIds(List.of());
+            }
             return context;
         }
     }

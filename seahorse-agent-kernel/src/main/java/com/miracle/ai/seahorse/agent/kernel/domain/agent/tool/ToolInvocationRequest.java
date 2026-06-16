@@ -46,6 +46,7 @@ public record ToolInvocationRequest(String runId,
                                     String toolCallId,
                                     String agentId,
                                     String versionId,
+                                    String rolloutId,
                                     String tenantId,
                                     String userId,
                                     String agentIdentityId,
@@ -55,6 +56,35 @@ public record ToolInvocationRequest(String runId,
                                     String idempotencyKey,
                                     List<String> allowedToolIds) {
 
+    public ToolInvocationRequest(String runId,
+                                 String stepId,
+                                 String toolCallId,
+                                 String agentId,
+                                 String versionId,
+                                 String tenantId,
+                                 String userId,
+                                 String agentIdentityId,
+                                 String toolId,
+                                 Map<String, Object> arguments,
+                                 Map<String, String> resourceRefs,
+                                 String idempotencyKey,
+                                 List<String> allowedToolIds) {
+        this(runId,
+                stepId,
+                toolCallId,
+                agentId,
+                versionId,
+                null,
+                tenantId,
+                userId,
+                agentIdentityId,
+                toolId,
+                arguments,
+                resourceRefs,
+                idempotencyKey,
+                allowedToolIds);
+    }
+
     public ToolInvocationRequest {
         stepId = requireText(stepId, "stepId must not be blank");
         toolCallId = requireText(toolCallId, "toolCallId must not be blank");
@@ -62,6 +92,7 @@ public record ToolInvocationRequest(String runId,
         runId = trimToNull(runId);
         agentId = defaultText(agentId, AgentRuntimeConstants.LEGACY_REACT_AGENT_ID);
         versionId = trimToNull(versionId);
+        rolloutId = trimToNull(rolloutId);
         tenantId = defaultText(tenantId, AgentDefinition.DEFAULT_TENANT_ID);
         userId = defaultText(userId, "");
         agentIdentityId = defaultText(agentIdentityId, userId);

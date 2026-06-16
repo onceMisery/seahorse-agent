@@ -37,9 +37,9 @@ public class JdbcCostUsageRepositoryAdapter implements CostUsageRepositoryPort {
 
     private static final String SQL_INSERT = """
             INSERT INTO sa_cost_usage_record
-            (usage_id, tenant_id, agent_id, run_id, user_id, tool_id, model_id,
+            (usage_id, tenant_id, agent_id, run_id, rollout_id, user_id, tool_id, model_id,
              source, tokens, calls, cost, reason_ref, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -56,6 +56,7 @@ public class JdbcCostUsageRepositoryAdapter implements CostUsageRepositoryPort {
                 safeRecord.tenantId(),
                 safeRecord.agentId(),
                 safeRecord.runId(),
+                safeRecord.rolloutId(),
                 safeRecord.userId(),
                 safeRecord.toolId(),
                 safeRecord.modelId(),
@@ -91,6 +92,7 @@ public class JdbcCostUsageRepositoryAdapter implements CostUsageRepositoryPort {
         addTextFilter(clauses, params, "tenant_id", query.tenantId());
         addTextFilter(clauses, params, "agent_id", query.agentId());
         addTextFilter(clauses, params, "run_id", query.runId());
+        addTextFilter(clauses, params, "rollout_id", query.rolloutId());
         if (query.from() != null) {
             clauses.add("created_at >= ?");
             params.add(toTimestamp(query.from()));

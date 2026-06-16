@@ -116,6 +116,60 @@ class JdbcToolApprovalRequestRepositoryAdapterTests {
     }
 
     @Test
+    void shouldPagePendingApprovalsByAgentAndRequestedWindow() {
+        DriverManagerDataSource dataSource = dataSource("tool-approval-window");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createApprovalRequestSchema(jdbcTemplate);
+        JdbcToolApprovalRequestRepositoryAdapter adapter = new JdbcToolApprovalRequestRepositoryAdapter(dataSource);
+        adapter.save(pendingApproval("approval-in-window", "run-1", "invocation-1", "tenant-1", "agent-1",
+                REQUESTED_AT.plusSeconds(60)));
+        adapter.save(pendingApproval("approval-other-agent", "run-2", "invocation-2", "tenant-1", "agent-2",
+                REQUESTED_AT.plusSeconds(60)));
+        adapter.save(pendingApproval("approval-too-old", "run-3", "invocation-3", "tenant-1", "agent-1",
+                REQUESTED_AT.minusSeconds(60)));
+
+        ApprovalRequestPage page = adapter.page(new ApprovalRequestQuery(
+                "tenant-1",
+                null,
+                "agent-1",
+                ApprovalRequestStatus.PENDING,
+                REQUESTED_AT,
+                REQUESTED_AT.plusSeconds(120),
+                1L,
+                10L));
+
+        assertThat(page.total()).isEqualTo(1L);
+        assertThat(page.records()).extracting(ApprovalRequest::approvalId).containsExactly("approval-in-window");
+    }
+
+    @Test
+    void shouldPagePendingApprovalsByExactRolloutId() {
+        DriverManagerDataSource dataSource = dataSource("tool-approval-rollout");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createApprovalRequestSchema(jdbcTemplate);
+        JdbcToolApprovalRequestRepositoryAdapter adapter = new JdbcToolApprovalRequestRepositoryAdapter(dataSource);
+        adapter.save(pendingApproval("approval-rollout-1", "run-1", "invocation-1", "tenant-1", "agent-1",
+                "rollout-1", REQUESTED_AT.plusSeconds(60)));
+        adapter.save(pendingApproval("approval-rollout-2", "run-2", "invocation-2", "tenant-1", "agent-1",
+                "rollout-2", REQUESTED_AT.plusSeconds(90)));
+
+        ApprovalRequestPage page = adapter.page(new ApprovalRequestQuery(
+                "tenant-1",
+                null,
+                "agent-1",
+                "rollout-1",
+                ApprovalRequestStatus.PENDING,
+                REQUESTED_AT,
+                REQUESTED_AT.plusSeconds(120),
+                1L,
+                10L));
+
+        assertThat(page.total()).isEqualTo(1L);
+        assertThat(page.records()).extracting(ApprovalRequest::approvalId).containsExactly("approval-rollout-1");
+        assertThat(page.records().get(0).rolloutId()).isEqualTo("rollout-1");
+    }
+
+    @Test
     void shouldFindLatestApprovalByRunAndStep() {
         DriverManagerDataSource dataSource = dataSource("tool-approval-run-step");
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
@@ -204,6 +258,7 @@ class JdbcToolApprovalRequestRepositoryAdapterTests {
                     tenant_id VARCHAR(64) NOT NULL,
                     user_id VARCHAR(64) NOT NULL,
                     agent_id VARCHAR(64),
+                    rollout_id VARCHAR(64),
                     tool_id VARCHAR(128) NOT NULL,
                     approval_type VARCHAR(32) NOT NULL,
                     risk_level VARCHAR(32) NOT NULL,
@@ -216,6 +271,10 @@ class JdbcToolApprovalRequestRepositoryAdapterTests {
                     decided_at TIMESTAMP,
                     decision_comment VARCHAR(1000)
                 )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX idx_sa_approval_request_rollout
+                ON sa_approval_request(tenant_id, agent_id, rollout_id, requested_at)
                 """);
     }
 
@@ -233,6 +292,25 @@ class JdbcToolApprovalRequestRepositoryAdapterTests {
                                             String toolInvocationId,
                                             String tenantId,
                                             Instant requestedAt) {
+        return pendingApproval(approvalId, runId, toolInvocationId, tenantId, "agent-1", requestedAt);
+    }
+
+    private ApprovalRequest pendingApproval(String approvalId,
+                                            String runId,
+                                            String toolInvocationId,
+                                            String tenantId,
+                                            String agentId,
+                                            Instant requestedAt) {
+        return pendingApproval(approvalId, runId, toolInvocationId, tenantId, agentId, null, requestedAt);
+    }
+
+    private ApprovalRequest pendingApproval(String approvalId,
+                                            String runId,
+                                            String toolInvocationId,
+                                            String tenantId,
+                                            String agentId,
+                                            String rolloutId,
+                                            Instant requestedAt) {
         return new ApprovalRequest(
                 approvalId,
                 runId,
@@ -240,7 +318,8 @@ class JdbcToolApprovalRequestRepositoryAdapterTests {
                 toolInvocationId,
                 tenantId,
                 "user-1",
-                "agent-1",
+                agentId,
+                rolloutId,
                 "memory-forget",
                 ApprovalType.TOOL_EXECUTION,
                 ToolRiskLevel.HIGH,

@@ -19,9 +19,32 @@ package com.miracle.ai.seahorse.agent.kernel.domain.memory;
 
 import lombok.Builder;
 
+import java.util.List;
+import java.util.Objects;
+
 /**
  * 记忆加载请求。
  */
 @Builder
-public record MemoryLoadRequest(String conversationId, String userId, String currentQuestion) {
+public record MemoryLoadRequest(
+        String conversationId,
+        String userId,
+        String currentQuestion,
+        List<String> knowledgeBaseIds) {
+
+    public MemoryLoadRequest {
+        knowledgeBaseIds = normalizeIds(knowledgeBaseIds);
+    }
+
+    private static List<String> normalizeIds(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        return values.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .toList();
+    }
 }

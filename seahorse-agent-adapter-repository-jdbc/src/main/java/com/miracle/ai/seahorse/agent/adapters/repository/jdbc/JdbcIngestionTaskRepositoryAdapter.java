@@ -53,10 +53,10 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
     private static final String STATUS_RUNNING = "running";
     private static final String SQL_INSERT_TASK = """
             INSERT INTO t_ingestion_task
-            (id, pipeline_id, source_type, source_location, source_file_name, status, chunk_count,
-             error_message, logs_json, metadata_json, started_at, completed_at, created_by, updated_by,
-             create_time, update_time, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, CURRENT_TIMESTAMP, NULL, ?, ?,
+            (id, pipeline_id, pipeline_version, pipeline_snapshot_json, source_type, source_location,
+             source_file_name, status, chunk_count, error_message, logs_json, metadata_json, started_at,
+             completed_at, created_by, updated_by, create_time, update_time, deleted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, CURRENT_TIMESTAMP, NULL, ?, ?,
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
             """;
     private static final String SQL_UPDATE_TASK = """
@@ -65,36 +65,46 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
                 completed_at = CURRENT_TIMESTAMP, updated_by = ?, update_time = CURRENT_TIMESTAMP
             WHERE id = ? AND deleted = 0
             """;
+    private static final String TASK_SELECT_COLUMNS = """
+            t.id, t.pipeline_id, t.source_type, t.source_location, t.source_file_name, t.status, t.chunk_count,
+            t.pipeline_version, t.pipeline_snapshot_json, t.error_message, t.logs_json, t.metadata_json,
+            t.started_at, t.completed_at, t.created_by, t.create_time, t.update_time,
+            (
+                SELECT COUNT(1)
+                FROM t_metadata_quarantine_item q
+                WHERE q.job_id = CAST(t.id AS VARCHAR) AND q.resolved = 0
+            ) AS unresolved_quarantine_count
+            """;
     private static final String SQL_FIND_TASK = """
-            SELECT id, pipeline_id, source_type, source_location, source_file_name, status, chunk_count,
-                   error_message, logs_json, metadata_json, started_at, completed_at, created_by,
-                   create_time, update_time
-            FROM t_ingestion_task
-            WHERE id = ? AND deleted = 0
+            SELECT
+            """ + TASK_SELECT_COLUMNS + """
+            FROM t_ingestion_task t
+            WHERE t.id = ? AND t.deleted = 0
             """;
     private static final String SQL_COUNT_PAGE = """
             SELECT COUNT(1)
-            FROM t_ingestion_task
-            WHERE deleted = 0
+            FROM t_ingestion_task t
+            WHERE t.deleted = 0
             """;
     private static final String SQL_PAGE = """
-            SELECT id, pipeline_id, source_type, source_location, source_file_name, status, chunk_count,
-                   error_message, logs_json, metadata_json, started_at, completed_at, created_by,
-                   create_time, update_time
-            FROM t_ingestion_task
-            WHERE deleted = 0
+            SELECT
+            """ + TASK_SELECT_COLUMNS + """
+            FROM t_ingestion_task t
+            WHERE t.deleted = 0
             """;
     private static final String SQL_DELETE_NODES =
             "UPDATE t_ingestion_task_node SET deleted = 1, update_time = CURRENT_TIMESTAMP WHERE task_id = ?";
     private static final String SQL_INSERT_NODE = """
             INSERT INTO t_ingestion_task_node
             (id, task_id, pipeline_id, node_id, node_type, node_order, status, duration_ms,
-             message, error_message, output_json, create_time, update_time, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+             input_summary, output_summary, error_code, message, error_message, retry_count,
+             downstream_impact, output_json, create_time, update_time, deleted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
             """;
     private static final String SQL_LIST_NODES = """
             SELECT id, task_id, pipeline_id, node_id, node_type, node_order, status, duration_ms,
-                   message, error_message, output_json, create_time, update_time
+                   input_summary, output_summary, error_code, message, error_message, retry_count,
+                   downstream_impact, output_json, create_time, update_time
             FROM t_ingestion_task_node
             WHERE task_id = ? AND deleted = 0
             ORDER BY node_order ASC, id ASC
@@ -116,6 +126,8 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
         jdbcTemplate.update(SQL_INSERT_TASK,
                 toLong(taskId),
                 requireText(safeValues.pipelineId(), "pipelineId"),
+                safeValues.pipelineVersion(),
+                toJson(safeValues.pipelineSnapshot()),
                 blankToNull(safeValues.sourceType()),
                 blankToNull(safeValues.sourceLocation()),
                 blankToNull(safeValues.sourceFileName()),
@@ -183,7 +195,7 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
         args.add(safeSize);
         args.add((safeCurrent - 1) * safeSize);
         List<IngestionTaskRecord> records = jdbcTemplate.query(
-                SQL_PAGE + queryParts.where() + " ORDER BY create_time DESC LIMIT ? OFFSET ?",
+                SQL_PAGE + queryParts.where() + " ORDER BY t.create_time DESC LIMIT ? OFFSET ?",
                 this::toTaskRecord,
                 args.toArray());
         long safeTotal = total == null ? 0 : total;
@@ -202,8 +214,13 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
                 safeNode.getNodeOrder(),
                 blankToNull(safeNode.getStatus()),
                 safeNode.getDurationMs(),
+                blankToNull(safeNode.getInputSummary()),
+                blankToNull(safeNode.getOutputSummary()),
+                blankToNull(safeNode.getErrorCode()),
                 blankToNull(safeNode.getMessage()),
                 blankToNull(safeNode.getErrorMessage()),
+                safeNode.getRetryCount(),
+                blankToNull(safeNode.getDownstreamImpact()),
                 toJson(safeNode.getOutput()));
     }
 
@@ -227,6 +244,8 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
         IngestionTaskRecord record = new IngestionTaskRecord();
         record.setId(resultSet.getString("id"));
         record.setPipelineId(resultSet.getString("pipeline_id"));
+        record.setPipelineVersion(resultSet.getInt("pipeline_version"));
+        record.setPipelineSnapshot(parseMap(resultSet.getString("pipeline_snapshot_json")));
         record.setSourceType(resultSet.getString("source_type"));
         record.setSourceLocation(resultSet.getString("source_location"));
         record.setSourceFileName(resultSet.getString("source_file_name"));
@@ -235,6 +254,7 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
         record.setErrorMessage(resultSet.getString("error_message"));
         record.setLogs(parseLogs(resultSet.getString("logs_json")));
         record.setMetadata(parseMap(resultSet.getString("metadata_json")));
+        record.setUnresolvedQuarantineCount(resultSet.getInt("unresolved_quarantine_count"));
         record.setStartedAt(toInstant(resultSet.getTimestamp("started_at")));
         record.setCompletedAt(toInstant(resultSet.getTimestamp("completed_at")));
         record.setCreatedBy(resultSet.getString("created_by"));
@@ -253,8 +273,13 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
         record.setNodeOrder(resultSet.getInt("node_order"));
         record.setStatus(resultSet.getString("status"));
         record.setDurationMs(resultSet.getLong("duration_ms"));
+        record.setInputSummary(resultSet.getString("input_summary"));
+        record.setOutputSummary(resultSet.getString("output_summary"));
+        record.setErrorCode(resultSet.getString("error_code"));
         record.setMessage(resultSet.getString("message"));
         record.setErrorMessage(resultSet.getString("error_message"));
+        record.setRetryCount(resultSet.getInt("retry_count"));
+        record.setDownstreamImpact(resultSet.getString("downstream_impact"));
         record.setOutput(parseMap(resultSet.getString("output_json")));
         record.setCreateTime(toInstant(resultSet.getTimestamp("create_time")));
         record.setUpdateTime(toInstant(resultSet.getTimestamp("update_time")));
@@ -265,7 +290,7 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
         if (status == null || status.isBlank()) {
             return new QueryParts("", List.of());
         }
-        return new QueryParts(" AND status = ?", List.of(status.trim()));
+        return new QueryParts(" AND t.status = ?", List.of(status.trim()));
     }
 
     private List<NodeLog> parseLogs(String json) {

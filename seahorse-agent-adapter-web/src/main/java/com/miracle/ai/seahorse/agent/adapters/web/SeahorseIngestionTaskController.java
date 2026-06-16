@@ -131,9 +131,22 @@ public class SeahorseIngestionTaskController {
 
     @PostMapping("/ingestion/tasks/{id}/retry")
     public ApiResponse<Object> retry(@PathVariable String id,
+                                     @RequestBody(required = false) IngestionTaskRetryRequest request,
                                      @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_TASK_MANAGEMENT);
-        return ApiResponses.requireServiceOrError(taskPortProvider, port -> port.retry(id, operator(userId)));
+        String fromNodeId = request == null ? null : request.getFromNodeId();
+        if (fromNodeId == null || fromNodeId.isBlank()) {
+            return ApiResponses.requireServiceOrError(taskPortProvider, port -> port.retry(id, operator(userId)));
+        }
+        return ApiResponses.requireServiceOrError(taskPortProvider,
+                port -> port.retry(id, fromNodeId.trim(), operator(userId)));
+    }
+
+    @PostMapping("/ingestion/tasks/{id}/rollback")
+    public ApiResponse<Object> rollback(@PathVariable String id,
+                                        @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_TASK_MANAGEMENT);
+        return ApiResponses.requireServiceOrError(taskPortProvider, port -> port.rollback(id, operator(userId)));
     }
 
     @GetMapping("/ingestion/tasks")

@@ -92,6 +92,23 @@ class KernelKnowledgeDocumentServiceTests {
     }
 
     @Test
+    void shouldUploadDocumentBeforeKnowledgeBaseHasAnyChunks() {
+        Ports ports = new Ports(new UploadableOnlyKnowledgeBaseQueryPort());
+        KernelKnowledgeDocumentService service = newService(ports);
+
+        KnowledgeDocumentRecord document = service.upload(new UploadKnowledgeDocumentCommand(
+                1L,
+                new UploadFileContent(new ByteArrayInputStream("content".getBytes()), 7L, "policy.pdf", "pdf"),
+                "tester",
+                new UploadProcessOptions("pipeline", "pipeline-1")));
+
+        assertThat(document.kbId()).isEqualTo(1L);
+        assertThat(document.file().fileUrl()).isEqualTo("local://policy.pdf");
+        assertThat(ports.storage.uploadedBuckets).containsExactly(
+                KnowledgeStorageBucketNames.fromCollectionName("collection-a"));
+    }
+
+    @Test
     void shouldExecutePipelineAndMarkSuccess() {
         Ports ports = new Ports();
         KernelKnowledgeDocumentService service = newService(ports);
@@ -270,17 +287,53 @@ class KernelKnowledgeDocumentServiceTests {
 
     private static class Ports {
 
-        private final KnowledgeBaseQueryPort knowledgeBaseQuery = new StaticKnowledgeBaseQueryPort();
+        private final KnowledgeBaseQueryPort knowledgeBaseQuery;
         private final InMemoryDocumentRepository repository = new InMemoryDocumentRepository();
         private final InMemoryObjectStorage storage = new InMemoryObjectStorage();
         private final RecordingMessageQueue messageQueue = new RecordingMessageQueue();
+
+        private Ports() {
+            this(new StaticKnowledgeBaseQueryPort());
+        }
+
+        private Ports(KnowledgeBaseQueryPort knowledgeBaseQuery) {
+            this.knowledgeBaseQuery = knowledgeBaseQuery;
+        }
     }
 
     private static class StaticKnowledgeBaseQueryPort implements KnowledgeBaseQueryPort {
 
         @Override
+        public Optional<KnowledgeBaseRef> findById(Long kbId) {
+            return Optional.of(new KnowledgeBaseRef(1L, "knowledge-base", "collection-a"));
+        }
+
+        @Override
         public List<KnowledgeBaseRef> listSearchableKnowledgeBases() {
             return List.of(new KnowledgeBaseRef(1L, "知识库", "collection-a"));
+        }
+
+        @Override
+        public List<KnowledgeDocumentSummary> searchDocuments(String keyword, int limit) {
+            return List.of();
+        }
+
+        @Override
+        public List<KnowledgeChunkSummary> listChunksByDocId(Long docId) {
+            return List.of();
+        }
+    }
+
+    private static final class UploadableOnlyKnowledgeBaseQueryPort implements KnowledgeBaseQueryPort {
+
+        @Override
+        public Optional<KnowledgeBaseRef> findById(Long kbId) {
+            return Optional.of(new KnowledgeBaseRef(1L, "knowledge-base", "collection-a"));
+        }
+
+        @Override
+        public List<KnowledgeBaseRef> listSearchableKnowledgeBases() {
+            return List.of();
         }
 
         @Override

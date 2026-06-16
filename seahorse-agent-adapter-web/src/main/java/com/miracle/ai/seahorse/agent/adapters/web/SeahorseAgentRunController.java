@@ -81,6 +81,7 @@ public class SeahorseAgentRunController {
         return ApiResponses.requireService(agentRunPortProvider, port -> port.startRun(new AgentRunStartCommand(
                 agentId,
                 safeRequest.versionId(),
+                safeRequest.rolloutId(),
                 safeRequest.tenantId(),
                 safeRequest.conversationId(),
                 safeRequest.triggerType(),
@@ -104,6 +105,7 @@ public class SeahorseAgentRunController {
     @GetMapping({"/agent-runs", "/api/agent-runs"})
     public ApiResponse<Object> listRuns(@RequestParam(required = false) String agentId,
                                         @RequestParam(required = false) String runId,
+                                        @RequestParam(required = false) String rolloutId,
                                         @RequestParam(required = false) String status,
                                         @RequestParam(required = false) String from,
                                         @RequestParam(required = false) String to,
@@ -113,6 +115,7 @@ public class SeahorseAgentRunController {
         return ApiResponses.requireService(agentRunPortProvider, port -> port.page(new AgentRunQuery(
                 agentId,
                 runId,
+                rolloutId,
                 status,
                 parseInstant(from),
                 parseInstant(to),

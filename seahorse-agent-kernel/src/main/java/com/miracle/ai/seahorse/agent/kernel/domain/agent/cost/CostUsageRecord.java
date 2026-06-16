@@ -24,6 +24,7 @@ public record CostUsageRecord(String usageId,
                               String tenantId,
                               String agentId,
                               String runId,
+                              String rolloutId,
                               String userId,
                               String toolId,
                               String modelId,
@@ -34,11 +35,41 @@ public record CostUsageRecord(String usageId,
                               String reasonRef,
                               Instant createdAt) {
 
+    public CostUsageRecord(String usageId,
+                           String tenantId,
+                           String agentId,
+                           String runId,
+                           String userId,
+                           String toolId,
+                           String modelId,
+                           CostUsageSource source,
+                           long tokens,
+                           long calls,
+                           double cost,
+                           String reasonRef,
+                           Instant createdAt) {
+        this(usageId,
+                tenantId,
+                agentId,
+                runId,
+                null,
+                userId,
+                toolId,
+                modelId,
+                source,
+                tokens,
+                calls,
+                cost,
+                reasonRef,
+                createdAt);
+    }
+
     public CostUsageRecord {
         usageId = requireText(usageId, "usageId must not be blank");
         tenantId = requireText(tenantId, "tenantId must not be blank");
         agentId = trimToNull(agentId);
         runId = trimToNull(runId);
+        rolloutId = trimToNull(rolloutId);
         userId = trimToNull(userId);
         toolId = trimToNull(toolId);
         modelId = trimToNull(modelId);

@@ -17,11 +17,16 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.retrieval;
 
+import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCase;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseDiagnostics;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationChunkDiagnostic;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCommand;
@@ -45,6 +50,9 @@ import java.util.concurrent.TimeUnit;
  */
 public class KernelRetrievalEvaluationService implements RetrievalEvaluationInboundPort {
 
+    private static final String TRACE_NAME_EVALUATION_CASE = "retrieval-evaluation-case";
+    private static final String TRACE_ENTRY_EVALUATE_CASE = "KernelRetrievalEvaluationService.evaluateCase";
+
     private static final String STATUS_SUCCESS = "SUCCESS";
     private static final String STATUS_MISS = "MISS";
     private static final String STATUS_EMPTY = "EMPTY";
@@ -52,9 +60,16 @@ public class KernelRetrievalEvaluationService implements RetrievalEvaluationInbo
     private static final String STATUS_FAILED = "FAILED";
 
     private final KernelRetrievalEngine retrievalEngine;
+    private final KernelRagTraceRecorder traceRecorder;
 
     public KernelRetrievalEvaluationService(KernelRetrievalEngine retrievalEngine) {
+        this(retrievalEngine, KernelRagTraceRecorder.noop());
+    }
+
+    public KernelRetrievalEvaluationService(KernelRetrievalEngine retrievalEngine,
+                                            KernelRagTraceRecorder traceRecorder) {
         this.retrievalEngine = Objects.requireNonNull(retrievalEngine, "retrievalEngine must not be null");
+        this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
     }
 
     @Override
@@ -184,53 +199,66 @@ public class KernelRetrievalEvaluationService implements RetrievalEvaluationInbo
                 : evaluationCase;
         Set<String> expectedTargets = expectedTargets(safeCase);
         long started = System.nanoTime();
-        List<RetrievedChunk> chunks;
+        TraceRunScope traceRunScope = traceRecorder.startRun(new TraceRunStartCommand(
+                TRACE_NAME_EVALUATION_CASE,
+                TRACE_ENTRY_EVALUATE_CASE,
+                null,
+                safeCase.caseId(),
+                null));
         try {
-            chunks = retrievalEngine.retrieveKnowledgeChannels(
+            List<RetrievedChunk> chunks = retrievalEngine.retrieveKnowledgeChannels(
                     List.of(new SubQuestionIntent(safeCase.question(), List.of())),
                     topK,
                     safeCase.filter(),
-                    safeCase.options() == null ? defaultOptions : safeCase.options());
-        } catch (RuntimeException ex) {
-            return failedResult(safeCase, elapsedMs(started), ex);
-        }
-        List<RetrievedChunk> topChunks = Objects.requireNonNullElse(chunks, List.<RetrievedChunk>of()).stream()
-                .limit(topK)
-                .toList();
-        List<String> negativeHitChunkIds = negativeHitChunkIds(topChunks, safeCase);
-        if (expectedTargets.isEmpty()) {
-            return result(safeCase, topChunks, 0, 0D, 0D, 0D, 0D, negativeHitChunkIds,
-                    elapsedMs(started), STATUS_NO_EXPECTED_TARGETS, "");
-        }
-
-        Set<String> matchedTargets = new LinkedHashSet<>();
-        int positiveHitChunkCount = 0;
-        double reciprocalRank = 0D;
-        double dcg = 0D;
-        for (int index = 0; index < topChunks.size(); index++) {
-            Set<String> matchedAtRank = matchedTargets(topChunks.get(index), expectedTargets);
-            if (!matchedAtRank.isEmpty()) {
-                positiveHitChunkCount++;
-                matchedTargets.addAll(matchedAtRank);
-                int rank = index + 1;
-                if (reciprocalRank == 0D) {
-                    reciprocalRank = 1D / rank;
-                }
-                dcg += 1D / log2(rank + 1D);
+                    safeCase.options() == null ? defaultOptions : safeCase.options(),
+                    traceRunScope);
+            List<RetrievedChunk> topChunks = Objects.requireNonNullElse(chunks, List.<RetrievedChunk>of()).stream()
+                    .limit(topK)
+                    .toList();
+            List<String> negativeHitChunkIds = negativeHitChunkIds(topChunks, safeCase);
+            RetrievalEvaluationCaseResult result;
+            if (expectedTargets.isEmpty()) {
+                result = result(safeCase, topChunks, 0, expectedTargets, 0D, 0D, 0D, 0D, negativeHitChunkIds,
+                        elapsedMs(started), STATUS_NO_EXPECTED_TARGETS, "", traceId(traceRunScope));
+                traceRecorder.finishRun(traceRunScope);
+                return result;
             }
+
+            Set<String> matchedTargets = new LinkedHashSet<>();
+            int positiveHitChunkCount = 0;
+            double reciprocalRank = 0D;
+            double dcg = 0D;
+            for (int index = 0; index < topChunks.size(); index++) {
+                Set<String> matchedAtRank = matchedTargets(topChunks.get(index), expectedTargets);
+                if (!matchedAtRank.isEmpty()) {
+                    positiveHitChunkCount++;
+                    matchedTargets.addAll(matchedAtRank);
+                    int rank = index + 1;
+                    if (reciprocalRank == 0D) {
+                        reciprocalRank = 1D / rank;
+                    }
+                    dcg += 1D / log2(rank + 1D);
+                }
+            }
+            double recall = ratio(matchedTargets.size(), expectedTargets.size());
+            double precision = ratio(positiveHitChunkCount, topK);
+            double ndcg = idealDcg(Math.min(expectedTargets.size(), topK)) == 0D
+                    ? 0D
+                    : dcg / idealDcg(Math.min(expectedTargets.size(), topK));
+            String status = topChunks.isEmpty() ? STATUS_EMPTY : matchedTargets.isEmpty() ? STATUS_MISS : STATUS_SUCCESS;
+            result = result(safeCase, topChunks, matchedTargets.size(), expectedTargets, recall, reciprocalRank, ndcg, precision,
+                    negativeHitChunkIds, elapsedMs(started), status, "", traceId(traceRunScope));
+            traceRecorder.finishRun(traceRunScope);
+            return result;
+        } catch (RuntimeException ex) {
+            traceRecorder.finishRun(traceRunScope, ex);
+            return failedResult(safeCase, elapsedMs(started), traceId(traceRunScope), ex);
         }
-        double recall = ratio(matchedTargets.size(), expectedTargets.size());
-        double precision = ratio(positiveHitChunkCount, topK);
-        double ndcg = idealDcg(Math.min(expectedTargets.size(), topK)) == 0D
-                ? 0D
-                : dcg / idealDcg(Math.min(expectedTargets.size(), topK));
-        String status = topChunks.isEmpty() ? STATUS_EMPTY : matchedTargets.isEmpty() ? STATUS_MISS : STATUS_SUCCESS;
-        return result(safeCase, topChunks, matchedTargets.size(), recall, reciprocalRank, ndcg, precision,
-                negativeHitChunkIds, elapsedMs(started), status, "");
     }
 
     private RetrievalEvaluationCaseResult failedResult(RetrievalEvaluationCase evaluationCase,
                                                        long latencyMs,
+                                                       String traceId,
                                                        RuntimeException ex) {
         return new RetrievalEvaluationCaseResult(
                 evaluationCase.caseId(),
@@ -247,20 +275,23 @@ public class KernelRetrievalEvaluationService implements RetrievalEvaluationInbo
                 ex.getClass().getSimpleName(),
                 0D,
                 0,
-                List.of());
+                List.of(),
+                diagnostics(evaluationCase, List.of(), expectedTargets(evaluationCase), List.of(), traceId));
     }
 
     private RetrievalEvaluationCaseResult result(RetrievalEvaluationCase evaluationCase,
                                                  List<RetrievedChunk> chunks,
                                                  int hitCount,
-                                                  double recall,
-                                                  double reciprocalRank,
-                                                  double ndcg,
-                                                  double precision,
-                                                  List<String> negativeHitChunkIds,
-                                                  long latencyMs,
-                                                  String status,
-                                                  String errorMessage) {
+                                                 Set<String> expectedTargets,
+                                                 double recall,
+                                                 double reciprocalRank,
+                                                 double ndcg,
+                                                 double precision,
+                                                 List<String> negativeHitChunkIds,
+                                                 long latencyMs,
+                                                 String status,
+                                                 String errorMessage,
+                                                 String traceId) {
         return new RetrievalEvaluationCaseResult(
                 evaluationCase.caseId(),
                 evaluationCase.question(),
@@ -283,7 +314,68 @@ public class KernelRetrievalEvaluationService implements RetrievalEvaluationInbo
                 errorMessage,
                 precision,
                 negativeHitChunkIds.size(),
-                negativeHitChunkIds);
+                negativeHitChunkIds,
+                diagnostics(evaluationCase, chunks, expectedTargets, negativeHitChunkIds, traceId));
+    }
+
+    private RetrievalEvaluationCaseDiagnostics diagnostics(RetrievalEvaluationCase evaluationCase,
+                                                           List<RetrievedChunk> chunks,
+                                                           Set<String> expectedTargets,
+                                                           List<String> negativeHitChunkIds,
+                                                           String traceId) {
+        Set<String> retrievedChunkIds = new LinkedHashSet<>();
+        Set<String> retrievedDocIds = new LinkedHashSet<>();
+        Set<String> retrievedKbIds = new LinkedHashSet<>();
+        for (RetrievedChunk chunk : chunks) {
+            if (chunk == null) {
+                continue;
+            }
+            addIfText(retrievedChunkIds, chunk.getId());
+            addIfText(retrievedDocIds, chunk.getDocId());
+            addIfText(retrievedKbIds, chunk.getKbId());
+        }
+        Set<String> negativeHits = new LinkedHashSet<>(Objects.requireNonNullElse(negativeHitChunkIds, List.of()));
+        List<RetrievalEvaluationChunkDiagnostic> retrievedChunks = new ArrayList<>();
+        for (int index = 0; index < chunks.size(); index++) {
+            RetrievedChunk chunk = chunks.get(index);
+            if (chunk == null) {
+                continue;
+            }
+            retrievedChunks.add(new RetrievalEvaluationChunkDiagnostic(
+                    index + 1,
+                    chunk.getId(),
+                    chunk.getDocId(),
+                    chunk.getKbId(),
+                    chunk.getScore() == null ? null : chunk.getScore().doubleValue(),
+                    new ArrayList<>(matchedTargets(chunk, expectedTargets)),
+                    hasText(chunk.getId()) && negativeHits.contains(chunk.getId())));
+        }
+        return new RetrievalEvaluationCaseDiagnostics(
+                evaluationCase.expectedChunkIds(),
+                evaluationCase.expectedDocIds(),
+                evaluationCase.expectedKbIds(),
+                missing(evaluationCase.expectedChunkIds(), retrievedChunkIds),
+                missing(evaluationCase.expectedDocIds(), retrievedDocIds),
+                missing(evaluationCase.expectedKbIds(), retrievedKbIds),
+                retrievedChunks,
+                traceId);
+    }
+
+    private List<String> missing(List<String> expectedIds, Set<String> retrievedIds) {
+        if (expectedIds == null || expectedIds.isEmpty()) {
+            return List.of();
+        }
+        return expectedIds.stream()
+                .filter(this::hasText)
+                .filter(id -> !retrievedIds.contains(id))
+                .distinct()
+                .toList();
+    }
+
+    private void addIfText(Set<String> values, String value) {
+        if (hasText(value)) {
+            values.add(value);
+        }
     }
 
     private Set<String> expectedTargets(RetrievalEvaluationCase evaluationCase) {
@@ -379,6 +471,10 @@ public class KernelRetrievalEvaluationService implements RetrievalEvaluationInbo
 
     private long elapsedMs(long startedNanos) {
         return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
+    }
+
+    private String traceId(TraceRunScope traceRunScope) {
+        return traceRunScope != null && traceRunScope.active() ? traceRunScope.traceId() : "";
     }
 
     private boolean hasText(String value) {

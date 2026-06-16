@@ -26,6 +26,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.eval.AgentEvalStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.eval.AgentEvalSummary;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.eval.AgentEvalSummaryPage;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.eval.AgentEvalType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentPublishCheckCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentPublishCheckItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentPublishCheckReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateCheckCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateStatus;
@@ -38,6 +41,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentEvalSummaryQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentEvalSummaryRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentPublishCheckRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ProductionGateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.QuotaPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthReportProviderPort;
@@ -185,6 +189,40 @@ class KernelProductionGateServiceTests {
                 report.item(ProductionGateCheckCode.QUOTA_CONFIGURED).orElseThrow().status());
     }
 
+    @Test
+    void shouldFoldLatestPublishCheckIntoProductionGateReport() {
+        MemoryAgentPublishCheckRepository publishRepository = new MemoryAgentPublishCheckRepository();
+        publishRepository.save(new AgentPublishCheckReport(
+                "check-1",
+                "agent-1",
+                "version-1",
+                null,
+                List.of(
+                        AgentPublishCheckItem.fail(AgentPublishCheckCode.TOOLS_ENABLED, "tool disabled"),
+                        AgentPublishCheckItem.pass(
+                                AgentPublishCheckCode.HIGH_RISK_APPROVAL_PRESENT, "approval recorded"),
+                        AgentPublishCheckItem.warn(AgentPublishCheckCode.RESOURCE_ACL_PRESENT, "acl missing")),
+                NOW));
+        KernelProductionGateService service = new KernelProductionGateService(
+                new MemoryProductionGateRepository(),
+                null,
+                null,
+                null,
+                null,
+                publishRepository,
+                CLOCK);
+
+        ProductionGateReport report = service.generate(agent(AgentRiskLevel.HIGH));
+
+        assertEquals(ProductionGateStatus.FAIL, report.status());
+        assertEquals(ProductionGateStatus.FAIL,
+                report.item(ProductionGateCheckCode.TOOL_RISK_REVIEWED).orElseThrow().status());
+        assertEquals(ProductionGateStatus.PASS,
+                report.item(ProductionGateCheckCode.HIGH_RISK_APPROVAL_PRESENT).orElseThrow().status());
+        assertEquals(ProductionGateStatus.WARN,
+                report.item(ProductionGateCheckCode.RESOURCE_ACL_PRESENT).orElseThrow().status());
+    }
+
     private static AgentDefinition agent() {
         return agent(AgentRiskLevel.MEDIUM);
     }
@@ -325,6 +363,23 @@ class KernelProductionGateServiceTests {
             records.replaceAll(policy -> policy.policyId().equals(policyId)
                     ? policy.disable(updatedAt)
                     : policy);
+        }
+    }
+
+    private static final class MemoryAgentPublishCheckRepository implements AgentPublishCheckRepositoryPort {
+
+        private AgentPublishCheckReport saved;
+
+        @Override
+        public AgentPublishCheckReport save(AgentPublishCheckReport report) {
+            saved = report;
+            return report;
+        }
+
+        @Override
+        public Optional<AgentPublishCheckReport> latest(String agentId) {
+            return Optional.ofNullable(saved)
+                    .filter(report -> report.agentId().equals(agentId));
         }
     }
 }

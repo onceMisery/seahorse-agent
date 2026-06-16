@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
 
+import java.time.Instant;
+
 /**
  * 审批请求分页查询条件。
  *
@@ -30,7 +32,11 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalReques
  */
 public record ApprovalRequestQuery(String tenantId,
                                    String runId,
+                                   String agentId,
+                                   String rolloutId,
                                    ApprovalRequestStatus status,
+                                   Instant from,
+                                   Instant to,
                                    long current,
                                    long size) {
 
@@ -39,12 +45,29 @@ public record ApprovalRequestQuery(String tenantId,
     public static final ApprovalRequestStatus DEFAULT_STATUS = ApprovalRequestStatus.PENDING;
 
     public ApprovalRequestQuery(String tenantId, ApprovalRequestStatus status, long current, long size) {
-        this(tenantId, null, status, current, size);
+        this(tenantId, null, null, null, status, null, null, current, size);
+    }
+
+    public ApprovalRequestQuery(String tenantId, String runId, ApprovalRequestStatus status, long current, long size) {
+        this(tenantId, runId, null, null, status, null, null, current, size);
+    }
+
+    public ApprovalRequestQuery(String tenantId,
+                                String runId,
+                                String agentId,
+                                ApprovalRequestStatus status,
+                                Instant from,
+                                Instant to,
+                                long current,
+                                long size) {
+        this(tenantId, runId, agentId, null, status, from, to, current, size);
     }
 
     public ApprovalRequestQuery {
         tenantId = trimToNull(tenantId);
         runId = trimToNull(runId);
+        agentId = trimToNull(agentId);
+        rolloutId = trimToNull(rolloutId);
         status = status == null ? DEFAULT_STATUS : status;
         current = current <= 0 ? DEFAULT_CURRENT : current;
         size = size <= 0 ? DEFAULT_PAGE_SIZE : size;

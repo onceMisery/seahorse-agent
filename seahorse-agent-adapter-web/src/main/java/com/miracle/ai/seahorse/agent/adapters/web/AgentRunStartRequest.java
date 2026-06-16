@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
 
 public record AgentRunStartRequest(String versionId,
+                                   String rolloutId,
                                    String tenantId,
                                    String conversationId,
                                    AgentRunTriggerType triggerType,

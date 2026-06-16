@@ -83,7 +83,12 @@ public class KernelIngestionEngine {
         Map<String, NodeConfig> nodeConfigMap = buildNodeConfigMap(pipeline.getNodes());
         validatePipeline(nodeConfigMap);
         safeContext.setStatus(IngestionStatus.RUNNING);
-        String startNodeId = findStartNode(nodeConfigMap);
+        String startNodeId = hasText(safeContext.getStartNodeId())
+                ? safeContext.getStartNodeId().trim()
+                : findStartNode(nodeConfigMap);
+        if (hasText(startNodeId) && !nodeConfigMap.containsKey(startNodeId)) {
+            throw new IllegalStateException("找不到入库恢复节点配置：" + startNodeId);
+        }
         executeChain(startNodeId, nodeConfigMap, safeContext);
         completeIfStillRunning(safeContext);
         return safeContext;

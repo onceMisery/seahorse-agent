@@ -19,7 +19,9 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCase;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseDiagnostics;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationChunkDiagnostic;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDataset;
@@ -73,8 +75,15 @@ class JdbcRetrievalEvaluationDatasetRepositoryAdapterTests {
                 });
         assertThat(adapter.findRun("kb-1", "dataset-1", run.runId()))
                 .get()
-                .satisfies(record -> assertThat(record.report().cases()).extracting(RetrievalEvaluationCaseResult::caseId)
-                        .containsExactly("case-1"));
+                .satisfies(record -> {
+                    assertThat(record.report().cases()).extracting(RetrievalEvaluationCaseResult::caseId)
+                            .containsExactly("case-1");
+                    assertThat(record.report().cases().get(0).diagnostics().missingExpectedChunkIds())
+                            .containsExactly("missing-1");
+                    assertThat(record.report().cases().get(0).diagnostics().retrievedChunks())
+                            .extracting(RetrievalEvaluationChunkDiagnostic::chunkId)
+                            .containsExactly("chunk-1");
+                });
         RetrievalEvaluationComparisonRecord comparison = adapter.saveComparison("kb-1", "dataset-1",
                 comparisonReport());
         assertThat(adapter.listComparisons("kb-1", "dataset-1", 10))
@@ -107,7 +116,17 @@ class JdbcRetrievalEvaluationDatasetRepositoryAdapterTests {
         return new RetrievalEvaluationReport(strategyName, 3, 1, 1, 1D, 1D, 1D, 0D, 12D, 12D,
                 List.of(new RetrievalEvaluationCaseResult(
                         "case-1", "问题", List.of("chunk-1"), List.of("doc-1"), 1, 1,
-                        1D, 1D, 1D, 12L, "SUCCESS", "")));
+                        1D, 1D, 1D, 12L, "SUCCESS", "", 1D, 0, List.of(),
+                        new RetrievalEvaluationCaseDiagnostics(
+                                List.of("chunk-1", "missing-1"),
+                                List.of("doc-1"),
+                                List.of("kb-1"),
+                                List.of("missing-1"),
+                                List.of(),
+                                List.of(),
+                                List.of(new RetrievalEvaluationChunkDiagnostic(
+                                        1, "chunk-1", "doc-1", "kb-1", 1D,
+                                        List.of("chunk:chunk-1", "doc:doc-1", "kb:kb-1"), false))))));
     }
 
     private RetrievalEvaluationComparisonReport comparisonReport() {

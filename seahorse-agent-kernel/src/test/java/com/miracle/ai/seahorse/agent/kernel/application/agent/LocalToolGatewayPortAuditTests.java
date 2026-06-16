@@ -124,7 +124,7 @@ class LocalToolGatewayPortAuditTests {
                 approvals,
                 FIXED_CLOCK);
 
-        ToolInvocationResult result = gateway.invoke(request("memory-forget"));
+        ToolInvocationResult result = gateway.invoke(requestWithRollout("memory-forget", "rollout-1"));
 
         assertFalse(result.success());
         assertEquals(ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED, result.error());
@@ -141,6 +141,7 @@ class LocalToolGatewayPortAuditTests {
         assertEquals("tenant-1", approval.tenantId());
         assertEquals("user-1", approval.userId());
         assertEquals("agent-1", approval.agentId());
+        assertEquals("rollout-1", approval.rolloutId());
         assertEquals("memory-forget", approval.toolId());
         assertEquals(FIXED_CLOCK.instant(), approval.requestedAt());
         assertTrue(approval.argumentsPreviewJson().contains("input"));
@@ -388,6 +389,24 @@ class LocalToolGatewayPortAuditTests {
                 "call-1",
                 "agent-1",
                 "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                toolId,
+                Map.of("input", "value"),
+                Map.of("knowledgeBaseId", "kb-1"),
+                "run-1:call-1",
+                List.of(toolId));
+    }
+
+    private static ToolInvocationRequest requestWithRollout(String toolId, String rolloutId) {
+        return new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                rolloutId,
                 "tenant-1",
                 "user-1",
                 "agent-identity-1",

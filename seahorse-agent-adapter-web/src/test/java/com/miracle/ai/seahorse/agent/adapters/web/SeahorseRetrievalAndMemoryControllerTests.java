@@ -18,8 +18,17 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseDiagnostics;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationChunkDiagnostic;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationStrategyDelta;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyPromotionCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplate;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityComparisonInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
@@ -45,6 +54,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -82,6 +93,50 @@ class SeahorseRetrievalAndMemoryControllerTests {
         verify(port).evaluate(any());
     }
 
+    @Test
+    void shouldExposeRetrievalComparisonCaseDiagnostics() throws Exception {
+        RetrievalEvaluationInboundPort port = mock(RetrievalEvaluationInboundPort.class);
+        when(port.compare(any())).thenReturn(new RetrievalEvaluationComparisonReport(
+                "baseline",
+                "candidate",
+                List.of(new RetrievalEvaluationReport(
+                        "baseline", 2, 1, 1, 0.5D, 0.5D, 0.5D, 0D, 8D, 8D,
+                        List.of(new RetrievalEvaluationCaseResult(
+                                "case-1", "question", List.of("chunk-1"), List.of("doc-1"), 1, 1,
+                                0.5D, 1D, 1D, 8L, "MISS", "", 0.5D, 1, List.of("negative-1"),
+                                new RetrievalEvaluationCaseDiagnostics(
+                                        List.of("chunk-1", "missing-1"),
+                                        List.of("doc-1"),
+                                        List.of("kb-1"),
+                                        List.of("missing-1"),
+                                        List.of(),
+                                        List.of(),
+                                        List.of(new RetrievalEvaluationChunkDiagnostic(
+                                                1, "chunk-1", "doc-1", "kb-1", 0.9D,
+                                                List.of("chunk:chunk-1"), false))))))),
+                List.of(new RetrievalEvaluationStrategyDelta("baseline", 0D, 0D, 0D, 0D, 0D, 0D, 0D))));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseRetrievalEvaluationController(provider(RetrievalEvaluationInboundPort.class, port))).build();
+
+        mvc.perform(post("/knowledge-base/kb-1/retrieval-quality/compare")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "baselineStrategyName": "baseline",
+                                  "topK": 2,
+                                  "strategies": [],
+                                  "cases": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reports[0].cases[0].diagnostics.missingExpectedChunkIds[0]")
+                        .value("missing-1"))
+                .andExpect(jsonPath("$.data.reports[0].cases[0].diagnostics.retrievedChunks[0].chunkId")
+                        .value("chunk-1"));
+
+        verify(port).compare(any());
+    }
+
     // --- RetrievalEvaluationDataset ---
 
     @Test
@@ -113,6 +168,43 @@ class SeahorseRetrievalAndMemoryControllerTests {
                 .andExpect(jsonPath("$.code").value("0"));
 
         verify(port).listTemplates("kb-1");
+    }
+
+    @Test
+    void shouldPromoteRetrievalStrategyFromComparison() throws Exception {
+        RetrievalStrategyTemplateInboundPort port = mock(RetrievalStrategyTemplateInboundPort.class);
+        when(port.promoteTemplateFromComparison(eq("kb-1"), any())).thenReturn(
+                new RetrievalStrategyTemplate(
+                        "candidate", "Candidate", "Passed comparison", RetrievalOptions.defaults(8), true));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseRetrievalStrategyTemplateController(provider(RetrievalStrategyTemplateInboundPort.class, port))).build();
+
+        mvc.perform(post("/knowledge-base/kb-1/retrieval-evaluation-datasets/dataset-1/comparisons/comparison-1/promote")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "tenantId": "tenant-a",
+                                  "operatorId": "admin-a",
+                                  "templateKey": "candidate",
+                                  "displayName": "Candidate",
+                                  "description": "Passed comparison",
+                                  "comment": "daily gate",
+                                  "options": {
+                                    "finalTopK": 8,
+                                    "enableKeyword": true,
+                                    "enableRrf": true
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"));
+
+        var captor = forClass(RetrievalStrategyPromotionCommand.class);
+        verify(port).promoteTemplateFromComparison(eq("kb-1"), captor.capture());
+        assertThat(captor.getValue().datasetId()).isEqualTo("dataset-1");
+        assertThat(captor.getValue().comparisonId()).isEqualTo("comparison-1");
+        assertThat(captor.getValue().template().templateKey()).isEqualTo("candidate");
+        assertThat(captor.getValue().template().options().finalTopK()).isEqualTo(8);
     }
 
     // --- VersionQualityComparison ---

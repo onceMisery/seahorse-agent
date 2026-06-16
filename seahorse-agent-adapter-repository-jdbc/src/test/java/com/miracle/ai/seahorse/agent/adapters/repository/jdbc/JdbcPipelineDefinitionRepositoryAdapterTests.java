@@ -65,9 +65,12 @@ class JdbcPipelineDefinitionRepositoryAdapterTests {
         PipelineDefinition definition = adapter.findById(created.getId()).orElseThrow();
 
         assertThat(created.getId()).isNotBlank();
+        assertThat(created.getVersion()).isEqualTo(1);
         assertThat(queried.getName()).isEqualTo("Native Pipeline");
+        assertThat(queried.getVersion()).isEqualTo(1);
         assertThat(queried.getNodes()).hasSize(1);
         assertThat(page.records()).extracting(IngestionPipelineRecord::getId).contains(created.getId());
+        assertThat(definition.getVersion()).isEqualTo(1);
         assertThat(definition.getNodes()).extracting("nodeId").containsExactly("1");
 
         IngestionPipelinePayload updatePayload = new IngestionPipelinePayload(
@@ -84,6 +87,7 @@ class JdbcPipelineDefinitionRepositoryAdapterTests {
 
         assertThat(updated).isTrue();
         assertThat(afterUpdate.getName()).isEqualTo("Updated Pipeline");
+        assertThat(afterUpdate.getVersion()).isEqualTo(2);
         assertThat(afterUpdate.getNodes()).extracting(IngestionPipelineNodePayload::nodeId)
                 .containsExactly("3");
         assertThat(activeNodes).isEqualTo(1);
@@ -100,6 +104,7 @@ class JdbcPipelineDefinitionRepositoryAdapterTests {
         PipelineDefinition definition = adapter.findById("1").orElseThrow();
 
         assertThat(definition.getName()).isEqualTo("Default Pipeline");
+        assertThat(definition.getVersion()).isEqualTo(1);
         assertThat(definition.getNodes()).hasSize(2);
         assertThat(definition.getNodes().get(0).getSettings().get("parserType").asText())
                 .isEqualTo("tika");
@@ -132,6 +137,7 @@ class JdbcPipelineDefinitionRepositoryAdapterTests {
                     id BIGINT PRIMARY KEY,
                     name VARCHAR(128),
                     description VARCHAR(256),
+                    version INTEGER NOT NULL DEFAULT 1,
                     created_by BIGINT,
                     updated_by BIGINT,
                     create_time TIMESTAMP,
@@ -162,8 +168,8 @@ class JdbcPipelineDefinitionRepositoryAdapterTests {
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update("""
                 INSERT INTO t_ingestion_pipeline
-                (id, name, description, created_by, updated_by, create_time, update_time, deleted)
-                VALUES (1, 'Default Pipeline', 'Default', 0, 0, ?, ?, 0)
+                (id, name, description, version, created_by, updated_by, create_time, update_time, deleted)
+                VALUES (1, 'Default Pipeline', 'Default', 1, 0, 0, ?, ?, 0)
                 """, now, now);
         jdbcTemplate.update("""
                 INSERT INTO t_ingestion_pipeline_node

@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.ports.outbound.chat;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.QueryOptimizationResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 
 import java.util.List;
@@ -53,5 +54,16 @@ public interface RetrievalContextPort {
                                       TraceRunScope traceRunScope,
                                       QueryOptimizationResult queryOptimizationResult) {
         return retrieve(subIntents, topK, traceRunScope);
+    }
+
+    /**
+     * 带治理过滤条件和查询优化结果的检索入口。默认回落到旧契约，便于外部实现逐步升级。
+     */
+    default RetrievalContext retrieve(List<SubQuestionIntent> subIntents,
+                                      int topK,
+                                      RetrievalFilter filter,
+                                      TraceRunScope traceRunScope,
+                                      QueryOptimizationResult queryOptimizationResult) {
+        return retrieve(subIntents, topK, traceRunScope, queryOptimizationResult);
     }
 }

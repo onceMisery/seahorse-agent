@@ -44,7 +44,7 @@ public class SeahorseCostUsageController {
     @PostMapping("/api/cost-usage-records")
     public ApiResponse<Object> append(@RequestBody CostUsageAppendRequest request) {
         CostUsageAppendRequest safeRequest = request == null
-                ? new CostUsageAppendRequest(null, null, null, null, null, null, null, null, 0L, 0L, 0d, null, null)
+                ? new CostUsageAppendRequest(null, null, null, null, null, null, null, null, null, 0L, 0L, 0d, null, null)
                 : request;
         return ApiResponses.requireService(costUsagePortProvider,
                 port -> port.append(new CostUsageRecord(
@@ -52,6 +52,7 @@ public class SeahorseCostUsageController {
                         safeRequest.tenantId(),
                         safeRequest.agentId(),
                         safeRequest.runId(),
+                        safeRequest.rolloutId(),
                         safeRequest.userId(),
                         safeRequest.toolId(),
                         safeRequest.modelId(),
@@ -67,12 +68,13 @@ public class SeahorseCostUsageController {
     public ApiResponse<Object> aggregate(@RequestParam(required = false) String tenantId,
                                          @RequestParam(required = false) String agentId,
                                          @RequestParam(required = false) String runId,
+                                         @RequestParam(required = false) String rolloutId,
                                          @RequestParam(required = false)
                                          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
                                          @RequestParam(required = false)
                                          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
         return ApiResponses.requireService(costUsagePortProvider,
-                port -> port.aggregate(new CostUsageQuery(tenantId, agentId, runId, from, to)));
+                port -> port.aggregate(new CostUsageQuery(tenantId, agentId, runId, rolloutId, from, to)));
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -80,6 +82,7 @@ public class SeahorseCostUsageController {
                                          String tenantId,
                                          String agentId,
                                          String runId,
+                                         String rolloutId,
                                          String userId,
                                          String toolId,
                                          String modelId,

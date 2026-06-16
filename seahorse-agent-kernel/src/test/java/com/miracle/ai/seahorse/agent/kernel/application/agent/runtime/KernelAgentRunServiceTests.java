@@ -76,6 +76,28 @@ class KernelAgentRunServiceTests {
     }
 
     @Test
+    void shouldStartRunWithRolloutIdAttribution() {
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.save(agent("data-analyst", AgentStatus.PUBLISHED, "version-1"));
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        KernelAgentRunService service = new KernelAgentRunService(
+                definitionRepository, runRepository, currentUser(), FIXED_CLOCK);
+
+        AgentRun run = service.startRun(new AgentRunStartCommand(
+                "data-analyst",
+                null,
+                "rollout-1",
+                AgentDefinition.DEFAULT_TENANT_ID,
+                "conversation-1",
+                AgentRunTriggerType.CHAT,
+                "summarized input",
+                "trace-1"));
+
+        assertEquals("rollout-1", run.rolloutId());
+        assertEquals("rollout-1", runRepository.runs.get(run.runId()).rolloutId());
+    }
+
+    @Test
     void shouldStartLegacyReactAgentRunWithoutRegistryDefinition() {
         MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
         KernelAgentRunService service = new KernelAgentRunService(

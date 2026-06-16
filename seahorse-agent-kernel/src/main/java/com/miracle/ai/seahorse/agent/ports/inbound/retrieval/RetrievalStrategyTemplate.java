@@ -33,8 +33,16 @@ public record RetrievalStrategyTemplate(
         String templateKey,
         String displayName,
         String description,
-        RetrievalOptions options
+        RetrievalOptions options,
+        boolean recommended
 ) {
+
+    public RetrievalStrategyTemplate(String templateKey,
+                                     String displayName,
+                                     String description,
+                                     RetrievalOptions options) {
+        this(templateKey, displayName, description, options, false);
+    }
 
     public RetrievalStrategyTemplate {
         templateKey = Objects.requireNonNullElse(templateKey, "").trim();

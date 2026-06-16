@@ -32,9 +32,20 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTrigger
  */
 public record AgentRunStartCommand(String agentId,
                                    String versionId,
+                                   String rolloutId,
                                    String tenantId,
                                    String conversationId,
                                    AgentRunTriggerType triggerType,
                                    String inputSummary,
                                    String traceId) {
+
+    public AgentRunStartCommand(String agentId,
+                                String versionId,
+                                String tenantId,
+                                String conversationId,
+                                AgentRunTriggerType triggerType,
+                                String inputSummary,
+                                String traceId) {
+        this(agentId, versionId, null, tenantId, conversationId, triggerType, inputSummary, traceId);
+    }
 }

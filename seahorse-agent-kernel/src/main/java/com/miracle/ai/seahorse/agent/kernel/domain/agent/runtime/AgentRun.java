@@ -47,6 +47,7 @@ import java.util.Objects;
 public record AgentRun(String runId,
                        String agentId,
                        String versionId,
+                       String rolloutId,
                        String tenantId,
                        String userId,
                        String conversationId,
@@ -64,10 +65,48 @@ public record AgentRun(String runId,
 
     public static final BigDecimal ZERO_COST = BigDecimal.ZERO;
 
+    public AgentRun(String runId,
+                    String agentId,
+                    String versionId,
+                    String tenantId,
+                    String userId,
+                    String conversationId,
+                    AgentRunTriggerType triggerType,
+                    String inputSummary,
+                    AgentRunStatus status,
+                    String traceId,
+                    long tokenInput,
+                    long tokenOutput,
+                    BigDecimal costTotal,
+                    String errorCode,
+                    String errorMessage,
+                    Instant startedAt,
+                    Instant finishedAt) {
+        this(runId,
+                agentId,
+                versionId,
+                null,
+                tenantId,
+                userId,
+                conversationId,
+                triggerType,
+                inputSummary,
+                status,
+                traceId,
+                tokenInput,
+                tokenOutput,
+                costTotal,
+                errorCode,
+                errorMessage,
+                startedAt,
+                finishedAt);
+    }
+
     public AgentRun {
         runId = requireText(runId, "runId 不能为空");
         agentId = trimToNull(agentId);
         versionId = trimToNull(versionId);
+        rolloutId = trimToNull(rolloutId);
         tenantId = defaultTenant(tenantId);
         userId = requireText(userId, "userId 不能为空");
         conversationId = trimToNull(conversationId);
@@ -117,6 +156,7 @@ public record AgentRun(String runId,
         return new AgentRun(runId,
                 agentId,
                 versionId,
+                rolloutId,
                 tenantId,
                 userId,
                 conversationId,

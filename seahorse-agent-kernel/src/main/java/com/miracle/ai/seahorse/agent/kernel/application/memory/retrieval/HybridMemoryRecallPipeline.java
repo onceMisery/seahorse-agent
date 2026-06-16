@@ -430,7 +430,8 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
             channelAttribution = recalled.channelAttribution();
         }
         List<MemoryItem> businessDocuments = loadBusinessDocument
-                ? loadBusinessDocuments(userId, request.currentQuestion(), fusionPolicy.finalTopK())
+                ? loadBusinessDocuments(userId, request.currentQuestion(), fusionPolicy.finalTopK(),
+                request.knowledgeBaseIds())
                 : Collections.emptyList();
 
         Set<String> activeProfileSlots = activeProfileSlots(profile);
@@ -1071,12 +1072,15 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 .build();
     }
 
-    private List<MemoryItem> loadBusinessDocuments(String userId, String query, int limit) {
+    private List<MemoryItem> loadBusinessDocuments(String userId,
+                                                   String query,
+                                                   int limit,
+                                                   List<String> knowledgeBaseIds) {
         if (isBlank(query)) {
             return Collections.emptyList();
         }
         try {
-            return businessDocumentRetrieverPort.retrieve(DEFAULT_TENANT_ID, query, limit);
+            return businessDocumentRetrieverPort.retrieve(DEFAULT_TENANT_ID, query, limit, knowledgeBaseIds);
         } catch (RuntimeException ex) {
             LOG.warn("load business document memories failed: userId={}", userId, ex);
             return Collections.emptyList();

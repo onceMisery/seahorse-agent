@@ -18,6 +18,10 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent.rollout;
 
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditActorType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentRollbackReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentRollbackResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentRollbackStatus;
@@ -47,16 +51,26 @@ public class KernelAgentRolloutService implements AgentRolloutInboundPort {
     private final AgentRolloutRepositoryPort rolloutRepository;
     private final ProductionGateRepositoryPort productionGateRepository;
     private final AgentFactoryInboundPort agentFactoryPort;
+    private final KernelAuditLedgerService auditLedger;
     private final Clock clock;
 
     public KernelAgentRolloutService(AgentRolloutRepositoryPort rolloutRepository,
                                      ProductionGateRepositoryPort productionGateRepository,
                                      AgentFactoryInboundPort agentFactoryPort,
                                      Clock clock) {
+        this(rolloutRepository, productionGateRepository, agentFactoryPort, null, clock);
+    }
+
+    public KernelAgentRolloutService(AgentRolloutRepositoryPort rolloutRepository,
+                                     ProductionGateRepositoryPort productionGateRepository,
+                                     AgentFactoryInboundPort agentFactoryPort,
+                                     KernelAuditLedgerService auditLedger,
+                                     Clock clock) {
         this.rolloutRepository = Objects.requireNonNull(rolloutRepository, "rolloutRepository must not be null");
         this.productionGateRepository = Objects.requireNonNull(productionGateRepository,
                 "productionGateRepository must not be null");
         this.agentFactoryPort = Objects.requireNonNull(agentFactoryPort, "agentFactoryPort must not be null");
+        this.auditLedger = auditLedger;
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
@@ -79,7 +93,9 @@ public class KernelAgentRolloutService implements AgentRolloutInboundPort {
                 clock.instant(),
                 clock.instant(),
                 null);
-        return rolloutRepository.save(rollout);
+        AgentVersionRollout saved = rolloutRepository.save(rollout);
+        appendAudit(AuditEventType.AGENT_ROLLOUT_STARTED, saved, safeCommand.operator(), null);
+        return saved;
     }
 
     @Override
@@ -88,7 +104,9 @@ public class KernelAgentRolloutService implements AgentRolloutInboundPort {
         if (rollout.status().terminal()) {
             return rollout;
         }
-        return rolloutRepository.save(rollout.pause(clock.instant()));
+        AgentVersionRollout paused = rolloutRepository.save(rollout.pause(clock.instant()));
+        appendAudit(AuditEventType.AGENT_ROLLOUT_PAUSED, paused, command.operator(), command.comment());
+        return paused;
     }
 
     @Override
@@ -96,13 +114,21 @@ public class KernelAgentRolloutService implements AgentRolloutInboundPort {
         AgentVersionRollout rollout = rolloutFor(command.tenantId(), command.agentId(), command.rolloutId());
         Optional<ProductionGateReport> latest = productionGateRepository.latest(rollout.agentId());
         if (latest.isEmpty()) {
-            return rolloutRepository.save(rollout.fail(AgentRolloutFailureCode.GATE_MISSING, clock.instant()));
+            AgentVersionRollout failed = rolloutRepository.save(
+                    rollout.fail(AgentRolloutFailureCode.GATE_MISSING, clock.instant()));
+            appendAudit(AuditEventType.AGENT_ROLLOUT_FAILED, failed, command.operator(), command.comment());
+            return failed;
         }
         ProductionGateReport report = latest.orElseThrow();
         if (!rollout.versionId().equals(report.versionId()) || report.status() != ProductionGateStatus.PASS) {
-            return rolloutRepository.save(rollout.fail(AgentRolloutFailureCode.GATE_FAILED, clock.instant()));
+            AgentVersionRollout failed = rolloutRepository.save(
+                    rollout.fail(AgentRolloutFailureCode.GATE_FAILED, clock.instant()));
+            appendAudit(AuditEventType.AGENT_ROLLOUT_FAILED, failed, command.operator(), command.comment());
+            return failed;
         }
-        return rolloutRepository.save(rollout.promote(report.reportId(), clock.instant()));
+        AgentVersionRollout promoted = rolloutRepository.save(rollout.promote(report.reportId(), clock.instant()));
+        appendAudit(AuditEventType.AGENT_ROLLOUT_PROMOTED, promoted, command.operator(), command.comment());
+        return promoted;
     }
 
     @Override
@@ -118,13 +144,25 @@ public class KernelAgentRolloutService implements AgentRolloutInboundPort {
                     command.comment()));
             if (result.status() == AgentRollbackStatus.ROLLED_BACK
                     || result.status() == AgentRollbackStatus.NOOP_ALREADY_ACTIVE) {
-                return rolloutRepository.save(rollout.rolledBack(clock.instant()));
+                AgentVersionRollout rolledBack = rolloutRepository.save(rollout.rolledBack(clock.instant()));
+                appendAudit(AuditEventType.AGENT_ROLLOUT_ROLLED_BACK, rolledBack,
+                        command.operator(), command.comment());
+                return rolledBack;
             }
-            return rolloutRepository.save(rollout.fail(AgentRolloutFailureCode.ROLLBACK_FAILED, clock.instant()));
+            AgentVersionRollout failed = rolloutRepository.save(
+                    rollout.fail(AgentRolloutFailureCode.ROLLBACK_FAILED, clock.instant()));
+            appendAudit(AuditEventType.AGENT_ROLLOUT_FAILED, failed, command.operator(), command.comment());
+            return failed;
         } catch (IllegalArgumentException ex) {
-            return rolloutRepository.save(rollout.fail(AgentRolloutFailureCode.ROLLBACK_TARGET_MISSING, clock.instant()));
+            AgentVersionRollout failed = rolloutRepository.save(
+                    rollout.fail(AgentRolloutFailureCode.ROLLBACK_TARGET_MISSING, clock.instant()));
+            appendAudit(AuditEventType.AGENT_ROLLOUT_FAILED, failed, command.operator(), command.comment());
+            return failed;
         } catch (RuntimeException ex) {
-            return rolloutRepository.save(rollout.fail(AgentRolloutFailureCode.ROLLBACK_FAILED, clock.instant()));
+            AgentVersionRollout failed = rolloutRepository.save(
+                    rollout.fail(AgentRolloutFailureCode.ROLLBACK_FAILED, clock.instant()));
+            appendAudit(AuditEventType.AGENT_ROLLOUT_FAILED, failed, command.operator(), command.comment());
+            return failed;
         }
     }
 
@@ -144,5 +182,43 @@ public class KernelAgentRolloutService implements AgentRolloutInboundPort {
 
     private String rolloutId() {
         return ROLLOUT_ID_PREFIX + SnowflakeIds.nextIdString();
+    }
+
+    private void appendAudit(AuditEventType eventType,
+                             AgentVersionRollout rollout,
+                             String operator,
+                             String comment) {
+        if (auditLedger == null) {
+            return;
+        }
+        auditLedger.append(new AuditEvent(
+                "audit_" + SnowflakeIds.nextIdString(),
+                rollout.tenantId(),
+                eventType,
+                AuditActorType.USER,
+                operator,
+                null,
+                rollout.agentId(),
+                "AGENT_ROLLOUT",
+                rollout.rolloutId(),
+                payload(rollout, comment),
+                clock.instant()));
+    }
+
+    private String payload(AgentVersionRollout rollout, String comment) {
+        return "{\"rolloutId\":\"" + escape(rollout.rolloutId())
+                + "\",\"agentId\":\"" + escape(rollout.agentId())
+                + "\",\"versionId\":\"" + escape(rollout.versionId())
+                + "\",\"status\":\"" + rollout.status().name()
+                + "\",\"canaryPercent\":" + rollout.canaryPercent()
+                + ",\"gateReportId\":\"" + escape(rollout.gateReportId())
+                + "\",\"failureCode\":\"" + (rollout.failureCode() == null ? "" : rollout.failureCode().name())
+                + "\",\"comment\":\"" + escape(comment) + "\"}";
+    }
+
+    private String escape(String value) {
+        return Objects.requireNonNullElse(value, "")
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"");
     }
 }

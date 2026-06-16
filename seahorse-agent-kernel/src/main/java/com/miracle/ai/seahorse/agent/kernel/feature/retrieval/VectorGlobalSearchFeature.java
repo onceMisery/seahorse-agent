@@ -20,9 +20,11 @@ package com.miracle.ai.seahorse.agent.kernel.feature.retrieval;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScore;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelType;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRef;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
@@ -106,7 +108,7 @@ public class VectorGlobalSearchFeature implements SearchChannelFeature {
     public SearchChannelResult search(SearchContext context) {
         long start = System.currentTimeMillis();
         String embeddingModel = embeddingModel(context);
-        List<String> searchableCollections = collectionNames(embeddingModel);
+        List<String> searchableCollections = collectionNames(embeddingModel, context);
         List<String> collections = searchableCollections.stream()
                 .limit(DEFAULT_MAX_COLLECTIONS)
                 .toList();
@@ -166,14 +168,36 @@ public class VectorGlobalSearchFeature implements SearchChannelFeature {
                 embeddingModelPort.embed(context.effectiveOptions().embeddingModel(), question), List.of());
     }
 
-    private List<String> collectionNames(String embeddingModel) {
+    private List<String> collectionNames(String embeddingModel, SearchContext context) {
+        SystemRetrievalFilter systemFilter = systemFilter(context);
         return knowledgeBaseQueryPort.listSearchableKnowledgeBases(embeddingModel)
                 .stream()
                 .filter(Objects::nonNull)
+                .filter(ref -> matchesKnowledgeBaseScope(ref, systemFilter))
                 .map(KnowledgeBaseRef::collectionName)
                 .filter(this::hasText)
+                .filter(collectionName -> matchesCollectionScope(collectionName, systemFilter))
                 .distinct()
                 .toList();
+    }
+
+    private SystemRetrievalFilter systemFilter(SearchContext context) {
+        RetrievalFilter filter = context == null ? null : context.getFilter();
+        return filter == null ? null : filter.system();
+    }
+
+    private boolean matchesKnowledgeBaseScope(KnowledgeBaseRef ref, SystemRetrievalFilter filter) {
+        if (filter == null || filter.knowledgeBaseIds().isEmpty()) {
+            return true;
+        }
+        return filter.knowledgeBaseIds().contains(String.valueOf(ref.id()));
+    }
+
+    private boolean matchesCollectionScope(String collectionName, SystemRetrievalFilter filter) {
+        if (filter == null || filter.collectionNames().isEmpty()) {
+            return true;
+        }
+        return filter.collectionNames().contains(collectionName);
     }
 
     private String embeddingModel(SearchContext context) {

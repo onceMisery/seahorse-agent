@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskExecu
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskNodeRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskRollbackResult;
 
 import java.util.List;
 
@@ -34,6 +35,17 @@ public interface IngestionTaskInboundPort {
     IngestionTaskExecutionResult upload(IngestionTaskUploadCommand command);
 
     IngestionTaskExecutionResult retry(String taskId, String operator);
+
+    default IngestionTaskExecutionResult retry(String taskId, String fromNodeId, String operator) {
+        if (fromNodeId == null || fromNodeId.isBlank()) {
+            return retry(taskId, operator);
+        }
+        throw new UnsupportedOperationException("retry from node is not supported");
+    }
+
+    default IngestionTaskRollbackResult rollback(String taskId, String operator) {
+        throw new UnsupportedOperationException("ingestion task rollback is not supported");
+    }
 
     IngestionTaskRecord get(String taskId);
 

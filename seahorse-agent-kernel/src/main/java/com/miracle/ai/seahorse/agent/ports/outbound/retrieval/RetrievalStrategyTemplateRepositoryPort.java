@@ -46,6 +46,10 @@ public interface RetrievalStrategyTemplateRepositoryPort {
         throw new UnsupportedOperationException("retrieval strategy template repository is read-only");
     }
 
+    default RetrievalStrategyTemplate promoteRecommendedTemplate(String kbId, RetrievalStrategyTemplatePayload payload) {
+        return upsertTemplate(kbId, payload);
+    }
+
     /**
      * 软删除指定知识库的模板覆盖。
      */

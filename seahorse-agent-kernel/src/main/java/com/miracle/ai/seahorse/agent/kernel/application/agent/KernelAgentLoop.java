@@ -956,6 +956,7 @@ public class KernelAgentLoop {
                 toolCall.id(),
                 request == null ? null : request.agentId(),
                 request == null ? null : request.versionId(),
+                request == null ? null : request.rolloutId(),
                 request == null ? null : request.tenantId(),
                 request == null ? null : request.userId(),
                 request == null ? null : request.agentIdentityId(),

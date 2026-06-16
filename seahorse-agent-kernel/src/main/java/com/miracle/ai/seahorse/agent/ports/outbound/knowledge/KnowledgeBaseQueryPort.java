@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.knowledge;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 知识库只读查询端口。
@@ -26,6 +27,10 @@ import java.util.List;
  * MyBatis Plus 分页对象或具体 Mapper。
  */
 public interface KnowledgeBaseQueryPort {
+
+    default Optional<KnowledgeBaseRef> findById(Long kbId) {
+        return Optional.empty();
+    }
 
     /**
      * 查询可参与全局检索的知识库。

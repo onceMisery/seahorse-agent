@@ -161,6 +161,36 @@ class JdbcRetrievalStrategyTemplateRepositoryAdapterTests {
                 """, Integer.class)).isEqualTo(0);
     }
 
+    @Test
+    void shouldPromoteOneRecommendedTemplatePerKnowledgeBase() {
+        DriverManagerDataSource dataSource = dataSource("retrieval-template-promote");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createSchema(jdbcTemplate);
+        insertTemplate(jdbcTemplate, "1", "kb-1", "baseline", "Baseline", 1, 1, 0,
+                "{\"finalTopK\":5,\"enableKeyword\":true}");
+        jdbcTemplate.update("""
+                UPDATE t_retrieval_strategy_template
+                SET recommended = 1
+                WHERE kb_id = 'kb-1' AND template_key = 'baseline'
+                """);
+        JdbcRetrievalStrategyTemplateRepositoryAdapter adapter =
+                new JdbcRetrievalStrategyTemplateRepositoryAdapter(dataSource, new ObjectMapper());
+
+        RetrievalStrategyTemplate promoted = adapter.promoteRecommendedTemplate("kb-1", payload("candidate", 8));
+        List<RetrievalStrategyTemplate> templates = adapter.listTemplates("kb-1");
+
+        assertThat(promoted.templateKey()).isEqualTo("candidate");
+        assertThat(promoted.recommended()).isTrue();
+        assertThat(templates).extracting(RetrievalStrategyTemplate::templateKey)
+                .containsExactly("candidate", "baseline");
+        assertThat(templates.get(0).recommended()).isTrue();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM t_retrieval_strategy_template
+                WHERE kb_id = 'kb-1' AND recommended = 1 AND deleted = 0
+                """, Integer.class)).isEqualTo(1);
+    }
+
     private DriverManagerDataSource dataSource(String name) {
         return new DriverManagerDataSource(
                 "jdbc:h2:mem:" + name + "-" + System.nanoTime() + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
@@ -176,6 +206,7 @@ class JdbcRetrievalStrategyTemplateRepositoryAdapterTests {
                     description VARCHAR(512),
                     options_json VARCHAR(4096) NOT NULL,
                     sort_order INTEGER NOT NULL DEFAULT 0,
+                    recommended SMALLINT NOT NULL DEFAULT 0,
                     enabled SMALLINT NOT NULL DEFAULT 1,
                     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -199,8 +230,8 @@ class JdbcRetrievalStrategyTemplateRepositoryAdapterTests {
                                 String optionsJson) {
         jdbcTemplate.update("""
                 INSERT INTO t_retrieval_strategy_template
-                (id, kb_id, template_key, display_name, description, options_json, sort_order, enabled, deleted)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, kb_id, template_key, display_name, description, options_json, sort_order, recommended, enabled, deleted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
                 """, id, kbId, templateKey, displayName, "desc-" + id, optionsJson, sortOrder, enabled, deleted);
     }
 

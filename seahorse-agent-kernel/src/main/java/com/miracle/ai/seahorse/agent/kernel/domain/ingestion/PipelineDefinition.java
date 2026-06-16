@@ -36,5 +36,6 @@ public class PipelineDefinition {
     private String id;
     private String name;
     private String description;
+    private int version;
     private List<NodeConfig> nodes;
 }

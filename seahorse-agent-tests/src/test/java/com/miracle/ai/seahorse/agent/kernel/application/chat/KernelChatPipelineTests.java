@@ -36,6 +36,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryQualityReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
@@ -202,6 +203,37 @@ class KernelChatPipelineTests {
         pipeline.execute(context(new RecordingCallback()));
 
         Assertions.assertEquals(List.of("Pulsar", "Kafka"), ports.lastExpandedTerms);
+    }
+
+    @Test
+    void shouldPassKnowledgeBaseScopeToRetrieval() {
+        RetrievalContext retrievalContext = RetrievalContext.builder()
+                .kbContext("知识库内容")
+                .intentChunks(Map.of())
+                .build();
+        RecordingChatPorts ports = new RecordingChatPorts(GuidanceDecision.none(), retrievalContext);
+        KernelChatPipeline pipeline = pipeline(ports);
+        StreamChatContext context = context(new RecordingCallback());
+        context.setKnowledgeBaseIds(List.of("42", "43"));
+
+        pipeline.execute(context);
+
+        Assertions.assertNotNull(ports.lastRetrievalFilter);
+        Assertions.assertEquals(List.of("42", "43"), ports.lastRetrievalFilter.system().knowledgeBaseIds());
+    }
+
+    @Test
+    void shouldPassKnowledgeBaseScopeToMemoryActivation() {
+        RecordingChatPorts ports = new RecordingChatPorts(GuidanceDecision.none(), RetrievalContext.builder().build());
+        RecordingMemoryEnginePort memoryEnginePort = new RecordingMemoryEnginePort();
+        KernelChatPipeline pipeline = pipeline(ports, memoryEnginePort);
+        StreamChatContext context = context(new RecordingCallback());
+        context.setKnowledgeBaseIds(List.of("42", "43"));
+
+        pipeline.execute(context);
+
+        Assertions.assertNotNull(memoryEnginePort.lastLoadRequest);
+        Assertions.assertEquals(List.of("42", "43"), memoryEnginePort.lastLoadRequest.knowledgeBaseIds());
     }
 
     @Test
@@ -502,6 +534,7 @@ class KernelChatPipelineTests {
         private ChatRequest lastChatRequest;
         private PromptContext lastPromptContext;
         private List<String> lastExpandedTerms = List.of();
+        private RetrievalFilter lastRetrievalFilter;
         private String boundTaskId;
         private RuntimeException streamError;
 
@@ -549,9 +582,11 @@ class KernelChatPipelineTests {
         @Override
         public RetrievalContext retrieve(List<SubQuestionIntent> subIntents,
                                          int topK,
+                                         RetrievalFilter filter,
                                          com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope traceRunScope,
                                          QueryOptimizationResult queryOptimizationResult) {
             retrieved = true;
+            lastRetrievalFilter = filter;
             lastExpandedTerms = queryOptimizationResult == null
                     ? List.of()
                     : queryOptimizationResult.expandedTerms();
@@ -744,10 +779,12 @@ class KernelChatPipelineTests {
 
     private static final class RecordingMemoryEnginePort implements MemoryEnginePort {
 
+        private MemoryLoadRequest lastLoadRequest;
         private MemoryWriteRequest lastWriteRequest;
 
         @Override
         public MemoryContext loadMemory(MemoryLoadRequest request) {
+            lastLoadRequest = request;
             return MemoryContext.builder()
                     .workingMemory(List.of())
                     .shortTermMemories(List.of())

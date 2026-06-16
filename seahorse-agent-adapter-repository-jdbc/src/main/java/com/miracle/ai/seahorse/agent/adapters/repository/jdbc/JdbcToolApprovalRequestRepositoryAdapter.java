@@ -47,16 +47,16 @@ public class JdbcToolApprovalRequestRepositoryAdapter implements ToolApprovalReq
         ApprovalRequestDecisionPort {
 
     private static final String APPROVAL_COLUMNS = """
-            approval_id, run_id, step_id, tool_invocation_id, tenant_id, user_id, agent_id, tool_id,
+            approval_id, run_id, step_id, tool_invocation_id, tenant_id, user_id, agent_id, rollout_id, tool_id,
             approval_type, risk_level, summary, arguments_preview_json, status, requested_at, expires_at,
             decided_by, decided_at, decision_comment
             """;
     private static final String SQL_INSERT = """
             INSERT INTO sa_approval_request
-            (approval_id, run_id, step_id, tool_invocation_id, tenant_id, user_id, agent_id, tool_id,
+            (approval_id, run_id, step_id, tool_invocation_id, tenant_id, user_id, agent_id, rollout_id, tool_id,
              approval_type, risk_level, summary, arguments_preview_json, status, requested_at, expires_at,
              decided_by, decided_at, decision_comment)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String SQL_FIND_BY_ID = """
             SELECT %s
@@ -99,6 +99,7 @@ public class JdbcToolApprovalRequestRepositoryAdapter implements ToolApprovalReq
                 safeRequest.tenantId(),
                 safeRequest.userId(),
                 safeRequest.agentId(),
+                safeRequest.rolloutId(),
                 safeRequest.toolId(),
                 safeRequest.approvalType().name(),
                 safeRequest.riskLevel().name(),
@@ -205,9 +206,19 @@ public class JdbcToolApprovalRequestRepositoryAdapter implements ToolApprovalReq
         List<Object> parameters = new ArrayList<>();
         addCondition(conditions, parameters, "tenant_id", query.tenantId());
         addCondition(conditions, parameters, "run_id", query.runId());
+        addCondition(conditions, parameters, "agent_id", query.agentId());
+        addCondition(conditions, parameters, "rollout_id", query.rolloutId());
         if (query.status() != null) {
             conditions.add("status = ?");
             parameters.add(query.status().name());
+        }
+        if (query.from() != null) {
+            conditions.add("requested_at >= ?");
+            parameters.add(toTimestamp(query.from()));
+        }
+        if (query.to() != null) {
+            conditions.add("requested_at <= ?");
+            parameters.add(toTimestamp(query.to()));
         }
         String whereSql = conditions.isEmpty() ? "" : "WHERE " + String.join(" AND ", conditions);
         return new QueryParts(whereSql, parameters);
@@ -230,6 +241,7 @@ public class JdbcToolApprovalRequestRepositoryAdapter implements ToolApprovalReq
                 resultSet.getString("tenant_id"),
                 resultSet.getString("user_id"),
                 resultSet.getString("agent_id"),
+                resultSet.getString("rollout_id"),
                 resultSet.getString("tool_id"),
                 ApprovalType.valueOf(resultSet.getString("approval_type")),
                 ToolRiskLevel.valueOf(resultSet.getString("risk_level")),
