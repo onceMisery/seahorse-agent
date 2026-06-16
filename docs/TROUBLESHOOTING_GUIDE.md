@@ -262,6 +262,17 @@ curl -X POST "http://localhost:9090/memories/maintenance/run?reason=manual-check
   -H "Authorization: Bearer $TOKEN"
 ```
 
+也可以触发治理策略评估（质量快照、清理建议）：
+
+```bash
+curl -X POST "http://localhost:9090/memories/governance/run" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+两个端点职责不同：
+- `/memories/maintenance/run`（SeahorseMemoryMaintenanceController）：触发底层数据整理，包括聚合缓冲刷新、实体别名合并、垃圾回收等。
+- `/memories/governance/run`（SeahorseMemoryController）：触发治理策略评估，包括质量快照生成、低价值记忆标记和清理建议。
+
 ## 7. 前端路径和 API 路径
 
 前端容器使用 `/api` 代理后端，浏览器里请求看起来可能是：

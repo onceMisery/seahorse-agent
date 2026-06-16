@@ -1,0 +1,303 @@
+# Checkpoint
+
+## TodoCheckpointDraft
+
+- Current todo: select the next bounded M2/M3/M4/M5 roadmap slice after closing the M5 AI/Vector canonical adapter selector drift evidence.
+- Completed todos:
+  - M2 ingestion retry API and failed-task retry path.
+  - M2 ingestion node governance fields, persistence, pipeline versioning, and task pipeline snapshots.
+  - M4 production gate publish-check evidence folding.
+  - M4 rollout audit events for canary start, pause, promote, rollback, and failed transitions.
+  - M1 retrieval evaluation metric/validation improvements.
+  - M1 retrieval evaluation case diagnostics for report drill-down, including missing expected targets and retrieved chunk diagnostics.
+  - M1 retrieval evaluation trace link: evaluation cases now start/finish a RAG trace run, pass `TraceRunScope` into retrieval, and expose `diagnostics.traceId`.
+  - M1 comparison-gated retrieval strategy promotion with recommended-template persistence and audit.
+  - M3 profile fact disable path.
+  - M3 memory quality cleanup suggestions that require manual confirmation.
+  - Docs skill operations alignment and stale-reference checks.
+  - M2 ingestion task to metadata quarantine linkage via unresolved quarantine count on task records.
+  - M4 rollout cost summary API over the rollout execution window.
+  - M4 rollout dashboard summary metrics: run health counts, error rate, and pending approval count over the same rollout window.
+  - M4 exact rollout-id attribution: agent runs, cost usage records, and approval requests now carry optional `rollout_id`; rollout summary uses exact rollout id filters and reports `AGENT_ROLLOUT_ID`.
+  - M5 starter-all heavy adapter acceptance matrix with classpath, auto-configuration, runtime bean, dependency, health, and minimal action coordinates.
+  - M5 starter-all/autoconfigure property drift stabilization: agent auto-configuration now uses canonical `seahorse-agent.*` properties, keeps legacy `seahorse.agent.*` fallback for custom conditions, and verifies MCP/deferred-search/built-in skill tool behavior under the starter-all regression set.
+  - M5 starter-all acceptance matrix canonical property coordinates: the public heavy-adapter activation matrix now exposes canonical `seahorse-agent.*` properties instead of legacy `seahorse.agent.*` coordinates, and the starter-all smoke suite enforces this boundary.
+  - M5 AI/Vector adapter selector canonical property drift: AI and Vector auto-configuration selectors now read canonical `seahorse-agent.*` properties first, keep legacy `seahorse.agent.*` fallback, and preserve multi-condition selector behavior through the custom repeatable condition helper.
+  - Near-term verification baseline: canonical backend smoke script now aligns with current login, knowledge document upload/chunk, RAG SSE, trace, memory readiness, profile facts, and maintenance endpoints.
+  - Near-term live full-compose verification: rebuilt/restarted backend image, reran canonical smoke against `docker-compose.full.yml`, and captured chunk/profile/trace database evidence.
+  - Near-term live smoke assertion hardening: trace API smoke now requires a trace run plus retrieval trace nodes, and memory/profile smoke now requires non-empty profile facts.
+  - M2 knowledge document chunk-log observability: successful and failed document chunk completion now appends rows to `t_knowledge_document_chunk_log`, and the canonical smoke script waits for non-empty chunk-log records instead of treating endpoint availability as enough evidence.
+  - Near-term RAG smoke retrieval scope: `/rag/v3/chat` can accept optional `knowledgeBaseIds`, the kernel propagates it through the retrieval filter, vector global search pre-filters searchable KB refs before vector calls, and the canonical smoke scopes its RAG SSE query to the KB created in the smoke run.
+  - Runtime stale Milvus warning retirement: rebuilt/restarted backend from the fresh image, reran canonical full-compose smoke, confirmed live chunk-log/trace/profile DB evidence, and verified no post-smoke `e2e_collection_99999` or vector collection-not-found warning in backend logs.
+  - M2 retry-from-node context restoration: retry keeps the legacy no-body API path, accepts optional `fromNodeId`, restores safe upstream context from successful prior node outputs, and starts the kernel engine from the requested node.
+  - M2 conservative ingestion rollback/compensation: completed tasks with explicit document target metadata can be marked `rolled_back` after delegating cleanup to the canonical knowledge document deletion owner; ambiguous tasks and running tasks are rejected.
+- Active slice: M5 AI/Vector adapter selector canonical property drift is verified at focused AI/Vector and starter-all smoke regression level.
+- Next step: pick the next bounded M2/M3/M4/M5 roadmap slice; likely candidates are Docker-backed rollback evidence for real parser/embed/index pipelines, M5 real-dependency smoke actions, or Docker-backed trace drill-down/UI/API evidence.
+
+## Evidence
+
+- Focused M1 promotion RED/GREEN:
+  - `.\mvnw -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web -am "-Dtest=KernelRetrievalStrategyTemplateServiceTests,JdbcRetrievalStrategyTemplateRepositoryAdapterTests,SeahorseRetrievalAndMemoryControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success; `KernelRetrievalStrategyTemplateServiceTests` 9 tests, `SeahorseRetrievalAndMemoryControllerTests` 14 tests, repository module success.
+- Broad roadmap regression:
+  - `.\mvnw -pl seahorse-agent-kernel,seahorse-agent-spring-boot-autoconfigure,seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web -am "-Dtest=KernelIngestionTaskServiceTests,KernelProductionGateServiceTests,KernelAgentRolloutServiceTests,SeahorseAgentRegistryAutoConfigurationTests,KernelMemoryGovernanceServiceTests,KernelRetrievalStrategyTemplateServiceTests,JdbcRetrievalStrategyTemplateRepositoryAdapterTests,SeahorseRetrievalAndMemoryControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success; kernel 14 tests, web 14 tests, autoconfigure 2 tests, seahorse-agent-tests 14 tests, repository module success.
+- Hygiene:
+  - `git diff --check`: no whitespace errors; CRLF warnings only.
+  - `rg -n "file://resources/docker|file://docs/quick-start|qwen-(plus|emb-8b)" docs --glob "*.md" --glob "!docs/architecture/current-code-architecture.md"`: no matches.
+  - `rg -n "localhost:8080/api/skills" docs/skills/SKILL-OPERATIONS.md`: no matches.
+- Near-term verification baseline:
+  - RED: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify-smoke-contracts.ps1`
+  - Result: failed because `scripts/e2e-backend-smoke.ps1` still referenced stale smoke coverage and did not yet include the current Bearer auth header, knowledge document upload/chunk paths, RAG SSE path, trace page, or memory governance checks required by the near-term baseline.
+  - GREEN: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify-smoke-contracts.ps1`
+  - Result: passed after updating `scripts/e2e-backend-smoke.ps1` to the current endpoint contract.
+  - Static syntax check: `$errors = $null; [void][System.Management.Automation.PSParser]::Tokenize((Get-Content -LiteralPath 'D:\code\seahorse-agent\scripts\e2e-backend-smoke.ps1' -Raw), [ref]$errors); if ($errors -and $errors.Count -gt 0) { $errors | ForEach-Object { Write-Host $_.Message }; exit 1 }`
+  - Result: passed.
+  - Hygiene: `git diff --check -- scripts\e2e-backend-smoke.ps1 scripts\verify-smoke-contracts.ps1`
+  - Result: no whitespace errors; CRLF warnings only.
+- Live full-compose backend smoke:
+  - Root cause previously found: first document upload used `KnowledgeBaseQueryPort.listSearchableKnowledgeBases()`, but the JDBC implementation only returns knowledge bases that already have enabled chunks. New knowledge bases therefore could not receive their first upload.
+  - Repair: added `KnowledgeBaseQueryPort.findById(Long kbId)`, implemented it in `JdbcKnowledgeBaseQueryAdapter` without requiring existing chunks, and changed `KernelKnowledgeDocumentService.requireKnowledgeBase` to use that canonical upload/read owner.
+  - RED focused coverage:
+    - `.\mvnw -pl seahorse-agent-adapter-repository-jdbc -am "-Dtest=JdbcKnowledgeBaseQueryAdapterTests#findByIdShouldReturnKnowledgeBaseEvenBeforeFirstChunkExists" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - `.\mvnw -pl seahorse-agent-tests -am "-Dtest=KernelKnowledgeDocumentServiceTests#shouldUploadDocumentBeforeKnowledgeBaseHasAnyChunks" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - GREEN focused coverage: both commands passed after the owner fix.
+  - Runtime image refresh:
+    - `docker compose -f docker-compose.full.yml build backend`
+    - Result: build success for `seahorse-agent-backend:latest`.
+    - `docker compose -f docker-compose.full.yml up -d --no-deps backend`
+    - Result: `seahorse-backend` recreated and started.
+    - `docker inspect seahorse-backend --format "{{.Image}} {{.Created}}"`
+    - Result: `sha256:39558a67f6b9a0a860c10bac9182ebeee8376a2adae32c73173c4a6dd37f110e 2026-06-15T16:40:01.173595306Z`.
+    - Health wait/curl result: backend reached `healthy`; `GET /actuator/health` returned `{"status":"UP"}`.
+  - Canonical live smoke:
+    - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\e2e-backend-smoke.ps1`
+    - Result: 18 checks, 0 failed. Passed health, auth, user/features/quota/notifications/export, knowledge base CRUD, document upload/chunk, RAG SSE chat, RAG trace API, memory/profile, agent/tool/skill catalog, audit, metadata governance, and SRE health.
+  - Runtime database evidence:
+    - `t_knowledge_chunk` for smoke `doc_id=324951590341529600`, `kb_id=324951589204873216`: `chunks=1`, `enabled_chunks=1`, `create_time=2026-06-15 16:41:40.665348`.
+    - Latest smoke trace run `trace_id=324951594456141824`: `status=SUCCESS`, `nodes=11`, `retrieval_nodes=4`, node types include `CHAT_STAGE`, `RETRIEVAL_CHANNEL`, and `RETRIEVAL_POST_PROCESSOR`.
+    - `t_user_profile_fact` for admin/default: `ACTIVE=7`, `HISTORICAL=16`, latest active update `2026-06-15 16:41:40.743865`.
+  - Smoke assertion hardening RED/GREEN:
+    - RED: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify-smoke-contracts.ps1`
+    - Result: failed after the contract checker was updated because `scripts\e2e-backend-smoke.ps1` did not yet request `/rag/traces/runs/$traceId/nodes`, assert retrieval trace nodes, or assert non-empty profile facts.
+    - GREEN contract: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify-smoke-contracts.ps1`
+    - Result: passed after adding `Assert-NonEmptyPageRecords`, `Assert-NonEmptyDataArray`, and `Assert-RetrievalTraceNodes`.
+    - Syntax: PowerShell parser tokenization of `scripts\e2e-backend-smoke.ps1`
+    - Result: passed.
+    - Live smoke: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\e2e-backend-smoke.ps1`
+    - Result: 18 checks, 0 failed; `RAG trace API smoke traceId=324954351028228096`; `Memory/profile smoke facts=7`.
+    - Database cross-check: smoke `doc_id=324954349530861568`, `kb_id=324954348729749504` has `chunks=1`, `enabled_chunks=1`; trace `324954351028228096` has `nodes=11`, `retrieval_nodes=4`.
+- M2 quarantine task-link RED/GREEN:
+  - RED: `.\mvnw -pl seahorse-agent-adapter-repository-jdbc -Dtest=JdbcIngestionTaskRepositoryAdapterTests#shouldAttachUnresolvedQuarantineCountToTaskRecords test`
+  - Result: failed at compile with missing new `IngestionTaskRecord` quarantine summary methods, plus expected stale upstream classpath noise from running without `-am`.
+  - GREEN focused: `.\mvnw -pl seahorse-agent-adapter-repository-jdbc -am "-Dtest=JdbcIngestionTaskRepositoryAdapterTests#shouldAttachUnresolvedQuarantineCountToTaskRecords" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success; 1 test run.
+  - Regression: `.\mvnw -pl seahorse-agent-adapter-repository-jdbc -am "-Dtest=JdbcIngestionTaskRepositoryAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success; 4 tests run.
+- M4 rollout cost summary RED/GREEN:
+  - RED service: `.\mvnw -pl seahorse-agent-kernel "-Dtest=KernelAgentRolloutCostSummaryServiceTests" test`
+  - Result: failed with missing rollout cost summary domain/port/service types.
+  - GREEN service: `.\mvnw -pl seahorse-agent-kernel "-Dtest=KernelAgentRolloutCostSummaryServiceTests" test`
+  - Result: build success; 1 test run.
+  - Web contract: `.\mvnw -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseAgentRolloutControllerTests#shouldExposeRolloutCostSummary" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success.
+  - Auto-configuration: `.\mvnw -pl seahorse-agent-spring-boot-autoconfigure -am "-Dtest=SeahorseAgentRegistryAutoConfigurationTests#shouldCreatePhaseOneRegistryAndRunStoreBeans" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success.
+- Broad focused regression after M2/M4 slices:
+  - `.\mvnw -pl seahorse-agent-kernel,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-autoconfigure -am "-Dtest=KernelIngestionTaskServiceTests,JdbcIngestionTaskRepositoryAdapterTests,KernelAgentRolloutServiceTests,KernelAgentRolloutCostSummaryServiceTests,SeahorseAgentRolloutControllerTests,SeahorseAgentRegistryAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success; kernel 8 tests, web rollout 3 tests, JDBC ingestion 4 tests, auto-config 2 tests.
+- M5 starter-all acceptance matrix RED/GREEN:
+  - RED: `.\mvnw -pl seahorse-agent-spring-boot-starter-all "-Dtest=SeahorseAgentStarterAllSmokeTests" test`
+  - Result: failed at test compile because `StarterAllAdapterAcceptanceMatrix` did not exist.
+  - GREEN: `.\mvnw -pl seahorse-agent-spring-boot-starter-all -am "-Dtest=SeahorseAgentStarterAllSmokeTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success; `SeahorseAgentStarterAllSmokeTests` 5 tests run.
+- Broad focused regression after M5 slice:
+  - `.\mvnw -pl seahorse-agent-kernel,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-autoconfigure,seahorse-agent-spring-boot-starter-all -am "-Dtest=KernelIngestionTaskServiceTests,JdbcIngestionTaskRepositoryAdapterTests,KernelAgentRolloutServiceTests,KernelAgentRolloutCostSummaryServiceTests,SeahorseAgentRolloutControllerTests,SeahorseAgentRegistryAutoConfigurationTests,SeahorseAgentStarterAllSmokeTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success; kernel 8 tests, web rollout 3 tests, JDBC ingestion 4 tests, auto-config 2 tests, starter-all 5 tests.
+- Hygiene after M5 slice:
+  - `git diff --check`
+  - Result: no whitespace errors; CRLF warnings only.
+- M5 starter-all/autoconfigure property drift stabilization:
+  - RED focused property drift:
+    - `.\mvnw -pl seahorse-agent-spring-boot-autoconfigure -am "-Dtest=SeahorseAgentChatRunStoreAutoConfigurationTests#shouldDisableAgentRuntimeOnlyWhenAgentModeAndWebTaskRuntimeAreBothDisabled+shouldWireLocalAgentAsToolPortWhenAdvancedLocalAgentFeatureIsEnabled" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - Result: failed before the fix because canonical `seahorse-agent.*` flags did not disable `KernelAgentLoop` and did not enable `LocalAgentAsToolPort`.
+  - GREEN focused property drift:
+    - Same command passed after `SeahorseAgentKernelAgentAutoConfiguration` moved property constants and the class-level kernel condition to canonical `seahorse-agent.*` names, while custom conditions still fall back to legacy `seahorse.agent.*`.
+  - Related regression after MCP/built-in test alignment:
+    - `.\mvnw -pl seahorse-agent-spring-boot-autoconfigure,seahorse-agent-tests -am "-Dtest=SeahorseAgentChatRunStoreAutoConfigurationTests,SeahorseAgentKernelAgentAutoConfigurationTests,McpToolAllowlistRegistrarTests,ToolSearchAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - First complete rerun result: failed only in `SeahorseAgentKernelAgentAutoConfigurationTests#shouldHonorBuiltInToolFeatureSwitches` because the test did not explicitly disable `deferred-search` and did not account for the baseline `load_skill_resource` skill tool.
+    - Final result: build success; autoconfigure ran `McpToolAllowlistRegistrarTests` 2, `SeahorseAgentChatRunStoreAutoConfigurationTests` 21, and `ToolSearchAutoConfigurationTests` 2; `seahorse-agent-tests` ran `SeahorseAgentKernelAgentAutoConfigurationTests` 9.
+  - M4/M5 runtime/starter regression:
+    - `.\mvnw -pl seahorse-agent-kernel,seahorse-agent-spring-boot-autoconfigure,seahorse-agent-spring-boot-starter-all -am "-Dtest=LocalToolGatewayPortPolicyTests,LocalToolGatewayPortAuditTests,KernelAgentLoopToolGatewayTests,KernelAgentRunResumeServiceTests,KernelAgentRunServiceTests,KernelAgentRolloutCostSummaryServiceTests,SeahorseAgentChatRunStoreAutoConfigurationTests,SeahorseAgentStarterAllSmokeTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - Result: build success; kernel agent/runtime tests 53, autoconfigure chat-run-store tests 21, starter-all smoke tests 5.
+  - Hygiene:
+    - `git diff --check`
+    - Result: exit code 0; CRLF normalization warnings only.
+- M5 starter-all acceptance matrix canonical property coordinates:
+  - RED focused matrix guard:
+    - `.\mvnw -pl seahorse-agent-spring-boot-starter-all -am "-Dtest=SeahorseAgentStarterAllSmokeTests#starterAllAcceptanceMatrixUsesCanonicalSeahorseAgentProperties" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - First attempt timed out at the tool layer after 120 seconds and produced no usable test result.
+    - Fresh RED rerun failed as expected because the acceptance matrix still exposed legacy `seahorse.agent.*` activation properties for heavy adapters.
+  - GREEN focused matrix guard:
+    - Same command passed after updating the matrix to canonical `seahorse-agent.*` activation properties while leaving `spring.*` infrastructure properties unchanged.
+  - Starter-all regression:
+    - `.\mvnw -pl seahorse-agent-spring-boot-starter-all -am "-Dtest=SeahorseAgentStarterAllSmokeTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - Result: build success; starter-all smoke tests ran 6 tests.
+  - Hygiene:
+    - `rg -n -F '"seahorse.agent.' seahorse-agent-spring-boot-starter-all/src/main/java/com/miracle/ai/seahorse/agent/starter/all/StarterAllAdapterAcceptanceMatrix.java seahorse-agent-spring-boot-starter-all/src/test/java/com/miracle/ai/seahorse/agent/adapters/spring/SeahorseAgentStarterAllSmokeTests.java`
+    - Result: no matches.
+    - `git diff --check`
+    - Result: exit code 0; CRLF normalization warnings only.
+- M5 AI/Vector adapter selector canonical property drift:
+  - RED focused selector guard:
+    - `.\mvnw -pl seahorse-agent-spring-boot-autoconfigure -am "-Dtest=SeahorseAgentAiAdapterAutoConfigurationTests#shouldConfigureMockEmbeddingFromCanonicalAdapterProperties,SeahorseAgentVectorAdapterAutoConfigurationTests#shouldSelectMilvusFromCanonicalAdapterProperties" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - Result: failed before implementation because canonical `seahorse-agent.adapters.ai.type=mock` did not create `MockEmbeddingAdapter`, and canonical `seahorse-agent.adapters.vector.type=milvus` did not override legacy vector `noop`.
+  - Intermediate diagnostic rerun:
+    - Same command still failed after adding an AI type condition to the dedicated embedding bean because repeatable `@ConditionalOnSeahorseAgentProperty` annotations were not expanded from their container, so multi-condition beans could match incorrectly.
+  - GREEN focused selector guard:
+    - Same command passed after `ConditionalOnSeahorseAgentProperty` expanded repeatable container annotations and the dedicated embedding bean required `seahorse-agent.adapters.ai.type=openai-compatible`.
+    - Result: build success; AI canonical mock selector and Vector canonical milvus selector tests ran 2 tests.
+  - Related AI/Vector regression:
+    - `.\mvnw -pl seahorse-agent-spring-boot-autoconfigure -am "-Dtest=SeahorseAgentAiAdapterAutoConfigurationTests,SeahorseAgentVectorAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - Result: build success; AI tests ran 6 and Vector tests ran 5.
+  - Starter-all/autoconfigure regression:
+    - `.\mvnw -pl seahorse-agent-spring-boot-autoconfigure,seahorse-agent-spring-boot-starter-all -am "-Dtest=SeahorseAgentAiAdapterAutoConfigurationTests,SeahorseAgentVectorAdapterAutoConfigurationTests,SeahorseAgentStarterAllSmokeTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - Result: build success; autoconfigure AI/Vector tests ran 11 and starter-all smoke tests ran 6.
+- M1 retrieval evaluation trace link RED/GREEN:
+  - RED: `.\mvnw -pl seahorse-agent-kernel "-Dtest=KernelRetrievalEvaluationServiceTests#shouldAttachTraceIdToEvaluationCaseDiagnostics" test`
+  - Result: failed at test compile because `KernelRetrievalEvaluationService` lacked a trace-recorder constructor, `RetrievalEvaluationCaseDiagnostics.traceId()` did not exist, and `KernelRetrievalEngine` lacked the filter/options/trace-scope overload.
+  - GREEN: `.\mvnw -pl seahorse-agent-kernel "-Dtest=KernelRetrievalEvaluationServiceTests#shouldAttachTraceIdToEvaluationCaseDiagnostics" test`
+  - Result: build success; 1 test run.
+  - First regression: `.\mvnw -pl seahorse-agent-kernel,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-tests -am "-Dtest=KernelRetrievalEvaluationServiceTests,JdbcRetrievalEvaluationDatasetRepositoryAdapterTests,SeahorseRetrievalAndMemoryControllerTests,KernelRetrievalStrategyTemplateServiceTests,JdbcRetrievalStrategyTemplateRepositoryAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: failed in `seahorse-agent-tests` because its test `FixedRetrievalEngine` only overrode the legacy 4-argument retrieval method; the new canonical evaluation path calls the 5-argument trace-aware method. Root cause was the test double, not production retrieval.
+  - Fix verification: `.\mvnw -pl seahorse-agent-tests -am "-Dtest=KernelRetrievalEvaluationServiceTests,KernelRetrievalStrategyTemplateServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success; 11 tests run.
+  - Related regression rerun: `.\mvnw -pl seahorse-agent-kernel,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-tests -am "-Dtest=KernelRetrievalEvaluationServiceTests,JdbcRetrievalEvaluationDatasetRepositoryAdapterTests,SeahorseRetrievalAndMemoryControllerTests,KernelRetrievalStrategyTemplateServiceTests,JdbcRetrievalStrategyTemplateRepositoryAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success; kernel retrieval evaluation 4 tests, web retrieval/memory controller 15 tests, JDBC retrieval evaluation dataset and strategy template repository tests 8 tests, seahorse-agent-tests retrieval evaluation/strategy 11 tests.
+  - Auto-configuration regression: `.\mvnw -pl seahorse-agent-spring-boot-autoconfigure -am "-Dtest=SeahorseAgentKernelRetrievalAutoConfigurationTests,SeahorseAgentRegistryAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success; 3 tests run.
+  - Hygiene: `git diff --check`
+  - Result: no whitespace errors; CRLF warnings only.
+  - Aegis workspace helper bundle/check:
+    - `python C:\Users\miracle\.codex\aegis\scripts\aegis-workspace.py bundle --root D:\code\seahorse-agent --work 2026-06-15-architecture-roadmap-implementation`
+    - Result: failed because `task-intent-draft.json` sidecar is missing.
+    - `python C:\Users\miracle\.codex\aegis\scripts\aegis-workspace.py check --root D:\code\seahorse-agent`
+    - Result: failed because standard workspace files/directories such as `docs/aegis/README.md`, `INDEX.md`, `BASELINE-GOVERNANCE.md`, `adr/`, `baseline/`, `specs/`, and `plans/` are missing.
+- M2 knowledge document chunk-log observability RED/GREEN:
+  - RED: `.\mvnw -pl seahorse-agent-adapter-repository-jdbc -am "-Dtest=JdbcKnowledgeDocumentRepositoryAdapterTests#markSuccessShouldAppendChunkLog+markFailedShouldAppendChunkLogWithErrorMessage" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: failed as expected before implementation because `chunkLogs(...).total()` was `0`.
+  - GREEN: same command passed after `JdbcKnowledgeDocumentRepositoryAdapter.markSuccess(...)` and `markFailed(...)` appended chunk-log rows.
+  - Focused regression: `.\mvnw -pl seahorse-agent-adapter-repository-jdbc -am "-Dtest=JdbcKnowledgeDocumentRepositoryAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success; 4 tests run.
+  - Service compatibility regression: `.\mvnw -pl seahorse-agent-tests -am "-Dtest=KernelKnowledgeDocumentServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success; 6 tests run.
+  - Combined related regression: `.\mvnw -pl seahorse-agent-adapter-repository-jdbc,seahorse-agent-tests -am "-Dtest=JdbcKnowledgeDocumentRepositoryAdapterTests,JdbcKnowledgeBaseQueryAdapterTests,KernelKnowledgeDocumentServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success; JDBC related tests 13, service tests 6.
+  - Static smoke contract: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify-smoke-contracts.ps1`
+  - Result: passed after requiring non-empty knowledge document chunk logs.
+  - PowerShell syntax: `$errors = $null; [void][System.Management.Automation.PSParser]::Tokenize((Get-Content -LiteralPath 'D:\code\seahorse-agent\scripts\e2e-backend-smoke.ps1' -Raw), [ref]$errors); if ($errors -and $errors.Count -gt 0) { $errors | ForEach-Object { Write-Host $_.Message }; exit 1 }`
+  - Result: passed.
+  - Hygiene: `git diff --check`
+  - Result: exit code 0; CRLF normalization warnings only.
+  - Live full-compose blocker: `docker compose -f docker-compose.full.yml build backend`
+  - Result: blocked by Maven dependency resolution inside Docker. Maven could not resolve `org.apache.maven.plugins:maven-dependency-plugin:pom:3.7.0` from Maven Central because the remote host terminated the TLS handshake. This is recorded as external dependency/network risk, not a code/test failure.
+  - Retry on 2026-06-16: `docker compose -f docker-compose.full.yml build backend`
+  - Result: timed out after 244 seconds. `docker inspect seahorse-agent-backend:latest --format "{{.Id}} {{.Created}}"` still reported image `sha256:39558a67f6b9a0a860c10bac9182ebeee8376a2adae32c73173c4a6dd37f110e` created `2026-06-15T16:36:23.048689088Z`; `docker inspect seahorse-backend --format "{{.Image}} {{.Created}}"` still reported the running container created `2026-06-15T16:40:01.173595306Z`. No fresh backend image was available for live smoke.
+- Fresh full-compose runtime proof for chunk-log and scoped RAG warning retirement:
+  - `docker inspect seahorse-agent-backend:latest --format "{{.Id}} {{.Created}}"`: fresh image `sha256:0c6ed8b2bfae51b06f1352e88f79debf1016873299b9c4ea58711a299f009e82`, created `2026-06-15T18:48:23.639516541Z`.
+  - `docker compose -f docker-compose.full.yml up -d --no-deps backend`: recreated and started `seahorse-backend`.
+  - `docker inspect seahorse-backend --format "{{.Image}} {{.Created}}"`: running container uses `sha256:0c6ed8b2bfae51b06f1352e88f79debf1016873299b9c4ea58711a299f009e82`, created `2026-06-15T18:51:16.248252576Z`.
+  - Health wait result: `GET http://localhost:9090/actuator/health` returned `{"status":"UP"}`.
+  - Smoke start: `2026-06-16T02:52:23.6136959+08:00` / `2026-06-15T18:52:23Z`.
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\e2e-backend-smoke.ps1`: 18 checks, 0 failed; smoke ids `kbId=324984540316659712`, `docId=324984541398790144`, `traceId=324984552765353984`.
+  - DB evidence: `t_knowledge_chunk` has `chunks=1`, `enabled_chunks=1` for `doc_id=324984541398790144`; `t_knowledge_document_chunk_log` has one `success` row with `chunk_count=1`; `t_rag_trace_run.trace_id=324984552765353984` is `SUCCESS`; `t_rag_trace_node` has `nodes=11`, `retrieval_nodes=5`; admin/default profile facts are `ACTIVE=7`, `HISTORICAL=16`.
+  - Log evidence: `docker logs --since "2026-06-15T18:52:23Z" seahorse-backend | Select-String -Pattern 'e2e_collection_99999|Vector global search skipped collection|collection not found'` returned no matches.
+- M2 retry-from-node context restoration RED/GREEN:
+  - RED: `.\mvnw -pl seahorse-agent-kernel,seahorse-agent-adapter-web,seahorse-agent-tests -am "-Dtest=KernelIngestionTaskServiceTests,SeahorseIngestionAndIntentControllerTests,LocalIngestionNodeLogAdapterTests,KernelIngestionEngineTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: failed as expected before implementation because `KernelIngestionTaskService.retry(String,String,String)` and `IngestionContext.getStartNodeId()` did not exist.
+  - GREEN focused: same command passed after adding optional retry body support, `startNodeId` execution, recoverable node-output snapshots, and context restoration helpers. Test counts: kernel ingestion task service 4, web ingestion/local node-log tests 15, kernel ingestion engine 4; reactor build success.
+  - Related regression: `.\mvnw -pl seahorse-agent-kernel,seahorse-agent-adapter-web,seahorse-agent-adapter-repository-jdbc,seahorse-agent-tests -am "-Dtest=KernelIngestionTaskServiceTests,SeahorseIngestionAndIntentControllerTests,LocalIngestionNodeLogAdapterTests,JdbcIngestionTaskRepositoryAdapterTests,KernelIngestionEngineTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - Result: build success; `JdbcIngestionTaskRepositoryAdapterTests` 4 tests also passed, covering the node output read/write path.
+  - Hygiene: `git diff --check` exited 0 with CRLF warnings only.
+  - Timeout note: one focused rerun timed out at the tool layer after 120 seconds and was rerun with a 300 second timeout; the fresh rerun completed successfully.
+- M4 exact rollout-id attribution RED/GREEN:
+  - RED summary/repository command:
+    - `.\mvnw -pl seahorse-agent-kernel,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web -am "-Dtest=KernelAgentRolloutCostSummaryServiceTests,JdbcAgentRunRepositoryAdapterTests,JdbcCostUsageRepositoryAdapterTests,JdbcToolApprovalRequestRepositoryAdapterTests,SeahorseAgentRolloutControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - Result: failed before implementation because `CostUsageQuery.rolloutId()`, `AgentRunQuery.rolloutId()`, and `ApprovalRequestQuery.rolloutId()` did not exist.
+  - GREEN focused:
+    - Same command passed after adding optional `rolloutId` to run/cost/approval domain records and query records, JDBC insert/update/mapper/filter support, `resources/database/seahorse_init.sql`, and migration `V33__agent_rollout_exact_attribution.sql`.
+    - Test counts: kernel rollout summary 3, web rollout controller 3, JDBC agent-run 5, JDBC cost usage 3, JDBC approval 7.
+  - RED entrypoint command:
+    - `.\mvnw -pl seahorse-agent-kernel,seahorse-agent-adapter-web -am "-Dtest=KernelAgentRunServiceTests,SeahorseCostUsageControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - Result: failed before implementation because `AgentRunStartCommand` lacked the new rollout attribution constructor/field.
+  - GREEN entrypoint command:
+    - Same command passed after `AgentRunStartCommand`, `AgentRunStartRequest`, `KernelAgentRunService`, `SeahorseAgentRunController`, and `SeahorseCostUsageController` accepted/propagated optional rollout ids. Test counts: kernel agent-run service 12, web cost usage controller 2.
+  - Related regression:
+    - `.\mvnw -pl seahorse-agent-kernel,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-autoconfigure -am "-Dtest=KernelAgentRolloutCostSummaryServiceTests,KernelAgentRunServiceTests,JdbcAgentRunRepositoryAdapterTests,JdbcAgentRunQueueRepositoryAdapterTests,JdbcCostUsageRepositoryAdapterTests,JdbcToolApprovalRequestRepositoryAdapterTests,SeahorseAgentRolloutControllerTests,SeahorseCostUsageControllerTests,SeahorseAgentRegistryAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - Result: build success; kernel 15 tests, web 5 tests, JDBC 17 tests, auto-configuration 2 tests.
+  - Hygiene:
+    - `git diff --check`
+    - Result: exit code 0; CRLF normalization warnings only.
+- M2 conservative ingestion rollback/compensation RED/GREEN:
+  - RED focused command:
+    - `.\mvnw -pl seahorse-agent-kernel,seahorse-agent-adapter-web -am "-Dtest=KernelIngestionTaskServiceTests,SeahorseIngestionAndIntentControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - Result: failed as expected before implementation because rollback result/target/compensation types, the inbound rollback method, and the controller rollback path did not exist.
+  - GREEN focused command:
+    - Same command passed after adding `IngestionTaskCompensationPort`, `IngestionTaskRollbackTarget`, `IngestionTaskRollbackResult`, `IngestionTaskInboundPort.rollback(...)`, `KernelIngestionTaskService.rollback(...)`, and `POST /ingestion/tasks/{id}/rollback`.
+    - Test counts: `KernelIngestionTaskServiceTests` 6 and `SeahorseIngestionAndIntentControllerTests` 15.
+  - Related regression:
+    - `.\mvnw -pl seahorse-agent-kernel,seahorse-agent-adapter-web,seahorse-agent-spring-boot-autoconfigure -am "-Dtest=KernelIngestionTaskServiceTests,SeahorseIngestionAndIntentControllerTests,SeahorseAgentRegistryAutoConfigurationTests,SeahorseAgentKernelDocumentRefreshAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - Result: build success; kernel ingestion task service 6 tests, web ingestion/intent controller 15 tests, auto-configuration 3 tests.
+  - Hygiene:
+    - `git diff --check`
+    - Result: exit code 0; CRLF normalization warnings only.
+- M4 automatic rollout-id attribution for tool approvals RED/GREEN:
+  - RED focused command:
+    - `.\mvnw -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,KernelAgentLoopToolGatewayTests,KernelChatAgentRunStoreTests,KernelAgentRunResumeServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - Result: failed as expected at test compile because `AgentLoopRequest.Builder.rolloutId(...)`, `ToolInvocationRequest.rolloutId()`, and the rollout-aware `ToolInvocationRequest(...)` constructor did not exist.
+  - GREEN focused command:
+    - `.\mvnw -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,KernelAgentLoopToolGatewayTests,KernelAgentRunResumeServiceTests,KernelChatAgentRunStoreTests#shouldPropagateAgentRunRolloutIdToToolGatewayRequest" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - Result: build success; 35 tests run. Coverage includes approval persistence, loop-to-tool propagation, chat/run-to-tool propagation, and resume fallback from approval rollout id for older checkpoints.
+  - Related kernel regression:
+    - `.\mvnw -pl seahorse-agent-kernel,seahorse-agent-spring-boot-autoconfigure -am "-Dtest=LocalToolGatewayPortPolicyTests,LocalToolGatewayPortAuditTests,KernelAgentLoopToolGatewayTests,KernelAgentRunResumeServiceTests,KernelAgentRunServiceTests,KernelAgentRolloutCostSummaryServiceTests,SeahorseAgentChatRunStoreAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+    - Result: kernel module tests passed: 53 tests run, 0 failures. The command later failed in `SeahorseAgentChatRunStoreAutoConfigurationTests` on two existing auto-configuration assertions (`KernelAgentLoop` bean disable condition and `LocalAgentAsToolPort` bean creation). Those failures are outside the rollout-id tool approval propagation path and are recorded as external regression drift for this slice.
+  - Hygiene:
+    - `git diff --check`
+    - Result: exit code 0; CRLF normalization warnings only.
+
+## DriftCheckDraft
+
+- Original task intent: still active, but bounded to implementable near/mid roadmap slices rather than the entire multi-month roadmap in one pass.
+- Compatibility boundary: preserved existing ports/adapters, added narrow contracts and schema migrations only where current tables could not express roadmap evidence.
+- New owners/fallbacks/adapters: added retrieval strategy promotion command and recommended-template persistence; no new external adapter.
+- M2 quarantine task-link stayed inside existing ingestion task repository and metadata quarantine table/port boundaries; no parallel quarantine subsystem added.
+- M2 chunk-log observability stayed inside `JdbcKnowledgeDocumentRepositoryAdapter`, the existing `KnowledgeDocumentRepositoryPort`, and the existing `t_knowledge_document_chunk_log` table/query API. No new public API shape, external adapter, or parallel chunk status owner was introduced.
+- Near-term RAG smoke retrieval scope stayed on the inbound chat command, chat context, existing retrieval filter, and vector global search feature. It does not add Milvus checks to JDBC query adapters or change default global search behavior when no KB scope is supplied.
+- M4 rollout cost summary stayed inside existing rollout repository, cost usage repository, web controller, and auto-configuration boundaries.
+- M4 rollout dashboard summary stayed inside the existing rollout cost summary service and reused current agent-run and approval query ports. Metrics are window-based by tenant/agent/time because run and cost records do not yet carry rollout ids.
+- M4 exact attribution retired the window-only dashboard limitation for records that carry `rollout_id`. The service still keeps window timestamps as a bounded time range, but the canonical attribution key is now `rolloutId`, and the response scope reports `AGENT_ROLLOUT_ID`.
+- M1 retrieval evaluation diagnostics stayed inside the existing evaluation report contract. It adds JSON report detail fields and no new table, migration, adapter, or external trace owner.
+- M1 retrieval evaluation trace link reused the existing `KernelRagTraceRecorder` and trace repository port. It adds no new trace owner, and the old no-recorder path degrades to an empty `traceId`.
+- M2 retry-from-node context restoration stayed inside the existing ingestion task inbound port, task repository node output contract, local node log adapter, and kernel ingestion engine. Empty or missing `fromNodeId` preserves the old retry path; explicit retry-from-node requires the pipeline snapshot and restores only safe context fields already emitted by successful upstream nodes.
+- M2 rollback/compensation stayed inside the existing ingestion task inbound port and the canonical knowledge document deletion owner. It does not introduce a parallel vector/index cleanup subsystem; Spring compensation delegates to `KnowledgeDocumentInboundPort.delete(docId, operator)`, which owns document, vector, keyword, and object cleanup.
+- M5 starter-all acceptance matrix stayed inside the starter-all module and existing auto-configuration discovery boundaries; it does not create external connections or claim full compose E2E readiness.
+- M5 starter-all/autoconfigure property drift stayed inside `SeahorseAgentKernelAgentAutoConfiguration` and existing tests. Canonical properties now align with the rest of the project; legacy fallback is limited to custom condition code because Spring's `@ConditionalOnProperty` cannot use the local fallback helper.
+- M5 starter-all acceptance matrix canonical property coordinates stayed inside the starter-all module and changed only public verification coordinates. It does not claim every adapter auto-configuration has migrated all `@ConditionalOnProperty` prefixes; that remains a separate compatibility/migration slice.
+- M5 AI/Vector adapter selector drift stayed inside the autoconfigure module. It introduces a canonical-first custom condition helper with legacy fallback, covers repeatable multi-condition behavior, and does not claim Cache/MQ/Storage/Search adapter selectors have been migrated yet.
+- Retirement track: the old "chunk-log endpoint only proves availability while DB chunk rows prove completion" limitation is retired for the canonical full-compose smoke path. The stale Milvus collection warning is retired for scoped canonical smoke because the fresh runtime log window had no stale collection warning after `knowledgeBaseIds` was propagated into chat and memory business-document retrieval.
+- Evidence sufficiency: sufficient for the implemented chunk-log persistence, scoped RAG retrieval contract, smoke-script contract, live runtime chunk-log evidence, and runtime stale-warning retirement. Still not sufficient to claim the whole roadmap complete.
+- Decision: continue by selecting the next bounded roadmap slice.
+
+## Risk / Unknown
+
+- M2 retry from a specified failed node now has code-path verification for upstream context/output restoration and start-node execution. Remaining risk is runtime breadth: complex real parser/embed/index pipelines still need Docker-backed or real-document evidence before claiming full operational recovery.
+- M2 quarantine queue linkage is now visible from ingestion task records. Conservative rollback/compensation is covered for tasks that carry explicit `docId`/`kbId` metadata; source-level or multi-document rollback remains open.
+- M4 exact rollout/run/cost/approval attribution is now covered for explicit `rollout_id` records, the cost summary endpoint, and automatic tool approval attribution from `AgentRun` -> `AgentLoopRequest` -> `ToolInvocationRequest` -> `ApprovalRequest`. Remaining runtime breadth is full Docker-backed approval/resume E2E for rollout-attributed runs.
+- M1 diagnostics now expose chunk-level drill-down data and carry a retrieval trace id when a trace recorder is configured.
+- M1 trace link evidence is code-path and Spring wiring evidence only. It does not prove a Docker-backed `/admin/traces` or UI/API drill-down E2E flow.
+- The near-term verification baseline now has fresh live `docker-compose.full.yml` smoke evidence, including document upload/chunk, non-empty chunk logs, RAG trace, memory/profile checks, governance APIs, and SRE health.
+- Runtime stale Milvus warning retirement is proven for the scoped canonical smoke path by a fresh backend rebuild/recreate, passing smoke, and no post-smoke `e2e_collection_99999` / vector collection-not-found log matches.
+- Aegis helper structural bundle/check is not green because the repository does not currently have the full standard Aegis workspace scaffold or JSON sidecars for this work record.
+- M5 full compose smoke suite and real-dependency Bean creation remain open; the adapter acceptance matrix is now present.
+- M5 property drift is covered by focused Spring context tests and starter-all smoke tests for the implemented agent-runtime, acceptance-matrix, AI selector, and Vector selector surfaces. Full real-dependency starter-all smoke actions and broader Cache/MQ/Storage/Search adapter canonical aliases remain open.
+- Full repository test suite was not run; verification targeted the roadmap surfaces touched by these slices.

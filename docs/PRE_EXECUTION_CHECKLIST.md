@@ -188,7 +188,7 @@ docker compose -f docker-compose.full.yml down -v
 - 带 `Authorization: Bearer <token>` 的接口不再返回“登录已过期”。
 - 全量部署下 `nomic-embed-text` 返回 768 维向量。
 - 知识库文档可以上传、分块并产生 chunk。
-- `/admin/traces` 能看到 RAG 请求。
+- `/rag/traces/runs` 能看到 RAG 请求（前端页面路由为 `/admin/traces`）。
 - 记忆链路有 `t_short_term_memory` 和 `t_user_profile_fact` 数据。
 
 可用脚本：
@@ -198,4 +198,41 @@ scripts/e2e-full-test.sh
 scripts/e2e-knowledge-test.sh
 scripts/memory-e2e-test.sh
 scripts/e2e-backend-smoke.ps1
+scripts/e2e-compose-suite.sh          # 四条主闭环统一 E2E 验证
+scripts/check-doc-staleness.sh        # 文档过期引用扫描
 ```
+
+## 季度文档审计模板
+
+每季度至少执行一次以下审计，确保文档与代码保持同步。审计结果记录在本文档末尾。
+
+### 审计步骤
+
+1. **API 路径审计**：
+   ```bash
+   # 提取所有 Controller 端点
+   rg -n "@(Get|Post|Put|Delete|Patch)Mapping|@RequestMapping" \
+     seahorse-agent-adapter-web/src/main/java/com/miracle/ai/seahorse/agent/adapters/web
+   ```
+   对照 `docs/architecture/current-code-architecture.md` Section 4 的路径表，确认新增/删除/变更的端点已同步。
+
+2. **环境变量审计**：
+   对照 `.env.full.example` 和实际 `docker-compose.full.yml` 的 environment 段，确认 `.env` 无过期或缺失变量。
+
+3. **前端路由审计**：
+   对照 `frontend/src/router.tsx` 和 `frontend/src/pages/admin/AdminLayout.tsx`，确认 `docs/deployment/enterprise-mode.md` 的页面路径表准确。
+
+4. **过期引用扫描**：
+   ```bash
+   ./scripts/check-doc-staleness.sh
+   ```
+   确保无旧 compose 文件、quick-start、旧模型名或旧 Trace 路径引用。
+
+5. **Feature Gate 审计**：
+   对照 `backend` 中的 feature gate 常量列表，确认 `.env` 和 `.env.full.example` 中的 gate 变量完整。
+
+### 审计记录
+
+| 审计日期 | 审计人 | 发现问题数 | 修复状态 |
+|---|---|---|---|
+| 2026-06-16 | 初始化 | 0 | 首次审计基线 |
