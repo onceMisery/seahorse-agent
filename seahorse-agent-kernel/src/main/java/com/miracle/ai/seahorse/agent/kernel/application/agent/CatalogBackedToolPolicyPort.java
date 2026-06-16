@@ -116,19 +116,25 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
         if (!tool.enabled()) {
             return deny(ToolPolicyReasonCodes.TOOL_DISABLED, "Tool is disabled");
         }
-        AgentToolBinding binding = bindingRepository
-                .findBinding(request.agentId(), request.versionId(), request.toolId())
-                .orElse(null);
-        if (binding == null) {
-            return deny(ToolPolicyReasonCodes.TOOL_NOT_BOUND, "Tool is not bound to the current agent version");
-        }
-        if (exceedsCallLimit(request, binding)) {
-            return deny(ToolPolicyReasonCodes.TOOL_CALL_LIMIT_EXCEEDED,
-                    "Tool call limit exceeded for this run");
-        }
-        PolicyDecision argumentDecision = validateArguments(request, binding);
-        if (argumentDecision != null) {
-            return argumentDecision;
+        // Legacy agent mode uses allowedToolIds list instead of explicit bindings
+        boolean isLegacyAgent = request.agentId() == null
+                || "legacy-react-agent".equals(request.agentId());
+        if (!isLegacyAgent) {
+            AgentToolBinding binding = bindingRepository
+                    .findBinding(request.agentId(), request.versionId(), request.toolId())
+                    .orElse(null);
+            if (binding == null) {
+                return deny(ToolPolicyReasonCodes.TOOL_NOT_BOUND,
+                        "Tool is not bound to the current agent version");
+            }
+            if (exceedsCallLimit(request, binding)) {
+                return deny(ToolPolicyReasonCodes.TOOL_CALL_LIMIT_EXCEEDED,
+                        "Tool call limit exceeded for this run");
+            }
+            PolicyDecision argumentDecision = validateArguments(request, binding);
+            if (argumentDecision != null) {
+                return argumentDecision;
+            }
         }
         PolicyDecision resourceDecision = validateResourceAccess(request, tool);
         if (resourceDecision != null) {

@@ -511,11 +511,8 @@ function mergeArtifactsById(current: Message["artifacts"], incoming: Message["ar
 }
 
 function chatModeForTaskTemplate(taskTemplateId?: TaskTemplateId): string | undefined {
-  if (!taskTemplateId) return undefined;
-  if (CONTROLLED_WEB_AGENT_TEMPLATE_IDS.has(taskTemplateId)) {
-    return CONTROLLED_WEB_AGENT_CHAT_MODE;
-  }
-  return undefined;
+  // Always use agent mode to enable tool access (image generation, web search, etc.)
+  return CONTROLLED_WEB_AGENT_CHAT_MODE;
 }
 
 async function hydrateSelectedSessionAgentRuns(

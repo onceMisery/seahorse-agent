@@ -24,8 +24,14 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillRuntimeComposer;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillSetJsonSupport;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualizationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryWriteToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
@@ -100,6 +106,17 @@ public class KernelChatInboundService implements ChatInboundPort {
             WebFetchToolPortAdapter.TOOL_ID,
             SearchKnowledgeBaseToolPortAdapter.TOOL_ID,
             GetDateTimeToolPortAdapter.TOOL_ID);
+    private static final List<String> LEGACY_DEFAULT_TOOL_IDS = List.of(
+            SearchKnowledgeBaseToolPortAdapter.TOOL_ID,
+            WebSearchToolPortAdapter.TOOL_ID,
+            WebFetchToolPortAdapter.TOOL_ID,
+            GetDateTimeToolPortAdapter.TOOL_ID,
+            ImageGenerationToolPortAdapter.TOOL_ID,
+            FrontendDesignToolPortAdapter.TOOL_ID,
+            ChartVisualizationToolPortAdapter.TOOL_ID,
+            MemoryReadToolPortAdapter.TOOL_ID,
+            MemoryWriteToolPortAdapter.TOOL_ID,
+            ToolSearchToolPortAdapter.TOOL_ID);
 
     private final KernelChatPipeline chatPipeline;
     private final StreamTaskPort streamTaskPort;
@@ -396,8 +413,11 @@ public class KernelChatInboundService implements ChatInboundPort {
         String agentId = selectedAgentId(command);
         String versionId = command.versionId();
         return selectedVersion(agentId, versionId)
-                .map(version -> toolIdsFromToolSetJson(version.toolSetJson()))
-                .orElseGet(List::of);
+                .map(version -> {
+                    List<String> toolIds = toolIdsFromToolSetJson(version.toolSetJson());
+                    return toolIds.isEmpty() ? LEGACY_DEFAULT_TOOL_IDS : toolIds;
+                })
+                .orElse(LEGACY_DEFAULT_TOOL_IDS);
     }
 
     private List<String> toolIdsFromToolSetJson(String toolSetJson) {
