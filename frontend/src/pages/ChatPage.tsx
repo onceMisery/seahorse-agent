@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Group, Panel, Separator } from "react-resizable-panels";
+import { GripVertical } from "lucide-react";
 
 import { ChatInput } from "@/components/chat/ChatInput";
 import { DeepSeaBackground } from "@/components/chat/DeepSeaBackground";
@@ -132,10 +133,15 @@ export function ChatPage() {
 
           {inspectorOpen && (
             <>
-              <Separator className="hidden md:flex w-[3px] items-center justify-center
-                bg-[var(--sh-workbench-border)] hover:bg-[var(--sh-workbench-accent)] transition-colors
-                cursor-col-resize" />
-              <Panel defaultSize={34} minSize={26} maxSize={48} className="hidden md:flex">
+              <Separator
+                className="group hidden md:flex relative w-[6px] items-center justify-center cursor-col-resize transition-colors hover:bg-[var(--sh-workbench-accent)]"
+                style={{ backgroundColor: "var(--sh-workbench-border)" }}
+              >
+                <div className="flex h-8 w-[3px] items-center justify-center rounded-full" style={{ backgroundColor: "var(--sh-workbench-border-strong)" }}>
+                  <GripVertical className="h-4 w-4" style={{ color: "var(--sh-workbench-accent)" }} />
+                </div>
+              </Separator>
+              <Panel defaultSize={34} minSize={20} maxSize={60} className="hidden md:flex">
                 <WorkspaceInspector
                   message={activeMessage}
                   open={inspectorOpen}

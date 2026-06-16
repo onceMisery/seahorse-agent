@@ -24,7 +24,6 @@ export function Header({ onToggleSidebar }: HeaderProps) {
             size="icon"
             onClick={onToggleSidebar}
             aria-label="切换侧边栏"
-            className="lg:hidden"
             style={{ color: "var(--theme-text-secondary)" }}
           >
             <Menu className="h-5 w-5" />

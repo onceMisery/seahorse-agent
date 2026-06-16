@@ -8,6 +8,7 @@ import {
   MessageSquare,
   MoreHorizontal,
   Palette,
+  PanelLeftClose,
   Pencil,
   Plus,
   Search,
@@ -160,7 +161,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     <>
       <div
         className={cn(
-          "fixed inset-0 z-30 backdrop-blur-sm transition-opacity lg:hidden",
+          "fixed inset-0 z-30 backdrop-blur-sm transition-opacity",
           isOpen ? "opacity-100" : "pointer-events-none opacity-0"
         )}
         style={{ backgroundColor: "rgba(2, 6, 23, 0.7)" }}
@@ -168,7 +169,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       />
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 flex h-screen w-[280px] flex-shrink-0 flex-col glass p-3 transition-transform lg:static lg:h-screen lg:translate-x-0",
+          "fixed left-0 top-0 z-40 flex h-screen w-[280px] flex-shrink-0 flex-col glass p-3 transition-transform",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
         style={{ borderColor: "var(--theme-glass-border)" }}
@@ -178,10 +179,19 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg overflow-hidden">
               <SeahorseLogo size={40} />
             </div>
-            <div style={{ fontFamily: sessionTitleFont }}>
+            <div className="flex-1" style={{ fontFamily: sessionTitleFont }}>
               <p className="text-base font-semibold glow-text" style={{ color: "var(--theme-text-primary)" }}>Seahorse Agent</p>
               <p className="text-xs" style={{ color: "var(--theme-text-muted)" }}>AI 驱动</p>
             </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="收起侧边栏"
+              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors glass-hover"
+              style={{ color: "var(--theme-text-muted)" }}
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
           </div>
         </div>
         <div className="py-3 space-y-4">
