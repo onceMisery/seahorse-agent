@@ -18,6 +18,7 @@ import {
   listEvaluationRuns,
   listEvaluationComparisons,
   listStrategyTemplates,
+  promoteStrategyFromComparison,
   type EvaluationRun,
   type EvaluationComparison,
   type RetrievalStrategyTemplate
@@ -210,6 +211,30 @@ export function RetrievalDatasetDetailPage() {
                               {((comp.diffHitRate ?? 0) * 100).toFixed(1)}%
                             </div>
                           </div>
+                        </div>
+                      )}
+                      {comp.status === "COMPLETED" && comp.comparisonId && (comp.diffHitRate ?? 0) >= 0 && (
+                        <div className="mt-3 flex justify-end">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-green-500 text-green-700 hover:bg-green-50"
+                            onClick={async () => {
+                              if (!kbId || !datasetId || !comp.comparisonId) return;
+                              try {
+                                await promoteStrategyFromComparison(kbId, datasetId, comp.comparisonId, {
+                                  strategyKey: comp.candidateStrategyKey || ""
+                                });
+                                toast.success("策略已推广为推荐模板");
+                                const st = await listStrategyTemplates(kbId);
+                                setStrategies(st || []);
+                              } catch (error) {
+                                toast.error(getErrorMessage(error, "推广失败"));
+                              }
+                            }}
+                          >
+                            推荐为线上策略
+                          </Button>
                         </div>
                       )}
                     </div>

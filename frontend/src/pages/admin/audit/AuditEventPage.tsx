@@ -16,7 +16,6 @@ import { listAuditEvents, getAuditEvent, type AuditEvent } from "@/services/audi
 import { getErrorMessage } from "@/utils/error";
 
 const PAGE_SIZE = 10;
-const INTERNAL_EVENT_TYPES = new Set(["CONTEXT_ACCESSED"]);
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
   AGENT_PUBLISHED: "Agent 发布",
@@ -37,7 +36,7 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   SANDBOX_EXECUTION_FINISHED: "沙箱执行",
   AGENT_HANDOFF_CREATED: "转交创建",
   AGENT_HANDOFF_FINISHED: "转交完成",
-  CONTEXT_ACCESSED: "上下文访问"
+  CONTEXT_ACCESSED: "内部上下文访问"
 };
 
 const displayActor = (event: AuditEvent) => event.actor || event.actorId || event.actorType || "-";
@@ -67,16 +66,14 @@ export function AuditEventPage() {
   const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
-  const events = (pageData?.records || []).filter(
-    (event) => eventTypeFilter !== "all" || !INTERNAL_EVENT_TYPES.has(event.eventType || "")
-  );
+  const events = pageData?.records || [];
 
   const loadEvents = async (current = pageNo, kw = keyword) => {
     try {
       setLoading(true);
       const data = await listAuditEvents({
         current,
-        size: eventTypeFilter === "all" ? PAGE_SIZE * 5 : PAGE_SIZE,
+        size: PAGE_SIZE,
         actor: kw || undefined,
         eventType: eventTypeFilter !== "all" ? eventTypeFilter : undefined
       });

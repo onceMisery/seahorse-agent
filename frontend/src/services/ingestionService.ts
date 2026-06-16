@@ -151,3 +151,13 @@ export async function uploadIngestionTask(pipelineId: string, file: File) {
     headers: { "Content-Type": "multipart/form-data" }
   });
 }
+
+export async function retryIngestionTask(id: string, fromNodeId?: string) {
+  return api.post<IngestionResult, IngestionResult>(`/ingestion/tasks/${id}/retry`, null, {
+    params: { fromNodeId: fromNodeId || undefined }
+  });
+}
+
+export async function rollbackIngestionTask(id: string) {
+  return api.post<IngestionResult, IngestionResult>(`/ingestion/tasks/${id}/rollback`, null);
+}

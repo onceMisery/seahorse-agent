@@ -15,3 +15,7 @@ export async function logout() {
 export async function getCurrentUser() {
   return api.get<CurrentUserResponse>("/user/me");
 }
+
+export async function refreshToken() {
+  return api.post<LoginResponse>("/auth/refresh");
+}

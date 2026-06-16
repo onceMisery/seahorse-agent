@@ -167,6 +167,32 @@ export function listDatasetSamples(kbId: string, datasetId: string, params?: { c
   );
 }
 
+// 样本导出（客户端下载 JSON）
+export async function exportDatasetSamples(kbId: string, datasetId: string) {
+  const allSamples = await listDatasetSamples(kbId, datasetId, { current: 1, size: 10000 });
+  const blob = new Blob([JSON.stringify(allSamples.records, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `evaluation-dataset-${datasetId}-samples.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// 样本导入（解析 JSON 文件后逐条创建，需要后端支持批量样本写入）
+export async function importDatasetSamples(kbId: string, datasetId: string, file: File): Promise<number> {
+  const text = await file.text();
+  const samples: EvaluationSample[] = JSON.parse(text);
+  if (!Array.isArray(samples) || samples.length === 0) {
+    throw new Error("文件格式无效：需要包含评测样本数组");
+  }
+  // 使用批量导入端点（如后端已实现）
+  return api.post<number, number>(
+    `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-evaluation-datasets/${encodeURIComponent(datasetId)}/samples/import`,
+    samples
+  );
+}
+
 // 评测与对比
 export function evaluateDataset(kbId: string, datasetId: string, payload: DatasetEvaluatePayload) {
   return api.post<EvaluationRun, EvaluationRun>(
@@ -240,6 +266,19 @@ export function evaluateRetrievalQuality(kbId: string, payload: Record<string, u
 export function compareRetrievalQuality(kbId: string, payload: Record<string, unknown>) {
   return api.post<Record<string, unknown>, Record<string, unknown>>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-quality/compare`,
+    payload
+  );
+}
+
+// 策略推广（将评测对比通过的策略标记为推荐模板）
+export function promoteStrategyFromComparison(
+  kbId: string,
+  datasetId: string,
+  comparisonId: string,
+  payload: { strategyKey: string; templateKey?: string }
+) {
+  return api.post<RetrievalStrategyTemplate, RetrievalStrategyTemplate>(
+    `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-evaluation-datasets/${encodeURIComponent(datasetId)}/comparisons/${encodeURIComponent(comparisonId)}/promote`,
     payload
   );
 }

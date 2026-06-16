@@ -46,6 +46,7 @@ import {
   uploadIngestionTask
 } from "@/services/ingestionService";
 import { getSystemSettings } from "@/services/settingsService";
+import { fetchUserMap, resolveUserName } from "@/services/userService";
 import { getErrorMessage } from "@/utils/error";
 const PIPELINE_PAGE_SIZE = 10;
 const TASK_PAGE_SIZE = 10;
@@ -227,6 +228,7 @@ export function IngestionPage() {
   const [pipelineDeleteTarget, setPipelineDeleteTarget] = useState<IngestionPipeline | null>(null);
 
   const [pipelineOptions, setPipelineOptions] = useState<IngestionPipeline[]>([]);
+  const [userMap, setUserMap] = useState<Map<string, string>>(new Map());
 
   const [taskPage, setTaskPage] = useState<PageResult<IngestionTask> | null>(null);
   const [taskStatus, setTaskStatus] = useState<string | undefined>();
@@ -287,6 +289,10 @@ export function IngestionPage() {
 
   useEffect(() => {
     loadPipelineOptions();
+  }, []);
+
+  useEffect(() => {
+    fetchUserMap().then(setUserMap);
   }, []);
 
   useEffect(() => {
@@ -430,7 +436,7 @@ export function IngestionPage() {
                         {pipeline.description || "-"}
                       </TableCell>
                       <TableCell>{pipeline.nodes?.length ?? 0}</TableCell>
-                      <TableCell>{pipeline.createdBy || "-"}</TableCell>
+                      <TableCell>{resolveUserName(userMap, pipeline.createdBy)}</TableCell>
                       <TableCell>{formatDate(pipeline.updateTime)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
@@ -552,7 +558,7 @@ export function IngestionPage() {
                           {taskStatusLabel(task.status)}
                         </Badge>
                       </TableCell>
-                      <TableCell>{task.createdBy || "-"}</TableCell>
+                      <TableCell>{resolveUserName(userMap, task.createdBy)}</TableCell>
                       <TableCell>{task.chunkCount ?? "-"}</TableCell>
                       <TableCell>{formatDate(task.createTime)}</TableCell>
                       <TableCell className="text-right">

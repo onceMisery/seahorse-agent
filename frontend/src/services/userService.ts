@@ -61,3 +61,25 @@ export async function deleteUser(id: string): Promise<void> {
 export async function changePassword(payload: ChangePasswordPayload): Promise<void> {
   await api.put("/user/password", payload);
 }
+
+// ── 用户ID解析工具 ──
+
+/** 获取所有用户的 ID→用户名映射表（用于表格展示） */
+export async function fetchUserMap(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  try {
+    const page = await getUsersPage(1, 1000);
+    for (const u of page.records) {
+      map.set(u.id, u.username);
+    }
+  } catch {
+    // 获取失败时返回空 map，前端会降级显示原始 ID
+  }
+  return map;
+}
+
+/** 解析用户ID为用户名，找不到时返回原始ID */
+export function resolveUserName(userMap: Map<string, string>, userId?: string | null): string {
+  if (!userId || userId === "0") return "系统";
+  return userMap.get(userId) || userId;
+}

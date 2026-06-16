@@ -17,6 +17,7 @@ import { MemoryTracePanel } from "./components/MemoryTracePanel";
 import { MemoryRecallEvalPanel } from "./components/MemoryRecallEvalPanel";
 import { MemoryPolicyConfigPanel } from "./components/MemoryPolicyConfigPanel";
 import { MemoryOperationsPanel } from "./components/MemoryOperationsPanel";
+import { MemoryCleanupPanel } from "./components/MemoryCleanupPanel";
 import { getErrorMessage } from "@/utils/error";
 
 export function MemoryGovernancePage() {
@@ -45,6 +46,7 @@ export function MemoryGovernancePage() {
           <TabsTrigger value="recall">召回评测</TabsTrigger>
           <TabsTrigger value="policy">策略配置</TabsTrigger>
           <TabsTrigger value="operations">运维视图</TabsTrigger>
+          <TabsTrigger value="cleanup">清理建议</TabsTrigger>
         </TabsList>
 
         <TabsContent value="review">
@@ -77,6 +79,10 @@ export function MemoryGovernancePage() {
 
         <TabsContent value="operations">
           <MemoryOperationsPanel />
+        </TabsContent>
+
+        <TabsContent value="cleanup">
+          <MemoryCleanupPanel />
         </TabsContent>
       </Tabs>
     </div>

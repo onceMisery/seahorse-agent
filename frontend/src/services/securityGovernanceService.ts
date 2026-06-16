@@ -29,14 +29,21 @@ export interface AccessDecision {
   decisionId?: string;
   tenantId?: string;
   subject?: string;
+  subjectType?: string;
+  subjectId?: string;
   resource?: string;
+  resourceType?: string;
+  resourceId?: string;
   action?: string;
   agentId?: string;
   runId?: string;
   result?: string;
+  effect?: string;
   denyReason?: string;
+  reasonCode?: string;
   matchedRules?: Array<{ ruleId?: string; effect?: string }>;
   decisionTime?: string;
+  createdAt?: string;
 }
 
 export interface SecretItem {

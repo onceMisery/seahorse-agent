@@ -44,6 +44,41 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Token refresh state — prevent concurrent refresh calls
+let refreshPromise: Promise<string | null> | null = null;
+
+async function attemptTokenRefresh(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    try {
+      // Use raw axios to avoid interceptor loops
+      const response = await axios.post(
+        `${API_BASE_URL || ""}${normalizeApiPath("/auth/refresh")}`,
+        null,
+        { timeout: 10000 }
+      );
+      const payload = response.data;
+      if (payload && typeof payload === "object" && payload.code === "0" && payload.data?.token) {
+        const newToken = payload.data.token;
+        storage.setToken(newToken);
+        return newToken;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
+function isAuthRequest(url?: string) {
+  if (!url) return false;
+  const normalized = url.toLowerCase();
+  return normalized.includes("/auth/login") || normalized.includes("/auth/refresh") || normalized.includes("/auth/logout");
+}
+
 api.interceptors.response.use(
   (response) => {
     const payload = response.data;
@@ -67,8 +102,21 @@ api.interceptors.response.use(
     }
     return payload;
   },
-  (error) => {
-    if (error?.response?.status === 401) {
+  async (error) => {
+    const originalRequest = error?.config;
+    const is401 = error?.response?.status === 401;
+
+    // Try token refresh on 401, but not for auth endpoints or already-retried requests
+    if (is401 && originalRequest && !originalRequest._retried && !isAuthRequest(originalRequest.url)) {
+      originalRequest._retried = true;
+      const newToken = await attemptTokenRefresh();
+      if (newToken) {
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return api(originalRequest);
+      }
+    }
+
+    if (is401) {
       handleUnauthorizedSession(error?.response?.data?.message);
     }
     const responseData = error?.response?.data;

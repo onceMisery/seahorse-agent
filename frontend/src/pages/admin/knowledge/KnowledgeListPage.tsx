@@ -89,7 +89,7 @@ export function KnowledgeListPage() {
       const creatorNames = new Set<string>();
       const addRecords = (records: KnowledgeBase[] = []) => {
         records.forEach((kb) => {
-          const docCount = toNumber(kb.documentCount);
+          const docCount = Number(kb.documentCount) || 0;
           documentTotal += docCount;
           if (docCount > 0) {
             activeTotal += 1;
@@ -196,17 +196,6 @@ export function KnowledgeListPage() {
     if (statsLoading) return "--";
     // 不使用千分位分隔符，避免在某些字体下逗号渲染异常
     return value.toString();
-  };
-
-  const toNumber = (value: unknown) => {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value;
-    }
-    if (typeof value === "string" && value.trim()) {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : 0;
-    }
-    return 0;
   };
 
   const renderEmbeddingModel = (model?: string) => {

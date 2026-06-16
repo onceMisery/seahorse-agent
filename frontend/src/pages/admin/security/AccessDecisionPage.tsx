@@ -98,19 +98,26 @@ export function AccessDecisionPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {decisions.map((d) => (
+                {decisions.map((d) => {
+                  const subject = d.subject || (d.subjectId ? `${d.subjectType || "USER"}: ${d.subjectId}` : "-");
+                  const resource = d.resource || (d.resourceId ? `${d.resourceType || ""}: ${d.resourceId}` : "-");
+                  const result = d.result || (d.effect ? d.effect.toLowerCase() : "-");
+                  const denyReason = d.denyReason || d.reasonCode || "-";
+                  const time = d.decisionTime || d.createdAt || "-";
+                  return (
                   <TableRow key={d.decisionId}>
-                    <TableCell className="font-medium">{d.subject || "-"}</TableCell>
-                    <TableCell className="text-muted-foreground">{d.resource || "-"}</TableCell>
+                    <TableCell className="font-medium">{subject}</TableCell>
+                    <TableCell className="text-muted-foreground">{resource}</TableCell>
                     <TableCell className="text-muted-foreground">{d.action || "-"}</TableCell>
-                    <TableCell><Badge variant={d.result === "allow" ? "default" : "destructive"}>{d.result || "-"}</Badge></TableCell>
+                    <TableCell><Badge variant={result === "allow" ? "default" : "destructive"}>{result}</Badge></TableCell>
                     <TableCell className="text-sm text-muted-foreground">{d.agentId || "-"}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground truncate max-w-[150px]">{d.denyReason || "-"}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground truncate max-w-[150px]" title={denyReason}>{denyReason}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {d.matchedRules?.map((r, i) => <span key={i} className="inline-block mr-1">{r.ruleId}</span>) || "-"}
+                      {d.matchedRules?.map((r, i) => <span key={i} className="inline-block mr-1">{r.ruleId}</span>) || denyReason !== "-" ? denyReason : "-"}
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}
