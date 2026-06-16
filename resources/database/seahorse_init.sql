@@ -338,6 +338,7 @@ CREATE TABLE t_ingestion_pipeline (
     id          BIGINT      NOT NULL PRIMARY KEY,
     name        VARCHAR(100) NOT NULL,
     description TEXT,
+    version     INTEGER     NOT NULL DEFAULT 1,
     created_by  BIGINT DEFAULT 0,
     updated_by  BIGINT DEFAULT 0,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -366,6 +367,8 @@ CREATE INDEX idx_ingestion_pipeline_node_pipeline ON t_ingestion_pipeline_node (
 CREATE TABLE t_ingestion_task (
     id               BIGINT      NOT NULL PRIMARY KEY,
     pipeline_id      BIGINT      NOT NULL,
+    pipeline_version INTEGER     NOT NULL DEFAULT 0,
+    pipeline_snapshot_json JSONB,
     source_type      VARCHAR(20) NOT NULL,
     source_location  TEXT,
     source_file_name VARCHAR(255),
@@ -394,8 +397,13 @@ CREATE TABLE t_ingestion_task_node (
     node_order    INTEGER     NOT NULL DEFAULT 0,
     status        VARCHAR(16) NOT NULL,
     duration_ms   BIGINT      NOT NULL DEFAULT 0,
+    input_summary TEXT,
+    output_summary TEXT,
+    error_code    VARCHAR(128),
     message       TEXT,
     error_message TEXT,
+    retry_count   INTEGER     NOT NULL DEFAULT 0,
+    downstream_impact TEXT,
     output_json   TEXT,
     create_time   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -404,6 +412,7 @@ CREATE TABLE t_ingestion_task_node (
 CREATE INDEX idx_ingestion_task_node_task ON t_ingestion_task_node (task_id);
 CREATE INDEX idx_ingestion_task_node_pipeline ON t_ingestion_task_node (pipeline_id);
 CREATE INDEX idx_ingestion_task_node_status ON t_ingestion_task_node (status);
+CREATE INDEX idx_ingestion_task_node_error_code ON t_ingestion_task_node (error_code);
 
 -- ============================================
 -- Vector Storage Table (pgvector)
@@ -989,6 +998,7 @@ CREATE TABLE IF NOT EXISTS sa_agent_run (
   run_id VARCHAR(64) NOT NULL UNIQUE,
   agent_id VARCHAR(64),
   version_id VARCHAR(64),
+  rollout_id VARCHAR(64),
   tenant_id VARCHAR(64) NOT NULL,
   user_id VARCHAR(64) NOT NULL,
   conversation_id VARCHAR(64),
@@ -1013,6 +1023,9 @@ CREATE INDEX IF NOT EXISTS idx_sa_agent_run_user
 
 CREATE INDEX IF NOT EXISTS idx_sa_agent_run_worker_queue
   ON sa_agent_run(tenant_id, status, started_at, run_id);
+
+CREATE INDEX IF NOT EXISTS idx_sa_agent_run_rollout
+  ON sa_agent_run(tenant_id, agent_id, rollout_id, started_at);
 
 CREATE TABLE IF NOT EXISTS sa_agent_artifact (
   pk_id BIGSERIAL PRIMARY KEY,
@@ -1325,6 +1338,7 @@ CREATE TABLE IF NOT EXISTS sa_approval_request (
   tenant_id VARCHAR(64) NOT NULL,
   user_id VARCHAR(64) NOT NULL,
   agent_id VARCHAR(64),
+  rollout_id VARCHAR(64),
   tool_id VARCHAR(128) NOT NULL,
   approval_type VARCHAR(32) NOT NULL,
   risk_level VARCHAR(32) NOT NULL,
@@ -1343,6 +1357,9 @@ CREATE INDEX IF NOT EXISTS idx_sa_approval_request_status
 
 CREATE INDEX IF NOT EXISTS idx_sa_approval_request_run
   ON sa_approval_request(run_id, step_id);
+
+CREATE INDEX IF NOT EXISTS idx_sa_approval_request_rollout
+  ON sa_approval_request(tenant_id, agent_id, rollout_id, requested_at);
 
 CREATE TABLE IF NOT EXISTS sa_secret_ref (
   pk_id BIGSERIAL PRIMARY KEY,
@@ -1593,6 +1610,7 @@ CREATE TABLE IF NOT EXISTS sa_cost_usage_record (
   tenant_id VARCHAR(64) NOT NULL,
   agent_id VARCHAR(64),
   run_id VARCHAR(64),
+  rollout_id VARCHAR(64),
   user_id VARCHAR(64),
   tool_id VARCHAR(128),
   model_id VARCHAR(128),
@@ -1614,6 +1632,9 @@ CREATE TABLE IF NOT EXISTS sa_cost_usage_record (
 
 CREATE INDEX IF NOT EXISTS idx_sa_cost_usage_aggregate
   ON sa_cost_usage_record(tenant_id, agent_id, run_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_sa_cost_usage_rollout
+  ON sa_cost_usage_record(tenant_id, agent_id, rollout_id, created_at);
 
 CREATE TABLE IF NOT EXISTS sa_agent_version_rollout (
   pk_id BIGSERIAL PRIMARY KEY,
@@ -1992,6 +2013,9 @@ ON t_metadata_quarantine_item (tenant_id, kb_id, resolved, next_retry_time);
 CREATE INDEX IF NOT EXISTS idx_metadata_quarantine_doc
 ON t_metadata_quarantine_item (doc_id);
 
+CREATE INDEX IF NOT EXISTS idx_metadata_quarantine_job
+ON t_metadata_quarantine_item (job_id, resolved);
+
 CREATE TABLE IF NOT EXISTS t_metadata_dictionary_item (
     pk_id BIGSERIAL PRIMARY KEY,
     id VARCHAR(64) NOT NULL UNIQUE,
@@ -2019,6 +2043,7 @@ CREATE TABLE IF NOT EXISTS t_retrieval_strategy_template (
     description     VARCHAR(512),
     options_json    JSONB NOT NULL,
     sort_order      INTEGER NOT NULL DEFAULT 0,
+    recommended     SMALLINT NOT NULL DEFAULT 0,
     enabled         SMALLINT NOT NULL DEFAULT 1,
     create_time     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2030,7 +2055,11 @@ ON t_retrieval_strategy_template (COALESCE(kb_id, ''), template_key)
 WHERE deleted = 0;
 
 CREATE INDEX IF NOT EXISTS idx_retrieval_strategy_template_scope
-ON t_retrieval_strategy_template (kb_id, enabled, deleted, sort_order);
+ON t_retrieval_strategy_template (kb_id, enabled, deleted, recommended, sort_order);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_retrieval_strategy_template_recommended
+ON t_retrieval_strategy_template (COALESCE(kb_id, ''))
+WHERE deleted = 0 AND recommended = 1;
 
 
 CREATE TABLE IF NOT EXISTS t_retrieval_evaluation_dataset (
