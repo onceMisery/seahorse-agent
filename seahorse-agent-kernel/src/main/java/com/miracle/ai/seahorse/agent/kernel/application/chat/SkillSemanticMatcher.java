@@ -106,6 +106,7 @@ public class SkillSemanticMatcher {
                     safeTenantId, queryVector, maxRecommendations * 2);
 
             List<SkillSearchResult> validVectorResults = vectorResults.stream()
+                    .filter(this::hasAcceptableSimilarity)
                     .filter(result -> isCurrentAvailableSkill(safeTenantId, result))
                     .toList();
 
@@ -194,6 +195,12 @@ public class SkillSemanticMatcher {
                         && !skill.latestRevisionId().isBlank()
                         && skill.latestRevisionId().equals(result.revisionId()))
                 .isPresent();
+    }
+
+    private boolean hasAcceptableSimilarity(SkillSearchResult result) {
+        return result != null
+                && Float.isFinite(result.score())
+                && result.score() >= MIN_SIMILARITY_THRESHOLD;
     }
 
     /**

@@ -24,6 +24,8 @@ import io.milvus.v2.service.collection.request.DescribeCollectionReq;
 import io.milvus.v2.service.collection.request.DropCollectionReq;
 import io.milvus.v2.service.collection.request.HasCollectionReq;
 import io.milvus.v2.service.collection.response.DescribeCollectionResp;
+import io.milvus.v2.service.vector.request.DeleteReq;
+import io.milvus.v2.service.vector.request.SearchReq;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -72,6 +74,25 @@ class MilvusSkillVectorIndexAdapterTests {
                 .getCollectionSchema()
                 .getField("embedding");
         assertThat(embeddingField.getDimension()).isEqualTo(768);
+    }
+
+    @Test
+    void shouldEscapeStringLiteralsInMilvusFilters() {
+        MilvusClientV2 client = mock(MilvusClientV2.class);
+        MilvusSkillVectorIndexAdapter adapter = new MilvusSkillVectorIndexAdapter(client);
+
+        adapter.searchSimilar("tenant\"\\x", new float[] {1.0f, 0.0f}, 3);
+        adapter.delete("tenant\"\\x", "skill\"\\name");
+
+        ArgumentCaptor<SearchReq> searchCaptor = ArgumentCaptor.forClass(SearchReq.class);
+        verify(client).search(searchCaptor.capture());
+        assertThat(searchCaptor.getValue().getFilter())
+                .isEqualTo("tenant_id == \"tenant\\\"\\\\x\"");
+
+        ArgumentCaptor<DeleteReq> deleteCaptor = ArgumentCaptor.forClass(DeleteReq.class);
+        verify(client).delete(deleteCaptor.capture());
+        assertThat(deleteCaptor.getValue().getFilter())
+                .isEqualTo("id == \"tenant\\\"\\\\x:skill\\\"\\\\name\"");
     }
 
     private DescribeCollectionResp describeCollection(int dimension) {

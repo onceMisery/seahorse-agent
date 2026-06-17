@@ -133,7 +133,7 @@ public class MilvusSkillVectorIndexAdapter implements SkillVectorIndexRepository
                 .annsField(FIELD_EMBEDDING)
                 .data(List.of(new FloatVec(queryVector)))
                 .topK(topK)
-                .filter(FIELD_TENANT_ID + " == \"" + tenantId + "\"")
+                .filter(equalsFilter(FIELD_TENANT_ID, tenantId))
                 .outputFields(List.of(FIELD_SKILL_NAME, FIELD_REVISION_ID, FIELD_CONTENT))
                 .consistencyLevel(ConsistencyLevel.BOUNDED)
                 .build();
@@ -170,7 +170,7 @@ public class MilvusSkillVectorIndexAdapter implements SkillVectorIndexRepository
 
         DeleteReq deleteReq = DeleteReq.builder()
                 .collectionName(COLLECTION_NAME)
-                .filter(FIELD_ID + " == \"" + id + "\"")
+                .filter(equalsFilter(FIELD_ID, id))
                 .build();
 
         milvusClient.delete(deleteReq);
@@ -182,7 +182,7 @@ public class MilvusSkillVectorIndexAdapter implements SkillVectorIndexRepository
     public void deleteByTenant(String tenantId) {
         DeleteReq deleteReq = DeleteReq.builder()
                 .collectionName(COLLECTION_NAME)
-                .filter(FIELD_TENANT_ID + " == \"" + tenantId + "\"")
+                .filter(equalsFilter(FIELD_TENANT_ID, tenantId))
                 .build();
 
         milvusClient.delete(deleteReq);
@@ -328,6 +328,17 @@ public class MilvusSkillVectorIndexAdapter implements SkillVectorIndexRepository
 
     private String buildId(String tenantId, String skillName) {
         return tenantId + ":" + skillName;
+    }
+
+    private String equalsFilter(String fieldName, String value) {
+        return fieldName + " == " + quotedLiteral(value);
+    }
+
+    private String quotedLiteral(String value) {
+        String safeValue = value == null ? "" : value;
+        return "\"" + safeValue
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"") + "\"";
     }
 
     private String truncateContent(String content) {

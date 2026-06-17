@@ -209,6 +209,20 @@ class SkillSmartMatcherTests {
         assertEquals(1, repository.pageCalls);
     }
 
+    @Test
+    void shouldScanAllPagesWhenRepositoryCapsPageSize() {
+        for (int i = 0; i < 105; i++) {
+            createSkill("skill-%03d".formatted(i), "Generic helper %03d".formatted(i), List.of("generic"));
+        }
+        createSkill("zz-data-analysis", "Analyze data trends beyond the first page",
+                List.of("data", "statistics", "visualization"));
+
+        List<String> result = matcher.match("default", "分析这份数据趋势并生成图表");
+
+        assertTrue(result.contains("zz-data-analysis"));
+        assertTrue(repository.pageCalls > 1);
+    }
+
     // 简单的内存实现，仅用于测试
     private static class TestAgentSkillRepository implements AgentSkillRepositoryPort {
 
@@ -236,12 +250,15 @@ class SkillSmartMatcherTests {
                     .filter(skill -> skill.tenantId().equals(tenantId))
                     .filter(skill -> skill.status() != AgentSkillStatus.DELETED)
                     .filter(skill -> safeKeyword.isEmpty()
-                            || skill.name().contains(safeKeyword)
-                            || skill.description().toLowerCase().contains(safeKeyword))
+                    || skill.name().contains(safeKeyword)
+                    || skill.description().toLowerCase().contains(safeKeyword))
                     .sorted(Comparator.comparing(AgentSkill::name))
                     .toList();
-            long safeSize = size <= 0 ? 10 : size;
-            return new AgentSkillPage(records, records.size(), safeSize, current <= 0 ? 1 : current,
+            long safeSize = Math.min(size <= 0 ? 10 : size, 100);
+            long safeCurrent = current <= 0 ? 1 : current;
+            int fromIndex = (int) Math.min(records.size(), (safeCurrent - 1) * safeSize);
+            int toIndex = (int) Math.min(records.size(), fromIndex + safeSize);
+            return new AgentSkillPage(records.subList(fromIndex, toIndex), records.size(), safeSize, safeCurrent,
                     records.isEmpty() ? 0 : (records.size() + safeSize - 1) / safeSize);
         }
 

@@ -48,7 +48,7 @@ import java.util.concurrent.Executors;
  *
  * <p>异步处理：向量化操作异步执行，不阻塞主流程。
  */
-public class SkillVectorIndexService {
+public class SkillVectorIndexService implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(SkillVectorIndexService.class);
 
@@ -250,7 +250,7 @@ public class SkillVectorIndexService {
                 boolean shouldRebuild = vectorRepository.ensureCollection(dimension);
                 LOG.info("Ensured skill vector collection with dimension: {}", dimension);
                 if (shouldRebuild) {
-                    rebuildAllAsync(DEFAULT_TENANT_ID);
+                    rebuildAllTenantsAsync();
                 }
             } else {
                 LOG.warn("Cannot create collection: embedding dimension is 0");
@@ -261,10 +261,24 @@ public class SkillVectorIndexService {
     }
 
     /**
+     * Rebuild vector indexes for every tenant known to the skill repository.
+     */
+    public List<CompletableFuture<RebuildResult>> rebuildAllTenantsAsync() {
+        return tenantIdsForRebuild().stream()
+                .map(this::rebuildAllAsync)
+                .toList();
+    }
+
+    /**
      * 关闭服务。
      */
     public void shutdown() {
         executorService.shutdown();
+    }
+
+    @Override
+    public void close() {
+        shutdown();
     }
 
     private boolean shouldIndex(AgentSkill skill) {
@@ -272,6 +286,20 @@ public class SkillVectorIndexService {
                 && skill.status() == AgentSkillStatus.ACTIVE
                 && skill.latestRevisionId() != null
                 && !skill.latestRevisionId().isBlank();
+    }
+
+    private List<String> tenantIdsForRebuild() {
+        try {
+            List<String> tenants = skillRepository.listTenants().stream()
+                    .filter(tenantId -> tenantId != null && !tenantId.isBlank())
+                    .map(String::trim)
+                    .distinct()
+                    .toList();
+            return tenants.isEmpty() ? List.of(DEFAULT_TENANT_ID) : tenants;
+        } catch (Exception ex) {
+            LOG.warn("Failed to list skill tenants for vector rebuild, falling back to default tenant", ex);
+            return List.of(DEFAULT_TENANT_ID);
+        }
     }
 
     /**

@@ -81,6 +81,17 @@ class SkillSemanticMatcherTests {
         assertTrue(recommendations.contains("data-analysis"));
     }
 
+    @Test
+    void shouldRejectLowSimilarityVectorResultsAndUseRuleFallback() {
+        vectorRepository.results = List.of(new SkillVectorIndexRepositoryPort.SkillSearchResult(
+                "deep-research", "rev-deep-1", 0.20f, "research"));
+
+        List<String> recommendations = matcher.match("default", "分析这份数据的趋势并生成可视化图表");
+
+        assertTrue(recommendations.contains("data-analysis"));
+        assertFalse(recommendations.contains("deep-research"));
+    }
+
     private void createSkill(String name, String description, List<String> tags, boolean enabled, String revisionId) {
         Instant now = Instant.now();
         skillRepository.saveSkill(new AgentSkill(

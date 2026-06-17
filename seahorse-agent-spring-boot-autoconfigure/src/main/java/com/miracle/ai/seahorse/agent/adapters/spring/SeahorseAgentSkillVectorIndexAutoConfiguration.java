@@ -82,13 +82,6 @@ public class SeahorseAgentSkillVectorIndexAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean
-    public EmbeddingPort noopEmbeddingPort() {
-        LOG.warn("No embedding model available, using noop embedding port");
-        return EmbeddingPort.noop();
-    }
-
-    @Bean
     @ConditionalOnBean({EmbeddingPort.class, SkillVectorIndexRepositoryPort.class, AgentSkillRepositoryPort.class})
     @ConditionalOnMissingBean
     public SkillVectorIndexService skillVectorIndexService(

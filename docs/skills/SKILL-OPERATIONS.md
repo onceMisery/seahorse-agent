@@ -146,6 +146,8 @@ User asks to research, investigate, or analyze a topic...
 
 智能匹配结果会作为本轮 Skill 候选继续交给 `ChatSelectedSkillResolver` 校验，因此仍然遵守启用状态、ACTIVE 状态、latest revision 和租户隔离规则。用户显式选择和 Agent Version 预绑定始终优先于智能匹配。
 
+智能匹配不会改变 Skill 系统的运行模型：它不按需动态加载任意 Skill，也不绕过已发布 Agent Version 的绑定快照；它只在无显式选择、无预绑定时自动生成本轮候选，随后仍通过相同的 resolver、合并和 `SkillRuntimeComposer` 注入链路进入 system prompt。
+
 ### 注入策略
 
 | 条件 | 模式 | 说明 |

@@ -601,7 +601,7 @@ public class KernelChatInboundService implements ChatInboundPort {
             List<String> recommendations = matchSkillsIntelligently(tenantId, command.question());
             if (!recommendations.isEmpty()) {
                 LOG.info("Smart skill matching triggered: question='{}', recommendations={}",
-                        command.question(), recommendations);
+                        logQuestion(command.question()), recommendations);
                 perTurn = chatSkillResolver.resolve(tenantId, recommendations);
             }
         }
@@ -782,6 +782,14 @@ public class KernelChatInboundService implements ChatInboundPort {
             return value;
         }
         return value.substring(0, 500);
+    }
+
+    private String logQuestion(String question) {
+        String value = Objects.requireNonNullElse(question, "").trim();
+        if (value.length() <= 80) {
+            return value;
+        }
+        return value.substring(0, 80) + "...";
     }
 
     private String text(JsonNode root, String fieldName) {

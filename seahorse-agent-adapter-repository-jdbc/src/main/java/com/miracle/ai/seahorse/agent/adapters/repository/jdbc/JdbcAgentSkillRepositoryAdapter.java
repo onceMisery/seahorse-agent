@@ -152,6 +152,16 @@ public class JdbcAgentSkillRepositoryAdapter implements AgentSkillRepositoryPort
     }
 
     @Override
+    public List<String> listTenants() {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT tenant_id
+                FROM sa_agent_skill
+                WHERE deleted = 0
+                ORDER BY tenant_id ASC
+                """, String.class);
+    }
+
+    @Override
     public void saveRevision(AgentSkillRevision revision) {
         AgentSkillRevision safe = Objects.requireNonNull(revision, "revision must not be null");
         jdbcTemplate.update("""

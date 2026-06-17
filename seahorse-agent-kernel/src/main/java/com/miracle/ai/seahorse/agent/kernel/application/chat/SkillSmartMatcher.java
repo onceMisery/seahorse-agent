@@ -47,6 +47,8 @@ public class SkillSmartMatcher {
 
     private static final String DEFAULT_TENANT_ID = "default";
     private static final int DEFAULT_MAX_RECOMMENDATIONS = 3;
+    private static final int AVAILABLE_SKILLS_PAGE_SIZE = 100;
+    private static final int MAX_AVAILABLE_SKILLS_SCAN = 10_000;
     private static final long AVAILABLE_SKILLS_CACHE_TTL_MILLIS = 30_000L;
     private static final double MIN_SCORE_THRESHOLD = 0.1;
     private static final Pattern ENGLISH_WORD_PATTERN = Pattern.compile("[a-z]{2,}");
@@ -61,7 +63,7 @@ public class SkillSmartMatcher {
 
     // 领域关键词映射
     private static final Map<String, List<String>> DOMAIN_KEYWORDS = Map.of(
-            "research", List.of("研究", "调研", "调查", "分析", "探索", "study", "investigate", "analyze", "explore"),
+            "research", List.of("研究", "调研", "调查", "探索", "study", "investigate", "analyze", "explore"),
             "data", List.of("数据", "统计", "可视化", "图表", "表格", "data", "statistics", "visualization", "chart"),
             "code", List.of("代码", "编程", "开发", "重构", "review", "code", "programming", "refactor", "debug"),
             "document", List.of("文档", "说明", "手册", "注释", "document", "documentation", "manual", "comment"),
@@ -188,13 +190,23 @@ public class SkillSmartMatcher {
             return cached.skills;
         }
         try {
-            // 分页查询所有技能（假设总量不超过 1000）
-            var page = repository.page(safeTenantId, 1, 1000, null);
-            List<AgentSkill> skills = page.records().stream()
-                    .filter(skill -> skill.enabled()
-                            && skill.status() == AgentSkillStatus.ACTIVE
-                            && skill.latestRevisionId() != null)
-                    .toList();
+            List<AgentSkill> skills = new ArrayList<>();
+            long current = 1L;
+            while (skills.size() < MAX_AVAILABLE_SKILLS_SCAN) {
+                var page = repository.page(safeTenantId, current, AVAILABLE_SKILLS_PAGE_SIZE, null);
+                if (page.records().isEmpty()) {
+                    break;
+                }
+                page.records().stream()
+                        .filter(skill -> skill.enabled()
+                                && skill.status() == AgentSkillStatus.ACTIVE
+                                && skill.latestRevisionId() != null)
+                        .forEach(skills::add);
+                if (page.pages() <= 0 || current >= page.pages()) {
+                    break;
+                }
+                current++;
+            }
             availableSkillsCache.put(safeTenantId, new CachedSkills(List.copyOf(skills),
                     now + AVAILABLE_SKILLS_CACHE_TTL_MILLIS));
             return skills;

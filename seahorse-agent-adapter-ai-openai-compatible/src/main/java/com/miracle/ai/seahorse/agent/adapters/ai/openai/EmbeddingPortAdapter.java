@@ -55,7 +55,13 @@ public class EmbeddingPortAdapter implements EmbeddingPort {
 
         try {
             List<Float> embedding = embeddingModel.embed(modelId, text);
-            return toFloatArray(embedding);
+            float[] vector = toFloatArray(embedding);
+            if (vector.length > 0 && vector.length != dimension) {
+                LOG.error("Embedding dimension mismatch for model {}: expected {}, actual {}",
+                        modelId, dimension, vector.length);
+                return new float[0];
+            }
+            return vector;
         } catch (Exception ex) {
             LOG.error("Failed to generate embedding for text: {}", truncate(text, 50), ex);
             return new float[0];

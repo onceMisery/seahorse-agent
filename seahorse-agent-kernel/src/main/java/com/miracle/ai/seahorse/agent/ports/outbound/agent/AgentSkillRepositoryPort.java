@@ -15,6 +15,10 @@ public interface AgentSkillRepositoryPort {
 
     AgentSkillPage page(String tenantId, long current, long size, String keyword);
 
+    default List<String> listTenants() {
+        return List.of("default");
+    }
+
     void saveRevision(AgentSkillRevision revision);
 
     long nextRevisionNo(String tenantId, String skillName);

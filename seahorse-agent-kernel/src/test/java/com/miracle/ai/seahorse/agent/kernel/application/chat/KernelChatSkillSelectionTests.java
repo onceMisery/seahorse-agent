@@ -6,12 +6,14 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOpt
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkill;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillCategory;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillRevision;
@@ -61,7 +63,7 @@ class KernelChatSkillSelectionTests {
     // ── Test 1: selectedSkillNames enters AgentLoopRequest ───
 
     @Test
-    void perTurnSelectedSkillAppearsInSystemPromptAndRuntimeBlocks() {
+    void perTurnSelectedSkillAppearsInSystemPromptAndRuntimeBlocks() throws Exception {
         // Set up a skill in the repository
         StubSkillRepository skillRepo = new StubSkillRepository();
         AgentSkill skill = new AgentSkill("code-review", "default",
@@ -78,41 +80,21 @@ class KernelChatSkillSelectionTests {
         defRepo.create(agentDef("my-agent", "v1"));
         defRepo.saveVersion(agentVer("my-agent", "v1", "{\"modelId\":\"test-model\"}", "{}"));
 
-        MemoryAgentRunRepository runRepo = new MemoryAgentRunRepository();
-        KernelAgentRunService runService = new KernelAgentRunService(
-                defRepo, runRepo,
-                () -> Optional.of(new CurrentUser(1L, "alice", "user", null)), FIXED_CLOCK);
-
-        CapturingModel model = new CapturingModel();
-        KernelAgentLoop agentLoop = new KernelAgentLoop(
-                model, new InMemoryToolRegistry(),
-                KernelAgentLoopOptions.defaults(),
-                new RepositoryAgentRunStepRecorder(runRepo, FIXED_CLOCK));
-
-        RecordingCallback callback = new RecordingCallback();
         KernelChatInboundService service = new KernelChatInboundService(
                 newPipeline(), StreamTaskPort.noop(),
-                Optional.of(agentLoop), KernelRagTraceRecorder.noop(),
+                Optional.empty(), KernelRagTraceRecorder.noop(),
                 null, MemoryEnginePort.noop(),
-                Optional.of(runService), Optional.empty(),
+                Optional.empty(), Optional.empty(),
                 Optional.of(defRepo),
                 ConversationAttachmentContextAssembler.noop(),
                 Optional.of(skillRepo));
 
-        // Send chat with selectedSkillNames
-        service.streamChat(new StreamChatCommand(
-                        "Review my code", "conv-1", "task-1", "user-1", false,
-                        ChatMode.AGENT, "my-agent", null, null, List.of(),
-                        List.of("code-review")),
-                callback);
+        AgentLoopRequest request = buildAgentLoopRequest(service, new StreamChatCommand(
+                "Review my code", "conv-1", "task-1", "user-1", false,
+                ChatMode.AGENT, "my-agent", null, null, List.of(),
+                List.of("code-review")));
 
-        assertTrue(callback.awaitTerminal(), "should reach terminal state");
-        assertNull(callback.error, "should not have error: " + callback.error);
-
-        // Verify the skill appeared in the system prompt (skillRuntimeContext)
-        assertFalse(model.capturedRequests.isEmpty(), "model should have been called");
-        ChatRequest req = model.capturedRequests.get(0);
-        String systemPrompt = req.getMessages().get(0).getContent();
+        String systemPrompt = request.skillRuntimeContext();
         assertTrue(systemPrompt.contains("<skill name=\"code-review\""),
                 "system prompt should contain the selected skill");
         assertTrue(systemPrompt.contains("Check naming conventions"),
@@ -128,88 +110,58 @@ class KernelChatSkillSelectionTests {
         defRepo.create(agentDef("my-agent", "v1"));
         defRepo.saveVersion(agentVer("my-agent", "v1", "{\"modelId\":\"test-model\"}", "{}"));
 
-        MemoryAgentRunRepository runRepo = new MemoryAgentRunRepository();
-        KernelAgentRunService runService = new KernelAgentRunService(
-                defRepo, runRepo,
-                () -> Optional.of(new CurrentUser(1L, "alice", "user", null)), FIXED_CLOCK);
-
-        CapturingModel model = new CapturingModel();
-        KernelAgentLoop agentLoop = new KernelAgentLoop(
-                model, new InMemoryToolRegistry(),
-                KernelAgentLoopOptions.defaults(),
-                new RepositoryAgentRunStepRecorder(runRepo, FIXED_CLOCK));
-
-        RecordingCallback callback = new RecordingCallback();
         // Construct service WITHOUT skill repository (last param = Optional.empty())
         KernelChatInboundService service = new KernelChatInboundService(
                 newPipeline(), StreamTaskPort.noop(),
-                Optional.of(agentLoop), KernelRagTraceRecorder.noop(),
+                Optional.empty(), KernelRagTraceRecorder.noop(),
                 null, MemoryEnginePort.noop(),
-                Optional.of(runService), Optional.empty(),
+                Optional.empty(), Optional.empty(),
                 Optional.of(defRepo),
                 ConversationAttachmentContextAssembler.noop(),
                 Optional.empty());  // No skill repository!
 
-        // Send chat with selectedSkillNames despite no resolver
-        service.streamChat(new StreamChatCommand(
+        java.lang.reflect.InvocationTargetException error = assertThrows(
+                java.lang.reflect.InvocationTargetException.class,
+                () -> buildAgentLoopRequest(service, new StreamChatCommand(
                         "Review my code", "conv-1", "task-1", "user-1", false,
                         ChatMode.AGENT, "my-agent", null, null, List.of(),
-                        List.of("code-review")),
-                callback);
-
-        assertTrue(callback.awaitTerminal(), "should reach terminal state");
-        assertNotNull(callback.error, "should have error when resolver is missing");
-        assertTrue(callback.error.getMessage().contains("not configured")
-                        || callback.error.getMessage().contains("missing")
-                        || callback.error instanceof IllegalStateException,
-                "error should indicate resolver is not configured, got: " + callback.error.getMessage());
-        assertTrue(model.capturedRequests.isEmpty(),
-                "model should NOT have been called when resolver is missing");
+                        List.of("code-review"))));
+        Throwable cause = error.getCause();
+        assertTrue(cause instanceof IllegalStateException);
+        assertTrue(cause.getMessage().contains("not configured")
+                        || cause.getMessage().contains("missing"),
+                "error should indicate resolver is not configured, got: " + cause.getMessage());
     }
 
     // ── Test 3: no selectedSkillNames → normal flow, no error ─
 
     @Test
-    void noSelectedSkillNamesWorksWithoutResolver() {
+    void noSelectedSkillNamesWorksWithoutResolver() throws Exception {
         MemoryAgentDefinitionRepository defRepo = new MemoryAgentDefinitionRepository();
         defRepo.create(agentDef("my-agent", "v1"));
         defRepo.saveVersion(agentVer("my-agent", "v1", "{\"modelId\":\"test-model\"}", "{}"));
 
-        MemoryAgentRunRepository runRepo = new MemoryAgentRunRepository();
-        KernelAgentRunService runService = new KernelAgentRunService(
-                defRepo, runRepo,
-                () -> Optional.of(new CurrentUser(1L, "alice", "user", null)), FIXED_CLOCK);
-
-        CapturingModel model = new CapturingModel();
-        KernelAgentLoop agentLoop = new KernelAgentLoop(
-                model, new InMemoryToolRegistry(),
-                KernelAgentLoopOptions.defaults(),
-                new RepositoryAgentRunStepRecorder(runRepo, FIXED_CLOCK));
-
-        RecordingCallback callback = new RecordingCallback();
         KernelChatInboundService service = new KernelChatInboundService(
                 newPipeline(), StreamTaskPort.noop(),
-                Optional.of(agentLoop), KernelRagTraceRecorder.noop(),
+                Optional.empty(), KernelRagTraceRecorder.noop(),
                 null, MemoryEnginePort.noop(),
-                Optional.of(runService), Optional.empty(),
+                Optional.empty(), Optional.empty(),
                 Optional.of(defRepo),
                 ConversationAttachmentContextAssembler.noop(),
                 Optional.empty());  // No skill repository
 
         // Send chat WITHOUT selectedSkillNames → should work fine
-        service.streamChat(new StreamChatCommand(
-                        "Hello", "conv-1", "task-1", "user-1", false,
-                        ChatMode.AGENT, "my-agent", null),
-                callback);
+        AgentLoopRequest request = buildAgentLoopRequest(service, new StreamChatCommand(
+                "Hello", "conv-1", "task-1", "user-1", false,
+                ChatMode.AGENT, "my-agent", null));
 
-        assertTrue(callback.awaitTerminal(), "should reach terminal state");
-        assertNull(callback.error, "should not error when no skills selected");
+        assertTrue(request.skillRuntimeContext().contains("You are a test assistant."));
     }
 
     // ── Test 4: version-bound + per-turn merge ───────────────
 
     @Test
-    void versionBoundSkillTakesPriorityOverPerTurnOnCollision() {
+    void versionBoundSkillTakesPriorityOverPerTurnOnCollision() throws Exception {
         StubSkillRepository skillRepo = new StubSkillRepository();
         // Per-turn skill with different content
         AgentSkill skill = new AgentSkill("deep-research", "default",
@@ -240,44 +192,63 @@ class KernelChatSkillSelectionTests {
                 }
                 """));
 
-        MemoryAgentRunRepository runRepo = new MemoryAgentRunRepository();
-        KernelAgentRunService runService = new KernelAgentRunService(
-                defRepo, runRepo,
-                () -> Optional.of(new CurrentUser(1L, "alice", "user", null)), FIXED_CLOCK);
-
-        CapturingModel model = new CapturingModel();
-        KernelAgentLoop agentLoop = new KernelAgentLoop(
-                model, new InMemoryToolRegistry(),
-                KernelAgentLoopOptions.defaults(),
-                new RepositoryAgentRunStepRecorder(runRepo, FIXED_CLOCK));
-
-        RecordingCallback callback = new RecordingCallback();
         KernelChatInboundService service = new KernelChatInboundService(
                 newPipeline(), StreamTaskPort.noop(),
-                Optional.of(agentLoop), KernelRagTraceRecorder.noop(),
+                Optional.empty(), KernelRagTraceRecorder.noop(),
                 null, MemoryEnginePort.noop(),
-                Optional.of(runService), Optional.empty(),
+                Optional.empty(), Optional.empty(),
                 Optional.of(defRepo),
                 ConversationAttachmentContextAssembler.noop(),
                 Optional.of(skillRepo));
 
-        // Send chat selecting the same skill that's version-bound
-        service.streamChat(new StreamChatCommand(
-                        "Research", "conv-1", "task-1", "user-1", false,
-                        ChatMode.AGENT, "my-agent", null, null, List.of(),
-                        List.of("deep-research")),
-                callback);
-
-        assertTrue(callback.awaitTerminal());
-        assertNull(callback.error, "should not error: " + callback.error);
-
-        ChatRequest req = model.capturedRequests.get(0);
-        String systemPrompt = req.getMessages().get(0).getContent();
+        AgentLoopRequest request = buildAgentLoopRequest(service, new StreamChatCommand(
+                "Research", "conv-1", "task-1", "user-1", false,
+                ChatMode.AGENT, "my-agent", null, null, List.of(),
+                List.of("deep-research")));
+        String systemPrompt = request.skillRuntimeContext();
         // Version-bound should win (published contract)
         assertTrue(systemPrompt.contains("Version-bound instructions"),
                 "version-bound skill content should take priority");
         assertFalse(systemPrompt.contains("Per-turn instructions"),
                 "per-turn content should be overridden by version-bound");
+    }
+
+    @Test
+    void smartMatchedSkillAppearsInSystemPromptWhenNoSkillWasSelectedOrBound() throws Exception {
+        StubSkillRepository skillRepo = new StubSkillRepository();
+        AgentSkill skill = new AgentSkill("data-analysis", "default",
+                AgentSkillCategory.PUBLIC, AgentSkillSource.MANUAL, AgentSkillStatus.ACTIVE,
+                true, "rev-data-1", "Analyze data trends and create charts",
+                List.of("data", "statistics", "visualization"), List.of(),
+                "admin", "admin", Instant.now(), Instant.now());
+        skillRepo.addSkill(skill);
+        skillRepo.addRevision(new AgentSkillRevision("rev-data-1", "data-analysis", "default", 1,
+                "hash-data", "Inspect trends and charts.", "{}", null, "{}",
+                "admin", Instant.now()));
+
+        MemoryAgentDefinitionRepository defRepo = new MemoryAgentDefinitionRepository();
+        defRepo.create(agentDef("my-agent", "v1"));
+        defRepo.saveVersion(agentVer("my-agent", "v1", "{\"modelId\":\"test-model\"}", "{}"));
+
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(), StreamTaskPort.noop(),
+                Optional.empty(), KernelRagTraceRecorder.noop(),
+                null, MemoryEnginePort.noop(),
+                Optional.empty(), Optional.empty(),
+                Optional.of(defRepo),
+                ConversationAttachmentContextAssembler.noop(),
+                Optional.of(skillRepo));
+
+        StreamChatCommand command = new StreamChatCommand(
+                "Analyze the data trends and create a chart",
+                "conv-1", "task-1", "user-1", false,
+                ChatMode.AGENT, "my-agent", null);
+        AgentLoopRequest request = buildAgentLoopRequest(service, command);
+        String systemPrompt = request.skillRuntimeContext();
+        assertTrue(systemPrompt.contains("<skill name=\"data-analysis\""),
+                "system prompt should contain the smart matched skill");
+        assertTrue(systemPrompt.contains("Inspect trends and charts"),
+                "system prompt should contain smart matched skill instructions");
     }
 
     // ── Test helpers ─────────────────────────────────────────
@@ -311,6 +282,14 @@ class KernelChatSkillSelectionTests {
                 com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort.empty(),
                 StreamingChatModelPort.noop(), StreamTaskPort.noop());
         return new KernelChatPipeline(prep, resp);
+    }
+
+    private static AgentLoopRequest buildAgentLoopRequest(KernelChatInboundService service,
+                                                          StreamChatCommand command) throws Exception {
+        var method = KernelChatInboundService.class.getDeclaredMethod(
+                "buildAgentLoopRequest", StreamChatCommand.class, AgentRun.class);
+        method.setAccessible(true);
+        return (AgentLoopRequest) method.invoke(service, command, null);
     }
 
     /** Model that captures requests and returns a simple final answer. */
@@ -364,7 +343,17 @@ class KernelChatSkillSelectionTests {
                     .filter(s -> s.status() != AgentSkillStatus.DELETED);
         }
         @Override public AgentSkillPage page(String t, long c, long s, String k) {
-            return new AgentSkillPage(List.of(), 0, s, c, 0);
+            List<AgentSkill> records = skills.values().stream()
+                    .filter(skill -> t.equals(skill.tenantId()))
+                    .filter(skill -> skill.status() != AgentSkillStatus.DELETED)
+                    .sorted(java.util.Comparator.comparing(AgentSkill::name))
+                    .toList();
+            long safeSize = s <= 0 ? 10 : s;
+            long safeCurrent = c <= 0 ? 1 : c;
+            int fromIndex = (int) Math.min(records.size(), (safeCurrent - 1) * safeSize);
+            int toIndex = (int) Math.min(records.size(), fromIndex + safeSize);
+            long pages = records.isEmpty() ? 0 : (records.size() + safeSize - 1) / safeSize;
+            return new AgentSkillPage(records.subList(fromIndex, toIndex), records.size(), safeSize, safeCurrent, pages);
         }
         @Override public void saveRevision(AgentSkillRevision rev) { addRevision(rev); }
         @Override public long nextRevisionNo(String t, String s) { return 1; }

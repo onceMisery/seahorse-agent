@@ -48,7 +48,7 @@ Agent Version 未预绑定 Skill (skillSetJson 为空)
 系统内置了领域关键词映射表：
 
 ```java
-"research" → ["研究", "调研", "调查", "分析", "探索", "study", "investigate", "analyze", "explore"]
+"research" → ["研究", "调研", "调查", "探索", "study", "investigate", "analyze", "explore"]
 "data" → ["数据", "统计", "可视化", "图表", "表格", "data", "statistics", "visualization", "chart"]
 "code" → ["代码", "编程", "开发", "重构", "review", "code", "programming", "refactor", "debug"]
 "document" → ["文档", "说明", "手册", "注释", "document", "documentation", "manual", "comment"]
@@ -368,14 +368,14 @@ smartMatched = [skill-A, skill-B]
 ### 时间复杂度
 
 - 关键词提取：O(n)，n 为问题长度
-- 查询可用 Skill：O(1)，假设分页查询
+- 查询可用 Skill：O(p)，p 为本次扫描页数；规则匹配按 100 条/页分页扫描，最多扫描 10,000 个 Skill
 - 匹配计算：O(m × k)，m 为 Skill 数量，k 为关键词数量
 - 语义匹配：一次问题 embedding 调用 + 向量库 TopK 检索 + 规则候选融合
 
 ### 优化建议
 
 1. **缓存 Skill 列表**：规则匹配会对租户可用 Skill 列表做短 TTL 缓存，避免每次查询数据库
-2. **限制 Skill 总量**：单租户不超过 1000 个
+2. **限制 Skill 总量**：规则匹配当前最多扫描单租户 10,000 个 Skill；生产上建议用分类、标签治理和语义索引控制候选规模
 3. **缓存 query embedding**：对短时间内重复问题避免重复调用 embedding 服务
 4. **设置超时/熔断**：embedding 或向量库异常时快速降级到规则匹配
 
@@ -386,9 +386,10 @@ smartMatched = [skill-A, skill-B]
 - 创建 / 更新 / 内置导入 Skill：异步创建或更新索引
 - 禁用 / 删除 Skill：异步删除索引
 - 重新启用 Skill：按当前 latest revision 重建索引
-- 全量修复：可通过 `rebuildAllAsync(tenantId)` 重建当前租户所有可用 Skill 索引
+- 全量修复：可通过 `rebuildAllAsync(tenantId)` 重建当前租户所有可用 Skill 索引，也可通过 `rebuildAllTenantsAsync()` 重建仓储中所有已知租户
+- 集合创建或维度变化触发重建时，会按 `AgentSkillRepositoryPort.listTenants()` 返回的租户列表重建；仓储不支持租户枚举时降级到 `default`
 
-如果没有可用向量数据库适配器，语义匹配 bean 不会创建，聊天链路会直接使用规则匹配。
+如果没有可用向量数据库适配器或真实 `EmbeddingPort`，语义匹配 bean 不会创建，聊天链路会直接使用规则匹配。OpenAI-compatible embedding 适配器会校验返回向量维度；维度不匹配时返回空向量并触发规则匹配降级。
 
 ## 安全性
 
@@ -397,7 +398,7 @@ smartMatched = [skill-A, skill-B]
 智能匹配严格遵守租户隔离：
 
 ```java
-repository.page(tenantId, 1, 1000, null)  // 仅查询当前租户的 Skill
+repository.page(tenantId, currentPage, 100, null)  // 仅查询当前租户的 Skill，最多扫描 10,000 条
 ```
 
 ### 2. Fail-safe 设计
