@@ -202,7 +202,7 @@ export function MessageList({ messages, isLoading, isStreaming, sessionKey }: Me
       className="h-full"
       components={{ List, Footer }}
       itemContent={(index, message) => (
-        <div className={index === messages.length - 1 ? "animate-fade-up" : ""}>
+        <div>
           <MessageItem message={message} isLast={index === messages.length - 1} />
         </div>
       )}

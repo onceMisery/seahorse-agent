@@ -1,7 +1,9 @@
-import { Navigate, createBrowserRouter } from "react-router-dom";
+import { Navigate, Outlet, createBrowserRouter } from "react-router-dom";
 
+import { CommandPalette } from "@/components/CommandPalette";
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
 import { ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
+import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
 import { ChatPage } from "@/pages/ChatPage";
@@ -119,6 +121,16 @@ function withFeature(feature: string, featureName: string, element: JSX.Element)
   );
 }
 
+function GlobalLayout() {
+  const { open, setOpen } = useCommandPalette();
+  return (
+    <>
+      <Outlet />
+      <CommandPalette open={open} onOpenChange={setOpen} />
+    </>
+  );
+}
+
 const advancedAdminRoutes = [
   { path: "intent-tree", element: withFeature(ADVANCED_ADMIN_FEATURES.INTENT_MANAGEMENT, "意图管理", <IntentTreePage />) },
   { path: "intent-list", element: withFeature(ADVANCED_ADMIN_FEATURES.INTENT_MANAGEMENT, "意图管理", <IntentListPage />) },
@@ -157,85 +169,90 @@ const advancedAdminRoutes = [
 ];
 
 export const router = createBrowserRouter([
-  { path: "/", element: <HomeRedirect /> },
   {
-    path: "/login",
-    element: (
-      <RedirectIfAuth>
-        <LoginPage />
-      </RedirectIfAuth>
-    )
-  },
-  {
-    path: "/register",
-    element: (
-      <RedirectIfAuth>
-        <RegisterPage />
-      </RedirectIfAuth>
-    )
-  },
-  {
-    path: "/chat",
-    element: (
-      <RequireAuth>
-        <ChatPage />
-      </RequireAuth>
-    )
-  },
-  {
-    path: "/chat/:sessionId",
-    element: (
-      <RequireAuth>
-        <ChatPage />
-      </RequireAuth>
-    )
-  },
-  {
-    path: "/memories",
-    element: (
-      <RequireAuth>
-        <MemoryCenterPage />
-      </RequireAuth>
-    )
-  },
-  {
-    path: "/marketplace",
-    element: (
-      <RequireAuth>
-        <MarketplacePage />
-      </RequireAuth>
-    )
-  },
-  { path: "/prototype/ai-infra", element: <Navigate to="/admin/ai-infra" replace /> },
-  {
-    path: "/admin",
-    element: (
-      <RequireAdmin>
-        <AdminLayout />
-      </RequireAdmin>
-    ),
+    element: <GlobalLayout />,
     children: [
-      { index: true, element: <Navigate to="/admin/dashboard" replace /> },
-      { path: "dashboard", element: <DashboardPage /> },
-      { path: "knowledge", element: <KnowledgeListPage /> },
-      { path: "knowledge/:kbId", element: <KnowledgeDocumentsPage /> },
-      { path: "knowledge/:kbId/docs/:docId", element: <KnowledgeChunksPage /> },
-      ...advancedAdminRoutes,
-      { path: "metadata-governance", element: withFeature(ADVANCED_ADMIN_FEATURES.METADATA_GOVERNANCE, "元数据治理", <MetadataGovernancePage />) },
-      { path: "traces", element: <RagTracePage /> },
-      { path: "traces/:traceId", element: <RagTraceDetailPage /> },
-      { path: "settings", element: <SystemSettingsPage /> },
-      { path: "model-config", element: <ModelConfigPage /> },
-      { path: "sample-questions", element: <SampleQuestionPage /> },
-      { path: "mappings", element: <QueryTermMappingPage /> },
-      { path: "context-packs", element: <ContextPackPage /> },
-      { path: "task-templates", element: <TaskTemplatePage /> },
-      { path: "users", element: <UserListPage /> },
-      { path: "billing", element: <BillingPage /> },
-      { path: "tenants", element: withFeature(ADVANCED_ADMIN_FEATURES.TENANT_MANAGEMENT, "租户管理", <TenantListPage />) },
-      { path: "audit-logs", element: withFeature(ADVANCED_ADMIN_FEATURES.TENANT_MANAGEMENT, "审计日志", <AuditLogPage />) },
-      { path: "marketplace-review", element: withFeature(ADVANCED_ADMIN_FEATURES.MARKETPLACE_REVIEW, "市场审核", <MarketplaceReviewPage />) }
+      { path: "/", element: <HomeRedirect /> },
+      {
+        path: "/login",
+        element: (
+          <RedirectIfAuth>
+            <LoginPage />
+          </RedirectIfAuth>
+        )
+      },
+      {
+        path: "/register",
+        element: (
+          <RedirectIfAuth>
+            <RegisterPage />
+          </RedirectIfAuth>
+        )
+      },
+      {
+        path: "/chat",
+        element: (
+          <RequireAuth>
+            <ChatPage />
+          </RequireAuth>
+        )
+      },
+      {
+        path: "/chat/:sessionId",
+        element: (
+          <RequireAuth>
+            <ChatPage />
+          </RequireAuth>
+        )
+      },
+      {
+        path: "/memories",
+        element: (
+          <RequireAuth>
+            <MemoryCenterPage />
+          </RequireAuth>
+        )
+      },
+      {
+        path: "/marketplace",
+        element: (
+          <RequireAuth>
+            <MarketplacePage />
+          </RequireAuth>
+        )
+      },
+      { path: "/prototype/ai-infra", element: <Navigate to="/admin/ai-infra" replace /> },
+      {
+        path: "/admin",
+        element: (
+          <RequireAdmin>
+            <AdminLayout />
+          </RequireAdmin>
+        ),
+        children: [
+          { index: true, element: <Navigate to="/admin/dashboard" replace /> },
+          { path: "dashboard", element: <DashboardPage /> },
+          { path: "knowledge", element: <KnowledgeListPage /> },
+          { path: "knowledge/:kbId", element: <KnowledgeDocumentsPage /> },
+          { path: "knowledge/:kbId/docs/:docId", element: <KnowledgeChunksPage /> },
+          ...advancedAdminRoutes,
+          { path: "metadata-governance", element: withFeature(ADVANCED_ADMIN_FEATURES.METADATA_GOVERNANCE, "元数据治理", <MetadataGovernancePage />) },
+          { path: "traces", element: <RagTracePage /> },
+          { path: "traces/:traceId", element: <RagTraceDetailPage /> },
+          { path: "settings", element: <SystemSettingsPage /> },
+          { path: "model-config", element: <ModelConfigPage /> },
+          { path: "sample-questions", element: <SampleQuestionPage /> },
+          { path: "mappings", element: <QueryTermMappingPage /> },
+          { path: "context-packs", element: <ContextPackPage /> },
+          { path: "task-templates", element: <TaskTemplatePage /> },
+          { path: "users", element: <UserListPage /> },
+          { path: "billing", element: <BillingPage /> },
+          { path: "tenants", element: withFeature(ADVANCED_ADMIN_FEATURES.TENANT_MANAGEMENT, "租户管理", <TenantListPage />) },
+          { path: "audit-logs", element: withFeature(ADVANCED_ADMIN_FEATURES.TENANT_MANAGEMENT, "审计日志", <AuditLogPage />) },
+          { path: "marketplace-review", element: withFeature(ADVANCED_ADMIN_FEATURES.MARKETPLACE_REVIEW, "市场审核", <MarketplaceReviewPage />) }
+        ]
+      },
+      { path: "*", element: <NotFoundPage /> }
     ]
-  },
-  { path: "*", element: <NotFoundPage /> }
+  }
 ]);

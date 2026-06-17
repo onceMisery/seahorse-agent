@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM eclipse-temurin:17-jdk AS builder
+FROM eclipse-temurin:21-jdk AS builder
 
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
@@ -51,7 +51,7 @@ COPY . .
 RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && ./mvnw package -B -pl seahorse-agent-bootstrap -am -DskipTests -Dspotless.check.skip=true
 
 # Stage 2: Run
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 

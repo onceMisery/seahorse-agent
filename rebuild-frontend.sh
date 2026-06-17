@@ -22,7 +22,7 @@ echo ">>> 步骤 3/5: 编译后端"
 # 4. 构建 Docker 镜像
 echo ">>> 步骤 4/5: 构建 Docker 镜像"
 docker build -t seahorse-agent-backend:latest -f - . <<'EOF'
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY seahorse-agent-bootstrap/target/seahorse-agent-bootstrap-0.0.1-SNAPSHOT-exec.jar app.jar
 EXPOSE 9090
