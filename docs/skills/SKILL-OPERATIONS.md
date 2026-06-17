@@ -123,6 +123,7 @@ User asks to research, investigate, or analyze a topic...
 | 参数 | 路径 | 说明 |
 |------|------|------|
 | `selectedSkillNames` | `/rag/v3/chat` | 本轮对话选择的 Skill 名称列表（最多 5 个） |
+| 智能匹配 | Agent 聊天运行时 | 当本轮未选择 Skill 且 Agent Version 未预绑定 Skill 时，可按问题内容自动推荐 Skill |
 
 ## 运行时注入流程
 
@@ -133,6 +134,17 @@ User asks to research, investigate, or analyze a topic...
       → KernelChatInboundService 合并 version-bound + per-turn skills
         → SkillRuntimeComposer 注入到 system prompt
 ```
+
+### 智能匹配触发流程
+
+当满足以下条件时，系统会尝试智能匹配 Skill：
+
+1. `selectedSkillNames` 为空
+2. 当前 Agent Version 没有预绑定 Skill
+3. `seahorse.agent.kernel.enable-smart-skill-matching=true`
+4. 服务端已配置 `AgentSkillRepositoryPort`
+
+智能匹配结果会作为本轮 Skill 候选继续交给 `ChatSelectedSkillResolver` 校验，因此仍然遵守启用状态、ACTIVE 状态、latest revision 和租户隔离规则。用户显式选择和 Agent Version 预绑定始终优先于智能匹配。
 
 ### 注入策略
 
@@ -150,6 +162,12 @@ version-bound skill > per-turn selected skill
 ```
 
 已发布的 Agent Version 是确定性契约，本轮选择不会覆盖已绑定的 revision。
+
+完整优先级为：
+
+```
+version-bound skill > per-turn selected skill > smart-matched skill
+```
 
 ## 安全与权限
 

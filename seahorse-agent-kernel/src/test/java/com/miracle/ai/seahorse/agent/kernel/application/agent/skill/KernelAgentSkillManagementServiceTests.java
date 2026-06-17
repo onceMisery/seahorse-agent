@@ -3,15 +3,21 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.skill;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkill;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillCategory;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillRevision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillSource;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillVectorIndex;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SkillVectorIndexRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.embedding.EmbeddingPort;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -72,9 +78,34 @@ class KernelAgentSkillManagementServiceTests {
                 () -> service.deleteCustom(null, "public-helper"));
     }
 
+    @Test
+    void shouldMaintainVectorIndexForCustomSkillLifecycle() {
+        InMemoryAgentSkillRepository repository = new InMemoryAgentSkillRepository();
+        RecordingSkillVectorIndexService vectorIndexService = new RecordingSkillVectorIndexService(repository);
+        KernelAgentSkillManagementService service = service(repository, vectorIndexService);
+
+        service.createCustom(null, markdown("indexed-helper", "Indexed helper v1"));
+        service.updateCustom(null, "indexed-helper", markdown("indexed-helper", "Indexed helper v2"));
+        service.disable(null, "indexed-helper");
+        service.enable(null, "indexed-helper");
+        service.deleteCustom(null, "indexed-helper");
+
+        assertEquals(List.of(
+                "index:indexed-helper:skillrev_indexed_helper_1",
+                "index:indexed-helper:skillrev_indexed_helper_2",
+                "delete:indexed-helper",
+                "index:indexed-helper:skillrev_indexed_helper_2",
+                "delete:indexed-helper"), vectorIndexService.events);
+    }
+
     private KernelAgentSkillManagementService service(InMemoryAgentSkillRepository repository) {
+        return service(repository, null);
+    }
+
+    private KernelAgentSkillManagementService service(InMemoryAgentSkillRepository repository,
+                                                      SkillVectorIndexService vectorIndexService) {
         CurrentUserPort currentUserPort = () -> Optional.of(new CurrentUser(7L, "admin", "admin", null));
-        return new KernelAgentSkillManagementService(repository, currentUserPort, CLOCK);
+        return new KernelAgentSkillManagementService(repository, currentUserPort, CLOCK, vectorIndexService);
     }
 
     private String markdown(String name, String description) {
@@ -92,5 +123,23 @@ class KernelAgentSkillManagementServiceTests {
 
                 Use this skill when research help is needed.
                 """.formatted(name, description, name);
+    }
+
+    private static final class RecordingSkillVectorIndexService extends SkillVectorIndexService {
+        private final List<String> events = new ArrayList<>();
+
+        private RecordingSkillVectorIndexService(InMemoryAgentSkillRepository repository) {
+            super(EmbeddingPort.noop(), SkillVectorIndexRepositoryPort.noop(), repository);
+        }
+
+        @Override
+        public void indexSkillAsync(AgentSkill skill, AgentSkillRevision revision) {
+            events.add("index:" + skill.name() + ":" + revision.revisionId());
+        }
+
+        @Override
+        public void deleteIndexAsync(String tenantId, String skillName) {
+            events.add("delete:" + skillName);
+        }
     }
 }

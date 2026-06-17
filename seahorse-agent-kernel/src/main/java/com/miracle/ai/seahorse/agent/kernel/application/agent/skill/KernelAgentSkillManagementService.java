@@ -36,12 +36,20 @@ public class KernelAgentSkillManagementService implements AgentSkillManagementIn
     private final SkillMarkdownParser parser;
     private final SkillSecurityScanner scanner;
     private final ObjectMapper objectMapper;
+    private final SkillVectorIndexService vectorIndexService;
 
     public KernelAgentSkillManagementService(AgentSkillRepositoryPort repository,
                                              CurrentUserPort currentUserPort,
                                              Clock clock) {
+        this(repository, currentUserPort, clock, null);
+    }
+
+    public KernelAgentSkillManagementService(AgentSkillRepositoryPort repository,
+                                             CurrentUserPort currentUserPort,
+                                             Clock clock,
+                                             SkillVectorIndexService vectorIndexService) {
         this(repository, currentUserPort, clock, new SkillMarkdownParser(), new SkillSecurityScanner(),
-                new ObjectMapper());
+                new ObjectMapper(), vectorIndexService);
     }
 
     public KernelAgentSkillManagementService(AgentSkillRepositoryPort repository,
@@ -50,12 +58,23 @@ public class KernelAgentSkillManagementService implements AgentSkillManagementIn
                                              SkillMarkdownParser parser,
                                              SkillSecurityScanner scanner,
                                              ObjectMapper objectMapper) {
+        this(repository, currentUserPort, clock, parser, scanner, objectMapper, null);
+    }
+
+    public KernelAgentSkillManagementService(AgentSkillRepositoryPort repository,
+                                             CurrentUserPort currentUserPort,
+                                             Clock clock,
+                                             SkillMarkdownParser parser,
+                                             SkillSecurityScanner scanner,
+                                             ObjectMapper objectMapper,
+                                             SkillVectorIndexService vectorIndexService) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
         this.currentUserPort = Objects.requireNonNull(currentUserPort, "currentUserPort must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.parser = Objects.requireNonNull(parser, "parser must not be null");
         this.scanner = Objects.requireNonNull(scanner, "scanner must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
+        this.vectorIndexService = vectorIndexService;
     }
 
     @Override
@@ -98,6 +117,7 @@ public class KernelAgentSkillManagementService implements AgentSkillManagementIn
         repository.saveRevision(revision);
         AgentSkill saved = skill.withRevision(revision.revisionId(), now, operator(user));
         repository.saveSkill(saved);
+        indexSkill(saved, revision);
         return saved;
     }
 
@@ -119,6 +139,7 @@ public class KernelAgentSkillManagementService implements AgentSkillManagementIn
                 existing.status(), existing.enabled(), revision.revisionId(), document.description(), document.tags(),
                 document.allowedTools(), existing.createdBy(), operator(user), existing.createdAt(), now);
         repository.saveSkill(updated);
+        indexSkill(updated, revision);
         return updated;
     }
 
@@ -127,6 +148,10 @@ public class KernelAgentSkillManagementService implements AgentSkillManagementIn
         CurrentUser user = admin();
         AgentSkill skill = load(defaultTenant(tenantId), name).withEnabled(true, clock.instant(), operator(user));
         repository.saveSkill(skill);
+        if (skill.latestRevisionId() != null && !skill.latestRevisionId().isBlank()) {
+            repository.findRevision(skill.tenantId(), skill.latestRevisionId())
+                    .ifPresent(revision -> indexSkill(skill, revision));
+        }
         return skill;
     }
 
@@ -135,6 +160,7 @@ public class KernelAgentSkillManagementService implements AgentSkillManagementIn
         CurrentUser user = admin();
         AgentSkill skill = load(defaultTenant(tenantId), name).withEnabled(false, clock.instant(), operator(user));
         repository.saveSkill(skill);
+        deleteSkillIndex(skill);
         return skill;
     }
 
@@ -145,6 +171,7 @@ public class KernelAgentSkillManagementService implements AgentSkillManagementIn
         requireCustom(skill);
         AgentSkill deleted = skill.deleted(clock.instant(), operator(user));
         repository.saveSkill(deleted);
+        deleteSkillIndex(deleted);
         return deleted;
     }
 
@@ -192,7 +219,20 @@ public class KernelAgentSkillManagementService implements AgentSkillManagementIn
                 AgentSkillStatus.ACTIVE, skill.enabled(), revision.revisionId(), document.description(), document.tags(),
                 document.allowedTools(), skill.createdBy(), operator, skill.createdAt(), now);
         repository.saveSkill(updated);
+        indexSkill(updated, revision);
         return updated;
+    }
+
+    private void indexSkill(AgentSkill skill, AgentSkillRevision revision) {
+        if (vectorIndexService != null) {
+            vectorIndexService.indexSkillAsync(skill, revision);
+        }
+    }
+
+    private void deleteSkillIndex(AgentSkill skill) {
+        if (vectorIndexService != null) {
+            vectorIndexService.deleteIndexAsync(skill.tenantId(), skill.name());
+        }
     }
 
     private AgentSkillRevision newRevision(String tenantId,

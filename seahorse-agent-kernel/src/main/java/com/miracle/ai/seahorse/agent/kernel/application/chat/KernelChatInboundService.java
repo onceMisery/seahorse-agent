@@ -130,8 +130,11 @@ public class KernelChatInboundService implements ChatInboundPort {
     private final SkillSetJsonSupport skillSetJsonSupport;
     private final SkillRuntimeComposer skillRuntimeComposer;
     private final ChatSelectedSkillResolver chatSkillResolver;
+    private final SkillSmartMatcher skillSmartMatcher;
+    private final SkillSemanticMatcher skillSemanticMatcher;
     private final KernelAgentLoopOptions agentLoopOptions;
     private final Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort;
+    private final boolean enableSmartSkillMatching;
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline, StreamTaskPort streamTaskPort) {
         this(chatPipeline, streamTaskPort, KernelRagTraceRecorder.noop());
@@ -267,6 +270,45 @@ public class KernelChatInboundService implements ChatInboundPort {
                                     Optional<AgentSkillRepositoryPort> skillRepository,
                                     KernelAgentLoopOptions agentLoopOptions,
                                     Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort) {
+        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
+                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
+                skillRepository, agentLoopOptions, taskTemplateQueryPort, true);
+    }
+
+    public KernelChatInboundService(KernelChatPipeline chatPipeline,
+                                    StreamTaskPort streamTaskPort,
+                                    Optional<KernelAgentLoop> agentLoop,
+                                    KernelRagTraceRecorder traceRecorder,
+                                    ConversationMemoryPort memoryPort,
+                                    MemoryEnginePort memoryEnginePort,
+                                    Optional<AgentRunInboundPort> agentRunPort,
+                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
+                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
+                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
+                                    Optional<AgentSkillRepositoryPort> skillRepository,
+                                    KernelAgentLoopOptions agentLoopOptions,
+                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
+                                    boolean enableSmartSkillMatching) {
+        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
+                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
+                skillRepository, agentLoopOptions, taskTemplateQueryPort, enableSmartSkillMatching, null);
+    }
+
+    public KernelChatInboundService(KernelChatPipeline chatPipeline,
+                                    StreamTaskPort streamTaskPort,
+                                    Optional<KernelAgentLoop> agentLoop,
+                                    KernelRagTraceRecorder traceRecorder,
+                                    ConversationMemoryPort memoryPort,
+                                    MemoryEnginePort memoryEnginePort,
+                                    Optional<AgentRunInboundPort> agentRunPort,
+                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
+                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
+                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
+                                    Optional<AgentSkillRepositoryPort> skillRepository,
+                                    KernelAgentLoopOptions agentLoopOptions,
+                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
+                                    boolean enableSmartSkillMatching,
+                                    SkillSemanticMatcher skillSemanticMatcher) {
         this.chatPipeline = Objects.requireNonNull(chatPipeline, "chatPipeline must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.agentLoop = agentLoop == null ? Optional.empty() : agentLoop;
@@ -283,8 +325,13 @@ public class KernelChatInboundService implements ChatInboundPort {
         this.chatSkillResolver = skillRepository == null || skillRepository.isEmpty()
                 ? null
                 : new ChatSelectedSkillResolver(skillRepository.get());
+        this.skillSmartMatcher = (enableSmartSkillMatching && skillRepository != null && skillRepository.isPresent())
+                ? new SkillSmartMatcher(skillRepository.get())
+                : null;
+        this.skillSemanticMatcher = skillSemanticMatcher;
         this.agentLoopOptions = Objects.requireNonNullElseGet(agentLoopOptions, KernelAgentLoopOptions::defaults);
         this.taskTemplateQueryPort = taskTemplateQueryPort == null ? Optional.empty() : taskTemplateQueryPort;
+        this.enableSmartSkillMatching = enableSmartSkillMatching;
     }
 
     @Override
@@ -520,6 +567,12 @@ public class KernelChatInboundService implements ChatInboundPort {
      * Merge version-bound skills with per-turn selected skills.
      * Version-bound skills take priority on name collision (published contract).
      *
+     * <p>智能匹配逻辑（优先级）：
+     * <ol>
+     *   <li>语义匹配（SkillSemanticMatcher）：基于 Embedding 向量的深度语义理解</li>
+     *   <li>规则匹配（SkillSmartMatcher）：基于关键词的规则匹配（降级方案）</li>
+     * </ol>
+     *
      * @throws IllegalStateException if selectedSkillNames is non-empty but resolver is unavailable
      */
     private List<SkillRuntimeBlock> mergeSkills(Optional<AgentVersion> selectedVersion,
@@ -542,6 +595,17 @@ public class KernelChatInboundService implements ChatInboundPort {
         if (hasPerTurnSelection) {
             perTurn = chatSkillResolver.resolve(tenantId, command.selectedSkillNames());
         }
+
+        // 智能匹配：当没有任何 Skill 时，尝试根据用户问题自动匹配
+        if (versionBound.isEmpty() && perTurn.isEmpty() && enableSmartSkillMatching && chatSkillResolver != null) {
+            List<String> recommendations = matchSkillsIntelligently(tenantId, command.question());
+            if (!recommendations.isEmpty()) {
+                LOG.info("Smart skill matching triggered: question='{}', recommendations={}",
+                        command.question(), recommendations);
+                perTurn = chatSkillResolver.resolve(tenantId, recommendations);
+            }
+        }
+
         if (versionBound.isEmpty() && perTurn.isEmpty()) {
             return List.of();
         }
@@ -560,6 +624,41 @@ public class KernelChatInboundService implements ChatInboundPort {
             merged.put(block.name(), block);
         }
         return List.copyOf(merged.values());
+    }
+
+    /**
+     * 智能匹配 Skill，优先使用语义匹配，降级到规则匹配。
+     *
+     * @param tenantId 租户 ID
+     * @param question 用户问题
+     * @return 推荐的 Skill 名称列表
+     */
+    private List<String> matchSkillsIntelligently(String tenantId, String question) {
+        // 优先使用语义匹配（基于 Embedding 向量）
+        if (skillSemanticMatcher != null) {
+            try {
+                List<String> semanticResults = skillSemanticMatcher.match(tenantId, question);
+                if (!semanticResults.isEmpty()) {
+                    LOG.debug("Using semantic matching results: {}", semanticResults);
+                    return semanticResults;
+                }
+            } catch (Exception ex) {
+                LOG.warn("Semantic matching failed, falling back to rule-based matching: {}", ex.getMessage());
+            }
+        }
+
+        // 降级到规则匹配（基于关键词）
+        if (skillSmartMatcher != null) {
+            try {
+                List<String> ruleResults = skillSmartMatcher.match(tenantId, question);
+                LOG.debug("Using rule-based matching results: {}", ruleResults);
+                return ruleResults;
+            } catch (Exception ex) {
+                LOG.error("Rule-based matching failed: {}", ex.getMessage(), ex);
+            }
+        }
+
+        return List.of();
     }
 
     private AgentModelExecutionConfig modelExecutionConfig(AgentVersion version) {

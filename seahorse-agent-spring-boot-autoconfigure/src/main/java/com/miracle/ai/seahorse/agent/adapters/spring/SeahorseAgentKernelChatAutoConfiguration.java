@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.ai.openai.LlmQueryOptimizerAdapter;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalChatStreamCallbackFactory;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalStreamTaskPort;
+import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentKernelProperties;
 import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
@@ -68,6 +69,7 @@ import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -77,6 +79,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>该配置收拢查询优化、流任务默认实现、聊天管线与入口装配，避免主 kernel 配置继续承担聊天主链路细节。
  */
 @Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(AgentKernelProperties.class)
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKernelMemoryAutoConfiguration.class,
         SeahorseAgentAiAdapterAutoConfiguration.class, SeahorseAgentKernelRegistryAutoConfiguration.class,
         SeahorseAgentKernelAgentAutoConfiguration.class})
@@ -212,7 +215,9 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                                    ObjectProvider<ConversationAttachmentContextAssembler> attachmentContextAssembler,
                                                    ObjectProvider<AgentSkillRepositoryPort> skillRepository,
                                                    ObjectProvider<KernelAgentLoopOptions> agentLoopOptions,
-                                                   ObjectProvider<TaskTemplateQueryInboundPort> taskTemplateQueryPort) {
+                                                   ObjectProvider<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
+                                                   ObjectProvider<com.miracle.ai.seahorse.agent.kernel.application.chat.SkillSemanticMatcher> skillSemanticMatcher,
+                                                   AgentKernelProperties kernelProperties) {
         return new KernelChatInboundService(chatPipeline, streamTaskPort,
                 Optional.ofNullable(agentLoop.getIfAvailable()),
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
@@ -224,6 +229,8 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                 attachmentContextAssembler.getIfAvailable(ConversationAttachmentContextAssembler::noop),
                 Optional.ofNullable(skillRepository.getIfAvailable()),
                 agentLoopOptions.getIfAvailable(KernelAgentLoopOptions::defaults),
-                Optional.ofNullable(taskTemplateQueryPort.getIfAvailable()));
+                Optional.ofNullable(taskTemplateQueryPort.getIfAvailable()),
+                kernelProperties.isEnableSmartSkillMatching(),
+                skillSemanticMatcher.getIfAvailable());
     }
 }

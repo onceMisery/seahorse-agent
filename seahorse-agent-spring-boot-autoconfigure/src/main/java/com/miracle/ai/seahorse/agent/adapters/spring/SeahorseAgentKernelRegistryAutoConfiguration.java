@@ -52,6 +52,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.KernelSand
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sre.KernelSreHealthQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.KernelAgentSkillBindingService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.KernelAgentSkillManagementService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillVectorIndexService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.task.KernelTaskTemplateQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolCatalogManagementService;
@@ -375,11 +376,13 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     public KernelAgentSkillManagementService seahorseAgentSkillManagementInboundPort(
             AgentSkillRepositoryPort agentSkillRepositoryPort,
             CurrentUserPort currentUserPort,
-            ObjectProvider<Clock> clockProvider) {
+            ObjectProvider<Clock> clockProvider,
+            ObjectProvider<SkillVectorIndexService> skillVectorIndexService) {
         return new KernelAgentSkillManagementService(
                 agentSkillRepositoryPort,
                 currentUserPort,
-                clockProvider.getIfAvailable(Clock::systemUTC));
+                clockProvider.getIfAvailable(Clock::systemUTC),
+                skillVectorIndexService.getIfAvailable());
     }
 
     @Bean

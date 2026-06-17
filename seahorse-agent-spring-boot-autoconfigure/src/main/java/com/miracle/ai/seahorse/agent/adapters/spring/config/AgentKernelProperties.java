@@ -36,6 +36,7 @@ public class AgentKernelProperties {
     private Duration extensionResolveTimeout = DEFAULT_EXTENSION_RESOLVE_TIMEOUT;
     private boolean failFastOnMissingDefault = true;
     private boolean strictBoundaryCheck;
+    private boolean enableSmartSkillMatching = true;
 
     public String getMode() {
         return mode;
@@ -72,5 +73,13 @@ public class AgentKernelProperties {
 
     public void setStrictBoundaryCheck(boolean strictBoundaryCheck) {
         this.strictBoundaryCheck = strictBoundaryCheck;
+    }
+
+    public boolean isEnableSmartSkillMatching() {
+        return enableSmartSkillMatching;
+    }
+
+    public void setEnableSmartSkillMatching(boolean enableSmartSkillMatching) {
+        this.enableSmartSkillMatching = enableSmartSkillMatching;
     }
 }
