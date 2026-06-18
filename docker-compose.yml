@@ -35,6 +35,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-seahorse}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-seahorse}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-seahorse}
+      # Redis (Sa-Token session storage)
+      SPRING_DATA_REDIS_HOST: seahorse-redis
+      SPRING_DATA_REDIS_PORT: "6379"
       # Adapters
       SEAHORSE_AGENT_ADAPTERS_VECTOR_TYPE: noop
       # Optional override. Leave blank to derive dimension from the embedding model.
