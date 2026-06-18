@@ -12,15 +12,18 @@ import {
   CheckCircle,
   AlertTriangle,
   XCircle,
-  Sparkles
+  Sparkles,
+  ListTodo
 } from "lucide-react";
 
 import { MainLayout } from "@/components/layout/MainLayout";
 import { ReadinessStatusBar } from "@/components/readiness/ReadinessStatusBar";
+import { TaskCard } from "@/components/task/TaskCard";
 import { QuickTaskCard } from "@/pages/workspace/QuickTaskCard";
 import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useReadinessStore } from "@/stores/readinessStore";
+import { useTaskStore } from "@/stores/taskStore";
 
 const QUICK_TASKS = [
   {
@@ -60,6 +63,7 @@ export function WorkspaceHomePage() {
   const { user } = useAuthStore();
   const { sessions, fetchSessions, startNewSessionDraft } = useChatStore();
   const { summary, isLoading, error, loadSummary } = useReadinessStore();
+  const { tasks, loadTasks, createTask } = useTaskStore();
 
   React.useEffect(() => {
     if (sessions.length === 0) {
@@ -73,13 +77,49 @@ export function WorkspaceHomePage() {
     }
   }, [summary, isLoading, error, loadSummary]);
 
+  React.useEffect(() => {
+    if (tasks.length === 0) {
+      loadTasks(10).catch(() => null);
+    }
+  }, [loadTasks, tasks.length]);
+
   const recentSessions = React.useMemo(() => {
     return sessions.slice(0, 8);
   }, [sessions]);
 
-  const handleQuickTask = (index: number) => {
-    startNewSessionDraft();
-    navigate("/chat");
+  const recentTasks = React.useMemo(() => {
+    return tasks.slice(0, 5);
+  }, [tasks]);
+
+  const handleQuickTask = async (index: number) => {
+    switch (index) {
+      case 0: {
+        // 快速聊天 → create task → navigate to TaskRunPage → auto-redirect to chat
+        try {
+          const task = await createTask({ type: "quick_chat", question: "" });
+          navigate(`/workspace/tasks/${task.taskId}`);
+        } catch {
+          // fallback: direct chat
+          startNewSessionDraft();
+          navigate("/chat");
+        }
+        break;
+      }
+      case 1:
+      case 2:
+        // 文档问答 / 知识库问答 → go to chat
+        startNewSessionDraft();
+        navigate("/chat");
+        break;
+      case 3:
+        // 运行 Agent → TODO: agent selection dialog
+        startNewSessionDraft();
+        navigate("/chat");
+        break;
+      default:
+        startNewSessionDraft();
+        navigate("/chat");
+    }
   };
 
   const greeting = React.useMemo(() => {
@@ -138,6 +178,34 @@ export function WorkspaceHomePage() {
               ))}
             </div>
           </section>
+
+          {/* Recent Tasks */}
+          {recentTasks.length > 0 && (
+            <section>
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ListTodo className="h-3.5 w-3.5" style={{ color: "var(--theme-accent)" }} />
+                  <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--theme-text-muted)" }}>
+                    最近任务
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-xs font-medium transition-colors"
+                  style={{ color: "var(--theme-accent)" }}
+                  onClick={() => navigate("/workspace/tasks")}
+                >
+                  查看全部
+                  <ArrowRight className="h-3 w-3" />
+                </button>
+              </div>
+              <div className="space-y-2">
+                {recentTasks.map((task) => (
+                  <TaskCard key={task.taskId} task={task} />
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Recent Conversations */}
           <section>

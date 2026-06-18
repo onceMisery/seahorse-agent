@@ -27,7 +27,6 @@ import com.miracle.ai.seahorse.agent.ports.inbound.task.TaskInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.task.TaskRepositoryPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -50,14 +49,12 @@ import org.springframework.context.annotation.Configuration;
 public class SeahorseAgentTaskAutoConfiguration {
 
     @Bean
-    @ConditionalOnBean(TaskMapper.class)
     @ConditionalOnMissingBean(TaskRepositoryPort.class)
     public TaskRepositoryPort seahorseTaskRepository(TaskMapper mapper) {
         return new JdbcTaskRepository(mapper);
     }
 
     @Bean
-    @ConditionalOnBean({TaskRepositoryPort.class, ConversationManagementInboundPort.class})
     @ConditionalOnMissingBean(TaskInboundPort.class)
     public TaskInboundPort seahorseTaskOrchestrationService(
             TaskRepositoryPort taskRepository,

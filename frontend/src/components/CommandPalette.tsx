@@ -16,7 +16,8 @@ import {
   LogIn,
   Search,
   Activity,
-  LayoutGrid
+  LayoutGrid,
+  ListTodo
 } from "lucide-react";
 
 import { useAuthStore } from "@/stores/authStore";
@@ -47,6 +48,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       heading: "快速操作",
       items: [
         { label: "工作台", icon: LayoutGrid, path: "/workspace" },
+        { label: "我的任务", icon: ListTodo, path: "/workspace/tasks" },
         { label: "新建对话", icon: MessageSquarePlus, path: "/chat" },
         { label: "记忆中心", icon: Brain, path: "/memories" },
         { label: "市场", icon: Store, path: "/marketplace" }

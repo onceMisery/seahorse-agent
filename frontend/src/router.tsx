@@ -9,6 +9,8 @@ import { RegisterPage } from "@/pages/RegisterPage";
 import { ChatPage } from "@/pages/ChatPage";
 import { MemoryCenterPage } from "@/pages/MemoryCenterPage";
 import { WorkspaceHomePage } from "@/pages/workspace/WorkspaceHomePage";
+import { TaskListPage } from "@/pages/workspace/TaskListPage";
+import { TaskRunPage } from "@/pages/workspace/TaskRunPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { DashboardPage } from "@/pages/admin/dashboard/DashboardPage";
@@ -196,6 +198,22 @@ export const router = createBrowserRouter([
         element: (
           <RequireAuth>
             <WorkspaceHomePage />
+          </RequireAuth>
+        )
+      },
+      {
+        path: "/workspace/tasks",
+        element: (
+          <RequireAuth>
+            <TaskListPage />
+          </RequireAuth>
+        )
+      },
+      {
+        path: "/workspace/tasks/:taskId",
+        element: (
+          <RequireAuth>
+            <TaskRunPage />
           </RequireAuth>
         )
       },
