@@ -513,8 +513,14 @@ function mergeArtifactsById(current: Message["artifacts"], incoming: Message["ar
 }
 
 function chatModeForTaskTemplate(taskTemplateId?: TaskTemplateId): string | undefined {
-  // Always use agent mode to enable tool access (image generation, web search, etc.)
-  return CONTROLLED_WEB_AGENT_CHAT_MODE;
+  // Only force agent mode for controlled web agent task templates (deep research,
+  // web summary, GitHub visual intro). Plain chat returns undefined so the backend
+  // routes it through the full RAG pipeline (query rewrite → multi-channel retrieval
+  // → rerank → post-process → generation) instead of the LLM-driven agent loop.
+  if (taskTemplateId && CONTROLLED_WEB_AGENT_TEMPLATE_IDS.has(taskTemplateId)) {
+    return CONTROLLED_WEB_AGENT_CHAT_MODE;
+  }
+  return undefined;
 }
 
 async function hydrateSelectedSessionAgentRuns(

@@ -235,6 +235,21 @@ describe("chatStore snapshot hydration", () => {
     expect(url.searchParams.get("chatMode")).toBe("agent");
   });
 
+  it("omits chatMode for plain chat so the backend routes through the full RAG pipeline", async () => {
+    useChatStore.setState({
+      currentSessionId: "conversation-1",
+      selectedTaskTemplateId: null
+    });
+
+    await useChatStore.getState().sendMessage("What does the document say?");
+
+    expect(streamStarts).toHaveLength(1);
+    const url = new URL(streamStarts[0], "http://localhost");
+    expect(url.pathname).toBe("/api/rag/v3/chat");
+    expect(url.searchParams.has("chatMode")).toBe(false);
+    expect(url.searchParams.has("agentId")).toBe(false);
+  });
+
   it("uses Bearer authorization for the chat stream request", async () => {
     storage.setToken("stream-token");
     useChatStore.setState({
