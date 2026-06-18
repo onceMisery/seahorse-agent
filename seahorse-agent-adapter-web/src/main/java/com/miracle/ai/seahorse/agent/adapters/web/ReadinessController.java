@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
  * 展示各项基础设施的可用状态和修复建议。
  */
 @RestController
-@RequestMapping("/api/readiness")
+@RequestMapping("/readiness")
 public class ReadinessController {
 
     private final ReadinessInboundPort readinessPort;

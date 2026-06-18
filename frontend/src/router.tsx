@@ -8,6 +8,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
 import { ChatPage } from "@/pages/ChatPage";
 import { MemoryCenterPage } from "@/pages/MemoryCenterPage";
+import { WorkspaceHomePage } from "@/pages/workspace/WorkspaceHomePage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { DashboardPage } from "@/pages/admin/dashboard/DashboardPage";
@@ -76,18 +77,18 @@ function RequireAdmin({ children }: { children: JSX.Element }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (user?.role !== "admin") return <Navigate to="/chat" replace />;
+  if (user?.role !== "admin") return <Navigate to="/workspace" replace />;
   return children;
 }
 
 function RedirectIfAuth({ children }: { children: JSX.Element }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  return isAuthenticated ? <Navigate to="/chat" replace /> : children;
+  return isAuthenticated ? <Navigate to="/workspace" replace /> : children;
 }
 
 function HomeRedirect() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  return <Navigate to={isAuthenticated ? "/chat" : "/login"} replace />;
+  return <Navigate to={isAuthenticated ? "/workspace" : "/login"} replace />;
 }
 
 function FeatureGuard({
@@ -188,6 +189,14 @@ export const router = createBrowserRouter([
           <RedirectIfAuth>
             <RegisterPage />
           </RedirectIfAuth>
+        )
+      },
+      {
+        path: "/workspace",
+        element: (
+          <RequireAuth>
+            <WorkspaceHomePage />
+          </RequireAuth>
         )
       },
       {

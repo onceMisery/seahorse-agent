@@ -4,6 +4,7 @@ import { differenceInCalendarDays, isValid } from "date-fns";
 import {
   BookOpen,
   Database,
+  LayoutGrid,
   LogOut,
   MessageSquare,
   MoreHorizontal,
@@ -230,7 +231,24 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <span className="block text-xs" style={{ color: "var(--theme-text-muted)" }}>从空白开始</span>
                 </span>
               </button>
-              <div className="mt-2 grid grid-cols-2 gap-2">
+              <div className="mt-2 space-y-2">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left glass-hover transition-all hover:-translate-y-[1px]"
+                  onClick={() => {
+                    navigate("/workspace");
+                    onClose();
+                  }}
+                >
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl text-white shadow-md" style={{ background: "var(--theme-gradient)", boxShadow: "0 4px 10px var(--theme-accent-alpha-30)" }}>
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-xs font-semibold" style={{ color: "var(--theme-text-primary)" }}>工作台</span>
+                    <span className="block text-[11px]" style={{ color: "var(--theme-text-muted)" }}>首页概览</span>
+                  </span>
+                </button>
+                <div className="grid grid-cols-2 gap-2">
                 {user?.role === "admin" ? (
                   <button
                     type="button"
@@ -265,6 +283,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     <span className="block text-[11px]" style={{ color: "var(--theme-text-muted)" }}>管理记忆</span>
                   </span>
                 </button>
+                </div>
               </div>
             </div>
           </div>
