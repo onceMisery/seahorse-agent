@@ -59,7 +59,7 @@ export function WorkspaceHomePage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { sessions, fetchSessions, startNewSessionDraft } = useChatStore();
-  const { summary, loadSummary } = useReadinessStore();
+  const { summary, isLoading, error, loadSummary } = useReadinessStore();
 
   React.useEffect(() => {
     if (sessions.length === 0) {
@@ -68,10 +68,10 @@ export function WorkspaceHomePage() {
   }, [fetchSessions, sessions.length]);
 
   React.useEffect(() => {
-    if (!summary) {
+    if (!summary && !isLoading && !error) {
       loadSummary();
     }
-  }, [summary, loadSummary]);
+  }, [summary, isLoading, error, loadSummary]);
 
   const recentSessions = React.useMemo(() => {
     return sessions.slice(0, 8);
