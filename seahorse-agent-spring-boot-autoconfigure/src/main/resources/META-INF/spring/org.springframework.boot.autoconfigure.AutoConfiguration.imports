@@ -64,6 +64,9 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelTraceAutoConfig
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelResearchAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelEvalAutoConfiguration
 
+# Layer 6.5: Task facade (after kernel sub-configs, provides task orchestration + repository)
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentTaskAutoConfiguration
+
 # Layer 7: Runtime guards (after kernel sub-configs)
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRuntimeGuardAutoConfiguration
 
