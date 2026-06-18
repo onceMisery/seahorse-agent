@@ -124,8 +124,9 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
         const messagePayload = payload as MessageDeltaPayload;
         if (messagePayload?.type === "think") {
           safeInvoke(handlers.onThinking, messagePayload);
+        } else {
+          safeInvoke(handlers.onMessage, messagePayload);
         }
-        safeInvoke(handlers.onMessage, messagePayload);
         break;
       }
       case "finish":

@@ -133,6 +133,13 @@ public class KernelAgentDefinitionService implements AgentDefinitionInboundPort 
     }
 
     @Override
+    public void delete(String agentId) {
+        currentUserPort.requireRole(ADMIN_ROLE);
+        AgentDefinition definition = load(agentId);
+        repository.delete(definition.agentId());
+    }
+
+    @Override
     public Optional<AgentDefinition> findById(String agentId) {
         currentUserPort.requireRole(ADMIN_ROLE);
         return repository.findById(requireText(agentId, "agentId 不能为空"));

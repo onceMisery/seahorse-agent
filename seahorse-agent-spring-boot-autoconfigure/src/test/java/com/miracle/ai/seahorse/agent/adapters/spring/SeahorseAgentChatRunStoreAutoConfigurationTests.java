@@ -1150,6 +1150,10 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         }
 
         @Override
+        public void delete(String agentId) {
+        }
+
+        @Override
         public Optional<AgentDefinition> findById(String agentId) {
             return Optional.empty();
         }

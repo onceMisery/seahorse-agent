@@ -679,10 +679,10 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
               )}
             </div>
             <div
-              className="mt-2 flex items-center justify-between pt-4"
+              className="mt-2 flex items-center justify-between gap-3 pt-4"
               style={{ borderTop: "1px solid var(--theme-accent-alpha-10)" }}
             >
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
                 <Select
                   value={selectedTaskTemplateId ?? undefined}
                   onValueChange={(next) => setSelectedTaskTemplateId(next as TaskTemplateId)}
@@ -714,7 +714,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                 >
                   <SelectTrigger
                     aria-label="Agent"
-                    className="h-9 w-[180px] rounded-xl border text-xs shadow-none focus:ring-1 focus:ring-offset-0"
+                    className="h-9 max-w-[180px] shrink rounded-xl border text-xs shadow-none focus:ring-1 focus:ring-offset-0"
                     style={{
                       backgroundColor: "var(--theme-bg-elevated)",
                       borderColor: "var(--theme-accent-alpha-20)",
@@ -856,11 +856,11 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                 disabled={!canSend}
                 aria-label={isStreaming ? "停止生成" : "发送消息"}
                 className={cn(
-                  "flex h-14 w-14 items-center justify-center rounded-2xl shadow-lg transition-all group/send",
+                  "flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl shadow-lg transition-all group/send",
                   !canSend && "cursor-not-allowed opacity-50"
                 )}
                 style={{
-                  backgroundColor: isStreaming ? "var(--destructive)" : "var(--theme-accent)",
+                  backgroundColor: isStreaming ? "hsl(var(--destructive))" : "var(--theme-accent)",
                   color: isStreaming ? "#fff" : "var(--theme-bg-deep)",
                   boxShadow: isStreaming ? undefined : "0 0 20px var(--theme-accent-alpha-30)"
                 }}

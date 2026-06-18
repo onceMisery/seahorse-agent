@@ -63,6 +63,26 @@ public class JdbcAgentDefinitionRepositoryAdapter implements AgentDefinitionRepo
                 updated_at = ?
             WHERE agent_id = ?
             """;
+    private static final String SQL_DELETE_TOOL_BINDINGS = """
+            DELETE FROM sa_agent_tool_binding
+            WHERE agent_id = ?
+            """;
+    private static final String SQL_DELETE_ROLLOUTS = """
+            DELETE FROM sa_agent_version_rollout
+            WHERE agent_id = ?
+            """;
+    private static final String SQL_DELETE_ACTIVATIONS = """
+            DELETE FROM sa_agent_version_activation
+            WHERE agent_id = ?
+            """;
+    private static final String SQL_DELETE_VERSIONS = """
+            DELETE FROM sa_agent_version
+            WHERE agent_id = ?
+            """;
+    private static final String SQL_DELETE_DEFINITION = """
+            DELETE FROM sa_agent_definition
+            WHERE agent_id = ?
+            """;
     private static final String SQL_FIND_DEFINITION = """
             SELECT agent_id, tenant_id, name, description, owner_user_id, owner_team, agent_type, base_agent_id,
                    status, risk_level, latest_version_id, created_at, updated_at
@@ -148,6 +168,16 @@ public class JdbcAgentDefinitionRepositoryAdapter implements AgentDefinitionRepo
                 toTimestamp(safeDefinition.createdAt()),
                 toTimestamp(safeDefinition.updatedAt()),
                 safeDefinition.agentId());
+    }
+
+    @Override
+    public void delete(String agentId) {
+        String safeAgentId = requireText(agentId, "agentId");
+        jdbcTemplate.update(SQL_DELETE_TOOL_BINDINGS, safeAgentId);
+        jdbcTemplate.update(SQL_DELETE_ROLLOUTS, safeAgentId);
+        jdbcTemplate.update(SQL_DELETE_ACTIVATIONS, safeAgentId);
+        jdbcTemplate.update(SQL_DELETE_VERSIONS, safeAgentId);
+        jdbcTemplate.update(SQL_DELETE_DEFINITION, safeAgentId);
     }
 
     @Override

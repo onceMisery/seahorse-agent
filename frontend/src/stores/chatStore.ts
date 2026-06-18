@@ -328,6 +328,8 @@ export const useChatStore = create<ChatState>()(
           const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
           if (msg) {
             msg.status = "error";
+            msg.isThinking = false;
+            msg.thinkingDuration = computeThinkingDuration(msg.thinkingStartAt);
             if (!msg.content) msg.content = errorText;
           }
         });

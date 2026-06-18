@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, RefreshCw, Search } from "lucide-react";
+import { Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { PageResult } from "@/services/metadataGovernanceService";
 import { getAdvancedFeatureState, ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
-import { listAgents, disableAgent, type AgentDefinition } from "@/services/agentDefinitionService";
+import { listAgents, disableAgent, deleteAgent, type AgentDefinition } from "@/services/agentDefinitionService";
 import { getErrorMessage } from "@/utils/error";
 
 const PAGE_SIZE = 10;
@@ -43,6 +43,7 @@ export function AgentListPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [riskFilter, setRiskFilter] = useState("all");
   const [disabling, setDisabling] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const agents = pageData?.records || [];
 
@@ -91,6 +92,22 @@ export function AgentListPage() {
       console.error(error);
     } finally {
       setDisabling(null);
+    }
+  };
+
+  const handleDelete = async (agentId: string) => {
+    try {
+      setDeleting(agentId);
+      await deleteAgent(agentId);
+      toast.success("已删除 Agent");
+      const nextPage = agents.length === 1 ? Math.max(1, pageNo - 1) : pageNo;
+      setPageNo(nextPage);
+      await loadAgents(nextPage, keyword);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "删除 Agent 失败"));
+      console.error(error);
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -196,7 +213,7 @@ export function AgentListPage() {
                   <TableHead className="w-[120px]">发布状态</TableHead>
                   <TableHead className="w-[80px]">工具数</TableHead>
                   <TableHead className="w-[160px]">更新时间</TableHead>
-                  <TableHead className="w-[200px] text-left">操作</TableHead>
+                  <TableHead className="w-[240px] text-left">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -239,6 +256,20 @@ export function AgentListPage() {
                             禁用
                           </Button>
                         )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          disabled={deleting === agent.agentId}
+                          onClick={() => {
+                            if (confirm(`确认删除 Agent「${agent.name || agent.agentId}」？删除后版本和工具绑定也会移除。`)) {
+                              handleDelete(agent.agentId!);
+                            }
+                          }}
+                          title="删除 Agent"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>

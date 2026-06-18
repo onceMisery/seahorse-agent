@@ -53,6 +53,8 @@ public interface AgentDefinitionInboundPort {
      */
     AgentDefinition enable(String agentId);
 
+    void delete(String agentId);
+
     /**
      * 查询单个 Agent 定义。
      */

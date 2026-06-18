@@ -367,6 +367,12 @@ class KernelAgentRunServiceTests {
         }
 
         @Override
+        public void delete(String agentId) {
+            definitions.remove(agentId);
+            versions.entrySet().removeIf(entry -> entry.getKey().startsWith(agentId + ":"));
+        }
+
+        @Override
         public Optional<AgentDefinition> findById(String agentId) {
             return Optional.ofNullable(definitions.get(agentId));
         }

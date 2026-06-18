@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionUpdateDr
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentVersionPublishCommand;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -173,5 +174,14 @@ public class SeahorseAgentDefinitionController {
     public ApiResponse<Object> enable(@PathVariable String agentId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
         return ApiResponses.requireService(agentDefinitionPortProvider, port -> port.enable(agentId));
+    }
+
+    @DeleteMapping({"/agents/{agentId}", "/api/agents/{agentId}"})
+    public ApiResponse<Object> delete(@PathVariable String agentId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
+        return ApiResponses.requireService(agentDefinitionPortProvider, port -> {
+            port.delete(agentId);
+            return null;
+        });
     }
 }

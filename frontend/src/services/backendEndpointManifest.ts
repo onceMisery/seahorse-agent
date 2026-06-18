@@ -5,6 +5,14 @@ export const backendEndpointManifest = [
   },
   {
     "method": "DELETE",
+    "path": "/agents/{}"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/agents/{}"
+  },
+  {
+    "method": "DELETE",
     "path": "/api/admin/tenants/{}"
   },
   {

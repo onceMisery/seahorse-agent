@@ -494,6 +494,11 @@ class KernelAgentFactoryServiceTests {
         }
 
         @Override
+        public void delete(String agentId) {
+            definitions.remove(agentId);
+        }
+
+        @Override
         public Optional<AgentDefinition> findById(String agentId) {
             return Optional.ofNullable(definitions.get(agentId));
         }
@@ -587,6 +592,12 @@ class KernelAgentFactoryServiceTests {
         @Override
         public void update(AgentDefinition definition) {
             saveDefinition(definition);
+        }
+
+        @Override
+        public void delete(String agentId) {
+            definitions.remove(agentId);
+            versions.entrySet().removeIf(entry -> entry.getValue().agentId().equals(agentId));
         }
 
         @Override

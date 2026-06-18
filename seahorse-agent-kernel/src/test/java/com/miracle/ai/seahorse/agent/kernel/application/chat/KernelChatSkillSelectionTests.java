@@ -373,6 +373,7 @@ class KernelChatSkillSelectionTests {
 
         @Override public void create(AgentDefinition d) { defs.put(d.agentId(), d); }
         @Override public void update(AgentDefinition d) { defs.put(d.agentId(), d); }
+        @Override public void delete(String id) { defs.remove(id); }
         @Override public Optional<AgentDefinition> findById(String id) {
             return Optional.ofNullable(defs.get(id));
         }

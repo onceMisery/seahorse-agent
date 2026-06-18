@@ -148,6 +148,10 @@ export function disableAgent(agentId: string, reason?: string) {
   );
 }
 
+export function deleteAgent(agentId: string) {
+  return api.delete<unknown, unknown>(`/api/agents/${encodeURIComponent(agentId)}`);
+}
+
 export function getLatestPublishChecks(agentId: string) {
   return api.get<AgentPublishCheck>(
     `/api/agents/${encodeURIComponent(agentId)}/publish-checks/latest`

@@ -34,6 +34,8 @@ public interface AgentDefinitionRepositoryPort {
      */
     void update(AgentDefinition definition);
 
+    void delete(String agentId);
+
     /**
      * 按 Agent ID 查询定义。
      */
