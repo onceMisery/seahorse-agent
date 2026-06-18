@@ -28,12 +28,12 @@ class AdvancedFeatureGateTests {
 
     @Test
     void consumerWebModeShouldEnableCoreFeaturesByDefault() {
-        AdvancedFeatureGate gate = AdvancedFeatureGate.consumerWebDefaults();
+        AdvancedFeatureGate gate = AdvancedFeatureGate.demoDefaults();
 
-        assertThat(gate.productMode()).isEqualTo(ProductMode.CONSUMER_WEB);
+        assertThat(gate.productMode()).isEqualTo(ProductMode.DEMO);
         for (AdvancedFeature feature : AdvancedFeature.values()) {
             assertThat(gate.isEnabled(feature)).as(feature.name())
-                    .isEqualTo(isConsumerWebCoreFeature(feature));
+                    .isEqualTo(isDemoCoreFeature(feature));
         }
     }
 
@@ -43,7 +43,7 @@ class AdvancedFeatureGateTests {
         for (AdvancedFeature feature : AdvancedFeature.values()) {
             enabledFeatures.put(feature, true);
         }
-        AdvancedFeatureGate gate = AdvancedFeatureGate.configured(ProductMode.CONSUMER_WEB, enabledFeatures);
+        AdvancedFeatureGate gate = AdvancedFeatureGate.configured(ProductMode.DEMO, enabledFeatures);
 
         for (AdvancedFeature feature : AdvancedFeature.values()) {
             assertThat(gate.isEnabled(feature)).as(feature.name()).isTrue();
@@ -52,18 +52,18 @@ class AdvancedFeatureGateTests {
 
     @Test
     void shouldRejectDisabledAdvancedFeatureWithProductModeContext() {
-        AdvancedFeatureGate gate = AdvancedFeatureGate.consumerWebDefaults();
+        AdvancedFeatureGate gate = AdvancedFeatureGate.demoDefaults();
 
         assertThatThrownBy(() -> gate.requireEnabled(AdvancedFeature.AGENT_HANDOFF))
                 .isInstanceOf(AdvancedFeatureDisabledException.class)
-                .hasMessage("Advanced feature AGENT_HANDOFF is disabled in CONSUMER_WEB mode");
+                .hasMessage("Advanced feature AGENT_HANDOFF is disabled in DEMO mode");
     }
 
     @Test
     void allEnabledGateShouldKeepLegacyControllerTestsFocusedOnApiMapping() {
         AdvancedFeatureGate gate = AdvancedFeatureGate.allEnabledForTests();
 
-        assertThat(gate.productMode()).isEqualTo(ProductMode.ENTERPRISE_PLATFORM);
+        assertThat(gate.productMode()).isEqualTo(ProductMode.ENTERPRISE);
         for (AdvancedFeature feature : AdvancedFeature.values()) {
             assertThat(gate.isEnabled(feature)).isTrue();
         }
@@ -74,7 +74,7 @@ class AdvancedFeatureGateTests {
         SeahorseWebGovernanceConfiguration configuration = new SeahorseWebGovernanceConfiguration(false);
 
         AdvancedFeatureGate gate = configuration.seahorseAdvancedFeatureGate(
-                "enterprise-platform",
+                "enterprise",
                 false,
                 false,
                 true,
@@ -112,7 +112,7 @@ class AdvancedFeatureGateTests {
         SeahorseWebGovernanceConfiguration configuration = new SeahorseWebGovernanceConfiguration(false);
 
         AdvancedFeatureGate gate = configuration.seahorseAdvancedFeatureGate(
-                "enterprise-platform",
+                "enterprise",
                 true,
                 true,
                 true,
@@ -146,7 +146,7 @@ class AdvancedFeatureGateTests {
         }
     }
 
-    private static boolean isConsumerWebCoreFeature(AdvancedFeature feature) {
+    private static boolean isDemoCoreFeature(AdvancedFeature feature) {
         return switch (feature) {
             case SKILL_MANAGEMENT,
                     AGENT_RUN_MANAGEMENT,

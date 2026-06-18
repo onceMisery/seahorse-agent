@@ -48,14 +48,14 @@ public class SeahorseOpenApiConnectorController {
     public SeahorseOpenApiConnectorController(ObjectProvider<OpenApiConnectorInboundPort> connectorPortProvider,
                                               ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(connectorPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseOpenApiConnectorController(ObjectProvider<OpenApiConnectorInboundPort> connectorPortProvider,
                                               AdvancedFeatureGate advancedFeatureGate) {
         this.connectorPortProvider = connectorPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

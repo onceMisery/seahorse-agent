@@ -27,7 +27,7 @@ import java.util.Set;
 public interface ToolProviderExposurePolicyPort {
 
     String PROVIDER_DISABLED_MESSAGE = "Tool provider is disabled in the current product mode";
-    Set<ToolProvider> CONSUMER_WEB_ALLOWED_PROVIDERS = Set.copyOf(EnumSet.of(
+    Set<ToolProvider> DEMO_ALLOWED_PROVIDERS = Set.copyOf(EnumSet.of(
             ToolProvider.BUILTIN,
             ToolProvider.INTERNAL));
 
@@ -43,8 +43,8 @@ public interface ToolProviderExposurePolicyPort {
         }
     }
 
-    static ToolProviderExposurePolicyPort consumerWebDefaults() {
-        return provider -> provider != null && CONSUMER_WEB_ALLOWED_PROVIDERS.contains(provider);
+    static ToolProviderExposurePolicyPort demoDefaults() {
+        return provider -> provider != null && DEMO_ALLOWED_PROVIDERS.contains(provider);
     }
 
     static ToolProviderExposurePolicyPort allEnabled() {

@@ -358,24 +358,24 @@ class SeahorseAgentControllerTests {
                                 null,
                                 null,
                                 null,
-                                provider(AdvancedFeatureGate.class, AdvancedFeatureGate.consumerWebDefaults())))
+                                provider(AdvancedFeatureGate.class, AdvancedFeatureGate.demoDefaults())))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
         mvc.perform(post("/api/agent-runs/run-1/retry"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message")
-                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in DEMO mode"));
 
         mvc.perform(post("/api/agent-runs/run-1/resume"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message")
-                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in DEMO mode"));
 
         mvc.perform(get("/api/agent-runs/run-1/checkpoints"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message")
-                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in DEMO mode"));
 
         mvc.perform(get("/api/agent-runs/run-1/snapshot"))
                 .andExpect(status().isOk())
@@ -413,7 +413,7 @@ class SeahorseAgentControllerTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
-                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in DEMO mode"));
 
         verifyNoInteractions(port);
     }
@@ -431,7 +431,7 @@ class SeahorseAgentControllerTests {
                                 null,
                                 null,
                                 provider(AdvancedFeatureGate.class, AdvancedFeatureGate.configured(
-                                        ProductMode.ENTERPRISE_PLATFORM,
+                                        ProductMode.ENTERPRISE,
                                         Map.of(AdvancedFeature.AGENT_RUN_MANAGEMENT, true)))))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
@@ -448,7 +448,7 @@ class SeahorseAgentControllerTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
-                        .value("Advanced feature AGENT_HANDOFF is disabled in ENTERPRISE_PLATFORM mode"));
+                        .value("Advanced feature AGENT_HANDOFF is disabled in ENTERPRISE mode"));
 
         verifyNoInteractions(port);
     }

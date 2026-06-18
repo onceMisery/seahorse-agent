@@ -39,14 +39,14 @@ public class SeahorseSecretController {
     public SeahorseSecretController(ObjectProvider<SecretManagementInboundPort> secretManagementPortProvider,
                                     ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(secretManagementPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseSecretController(ObjectProvider<SecretManagementInboundPort> secretManagementPortProvider,
                                     AdvancedFeatureGate advancedFeatureGate) {
         this.secretManagementPortProvider = secretManagementPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

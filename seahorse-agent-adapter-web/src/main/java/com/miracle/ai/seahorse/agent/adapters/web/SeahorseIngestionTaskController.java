@@ -75,7 +75,7 @@ public class SeahorseIngestionTaskController {
                                            ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(taskPortProvider, rateLimiterPortProvider.getIfAvailable(RateLimiterPort::noop),
                 uploadRateLimitPermits, uploadRateLimitWindowMs,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseIngestionTaskController(ObjectProvider<IngestionTaskInboundPort> taskPortProvider,
@@ -88,7 +88,7 @@ public class SeahorseIngestionTaskController {
         this.uploadRateLimitPermits = Math.max(1, uploadRateLimitPermits);
         this.uploadRateLimitWindow = Duration.ofMillis(Math.max(1L, uploadRateLimitWindowMs));
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

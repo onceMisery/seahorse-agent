@@ -53,14 +53,14 @@ public class SeahorseAgentDefinitionController {
     public SeahorseAgentDefinitionController(ObjectProvider<AgentDefinitionInboundPort> agentDefinitionPortProvider,
                                              ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(agentDefinitionPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseAgentDefinitionController(ObjectProvider<AgentDefinitionInboundPort> agentDefinitionPortProvider,
                                              AdvancedFeatureGate advancedFeatureGate) {
         this.agentDefinitionPortProvider = agentDefinitionPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

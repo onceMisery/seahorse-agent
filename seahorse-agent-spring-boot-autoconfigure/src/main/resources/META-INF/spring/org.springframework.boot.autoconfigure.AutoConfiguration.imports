@@ -26,6 +26,7 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentStorageAdapterAutoCon
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentS3StorageAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentVectorAdapterAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentSreAdapterHealthAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentReadinessAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentSimpleMeterRegistryAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentMiddlewareHealthAutoConfiguration
 

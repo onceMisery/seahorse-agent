@@ -89,7 +89,7 @@ public class KernelAgentFactoryService implements AgentFactoryInboundPort {
                 null,
                 null,
                 null,
-                ToolProviderExposurePolicyPort.consumerWebDefaults(),
+                ToolProviderExposurePolicyPort.demoDefaults(),
                 clock);
     }
 
@@ -108,7 +108,7 @@ public class KernelAgentFactoryService implements AgentFactoryInboundPort {
                 definitionRepository,
                 activationRepository,
                 catalogQueryPort,
-                ToolProviderExposurePolicyPort.consumerWebDefaults(),
+                ToolProviderExposurePolicyPort.demoDefaults(),
                 Clock.systemUTC());
     }
 
@@ -128,7 +128,7 @@ public class KernelAgentFactoryService implements AgentFactoryInboundPort {
                 definitionRepository,
                 activationRepository,
                 catalogQueryPort,
-                ToolProviderExposurePolicyPort.consumerWebDefaults(),
+                ToolProviderExposurePolicyPort.demoDefaults(),
                 clock);
     }
 
@@ -152,7 +152,7 @@ public class KernelAgentFactoryService implements AgentFactoryInboundPort {
         this.catalogQueryPort = catalogQueryPort;
         this.providerExposurePolicy = Objects.requireNonNullElseGet(
                 providerExposurePolicy,
-                ToolProviderExposurePolicyPort::consumerWebDefaults);
+                ToolProviderExposurePolicyPort::demoDefaults);
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 

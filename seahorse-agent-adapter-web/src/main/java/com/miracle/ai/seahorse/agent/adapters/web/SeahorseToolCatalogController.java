@@ -50,14 +50,14 @@ public class SeahorseToolCatalogController {
     public SeahorseToolCatalogController(ObjectProvider<ToolCatalogManagementInboundPort> toolCatalogPortProvider,
                                          ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(toolCatalogPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseToolCatalogController(ObjectProvider<ToolCatalogManagementInboundPort> toolCatalogPortProvider,
                                          AdvancedFeatureGate advancedFeatureGate) {
         this.toolCatalogPortProvider = toolCatalogPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

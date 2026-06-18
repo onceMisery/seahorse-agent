@@ -32,21 +32,21 @@ public class SeahorseProductionGateController {
     private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseProductionGateController(ObjectProvider<ProductionGateInboundPort> productionGatePortProvider) {
-        this(productionGatePortProvider, AdvancedFeatureGate.consumerWebDefaults());
+        this(productionGatePortProvider, AdvancedFeatureGate.demoDefaults());
     }
 
     @Autowired
     public SeahorseProductionGateController(ObjectProvider<ProductionGateInboundPort> productionGatePortProvider,
                                             ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(productionGatePortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseProductionGateController(ObjectProvider<ProductionGateInboundPort> productionGatePortProvider,
                                             AdvancedFeatureGate advancedFeatureGate) {
         this.productionGatePortProvider = productionGatePortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

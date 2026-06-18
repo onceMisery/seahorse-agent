@@ -188,7 +188,7 @@ class SeahorseSkillControllerTests {
     void shouldRejectSkillApiWhenFeatureDisabled() throws Exception {
         AgentSkillManagementInboundPort managementPort = mock(AgentSkillManagementInboundPort.class);
         AgentSkillBindingInboundPort bindingPort = mock(AgentSkillBindingInboundPort.class);
-        MockMvc mvc = mvc(managementPort, bindingPort, AdvancedFeatureGate.consumerWebDefaults());
+        MockMvc mvc = mvc(managementPort, bindingPort, AdvancedFeatureGate.demoDefaults());
 
         mvc.perform(get("/api/skills"))
                 .andExpect(status().isForbidden())

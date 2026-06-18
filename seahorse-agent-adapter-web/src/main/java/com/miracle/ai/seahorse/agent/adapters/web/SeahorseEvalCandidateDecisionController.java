@@ -40,7 +40,7 @@ public class SeahorseEvalCandidateDecisionController {
             ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this.decisionServiceProvider = decisionServiceProvider;
         this.regressionServiceProvider = regressionServiceProvider;
-        this.advancedFeatureGate = advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults);
+        this.advancedFeatureGate = advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults);
     }
 
     @PostMapping("/api/eval-candidates/{candidateId}/accept")

@@ -678,8 +678,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 mcpRegistry,
                 toolRegistry,
                 toolCatalogRepository.getIfAvailable(ToolCatalogRepositoryPort::empty),
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults),
-                toolProviderExposurePolicy.getIfAvailable(ToolProviderExposurePolicyPort::consumerWebDefaults),
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults),
+                toolProviderExposurePolicy.getIfAvailable(ToolProviderExposurePolicyPort::demoDefaults),
                 parseCsv(environment.getProperty(PROP_MCP_INCLUDE, "")),
                 objectMapper.getIfAvailable(ObjectMapper::new),
                 clockProvider.getIfAvailable(Clock::systemUTC));
@@ -744,7 +744,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 if (productMode == null) {
                     productMode = environment.getProperty(legacyPropertyName(PROP_PRODUCT_MODE));
                 }
-                return ProductMode.fromProperty(productMode) == ProductMode.CONSUMER_WEB;
+                return ProductMode.fromProperty(productMode) == ProductMode.DEMO;
             } catch (IllegalArgumentException ex) {
                 return true;
             }

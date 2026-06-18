@@ -322,7 +322,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(ToolProviderExposurePolicyPort.class)
     public ToolProviderExposurePolicyPort seahorseToolProviderExposurePolicyPort() {
-        return ToolProviderExposurePolicyPort.consumerWebDefaults();
+        return ToolProviderExposurePolicyPort.demoDefaults();
     }
 
     @Bean

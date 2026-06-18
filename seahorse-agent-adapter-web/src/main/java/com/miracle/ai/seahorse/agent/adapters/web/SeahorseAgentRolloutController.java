@@ -53,7 +53,7 @@ public class SeahorseAgentRolloutController {
                                           ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(rolloutPortProvider,
                 costSummaryPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseAgentRolloutController(ObjectProvider<AgentRolloutInboundPort> rolloutPortProvider,
@@ -67,7 +67,7 @@ public class SeahorseAgentRolloutController {
         this.rolloutPortProvider = rolloutPortProvider;
         this.costSummaryPortProvider = costSummaryPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

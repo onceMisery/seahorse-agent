@@ -7,6 +7,7 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { DeepSeaBackground } from "@/components/chat/DeepSeaBackground";
 import { MessageList } from "@/components/chat/MessageList";
 import { WorkspaceInspector } from "@/components/chat/workbench/WorkspaceInspector";
+import { ReadinessStatusBar } from "@/components/readiness/ReadinessStatusBar";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useChatStore } from "@/stores/chatStore";
 import { useWorkbenchStore } from "@/stores/workbenchStore";
@@ -112,6 +113,9 @@ export function ChatPage() {
         <Group id="seahorse-chat-panels">
           <Panel minSize={44}>
             <div className="relative flex h-full min-w-0 flex-col">
+              <div className="relative z-10 flex justify-end px-4 pt-2">
+                <ReadinessStatusBar />
+              </div>
               <DeepSeaBackground />
               <div className="flex-1 min-h-0">
                 <MessageList

@@ -139,7 +139,7 @@ class McpToolAllowlistRegistrarTests {
         AdvancedFeatureGate advancedFeatureGate() {
             EnumMap<AdvancedFeature, Boolean> features = new EnumMap<>(AdvancedFeature.class);
             features.put(AdvancedFeature.MCP_TOOL, true);
-            return AdvancedFeatureGate.configured(ProductMode.ENTERPRISE_PLATFORM, features);
+            return AdvancedFeatureGate.configured(ProductMode.ENTERPRISE, features);
         }
 
         @Bean

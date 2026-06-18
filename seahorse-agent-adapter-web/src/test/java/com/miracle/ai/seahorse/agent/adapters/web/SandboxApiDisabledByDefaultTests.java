@@ -38,12 +38,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class SandboxApiDisabledByDefaultTests {
 
     @Test
-    void consumerWebDefaultsShouldRejectEverySandboxEndpointBeforeCallingPort() throws Exception {
+    void demoDefaultsShouldRejectEverySandboxEndpointBeforeCallingPort() throws Exception {
         SandboxRuntimeInboundPort port = mock(SandboxRuntimeInboundPort.class);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseSandboxController(
                                 provider(SandboxRuntimeInboundPort.class, port),
-                                AdvancedFeatureGate.consumerWebDefaults()))
+                                AdvancedFeatureGate.demoDefaults()))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
@@ -57,7 +57,7 @@ class SandboxApiDisabledByDefaultTests {
                                 "requestedHosts", List.of()))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message")
-                        .value("Advanced feature SANDBOX is disabled in CONSUMER_WEB mode"));
+                        .value("Advanced feature SANDBOX is disabled in DEMO mode"));
 
         mvc.perform(post("/api/sandbox/sessions/session-1/execute")
                         .contentType(MediaType.APPLICATION_JSON)

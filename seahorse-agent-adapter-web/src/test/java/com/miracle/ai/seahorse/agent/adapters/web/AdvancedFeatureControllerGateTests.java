@@ -54,7 +54,7 @@ class AdvancedFeatureControllerGateTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseSandboxController(
                                 provider(SandboxRuntimeInboundPort.class, port),
-                                AdvancedFeatureGate.consumerWebDefaults()))
+                                AdvancedFeatureGate.demoDefaults()))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
@@ -69,7 +69,7 @@ class AdvancedFeatureControllerGateTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
-                        .value("Advanced feature SANDBOX is disabled in CONSUMER_WEB mode"));
+                        .value("Advanced feature SANDBOX is disabled in DEMO mode"));
 
         verifyNoInteractions(port);
     }
@@ -80,7 +80,7 @@ class AdvancedFeatureControllerGateTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseAgentHandoffController(
                                 provider(AgentHandoffInboundPort.class, port),
-                                AdvancedFeatureGate.consumerWebDefaults()))
+                                AdvancedFeatureGate.demoDefaults()))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
@@ -88,7 +88,7 @@ class AdvancedFeatureControllerGateTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
-                        .value("Advanced feature AGENT_HANDOFF is disabled in CONSUMER_WEB mode"));
+                        .value("Advanced feature AGENT_HANDOFF is disabled in DEMO mode"));
 
         verifyNoInteractions(port);
     }
@@ -99,7 +99,7 @@ class AdvancedFeatureControllerGateTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseOpenApiConnectorController(
                                 provider(OpenApiConnectorInboundPort.class, port),
-                                AdvancedFeatureGate.consumerWebDefaults()))
+                                AdvancedFeatureGate.demoDefaults()))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
@@ -107,7 +107,7 @@ class AdvancedFeatureControllerGateTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
-                        .value("Advanced feature CONNECTOR_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+                        .value("Advanced feature CONNECTOR_MANAGEMENT is disabled in DEMO mode"));
 
         verifyNoInteractions(port);
     }
@@ -118,7 +118,7 @@ class AdvancedFeatureControllerGateTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseSecretController(
                                 provider(SecretManagementInboundPort.class, port),
-                                AdvancedFeatureGate.consumerWebDefaults()))
+                                AdvancedFeatureGate.demoDefaults()))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
@@ -131,7 +131,7 @@ class AdvancedFeatureControllerGateTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
-                        .value("Advanced feature SECRET_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+                        .value("Advanced feature SECRET_MANAGEMENT is disabled in DEMO mode"));
 
         verifyNoInteractions(port);
     }
@@ -142,7 +142,7 @@ class AdvancedFeatureControllerGateTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseIntentTreeController(
                                 provider(IntentTreeInboundPort.class, port),
-                                AdvancedFeatureGate.consumerWebDefaults()))
+                                AdvancedFeatureGate.demoDefaults()))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
@@ -150,7 +150,7 @@ class AdvancedFeatureControllerGateTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
-                        .value("Advanced feature INTENT_TREE_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+                        .value("Advanced feature INTENT_TREE_MANAGEMENT is disabled in DEMO mode"));
 
         verifyNoInteractions(port);
     }
@@ -161,7 +161,7 @@ class AdvancedFeatureControllerGateTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseIngestionPipelineController(
                                 provider(IngestionPipelineInboundPort.class, port),
-                                AdvancedFeatureGate.consumerWebDefaults()))
+                                AdvancedFeatureGate.demoDefaults()))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
@@ -177,7 +177,7 @@ class AdvancedFeatureControllerGateTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseToolCatalogController(
                                 provider(ToolCatalogManagementInboundPort.class, port),
-                                AdvancedFeatureGate.consumerWebDefaults()))
+                                AdvancedFeatureGate.demoDefaults()))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
@@ -193,7 +193,7 @@ class AdvancedFeatureControllerGateTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseAgentRolloutController(
                                 provider(AgentRolloutInboundPort.class, port),
-                                AdvancedFeatureGate.consumerWebDefaults()))
+                                AdvancedFeatureGate.demoDefaults()))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
@@ -202,7 +202,7 @@ class AdvancedFeatureControllerGateTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
-                        .value("Advanced feature AGENT_ROLLOUT_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+                        .value("Advanced feature AGENT_ROLLOUT_MANAGEMENT is disabled in DEMO mode"));
 
         verifyNoInteractions(port);
     }
@@ -213,7 +213,7 @@ class AdvancedFeatureControllerGateTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseApprovalController(
                                 provider(ApprovalManagementInboundPort.class, port),
-                                AdvancedFeatureGate.consumerWebDefaults()))
+                                AdvancedFeatureGate.demoDefaults()))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
         when(port.findById(eq("approval-1"))).thenReturn(java.util.Optional.empty());

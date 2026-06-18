@@ -36,7 +36,7 @@ public class SeahorseFeatureController {
     public Map<String, Object> features() {
         Map<String, Object> featureStates = new LinkedHashMap<>();
         for (AdvancedFeature feature : AdvancedFeature.values()) {
-            boolean visible = advancedFeatureGate.productMode() != ProductMode.CONSUMER_WEB;
+            boolean visible = advancedFeatureGate.productMode() != ProductMode.DEMO;
             boolean enabled = advancedFeatureGate.isEnabled(feature);
             featureStates.put(feature.name(), Map.of(
                     "enabled", enabled,
@@ -49,8 +49,8 @@ public class SeahorseFeatureController {
     }
 
     private String disabledReason(AdvancedFeature feature) {
-        if (advancedFeatureGate.productMode() == ProductMode.CONSUMER_WEB) {
-            return "Current mode is consumer web, " + feature.name() + " is not available";
+        if (advancedFeatureGate.productMode() == ProductMode.DEMO) {
+            return "Current mode is demo, " + feature.name() + " is not available";
         }
         return feature.name() + " is not enabled in backend configuration";
     }

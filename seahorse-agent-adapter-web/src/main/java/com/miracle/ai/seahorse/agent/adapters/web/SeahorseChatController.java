@@ -87,7 +87,7 @@ public class SeahorseChatController {
                                   StreamTaskPort streamTaskPort,
                                   long sseTimeoutMs) {
         this(chatInboundPortProvider, callbackFactory, streamTaskPort, sseTimeoutMs,
-                AdvancedFeatureGate.consumerWebDefaults());
+                AdvancedFeatureGate.demoDefaults());
     }
 
     public SeahorseChatController(ObjectProvider<ChatInboundPort> chatInboundPortProvider,
@@ -114,7 +114,7 @@ public class SeahorseChatController {
                 null,
                 RateLimiterPort.noop(),
                 AgentRunEventBufferPort.noop(),
-                AdvancedFeatureGate.consumerWebDefaults(),
+                AdvancedFeatureGate.demoDefaults(),
                 sseTimeoutMs,
                 60,
                 Duration.ofMinutes(1));
@@ -143,7 +143,7 @@ public class SeahorseChatController {
                 researchSseBridgeProvider,
                 Objects.requireNonNullElse(rateLimiterPortProvider.getIfAvailable(), RateLimiterPort.noop()),
                 Objects.requireNonNullElse(eventBufferPortProvider.getIfAvailable(), AgentRunEventBufferPort.noop()),
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults),
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults),
                 sseTimeoutMs,
                 chatRateLimitPermits,
                 Duration.ofMillis(Math.max(1L, chatRateLimitWindowMs)));
@@ -171,7 +171,7 @@ public class SeahorseChatController {
         this.eventBufferPort = Objects.requireNonNullElse(eventBufferPort, AgentRunEventBufferPort.noop());
         this.advancedFeatureGate = Objects.requireNonNullElseGet(
                 advancedFeatureGate,
-                AdvancedFeatureGate::consumerWebDefaults);
+                AdvancedFeatureGate::demoDefaults);
         this.sseTimeoutMs = sseTimeoutMs;
         this.chatRateLimitPermits = Math.max(1, chatRateLimitPermits);
         this.chatRateLimitWindow = Objects.requireNonNullElse(chatRateLimitWindow, Duration.ofMinutes(1));
@@ -391,9 +391,9 @@ public class SeahorseChatController {
         boolean controlledWebTask = isControlledWebAgentTemplate(taskTemplateId)
                 && !hasText(agentId)
                 && !hasText(versionId);
-        if (advancedFeatureGate.productMode() == ProductMode.CONSUMER_WEB && !controlledWebTask) {
+        if (advancedFeatureGate.productMode() == ProductMode.DEMO && !controlledWebTask) {
             throw new SecurityException(
-                    "Consumer web chat only allows controlled Agent task templates without explicit agentId/versionId");
+                    "Demo mode chat only allows controlled Agent task templates without explicit agentId/versionId");
         }
         if (!controlledWebTask) {
             advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);

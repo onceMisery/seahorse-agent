@@ -20,16 +20,23 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 import java.util.Locale;
 
 public enum ProductMode {
-    CONSUMER_WEB,
-    PROFESSIONAL_WEB,
-    ENTERPRISE_PLATFORM;
+    DEMO,
+    RAG,
+    ENTERPRISE;
 
-    public static final ProductMode DEFAULT = CONSUMER_WEB;
+    public static final ProductMode DEFAULT = DEMO;
 
     public static ProductMode fromProperty(String value) {
         if (value == null || value.isBlank()) {
             return DEFAULT;
         }
-        return ProductMode.valueOf(value.trim().replace('-', '_').toUpperCase(Locale.ROOT));
+        String normalized = value.trim().replace('-', '_').toUpperCase(Locale.ROOT);
+        // Backward compatibility: map legacy names to new names
+        return switch (normalized) {
+            case "CONSUMER_WEB" -> DEMO;
+            case "PROFESSIONAL_WEB" -> RAG;
+            case "ENTERPRISE_PLATFORM" -> ENTERPRISE;
+            default -> ProductMode.valueOf(normalized);
+        };
     }
 }

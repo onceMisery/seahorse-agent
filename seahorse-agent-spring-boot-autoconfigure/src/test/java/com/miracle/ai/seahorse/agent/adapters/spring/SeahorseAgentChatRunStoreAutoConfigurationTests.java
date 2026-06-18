@@ -515,7 +515,7 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
     @Test
     void shouldNotWireLocalAgentAsToolPortWhenConsumerWebFlagsAreMisconfigured() {
         contextRunner.withPropertyValues(
-                        "seahorse-agent.product-mode=consumer-web",
+                        "seahorse-agent.product-mode=demo",
                         "seahorse-agent.advanced.agent-handoff-enabled=true",
                         "seahorse-agent.advanced.local-agent-enabled=true")
                 .withUserConfiguration(TestLocalAgentAsToolConfiguration.class)
@@ -528,7 +528,7 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
     @Test
     void shouldWireLocalAgentAsToolPortWhenAdvancedLocalAgentFeatureIsEnabled() {
         contextRunner.withPropertyValues(
-                        "seahorse-agent.product-mode=enterprise-platform",
+                        "seahorse-agent.product-mode=enterprise",
                         "seahorse-agent.advanced.agent-handoff-enabled=true",
                         "seahorse-agent.advanced.local-agent-enabled=true")
                 .withUserConfiguration(TestAdvancedLocalAgentAsToolConfiguration.class)
@@ -1290,7 +1290,7 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
             EnumMap<AdvancedFeature, Boolean> features = new EnumMap<>(AdvancedFeature.class);
             features.put(AdvancedFeature.AGENT_HANDOFF, true);
             features.put(AdvancedFeature.LOCAL_AGENT, true);
-            return AdvancedFeatureGate.configured(ProductMode.ENTERPRISE_PLATFORM, features);
+            return AdvancedFeatureGate.configured(ProductMode.ENTERPRISE, features);
         }
     }
 

@@ -68,8 +68,8 @@ public class SeahorseAgentRunController {
         this.costSummaryPortProvider = costSummaryPortProvider;
         this.eventBufferPortProvider = eventBufferPortProvider;
         this.advancedFeatureGate = advancedFeatureGateProvider == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
-                : advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults);
+                ? AdvancedFeatureGate.demoDefaults()
+                : advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults);
     }
 
     @PostMapping({"/agents/{agentId}/runs", "/api/agents/{agentId}/runs"})

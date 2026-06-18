@@ -84,8 +84,8 @@ public class McpToolAllowlistRegistrar implements ApplicationRunner {
                 mcpRegistry,
                 toolRegistry,
                 toolCatalogRepository,
-                AdvancedFeatureGate.consumerWebDefaults(),
-                ToolProviderExposurePolicyPort.consumerWebDefaults(),
+                AdvancedFeatureGate.demoDefaults(),
+                ToolProviderExposurePolicyPort.demoDefaults(),
                 includeToolIds,
                 objectMapper,
                 clock);
@@ -106,9 +106,9 @@ public class McpToolAllowlistRegistrar implements ApplicationRunner {
         this.toolCatalogRepository = Objects.requireNonNullElseGet(toolCatalogRepository,
                 ToolCatalogRepositoryPort::empty);
         this.advancedFeatureGate = Objects.requireNonNullElseGet(advancedFeatureGate,
-                AdvancedFeatureGate::consumerWebDefaults);
+                AdvancedFeatureGate::demoDefaults);
         this.providerExposurePolicy = Objects.requireNonNullElseGet(providerExposurePolicy,
-                ToolProviderExposurePolicyPort::consumerWebDefaults);
+                ToolProviderExposurePolicyPort::demoDefaults);
         this.includeToolIds = List.copyOf(Objects.requireNonNullElse(includeToolIds, List.of()));
         this.objectMapper = Objects.requireNonNullElseGet(objectMapper, ObjectMapper::new);
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);

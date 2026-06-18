@@ -64,7 +64,7 @@ public class SeahorseResourceAclController {
             ObjectProvider<ResourceAclManagementInboundPort> resourceAclManagementPortProvider,
             ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(resourceAclManagementPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseResourceAclController(
@@ -72,7 +72,7 @@ public class SeahorseResourceAclController {
             AdvancedFeatureGate advancedFeatureGate) {
         this.resourceAclManagementPortProvider = resourceAclManagementPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

@@ -48,14 +48,14 @@ public class SeahorseIntentTreeController {
     public SeahorseIntentTreeController(ObjectProvider<IntentTreeInboundPort> intentTreePortProvider,
                                         ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(intentTreePortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseIntentTreeController(ObjectProvider<IntentTreeInboundPort> intentTreePortProvider,
                                         AdvancedFeatureGate advancedFeatureGate) {
         this.intentTreePortProvider = intentTreePortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

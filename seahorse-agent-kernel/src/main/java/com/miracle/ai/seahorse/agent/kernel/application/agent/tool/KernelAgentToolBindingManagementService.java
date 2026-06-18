@@ -51,7 +51,7 @@ public class KernelAgentToolBindingManagementService implements AgentToolBinding
                                                    CurrentUserPort currentUserPort,
                                                    Clock clock) {
         this(bindingRepository, currentUserPort, clock, ToolCatalogRepositoryPort.empty(),
-                ToolProviderExposurePolicyPort.consumerWebDefaults());
+                ToolProviderExposurePolicyPort.demoDefaults());
     }
 
     public KernelAgentToolBindingManagementService(AgentToolBindingRepositoryPort bindingRepository,
@@ -59,7 +59,7 @@ public class KernelAgentToolBindingManagementService implements AgentToolBinding
                                                    Clock clock,
                                                    ToolCatalogRepositoryPort toolCatalogRepository) {
         this(bindingRepository, currentUserPort, clock, toolCatalogRepository,
-                ToolProviderExposurePolicyPort.consumerWebDefaults());
+                ToolProviderExposurePolicyPort.demoDefaults());
     }
 
     public KernelAgentToolBindingManagementService(AgentToolBindingRepositoryPort bindingRepository,
@@ -73,7 +73,7 @@ public class KernelAgentToolBindingManagementService implements AgentToolBinding
         this.toolCatalogRepository = Objects.requireNonNullElseGet(toolCatalogRepository, ToolCatalogRepositoryPort::empty);
         this.providerExposurePolicy = Objects.requireNonNullElseGet(
                 providerExposurePolicy,
-                ToolProviderExposurePolicyPort::consumerWebDefaults);
+                ToolProviderExposurePolicyPort::demoDefaults);
     }
 
     @Override

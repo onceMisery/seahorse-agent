@@ -50,14 +50,14 @@ public class SeahorseAgentFactoryController {
     public SeahorseAgentFactoryController(ObjectProvider<AgentFactoryInboundPort> agentFactoryPortProvider,
                                           ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(agentFactoryPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseAgentFactoryController(ObjectProvider<AgentFactoryInboundPort> agentFactoryPortProvider,
                                           AdvancedFeatureGate advancedFeatureGate) {
         this.agentFactoryPortProvider = agentFactoryPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

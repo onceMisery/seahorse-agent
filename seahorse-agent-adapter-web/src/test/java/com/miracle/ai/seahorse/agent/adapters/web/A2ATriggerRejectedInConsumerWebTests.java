@@ -49,7 +49,7 @@ class A2ATriggerRejectedInConsumerWebTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"))
                 .andExpect(jsonPath("$.message")
-                        .value("Consumer web chat only allows controlled Agent task templates without explicit agentId/versionId"));
+                        .value("Demo mode chat only allows controlled Agent task templates without explicit agentId/versionId"));
 
         verifyNoInteractions(chatPort, streamTaskPort);
     }
@@ -69,7 +69,7 @@ class A2ATriggerRejectedInConsumerWebTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"))
                 .andExpect(jsonPath("$.message")
-                        .value("Consumer web chat only allows controlled Agent task templates without explicit agentId/versionId"));
+                        .value("Demo mode chat only allows controlled Agent task templates without explicit agentId/versionId"));
 
         verifyNoInteractions(chatPort, streamTaskPort);
     }

@@ -1,8 +1,9 @@
 import { useFeatureStore } from "@/stores/featureStore";
 
 export const PRODUCT_MODES = {
-  CONSUMER_WEB: "consumer-web",
-  ENTERPRISE_PLATFORM: "enterprise-platform"
+  DEMO: "demo",
+  ENTERPRISE: "enterprise",
+  RAG: "rag"
 } as const;
 
 export type ProductMode = (typeof PRODUCT_MODES)[keyof typeof PRODUCT_MODES];
@@ -50,17 +51,22 @@ export type FeatureState = {
 };
 
 function resolveProductMode(value: string | undefined): ProductMode {
-  const normalized = (value || PRODUCT_MODES.CONSUMER_WEB).trim().toLowerCase();
-  return normalized === PRODUCT_MODES.ENTERPRISE_PLATFORM
-    ? PRODUCT_MODES.ENTERPRISE_PLATFORM
-    : PRODUCT_MODES.CONSUMER_WEB;
+  const normalized = (value || PRODUCT_MODES.DEMO).trim().toLowerCase();
+  // Backward compat: accept old values alongside new ones
+  if (normalized === PRODUCT_MODES.ENTERPRISE || normalized === "enterprise-platform") {
+    return PRODUCT_MODES.ENTERPRISE;
+  }
+  if (normalized === PRODUCT_MODES.RAG) {
+    return PRODUCT_MODES.RAG;
+  }
+  return PRODUCT_MODES.DEMO;
 }
 
 const productMode = resolveProductMode(import.meta.env.VITE_SEAHORSE_PRODUCT_MODE);
 const explicitAdvancedAdmin = import.meta.env.VITE_SEAHORSE_ENABLE_ADVANCED_ADMIN === "true";
 
-export function isConsumerWebMode() {
-  return productMode === PRODUCT_MODES.CONSUMER_WEB;
+export function isDemoMode() {
+  return productMode === PRODUCT_MODES.DEMO;
 }
 
 export function isAdvancedAdminEnabled(feature: AdvancedAdminFeature) {
@@ -68,7 +74,7 @@ export function isAdvancedAdminEnabled(feature: AdvancedAdminFeature) {
   if (capabilities) {
     return Boolean(capabilities.features?.[feature]?.enabled);
   }
-  return !isConsumerWebMode() && explicitAdvancedAdmin;
+  return !isDemoMode() && explicitAdvancedAdmin;
 }
 
 export function getAdvancedFeatureState(feature: AdvancedAdminFeature): FeatureState {
@@ -77,12 +83,12 @@ export function getAdvancedFeatureState(feature: AdvancedAdminFeature): FeatureS
     return capabilities.features?.[feature] ?? {
       visible: false,
       enabled: false,
-      reason: "后端未返回该功能能力"
+      reason: "后端未返回该功能的能力"
     };
   }
 
-  if (isConsumerWebMode()) {
-    return { visible: false, enabled: false, reason: "当前为消费端模式，此功能不可用" };
+  if (isDemoMode()) {
+    return { visible: false, enabled: false, reason: "当前为演示模式，此功能不可用" };
   }
 
   if (!explicitAdvancedAdmin) {

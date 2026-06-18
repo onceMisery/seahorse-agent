@@ -98,7 +98,7 @@ class SeahorseChatControllerRateLimitTests {
                 provider(ResearchSseBridge.class, null),
                 provider(RateLimiterPort.class, rateLimiter),
                 provider(AgentRunEventBufferPort.class, AgentRunEventBufferPort.noop()),
-                provider(AdvancedFeatureGate.class, AdvancedFeatureGate.consumerWebDefaults()),
+                provider(AdvancedFeatureGate.class, AdvancedFeatureGate.demoDefaults()),
                 1_000L,
                 60,
                 60_000L);

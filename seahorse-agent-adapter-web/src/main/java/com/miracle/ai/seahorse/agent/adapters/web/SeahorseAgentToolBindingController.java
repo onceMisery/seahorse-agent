@@ -49,7 +49,7 @@ public class SeahorseAgentToolBindingController {
             ObjectProvider<AgentToolBindingManagementInboundPort> bindingPortProvider,
             ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(bindingPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseAgentToolBindingController(
@@ -57,7 +57,7 @@ public class SeahorseAgentToolBindingController {
             AdvancedFeatureGate advancedFeatureGate) {
         this.bindingPortProvider = bindingPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

@@ -96,7 +96,7 @@ class SeahorseEvalCandidateDecisionControllerTests {
 
     @Test
     void shouldRejectWhenFeatureGateDisabled() throws Exception {
-        MockMvc mvc = buildMvc(AdvancedFeatureGate.consumerWebDefaults());
+        MockMvc mvc = buildMvc(AdvancedFeatureGate.demoDefaults());
 
         mvc.perform(post("/api/eval-candidates/cand-1/accept")
                         .contentType(MediaType.APPLICATION_JSON)

@@ -42,14 +42,14 @@ public class SeahorseAgentHandoffController {
     public SeahorseAgentHandoffController(ObjectProvider<AgentHandoffInboundPort> handoffPortProvider,
                                           ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(handoffPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseAgentHandoffController(ObjectProvider<AgentHandoffInboundPort> handoffPortProvider,
                                           AdvancedFeatureGate advancedFeatureGate) {
         this.handoffPortProvider = handoffPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

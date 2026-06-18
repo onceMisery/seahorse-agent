@@ -14,7 +14,8 @@ import {
   Wrench,
   Home,
   LogIn,
-  Search
+  Search,
+  Activity
 } from "lucide-react";
 
 import { useAuthStore } from "@/stores/authStore";
@@ -57,7 +58,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         { label: "知识库", icon: BookOpen, path: "/admin/knowledge" },
         { label: "Agent 管理", icon: Bot, path: "/admin/agents" },
         { label: "模型配置", icon: Wrench, path: "/admin/model-config" },
-        { label: "系统设置", icon: Settings, path: "/admin/settings" }
+        { label: "系统设置", icon: Settings, path: "/admin/settings" },
+        { label: "系统诊断", icon: Activity, path: "/admin/readiness" }
       ]
     };
 

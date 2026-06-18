@@ -45,21 +45,21 @@ public class SeahorseAgentEvalController {
     private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseAgentEvalController(ObjectProvider<AgentEvalInboundPort> agentEvalPortProvider) {
-        this(agentEvalPortProvider, AdvancedFeatureGate.consumerWebDefaults());
+        this(agentEvalPortProvider, AdvancedFeatureGate.demoDefaults());
     }
 
     @Autowired
     public SeahorseAgentEvalController(ObjectProvider<AgentEvalInboundPort> agentEvalPortProvider,
                                        ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(agentEvalPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseAgentEvalController(ObjectProvider<AgentEvalInboundPort> agentEvalPortProvider,
                                        AdvancedFeatureGate advancedFeatureGate) {
         this.agentEvalPortProvider = agentEvalPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

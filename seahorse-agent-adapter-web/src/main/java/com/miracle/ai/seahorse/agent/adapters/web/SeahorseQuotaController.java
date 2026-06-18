@@ -48,14 +48,14 @@ public class SeahorseQuotaController {
     public SeahorseQuotaController(ObjectProvider<QuotaManagementInboundPort> quotaManagementPortProvider,
                                    ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(quotaManagementPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseQuotaController(ObjectProvider<QuotaManagementInboundPort> quotaManagementPortProvider,
                                    AdvancedFeatureGate advancedFeatureGate) {
         this.quotaManagementPortProvider = quotaManagementPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

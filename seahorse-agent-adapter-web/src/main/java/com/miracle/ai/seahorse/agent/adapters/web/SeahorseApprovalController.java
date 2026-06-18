@@ -50,14 +50,14 @@ public class SeahorseApprovalController {
     public SeahorseApprovalController(ObjectProvider<ApprovalManagementInboundPort> approvalPortProvider,
                                       ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(approvalPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseApprovalController(ObjectProvider<ApprovalManagementInboundPort> approvalPortProvider,
                                       AdvancedFeatureGate advancedFeatureGate) {
         this.approvalPortProvider = approvalPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

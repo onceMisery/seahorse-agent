@@ -28,13 +28,13 @@ class SeahorseFeatureControllerTests {
     @Test
     void shouldReturnConfiguredFeatureStates() {
         AdvancedFeatureGate gate = AdvancedFeatureGate.configured(
-                ProductMode.ENTERPRISE_PLATFORM,
+                ProductMode.ENTERPRISE,
                 Map.of(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT, true));
         SeahorseFeatureController controller = new SeahorseFeatureController(gate);
 
         Map<String, Object> response = controller.features();
 
-        assertThat(response.get("productMode")).isEqualTo("ENTERPRISE_PLATFORM");
+        assertThat(response.get("productMode")).isEqualTo("ENTERPRISE");
         Map<?, ?> features = (Map<?, ?>) response.get("features");
         Map<?, ?> agentDefinition = (Map<?, ?>) features.get("AGENT_DEFINITION_MANAGEMENT");
         assertThat(agentDefinition.get("enabled")).isEqualTo(true);
@@ -45,7 +45,7 @@ class SeahorseFeatureControllerTests {
     @Test
     void shouldHideEnterpriseFeaturesInConsumerMode() {
         SeahorseFeatureController controller = new SeahorseFeatureController(
-                AdvancedFeatureGate.consumerWebDefaults());
+                AdvancedFeatureGate.demoDefaults());
 
         Map<String, Object> response = controller.features();
 
@@ -53,6 +53,6 @@ class SeahorseFeatureControllerTests {
         Map<?, ?> sandbox = (Map<?, ?>) features.get("SANDBOX");
         assertThat(sandbox.get("enabled")).isEqualTo(false);
         assertThat(sandbox.get("visible")).isEqualTo(false);
-        assertThat((String) sandbox.get("reason")).contains("consumer web");
+        assertThat((String) sandbox.get("reason")).contains("demo");
     }
 }

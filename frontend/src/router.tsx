@@ -25,6 +25,7 @@ import { SystemSettingsPage } from "@/pages/admin/settings/SystemSettingsPage";
 import { ModelConfigPage } from "@/pages/admin/settings/ModelConfigPage";
 import { ContextPackPage } from "@/pages/admin/settings/ContextPackPage";
 import { TaskTemplatePage } from "@/pages/admin/settings/TaskTemplatePage";
+import ReadinessPage from "@/pages/admin/ReadinessPage";
 import { SampleQuestionPage } from "@/pages/admin/sample-questions/SampleQuestionPage";
 import { QueryTermMappingPage } from "@/pages/admin/query-term-mapping/QueryTermMappingPage";
 import { UserListPage } from "@/pages/admin/users/UserListPage";
@@ -240,6 +241,7 @@ export const router = createBrowserRouter([
           { path: "traces", element: <RagTracePage /> },
           { path: "traces/:traceId", element: <RagTraceDetailPage /> },
           { path: "settings", element: <SystemSettingsPage /> },
+          { path: "readiness", element: <ReadinessPage /> },
           { path: "model-config", element: <ModelConfigPage /> },
           { path: "sample-questions", element: <SampleQuestionPage /> },
           { path: "mappings", element: <QueryTermMappingPage /> },

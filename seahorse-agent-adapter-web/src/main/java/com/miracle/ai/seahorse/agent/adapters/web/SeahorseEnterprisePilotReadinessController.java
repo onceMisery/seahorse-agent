@@ -44,7 +44,7 @@ public class SeahorseEnterprisePilotReadinessController {
             ObjectProvider<EnterprisePilotReadinessInboundPort> readinessPortProvider,
             ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(readinessPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseEnterprisePilotReadinessController(
@@ -52,7 +52,7 @@ public class SeahorseEnterprisePilotReadinessController {
             AdvancedFeatureGate advancedFeatureGate) {
         this.readinessPortProvider = readinessPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

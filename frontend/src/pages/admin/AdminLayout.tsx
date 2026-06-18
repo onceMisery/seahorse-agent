@@ -41,6 +41,7 @@ import {
   Store,
   Building2,
   CreditCard,
+  Activity,
   ClipboardCheck
 } from "lucide-react";
 import { toast } from "sonner";
@@ -192,7 +193,8 @@ const menuGroups: MenuGroup[] = [
       { path: "/admin/mappings", label: "关键词映射", icon: KeyRound },
       { path: "/admin/sample-questions", label: "示例问题", icon: Lightbulb },
       { path: "/admin/model-config", label: "模型配置", icon: Cpu },
-      { path: "/admin/settings", label: "系统设置", icon: Settings }
+      { path: "/admin/settings", label: "系统设置", icon: Settings },
+      { path: "/admin/readiness", label: "系统诊断", icon: Activity }
     ]
   }
 ];
@@ -239,12 +241,13 @@ const breadcrumbMap: Record<string, string> = {
   tenants: "租户管理",
   "audit-logs": "运营审计",
   "marketplace-review": "市场审核",
+  readiness: "系统诊断",
   edit: "编辑"
 };
 
 function itemVisible(item: MenuItem, featureState: (feature: string) => { visible: boolean; enabled: boolean }) {
   if (!item.feature) return true;
-  // 使用 enabled 而不是 visible，核心功能在 CONSUMER_WEB 下 enabled=true 但 visible=false
+  // 使用 enabled 而不是 visible，核心功能在 DEMO 下 enabled=true 但 visible=false
   return featureState(ADVANCED_ADMIN_FEATURES[item.feature]).enabled;
 }
 

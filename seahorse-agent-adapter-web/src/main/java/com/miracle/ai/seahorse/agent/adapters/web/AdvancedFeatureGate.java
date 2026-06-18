@@ -34,8 +34,8 @@ public final class AdvancedFeatureGate {
         }
     }
 
-    public static AdvancedFeatureGate consumerWebDefaults() {
-        return new AdvancedFeatureGate(ProductMode.CONSUMER_WEB, Map.of());
+    public static AdvancedFeatureGate demoDefaults() {
+        return new AdvancedFeatureGate(ProductMode.DEMO, Map.of());
     }
 
     public static AdvancedFeatureGate allEnabledForTests() {
@@ -43,7 +43,7 @@ public final class AdvancedFeatureGate {
         for (AdvancedFeature feature : AdvancedFeature.values()) {
             features.put(feature, true);
         }
-        return new AdvancedFeatureGate(ProductMode.ENTERPRISE_PLATFORM, features);
+        return new AdvancedFeatureGate(ProductMode.ENTERPRISE, features);
     }
 
     public static AdvancedFeatureGate configured(ProductMode productMode, Map<AdvancedFeature, Boolean> enabledFeatures) {
@@ -196,15 +196,15 @@ public final class AdvancedFeatureGate {
     }
 
     public boolean isEnabled(AdvancedFeature feature) {
-        // CONSUMER_WEB 模式下，核心功能默认启用，通过配额而非开关来限制使用量
-        if (productMode == ProductMode.CONSUMER_WEB) {
-            return isConsumerWebCoreFeature(feature) || Boolean.TRUE.equals(enabledFeatures.get(feature));
+        // DEMO 模式下，核心功能默认启用，通过配额而非开关来限制使用量
+        if (productMode == ProductMode.DEMO) {
+            return isDemoCoreFeature(feature) || Boolean.TRUE.equals(enabledFeatures.get(feature));
         }
         return Boolean.TRUE.equals(enabledFeatures.get(feature));
     }
 
     /**
-     * 判断是否为消费者版核心功能。
+     * 判断是否为 Demo 模式核心功能。
      * <p>
      * 核心功能在所有产品模式下都应该可用，通过配额而非开关来限制使用量。
      * 这样设计的好处：
@@ -217,7 +217,7 @@ public final class AdvancedFeatureGate {
      * @param feature 要检查的功能
      * @return 如果是核心功能返回 true，否则返回 false
      */
-    private boolean isConsumerWebCoreFeature(AdvancedFeature feature) {
+    private boolean isDemoCoreFeature(AdvancedFeature feature) {
         return switch (feature) {
             // Agent 核心能力 - 这些是 RAG Agent 平台的基础功能
             case SKILL_MANAGEMENT ->            // Skills 系统：Agent 调用外部能力的机制
@@ -235,7 +235,7 @@ public final class AdvancedFeatureGate {
             case INGESTION_TASK_MANAGEMENT ->     // 任务管理：监控文档处理任务
                     true;
 
-            // 其他功能默认禁用，需要升级到 PROFESSIONAL 或 ENTERPRISE 版本
+            // 其他功能默认禁用，需要升级到 RAG 或 ENTERPRISE 模式
             // 包括：
             // - SANDBOX: 代码沙箱隔离（安全相关，成本较高）
             // - AUDIT_LOG: 审计日志（企业合规需求）

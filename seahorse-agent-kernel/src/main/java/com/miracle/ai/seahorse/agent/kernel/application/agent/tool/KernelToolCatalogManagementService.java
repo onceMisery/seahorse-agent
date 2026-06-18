@@ -40,7 +40,7 @@ public class KernelToolCatalogManagementService implements ToolCatalogManagement
 
     public KernelToolCatalogManagementService(ToolCatalogRepositoryPort toolCatalogRepository,
                                               CurrentUserPort currentUserPort) {
-        this(toolCatalogRepository, currentUserPort, ToolProviderExposurePolicyPort.consumerWebDefaults());
+        this(toolCatalogRepository, currentUserPort, ToolProviderExposurePolicyPort.demoDefaults());
     }
 
     public KernelToolCatalogManagementService(ToolCatalogRepositoryPort toolCatalogRepository,
@@ -51,7 +51,7 @@ public class KernelToolCatalogManagementService implements ToolCatalogManagement
         this.currentUserPort = Objects.requireNonNull(currentUserPort, "currentUserPort must not be null");
         this.providerExposurePolicy = Objects.requireNonNullElseGet(
                 providerExposurePolicy,
-                ToolProviderExposurePolicyPort::consumerWebDefaults);
+                ToolProviderExposurePolicyPort::demoDefaults);
     }
 
     @Override

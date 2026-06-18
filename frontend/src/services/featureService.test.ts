@@ -12,7 +12,7 @@ import { getBackendFeatures } from "@/services/featureService";
 describe("featureService", () => {
   it("loads backend feature capabilities", async () => {
     vi.mocked(api.get).mockResolvedValueOnce({
-      productMode: "ENTERPRISE_PLATFORM",
+      productMode: "ENTERPRISE",
       features: {}
     });
 

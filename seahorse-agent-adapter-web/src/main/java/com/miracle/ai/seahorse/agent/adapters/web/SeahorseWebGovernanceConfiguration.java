@@ -52,7 +52,7 @@ public class SeahorseWebGovernanceConfiguration implements WebMvcConfigurer, Fil
 
     @Bean
     public AdvancedFeatureGate seahorseAdvancedFeatureGate(
-            @Value("${seahorse-agent.product-mode:consumer-web}") String productMode,
+            @Value("${seahorse-agent.product-mode:demo}") String productMode,
             @Value("${seahorse-agent.advanced.sandbox-enabled:false}") boolean sandboxEnabled,
             @Value("${seahorse-agent.advanced.connector-management-enabled:false}")
             boolean connectorManagementEnabled,

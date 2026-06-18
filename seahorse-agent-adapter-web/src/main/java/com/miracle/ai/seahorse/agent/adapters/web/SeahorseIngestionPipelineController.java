@@ -55,14 +55,14 @@ public class SeahorseIngestionPipelineController {
     public SeahorseIngestionPipelineController(ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider,
                                                ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(pipelinePortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
     }
 
     public SeahorseIngestionPipelineController(ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider,
                                                AdvancedFeatureGate advancedFeatureGate) {
         this.pipelinePortProvider = pipelinePortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
+                ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
     }
 

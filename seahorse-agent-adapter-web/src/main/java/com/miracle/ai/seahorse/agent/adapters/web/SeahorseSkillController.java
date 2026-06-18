@@ -53,7 +53,7 @@ public class SeahorseSkillController {
                                    ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this.managementPortProvider = managementPortProvider;
         this.bindingPortProvider = bindingPortProvider;
-        this.advancedFeatureGate = advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults);
+        this.advancedFeatureGate = advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults);
     }
 
     @GetMapping("/api/skills")

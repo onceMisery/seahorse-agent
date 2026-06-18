@@ -230,32 +230,42 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <span className="block text-xs" style={{ color: "var(--theme-text-muted)" }}>从空白开始</span>
                 </span>
               </button>
-              {user?.role === "admin" ? (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {user?.role === "admin" ? (
+                  <button
+                    type="button"
+                    className="flex items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left glass-hover transition-all hover:-translate-y-[1px]"
+                    onClick={() => {
+                      window.open("/admin", "_blank");
+                      onClose();
+                    }}
+                  >
+                    <span className="flex h-8 w-8 items-center justify-center rounded-xl text-white shadow-md" style={{ background: "var(--theme-gradient)", boxShadow: "0 4px 10px var(--theme-accent-alpha-30)" }}>
+                      <Settings className="h-3.5 w-3.5" />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-xs font-semibold" style={{ color: "var(--theme-text-primary)" }}>管理后台</span>
+                      <span className="block text-[11px]" style={{ color: "var(--theme-text-muted)" }}>系统管理</span>
+                    </span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  className="mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors glass-hover"
-                  style={{ color: "var(--theme-accent)" }}
+                  className="flex items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left glass-hover transition-all hover:-translate-y-[1px]"
                   onClick={() => {
-                    window.open("/admin", "_blank");
+                    navigate("/memories");
                     onClose();
                   }}
                 >
-                  <Settings className="h-3.5 w-3.5" />
-                  管理后台
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl text-white shadow-md" style={{ background: "var(--theme-gradient)", boxShadow: "0 4px 10px var(--theme-accent-alpha-30)" }}>
+                    <Database className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-xs font-semibold" style={{ color: "var(--theme-text-primary)" }}>记忆中心</span>
+                    <span className="block text-[11px]" style={{ color: "var(--theme-text-muted)" }}>管理记忆</span>
+                  </span>
                 </button>
-              ) : null}
-              <button
-                type="button"
-                className="mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors glass-hover"
-                style={{ color: "var(--theme-text-secondary)" }}
-                onClick={() => {
-                  navigate("/memories");
-                  onClose();
-                }}
-              >
-                <Database className="h-3.5 w-3.5" />
-                记忆中心
-              </button>
+              </div>
             </div>
           </div>
           <div className="rounded-2xl p-3 glass">
@@ -315,7 +325,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                         )}
                         style={{
                           backgroundColor: currentSessionId === session.id ? "var(--theme-accent-alpha-10)" : "transparent",
-                          color: currentSessionId === session.id ? "var(--theme-accent)" : "var(--theme-text-secondary)"
+                          color: currentSessionId === session.id ? "var(--theme-accent)" : "var(--theme-text-primary)"
                         }}
                         onMouseEnter={(e) => {
                           if (currentSessionId !== session.id) {
