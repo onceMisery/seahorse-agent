@@ -47,20 +47,13 @@ export function WorkspaceInspector({ message, open, onClose }: WorkspaceInspecto
   const hasCost = Boolean(message?.costSummary);
 
   return (
-    <AnimatePresence>
-      {open ? (
-        <motion.div
-          key="workspace-inspector"
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 20 }}
-          transition={{ duration: 0.25, ease: "easeOut" }}
-          className="flex h-full flex-col"
-          style={{
-            background: "var(--sh-workbench-panel)",
-            borderLeft: "1px solid var(--sh-workbench-border)"
-          }}
-        >
+    open ? (
+      <div
+        className="flex h-full flex-col"
+        style={{
+          background: "var(--sh-workbench-panel)",
+        }}
+      >
           <div
             className="flex items-center justify-between px-3 py-2"
             style={{ borderBottom: "1px solid var(--sh-workbench-border)" }}
@@ -202,8 +195,7 @@ export function WorkspaceInspector({ message, open, onClose }: WorkspaceInspecto
               )}
             </div>
           </Tabs.Root>
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
+        </div>
+    ) : null
   );
 }

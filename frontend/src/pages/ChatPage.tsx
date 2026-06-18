@@ -1,7 +1,6 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Group, Panel, Separator } from "react-resizable-panels";
-import { GripVertical } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 
 import { ChatInput } from "@/components/chat/ChatInput";
 import { DeepSeaBackground } from "@/components/chat/DeepSeaBackground";
@@ -110,68 +109,62 @@ export function ChatPage() {
   return (
     <MainLayout>
       <div className="relative flex h-full">
-        <Group id="seahorse-chat-panels">
-          <Panel minSize={44}>
-            <div className="relative flex h-full min-w-0 flex-col">
-              <div className="relative z-10 flex justify-end px-4 pt-2">
-                <ReadinessStatusBar />
+        {/* Chat area — always full width */}
+        <div className="relative flex h-full min-w-0 flex-1 flex-col">
+          <div className="relative z-10 flex justify-end px-4 pt-2">
+            <ReadinessStatusBar />
+          </div>
+          <DeepSeaBackground />
+          <div className="flex-1 min-h-0">
+            <MessageList
+              messages={messages}
+              isLoading={isLoading}
+              isStreaming={isStreaming}
+              sessionKey={currentSessionId}
+            />
+          </div>
+          {showWelcome ? null : (
+            <div className="relative z-20">
+              <div className="mx-auto max-w-[800px] px-6 pt-1 pb-4">
+                <ChatInput />
               </div>
-              <DeepSeaBackground />
-              <div className="flex-1 min-h-0">
-                <MessageList
-                  messages={messages}
-                  isLoading={isLoading}
-                  isStreaming={isStreaming}
-                  sessionKey={currentSessionId}
-                />
-              </div>
-              {showWelcome ? null : (
-                <div className="relative z-20">
-                  <div className="mx-auto max-w-[800px] px-6 pt-1 pb-4">
-                    <ChatInput />
-                  </div>
-                </div>
-              )}
             </div>
-          </Panel>
+          )}
+        </div>
 
+        {/* Slide-out inspector drawer */}
+        <AnimatePresence>
           {inspectorOpen && (
             <>
-              <Separator
-                className="group hidden md:flex relative w-[6px] items-center justify-center cursor-col-resize transition-colors hover:bg-[var(--sh-workbench-accent)]"
-                style={{ backgroundColor: "var(--sh-workbench-border)" }}
+              {/* Backdrop */}
+              <motion.div
+                key="inspector-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px]"
+                onClick={closeInspector}
+              />
+              {/* Drawer */}
+              <motion.div
+                key="inspector-drawer"
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                className="fixed right-0 top-0 z-50 h-full w-[420px] max-w-[85vw] shadow-2xl"
+                style={{ background: "var(--sh-workbench-panel)" }}
               >
-                <div className="flex h-8 w-[3px] items-center justify-center rounded-full" style={{ backgroundColor: "var(--sh-workbench-border-strong)" }}>
-                  <GripVertical className="h-4 w-4" style={{ color: "var(--sh-workbench-accent)" }} />
-                </div>
-              </Separator>
-              <Panel defaultSize={34} minSize={20} maxSize={60} className="hidden md:flex">
                 <WorkspaceInspector
                   message={activeMessage}
                   open={inspectorOpen}
                   onClose={closeInspector}
                 />
-              </Panel>
+              </motion.div>
             </>
           )}
-        </Group>
-
-        {inspectorOpen && (
-          <div
-            className="workspace-inspector-mobile fixed inset-x-0 bottom-0 z-[var(--sh-z-inspector-mobile)] md:hidden"
-          >
-            <div
-              className="h-full rounded-t-xl shadow-xl"
-              style={{ background: "var(--sh-workbench-panel)", border: "1px solid var(--sh-workbench-border)" }}
-            >
-              <WorkspaceInspector
-                message={activeMessage}
-                open={inspectorOpen}
-                onClose={closeInspector}
-              />
-            </div>
-          </div>
-        )}
+        </AnimatePresence>
       </div>
     </MainLayout>
   );
