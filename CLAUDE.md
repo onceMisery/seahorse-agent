@@ -68,7 +68,7 @@ docker compose -f docker-compose.full.yml up -d --build
 ```bash
 ./mvnw package -B -pl seahorse-agent-bootstrap -am -DskipTests -Dspotless.check.skip=true
 docker build -t seahorse-agent-backend:latest -f - . <<'EOF'
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY seahorse-agent-bootstrap/target/seahorse-agent-bootstrap-0.0.1-SNAPSHOT-exec.jar app.jar
 EXPOSE 9090

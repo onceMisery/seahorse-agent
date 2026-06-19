@@ -6,7 +6,7 @@
 
 ## 1. 总体定位
 
-Seahorse Agent 当前是一个基于 Spring Boot 3.5、Java 17、React + Vite 的企业级 RAG 与 Agent 平台。后端采用 Clean Architecture / Ports and Adapters：内核只依赖领域对象和端口，外部模型、向量库、缓存、消息、存储、搜索和观测能力都由 adapter 模块接入。
+Seahorse Agent 当前是一个基于 Spring Boot 3.5、Java 21、React + Vite 的企业级 RAG 与 Agent 平台。后端采用 Clean Architecture / Ports and Adapters：内核只依赖领域对象和端口，外部模型、向量库、缓存、消息、存储、搜索和观测能力都由 adapter 模块接入。
 
 当前代码已经覆盖四条主闭环：
 

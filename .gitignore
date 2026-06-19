@@ -1,5 +1,6 @@
 target/
 temp
+.docker-build/
 .worktrees/
 .qoder/
 .m2/
