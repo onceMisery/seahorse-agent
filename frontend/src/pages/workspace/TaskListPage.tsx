@@ -75,6 +75,14 @@ export function TaskListPage() {
               <Plus className="h-3.5 w-3.5" />
               新建任务
             </Button>
+            <button
+              type="button"
+              className="text-xs underline"
+              style={{ color: "var(--theme-accent)" }}
+              onClick={() => navigate("/workspace/examples/github-mermaid")}
+            >
+              或试试「GitHub Mermaid 架构图」示例
+            </button>
           </div>
         ) : (
           <div className="space-y-2">

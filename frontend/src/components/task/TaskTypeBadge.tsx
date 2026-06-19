@@ -2,7 +2,9 @@ import type { Task } from "@/types/task";
 
 const TYPE_CONFIG: Record<Task["type"], { label: string; icon: string }> = {
   quick_chat: { label: "快速聊天", icon: "💬" },
-  agent_run: { label: "Agent 运行", icon: "🤖" }
+  agent_run: { label: "Agent 运行", icon: "🤖" },
+  document_qa: { label: "文档问答", icon: "📄" },
+  knowledge_qa: { label: "知识库问答", icon: "📚" }
 };
 
 interface TaskTypeBadgeProps {

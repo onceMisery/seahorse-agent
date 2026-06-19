@@ -1,20 +1,30 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft, X, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 
 import { TaskStatusBadge } from "@/components/task/TaskStatusBadge";
 import { TaskTypeBadge } from "@/components/task/TaskTypeBadge";
+import { TaskTimeline } from "@/components/task/TaskTimeline";
+import { TaskArtifacts } from "@/components/task/TaskArtifacts";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { useTaskStore } from "@/stores/taskStore";
+import { listTaskArtifacts, subscribeTaskEvents } from "@/services/taskService";
+import type { TaskArtifact, TaskEvent } from "@/types/task";
 
 export function TaskRunPage() {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
   const { activeTask, isLoading, loadTask, cancelTask } = useTaskStore();
-  const pollingRef = React.useRef<ReturnType<typeof setInterval>>();
+
+  const [events, setEvents] = React.useState<TaskEvent[]>([]);
+  const [artifacts, setArtifacts] = React.useState<TaskArtifact[]>([]);
+  const [connecting, setConnecting] = React.useState(false);
+  const [reconnecting, setReconnecting] = React.useState(false);
+  const subRef = React.useRef<{ close: () => void } | null>(null);
+  const seqRef = React.useRef<Set<number>>(new Set());
 
   // Load task on mount
   React.useEffect(() => {
@@ -23,26 +33,70 @@ export function TaskRunPage() {
     }
   }, [taskId, loadTask]);
 
-  // Poll for status updates while running/pending
-  React.useEffect(() => {
-    if (!activeTask || activeTask.status === "pending" || activeTask.status === "running") {
-      pollingRef.current = setInterval(() => {
-        if (taskId) loadTask(taskId);
-      }, 3000);
-    }
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, [activeTask?.status, taskId, loadTask]);
-
-  // Navigate to chat when quick_chat task has a conversation
-  React.useEffect(() => {
-    if (activeTask?.type === "quick_chat" && activeTask.conversationId) {
-      navigate(`/chat/${activeTask.conversationId}`, { replace: true });
-    }
-  }, [activeTask?.type, activeTask?.conversationId, navigate]);
-
   const task = activeTask;
+  const isAgentRun = task?.type === "agent_run";
+
+  // Conversational tasks → redirect to chat
+  React.useEffect(() => {
+    if (task && task.type !== "agent_run" && task.conversationId) {
+      navigate(`/chat/${task.conversationId}`, { replace: true });
+    }
+  }, [task?.type, task?.conversationId, navigate]);
+
+  const loadArtifacts = React.useCallback(() => {
+    if (!taskId) return;
+    listTaskArtifacts(taskId)
+      .then(setArtifacts)
+      .catch(() => null);
+  }, [taskId]);
+
+  // Subscribe to SSE events for agent_run tasks (with auto-reconnect)
+  React.useEffect(() => {
+    if (!taskId || !isAgentRun) return;
+
+    let disposed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const connect = () => {
+      setConnecting(true);
+      subRef.current = subscribeTaskEvents(taskId, {
+        onEvent: (ev) => {
+          if (seqRef.current.has(ev.seq)) return;
+          seqRef.current.add(ev.seq);
+          setEvents((prev) => [...prev, ev].sort((a, b) => a.seq - b.seq));
+          if (ev.type === "artifact.created" || ev.type === "task.completed") {
+            loadArtifacts();
+          }
+          if (ev.type === "task.completed" || ev.type === "task.failed") {
+            setConnecting(false);
+            loadTask(taskId);
+          }
+        },
+        onError: () => {
+          if (disposed) return;
+          // auto-reconnect after 3s
+          setReconnecting(true);
+          reconnectTimer = setTimeout(() => {
+            setReconnecting(false);
+            connect();
+          }, 3000);
+        },
+        onDone: () => {
+          setConnecting(false);
+        }
+      });
+    };
+
+    connect();
+    loadArtifacts();
+
+    return () => {
+      disposed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      subRef.current?.close();
+    };
+  }, [taskId, isAgentRun, loadArtifacts, loadTask]);
+
   const canCancel = task && (task.status === "pending" || task.status === "running");
 
   return (
@@ -59,15 +113,18 @@ export function TaskRunPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex-1 min-w-0">
-            <h1
-              className="truncate text-lg font-semibold"
-              style={{ color: "var(--theme-text-primary)" }}
-            >
+            <h1 className="truncate text-lg font-semibold" style={{ color: "var(--theme-text-primary)" }}>
               {task?.title || task?.question || "任务详情"}
             </h1>
             <div className="mt-1 flex items-center gap-2">
               {task && <TaskTypeBadge type={task.type} />}
               {task && <TaskStatusBadge status={task.status} />}
+              {reconnecting && (
+                <span className="flex items-center gap-1 text-xs" style={{ color: "var(--theme-text-muted)" }}>
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  正在恢复连接
+                </span>
+              )}
             </div>
           </div>
           {canCancel && (
@@ -84,13 +141,9 @@ export function TaskRunPage() {
           )}
         </div>
 
-        {/* Task Content */}
         {isLoading && !task ? (
           <div className="flex flex-1 items-center justify-center">
-            <div
-              className="text-sm"
-              style={{ color: "var(--theme-text-muted)" }}
-            >
+            <div className="text-sm" style={{ color: "var(--theme-text-muted)" }}>
               加载中...
             </div>
           </div>
@@ -99,10 +152,7 @@ export function TaskRunPage() {
             {/* Meta info */}
             <div
               className="rounded-xl p-4"
-              style={{
-                backgroundColor: "var(--theme-glass-bg)",
-                border: "1px solid var(--theme-glass-border)"
-              }}
+              style={{ backgroundColor: "var(--theme-glass-bg)", border: "1px solid var(--theme-glass-border)" }}
             >
               <dl className="grid grid-cols-2 gap-3 text-sm">
                 <div>
@@ -117,22 +167,6 @@ export function TaskRunPage() {
                     {format(new Date(task.createdAt), "yyyy-MM-dd HH:mm:ss", { locale: zhCN })}
                   </dd>
                 </div>
-                {task.startedAt && (
-                  <div>
-                    <dt style={{ color: "var(--theme-text-muted)" }}>开始时间</dt>
-                    <dd className="mt-0.5 text-xs" style={{ color: "var(--theme-text-secondary)" }}>
-                      {format(new Date(task.startedAt), "yyyy-MM-dd HH:mm:ss", { locale: zhCN })}
-                    </dd>
-                  </div>
-                )}
-                {task.finishedAt && (
-                  <div>
-                    <dt style={{ color: "var(--theme-text-muted)" }}>结束时间</dt>
-                    <dd className="mt-0.5 text-xs" style={{ color: "var(--theme-text-secondary)" }}>
-                      {format(new Date(task.finishedAt), "yyyy-MM-dd HH:mm:ss", { locale: zhCN })}
-                    </dd>
-                  </div>
-                )}
                 {task.agentId && (
                   <div>
                     <dt style={{ color: "var(--theme-text-muted)" }}>Agent</dt>
@@ -156,10 +190,7 @@ export function TaskRunPage() {
             {task.question && (
               <div
                 className="rounded-xl p-4"
-                style={{
-                  backgroundColor: "var(--theme-glass-bg)",
-                  border: "1px solid var(--theme-glass-border)"
-                }}
+                style={{ backgroundColor: "var(--theme-glass-bg)", border: "1px solid var(--theme-glass-border)" }}
               >
                 <h3 className="mb-2 text-xs font-semibold uppercase" style={{ color: "var(--theme-text-muted)" }}>
                   输入
@@ -170,43 +201,26 @@ export function TaskRunPage() {
               </div>
             )}
 
-            {/* Agent run info */}
-            {task.type === "agent_run" && task.runId && (
+            {/* Timeline (agent_run) */}
+            {isAgentRun && (
               <div
                 className="rounded-xl p-4"
-                style={{
-                  backgroundColor: "var(--theme-glass-bg)",
-                  border: "1px solid var(--theme-glass-border)"
-                }}
+                style={{ backgroundColor: "var(--theme-glass-bg)", border: "1px solid var(--theme-glass-border)" }}
               >
-                <h3 className="mb-2 text-xs font-semibold uppercase" style={{ color: "var(--theme-text-muted)" }}>
-                  Agent 运行
+                <h3 className="mb-3 text-xs font-semibold uppercase" style={{ color: "var(--theme-text-muted)" }}>
+                  运行过程
                 </h3>
-                <p className="text-sm" style={{ color: "var(--theme-text-secondary)" }}>
-                  Agent 运行已启动，Run ID: <code className="font-mono text-xs">{task.runId}</code>
-                </p>
-                <p className="mt-2 text-xs" style={{ color: "var(--theme-text-muted)" }}>
-                  任务完成后将在此页面显示运行结果和产物。
-                </p>
+                <TaskTimeline events={events} connecting={connecting} />
               </div>
             )}
 
-            {/* Status: pending with no conversation yet */}
-            {task.type === "quick_chat" && !task.conversationId && (
-              <div
-                className="flex items-center gap-3 rounded-xl p-4"
-                style={{
-                  backgroundColor: "var(--theme-accent-alpha-15, rgba(168,85,247,0.1))",
-                  border: "1px solid var(--theme-glass-border)"
-                }}
-              >
-                <div
-                  className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"
-                  style={{ borderColor: "var(--theme-accent)", borderTopColor: "transparent" }}
-                />
-                <span className="text-sm" style={{ color: "var(--theme-text-secondary)" }}>
-                  正在准备聊天会话...
-                </span>
+            {/* Artifacts */}
+            {artifacts.length > 0 && (
+              <div>
+                <h3 className="mb-3 text-xs font-semibold uppercase" style={{ color: "var(--theme-text-muted)" }}>
+                  产物
+                </h3>
+                <TaskArtifacts artifacts={artifacts} />
               </div>
             )}
           </div>

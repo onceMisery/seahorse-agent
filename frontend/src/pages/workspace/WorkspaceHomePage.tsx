@@ -13,7 +13,9 @@ import {
   AlertTriangle,
   XCircle,
   Sparkles,
-  ListTodo
+  ListTodo,
+  GitBranch,
+  Send
 } from "lucide-react";
 
 import { MainLayout } from "@/components/layout/MainLayout";
@@ -26,12 +28,6 @@ import { useReadinessStore } from "@/stores/readinessStore";
 import { useTaskStore } from "@/stores/taskStore";
 
 const QUICK_TASKS = [
-  {
-    icon: MessageSquarePlus,
-    title: "快速聊天",
-    description: "开始一段新的对话",
-    gradient: "linear-gradient(135deg, #6366f1, #8b5cf6)"
-  },
   {
     icon: FileText,
     title: "文档问答",
@@ -49,6 +45,12 @@ const QUICK_TASKS = [
     title: "运行 Agent",
     description: "选择 Agent 执行任务",
     gradient: "linear-gradient(135deg, #10b981, #059669)"
+  },
+  {
+    icon: GitBranch,
+    title: "生成 Mermaid 架构图",
+    description: "GitHub 仓库生成架构图",
+    gradient: "linear-gradient(135deg, #8b5cf6, #6366f1)"
   }
 ];
 
@@ -91,30 +93,61 @@ export function WorkspaceHomePage() {
     return tasks.slice(0, 5);
   }, [tasks]);
 
+  const [taskInput, setTaskInput] = React.useState("");
+
+  const submitChatTask = async (question: string) => {
+    const trimmed = question.trim();
+    if (!trimmed) return;
+    try {
+      const task = await createTask({ type: "quick_chat", question: trimmed });
+      if (task.conversationId) {
+        navigate(`/chat/${task.conversationId}`, {
+          state: { autoSend: trimmed, autoSendId: task.taskId }
+        });
+        return;
+      }
+      navigate(`/workspace/tasks/${task.taskId}`);
+    } catch {
+      startNewSessionDraft();
+      navigate("/chat");
+    }
+  };
+
+  const handleSubmitInput = (e: React.FormEvent) => {
+    e.preventDefault();
+    void submitChatTask(taskInput);
+    setTaskInput("");
+  };
+
   const handleQuickTask = async (index: number) => {
     switch (index) {
-      case 0: {
-        // 快速聊天 → create task → navigate to TaskRunPage → auto-redirect to chat
+      case 0:
+        // 文档问答 → 创建 document_qa 任务（统一 taskId），随后进入会话上传文档
         try {
-          const task = await createTask({ type: "quick_chat", question: "" });
-          navigate(`/workspace/tasks/${task.taskId}`);
+          const task = await createTask({ type: "document_qa", question: "" });
+          navigate(`/workspace/tasks/${task.taskId}`, { state: { intent: "document_qa" } });
         } catch {
-          // fallback: direct chat
           startNewSessionDraft();
           navigate("/chat");
         }
         break;
-      }
       case 1:
+        // 知识库问答 → 创建 knowledge_qa 任务
+        try {
+          const task = await createTask({ type: "knowledge_qa", question: "" });
+          navigate(`/workspace/tasks/${task.taskId}`, { state: { intent: "knowledge_qa" } });
+        } catch {
+          startNewSessionDraft();
+          navigate("/chat");
+        }
+        break;
       case 2:
-        // 文档问答 / 知识库问答 → go to chat
-        startNewSessionDraft();
-        navigate("/chat");
+        // 运行 Agent → Builder agent 列表选择
+        navigate("/admin/agents");
         break;
       case 3:
-        // 运行 Agent → TODO: agent selection dialog
-        startNewSessionDraft();
-        navigate("/chat");
+        // 生成 Mermaid 架构图 → 示例任务页
+        navigate("/workspace/examples/github-mermaid");
         break;
       default:
         startNewSessionDraft();
@@ -159,6 +192,36 @@ export function WorkspaceHomePage() {
             </div>
             <ReadinessStatusBar />
           </div>
+
+          {/* Top Task Input Box */}
+          <form onSubmit={handleSubmitInput}>
+            <div
+              className="flex items-center gap-2 rounded-2xl px-4 py-3"
+              style={{
+                backgroundColor: "var(--theme-glass-bg)",
+                border: "1px solid var(--theme-glass-border)"
+              }}
+            >
+              <Sparkles className="h-5 w-5 shrink-0" style={{ color: "var(--theme-accent)" }} />
+              <input
+                type="text"
+                value={taskInput}
+                onChange={(e) => setTaskInput(e.target.value)}
+                placeholder="输入你想完成的事，回车开始任务…"
+                className="flex-1 bg-transparent text-sm outline-none"
+                style={{ color: "var(--theme-text-primary)" }}
+              />
+              <button
+                type="submit"
+                disabled={!taskInput.trim()}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-opacity disabled:opacity-40"
+                style={{ backgroundColor: "var(--theme-accent)", color: "#fff" }}
+                aria-label="开始任务"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            </div>
+          </form>
 
           {/* Quick Task Cards */}
           <section>

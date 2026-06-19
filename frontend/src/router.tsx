@@ -11,6 +11,7 @@ import { MemoryCenterPage } from "@/pages/MemoryCenterPage";
 import { WorkspaceHomePage } from "@/pages/workspace/WorkspaceHomePage";
 import { TaskListPage } from "@/pages/workspace/TaskListPage";
 import { TaskRunPage } from "@/pages/workspace/TaskRunPage";
+import { GithubMermaidExamplePage } from "@/pages/workspace/GithubMermaidExamplePage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { DashboardPage } from "@/pages/admin/dashboard/DashboardPage";
@@ -214,6 +215,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireAuth>
             <TaskRunPage />
+          </RequireAuth>
+        )
+      },
+      {
+        path: "/workspace/examples/github-mermaid",
+        element: (
+          <RequireAuth>
+            <GithubMermaidExamplePage />
           </RequireAuth>
         )
       },
