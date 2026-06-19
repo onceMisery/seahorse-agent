@@ -454,6 +454,25 @@ describe("chatStore snapshot hydration", () => {
     expect(getAgentRunCostSummary).not.toHaveBeenCalled();
   });
 
+  it("does not overwrite live auto-sent messages when session history resolves later", async () => {
+    let resolveMessages: (messages: unknown[]) => void = () => undefined;
+    vi.mocked(listMessages).mockReturnValue(new Promise((resolve) => {
+      resolveMessages = resolve;
+    }) as ReturnType<typeof listMessages>);
+
+    const load = useChatStore.getState().selectSession("conversation-history");
+    await useChatStore.getState().sendMessage("Workspace task prompt", {
+      conversationIdOverride: "conversation-history"
+    });
+
+    resolveMessages([]);
+    await load;
+
+    expect(useChatStore.getState().messages.some((message) =>
+      message.role === "user" && message.content === "Workspace task prompt"
+    )).toBe(true);
+  });
+
   it("does not apply a stale session response after the active session changes", async () => {
     let resolveMessages: (messages: unknown[]) => void = () => undefined;
     vi.mocked(listMessages).mockReturnValue(new Promise((resolve) => {

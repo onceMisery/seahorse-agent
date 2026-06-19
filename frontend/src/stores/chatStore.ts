@@ -55,6 +55,26 @@ function isAbortError(error: unknown) {
   return candidate.name === "AbortError" || /aborted/i.test(candidate.message || "");
 }
 
+function messagesCreatedSince(messages: Message[], sinceMs: number) {
+  return messages.filter((message) => {
+    if (!message.createdAt) return false;
+    const createdAt = Date.parse(message.createdAt);
+    return Number.isFinite(createdAt) && createdAt >= sinceMs;
+  });
+}
+
+function appendMissingMessages(messages: Message[], additions: Message[]) {
+  if (additions.length === 0) return messages;
+  const seen = new Set(messages.map((message) => message.id));
+  const merged = [...messages];
+  for (const message of additions) {
+    if (seen.has(message.id)) continue;
+    seen.add(message.id);
+    merged.push(message);
+  }
+  return merged;
+}
+
 export const useChatStore = create<ChatState>()(
   immer((set, get) => ({
     sessions: [],
@@ -194,6 +214,7 @@ export const useChatStore = create<ChatState>()(
         if (state.isStreaming) {
           get().cancelGeneration();
         }
+        const loadStartedAt = Date.now();
         try {
           set((s) => {
             s.currentSessionId = sessionId;
@@ -214,7 +235,7 @@ export const useChatStore = create<ChatState>()(
           }));
           if (get().currentSessionId !== sessionId) return;
           set((s) => {
-            s.messages = nextMessages;
+            s.messages = appendMissingMessages(nextMessages, messagesCreatedSince(s.messages, loadStartedAt));
             s.isLoading = false;
           });
           await hydrateSelectedSessionAgentRuns(sessionId, nextMessages, set);
