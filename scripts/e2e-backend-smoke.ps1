@@ -177,6 +177,57 @@ function Assert-NonEmptyDataArray {
     }
 }
 
+function Assert-ProfileFactsContainValue {
+    param(
+        [object]$Response,
+        [string]$ExpectedValue
+    )
+
+    Assert-Code "Profile facts" $Response
+    if ([string]::IsNullOrWhiteSpace($ExpectedValue)) {
+        throw "Expected profile fact value must not be blank"
+    }
+    if ($null -eq $Response.data) {
+        throw "Profile facts response missing data"
+    }
+    $match = @($Response.data | Where-Object {
+            [string]$_.valueText -eq $ExpectedValue
+        })[0]
+    if ($null -eq $match) {
+        $actualValues = @($Response.data | ForEach-Object { [string]$_.valueText }) -join ", "
+        throw "Profile facts did not include valueText=$ExpectedValue; actual=[$actualValues]"
+    }
+    return $match
+}
+
+function Find-ProfileFactForValue {
+    param(
+        [string]$UserId,
+        [string]$TenantId,
+        [string]$ExpectedValue,
+        [hashtable]$Headers = @{},
+        [int]$Attempts = 75,
+        [int]$DelaySeconds = 1
+    )
+
+    $encodedUserId = [System.Uri]::EscapeDataString($UserId)
+    $encodedTenantId = [System.Uri]::EscapeDataString($TenantId)
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        $response = Invoke-Json -Method GET -Path "/memories/profile-facts?userId=$encodedUserId&tenantId=$encodedTenantId&limit=20" -Headers $Headers
+        try {
+            [void](Assert-ProfileFactsContainValue -Response $response -ExpectedValue $ExpectedValue)
+            return $response
+        } catch {
+            if ($attempt -ge $Attempts) {
+                throw
+            }
+        }
+        Start-Sleep -Seconds $DelaySeconds
+    }
+
+    throw "Profile facts did not include valueText=$ExpectedValue after $Attempts attempts"
+}
+
 function Wait-ForNonEmptyPageRecords {
     param(
         [string]$Name,
@@ -433,6 +484,7 @@ try {
     $strategy = Invoke-Json -Method GET -Path "/knowledge-base/chunk-strategies" -Headers $authHeaders
     Assert-Code "Knowledge chunk strategies" $strategy
     $suffix = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $memoryFactValue = "smoke-profile-$suffix"
     $kb = Invoke-Json -Method POST -Path "/knowledge-base" -Headers $authHeaders -Body @{
         name = "e2e-kb-$suffix"
         embeddingModel = "default"
@@ -487,14 +539,20 @@ The expected embedding dimension is 768.
     Assert-RetrievalTraceNodes $traceNodes
     Add-Result "RAG trace API smoke" "PASS" "traceId=$traceId conversationId=$conversationId"
 
+    $memoryConversationId = "smoke-memory-$suffix"
+    $memoryQuestion = [System.Uri]::EscapeDataString("I prefer $memoryFactValue")
+    $memoryChat = Invoke-Text -Method GET -Path "/rag/v3/chat?question=$memoryQuestion&conversationId=$memoryConversationId&userId=$userId" -Headers $authHeaders
+    if ([string]::IsNullOrWhiteSpace($memoryChat)) {
+        throw "Memory SSE chat returned empty stream"
+    }
+
     $maintenance = Invoke-Json -Method POST -Path "/memories/maintenance/run?reason=smoke-check&compaction=true&alias=true&gc=true" -Headers $authHeaders
     Assert-Code "Memory maintenance run" $maintenance
     $readiness = Invoke-Json -Method GET -Path "/memories/readiness?userId=$userId&tenantId=default" -Headers $authHeaders
     Assert-Code "Memory readiness" $readiness
-    $profileFacts = Invoke-Json -Method GET -Path "/memories/profile-facts?userId=$userId&tenantId=default&limit=20" -Headers $authHeaders
-    Assert-Code "Profile facts" $profileFacts
-    Assert-NonEmptyDataArray "Profile facts" $profileFacts
-    Add-Result "Memory/profile smoke" "PASS" "facts=$(@($profileFacts.data).Count)"
+    $profileFacts = Find-ProfileFactForValue -UserId $userId -TenantId "default" -ExpectedValue $memoryFactValue -Headers $authHeaders
+    [void](Assert-ProfileFactsContainValue -Response $profileFacts -ExpectedValue $memoryFactValue)
+    Add-Result "Memory/profile smoke" "PASS" "valueText=$memoryFactValue facts=$(@($profileFacts.data).Count)"
 
     $agentList = Invoke-Json -Method GET -Path "/api/agents?current=1&size=10" -Headers $authHeaders
     Assert-Code "Agent list" $agentList

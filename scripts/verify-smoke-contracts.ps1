@@ -33,9 +33,13 @@ $requiredSnippets = @(
     'Assert-RagTraceRunMatchesConversation',
     '"/rag/traces/runs/$traceId/nodes"',
     '"/memories/readiness?userId=$userId&tenantId=default"',
-    '"/memories/profile-facts?userId=$userId&tenantId=default&limit=20"',
+    '"/memories/profile-facts?userId=$encodedUserId&tenantId=$encodedTenantId&limit=20"',
     '"/memories/maintenance/run?reason=smoke-check&compaction=true&alias=true&gc=true"',
-    'Assert-NonEmptyDataArray "Profile facts" $profileFacts',
+    '$memoryFactValue = "smoke-profile-$suffix"',
+    'Find-ProfileFactForValue',
+    'Assert-ProfileFactsContainValue',
+    '[int]$Attempts = 75',
+    'Assert-ProfileFactsContainValue -Response $profileFacts -ExpectedValue $memoryFactValue',
     'Assert-RetrievalTraceNodes $traceNodes',
     '[ValidateSet("full-compose", "none")]',
     'Assert-FullComposeRuntime -ContainerName $DockerContainerName',
@@ -62,7 +66,8 @@ $forbiddenSnippets = @(
     '"/knowledge-base/$kbId/documents"',
     '"/knowledge-base/$kbId/chunks"',
     '-X POST "$BaseUrl/rag/v3/chat"',
-    '"/api/readiness/summary"'
+    '"/api/readiness/summary"',
+    'Assert-NonEmptyDataArray "Profile facts" $profileFacts'
 )
 
 $missing = @($requiredSnippets | Where-Object { -not $content.Contains($_) })
