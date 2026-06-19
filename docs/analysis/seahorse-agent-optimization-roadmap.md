@@ -117,13 +117,13 @@ flowchart TB
 
 ### 4.2 后端落地点
 
-建议新增或收敛到统一配置对象：
+建议新增或收敛到统一配置对象（已实现）：
 
-- `seahorse.product.mode=demo|rag|enterprise`
-- `seahorse.product.capabilities.*`
-- `seahorse.product.degradation.*`
+- `seahorse-agent.product-mode=demo|rag|enterprise`（环境变量 `SEAHORSE_AGENT_PRODUCT_MODE`）
+- `seahorse-agent.adapters.*`（各 adapter 配置项）
+- `seahorse-agent.advanced.*`（各高级功能开关）
 
-后端启动时将 product mode 转换为 capability map，供 Web 层和前端读取。
+后端启动时将 product mode 转换为 capability map，供 Web 层和前端读取。实现类为 `AdvancedFeatureGate`，通过 `ProductMode.fromProperty()` 解析配置值。
 
 可复用现有能力：
 
@@ -163,19 +163,25 @@ Doctor 应分为三层：
 
 ### 5.2 API 设计
 
-建议新增：
+> **路径约定说明**：前端通过 nginx 反向代理 `/api` 访问后端，后端 Controller 实际映射路径不带 `/api` 前缀。例如后端 `ReadinessController` 映射 `/readiness/*`，前端通过 `/api/readiness/*` 调用。下文统一使用前端调用路径（含 `/api` 前缀）。
+
+已实现（后端 `ReadinessController` 映射 `/readiness`）：
 
 - `GET /api/readiness/summary`
 - `GET /api/readiness/checks`
 - `POST /api/readiness/checks/{checkId}/run`
 - `GET /api/readiness/product-mode`
 
-返回结构建议：
+返回结构（已实现）：
 
 ```json
 {
   "mode": "rag",
   "overall": "degraded",
+  "overallLabel": "部分能力降级",
+  "passedCount": 11,
+  "failedCount": 1,
+  "totalCount": 13,
   "checks": [
     {
       "id": "embedding.dimension",
@@ -185,17 +191,20 @@ Doctor 应分为三层：
       "message": "当前 embedding 模型输出维度与向量库集合维度不一致。",
       "impact": "知识库检索不可用，文档问答会降级或失败。",
       "suggestion": "确认模型配置中的 embedding 维度，并重建向量集合或切换到匹配模型。",
-      "docs": "/docs/deployment/local-embedding-model-guide.md"
+      "docsUrl": "/docs/deployment/local-embedding-model-guide.md"
     }
   ]
 }
 ```
+
+> 注：`impact`、`suggestion`、`docsUrl` 为条件字段，仅在检查失败或降级时返回；通过（`passed`）和跳过（`skipped`）状态的检查项不包含这三个字段。`severity` 枚举值为 `ERROR`/`WARN`/`INFO`，JSON 输出为小写。
 
 ### 5.3 检查项清单
 
 | Check ID | 检查内容 | Demo | RAG | Enterprise |
 | --- | --- | --- | --- | --- |
 | `app.boot` | 应用启动与 profile | 必需 | 必需 | 必需 |
+| `db.connection` | 数据库连接可用性 | 必需 | 必需 | 必需 |
 | `db.migration` | 数据库迁移版本 | 必需 | 必需 | 必需 |
 | `auth.default-admin` | 默认管理员/登录状态 | 必需 | 必需 | 必需 |
 | `model.chat` | 聊天模型可用性 | 必需 | 必需 | 必需 |
@@ -224,7 +233,7 @@ Doctor 应分为三层：
 - Windows：`scripts/seahorse-doctor.ps1`
 - Unix：`scripts/seahorse-doctor.sh`
 
-脚本调用 `/api/readiness/checks`，输出表格和修复建议。后续再升级为独立 CLI。
+脚本调用 `/readiness/checks`（后端直接路径），输出表格和修复建议。后续再升级为独立 CLI。
 
 ### 5.6 验收标准
 
@@ -306,15 +315,21 @@ Workspace 首页建议只包含四块：
 
 ### 6.4 前端改造范围
 
-建议新增：
+已新增（实现状态）：
 
-- `frontend/src/pages/workspace/WorkspaceHomePage.tsx`
-- `frontend/src/pages/workspace/TaskRunPage.tsx`
-- `frontend/src/pages/workspace/ArtifactListPage.tsx`
-- `frontend/src/pages/workspace/UploadCenterPage.tsx`
-- `frontend/src/pages/workspace/WorkspaceLayout.tsx`
-- `frontend/src/services/taskService.ts`
-- `frontend/src/services/readinessService.ts`
+- `frontend/src/pages/workspace/WorkspaceHomePage.tsx` — 工作台首页
+- `frontend/src/pages/workspace/TaskRunPage.tsx` — 任务运行详情
+- `frontend/src/pages/workspace/TaskListPage.tsx` — 任务列表
+- `frontend/src/pages/workspace/QuickTaskCard.tsx` — 快捷任务卡片
+- `frontend/src/pages/workspace/GithubMermaidExamplePage.tsx` — Mermaid 示例页
+- `frontend/src/services/taskService.ts` — 任务 API 封装
+- `frontend/src/services/readinessService.ts` — Readiness API 封装
+- `frontend/src/stores/taskStore.ts` — 任务状态管理
+- `frontend/src/stores/readinessStore.ts` — Readiness 状态管理
+- `frontend/src/components/readiness/ReadinessStatusBar.tsx` — Readiness 状态栏
+- `frontend/src/components/task/TaskCard.tsx` — 任务卡片组件
+
+> 注：工作台页面复用 `MainLayout` 作为通用布局组件，未引入独立的 `WorkspaceLayout`。产物展示内嵌在 `TaskRunPage` 中，未拆分为独立的 `ArtifactListPage`。
 
 建议调整：
 
@@ -351,32 +366,32 @@ Facade 不替代现有服务，只做编排：
 
 ### 7.2 建议新增后端模块
 
-在 kernel application 层新增任务编排服务：
+在 kernel application 层新增任务编排服务（已实现为统一服务）：
 
-- `TaskOrchestrationService`
-- `TaskTemplateService` 可复用现有 task template 能力。
-- `TaskRunService`
-- `TaskEventPublisher`
-- `TaskArtifactService`
+- `TaskOrchestrationService`（实现 `TaskInboundPort`，统一承担任务创建、事件发布、产物汇总职责）
 
-在 web adapter 层新增：
+> 注：实际实现采用了更简洁的设计——将所有任务编排逻辑统一由 `TaskOrchestrationService` 承载，而非拆分为多个独立服务。该服务内部处理任务类型路由（`quick_chat`/`document_qa`/`knowledge_qa`/`agent_run`）、事件流管理、产物聚合等。
 
-- `SeahorseTaskController`
-- `TaskCreateRequest`
-- `TaskRunResponse`
+在 web adapter 层新增（已实现）：
+
+- `SeahorseTaskController`（映射 `/tasks`）
+- `CreateTaskRequest`
+- `TaskResponse`
 - `TaskEventResponse`
 - `TaskArtifactResponse`
 
-### 7.3 API 草案
+### 7.3 API 设计（已实现）
+
+> **路径约定**：后端 `SeahorseTaskController` 映射 `/tasks`，前端通过 nginx `/api` 代理调用，因此前端调用路径为 `/api/tasks`。
 
 #### 创建任务
 
-`POST /api/tasks`
+`POST /api/tasks`（后端 `/tasks`）
 
 ```json
 {
   "type": "document_qa",
-  "message": "总结这份文档，并给出 Mermaid 架构图",
+  "question": "总结这份文档，并给出 Mermaid 架构图",
   "agentId": "github-mermaid-agent",
   "knowledgeBaseId": "kb-001",
   "attachmentIds": ["att-001"],
@@ -388,25 +403,30 @@ Facade 不替代现有服务，只做编排：
 
 ```json
 {
-  "taskId": "task-001",
-  "runId": "run-001",
-  "status": "queued",
-  "eventStreamUrl": "/api/tasks/task-001/events",
-  "artifactUrl": "/api/tasks/task-001/artifacts"
+  "code": "0",
+  "data": {
+    "taskId": "task_001",
+    "type": "document_qa",
+    "status": "running",
+    "conversationId": "conv-001",
+    "question": "总结这份文档，并给出 Mermaid 架构图",
+    "createdAt": "2026-06-19T12:00:00Z",
+    "startedAt": "2026-06-19T12:00:00Z"
+  }
 }
 ```
 
 #### 获取任务详情
 
-`GET /api/tasks/{taskId}`
+`GET /api/tasks/{taskId}`（后端 `GET /tasks/{taskId}`）
 
 #### 取消任务
 
-`POST /api/tasks/{taskId}/cancel`
+`POST /api/tasks/{taskId}/cancel`（后端 `POST /tasks/{taskId}/cancel`）
 
 #### 任务事件流
 
-`GET /api/tasks/{taskId}/events`
+`GET /api/tasks/{taskId}/events`（后端 `GET /tasks/{taskId}/events`，SSE 协议）
 
 事件类型建议：
 
@@ -427,7 +447,7 @@ Facade 不替代现有服务，只做编排：
 
 #### 任务产物
 
-`GET /api/tasks/{taskId}/artifacts`
+`GET /api/tasks/{taskId}/artifacts`（后端 `GET /tasks/{taskId}/artifacts`）
 
 产物类型建议：
 
@@ -656,10 +676,10 @@ TaskRunPage 中展示：
 
 任务：
 
-- 定义 product mode 和 capability map。
-- 扩展 `/api/features` 或新增 `/api/readiness/summary`。
-- 实现基础 Doctor checks。
-- 前端增加简版健康状态条。
+- 定义 product mode 和 capability map（已实现：`AdvancedFeatureGate` + `ProductMode` 枚举）。
+- 扩展 `/api/features`（已实现：`SeahorseFeatureController`）并新增 `/readiness/summary`（已实现：`ReadinessController`）。
+- 实现基础 Doctor checks（已实现：`KernelReadinessService` 13 项检查）。
+- 前端增加简版健康状态条（已实现：`ReadinessStatusBar`）。
 - 文档补充 Demo/RAG/Enterprise 模式说明。
 
 验收：
@@ -673,8 +693,8 @@ TaskRunPage 中展示：
 
 任务：
 
-- 新增 WorkspaceLayout 和 WorkspaceHomePage。
-- 调整登录后默认路由。
+- 新增 WorkspaceHomePage（复用 MainLayout 作为布局组件）。
+- 调整登录后默认路由（已实现：`LoginPage` 登录后导航至 `/workspace`）。
 - 增加快捷任务入口。
 - 增加最近任务区域。
 - Command Palette 增加 Workspace 入口。
@@ -690,11 +710,11 @@ TaskRunPage 中展示：
 
 任务：
 
-- 新增 TaskController。
-- 新增 TaskOrchestrationService。
-- 统一 taskId/runId/status。
-- 新增任务事件流。
-- 前端 TaskRunPage 订阅事件。
+- 新增 SeahorseTaskController（已实现，映射 `/tasks`）。
+- 新增 TaskOrchestrationService（已实现，实现 `TaskInboundPort`）。
+- 统一 taskId/status（已实现，taskId 格式 `task_*`）。
+- 新增任务事件流（已实现，SSE 协议，支持历史回放 + 实时推送）。
+- 前端 TaskRunPage 订阅事件（已实现，使用 `fetch + ReadableStream`）。
 
 验收：
 
@@ -779,13 +799,13 @@ TaskRunPage 中展示：
 
 如果希望最快落地，建议 MVP 只做以下内容：
 
-1. `demo/rag/enterprise` product mode 字段和 capability map。
-2. `/api/readiness/summary`。
-3. `/workspace` 首页。
-4. `POST /api/tasks` 支持 `quick_chat` 和 `agent_run`。
-5. `GET /api/tasks/{taskId}/events`。
-6. TaskRunPage 展示状态、阶段和 Mermaid/Markdown artifacts。
-7. GitHub Mermaid 架构图示例任务。
+1. `demo/rag/enterprise` product mode 字段和 capability map（已实现）。
+2. `/readiness/summary`（已实现，前端通过 `/api/readiness/summary` 调用）。
+3. `/workspace` 首页（已实现）。
+4. `POST /tasks` 支持 `quick_chat` 和 `agent_run`（已实现，前端通过 `/api/tasks` 调用）。
+5. `GET /tasks/{taskId}/events`（已实现，SSE 事件流）。
+6. TaskRunPage 展示状态、阶段和 Mermaid/Markdown artifacts（已实现）。
+7. GitHub Mermaid 架构图示例任务（已实现）。
 
 这条 MVP 不需要一次性重构所有后台页面，也不需要重写 RAG、Agent、Skill、Tool 的内部实现。它的价值在于先把 Seahorse Agent 的“第一口体验”做顺。
 
