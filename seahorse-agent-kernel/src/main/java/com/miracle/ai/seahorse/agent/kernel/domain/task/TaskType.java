@@ -13,5 +13,16 @@ public enum TaskType {
     QUICK_CHAT,
 
     /** Agent 运行 — 走 Agent Loop */
-    AGENT_RUN
+    AGENT_RUN,
+
+    /** 文档问答 — 上传附件 + 解析 + RAG 检索 + 引用 */
+    DOCUMENT_QA,
+
+    /** 知识库问答 — 基于已有知识库的 RAG 检索 */
+    KNOWLEDGE_QA;
+
+    /** 是否走对话/RAG 管道（前端订阅 chat SSE），而非独立 Agent Loop。 */
+    public boolean isConversational() {
+        return this == QUICK_CHAT || this == DOCUMENT_QA || this == KNOWLEDGE_QA;
+    }
 }

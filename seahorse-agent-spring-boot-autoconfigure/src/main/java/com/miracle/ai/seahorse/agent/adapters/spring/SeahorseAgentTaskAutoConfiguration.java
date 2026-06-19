@@ -19,11 +19,14 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcTaskRepository;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.mapper.TaskMapper;
+import com.miracle.ai.seahorse.agent.kernel.application.task.InMemoryTaskEventBus;
 import com.miracle.ai.seahorse.agent.kernel.application.task.TaskOrchestrationService;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.task.TaskInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.task.TaskEventPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.task.TaskRepositoryPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -35,7 +38,8 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Task Facade 自动配置。
  * <p>
- * 注册 JdbcTaskRepository（仓储适配器）和 TaskOrchestrationService（编排服务）。
+ * 注册 JdbcTaskRepository（仓储适配器）、InMemoryTaskEventBus（事件总线）
+ * 和 TaskOrchestrationService（编排服务）。
  * Controller 由 @RestController 组件扫描自动发现。
  */
 @Configuration(proxyBeanMethods = false)
@@ -55,18 +59,28 @@ public class SeahorseAgentTaskAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(TaskEventPort.class)
+    public TaskEventPort seahorseTaskEventBus() {
+        return new InMemoryTaskEventBus();
+    }
+
+    @Bean
     @ConditionalOnMissingBean(TaskInboundPort.class)
     public TaskInboundPort seahorseTaskOrchestrationService(
             TaskRepositoryPort taskRepository,
             ConversationManagementInboundPort conversationPort,
+            TaskEventPort eventPort,
             ObjectProvider<ChatInboundPort> chatPort,
-            ObjectProvider<AgentRunInboundPort> agentRunPort
+            ObjectProvider<AgentRunInboundPort> agentRunPort,
+            ObjectProvider<AgentArtifactQueryInboundPort> artifactQueryPort
     ) {
         return new TaskOrchestrationService(
                 taskRepository,
                 conversationPort,
                 chatPort.getIfAvailable(),
-                agentRunPort.getIfAvailable()
+                agentRunPort.getIfAvailable(),
+                artifactQueryPort.getIfAvailable(),
+                eventPort
         );
     }
 }

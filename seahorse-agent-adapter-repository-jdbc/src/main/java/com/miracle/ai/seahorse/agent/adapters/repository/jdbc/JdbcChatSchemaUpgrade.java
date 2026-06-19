@@ -40,6 +40,7 @@ public class JdbcChatSchemaUpgrade {
     public void upgrade() {
         ensureConversationAttachmentTable();
         ensureMemoryProfileTables();
+        ensureTaskTable();
         widenColumns("t_conversation", List.of("id", "conversation_id", "user_id"));
         widenColumns("t_conversation_summary", List.of("id", "conversation_id", "user_id", "last_message_id"));
         widenColumns("t_message", List.of("id", "conversation_id", "user_id"));
@@ -50,6 +51,32 @@ public class JdbcChatSchemaUpgrade {
         widenColumns("t_rag_trace_node", List.of("id", "trace_id", "node_id", "parent_node_id", "node_type"));
         widenColumns("t_short_term_memory", List.of("id", "user_id", "conversation_id"));
         ensureLayeredMemoryLifecycleColumns();
+    }
+
+    private void ensureTaskTable() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS sa_task (
+                    task_id         VARCHAR(64)  PRIMARY KEY,
+                    tenant_id       VARCHAR(64)  NOT NULL DEFAULT 'default',
+                    type            VARCHAR(32)  NOT NULL,
+                    status          VARCHAR(32)  NOT NULL DEFAULT 'PENDING',
+                    user_id         VARCHAR(64)  NOT NULL,
+                    conversation_id VARCHAR(64),
+                    run_id          VARCHAR(64),
+                    agent_id        VARCHAR(64),
+                    title           VARCHAR(512),
+                    question        TEXT,
+                    created_at      TIMESTAMP    NOT NULL DEFAULT NOW(),
+                    started_at      TIMESTAMP,
+                    finished_at     TIMESTAMP
+                )
+                """);
+        // 兼容旧 volume：表已存在但缺 tenant_id 时补列
+        addColumnIfMissing("sa_task", "tenant_id", "VARCHAR(64) NOT NULL DEFAULT 'default'");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_sa_task_user ON sa_task(user_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_sa_task_status ON sa_task(status)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_sa_task_conv ON sa_task(conversation_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_sa_task_tenant ON sa_task(tenant_id)");
     }
 
     private void ensureAgentSkillTables() {

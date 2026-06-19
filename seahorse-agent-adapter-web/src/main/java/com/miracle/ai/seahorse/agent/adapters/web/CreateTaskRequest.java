@@ -19,21 +19,29 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.task.TaskType;
 
+import java.util.List;
+
 /**
  * 创建任务请求 DTO。
  *
- * @param type           任务类型: "quick_chat" | "agent_run"
- * @param question       用户问题/输入
- * @param conversationId 会话 ID（可选，为空时自动创建）
- * @param agentId        Agent ID（agent_run 类型必需）
- * @param title          任务标题（可选）
+ * @param type            任务类型: "quick_chat" | "agent_run" | "document_qa" | "knowledge_qa"
+ * @param question        用户问题/输入
+ * @param conversationId  会话 ID（可选，为空时自动创建）
+ * @param agentId         Agent ID（agent_run 类型必需）
+ * @param title           任务标题（可选）
+ * @param knowledgeBaseId 知识库 ID（knowledge_qa 可选）
+ * @param attachmentIds   附件 ID 列表（document_qa 可选）
+ * @param mode            执行模式（auto/manual，可选）
  */
 public record CreateTaskRequest(
         String type,
         String question,
         String conversationId,
         String agentId,
-        String title
+        String title,
+        String knowledgeBaseId,
+        List<String> attachmentIds,
+        String mode
 ) {
     public TaskType toTaskType() {
         if (type == null || type.isBlank()) {
@@ -42,6 +50,8 @@ public record CreateTaskRequest(
         return switch (type.toLowerCase()) {
             case "quick_chat" -> TaskType.QUICK_CHAT;
             case "agent_run" -> TaskType.AGENT_RUN;
+            case "document_qa" -> TaskType.DOCUMENT_QA;
+            case "knowledge_qa" -> TaskType.KNOWLEDGE_QA;
             default -> throw new IllegalArgumentException("Unknown task type: " + type);
         };
     }
