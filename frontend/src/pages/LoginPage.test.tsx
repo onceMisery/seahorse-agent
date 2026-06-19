@@ -25,7 +25,7 @@ describe("LoginPage", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByPlaceholderText("输入用户名")).toHaveValue("admin");
-    expect(screen.getByPlaceholderText("输入密码")).toHaveValue("admin123");
+    expect(screen.getByLabelText("用户名")).toHaveValue("admin");
+    expect(screen.getByLabelText("密码")).toHaveValue("admin123");
   });
 });

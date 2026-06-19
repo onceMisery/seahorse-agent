@@ -184,6 +184,7 @@ export function LoginPage() {
           <form className="space-y-5" onSubmit={handleSubmit}>
             <div className="space-y-1.5">
               <label
+                htmlFor="login-username"
                 className="text-xs font-mono uppercase tracking-widest"
                 style={{ color: "var(--theme-text-muted)" }}
               >
@@ -204,6 +205,7 @@ export function LoginPage() {
                   }}
                 />
                 <Input
+                  id="login-username"
                   placeholder="输入用户名"
                   value={form.username}
                   onChange={(e) => setForm((p) => ({ ...p, username: e.target.value }))}
@@ -225,6 +227,7 @@ export function LoginPage() {
 
             <div className="space-y-1.5">
               <label
+                htmlFor="login-password"
                 className="text-xs font-mono uppercase tracking-widest"
                 style={{ color: "var(--theme-text-muted)" }}
               >
@@ -245,6 +248,7 @@ export function LoginPage() {
                   }}
                 />
                 <Input
+                  id="login-password"
                   type={showPassword ? "text" : "password"}
                   placeholder="输入密码"
                   value={form.password}
