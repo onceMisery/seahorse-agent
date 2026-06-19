@@ -134,18 +134,14 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
 
     @Override
     public void deleteDocumentVectors(String collectionName, String docId) {
-        milvusClient.delete(DeleteReq.builder()
-                .collectionName(resolveCollection(collectionName))
-                .filter(FIELD_METADATA + "[\"" + META_DOC_ID + "\"] == \"" + requireText(docId, "docId") + "\"")
-                .build());
+        deleteIfCollectionExists(
+                collectionName,
+                FIELD_METADATA + "[\"" + META_DOC_ID + "\"] == \"" + requireText(docId, "docId") + "\"");
     }
 
     @Override
     public void deleteChunkById(String collectionName, String chunkId) {
-        milvusClient.delete(DeleteReq.builder()
-                .collectionName(resolveCollection(collectionName))
-                .filter(FIELD_ID + " == \"" + requireText(chunkId, "chunkId") + "\"")
-                .build());
+        deleteIfCollectionExists(collectionName, FIELD_ID + " == \"" + requireText(chunkId, "chunkId") + "\"");
     }
 
     @Override
@@ -160,16 +156,17 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
         if (idList.isBlank()) {
             return;
         }
-        milvusClient.delete(DeleteReq.builder()
-                .collectionName(resolveCollection(collectionName))
-                .filter(FIELD_ID + " in [" + idList + "]")
-                .build());
+        deleteIfCollectionExists(collectionName, FIELD_ID + " in [" + idList + "]");
     }
 
     @Override
     public boolean collectionExists(String collectionName) {
+        return collectionExistsResolved(resolveCollection(collectionName));
+    }
+
+    private boolean collectionExistsResolved(String collectionName) {
         return Boolean.TRUE.equals(milvusClient.hasCollection(HasCollectionReq.builder()
-                .collectionName(resolveCollection(collectionName))
+                .collectionName(collectionName)
                 .build()));
     }
 
@@ -351,6 +348,17 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
             return collection;
         }
         return requireText(properties.defaultCollection(), "defaultCollection");
+    }
+
+    private void deleteIfCollectionExists(String collectionName, String filter) {
+        String collection = resolveCollection(collectionName);
+        if (!collectionExistsResolved(collection)) {
+            return;
+        }
+        milvusClient.delete(DeleteReq.builder()
+                .collectionName(collection)
+                .filter(filter)
+                .build());
     }
 
     private String requireText(String value, String name) {

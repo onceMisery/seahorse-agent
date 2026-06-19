@@ -34,6 +34,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchRequest;
 import io.milvus.v2.service.collection.request.CreateCollectionReq;
 import io.milvus.v2.service.collection.request.HasCollectionReq;
 import io.milvus.v2.service.vector.request.InsertReq;
+import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.SearchReq;
 import io.milvus.v2.service.vector.response.SearchResp;
@@ -47,6 +48,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -164,6 +166,33 @@ class MilvusVectorAdapterTests {
         ArgumentCaptor<InsertReq> requestCaptor = ArgumentCaptor.forClass(InsertReq.class);
         verify(client).insert(requestCaptor.capture());
         assertThat(requestCaptor.getValue().getData().get(0).get("content").getAsString()).isEqualTo("12345");
+    }
+
+    @Test
+    void shouldSkipDocumentVectorDeleteWhenCollectionIsMissing() {
+        MilvusClientV2 client = mock(MilvusClientV2.class);
+        when(client.hasCollection(any(HasCollectionReq.class))).thenReturn(false);
+        MilvusVectorAdapter adapter = new MilvusVectorAdapter(client,
+                new MilvusVectorProperties("default_collection", 2, "COSINE"));
+
+        adapter.deleteDocumentVectors("missing_collection", "doc-1");
+
+        verify(client, never()).delete(any(DeleteReq.class));
+    }
+
+    @Test
+    void shouldDeleteDocumentVectorsWhenCollectionExists() {
+        MilvusClientV2 client = mock(MilvusClientV2.class);
+        when(client.hasCollection(any(HasCollectionReq.class))).thenReturn(true);
+        MilvusVectorAdapter adapter = new MilvusVectorAdapter(client,
+                new MilvusVectorProperties("default_collection", 2, "COSINE"));
+
+        adapter.deleteDocumentVectors("collection-a", "doc-1");
+
+        ArgumentCaptor<DeleteReq> requestCaptor = ArgumentCaptor.forClass(DeleteReq.class);
+        verify(client).delete(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().getCollectionName()).isEqualTo("collection-a");
+        assertThat(requestCaptor.getValue().getFilter()).contains("metadata[\"doc_id\"] == \"doc-1\"");
     }
 
     private VectorSearchRequest searchRequest() {
