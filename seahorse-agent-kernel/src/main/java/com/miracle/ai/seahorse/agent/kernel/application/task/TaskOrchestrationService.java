@@ -99,8 +99,10 @@ public class TaskOrchestrationService implements TaskInboundPort {
         // 3. 根据 type 分发
         if (task.getType().isConversational()) {
             // 对话类：会话已就绪，前端订阅 chat SSE 完成对话
+            taskRepository.updateStatus(task.getTaskId(), TaskStatus.RUNNING);
+            task = task.transitionTo(TaskStatus.RUNNING);
             eventPort.publish(task.getTaskId(), TaskEvent.STARTED, "会话已就绪，开始对话",
-                    Map.of("conversationId", conversationId));
+                    Map.of("conversationId", conversationId, "status", "running"));
             LOG.info("Task {} is {}, frontend will initiate chat stream", task.getTaskId(), task.getType());
         } else if (task.getType() == TaskType.AGENT_RUN) {
             startAgentRunAsync(task, command);
