@@ -46,7 +46,14 @@ const CONTROLLED_WEB_AGENT_TEMPLATE_IDS = new Set<TaskTemplateId>([
   "github-visual-project-intro"
 ]);
 const MAX_ATTACHMENT_COUNT = 20;
+const DEFAULT_TASK_TEMPLATE_ID: TaskTemplateId = "quick-answer";
 const selectedSessionLoads = new Map<string, Promise<void>>();
+
+function isAbortError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { name?: string; message?: string };
+  return candidate.name === "AbortError" || /aborted/i.test(candidate.message || "");
+}
 
 export const useChatStore = create<ChatState>()(
   immer((set, get) => ({
@@ -64,7 +71,7 @@ export const useChatStore = create<ChatState>()(
     streamingMessageId: null,
     cancelRequested: false,
     inputFocusKey: Date.now(),
-    selectedTaskTemplateId: null,
+    selectedTaskTemplateId: DEFAULT_TASK_TEMPLATE_ID,
     sessionsLoaded: false,
 
     fetchSessions: async () => {
@@ -374,13 +381,18 @@ export const useChatStore = create<ChatState>()(
         set((s) => { s.streamAbort = stream.cancel; });
         await stream.start();
       } catch (error) {
-        console.error("Stream error:", error);
-        markError(error instanceof Error ? error.message : "对话失败");
+        if (get().cancelRequested || isAbortError(error)) {
+          markDone();
+        } else {
+          console.error("Stream error:", error);
+          markError(error instanceof Error ? error.message : "对话失败");
+        }
       } finally {
         set((s) => {
           s.isStreaming = false;
           s.streamAbort = null;
           s.streamTaskId = null;
+          s.cancelRequested = false;
         });
         await get().fetchSessions();
       }

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useChatStore } from "@/stores/chatStore";
 import { getAgentRunCostSummary, getAgentRunSnapshot, listAgentRunEvents } from "@/services/agentRunService";
+import { createStreamResponse } from "@/hooks/useStreamResponse";
 import { listMessages } from "@/services/sessionService";
 import { AGENT_STREAM_EVENTS, type AgentRunSnapshot, type Message, type StreamEventEnvelope } from "@/types";
 import { storage } from "@/utils/storage";
@@ -260,6 +261,31 @@ describe("chatStore snapshot hydration", () => {
 
     expect(streamRequests).toHaveLength(1);
     expect(streamRequests[0].headers?.Authorization).toBe("Bearer stream-token");
+  });
+
+  it("treats aborted chat streams as cancellation without console errors", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(createStreamResponse).mockImplementationOnce(({ url, headers }) => {
+      streamStarts.push(url);
+      streamRequests.push({ url, headers });
+      const abortError = Object.assign(new Error("BodyStreamBuffer was aborted"), { name: "AbortError" });
+      return {
+        cancel: vi.fn(),
+        start: vi.fn().mockRejectedValue(abortError)
+      };
+    });
+
+    useChatStore.setState({
+      currentSessionId: "conversation-1"
+    });
+
+    await useChatStore.getState().sendMessage("Stop me");
+
+    const assistant = useChatStore.getState().messages.find((message) => message.role === "assistant");
+    expect(assistant?.status).toBe("done");
+    expect(useChatStore.getState().cancelRequested).toBe(false);
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 
   it("hydrates historical agent messages with snapshot, replay events, and cost after selecting a session", async () => {
