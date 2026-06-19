@@ -314,6 +314,45 @@ function Assert-RetrievalTraceNodes {
     }
 }
 
+function Assert-RagTraceNodesContainHit {
+    param(
+        [object]$Response,
+        [string]$ExpectedText
+    )
+
+    Assert-Code "RAG trace nodes" $Response
+    Assert-NonEmptyDataArray "RAG trace nodes" $Response
+    $retrievalNodes = @($Response.data | Where-Object {
+            $_.nodeType -match "RETRIEVAL" -or $_.nodeName -match "retrieval|search-channel"
+        })
+    foreach ($node in $retrievalNodes) {
+        $extraText = if ($node.extraData -is [string]) {
+            [string]$node.extraData
+        } elseif ($null -ne $node.extraData) {
+            $node.extraData | ConvertTo-Json -Depth 20 -Compress
+        } else {
+            ""
+        }
+        if ([string]::IsNullOrWhiteSpace($extraText) -or -not $extraText.Contains($ExpectedText)) {
+            continue
+        }
+        $hitCount = 0
+        try {
+            $extra = $extraText | ConvertFrom-Json
+            $hitCount = [int]$extra.hitCount
+        } catch {
+            if ($extraText -match '"hitCount"\s*:\s*([1-9][0-9]*)') {
+                $hitCount = [int]$Matches[1]
+            }
+        }
+        if ($hitCount -gt 0) {
+            return
+        }
+    }
+
+    throw "RAG trace nodes did not include retrieval hit evidence for '$ExpectedText'"
+}
+
 function Convert-EnvListToMap {
     param(
         [object[]]$EnvList
@@ -487,7 +526,7 @@ try {
     $memoryFactValue = "smoke-profile-$suffix"
     $kb = Invoke-Json -Method POST -Path "/knowledge-base" -Headers $authHeaders -Body @{
         name = "e2e-kb-$suffix"
-        embeddingModel = "default"
+        embeddingModel = "nomic-embed-text"
         collectionName = "e2ekb$suffix"
     }
     Assert-Code "Create knowledge base" $kb
@@ -537,6 +576,7 @@ The expected embedding dimension is 768.
     $traceId = [string]$traceRun.traceId
     $traceNodes = Invoke-Json -Method GET -Path "/rag/traces/runs/$traceId/nodes" -Headers $authHeaders
     Assert-RetrievalTraceNodes $traceNodes
+    Assert-RagTraceNodesContainHit -Response $traceNodes -ExpectedText "nomic-embed-text"
     Add-Result "RAG trace API smoke" "PASS" "traceId=$traceId conversationId=$conversationId"
 
     $memoryConversationId = "smoke-memory-$suffix"
