@@ -119,10 +119,10 @@
 public List<String> match(String tenantId, String question) {
     // 1. 提取关键词
     List<String> keywords = extractKeywords(question);
-    
+
     // 2. 查询可用 Skill
     List<AgentSkill> availableSkills = fetchAvailableSkills(tenantId);
-    
+
     // 3. 计算匹配得分
     List<SkillScore> scores = availableSkills.stream()
             .map(skill -> scoreSkill(skill, keywords))
@@ -130,7 +130,7 @@ public List<String> match(String tenantId, String question) {
             .sorted(Comparator.comparingDouble(SkillScore::score).reversed())
             .limit(maxRecommendations)
             .toList();
-    
+
     // 4. 返回推荐结果
     return scores.stream().map(SkillScore::skillName).toList();
 }
@@ -140,9 +140,9 @@ public List<String> match(String tenantId, String question) {
 ```java
 private List<SkillRuntimeBlock> mergeSkills(...) {
     // ... 现有逻辑 ...
-    
+
     // 智能匹配：当没有任何 Skill 时，尝试根据用户问题自动匹配
-    if (versionBound.isEmpty() && perTurn.isEmpty() 
+    if (versionBound.isEmpty() && perTurn.isEmpty()
             && enableSmartSkillMatching && skillSmartMatcher != null) {
         List<String> recommendations = skillSmartMatcher.match(tenantId, command.question());
         if (!recommendations.isEmpty()) {
@@ -150,7 +150,7 @@ private List<SkillRuntimeBlock> mergeSkills(...) {
             perTurn = chatSkillResolver.resolve(tenantId, recommendations);
         }
     }
-    
+
     // ... 合并逻辑 ...
 }
 ```
@@ -170,7 +170,7 @@ seahorse:
 `docs/skills/SKILL-OPERATIONS.md` 描述的运行时注入流程现在包含智能匹配：
 
 > `用户选择 Skill → 前端发送 selectedSkillNames → ... → SkillRuntimeComposer 注入到 system prompt`
-> 
+>
 > **新增**：`无用户选择 + 无预绑定 → SkillSmartMatcher 智能推荐 → ChatSelectedSkillResolver 验证 → 注入到 system prompt`
 
 这与代码实现**完全一致**。
@@ -229,4 +229,4 @@ seahorse:
 - 📖 [SKILL-SMART-MATCHING.md](./docs/skills/SKILL-SMART-MATCHING.md) - 详细指南
 - 📖 [SKILL-SMART-MATCHING-IMPLEMENTATION.md](./SKILL-SMART-MATCHING-IMPLEMENTATION.md) - 实现总结
 
-**总结**：智能匹配功能已完全实现并集成到现有架构中，实现了"当没有选择 skill 时就采用智能匹配"的设计目标。 
+**总结**：智能匹配功能已完全实现并集成到现有架构中，实现了"当没有选择 skill 时就采用智能匹配"的设计目标。

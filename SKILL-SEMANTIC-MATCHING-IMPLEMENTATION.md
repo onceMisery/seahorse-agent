@@ -78,10 +78,10 @@ public class SkillSemanticMatcher {
 public class SkillVectorIndexService {
     // 异步索引单个 Skill
     public void indexSkillAsync(AgentSkill skill, AgentSkillRevision revision);
-    
+
     // 全量重建租户的所有索引
     public CompletableFuture<RebuildResult> rebuildAllAsync(String tenantId);
-    
+
     // 初始化 Milvus Collection
     public void initializeCollection();
 }
@@ -171,10 +171,10 @@ SkillVectorIndexService.indexSkillAsync()
        - 描述：Skill description
        - 标签：[tag1, tag2, ...]
        - 正文：(前500字符)
-    
+
     2. 调用 Embedding 服务
        EmbeddingPort.embed(content) → float[1536]
-    
+
     3. 保存到 Milvus
        MilvusSkillVectorIndexAdapter.save()
     ↓
@@ -204,36 +204,36 @@ matchSkillsIntelligently(tenantId, question)
     1. 问题向量化
        EmbeddingPort.embed("帮我分析这份销售数据的趋势")
        → queryVector: float[1536]
-    
+
     2. Milvus 向量搜索
        SELECT skill_name, revision_id, score
        FROM seahorse_skill_vectors
        WHERE tenant_id = 'default'
        ORDER BY COSINE_SIMILARITY(embedding, queryVector) DESC
        LIMIT 6  (topK × 2)
-       
+
        结果：
        - data-analysis: 0.89
        - deep-research: 0.72
        - visualization-tool: 0.68
        - ...
-    
+
     3. 混合评分
        向量相似度 × 0.7 + 规则增强 × 0.3
-       
+
        规则增强：
        - "分析" in skill_name → +0.1
        - "数据" in skill_name → +0.1
-       
+
        最终得分：
        - data-analysis: 0.89 × 0.7 + 0.2 × 0.3 = 0.683
        - deep-research: 0.72 × 0.7 + 0.0 × 0.3 = 0.504
-    
+
     4. 过滤 + 排序 + 截取
        filter(score >= 0.6)
        sort(desc)
        limit(3)
-       
+
        → ["data-analysis", "deep-research"]
     ↓
 [降级] 如果向量匹配失败，使用 SkillSmartMatcher（规则匹配）

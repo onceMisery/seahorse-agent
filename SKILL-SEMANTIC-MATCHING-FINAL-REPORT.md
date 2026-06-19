@@ -11,7 +11,7 @@ mvn clean compile -DskipTests -Dmaven.test.skip=true
 
 **所有模块编译通过**：
 - ✅ seahorse-agent-kernel
-- ✅ seahorse-agent-adapter-vector-milvus  
+- ✅ seahorse-agent-adapter-vector-milvus
 - ✅ seahorse-agent-adapter-ai-openai-compatible
 - ✅ seahorse-agent-spring-boot-autoconfigure
 - ✅ 所有其他模块
@@ -87,7 +87,7 @@ seahorse-agent-adapter-vector-milvus/
 ### 1. 语义匹配流程
 
 ```
-用户问题 
+用户问题
   ↓
 [语义匹配] SkillSemanticMatcher
   ├─ 问题向量化 (EmbeddingPort)

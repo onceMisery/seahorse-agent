@@ -235,19 +235,19 @@ DeerFlow 的适配更偏配置和生态集成。模型、tools、skills、sandbo
 
 #### Seahorse Agent 的易用性短板
 
-1. 首次路径不够单一  
+1. 首次路径不够单一
    用户既可以从聊天进入，也可以从知识库、模型配置、Agent、Skill、Tool、治理页面进入。入口很多，但缺少“按任务引导”的默认路径。
 
-2. 部署模式需要解释  
+2. 部署模式需要解释
    轻量部署能启动，但不代表完整 RAG 质量；全量部署更接近真实效果，但依赖 PostgreSQL、Milvus、Elasticsearch、Redis、Pulsar、MinIO、Prometheus、Grafana 等组件。
 
-3. 配置失败难定位  
+3. 配置失败难定位
    模型、embedding、向量维度、向量库、关键词索引、消息队列、缓存、对象存储、租户和权限都可能造成可用性问题。当前更依赖文档和日志，而不是交互式诊断。
 
-4. 高级治理概念过早出现  
+4. 高级治理概念过早出现
    租户、ACL、访问决策、配额、审计、成本、审批等非常重要，但对于首次用户来说会稀释“agent 帮我完成任务”的核心体验。
 
-5. 产物模型不够突出  
+5. 产物模型不够突出
    DeerFlow 的 workspace/uploads/outputs 很容易让用户知道 agent 做了什么、文件在哪里。Seahorse Agent 更强调对话、知识库和后台管理，任务产物的视觉中心不够强。
 
 #### DeerFlow 的易用性优势
@@ -375,16 +375,16 @@ Seahorse Agent 的适配器模式更适合企业长期演进：
 
 当前适配器模式的问题主要不是代码结构，而是产品化表达：
 
-1. 适配器选择对用户暴露过早  
+1. 适配器选择对用户暴露过早
    用户一开始就需要面对 Milvus/pgvector/noop、Elasticsearch/Lucene、Redis/local、Pulsar/direct 等选择。
 
-2. 缺少模式级默认策略  
+2. 缺少模式级默认策略
    应该由 `demo/rag/enterprise` 这类产品模式决定默认适配器组合，而不是让用户自己理解每个适配器。
 
-3. 适配器健康状态没有充分转化为用户语言  
+3. 适配器健康状态没有充分转化为用户语言
    “Milvus 连接失败”“embedding 维度不一致”“Pulsar topic 不存在”应该在前端 readiness 面板中变成明确修复建议。
 
-4. 适配器能力与前端 feature flag 的关系需要更强约束  
+4. 适配器能力与前端 feature flag 的关系需要更强约束
    如果某能力对应的适配器不可用，前端应显示降级状态、禁用入口或提供修复向导。
 
 ### 7.3 DeerFlow 的适配方式优势

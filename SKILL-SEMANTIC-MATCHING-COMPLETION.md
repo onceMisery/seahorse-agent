@@ -86,12 +86,12 @@ private List<String> matchSkillsIntelligently(String tenantId, String question) 
             return semanticResults;  // 使用语义匹配结果
         }
     }
-    
+
     // 第2优先级：规则匹配（基于关键词）
     if (skillSmartMatcher != null) {
         return skillSmartMatcher.match(tenantId, question);
     }
-    
+
     return List.of();  // 无匹配
 }
 ```
@@ -132,7 +132,7 @@ seahorse:
         milvus:
           host: localhost
           port: 19530
-      
+
       # Embedding 配置（现有）
       ai:
         openai:

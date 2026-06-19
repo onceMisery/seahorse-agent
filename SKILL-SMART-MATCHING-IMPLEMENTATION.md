@@ -36,8 +36,8 @@
 
 **触发条件**:
 ```java
-versionBound.isEmpty() && perTurn.isEmpty() 
-    && enableSmartSkillMatching 
+versionBound.isEmpty() && perTurn.isEmpty()
+    && enableSmartSkillMatching
     && skillSmartMatcher != null
 ```
 
