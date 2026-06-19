@@ -57,7 +57,13 @@ class JdbcRagTraceRepositoryAdapterTests {
 
         assertThat(page.total()).isEqualTo(1);
         assertThat(page.records()).extracting(RagTraceRun::getStatus).containsExactly("SUCCESS");
+        assertThat(page.records()).extracting(RagTraceRun::getConversationId).containsExactly("conv-1");
+        assertThat(page.records()).extracting(RagTraceRun::getTaskId).containsExactly("task-1");
         assertThat(adapter.findRun("trace-1")).isPresent();
+
+        RagTracePage<RagTraceRun> conversationPage = adapter.pageRuns(
+                new RagTracePageRequest(1, 10, null, "conv-1", null, null));
+        assertThat(conversationPage.total()).isEqualTo(1);
     }
 
     @Test
@@ -155,8 +161,8 @@ class JdbcRagTraceRepositoryAdapterTests {
                     trace_id BIGINT NOT NULL,
                     trace_name VARCHAR(128),
                     entry_method VARCHAR(256),
-                    conversation_id BIGINT,
-                    task_id BIGINT,
+                    conversation_id VARCHAR(64),
+                    task_id VARCHAR(64),
                     user_id BIGINT,
                     status VARCHAR(16) NOT NULL,
                     error_message VARCHAR(1000),

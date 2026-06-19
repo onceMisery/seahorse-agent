@@ -47,6 +47,8 @@ public class JdbcChatSchemaUpgrade {
         ensureMessageRunLinkage();
         ensureAgentSkillTables();
         widenColumns("t_message_feedback", List.of("id", "message_id", "conversation_id", "user_id"));
+        alterColumnToVarcharIfExists("t_rag_trace_run", "conversation_id", TARGET_LENGTH);
+        alterColumnToVarcharIfExists("t_rag_trace_run", "task_id", TARGET_LENGTH);
         widenColumns("t_rag_trace_run", List.of("id", "trace_id", "conversation_id", "task_id", "user_id"));
         widenColumns("t_rag_trace_node", List.of("id", "trace_id", "node_id", "parent_node_id", "node_type"));
         widenColumns("t_short_term_memory", List.of("id", "user_id", "conversation_id"));
@@ -734,8 +736,22 @@ public class JdbcChatSchemaUpgrade {
         try {
             jdbcTemplate.execute("ALTER TABLE " + tableName + " ALTER COLUMN " + columnName
                     + " TYPE VARCHAR(" + length + ") USING " + columnName + "::VARCHAR");
+            return;
         } catch (Exception ignored) {
-            // Some embedded databases do not support PostgreSQL USING syntax; leave init SQL as the source of truth.
+            // Some embedded databases do not support PostgreSQL USING syntax; try their simpler type syntax.
+        }
+        try {
+            jdbcTemplate.execute("ALTER TABLE " + tableName + " ALTER COLUMN " + columnName
+                    + " TYPE VARCHAR(" + length + ")");
+            return;
+        } catch (Exception ignored) {
+            // H2 supports SET DATA TYPE instead of PostgreSQL TYPE syntax.
+        }
+        try {
+            jdbcTemplate.execute("ALTER TABLE " + tableName + " ALTER COLUMN " + columnName
+                    + " SET DATA TYPE VARCHAR(" + length + ")");
+        } catch (Exception ignored) {
+            // Leave init SQL as the source of truth when the database cannot alter this column online.
         }
     }
 

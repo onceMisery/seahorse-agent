@@ -30,7 +30,7 @@ class JdbcChatSchemaUpgradeTests {
 
     @Test
     void shouldKeepInitSqlAlignedWithReviewSchemaUpgrade() throws Exception {
-        String initSql = Files.readString(Path.of("..", "resources", "database", "seahorse_init.sql"));
+        String initSql = Files.readString(initSqlPath());
 
         assertThat(initSql).contains("CREATE TABLE t_memory_review_candidate");
         assertThat(initSql).contains("CREATE INDEX idx_memory_review_queue");
@@ -45,6 +45,8 @@ class JdbcChatSchemaUpgradeTests {
         assertThat(initSql).contains("CREATE TABLE t_memory_keyword_index");
         assertThat(initSql).contains("CREATE UNIQUE INDEX uk_memory_keyword_memory");
         assertThat(initSql).contains("CREATE INDEX idx_memory_keyword_lookup");
+        assertThat(initSql).contains("conversation_id VARCHAR(64)");
+        assertThat(initSql).contains("task_id         VARCHAR(64)");
     }
 
     @Test
@@ -137,6 +139,27 @@ class JdbcChatSchemaUpgradeTests {
         new JdbcChatSchemaUpgrade(dataSource).upgrade();
 
         assertThat(columnExists(jdbcTemplate, "t_memory_aggregation_buffer", "version")).isTrue();
+    }
+
+    @Test
+    void shouldConvertTraceRunConversationAndTaskIdsToVarcharForExistingTable() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:chat-schema-upgrade-rag-trace-run;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_rag_trace_run (
+                    id BIGINT PRIMARY KEY,
+                    trace_id BIGINT NOT NULL,
+                    conversation_id BIGINT,
+                    task_id BIGINT,
+                    user_id BIGINT
+                )
+                """);
+
+        new JdbcChatSchemaUpgrade(dataSource).upgrade();
+
+        assertThat(dataType(jdbcTemplate, "t_rag_trace_run", "conversation_id")).containsIgnoringCase("CHAR");
+        assertThat(dataType(jdbcTemplate, "t_rag_trace_run", "task_id")).containsIgnoringCase("CHAR");
     }
 
     @Test
@@ -252,6 +275,14 @@ class JdbcChatSchemaUpgradeTests {
                 .isEmpty();
     }
 
+    private Path initSqlPath() {
+        Path fromRepoRoot = Path.of("resources", "database", "seahorse_init.sql");
+        if (Files.exists(fromRepoRoot)) {
+            return fromRepoRoot;
+        }
+        return Path.of("..", "resources", "database", "seahorse_init.sql");
+    }
+
     private boolean columnExists(JdbcTemplate jdbcTemplate, String tableName, String columnName) {
         return !jdbcTemplate.query(
                         """
@@ -263,5 +294,17 @@ class JdbcChatSchemaUpgradeTests {
                         tableName,
                         columnName)
                 .isEmpty();
+    }
+
+    private String dataType(JdbcTemplate jdbcTemplate, String tableName, String columnName) {
+        return jdbcTemplate.queryForObject(
+                """
+                SELECT data_type
+                FROM information_schema.columns
+                WHERE lower(table_name) = lower(?) AND lower(column_name) = lower(?)
+                """,
+                String.class,
+                tableName,
+                columnName);
     }
 }

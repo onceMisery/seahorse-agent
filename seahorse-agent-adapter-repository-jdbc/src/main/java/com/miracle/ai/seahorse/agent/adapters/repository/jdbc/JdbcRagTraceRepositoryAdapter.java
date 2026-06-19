@@ -156,8 +156,8 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
                 toLongId(safeRun.getTraceId()),
                 safeRun.getTraceName(),
                 safeRun.getEntryMethod(),
-                toLongIdOrNull(safeRun.getConversationId()),
-                toLongIdOrNull(safeRun.getTaskId()),
+                trimToNull(safeRun.getConversationId()),
+                trimToNull(safeRun.getTaskId()),
                 toLongIdOrNull(safeRun.getUserId()),
                 statusOrRunning(safeRun.getStatus()),
                 safeRun.getErrorMessage(),
@@ -248,19 +248,19 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
         List<String> clauses = new ArrayList<>();
         List<Object> args = new ArrayList<>();
         clauses.add("r.deleted = 0");
-        appendEqual(clauses, args, "r.trace_id", request.traceId());
-        appendEqual(clauses, args, "r.conversation_id", request.conversationId());
-        appendEqual(clauses, args, "r.task_id", request.taskId());
-        appendEqual(clauses, args, "r.status", request.status());
+        appendEqual(clauses, args, "r.trace_id", request.traceId(), true);
+        appendEqual(clauses, args, "r.conversation_id", request.conversationId(), false);
+        appendEqual(clauses, args, "r.task_id", request.taskId(), false);
+        appendEqual(clauses, args, "r.status", request.status(), false);
         return new QueryParts(" WHERE " + String.join(" AND ", clauses), args);
     }
 
-    private void appendEqual(List<String> clauses, List<Object> args, String column, String value) {
+    private void appendEqual(List<String> clauses, List<Object> args, String column, String value, boolean numericId) {
         if (!hasText(value)) {
             return;
         }
         clauses.add(column + " = ?");
-        args.add(column.endsWith("_id") ? toLongId(value) : value);
+        args.add(numericId ? toLongId(value) : value);
     }
 
     private RagTracePageRequest normalize(RagTracePageRequest request) {
@@ -279,10 +279,8 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
         run.setTraceId(String.valueOf(resultSet.getLong("trace_id")));
         run.setTraceName(resultSet.getString("trace_name"));
         run.setEntryMethod(resultSet.getString("entry_method"));
-        Long conversationId = resultSet.getObject("conversation_id", Long.class);
-        run.setConversationId(conversationId != null ? String.valueOf(conversationId) : null);
-        Long taskId = resultSet.getObject("task_id", Long.class);
-        run.setTaskId(taskId != null ? String.valueOf(taskId) : null);
+        run.setConversationId(resultSet.getString("conversation_id"));
+        run.setTaskId(resultSet.getString("task_id"));
         Long userId = resultSet.getObject("user_id", Long.class);
         run.setUserId(userId != null ? String.valueOf(userId) : null);
         run.setUsername(resultSet.getString("user_name"));
@@ -348,7 +346,13 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
         return JdbcMemorySupport.nextId();
     }
 
-    
+    private String trimToNull(String value) {
+        if (!hasText(value)) {
+            return null;
+        }
+        return value.trim();
+    }
+
 
     private record QueryParts(String where, List<Object> argList) {
 

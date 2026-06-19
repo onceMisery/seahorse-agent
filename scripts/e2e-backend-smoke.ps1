@@ -203,6 +203,51 @@ function Wait-ForNonEmptyPageRecords {
     throw "$Name returned no records after $Attempts attempts"
 }
 
+function Assert-RagTraceRunMatchesConversation {
+    param(
+        [object]$Run,
+        [string]$ConversationId
+    )
+
+    if ($null -eq $Run) {
+        throw "RAG trace run was not found"
+    }
+    $actualConversationId = [string]$Run.conversationId
+    if ($actualConversationId -ne $ConversationId) {
+        throw "RAG trace run conversationId=$actualConversationId, expected $ConversationId"
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$Run.traceId)) {
+        throw "RAG trace run did not return traceId"
+    }
+}
+
+function Find-RagTraceRunForConversation {
+    param(
+        [string]$ConversationId,
+        [hashtable]$Headers = @{},
+        [int]$Attempts = 30,
+        [int]$DelaySeconds = 1
+    )
+
+    $encodedConversationId = [System.Uri]::EscapeDataString($ConversationId)
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        $response = Invoke-Json -Method GET -Path "/rag/traces/runs?current=1&size=10&conversationId=$encodedConversationId" -Headers $Headers
+        Assert-Code "RAG trace run page" $response
+        if ($null -ne $response.data -and $null -ne $response.data.records) {
+            $run = @($response.data.records | Where-Object { [string]$_.conversationId -eq $ConversationId })[0]
+            if ($null -ne $run) {
+                Assert-RagTraceRunMatchesConversation -Run $run -ConversationId $ConversationId
+                return $run
+            }
+        }
+        if ($attempt -lt $Attempts) {
+            Start-Sleep -Seconds $DelaySeconds
+        }
+    }
+
+    throw "RAG trace run page returned no records for conversationId=$ConversationId after $Attempts attempts"
+}
+
 function Assert-RetrievalTraceNodes {
     param(
         [object]$Response
@@ -436,16 +481,11 @@ The expected embedding dimension is 768.
     }
     Add-Result "RAG SSE chat smoke" "PASS" "conversationId=$conversationId"
 
-    $traces = Invoke-Json -Method GET -Path "/rag/traces/runs?current=1&size=10" -Headers $authHeaders
-    Assert-Code "RAG trace run page" $traces
-    Assert-NonEmptyPageRecords "RAG trace run page" $traces
-    $traceId = [string](@($traces.data.records)[0].traceId)
-    if ([string]::IsNullOrWhiteSpace($traceId)) {
-        throw "RAG trace run page did not return traceId"
-    }
+    $traceRun = Find-RagTraceRunForConversation -ConversationId $conversationId -Headers $authHeaders
+    $traceId = [string]$traceRun.traceId
     $traceNodes = Invoke-Json -Method GET -Path "/rag/traces/runs/$traceId/nodes" -Headers $authHeaders
     Assert-RetrievalTraceNodes $traceNodes
-    Add-Result "RAG trace API smoke" "PASS" "traceId=$traceId"
+    Add-Result "RAG trace API smoke" "PASS" "traceId=$traceId conversationId=$conversationId"
 
     $maintenance = Invoke-Json -Method POST -Path "/memories/maintenance/run?reason=smoke-check&compaction=true&alias=true&gc=true" -Headers $authHeaders
     Assert-Code "Memory maintenance run" $maintenance
