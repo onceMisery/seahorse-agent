@@ -94,6 +94,14 @@ class TaskOrchestrationServiceTests {
         public void updateConversationId(String taskId, String conversationId) {
             tasks.computeIfPresent(taskId, (ignored, task) -> task.withConversationId(conversationId));
         }
+
+        @Override
+        public Optional<Task> findRunningByConversationId(String conversationId) {
+            return tasks.values().stream()
+                    .filter(t -> conversationId.equals(t.getConversationId()))
+                    .filter(t -> t.getStatus() == TaskStatus.RUNNING)
+                    .findFirst();
+        }
     }
 
     private static final class StubConversationManagementPort implements ConversationManagementInboundPort {
