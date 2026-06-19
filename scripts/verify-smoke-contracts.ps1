@@ -44,6 +44,7 @@ $requiredSnippets = @(
     '[int]$Attempts = 75',
     'Assert-ProfileFactsContainValue -Response $profileFacts -ExpectedValue $memoryFactValue',
     'Assert-RetrievalTraceNodes $traceNodes',
+    'Get-RagTraceHitText',
     '[ValidateSet("full-compose", "none")]',
     'Assert-FullComposeRuntime -ContainerName $DockerContainerName',
     '"/readiness/summary"',
@@ -70,7 +71,9 @@ $forbiddenSnippets = @(
     '"/knowledge-base/$kbId/chunks"',
     '-X POST "$BaseUrl/rag/v3/chat"',
     '"/api/readiness/summary"',
-    'Assert-NonEmptyDataArray "Profile facts" $profileFacts'
+    'Assert-NonEmptyDataArray "Profile facts" $profileFacts',
+    'Assert-TextContains',
+    'Convert-SseResponseText'
 )
 
 $missing = @($requiredSnippets | Where-Object { -not $content.Contains($_) })

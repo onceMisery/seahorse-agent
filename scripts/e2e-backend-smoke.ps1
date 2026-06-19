@@ -147,6 +147,21 @@ function Assert-Code {
     }
 }
 
+function Get-RagTraceHitText {
+    param(
+        [object]$Hit
+    )
+
+    $parts = @()
+    foreach ($field in @("textPreview", "text", "content", "chunkText", "preview")) {
+        $value = $Hit.$field
+        if ($null -ne $value -and -not [string]::IsNullOrWhiteSpace([string]$value)) {
+            $parts += [string]$value
+        }
+    }
+    return ($parts -join "`n")
+}
+
 function Assert-NonEmptyPageRecords {
     param(
         [string]$Name,
@@ -333,20 +348,22 @@ function Assert-RagTraceNodesContainHit {
         } else {
             ""
         }
-        if ([string]::IsNullOrWhiteSpace($extraText) -or -not $extraText.Contains($ExpectedText)) {
+        if ([string]::IsNullOrWhiteSpace($extraText)) {
             continue
         }
-        $hitCount = 0
         try {
             $extra = $extraText | ConvertFrom-Json
-            $hitCount = [int]$extra.hitCount
         } catch {
-            if ($extraText -match '"hitCount"\s*:\s*([1-9][0-9]*)') {
-                $hitCount = [int]$Matches[1]
-            }
+            continue
         }
-        if ($hitCount -gt 0) {
-            return
+        if ([int]$extra.hitCount -le 0) {
+            continue
+        }
+        foreach ($hit in @($extra.hits)) {
+            $hitText = Get-RagTraceHitText $hit
+            if (-not [string]::IsNullOrWhiteSpace($hitText) -and $hitText.Contains($ExpectedText)) {
+                return
+            }
         }
     }
 
