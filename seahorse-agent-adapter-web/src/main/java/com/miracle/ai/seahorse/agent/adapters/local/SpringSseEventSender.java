@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -53,6 +54,10 @@ public class SpringSseEventSender implements StreamEventSender {
         try {
             sendPayload(eventName, payload);
         } catch (Exception ex) {
+            if (isClientDisconnect(ex)) {
+                closeAfterClientDisconnect(ex);
+                return;
+            }
             fail(ex);
         }
     }
@@ -66,11 +71,22 @@ public class SpringSseEventSender implements StreamEventSender {
 
     @Override
     public void fail(Throwable error) {
+        if (isClientDisconnect(error)) {
+            closeAfterClientDisconnect(error);
+            return;
+        }
         if (closed.compareAndSet(false, true)) {
             sendError(error);
             completeQuietly();
         }
         log.warn("SSE send failed", error);
+    }
+
+    private void closeAfterClientDisconnect(Throwable error) {
+        if (closed.compareAndSet(false, true)) {
+            completeQuietly();
+        }
+        log.debug("SSE client disconnected before stream completed", error);
     }
 
     private void sendPayload(String eventName, Object payload) throws java.io.IOException {
@@ -99,5 +115,30 @@ public class SpringSseEventSender implements StreamEventSender {
         } catch (Exception completeException) {
             log.debug("Failed to complete SSE emitter", completeException);
         }
+    }
+
+    private boolean isClientDisconnect(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof AsyncRequestNotUsableException) {
+                return true;
+            }
+            String className = current.getClass().getName();
+            if ("org.apache.catalina.connector.ClientAbortException".equals(className)) {
+                return true;
+            }
+            String message = current.getMessage();
+            if (message != null) {
+                String normalized = message.toLowerCase(java.util.Locale.ROOT);
+                if (normalized.contains("broken pipe")
+                        || normalized.contains("connection reset by peer")
+                        || normalized.contains("client disconnected")
+                        || normalized.contains("client abort")) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

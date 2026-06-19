@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.local;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 class SpringSseEventSenderTests {
@@ -56,6 +58,32 @@ class SpringSseEventSenderTests {
         SpringSseEventSender sender = new SpringSseEventSender(emitter);
 
         assertThatCode(() -> sender.sendEvent("message", "payload")).doesNotThrowAnyException();
+    }
+
+    @Test
+    void sendEventShouldTreatClientDisconnectAsNormalCompletion() throws Exception {
+        SseEmitter emitter = mock(SseEmitter.class);
+        doThrow(new AsyncRequestNotUsableException(
+                "ServletOutputStream failed to flush: java.io.IOException: Broken pipe"))
+                .when(emitter).send(any(SseEmitter.SseEventBuilder.class));
+        SpringSseEventSender sender = new SpringSseEventSender(emitter);
+
+        assertThatCode(() -> sender.sendEvent("message", "payload")).doesNotThrowAnyException();
+
+        verify(emitter, times(1)).send(any(SseEmitter.SseEventBuilder.class));
+        verify(emitter).complete();
+    }
+
+    @Test
+    void failShouldNotEmitErrorPayloadForClientDisconnect() throws Exception {
+        RecordingSseEmitter emitter = new RecordingSseEmitter();
+        SpringSseEventSender sender = new SpringSseEventSender(emitter);
+
+        sender.fail(new AsyncRequestNotUsableException(
+                "ServletOutputStream failed to flush: java.io.IOException: Broken pipe"));
+
+        assertThat(emitter.events).isEmpty();
+        assertThat(emitter.completed).isTrue();
     }
 
     @Test

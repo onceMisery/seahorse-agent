@@ -33,6 +33,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashMap;
@@ -150,6 +151,11 @@ public class SeahorseWebExceptionHandler {
         String reason = ex.getReason() != null ? ex.getReason() : ex.getMessage();
         return ResponseEntity.status(ex.getStatusCode())
                 .body(response("HTTP_" + ex.getStatusCode().value(), reason, request, Map.of()));
+    }
+
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void clientDisconnected(AsyncRequestNotUsableException ex, HttpServletRequest request) {
+        LOGGER.debug("Client disconnected before async response completed: {}", request.getRequestURI());
     }
 
     @ExceptionHandler(Exception.class)
