@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: frontend/chat_app
+title: 智能对话与流式响应处理
+scope:
+    - frontend/src/pages/ChatPage.tsx
+    - frontend/src/hooks/useChat.ts
+    - frontend/src/hooks/useStreamResponse.ts
+source_files: []
+depends_on: []
+related_to:
+    - path: backend/agent_kernel

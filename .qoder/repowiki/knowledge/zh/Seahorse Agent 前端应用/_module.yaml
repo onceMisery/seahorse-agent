@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: frontend
+title: Seahorse Agent 前端应用
+scope:
+    - frontend/
+source_files: []
+depends_on: []
+related_to: []

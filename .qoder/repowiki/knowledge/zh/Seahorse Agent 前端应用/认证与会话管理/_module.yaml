@@ -1,0 +1,16 @@
+schema_version: 1
+module_path: frontend/auth_and_shared
+title: 认证与会话管理
+scope:
+    - frontend/src/pages/LoginPage.tsx
+    - frontend/src/pages/NotFoundPage.tsx
+    - frontend/src/hooks/useAuth.ts
+    - frontend/src/services/authService.ts
+    - frontend/src/utils/authSession.ts
+    - frontend/src/App.tsx
+    - frontend/src/main.tsx
+    - frontend/src/router.tsx
+source_files: []
+depends_on: []
+related_to:
+    - path: backend

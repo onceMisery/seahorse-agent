@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: backend
+title: Seahorse Agent 智能体平台核心
+scope:
+    - pom.xml
+    - seahorse-agent-kernel/
+    - seahorse-agent-bootstrap/
+source_files: []
+depends_on: []
+related_to:
+    - path: frontend/auth_and_shared
+    - path: docs
