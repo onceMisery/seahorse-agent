@@ -20,7 +20,7 @@ vi.mock("@/components/common/SeahorseLogo", () => ({
 describe("LoginPage", () => {
   it("prefills the admin login with the current default password", () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <LoginPage />
       </MemoryRouter>
     );

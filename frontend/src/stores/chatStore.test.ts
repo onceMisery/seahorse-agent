@@ -486,25 +486,31 @@ describe("chatStore snapshot hydration", () => {
   });
 
   it("does not clear the active session when a stale session load fails", async () => {
-    let rejectMessages: (error: unknown) => void = () => undefined;
-    vi.mocked(listMessages).mockReturnValue(new Promise((_, reject) => {
-      rejectMessages = reject;
-    }) as ReturnType<typeof listMessages>);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      let rejectMessages: (error: unknown) => void = () => undefined;
+      vi.mocked(listMessages).mockReturnValue(new Promise((_, reject) => {
+        rejectMessages = reject;
+      }) as ReturnType<typeof listMessages>);
 
-    const load = useChatStore.getState().selectSession("conversation-history");
-    useChatStore.setState({
-      currentSessionId: "conversation-next",
-      messages: [assistantMessage({ id: "assistant-next", content: "newer session" })],
-      isLoading: false
-    });
-    rejectMessages(new Error("stale request failed"));
-    await load;
+      const load = useChatStore.getState().selectSession("conversation-history");
+      useChatStore.setState({
+        currentSessionId: "conversation-next",
+        messages: [assistantMessage({ id: "assistant-next", content: "newer session" })],
+        isLoading: false
+      });
+      rejectMessages(new Error("stale request failed"));
+      await load;
 
-    expect(useChatStore.getState().currentSessionId).toBe("conversation-next");
-    expect(useChatStore.getState().messages[0]).toMatchObject({
-      id: "assistant-next",
-      content: "newer session"
-    });
-    expect(toast.error).not.toHaveBeenCalledWith("加载会话失败");
+      expect(useChatStore.getState().currentSessionId).toBe("conversation-next");
+      expect(useChatStore.getState().messages[0]).toMatchObject({
+        id: "assistant-next",
+        content: "newer session"
+      });
+      expect(toast.error).not.toHaveBeenCalledWith("加载会话失败");
+      expect(consoleError).toHaveBeenCalledWith("Failed to load session:", expect.any(Error));
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

@@ -64,6 +64,7 @@ describe("ChatPage", () => {
   it("auto-sends workspace task input once when routed with autoSend state", async () => {
     render(
       <MemoryRouter
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
         initialEntries={[
           {
             pathname: "/chat/conversation-1",
