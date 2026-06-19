@@ -19,11 +19,58 @@ export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
+        h1({ children, ...props }) {
+          return (
+            <h1
+              className="mb-4 mt-6 text-2xl font-bold tracking-tight"
+              style={{ color: "var(--theme-text-primary)", borderBottom: "1px solid var(--theme-glass-border)", paddingBottom: "0.5rem" }}
+              {...props}
+            >
+              {children}
+            </h1>
+          );
+        },
+        h2({ children, ...props }) {
+          return (
+            <h2
+              className="mb-3 mt-5 text-xl font-semibold tracking-tight"
+              style={{ color: "var(--theme-text-primary)" }}
+              {...props}
+            >
+              {children}
+            </h2>
+          );
+        },
+        h3({ children, ...props }) {
+          return (
+            <h3
+              className="mb-2 mt-4 text-lg font-semibold"
+              style={{ color: "var(--theme-text-primary)" }}
+              {...props}
+            >
+              {children}
+            </h3>
+          );
+        },
+        h4({ children, ...props }) {
+          return (
+            <h4
+              className="mb-2 mt-3 text-base font-semibold"
+              style={{ color: "var(--theme-text-primary)" }}
+              {...props}
+            >
+              {children}
+            </h4>
+          );
+        },
         p({ children, ...props }) {
           return <p {...props}>{renderWithCitations(children, sources)}</p>;
         },
         li({ children, ...props }) {
           return <li {...props}>{renderWithCitations(children, sources)}</li>;
+        },
+        hr(props) {
+          return <hr className="my-6" style={{ borderColor: "var(--theme-glass-border)" }} {...props} />;
         },
         code({ className, children, ...props }) {
           const match = /language-(\w+)/.exec(className || "");
@@ -39,8 +86,8 @@ export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
           if (!hasLanguage && !hasNewlines) {
             return (
               <code
-                className={cn("rounded px-1.5 py-0.5 text-[13px] font-mono", className)}
-                style={{ backgroundColor: "var(--theme-bg-elevated)", color: "var(--theme-text-primary)" }}
+                className={cn("rounded px-1.5 py-0.5 font-mono text-[0.875em]", className)}
+                style={{ backgroundColor: "var(--theme-accent-alpha-10)", color: "var(--theme-accent)" }}
                 {...props}
               >
                 {children}
@@ -119,8 +166,8 @@ export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
         blockquote({ children, ...props }) {
           return (
             <blockquote
-              className="my-3 pl-3 pr-3 py-2 italic"
-              style={{ borderLeft: "4px solid var(--theme-accent)", backgroundColor: "var(--theme-accent-alpha-10)", color: "var(--theme-text-secondary)" }}
+              className="my-4 rounded-r-lg pl-4 pr-4 py-3 not-italic"
+              style={{ borderLeft: "3px solid var(--theme-accent)", backgroundColor: "var(--theme-accent-alpha-10)", color: "var(--theme-text-secondary)" }}
               {...props}
             >
               {children}
@@ -129,20 +176,20 @@ export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
         },
         ul({ children, ...props }) {
           return (
-            <ul className="my-2 ml-6 list-disc space-y-1" {...props}>
+            <ul className="my-2.5 ml-5 list-disc space-y-1.5" style={{ color: "var(--theme-text-primary)" }} {...props}>
               {children}
             </ul>
           );
         },
         ol({ children, ...props }) {
           return (
-            <ol className="my-2 ml-6 list-decimal space-y-1" {...props}>
+            <ol className="my-2.5 ml-5 list-decimal space-y-1.5" style={{ color: "var(--theme-text-primary)" }} {...props}>
               {children}
             </ol>
           );
         }
       }}
-      className="prose max-w-none prose-headings:font-semibold prose-p:leading-relaxed"
+      className="prose max-w-none prose-p:leading-[1.8] prose-li:leading-[1.8]"
       style={{
         "--tw-prose-headings": "var(--theme-text-primary)",
         "--tw-prose-body": "var(--theme-text-primary)",

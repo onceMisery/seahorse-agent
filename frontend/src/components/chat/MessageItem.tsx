@@ -150,56 +150,58 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
           />
         ) : null}
 
-        <div className="space-y-2">
-          {isWaiting ? (
-            <div className="ai-wait" aria-label="思考中">
-              <span className="ai-wait-dots" aria-hidden="true">
-                <span className="ai-wait-dot" />
-                <span className="ai-wait-dot" />
-                <span className="ai-wait-dot" />
-              </span>
-            </div>
-          ) : null}
-          {hasContent ? <MessageContent blocks={message.blocks ?? []} rawText={message.content} sources={message.sources} /> : null}
-          {!isUser ? <AgentTracePanel message={message} /> : null}
-          <AnimatePresence>
-            {!isUser && hasRunData(message) && message.status !== "streaming" ? (
-              <motion.button
-                key="run-details-btn"
-                initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -4, scale: 0.95 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                type="button"
-                onClick={() => openInspector(message.id, "timeline")}
-                className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors"
-                style={{
-                  color: "var(--sh-workbench-accent)",
-                  backgroundColor: "var(--sh-workbench-accent-soft)"
-                }}
-                aria-label="查看运行详情"
-              >
-                <ScanSearch className="h-3.5 w-3.5" />
-                查看运行详情
-              </motion.button>
+        <div className="assistant-message">
+          <div className="space-y-3">
+            {isWaiting ? (
+              <div className="ai-wait" aria-label="思考中">
+                <span className="ai-wait-dots" aria-hidden="true">
+                  <span className="ai-wait-dot" />
+                  <span className="ai-wait-dot" />
+                  <span className="ai-wait-dot" />
+                </span>
+              </div>
             ) : null}
-          </AnimatePresence>
-          {showEmptyResult ? (
-            <p className="text-sm" style={{ color: "var(--theme-text-muted)" }}>
-              {EMPTY_RESULT_TEXT}
-            </p>
-          ) : null}
-          {message.status === "error" ? (
-            <p className="text-xs text-rose-400">生成已中断。</p>
-          ) : null}
-          {showFeedback ? (
-            <FeedbackButtons
-              messageId={message.id}
-              feedback={message.feedback ?? null}
-              content={message.content}
-              alwaysVisible={Boolean(isLast)}
-            />
-          ) : null}
+            {hasContent ? <MessageContent blocks={message.blocks ?? []} rawText={message.content} sources={message.sources} /> : null}
+            {!isUser ? <AgentTracePanel message={message} /> : null}
+            <AnimatePresence>
+              {!isUser && hasRunData(message) && message.status !== "streaming" ? (
+                <motion.button
+                  key="run-details-btn"
+                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                  type="button"
+                  onClick={() => openInspector(message.id, "timeline")}
+                  className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors"
+                  style={{
+                    color: "var(--sh-workbench-accent)",
+                    backgroundColor: "var(--sh-workbench-accent-soft)"
+                  }}
+                  aria-label="查看运行详情"
+                >
+                  <ScanSearch className="h-3.5 w-3.5" />
+                  查看运行详情
+                </motion.button>
+              ) : null}
+            </AnimatePresence>
+            {showEmptyResult ? (
+              <p className="text-sm" style={{ color: "var(--theme-text-muted)" }}>
+                {EMPTY_RESULT_TEXT}
+              </p>
+            ) : null}
+            {message.status === "error" ? (
+              <p className="text-xs text-rose-400">生成已中断。</p>
+            ) : null}
+            {showFeedback ? (
+              <FeedbackButtons
+                messageId={message.id}
+                feedback={message.feedback ?? null}
+                content={message.content}
+                alwaysVisible={Boolean(isLast)}
+              />
+            ) : null}
+          </div>
         </div>
       </div>
     </motion.div>

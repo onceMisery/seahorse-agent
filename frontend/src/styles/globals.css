@@ -609,7 +609,28 @@ select:focus:not(:focus-visible),
 }
 
 .prose pre {
-  @apply bg-marine-800 text-slate-200;
+  background-color: var(--theme-bg-elevated) !important;
+  color: var(--theme-text-primary);
+  border: 1px solid var(--theme-glass-border);
+}
+
+.assistant-message {
+  background: var(--theme-glass-bg);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: 12px 16px 16px 4px;
+  padding: 20px 24px;
+  line-height: 1.8;
+  letter-spacing: 0.01em;
+}
+
+.assistant-message .prose {
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.assistant-message .prose p {
+  letter-spacing: 0.01em;
 }
 
 /* 缩小 Markdown 元素之间的间距 */
@@ -618,42 +639,81 @@ select:focus:not(:focus-visible),
 }
 
 .prose h1 {
-  margin-top: 1rem;
+  margin-top: 1.5rem;
   margin-bottom: 0.75rem;
+  font-size: 1.5rem;
+  line-height: 1.3;
 }
 .prose h2 {
-  margin-top: 1rem;
-  margin-bottom: 0.75rem;
+  margin-top: 1.25rem;
+  margin-bottom: 0.625rem;
+  font-size: 1.25rem;
+  line-height: 1.35;
 }
 .prose h3 {
-  margin-top: 0.75rem;
+  margin-top: 1rem;
   margin-bottom: 0.5rem;
+  font-size: 1.125rem;
+  line-height: 1.4;
 }
 .prose h4 {
-  margin-top: 0.75rem;
+  margin-top: 0.875rem;
   margin-bottom: 0.5rem;
+  font-size: 1rem;
+  line-height: 1.45;
 }
 
 .prose p {
   margin-top: 0.5rem;
   margin-bottom: 0.5rem;
+  line-height: 1.8;
 }
 
 .prose ul,
 .prose ol {
-  margin-top: 0.75rem;
-  margin-bottom: 0.75rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-left: 1.5rem;
 }
 
 .prose li {
-  margin-top: 0.5rem;
-  margin-bottom: 0.5rem;
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+  line-height: 1.8;
+}
+
+.prose li > p {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
 }
 
 /* 表格间距优化 */
 .prose table {
   margin-top: 0.75rem;
   margin-bottom: 0.75rem;
+  font-size: 0.9375rem;
+}
+
+.prose blockquote {
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.prose hr {
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.prose img {
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-radius: 8px;
+}
+
+/* strong/bold 文字在暗色主题下需要更醒目 */
+.prose strong {
+  font-weight: 600;
+  color: var(--theme-text-primary);
 }
 
 @layer components {

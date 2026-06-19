@@ -120,7 +120,8 @@ export function MermaidDiagram({ code }: MermaidDiagramProps) {
         </pre>
       ) : (
         <div
-          className="overflow-auto bg-white px-4 py-4"
+          className="overflow-auto px-4 py-4"
+          style={{ backgroundColor: "var(--theme-bg-surface)" }}
           dangerouslySetInnerHTML={{ __html: svg }}
         />
       )}

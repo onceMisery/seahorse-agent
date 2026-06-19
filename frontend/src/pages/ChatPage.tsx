@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -13,6 +13,7 @@ import { useWorkbenchStore } from "@/stores/workbenchStore";
 
 export function ChatPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { sessionId } = useParams<{ sessionId: string }>();
   const {
     messages,
@@ -25,12 +26,15 @@ export function ChatPage() {
     fetchSessions,
     selectSession,
     createSession,
-    startNewSessionDraft
+    startNewSessionDraft,
+    sendMessage
   } = useChatStore();
   const { activeMessageId, inspectorOpen, closeInspector } = useWorkbenchStore();
   const showWelcome = messages.length === 0 && !isLoading;
   const [sessionsReady, setSessionsReady] = React.useState(false);
   const invalidSessionHandledRef = React.useRef<string | null>(null);
+  const autoSentRef = React.useRef<string | null>(null);
+  const routeState = location.state as { autoSend?: string; autoSendId?: string } | null;
   const sessionExists = React.useMemo(() => {
     if (!sessionId) return false;
     return sessions.some((session) => session.id === sessionId);
@@ -105,6 +109,32 @@ export function ChatPage() {
       startNewSessionDraft();
     }
   }, [sessionId, sessionsReady, currentSessionId, messages.length, isCreatingNew, startNewSessionDraft]);
+
+  React.useEffect(() => {
+    const autoSendText = typeof routeState?.autoSend === "string" ? routeState.autoSend.trim() : "";
+    if (!autoSendText || !sessionId || !sessionsReady || !sessionExists || currentSessionId !== sessionId) {
+      return;
+    }
+
+    const autoSendId = routeState?.autoSendId || `${sessionId}:${autoSendText}`;
+    if (autoSentRef.current === autoSendId) {
+      return;
+    }
+
+    autoSentRef.current = autoSendId;
+    void sendMessage(autoSendText, { conversationIdOverride: sessionId });
+    navigate(location.pathname, { replace: true, state: null });
+  }, [
+    currentSessionId,
+    location.pathname,
+    navigate,
+    routeState?.autoSend,
+    routeState?.autoSendId,
+    sendMessage,
+    sessionExists,
+    sessionId,
+    sessionsReady
+  ]);
 
   return (
     <MainLayout>
