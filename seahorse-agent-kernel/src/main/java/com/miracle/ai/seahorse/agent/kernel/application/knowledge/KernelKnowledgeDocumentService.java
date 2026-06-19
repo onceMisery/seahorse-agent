@@ -252,6 +252,7 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
                 .rawBytes(fileBytes)
                 .mimeType(document.file().fileType())
                 .metadata(java.util.Map.of(
+                        "tenantId", TenantContext.get(),
                         "kbId", document.kbId(),
                         "docId", document.id(),
                         "fileName", document.docName(),

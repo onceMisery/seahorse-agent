@@ -157,8 +157,8 @@ public class IndexerNodeFeature implements IngestionNodeFeature {
         // 向量库只携带可下推过滤或权限兜底需要的字段，避免未声明动态 metadata 直接进入检索后端。
         VECTOR_SYSTEM_METADATA_KEYS.forEach(key -> putIfPresent(metadata, key, source.get(key)));
         putIfPresent(metadata, META_COLLECTION_NAME, firstValue(source.get(META_COLLECTION_NAME), request.collectionName()));
-        putIfPresent(metadata, META_KB_ID, firstValue(source.get(META_KB_ID), request.kbId()));
-        putIfPresent(metadata, META_DOC_ID, firstValue(source.get(META_DOC_ID), request.docId()));
+        putIfPresent(metadata, META_KB_ID, stringValue(firstValue(source.get(META_KB_ID), request.kbId())));
+        putIfPresent(metadata, META_DOC_ID, stringValue(firstValue(source.get(META_DOC_ID), request.docId())));
         putIfPresent(metadata, META_CHUNK_ID, firstValue(source.get(META_CHUNK_ID), chunk.getChunkId()));
         putIfPresent(metadata, META_CHUNK_INDEX, firstValue(source.get(META_CHUNK_INDEX), chunk.getIndex()));
         if (schema != null && !schema.empty()) {
@@ -187,6 +187,10 @@ public class IndexerNodeFeature implements IngestionNodeFeature {
 
     private Object firstValue(Object first, Object second) {
         return present(first) ? first : second;
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private String firstText(String first, String second) {

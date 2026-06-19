@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.PipelineDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.ChunkerNodeFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.EmbedderNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.IndexerNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.IngestionNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.ParserNodeFeature;
@@ -31,6 +32,7 @@ import com.miracle.ai.seahorse.agent.kernel.plugin.DefaultExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionDescriptor;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureType;
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParserPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.UploadFileContent;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.UploadKnowledgeDocumentCommand;
@@ -127,6 +129,32 @@ class KernelKnowledgeDocumentServiceTests {
     }
 
     @Test
+    void shouldAttachTenantMetadataWhenExecutingDefaultDocumentPipeline() {
+        Ports ports = new Ports();
+        RecordingVectorIndexPort vectorIndexPort = new RecordingVectorIndexPort();
+        KernelKnowledgeDocumentService service = newService(ports, vectorIndexPort, KeywordIndexPort.noop());
+        KnowledgeDocumentRecord document = ports.repository.createPendingDocument(new CreateKnowledgeDocumentCommand(
+                1L,
+                "policy.pdf",
+                new KnowledgeDocumentFileRef("local://policy.pdf", "pdf", 7L),
+                new KnowledgeDocumentProcessRef("pending", "pipeline", "pipeline-1"),
+                "tester"));
+
+        TenantContext.set("tenant-1");
+        try {
+            service.executeChunk(document.id(), PipelineDefinition.builder().id("pipeline-1").build(), "tester");
+        } finally {
+            TenantContext.clear();
+        }
+
+        assertThat(vectorIndexPort.indexedChunks).hasSize(1);
+        assertThat(vectorIndexPort.indexedChunks.get(0).getMetadata())
+                .containsEntry("tenant_id", "tenant-1")
+                .containsEntry("kb_id", "1")
+                .containsEntry("doc_id", "1");
+    }
+
+    @Test
     void chunkHandlerShouldLoadPipelineAndExecuteDocument() {
         Ports ports = new Ports();
         KnowledgeDocumentRecord document = ports.repository.createPendingDocument(new CreateKnowledgeDocumentCommand(
@@ -203,7 +231,8 @@ class KernelKnowledgeDocumentServiceTests {
                                                      VectorIndexPort vectorIndexPort,
                                                      KeywordIndexPort keywordIndexPort) {
         KnowledgeDocumentServicePorts servicePorts = new KnowledgeDocumentServicePorts(
-                ports.knowledgeBaseQuery, ports.repository, ports.storage, ports.messageQueue, ingestionEngine());
+                ports.knowledgeBaseQuery, ports.repository, ports.storage, ports.messageQueue,
+                ingestionEngine(vectorIndexPort, keywordIndexPort));
         KnowledgeDocumentVectorPorts vectorPorts = new KnowledgeDocumentVectorPorts(
                 EmbeddingModelPort.noop(), vectorIndexPort, keywordIndexPort);
         return new KernelKnowledgeDocumentService(servicePorts, vectorPorts, "topic");
@@ -233,15 +262,20 @@ class KernelKnowledgeDocumentServiceTests {
     }
 
     private KernelIngestionEngine ingestionEngine() {
+        return ingestionEngine(new NoopVectorIndexPort(), KeywordIndexPort.noop());
+    }
+
+    private KernelIngestionEngine ingestionEngine(VectorIndexPort vectorIndexPort, KeywordIndexPort keywordIndexPort) {
         DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
         registerNodeFeature(registry, new ChunkNodeFeature());
         registerNodeFeature(registry, new ParserNodeFeature(DocumentParserPort.plainText()));
         registerNodeFeature(registry, new ChunkerNodeFeature((modelId, text) -> List.of(0.1F)));
+        registerNodeFeature(registry, new EmbedderNodeFeature((modelId, text) -> List.of(0.1F)));
         registerNodeFeature(registry, new IndexerNodeFeature(
                 new NoopVectorCollectionAdminPort(),
-                new NoopVectorIndexPort(),
+                vectorIndexPort,
                 new RecordingKnowledgeChunkRepository(),
-                KeywordIndexPort.noop()));
+                keywordIndexPort));
         return new KernelIngestionEngine(registry, FeatureActivationContext.empty());
     }
 
@@ -431,10 +465,12 @@ class KernelKnowledgeDocumentServiceTests {
 
         private final List<String> indexedDocuments = new ArrayList<>();
         private final List<String> deletedDocuments = new ArrayList<>();
+        private final List<VectorChunk> indexedChunks = new ArrayList<>();
 
         @Override
         public void indexDocumentChunks(String collectionName, String docId, List<VectorChunk> chunks) {
             indexedDocuments.add(collectionName + "/" + docId + "/" + chunks.get(0).getChunkId());
+            indexedChunks.addAll(chunks);
         }
 
         @Override
