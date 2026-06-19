@@ -40,7 +40,6 @@ import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -61,12 +60,16 @@ import java.util.Locale;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
+        matchIfMissing = true)
 public class SeahorseAgentKeywordAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type",
+            havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.keyword-search", name = "type",
+            havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(KeywordSearchPort.class)
     public JdbcKeywordSearchAdapter seahorseJdbcKeywordSearchAdapter(
             DataSource dataSource, ObjectMapper objectMapper) {
@@ -75,7 +78,10 @@ public class SeahorseAgentKeywordAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type",
+            havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.keyword-index", name = "type",
+            havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(value = KeywordIndexPort.class, ignored = KeywordIndexOutboxAdapter.class)
     public JdbcKeywordIndexAdapter seahorseJdbcKeywordIndexAdapter(DataSource dataSource) {
         return new JdbcKeywordIndexAdapter(dataSource);
@@ -84,7 +90,8 @@ public class SeahorseAgentKeywordAdapterAutoConfiguration {
     @Bean
     @Primary
     @ConditionalOnBean(MessageQueuePort.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.keyword-index", name = "mode", havingValue = "outbox")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.keyword-index", name = "mode",
+            havingValue = "outbox")
     @ConditionalOnMissingBean(KeywordIndexOutboxAdapter.class)
     public KeywordIndexOutboxAdapter seahorseKeywordIndexOutboxAdapter(
             MessageQueuePort messageQueuePort,
@@ -95,7 +102,8 @@ public class SeahorseAgentKeywordAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(MessageSubscriptionPort.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.keyword-index", name = "mode", havingValue = "outbox")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.keyword-index", name = "mode",
+            havingValue = "outbox")
     @ConditionalOnMissingBean(KeywordIndexMessageSubscriber.class)
     public KeywordIndexMessageSubscriber seahorseKeywordIndexMessageSubscriber(
             MessageSubscriptionPort subscriptionPort,
@@ -158,7 +166,7 @@ public class SeahorseAgentKeywordAdapterAutoConfiguration {
 
         @Bean
         @ConditionalOnBean({OkHttpClient.class, ObjectMapper.class})
-        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.keyword-search", name = "type",
+        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.keyword-search", name = "type",
                 havingValue = "elasticsearch")
         @ConditionalOnMissingBean(ElasticsearchKeywordSearchAdapter.class)
         public ElasticsearchKeywordSearchAdapter seahorseElasticsearchKeywordSearchAdapter(
@@ -191,7 +199,7 @@ public class SeahorseAgentKeywordAdapterAutoConfiguration {
 
         @Bean
         @ConditionalOnBean({OkHttpClient.class, ObjectMapper.class})
-        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.keyword-index", name = "type",
+        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.keyword-index", name = "type",
                 havingValue = "elasticsearch")
         @ConditionalOnMissingBean(ElasticsearchKeywordIndexAdapter.class)
         public ElasticsearchKeywordIndexAdapter seahorseElasticsearchKeywordIndexAdapter(
@@ -226,7 +234,7 @@ public class SeahorseAgentKeywordAdapterAutoConfiguration {
 
         @Bean
         @ConditionalOnBean(ObjectMapper.class)
-        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.keyword-search", name = "type",
+        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.keyword-search", name = "type",
                 havingValue = "lucene")
         @ConditionalOnMissingBean(LuceneKeywordSearchAdapter.class)
         public LuceneKeywordSearchAdapter seahorseLuceneKeywordSearchAdapter(
@@ -248,7 +256,7 @@ public class SeahorseAgentKeywordAdapterAutoConfiguration {
 
         @Bean
         @ConditionalOnBean(ObjectMapper.class)
-        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.keyword-index", name = "type",
+        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.keyword-index", name = "type",
                 havingValue = "lucene")
         @ConditionalOnMissingBean(LuceneKeywordIndexAdapter.class)
         public LuceneKeywordIndexAdapter seahorseLuceneKeywordIndexAdapter(

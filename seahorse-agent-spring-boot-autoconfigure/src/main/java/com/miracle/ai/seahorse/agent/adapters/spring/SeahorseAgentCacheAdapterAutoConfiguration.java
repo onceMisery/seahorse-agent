@@ -39,7 +39,6 @@ import org.springframework.boot.autoconfigure.condition.AnyNestedCondition;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -54,25 +53,28 @@ import org.springframework.context.annotation.ConfigurationCondition.Configurati
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
+        matchIfMissing = true)
 public class SeahorseAgentCacheAdapterAutoConfiguration {
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.cache", name = "type",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
             havingValue = "noop")
     public RateLimiterPort seahorseRateLimiterPort() {
         return RateLimiterPort.noop();
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.cache", name = "type", havingValue = "local")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
+            havingValue = "local")
     @ConditionalOnMissingBean(KeyValueCachePort.class)
     public LocalCacheAdapter seahorseLocalCacheAdapter() {
         return new LocalCacheAdapter();
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.cache", name = "type", havingValue = "local")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
+            havingValue = "local")
     @ConditionalOnMissingBean(DistributedSemaphorePort.class)
     public LocalSemaphoreAdapter seahorseLocalSemaphoreAdapter() {
         return new LocalSemaphoreAdapter();
@@ -86,7 +88,8 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
     static class RedisCacheAutoConfiguration {
 
         @Bean(destroyMethod = "shutdown")
-        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.cache", name = "type", havingValue = "redis")
+        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
+                havingValue = "redis")
         @ConditionalOnBean(RedisProperties.class)
         @ConditionalOnMissingBean(RedissonClient.class)
         public RedissonClient redissonClient(RedisProperties redisProperties) {
@@ -99,7 +102,7 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.cache", name = "type",
+        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
                 havingValue = "redis")
         @ConditionalOnBean(RedissonClient.class)
         @ConditionalOnMissingBean(RedisCacheAdapter.class)
@@ -108,7 +111,7 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.cache", name = "type",
+        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
                 havingValue = "redis")
         @ConditionalOnBean(RedissonClient.class)
         @ConditionalOnMissingBean(DistributedSemaphorePort.class)
@@ -117,7 +120,8 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.stream-task", name = "type", havingValue = "redis")
+        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.stream-task", name = "type",
+                havingValue = "redis")
         @ConditionalOnBean(RedissonClient.class)
         @ConditionalOnMissingBean(StreamTaskPort.class)
         public RedisStreamTaskPort seahorseRedisStreamTaskPort(RedissonClient redissonClient) {
@@ -125,7 +129,7 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.memory-aggregation", name = "type",
+        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.memory-aggregation", name = "type",
                 havingValue = "redis")
         @ConditionalOnBean({RedissonClient.class, MemoryAggregationPolicy.class})
         @ConditionalOnMissingBean(MemoryAggregationBufferPort.class)
@@ -136,7 +140,7 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.memory-aggregation", name = "type",
+        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.memory-aggregation", name = "type",
                 havingValue = "redis")
         @ConditionalOnBean(RedissonClient.class)
         @ConditionalOnMissingBean(MemoryAggregationSchedulerPort.class)
@@ -152,12 +156,13 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
             super(ConfigurationPhase.REGISTER_BEAN);
         }
 
-        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.cache", name = "type",
+        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
                 havingValue = "redis")
         static class RedisCacheSelected {
         }
 
-        @ConditionalOnProperty(prefix = "seahorse.agent.adapters.stream-task", name = "type", havingValue = "redis")
+        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.stream-task", name = "type",
+                havingValue = "redis")
         static class RedisStreamTaskSelected {
         }
     }

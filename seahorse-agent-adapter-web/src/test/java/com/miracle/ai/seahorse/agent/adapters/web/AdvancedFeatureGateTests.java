@@ -148,10 +148,7 @@ class AdvancedFeatureGateTests {
 
     private static boolean isDemoCoreFeature(AdvancedFeature feature) {
         return switch (feature) {
-            case SKILL_MANAGEMENT,
-                    AGENT_RUN_MANAGEMENT,
-                    AGENT_DEFINITION_MANAGEMENT,
-                    TOOL_CATALOG_MANAGEMENT,
+            case TOOL_CATALOG_MANAGEMENT,
                     INGESTION_PIPELINE_MANAGEMENT,
                     INGESTION_TASK_MANAGEMENT -> true;
             default -> false;

@@ -29,7 +29,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -43,7 +42,8 @@ import java.util.Locale;
         SeahorseAgentAiAdapterAutoConfiguration.class,
         SeahorseAgentStorageAdapterAutoConfiguration.class
 })
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
+        matchIfMissing = true)
 public class SeahorseAgentSreAdapterHealthAutoConfiguration {
 
     @Bean
@@ -55,8 +55,8 @@ public class SeahorseAgentSreAdapterHealthAutoConfiguration {
                 "vector-store",
                 vectorSearchPort.getIfAvailable(),
                 "VectorSearchPort",
-                "seahorse.agent.adapters.vector.type",
-                environment.getProperty("seahorse.agent.adapters.vector.type", "milvus"),
+                "seahorse-agent.adapters.vector.type",
+                resolveSeahorseAgentProperty(environment, "seahorse-agent.adapters.vector.type", "milvus"),
                 true);
     }
 
@@ -69,8 +69,8 @@ public class SeahorseAgentSreAdapterHealthAutoConfiguration {
                 "keyword-search",
                 keywordSearchPort.getIfAvailable(),
                 "KeywordSearchPort",
-                "seahorse.agent.adapters.keyword-search.type",
-                environment.getProperty("seahorse.agent.adapters.keyword-search.type", "jdbc"),
+                "seahorse-agent.adapters.keyword-search.type",
+                resolveSeahorseAgentProperty(environment, "seahorse-agent.adapters.keyword-search.type", "jdbc"),
                 false);
     }
 
@@ -79,16 +79,17 @@ public class SeahorseAgentSreAdapterHealthAutoConfiguration {
     public SreHealthContributorPort seahorseKeywordIndexSreHealthContributor(
             ObjectProvider<KeywordIndexPort> keywordIndexPort,
             Environment environment) {
-        String indexType = environment.getProperty("seahorse.agent.adapters.keyword-index.type", "jdbc");
-        String mode = environment.getProperty("seahorse.agent.adapters.keyword-index.mode", "sync");
+        String indexType = resolveSeahorseAgentProperty(environment,
+                "seahorse-agent.adapters.keyword-index.type", "jdbc");
+        String mode = resolveSeahorseAgentProperty(environment, "seahorse-agent.adapters.keyword-index.mode", "sync");
         return () -> runtimeAdapterItem(
                 "keyword-index",
                 keywordIndexPort.getIfAvailable(),
                 "KeywordIndexPort",
-                "seahorse.agent.adapters.keyword-index.type",
+                "seahorse-agent.adapters.keyword-index.type",
                 indexType,
                 false,
-                "seahorse.agent.adapters.keyword-index.mode=" + mode);
+                "seahorse-agent.adapters.keyword-index.mode=" + mode);
     }
 
     @Bean
@@ -100,9 +101,9 @@ public class SeahorseAgentSreAdapterHealthAutoConfiguration {
         return () -> {
             Object chat = chatModelPort.getIfAvailable();
             Object streaming = streamingChatModelPort.getIfAvailable();
-            String configuredType = environment.getProperty(
-                    "seahorse.agent.adapters.ai.type", "openai-compatible");
-            String evidence = "seahorse.agent.adapters.ai.type=" + configuredType;
+            String configuredType = resolveSeahorseAgentProperty(environment,
+                    "seahorse-agent.adapters.ai.type", "openai-compatible");
+            String evidence = "seahorse-agent.adapters.ai.type=" + configuredType;
             if (chat != null && streaming != null) {
                 return new SreHealthItem("ai-model", SreHealthStatus.GREEN,
                         "ChatModelPort and StreamingChatModelPort are available",
@@ -126,8 +127,8 @@ public class SeahorseAgentSreAdapterHealthAutoConfiguration {
                 "object-storage",
                 objectStoragePort.getIfAvailable(),
                 "ObjectStoragePort",
-                "seahorse.agent.adapters.storage.type",
-                environment.getProperty("seahorse.agent.adapters.storage.type", "local"),
+                "seahorse-agent.adapters.storage.type",
+                resolveSeahorseAgentProperty(environment, "seahorse-agent.adapters.storage.type", "local"),
                 false);
     }
 
@@ -174,5 +175,13 @@ public class SeahorseAgentSreAdapterHealthAutoConfiguration {
 
     private static String textOr(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    private static String resolveSeahorseAgentProperty(Environment environment, String canonicalName, String fallback) {
+        String value = environment.getProperty(canonicalName);
+        if (value == null || value.isBlank()) {
+            value = environment.getProperty(canonicalName.replace("seahorse-agent.", "seahorse.agent."));
+        }
+        return textOr(value, fallback);
     }
 }

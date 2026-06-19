@@ -119,6 +119,7 @@ public class SeahorseAgentRunController {
                 status,
                 parseInstant(from),
                 parseInstant(to),
+                null,
                 current,
                 size)));
     }

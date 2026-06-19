@@ -66,7 +66,6 @@ public class SeahorseApprovalController {
                                     @RequestParam(required = false) ApprovalRequestStatus status,
                                     @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,
                                     @RequestParam(required = false, defaultValue = DEFAULT_SIZE) long size) {
-        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
         return ApiResponses.requireService(approvalPortProvider, port -> port.page(tenantId, status, current, size));
     }
 
@@ -77,7 +76,6 @@ public class SeahorseApprovalController {
 
     @GetMapping("/api/approvals/{approvalId}")
     public ApiResponse<Object> findById(@PathVariable String approvalId) {
-        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
         return ApiResponses.requireService(approvalPortProvider, port -> port.findById(approvalId)
                 .orElseThrow(() -> new ResourceNotFoundException("Approval not found")));
     }

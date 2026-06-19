@@ -138,6 +138,11 @@ public class KernelAgentLoop {
     private static final String ARTIFACT_TYPE_FIELD = "artifactType";
     private static final String MARKDOWN_ARTIFACT_TYPE = "MARKDOWN";
     private static final String LEGACY_LOAD_SKILL_TOOL_ID = "load_skill";
+    private static final ToolDescriptor LEGACY_LOAD_SKILL_DESCRIPTOR = new ToolDescriptor(
+            LEGACY_LOAD_SKILL_TOOL_ID,
+            "Load Skill",
+            "Load SKILL.md for a skill selected in the current Agent runtime snapshot.",
+            "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"]}");
     private static final ToolRiskLevel DEFAULT_TOOL_RISK_LEVEL = ToolRiskLevel.HIGH;
     private static final String TRACE_CLASS_NAME =
             "com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop";
@@ -655,11 +660,15 @@ public class KernelAgentLoop {
                 .filter(Objects::nonNull)
                 .toList());
         if (hasLoadableSkills(skillRuntimeBlocks)) {
-            toolRegistry.find(LoadSkillResourceToolPortAdapter.TOOL_ID)
+            boolean registeredLoadSkill = toolRegistry.find(LoadSkillResourceToolPortAdapter.TOOL_ID)
                     .flatMap(ignored -> toolRegistry.listTools().stream()
                             .filter(tool -> LoadSkillResourceToolPortAdapter.TOOL_ID.equals(tool.toolId()))
                             .findFirst())
-                    .ifPresent(result::add);
+                    .map(result::add)
+                    .orElse(false);
+            if (!registeredLoadSkill) {
+                result.add(LEGACY_LOAD_SKILL_DESCRIPTOR);
+            }
         }
         if (!safeAllowedToolIds.isEmpty()) {
             toolRegistry.find(ToolSearchToolPortAdapter.TOOL_ID)
