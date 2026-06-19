@@ -303,11 +303,13 @@ services:
         condition: service_healthy
     entrypoint: >
       bash -c "
-      bin/pulsar-admin clusters create standalone --url http://pulsar-broker:8080 --broker-url pulsar://pulsar-broker:6650 || true &&
-      bin/pulsar-admin tenants create seahorse-agent || true &&
-      bin/pulsar-admin namespaces create seahorse-agent/ai || true &&
-      bin/pulsar-admin topics create-partitioned-topic persistent://seahorse-agent/ai/knowledge-document-chunk -p 4 || true &&
-      bin/pulsar-admin topics create-partitioned-topic persistent://seahorse-agent/ai/message-feedback -p 2 || true &&
+      set -e;
+      ADMIN='bin/pulsar-admin --admin-url http://pulsar-broker:8080';
+      $$ADMIN clusters get standalone >/dev/null 2>&1 || $$ADMIN clusters create standalone --url http://pulsar-broker:8080 --broker-url pulsar://pulsar-broker:6650;
+      $$ADMIN tenants get seahorse-agent >/dev/null 2>&1 || $$ADMIN tenants create seahorse-agent;
+      $$ADMIN namespaces list seahorse-agent | grep -qx 'seahorse-agent/ai' || $$ADMIN namespaces create seahorse-agent/ai;
+      $$ADMIN topics list seahorse-agent/ai | grep -qx 'persistent://seahorse-agent/ai/knowledge-document-chunk' || $$ADMIN topics create-partitioned-topic persistent://seahorse-agent/ai/knowledge-document-chunk -p 4;
+      $$ADMIN topics list seahorse-agent/ai | grep -qx 'persistent://seahorse-agent/ai/message-feedback' || $$ADMIN topics create-partitioned-topic persistent://seahorse-agent/ai/message-feedback -p 2;
       echo 'Pulsar topics created successfully'
       "
     restart: "no"

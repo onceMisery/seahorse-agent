@@ -25,7 +25,24 @@ $requiredSnippets = @(
     '"/memories/profile-facts?userId=$userId&tenantId=default&limit=20"',
     '"/memories/maintenance/run?reason=smoke-check&compaction=true&alias=true&gc=true"',
     'Assert-NonEmptyDataArray "Profile facts" $profileFacts',
-    'Assert-RetrievalTraceNodes $traceNodes'
+    'Assert-RetrievalTraceNodes $traceNodes',
+    '[ValidateSet("full-compose", "none")]',
+    'Assert-FullComposeRuntime -ContainerName $DockerContainerName',
+    '"/readiness/summary"',
+    'Assert-FullAdapterReadiness $readiness',
+    'docker-compose.full.yml',
+    'SEAHORSE_AGENT_ADAPTERS_VECTOR_TYPE',
+    'SEAHORSE_AGENT_ADAPTERS_CACHE_TYPE',
+    'SEAHORSE_AGENT_ADAPTERS_MQ_TYPE',
+    'SEAHORSE_AGENT_ADAPTERS_OBSERVATION_TYPE',
+    'vector.store',
+    'search.keyword',
+    'cache',
+    'mq',
+    'ForbiddenPattern "noop|unknown"',
+    'unavailable|noop|unknown',
+    'ForbiddenPattern "\blocal\b|unknown"',
+    'ForbiddenPattern "\bdirect\b|unknown"'
 )
 
 $forbiddenSnippets = @(
@@ -33,7 +50,8 @@ $forbiddenSnippets = @(
     '"/rag/config"',
     '"/knowledge-base/$kbId/documents"',
     '"/knowledge-base/$kbId/chunks"',
-    '-X POST "$BaseUrl/rag/v3/chat"'
+    '-X POST "$BaseUrl/rag/v3/chat"',
+    '"/api/readiness/summary"'
 )
 
 $missing = @($requiredSnippets | Where-Object { -not $content.Contains($_) })

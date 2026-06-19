@@ -1,7 +1,10 @@
 param(
     [string]$BaseUrl = "http://localhost:9090",
     [string]$Username = "admin",
-    [string]$Password = "admin123"
+    [string]$Password = "admin123",
+    [string]$DockerContainerName = "seahorse-backend",
+    [ValidateSet("full-compose", "none")]
+    [string]$RuntimeProfile = "full-compose"
 )
 
 $ErrorActionPreference = "Stop"
@@ -215,10 +218,110 @@ function Assert-RetrievalTraceNodes {
     }
 }
 
+function Convert-EnvListToMap {
+    param(
+        [object[]]$EnvList
+    )
+
+    $map = @{}
+    foreach ($entry in @($EnvList)) {
+        $text = [string]$entry
+        $separator = $text.IndexOf("=")
+        if ($separator -le 0) {
+            continue
+        }
+        $name = $text.Substring(0, $separator)
+        $value = $text.Substring($separator + 1)
+        $map[$name] = $value
+    }
+    return $map
+}
+
+function Assert-FullComposeRuntime {
+    param(
+        [string]$ContainerName
+    )
+
+    $raw = & docker.exe inspect $ContainerName 2>&1
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "docker inspect failed for ${ContainerName}: $raw"
+    }
+
+    $inspect = ($raw -join "`n") | ConvertFrom-Json
+    $container = @($inspect)[0]
+    if ($null -eq $container) {
+        throw "docker inspect returned no container for $ContainerName"
+    }
+
+    $configFiles = [string]$container.Config.Labels.'com.docker.compose.project.config_files'
+    if ([string]::IsNullOrWhiteSpace($configFiles) -or $configFiles -notmatch 'docker-compose\.full\.yml') {
+        throw "$ContainerName was not created from docker-compose.full.yml; config_files=$configFiles"
+    }
+
+    $envMap = Convert-EnvListToMap -EnvList $container.Config.Env
+    $required = [ordered]@{
+        SEAHORSE_AGENT_ADAPTERS_VECTOR_TYPE = "milvus"
+        SEAHORSE_AGENT_ADAPTERS_CACHE_TYPE = "redis"
+        SEAHORSE_AGENT_ADAPTERS_MQ_TYPE = "pulsar"
+        SEAHORSE_AGENT_ADAPTERS_OBSERVATION_TYPE = "micrometer"
+    }
+    foreach ($name in $required.Keys) {
+        $actual = [string]$envMap[$name]
+        $expected = [string]$required[$name]
+        if ($actual -ne $expected) {
+            throw "$ContainerName has $name=$actual, expected $expected for full-compose smoke"
+        }
+    }
+
+    return "configFiles=$configFiles vector=$($envMap['SEAHORSE_AGENT_ADAPTERS_VECTOR_TYPE']) cache=$($envMap['SEAHORSE_AGENT_ADAPTERS_CACHE_TYPE']) mq=$($envMap['SEAHORSE_AGENT_ADAPTERS_MQ_TYPE'])"
+}
+
+function Assert-ReadinessPassed {
+    param(
+        [object[]]$Checks,
+        [string]$Id,
+        [string]$ForbiddenPattern
+    )
+
+    $check = @($Checks | Where-Object { $_.id -eq $Id })[0]
+    if ($null -eq $check) {
+        throw "readiness missing check $Id"
+    }
+    if ([string]$check.status -ne "passed") {
+        throw "readiness $Id status=$($check.status) message=$($check.message)"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ForbiddenPattern) -and [string]$check.message -match $ForbiddenPattern) {
+        throw "readiness $Id still reports fallback adapter: $($check.message)"
+    }
+}
+
+function Assert-FullAdapterReadiness {
+    param(
+        [object]$Response
+    )
+
+    $data = if ($null -ne $Response.data -and $null -ne $Response.data.checks) { $Response.data } else { $Response }
+    if ($null -eq $data -or $null -eq $data.checks) {
+        throw "readiness summary response missing checks"
+    }
+
+    $checks = @($data.checks)
+    Assert-ReadinessPassed -Checks $checks -Id "vector.store" -ForbiddenPattern "noop|unknown"
+    Assert-ReadinessPassed -Checks $checks -Id "search.keyword" -ForbiddenPattern "不可用|unavailable|noop|unknown"
+    Assert-ReadinessPassed -Checks $checks -Id "cache" -ForbiddenPattern "\blocal\b|unknown"
+    Assert-ReadinessPassed -Checks $checks -Id "mq" -ForbiddenPattern "\bdirect\b|unknown"
+}
+
 try {
     $health = Invoke-Json -Method GET -Path "/actuator/health"
     if ($health.status -ne "UP") { throw "health status is $($health.status)" }
     Add-Result "Actuator health" "PASS" "status=UP"
+
+    if ($RuntimeProfile -eq "full-compose") {
+        $runtime = Assert-FullComposeRuntime -ContainerName $DockerContainerName
+        Add-Result "Full compose runtime" "PASS" $runtime
+    }
 
     $login = Invoke-Json -Method POST -Path "/auth/login" -Body @{ username = $Username; password = $Password }
     Assert-Code "Login" $login
@@ -245,6 +348,12 @@ try {
         throw "Feature flags response missing productMode/features"
     }
     Add-Result "Feature flags" "PASS" "productMode=$($features.productMode)"
+
+    if ($RuntimeProfile -eq "full-compose") {
+        $readiness = Invoke-Json -Method GET -Path "/readiness/summary" -Headers $authHeaders
+        Assert-FullAdapterReadiness $readiness
+        Add-Result "Full adapter readiness" "PASS" "mode=$($readiness.mode)"
+    }
 
     $users = Invoke-Json -Method GET -Path "/users?current=1&size=5" -Headers $authHeaders
     Assert-Code "User page" $users
