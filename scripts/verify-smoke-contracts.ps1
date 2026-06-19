@@ -1,5 +1,6 @@
 param(
-    [string]$SmokeScript = "scripts/e2e-backend-smoke.ps1"
+    [string]$SmokeScript = "scripts/e2e-backend-smoke.ps1",
+    [string]$FrontendDockerfile = "frontend/Dockerfile.frontend"
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,6 +11,13 @@ if (-not (Test-Path -LiteralPath $scriptPath)) {
 }
 
 $content = Get-Content -LiteralPath $scriptPath -Raw
+
+$frontendDockerfilePath = Join-Path (Get-Location) $FrontendDockerfile
+if (-not (Test-Path -LiteralPath $frontendDockerfilePath)) {
+    throw "Frontend Dockerfile not found: $FrontendDockerfile"
+}
+
+$frontendDockerfileContent = Get-Content -LiteralPath $frontendDockerfilePath -Raw
 
 $requiredSnippets = @(
     'Authorization = "Bearer $token"',
@@ -69,4 +77,29 @@ if ($missing.Count -gt 0 -or $forbidden.Count -gt 0) {
     exit 1
 }
 
-Write-Host "Smoke contract check passed for $SmokeScript"
+$requiredFrontendDockerfileSnippets = @(
+    'npm ci',
+    'npm run build',
+    'COPY --from=frontend-build /app/dist /usr/share/nginx/html'
+)
+
+$forbiddenFrontendDockerfileSnippets = @(
+    'COPY dist /usr/share/nginx/html'
+)
+
+$missingFrontend = @($requiredFrontendDockerfileSnippets | Where-Object { -not $frontendDockerfileContent.Contains($_) })
+$forbiddenFrontend = @($forbiddenFrontendDockerfileSnippets | Where-Object { $frontendDockerfileContent.Contains($_) })
+
+if ($missingFrontend.Count -gt 0 -or $forbiddenFrontend.Count -gt 0) {
+    if ($missingFrontend.Count -gt 0) {
+        Write-Host "Missing required frontend Dockerfile snippets:" -ForegroundColor Red
+        $missingFrontend | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    }
+    if ($forbiddenFrontend.Count -gt 0) {
+        Write-Host "Forbidden stale frontend Dockerfile snippets:" -ForegroundColor Red
+        $forbiddenFrontend | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    }
+    exit 1
+}
+
+Write-Host "Smoke contract check passed for $SmokeScript and $FrontendDockerfile"
