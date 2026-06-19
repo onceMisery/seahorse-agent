@@ -48,7 +48,7 @@ export function LoginPage() {
     try {
       await login(form.username.trim(), form.password.trim());
       const params = new URLSearchParams(window.location.search);
-      navigate(params.get("redirect") || "/chat");
+      navigate(params.get("redirect") || "/workspace");
     } catch (err) {
       setError((err as Error).message || "登录失败，请稍后重试。");
     }
