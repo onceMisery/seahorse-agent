@@ -252,11 +252,21 @@ public class KernelReadinessService implements ReadinessInboundPort {
             return ReadinessCheck.passed("mq", "消息队列", Severity.INFO,
                     "消息队列可用: " + type);
         }
+        String unavailableMessage = mq != null && mq.detail() != null && !mq.detail().isBlank()
+                ? mq.detail()
+                : "消息队列不可用";
         if (isEnterprise()) {
             return ReadinessCheck.failed("mq", "消息队列", Severity.ERROR,
-                    "消息队列不可用",
+                    unavailableMessage,
                     "异步任务处理不可用",
                     "配置 Pulsar 消息队列",
+                    "");
+        }
+        if (!"direct".equalsIgnoreCase(type) && !"unknown".equalsIgnoreCase(type)) {
+            return ReadinessCheck.failed("mq", "消息队列", Severity.WARN,
+                    unavailableMessage,
+                    "已配置的消息队列不可用",
+                    "检查 " + type + " 消息队列配置",
                     "");
         }
         return ReadinessCheck.passed("mq", "消息队列", Severity.INFO,

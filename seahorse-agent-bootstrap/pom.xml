@@ -38,7 +38,22 @@
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-cache-redis</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-mq-pulsar</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-observation-micrometer</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-search-elasticsearch</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

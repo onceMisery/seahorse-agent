@@ -35,7 +35,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -49,20 +48,22 @@ import java.time.Clock;
         SeahorseAgentAuthAdapterAutoConfiguration.class,
         SeahorseAgentKernelAuthAutoConfiguration.class
 })
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
+        matchIfMissing = true)
 public class SeahorseAgentCredentialAutoConfiguration {
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse.agent.credentials.jdbc", name = "aes-key-base64")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.credentials.jdbc", name = "aes-key-base64")
     @ConditionalOnMissingBean(SecretValueCipher.class)
     public AesGcmSecretValueCipher seahorseSecretValueCipher(
-            @Value("${seahorse.agent.credentials.jdbc.aes-key-base64}") String aesKeyBase64) {
+            @Value("${seahorse-agent.credentials.jdbc.aes-key-base64:${seahorse.agent.credentials.jdbc.aes-key-base64:}}")
+            String aesKeyBase64) {
         return AesGcmSecretValueCipher.fromBase64Key(aesKeyBase64);
     }
 
     @Bean
     @ConditionalOnBean({DataSource.class, SecretValueCipher.class})
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean({SecretStorePort.class, SecretWritePort.class})
     public JdbcSecretStoreAdapter seahorseJdbcSecretStoreAdapter(DataSource dataSource, SecretValueCipher cipher) {

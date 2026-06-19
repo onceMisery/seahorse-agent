@@ -76,8 +76,12 @@ public class SeahorseAgentReadinessAutoConfiguration {
             @Value("${seahorse-agent.adapters.storage.type:local}") String storageType,
             @Value("${seahorse-agent.adapters.ai.type:unknown}") String aiType,
             @Value("${seahorse-agent.adapters.ai.embedding-type:unknown}") String embeddingType,
-            @Value("${seahorse-agent.adapters.ai.embedding-dimension:0}") int embeddingDimension,
-            @Value("${seahorse-agent.adapters.vector.dimension:0}") int vectorDimension,
+            @Value("${seahorse-agent.adapters.ai.embedding-dimension:}") String embeddingDimensionValue,
+            @Value("${seahorse-agent.adapters.vector.dimension:}") String vectorDimensionValue,
+            @Value("${seahorse-agent.adapters.mq.readiness-probe.enabled:${seahorse.agent.adapters.mq.readiness-probe.enabled:true}}")
+            boolean mqReadinessProbeEnabled,
+            @Value("${seahorse-agent.adapters.mq.readiness-probe.topic:${seahorse.agent.adapters.mq.readiness-probe.topic:persistent://seahorse-agent/ai/readiness-probe}}")
+            String mqReadinessProbeTopic,
             Environment environment
     ) {
         String configuredVectorType = resolveSeahorseAgentProperty(environment,
@@ -96,8 +100,17 @@ public class SeahorseAgentReadinessAutoConfiguration {
                 "seahorse-agent.adapters.keyword-search.type", "jdbc");
         String configuredKeywordIndexType = resolveSeahorseAgentProperty(environment,
                 "seahorse-agent.adapters.keyword-index.type", "jdbc");
+        int embeddingDimension = resolveIntSeahorseAgentProperty(environment,
+                "seahorse-agent.adapters.ai.embedding-dimension", embeddingDimensionValue, 0);
+        int vectorDimension = resolveIntSeahorseAgentProperty(environment,
+                "seahorse-agent.adapters.vector.dimension", vectorDimensionValue, 0);
 
         return new ReadinessProbePort() {
+            private static final long MQ_PROBE_TTL_MILLIS = 30_000L;
+
+            private volatile ComponentStatus lastMqProbe;
+            private volatile long lastMqProbeAt;
+
             @Override
             public Map<String, ComponentStatus> probeComponents() {
                 Map<String, ComponentStatus> map = new LinkedHashMap<>();
@@ -138,15 +151,57 @@ public class SeahorseAgentReadinessAutoConfiguration {
                         ? ComponentStatus.available(configuredCacheType)
                         : ComponentStatus.unavailable("KeyValueCachePort not available"));
 
-                map.put("mq", mq.getIfAvailable() != null
-                        ? ComponentStatus.available(configuredMqType)
-                        : ComponentStatus.unavailable("MessageQueuePort not available"));
+                map.put("mq", probeMessageQueue(mq.getIfAvailable()));
 
                 map.put("storage", storage.getIfAvailable() != null
                         ? ComponentStatus.available(configuredStorageType)
                         : ComponentStatus.unavailable("ObjectStoragePort not available"));
 
                 return map;
+            }
+
+            private ComponentStatus probeMessageQueue(MessageQueuePort mqPort) {
+                if (mqPort == null) {
+                    return ComponentStatus.unavailable("MessageQueuePort not available");
+                }
+                if (!"pulsar".equalsIgnoreCase(configuredMqType) || !mqReadinessProbeEnabled) {
+                    return ComponentStatus.available(configuredMqType);
+                }
+                long now = System.currentTimeMillis();
+                ComponentStatus cached = lastMqProbe;
+                if (cached != null && now - lastMqProbeAt < MQ_PROBE_TTL_MILLIS) {
+                    return cached;
+                }
+                try {
+                    String topic = hasText(mqReadinessProbeTopic)
+                            ? mqReadinessProbeTopic.trim()
+                            : "persistent://seahorse-agent/ai/readiness-probe";
+                    mqPort.send(topic, "readiness-" + now, "readiness-probe",
+                            Map.of("probe", "readiness", "timestamp", String.valueOf(now)));
+                    return cacheMqProbe(ComponentStatus.available(configuredMqType, "probe sent to " + topic), now);
+                } catch (Exception ex) {
+                    return cacheMqProbe(ComponentStatus.unavailable(
+                            "Pulsar readiness probe failed: " + rootMessage(ex)), now);
+                }
+            }
+
+            private ComponentStatus cacheMqProbe(ComponentStatus status, long checkedAt) {
+                lastMqProbe = status;
+                lastMqProbeAt = checkedAt;
+                return status;
+            }
+
+            private String rootMessage(Throwable throwable) {
+                Throwable root = throwable;
+                while (root.getCause() != null) {
+                    root = root.getCause();
+                }
+                String message = root.getMessage();
+                return message == null || message.isBlank() ? root.getClass().getSimpleName() : message;
+            }
+
+            private boolean hasText(String value) {
+                return value != null && !value.isBlank();
             }
 
             private ComponentStatus probeMigration(DataSource ds) {
@@ -248,5 +303,17 @@ public class SeahorseAgentReadinessAutoConfiguration {
             value = environment.getProperty(canonicalName.replace("seahorse-agent.", "seahorse.agent."));
         }
         return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    private static int resolveIntSeahorseAgentProperty(
+            Environment environment,
+            String canonicalName,
+            String placeholderValue,
+            int fallback) {
+        String value = resolveSeahorseAgentProperty(environment, canonicalName, placeholderValue);
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return Integer.parseInt(value.trim());
     }
 }

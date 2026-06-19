@@ -45,7 +45,7 @@ class JdbcInitSqlSchemaAlignmentTests {
         assertThat(initSql).contains("id          VARCHAR(128) PRIMARY KEY");
         assertThat(initSql).contains("content     TEXT NOT NULL");
         assertThat(initSql).contains("metadata    JSONB NOT NULL");
-        assertThat(initSql).contains("embedding   vector(1024) NOT NULL");
+        assertThat(initSql).contains("embedding   vector(768) NOT NULL");
     }
 
     private String initSql() throws Exception {

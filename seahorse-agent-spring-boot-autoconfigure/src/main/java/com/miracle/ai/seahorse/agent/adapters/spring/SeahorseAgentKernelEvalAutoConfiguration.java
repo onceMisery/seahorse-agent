@@ -37,12 +37,14 @@ import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 /**
  * 评测、附件解析与模型路由自动配置。
@@ -57,17 +59,22 @@ import org.springframework.context.annotation.Configuration;
         SeahorseAgentAiAdapterAutoConfiguration.class
 })
 @EnableConfigurationProperties(RoutingProperties.class)
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
+        matchIfMissing = true)
 public class SeahorseAgentKernelEvalAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
     public ModelRoutingPolicy seahorseModelRoutingPolicy(
             RoutingProperties routingProperties,
+            Environment environment,
             ObjectProvider<ModelProviderPort> modelProviderPort,
             ObjectProvider<RateLimiterPort> rateLimiterPort) {
+        RoutingProperties resolvedRoutingProperties = Binder.get(environment)
+                .bind("seahorse-agent.routing", Bindable.of(RoutingProperties.class))
+                .orElse(routingProperties);
         return new ModelRoutingPolicy(
-                routingProperties.toKernelProperties(),
+                resolvedRoutingProperties.toKernelProperties(),
                 modelProviderPort.getIfAvailable(),
                 rateLimiterPort.getIfAvailable());
     }
