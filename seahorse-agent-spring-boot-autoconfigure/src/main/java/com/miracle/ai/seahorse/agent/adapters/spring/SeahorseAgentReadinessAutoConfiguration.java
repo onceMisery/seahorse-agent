@@ -33,7 +33,6 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -57,7 +56,8 @@ import java.util.Map;
         SeahorseAgentMqAdapterAutoConfiguration.class,
         SeahorseAgentStorageAdapterAutoConfiguration.class
 })
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
+        matchIfMissing = true)
 public class SeahorseAgentReadinessAutoConfiguration {
 
     @Bean
@@ -76,59 +76,149 @@ public class SeahorseAgentReadinessAutoConfiguration {
             @Value("${seahorse-agent.adapters.storage.type:local}") String storageType,
             @Value("${seahorse-agent.adapters.ai.type:unknown}") String aiType,
             @Value("${seahorse-agent.adapters.ai.embedding-type:unknown}") String embeddingType,
+            @Value("${seahorse-agent.adapters.ai.embedding-dimension:0}") int embeddingDimension,
+            @Value("${seahorse-agent.adapters.vector.dimension:0}") int vectorDimension,
             Environment environment
     ) {
+        String configuredVectorType = resolveSeahorseAgentProperty(environment,
+                "seahorse-agent.adapters.vector.type", vectorType);
+        String configuredCacheType = resolveSeahorseAgentProperty(environment,
+                "seahorse-agent.adapters.cache.type", cacheType);
+        String configuredMqType = resolveSeahorseAgentProperty(environment,
+                "seahorse-agent.adapters.mq.type", mqType);
+        String configuredStorageType = resolveSeahorseAgentProperty(environment,
+                "seahorse-agent.adapters.storage.type", storageType);
+        String configuredAiType = resolveSeahorseAgentProperty(environment,
+                "seahorse-agent.adapters.ai.type", aiType);
+        String configuredEmbeddingType = resolveSeahorseAgentProperty(environment,
+                "seahorse-agent.adapters.ai.embedding-type", embeddingType);
+        String configuredKeywordSearchType = resolveSeahorseAgentProperty(environment,
+                "seahorse-agent.adapters.keyword-search.type", "jdbc");
+        String configuredKeywordIndexType = resolveSeahorseAgentProperty(environment,
+                "seahorse-agent.adapters.keyword-index.type", "jdbc");
+
         return new ReadinessProbePort() {
             @Override
             public Map<String, ComponentStatus> probeComponents() {
                 Map<String, ComponentStatus> map = new LinkedHashMap<>();
 
-                map.put("database", dataSource.getIfAvailable() != null
+                DataSource ds = dataSource.getIfAvailable();
+                map.put("database", ds != null
                         ? ComponentStatus.available("postgresql")
                         : ComponentStatus.unavailable("DataSource not available"));
 
+                // db.migration — 核心表存在即视为迁移已应用（幂等升级器在启动时执行）
+                map.put("db.migration", probeMigration(ds));
+
+                // auth.default-admin — 是否存在至少一个用户（默认管理员已 seed）
+                map.put("auth.default-admin", probeDefaultAdmin(ds));
+
                 map.put("chat-model", chatModel.getIfAvailable() != null
-                        ? ComponentStatus.available(aiType)
+                        ? ComponentStatus.available(configuredAiType)
                         : ComponentStatus.unavailable("StreamingChatModelPort not available"));
 
                 // Embedding model availability — check if a separate embedding bean exists
                 // In practice, the embedding model is often part of the AI adapter
                 map.put("embedding-model", chatModel.getIfAvailable() != null
-                        ? ComponentStatus.available(embeddingType)
+                        ? ComponentStatus.available(configuredEmbeddingType)
                         : ComponentStatus.unavailable("Embedding model not available"));
 
+                // embedding.dimension — 配置维度与向量库维度一致性
+                map.put("embedding.dimension", probeEmbeddingDimension(embeddingDimension, vectorDimension));
+
                 map.put("vector-store", vectorSearch.getIfAvailable() != null
-                        ? ComponentStatus.available(vectorType)
+                        ? ComponentStatus.available(configuredVectorType)
                         : ComponentStatus.unavailable("VectorSearchPort not available"));
 
                 map.put("keyword-search", keywordSearch.getIfAvailable() != null
-                        ? ComponentStatus.available("lucene")
+                        ? ComponentStatus.available(configuredKeywordSearchType)
                         : ComponentStatus.unavailable("KeywordSearchPort not available"));
 
                 map.put("cache", cache.getIfAvailable() != null
-                        ? ComponentStatus.available(cacheType)
+                        ? ComponentStatus.available(configuredCacheType)
                         : ComponentStatus.unavailable("KeyValueCachePort not available"));
 
                 map.put("mq", mq.getIfAvailable() != null
-                        ? ComponentStatus.available(mqType)
+                        ? ComponentStatus.available(configuredMqType)
                         : ComponentStatus.unavailable("MessageQueuePort not available"));
 
                 map.put("storage", storage.getIfAvailable() != null
-                        ? ComponentStatus.available(storageType)
+                        ? ComponentStatus.available(configuredStorageType)
                         : ComponentStatus.unavailable("ObjectStoragePort not available"));
 
                 return map;
             }
 
+            private ComponentStatus probeMigration(DataSource ds) {
+                if (ds == null) {
+                    return ComponentStatus.unavailable("数据库不可用，无法校验迁移");
+                }
+                try (var conn = ds.getConnection()) {
+                    var meta = conn.getMetaData();
+                    // 检查若干核心表是否存在（大小写无关，覆盖 t_/sa_ 前缀）
+                    for (String table : new String[]{"t_conversation", "t_user", "sa_task"}) {
+                        boolean found = tableExists(meta, table);
+                        if (!found) {
+                            return ComponentStatus.unavailable("核心表缺失: " + table);
+                        }
+                    }
+                    return ComponentStatus.available("applied", "核心表齐全");
+                } catch (Exception e) {
+                    return ComponentStatus.unavailable("迁移校验失败: " + e.getMessage());
+                }
+            }
+
+            private boolean tableExists(java.sql.DatabaseMetaData meta, String table) throws java.sql.SQLException {
+                for (String t : new String[]{table, table.toUpperCase(), table.toLowerCase()}) {
+                    try (var rs = meta.getTables(null, null, t, new String[]{"TABLE"})) {
+                        if (rs.next()) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
+            private ComponentStatus probeDefaultAdmin(DataSource ds) {
+                if (ds == null) {
+                    return ComponentStatus.unavailable("数据库不可用");
+                }
+                try (var conn = ds.getConnection();
+                     var st = conn.createStatement();
+                     var rs = st.executeQuery("SELECT COUNT(*) FROM t_user")) {
+                    if (rs.next() && rs.getLong(1) > 0) {
+                        return ComponentStatus.available("seeded", rs.getLong(1) + " 个用户");
+                    }
+                    return ComponentStatus.unavailable("未发现任何用户账号");
+                } catch (Exception e) {
+                    return ComponentStatus.unavailable("用户表查询失败: " + e.getMessage());
+                }
+            }
+
+            private ComponentStatus probeEmbeddingDimension(int embedDim, int vecDim) {
+                if (embedDim <= 0 || vecDim <= 0) {
+                    // 未显式配置维度 → 跳过（不阻断），交由检查项标记为 skipped
+                    return new ComponentStatus(true, "unknown", "未配置显式维度，跳过一致性校验");
+                }
+                if (embedDim == vecDim) {
+                    return ComponentStatus.available("consistent", "维度一致: " + embedDim);
+                }
+                return ComponentStatus.unavailable("维度不一致: embedding=" + embedDim + ", vector=" + vecDim);
+            }
+
             @Override
             public Map<String, String> adapterTypes() {
                 Map<String, String> types = new LinkedHashMap<>();
-                types.put("vector-store", vectorType);
-                types.put("cache", cacheType);
-                types.put("mq", mqType);
-                types.put("storage", storageType);
-                types.put("ai", aiType);
-                types.put("embedding", embeddingType);
+                types.put("vector-store", configuredVectorType);
+                types.put("keyword-search", configuredKeywordSearchType);
+                types.put("keyword-index", configuredKeywordIndexType);
+                types.put("cache", configuredCacheType);
+                types.put("mq", configuredMqType);
+                types.put("storage", configuredStorageType);
+                types.put("ai", configuredAiType);
+                types.put("embedding", configuredEmbeddingType);
+                types.put("embedding-dimension", String.valueOf(embeddingDimension));
+                types.put("vector-dimension", String.valueOf(vectorDimension));
                 return types;
             }
         };
@@ -150,5 +240,13 @@ public class SeahorseAgentReadinessAutoConfiguration {
             AdvancedFeatureGate featureGate
     ) {
         return new ReadinessController(readinessPort, featureGate);
+    }
+
+    private static String resolveSeahorseAgentProperty(Environment environment, String canonicalName, String fallback) {
+        String value = environment.getProperty(canonicalName);
+        if (value == null || value.isBlank()) {
+            value = environment.getProperty(canonicalName.replace("seahorse-agent.", "seahorse.agent."));
+        }
+        return value == null || value.isBlank() ? fallback : value.trim();
     }
 }

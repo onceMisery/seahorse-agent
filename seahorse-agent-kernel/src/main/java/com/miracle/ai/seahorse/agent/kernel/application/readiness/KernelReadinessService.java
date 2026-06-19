@@ -54,13 +54,17 @@ public class KernelReadinessService implements ReadinessInboundPort {
 
         checks.add(checkAppBoot());
         checks.add(checkDatabase(components));
+        checks.add(checkMigration(components));
+        checks.add(checkDefaultAdmin(components));
         checks.add(checkChatModel(components));
         checks.add(checkEmbeddingModel(components));
+        checks.add(checkEmbeddingDimension(components));
         checks.add(checkVectorStore(components, adapterTypes));
         checks.add(checkKeywordSearch(components, adapterTypes));
         checks.add(checkCache(components, adapterTypes));
         checks.add(checkMessageQueue(components, adapterTypes));
         checks.add(checkStorage(components, adapterTypes));
+        checks.add(checkFeatureFlags());
 
         return checks;
     }
@@ -80,7 +84,69 @@ public class KernelReadinessService implements ReadinessInboundPort {
                 "数据库连接不可用",
                 "所有持久化功能将不可用",
                 "检查 PostgreSQL 连接配置和网络可达性",
-                "");
+                "/docs/zh/content/部署配置/部署配置.md");
+    }
+
+    private ReadinessCheck checkMigration(Map<String, ComponentStatus> components) {
+        ComponentStatus mig = components.get("db.migration");
+        if (mig != null && mig.available()) {
+            return ReadinessCheck.passed("db.migration", "数据库迁移版本", Severity.ERROR,
+                    "数据库迁移已应用（" + safeDetail(mig) + "）");
+        }
+        return ReadinessCheck.failed("db.migration", "数据库迁移版本", Severity.ERROR,
+                mig != null ? mig.detail() : "迁移状态未知",
+                "缺少核心表，应用核心功能将报错或数据不一致",
+                "执行 resources/database/seahorse_init.sql 或确认幂等迁移升级器已在启动时运行",
+                "/docs/zh/content/部署配置/生产环境部署.md");
+    }
+
+    private ReadinessCheck checkDefaultAdmin(Map<String, ComponentStatus> components) {
+        ComponentStatus admin = components.get("auth.default-admin");
+        if (admin != null && admin.available()) {
+            return ReadinessCheck.passed("auth.default-admin", "默认管理员/登录状态", Severity.ERROR,
+                    "用户账号已就绪（" + safeDetail(admin) + "）");
+        }
+        return ReadinessCheck.failed("auth.default-admin", "默认管理员/登录状态", Severity.ERROR,
+                admin != null ? admin.detail() : "未发现用户账号",
+                "无法登录系统，所有需要认证的功能不可用",
+                "首次启动应自动创建默认管理员；若缺失，检查注册服务配置或手动创建管理员账号",
+                "/docs/zh/content/快速开始.md");
+    }
+
+    private ReadinessCheck checkEmbeddingDimension(Map<String, ComponentStatus> components) {
+        Severity severity = isDemo() ? Severity.WARN : Severity.ERROR;
+        ComponentStatus dim = components.get("embedding.dimension");
+        // 未配置显式维度：available=true 且 adapterType=unknown → skipped
+        if (dim != null && dim.available() && "unknown".equals(dim.adapterType())) {
+            return ReadinessCheck.skipped("embedding.dimension", "Embedding 维度一致性",
+                    "未配置显式 embedding/向量库维度，跳过一致性校验");
+        }
+        if (dim != null && dim.available()) {
+            return ReadinessCheck.passed("embedding.dimension", "Embedding 维度一致性", severity,
+                    "Embedding 与向量库维度一致（" + safeDetail(dim) + "）");
+        }
+        return ReadinessCheck.failed("embedding.dimension", "Embedding 维度一致性", severity,
+                dim != null ? dim.detail() : "维度状态未知",
+                "知识库检索不可用，文档问答会降级或失败",
+                "确认 embedding 模型输出维度与向量库集合维度一致，必要时重建向量集合或切换匹配模型",
+                "/docs/zh/content/部署配置/开发环境搭建.md");
+    }
+
+    private ReadinessCheck checkFeatureFlags() {
+        boolean known = isDemo() || isRag() || isEnterprise();
+        if (known) {
+            return ReadinessCheck.passed("feature.flags", "前后端能力开关一致性", Severity.WARN,
+                    "产品模式有效: " + productMode + "，能力开关由后端统一生成");
+        }
+        return ReadinessCheck.failed("feature.flags", "前后端能力开关一致性", Severity.WARN,
+                "未识别的产品模式: " + productMode,
+                "前端可能显示与后端实际能力不一致的入口",
+                "将 seahorse-agent.product-mode 设置为 demo / rag / enterprise 之一",
+                "/docs/zh/content/项目概述.md");
+    }
+
+    private static String safeDetail(ComponentStatus s) {
+        return s.detail() == null || s.detail().isBlank() ? s.adapterType() : s.detail();
     }
 
     private ReadinessCheck checkChatModel(Map<String, ComponentStatus> components) {
@@ -218,6 +284,10 @@ public class KernelReadinessService implements ReadinessInboundPort {
 
     private boolean isDemo() {
         return "DEMO".equalsIgnoreCase(productMode);
+    }
+
+    private boolean isRag() {
+        return "RAG".equalsIgnoreCase(productMode);
     }
 
     private boolean isEnterprise() {
