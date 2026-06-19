@@ -128,7 +128,11 @@ class MilvusVectorAdapterTests {
 
         ArgumentCaptor<SearchReq> requestCaptor = ArgumentCaptor.forClass(SearchReq.class);
         verify(client).search(requestCaptor.capture());
-        assertThat(requestCaptor.getValue().getSearchParams()).containsEntry("ef", 64);
+        assertThat(requestCaptor.getValue().getMetricType().name()).isEqualTo("COSINE");
+        assertThat(requestCaptor.getValue().getSearchParams())
+                .containsEntry("ef", 64)
+                .doesNotContainKey("params")
+                .doesNotContainKey("metric_type");
     }
 
     @Test

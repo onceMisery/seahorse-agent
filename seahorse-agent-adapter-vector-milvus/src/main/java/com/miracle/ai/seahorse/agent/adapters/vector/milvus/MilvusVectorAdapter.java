@@ -191,9 +191,10 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
         SearchReq.SearchReqBuilder<?, ?> builder = SearchReq.builder()
                 .collectionName(resolveCollection(request.collectionName()))
                 .annsField(FIELD_EMBEDDING)
+                .metricType(IndexParam.MetricType.valueOf(properties.metricType()))
                 .data(List.of(new FloatVec(vectorArray(request.vector()))))
                 .topK(topK(request.topK()))
-                .searchParams(Map.of("metric_type", properties.metricType(), "ef", properties.searchEf()))
+                .searchParams(Map.of("ef", properties.searchEf()))
                 .outputFields(List.of(FIELD_ID, FIELD_CONTENT, FIELD_METADATA));
         String filter = metadataFilter(request);
         if (!filter.isBlank()) {
