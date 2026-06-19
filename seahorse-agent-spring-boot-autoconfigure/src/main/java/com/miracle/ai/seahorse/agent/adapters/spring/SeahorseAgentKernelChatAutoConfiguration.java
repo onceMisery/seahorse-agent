@@ -39,6 +39,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.TaskTemplateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.task.TaskInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentSkillRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
@@ -97,10 +98,12 @@ public class SeahorseAgentKernelChatAutoConfiguration {
     public ChatStreamCallbackFactoryPort seahorseLocalChatStreamCallbackFactoryPort(
             StreamTaskPort streamTaskPort,
             ObjectProvider<ConversationMemoryPort> memoryPort,
-            ObjectProvider<AgentRunEventBufferPort> eventBufferPort) {
+            ObjectProvider<AgentRunEventBufferPort> eventBufferPort,
+            ObjectProvider<TaskInboundPort> taskPort) {
         return new LocalChatStreamCallbackFactory(streamTaskPort,
                 memoryPort.getIfAvailable(ConversationMemoryPort::noop),
-                () -> eventBufferPort.getIfAvailable(AgentRunEventBufferPort::noop));
+                () -> eventBufferPort.getIfAvailable(AgentRunEventBufferPort::noop),
+                taskPort);
     }
 
     @Bean

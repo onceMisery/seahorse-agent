@@ -29,8 +29,11 @@ import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.task.TaskInboundPort;
+import com.miracle.ai.seahorse.agent.kernel.domain.task.Task;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
@@ -52,29 +55,38 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
     private final StreamTaskPort streamTaskPort;
     private final ConversationMemoryPort memoryPort;
     private final Supplier<AgentRunEventBufferPort> eventBufferPortSupplier;
+    private final ObjectProvider<TaskInboundPort> taskPortProvider;
 
     public LocalChatStreamCallbackFactory(StreamTaskPort streamTaskPort) {
-        this(streamTaskPort, ConversationMemoryPort.noop(), AgentRunEventBufferPort.noop());
+        this(streamTaskPort, ConversationMemoryPort.noop(), AgentRunEventBufferPort::noop, null);
     }
 
     public LocalChatStreamCallbackFactory(StreamTaskPort streamTaskPort, ConversationMemoryPort memoryPort) {
-        this(streamTaskPort, memoryPort, AgentRunEventBufferPort.noop());
+        this(streamTaskPort, memoryPort, AgentRunEventBufferPort::noop, null);
     }
 
     public LocalChatStreamCallbackFactory(StreamTaskPort streamTaskPort,
                                           ConversationMemoryPort memoryPort,
                                           AgentRunEventBufferPort eventBufferPort) {
-        this(streamTaskPort, memoryPort, () -> eventBufferPort);
+        this(streamTaskPort, memoryPort, () -> eventBufferPort, null);
     }
 
     public LocalChatStreamCallbackFactory(StreamTaskPort streamTaskPort,
                                           ConversationMemoryPort memoryPort,
                                           Supplier<AgentRunEventBufferPort> eventBufferPortSupplier) {
+        this(streamTaskPort, memoryPort, eventBufferPortSupplier, null);
+    }
+
+    public LocalChatStreamCallbackFactory(StreamTaskPort streamTaskPort,
+                                          ConversationMemoryPort memoryPort,
+                                          Supplier<AgentRunEventBufferPort> eventBufferPortSupplier,
+                                          ObjectProvider<TaskInboundPort> taskPortProvider) {
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.memoryPort = Objects.requireNonNullElse(memoryPort, ConversationMemoryPort.noop());
         this.eventBufferPortSupplier = eventBufferPortSupplier == null
                 ? AgentRunEventBufferPort::noop
                 : eventBufferPortSupplier;
+        this.taskPortProvider = taskPortProvider;
     }
 
     @Override
@@ -85,7 +97,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
     @Override
     public StreamCallback create(SseEmitter emitter, String conversationId, String taskId, String userId) {
         return new LocalChatStreamCallback(emitter, conversationId, taskId, userId,
-                streamTaskPort, memoryPort, eventBufferPort());
+                streamTaskPort, memoryPort, eventBufferPort(), taskPortProvider);
     }
 
     private AgentRunEventBufferPort eventBufferPort() {
@@ -93,9 +105,9 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
     }
 
     private static final class LocalChatStreamCallback implements StreamCallback {
-
+    
         private static final Logger log = LoggerFactory.getLogger(LocalChatStreamCallback.class);
-
+    
         private final StreamEventSender sender;
         private final String conversationId;
         private final String taskId;
@@ -103,20 +115,22 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
         private final StreamTaskPort streamTaskPort;
         private final ConversationMemoryPort memoryPort;
         private final AgentRunEventBufferPort eventBufferPort;
+        private final ObjectProvider<TaskInboundPort> taskPortProvider;
         private final StringBuilder answer = new StringBuilder();
         private final StringBuilder thinking = new StringBuilder();
         private final AtomicLong seqCounter = new AtomicLong(0);
         private long sentEventSeq;
         private String currentRunId;
         private long runStartedAtMs;
-
+    
         private LocalChatStreamCallback(SseEmitter emitter,
                                         String conversationId,
                                         String taskId,
                                         String userId,
                                         StreamTaskPort streamTaskPort,
                                         ConversationMemoryPort memoryPort,
-                                        AgentRunEventBufferPort eventBufferPort) {
+                                        AgentRunEventBufferPort eventBufferPort,
+                                        ObjectProvider<TaskInboundPort> taskPortProvider) {
             this.sender = new SpringSseEventSender(Objects.requireNonNull(emitter, "emitter must not be null"));
             this.conversationId = conversationId;
             this.taskId = taskId;
@@ -124,6 +138,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             this.streamTaskPort = streamTaskPort;
             this.memoryPort = Objects.requireNonNullElse(memoryPort, ConversationMemoryPort.noop());
             this.eventBufferPort = Objects.requireNonNullElse(eventBufferPort, AgentRunEventBufferPort.noop());
+            this.taskPortProvider = taskPortProvider;
             initialize();
         }
 
@@ -185,6 +200,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             sender.sendEvent(StreamEventType.DONE.value(), DONE_PAYLOAD);
             streamTaskPort.unregister(taskId);
             sender.complete();
+            completeFacadeTask();
         }
 
         @Override
@@ -194,6 +210,26 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             }
             streamTaskPort.unregister(taskId);
             sender.fail(error);
+            completeFacadeTask();
+        }
+
+        /**
+         * SSE 流结束后，查找并闭合对应的 Task Facade 任务（如有）。
+         */
+        private void completeFacadeTask() {
+            if (taskPortProvider == null || conversationId == null || conversationId.isBlank()) {
+                return;
+            }
+            try {
+                TaskInboundPort port = taskPortProvider.getIfAvailable();
+                if (port == null) return;
+                Task facadeTask = port.findRunningTaskByConversation(conversationId);
+                if (facadeTask != null) {
+                    port.completeTask(facadeTask.getTaskId());
+                }
+            } catch (Exception e) {
+                log.debug("Failed to complete facade task for conversation {}: {}", conversationId, e.toString());
+            }
         }
 
         private void initialize() {

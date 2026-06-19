@@ -49,4 +49,19 @@ public interface TaskInboundPort {
      * 聚合任务产物。对于关联了 AgentRun 的任务，返回该 run 的全部 artifact；否则返回空列表。
      */
     List<AgentArtifact> listArtifacts(String taskId);
+
+    /**
+     * 将指定任务标记为已完成（SUCCEEDED）。对于对话类任务（quick_chat / knowledge_qa / document_qa），
+     * 当 SSE 流结束时由回调方调用此方法闭合任务生命周期。
+     *
+     * @param taskId 任务 ID
+     * @return 更新后的任务；如果任务已是终态或不存在则返回原任务或 null
+     */
+    Task completeTask(String taskId);
+
+    /**
+     * 根据 conversationId 查找处于 RUNNING 状态的任务。
+     * 用于 SSE 对话流结束时反查对应的 Task Facade 任务。
+     */
+    Task findRunningTaskByConversation(String conversationId);
 }

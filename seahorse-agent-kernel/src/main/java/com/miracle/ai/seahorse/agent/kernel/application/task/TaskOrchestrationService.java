@@ -179,6 +179,32 @@ public class TaskOrchestrationService implements TaskInboundPort {
         }
     }
 
+    @Override
+    public Task completeTask(String taskId) {
+        Objects.requireNonNull(taskId, "taskId");
+        Task task = taskRepository.findById(taskId).orElse(null);
+        if (task == null) {
+            LOG.debug("completeTask: task not found: {}", taskId);
+            return null;
+        }
+        if (task.getStatus().isTerminal()) {
+            LOG.debug("completeTask: task {} already terminal (status={})", taskId, task.getStatus());
+            return task;
+        }
+        taskRepository.updateStatus(taskId, TaskStatus.SUCCEEDED);
+        Task completed = task.transitionTo(TaskStatus.SUCCEEDED);
+        eventPort.publish(taskId, TaskEvent.COMPLETED, "对话已完成", Map.of());
+        eventPort.complete(taskId);
+        LOG.info("Task {} completed (conversation={})", taskId, task.getConversationId());
+        return completed;
+    }
+
+    @Override
+    public Task findRunningTaskByConversation(String conversationId) {
+        Objects.requireNonNull(conversationId, "conversationId");
+        return taskRepository.findRunningByConversationId(conversationId).orElse(null);
+    }
+
     private void startAgentRunAsync(Task task, CreateTaskCommand command) {
         if (agentRunPort == null) {
             LOG.warn("AgentRunInboundPort not available, cannot start agent run for task {}", task.getTaskId());

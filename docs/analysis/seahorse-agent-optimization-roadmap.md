@@ -420,6 +420,10 @@ Facade 不替代现有服务，只做编排：
 
 `GET /api/tasks/{taskId}`（后端 `GET /tasks/{taskId}`）
 
+#### 列出用户任务
+
+`GET /api/tasks?limit=20`（后端 `GET /tasks?limit=20`）
+
 #### 取消任务
 
 `POST /api/tasks/{taskId}/cancel`（后端 `POST /tasks/{taskId}/cancel`）
@@ -715,6 +719,7 @@ TaskRunPage 中展示：
 - 统一 taskId/status（已实现，taskId 格式 `task_*`）。
 - 新增任务事件流（已实现，SSE 协议，支持历史回放 + 实时推送）。
 - 前端 TaskRunPage 订阅事件（已实现，使用 `fetch + ReadableStream`）。
+- 对话类任务生命周期闭合（已实现：`TaskInboundPort.completeTask` + `findRunningTaskByConversation`，SSE 流结束时 `LocalChatStreamCallbackFactory` 自动标记任务为 SUCCEEDED）。
 
 验收：
 

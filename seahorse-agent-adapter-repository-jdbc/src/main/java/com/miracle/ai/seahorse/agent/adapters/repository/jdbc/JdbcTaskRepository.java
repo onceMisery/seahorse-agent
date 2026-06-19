@@ -98,6 +98,17 @@ public class JdbcTaskRepository implements TaskRepositoryPort {
         mapper.update(null, wrapper);
     }
 
+    @Override
+    public Optional<Task> findRunningByConversationId(String conversationId) {
+        LambdaQueryWrapper<TaskDO> wrapper = new LambdaQueryWrapper<TaskDO>()
+                .eq(TaskDO::getConversationId, conversationId)
+                .eq(TaskDO::getStatus, TaskStatus.RUNNING.name())
+                .orderByDesc(TaskDO::getCreatedAt)
+                .last("LIMIT 1");
+        TaskDO po = mapper.selectOne(wrapper);
+        return po == null ? Optional.empty() : Optional.of(toDomain(po));
+    }
+
     // ---- mapping ----
 
     private Task toDomain(TaskDO po) {

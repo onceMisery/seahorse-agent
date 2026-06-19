@@ -26,4 +26,9 @@ public interface TaskRepositoryPort {
     void updateRunId(String taskId, String runId);
 
     void updateConversationId(String taskId, String conversationId);
+
+    /**
+     * 根据 conversationId 查找处于 RUNNING 状态的任务。
+     */
+    Optional<Task> findRunningByConversationId(String conversationId);
 }
