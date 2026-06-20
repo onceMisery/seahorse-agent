@@ -22,18 +22,10 @@ import io.a2a.spec.TransportProtocol;
 import io.agentscope.core.nacos.a2a.registry.NacosA2aRegistryProperties;
 import io.agentscope.core.nacos.a2a.registry.NacosA2aRegistryTransportProperties;
 
-import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 
 public class NacosPropertiesFactory {
-
-    public static final String PROP_NACOS_AI_MODE = "nacos.ai.mode";
-    public static final String PROP_M3_ENABLED = "nacos.ai.m3.enabled";
-    public static final String PROP_M3_NAMESPACE = "nacos.ai.m3.namespace";
-    public static final String PROP_M3_GROUP = "nacos.ai.m3.group";
-    public static final String PROP_M3_CLUSTER_NAME = "nacos.ai.m3.cluster-name";
-    public static final String PROP_M3_METADATA_PREFIX = "nacos.ai.m3.metadata.";
 
     public Properties nacosProperties(AgentScopeProperties properties) {
         AgentScopeProperties safeProperties = Objects.requireNonNull(properties, "properties must not be null");
@@ -47,7 +39,6 @@ public class NacosPropertiesFactory {
         putIfPresent(result, PropertyKeyConst.ACCESS_KEY, nacos.getAccessKey());
         putIfPresent(result, PropertyKeyConst.SECRET_KEY, nacos.getSecretKey());
         nacos.getProperties().forEach((key, value) -> putIfPresent(result, key, value));
-        putM3Properties(result, nacos.getM3());
         return result;
     }
 
@@ -76,20 +67,6 @@ public class NacosPropertiesFactory {
     private String transport(String value) {
         String trimmed = value.trim();
         return "jsonrpc".equalsIgnoreCase(trimmed) ? TransportProtocol.JSONRPC.asString() : trimmed;
-    }
-
-    private void putM3Properties(Properties result, AgentScopeProperties.M3 m3) {
-        if (m3 == null || !m3.isEnabled()) {
-            return;
-        }
-        putIfPresent(result, PROP_NACOS_AI_MODE, firstText(m3.getMode(), "M3"));
-        putIfPresent(result, PROP_M3_ENABLED, "true");
-        putIfPresent(result, PROP_M3_NAMESPACE, m3.getNamespace());
-        putIfPresent(result, PROP_M3_GROUP, m3.getGroup());
-        putIfPresent(result, PROP_M3_CLUSTER_NAME, m3.getClusterName());
-        for (Map.Entry<String, String> entry : m3.getMetadata().entrySet()) {
-            putIfPresent(result, PROP_M3_METADATA_PREFIX + entry.getKey(), entry.getValue());
-        }
     }
 
     private static void putIfPresent(Properties properties, String key, String value) {

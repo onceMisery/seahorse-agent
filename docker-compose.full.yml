@@ -38,6 +38,28 @@ services:
       retries: 10
     restart: unless-stopped
 
+  nacos:
+    image: ${NACOS_IMAGE:-nacos/nacos-server:v3.0.3}
+    container_name: seahorse-nacos
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "false"
+      JVM_XMS: ${NACOS_JVM_XMS:-256m}
+      JVM_XMX: ${NACOS_JVM_XMX:-512m}
+      JVM_XMN: ${NACOS_JVM_XMN:-128m}
+    volumes:
+      - nacos-data:/home/nacos/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8848/nacos/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    restart: unless-stopped
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
     container_name: seahorse-elasticsearch
@@ -328,6 +350,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      nacos:
+        condition: service_healthy
       milvus-standalone:
         condition: service_healthy
       pulsar-broker:
@@ -376,6 +400,31 @@ services:
       SEAHORSE_AGENT_ADAPTERS_KEYWORD_INDEX_ELASTICSEARCH_INDEX_NAME: seahorse_keyword_chunk
       # 仓储
       SEAHORSE_AGENT_ADAPTERS_REPOSITORY_TYPE: jdbc
+      # AgentScope / Nacos A2A. Defaults keep the kernel executor; set
+      # SEAHORSE_AGENT_EXECUTOR_ENGINE=agentscope and enable A2A/config-center to exercise AgentScope.
+      SEAHORSE_AGENT_EXECUTOR_ENGINE: ${SEAHORSE_AGENT_EXECUTOR_ENGINE:-kernel}
+      SEAHORSE_AGENTSCOPE_NACOS_SERVER_ADDR: ${SEAHORSE_AGENTSCOPE_NACOS_SERVER_ADDR:-nacos:8848}
+      SEAHORSE_AGENTSCOPE_NACOS_NAMESPACE: ${SEAHORSE_AGENTSCOPE_NACOS_NAMESPACE:-public}
+      SEAHORSE_AGENTSCOPE_NACOS_GROUP: ${SEAHORSE_AGENTSCOPE_NACOS_GROUP:-DEFAULT_GROUP}
+      SEAHORSE_AGENTSCOPE_NACOS_M3_ENABLED: ${SEAHORSE_AGENTSCOPE_NACOS_M3_ENABLED:-true}
+      SEAHORSE_AGENTSCOPE_NACOS_M3_MODE: ${SEAHORSE_AGENTSCOPE_NACOS_M3_MODE:-M3}
+      SEAHORSE_AGENTSCOPE_NACOS_M3_NAMESPACE: ${SEAHORSE_AGENTSCOPE_NACOS_M3_NAMESPACE:-seahorse-agent}
+      SEAHORSE_AGENTSCOPE_NACOS_M3_GROUP: ${SEAHORSE_AGENTSCOPE_NACOS_M3_GROUP:-DEFAULT_GROUP}
+      SEAHORSE_AGENTSCOPE_NACOS_M3_CLUSTER_NAME: ${SEAHORSE_AGENTSCOPE_NACOS_M3_CLUSTER_NAME:-local}
+      SEAHORSE_AGENTSCOPE_A2A_ENABLED: ${SEAHORSE_AGENTSCOPE_A2A_ENABLED:-false}
+      SEAHORSE_AGENTSCOPE_A2A_REGISTER_ENABLED: ${SEAHORSE_AGENTSCOPE_A2A_REGISTER_ENABLED:-false}
+      SEAHORSE_AGENTSCOPE_A2A_NACOS_SERVER: ${SEAHORSE_AGENTSCOPE_A2A_NACOS_SERVER:-nacos:8848}
+      SEAHORSE_AGENTSCOPE_A2A_TENANT_ID: ${SEAHORSE_AGENTSCOPE_A2A_TENANT_ID:-default}
+      SEAHORSE_AGENTSCOPE_A2A_AGENT_NAME: ${SEAHORSE_AGENTSCOPE_A2A_AGENT_NAME:-seahorse-agent}
+      SEAHORSE_AGENTSCOPE_A2A_URL: ${SEAHORSE_AGENTSCOPE_A2A_URL:-http://backend:9090/a2a}
+      SEAHORSE_AGENTSCOPE_A2A_HOST: ${SEAHORSE_AGENTSCOPE_A2A_HOST:-backend}
+      SEAHORSE_AGENTSCOPE_A2A_PORT: ${SEAHORSE_AGENTSCOPE_A2A_PORT:-9090}
+      SEAHORSE_AGENTSCOPE_A2A_PATH: ${SEAHORSE_AGENTSCOPE_A2A_PATH:-/a2a}
+      SEAHORSE_AGENTSCOPE_CONFIG_CENTER_ENABLED: ${SEAHORSE_AGENTSCOPE_CONFIG_CENTER_ENABLED:-false}
+      SEAHORSE_AGENTSCOPE_CONFIG_CENTER_PROMPT_KEY: ${SEAHORSE_AGENTSCOPE_CONFIG_CENTER_PROMPT_KEY:-}
+      SEAHORSE_AGENTSCOPE_CONFIG_CENTER_SKILL_NAMESPACE: ${SEAHORSE_AGENTSCOPE_CONFIG_CENTER_SKILL_NAMESPACE:-agent-skills}
+      SEAHORSE_AGENTSCOPE_CONFIG_CENTER_SKILL_VERSION: ${SEAHORSE_AGENTSCOPE_CONFIG_CENTER_SKILL_VERSION:-}
+      SEAHORSE_AGENTSCOPE_CONFIG_CENTER_SKILL_LABEL: ${SEAHORSE_AGENTSCOPE_CONFIG_CENTER_SKILL_LABEL:-}
       # Agent runtime
       SEAHORSE_AGENT_CHAT_AGENT_MODE_ENABLED: ${SEAHORSE_AGENT_CHAT_AGENT_MODE_ENABLED:-true}
       SEAHORSE_AGENT_CHAT_AGENT_MAX_STEPS: ${SEAHORSE_AGENT_CHAT_AGENT_MAX_STEPS:-24}
@@ -510,6 +559,7 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  nacos-data:
   es-data:
   minio-data:
   ollama-data:

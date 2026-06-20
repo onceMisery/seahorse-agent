@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
+import io.agentscope.core.hook.Hook;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.Model;
@@ -31,11 +32,14 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 
+@SuppressWarnings("removal")
 public class ReActAgentScopeAgentClient implements AgentScopeAgentClient {
 
     private final AgentScopeModelFactory modelFactory;
     private final AgentScopeProperties properties;
     private final AgentScopeToolFactory toolFactory;
+    private final AgentScopePromptProvider promptProvider;
+    private final List<Hook> hooks;
 
     public ReActAgentScopeAgentClient(Model model, AgentScopeProperties properties) {
         this(request -> Objects.requireNonNull(model, "model must not be null"), properties);
@@ -43,6 +47,25 @@ public class ReActAgentScopeAgentClient implements AgentScopeAgentClient {
 
     public ReActAgentScopeAgentClient(Model model, AgentScopeProperties properties, AgentScopeToolFactory toolFactory) {
         this(request -> Objects.requireNonNull(model, "model must not be null"), properties, toolFactory);
+    }
+
+    public ReActAgentScopeAgentClient(
+            Model model,
+            AgentScopeProperties properties,
+            AgentScopeToolFactory toolFactory,
+            AgentScopePromptProvider promptProvider) {
+        this(request -> Objects.requireNonNull(model, "model must not be null"), properties, toolFactory,
+                promptProvider);
+    }
+
+    public ReActAgentScopeAgentClient(
+            Model model,
+            AgentScopeProperties properties,
+            AgentScopeToolFactory toolFactory,
+            AgentScopePromptProvider promptProvider,
+            List<Hook> hooks) {
+        this(request -> Objects.requireNonNull(model, "model must not be null"), properties, toolFactory,
+                promptProvider, hooks);
     }
 
     public ReActAgentScopeAgentClient(AgentScopeModelFactory modelFactory, AgentScopeProperties properties) {
@@ -53,9 +76,28 @@ public class ReActAgentScopeAgentClient implements AgentScopeAgentClient {
             AgentScopeModelFactory modelFactory,
             AgentScopeProperties properties,
             AgentScopeToolFactory toolFactory) {
+        this(modelFactory, properties, toolFactory, AgentScopePromptProvider.local());
+    }
+
+    public ReActAgentScopeAgentClient(
+            AgentScopeModelFactory modelFactory,
+            AgentScopeProperties properties,
+            AgentScopeToolFactory toolFactory,
+            AgentScopePromptProvider promptProvider) {
+        this(modelFactory, properties, toolFactory, promptProvider, List.of());
+    }
+
+    public ReActAgentScopeAgentClient(
+            AgentScopeModelFactory modelFactory,
+            AgentScopeProperties properties,
+            AgentScopeToolFactory toolFactory,
+            AgentScopePromptProvider promptProvider,
+            List<Hook> hooks) {
         this.modelFactory = Objects.requireNonNull(modelFactory, "modelFactory must not be null");
         this.properties = Objects.requireNonNull(properties, "properties must not be null");
         this.toolFactory = toolFactory;
+        this.promptProvider = Objects.requireNonNullElseGet(promptProvider, AgentScopePromptProvider::local);
+        this.hooks = hooks == null ? List.of() : List.copyOf(hooks);
     }
 
     @Override
@@ -79,10 +121,11 @@ public class ReActAgentScopeAgentClient implements AgentScopeAgentClient {
         AgentScopeProperties.Executor executor = properties.getExecutor();
         ReActAgent.Builder builder = ReActAgent.builder()
                 .name(textOrDefault(executor.getAgentName(), request.agentId()))
-                .sysPrompt(executor.getSystemPrompt())
+                .sysPrompt(systemPrompt(request, executor.getSystemPrompt()))
                 .model(modelFactory.modelFor(request))
                 .maxIters(request.maxSteps())
                 .generateOptions(generateOptions(request));
+        hooks.forEach(builder::hook);
         if (toolFactory != null) {
             Toolkit toolkit = toolFactory.toolkitFor(request);
             if (!toolkit.getToolNames().isEmpty()) {
@@ -102,6 +145,11 @@ public class ReActAgentScopeAgentClient implements AgentScopeAgentClient {
                     .maxTokens(request.samplingOptions().getMaxTokens());
         }
         return builder.build();
+    }
+
+    private String systemPrompt(AgentLoopRequest request, String fallback) {
+        String resolved = promptProvider.systemPrompt(request, fallback);
+        return textOrDefault(resolved, fallback);
     }
 
     private Duration timeout(Duration value) {

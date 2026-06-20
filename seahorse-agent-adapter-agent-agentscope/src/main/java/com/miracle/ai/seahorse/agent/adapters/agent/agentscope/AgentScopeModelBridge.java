@@ -19,18 +19,21 @@ package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.model.ChatResponse;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.Model;
@@ -84,13 +87,13 @@ public class AgentScopeModelBridge implements Model {
                 .toolChoice(seahorseTools.isEmpty() ? "none" : "auto")
                 .build();
         return Flux.create(sink -> {
-            StreamCancellationHandle handle = modelPort.streamChat(request, new StreamCallback() {
+            StreamCallback callback = new StreamCallback() {
                 @Override
                 public void onContent(String content) {
                     if (!sink.isCancelled()) {
-                        sink.next(ChatResponse.builder()
-                                .content(List.of(TextBlock.builder().text(Objects.requireNonNullElse(content, "")).build()))
-                                .build());
+                        sink.next(response(List.of(TextBlock.builder()
+                                .text(Objects.requireNonNullElse(content, ""))
+                                .build())));
                     }
                 }
 
@@ -103,7 +106,15 @@ public class AgentScopeModelBridge implements Model {
                 public void onError(Throwable error) {
                     sink.error(error);
                 }
-            });
+            };
+            StreamCancellationHandle handle = seahorseTools.isEmpty()
+                    ? modelPort.streamChat(request, callback)
+                    : modelPort.streamChatWithTools(request, callback, toolCalls -> {
+                        List<ContentBlock> blocks = toToolUseBlocks(toolCalls);
+                        if (!blocks.isEmpty() && !sink.isCancelled()) {
+                            sink.next(response(blocks));
+                        }
+                    });
             sink.onCancel(handle::cancel);
         });
     }
@@ -137,6 +148,26 @@ public class AgentScopeModelBridge implements Model {
                         tool.getName(),
                         tool.getDescription(),
                         toJson(tool.getParameters())))
+                .toList();
+    }
+
+    private ChatResponse response(List<ContentBlock> content) {
+        return ChatResponse.builder()
+                .content(content == null ? List.of() : content)
+                .build();
+    }
+
+    private List<ContentBlock> toToolUseBlocks(List<AgentToolCall> toolCalls) {
+        if (toolCalls == null || toolCalls.isEmpty()) {
+            return List.of();
+        }
+        return toolCalls.stream()
+                .filter(Objects::nonNull)
+                .map(toolCall -> (ContentBlock) ToolUseBlock.builder()
+                        .id(toolCall.id())
+                        .name(toolCall.toolId())
+                        .input(toolCall.arguments())
+                        .build())
                 .toList();
     }
 

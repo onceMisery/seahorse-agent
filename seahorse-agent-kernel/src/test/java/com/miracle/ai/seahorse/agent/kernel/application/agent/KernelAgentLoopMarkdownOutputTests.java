@@ -48,7 +48,7 @@ class KernelAgentLoopMarkdownOutputTests {
                 X[Read] --> Y[Write]
                 ```---## Summary
                 """;
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 new FinalAnswerModel(compressedMarkdown),
                 ToolRegistryPort.empty(),
                 KernelAgentLoopOptions.defaults());
@@ -90,7 +90,7 @@ class KernelAgentLoopMarkdownOutputTests {
                 W[Write] --> AOF[AOF]```
                 ---##六、重点特性###6.1丰富的数据结构Redis supports strings.###6.2高性能-数据主要保存在内存中-单线程模型避免锁竞争
                 """;
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 new FinalAnswerModel(compressedMarkdown),
                 ToolRegistryPort.empty(),
                 KernelAgentLoopOptions.defaults());
@@ -132,7 +132,7 @@ class KernelAgentLoopMarkdownOutputTests {
                 ##六、生成图片引用![Redis](https://platform-outputs.agnes-ai.space/images/text-to-image/2026/06/example-image.png)
                 ###6.2高性能-数据主要保存在内存中-单线程模型避免锁竞争
                 """;
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 new FinalAnswerModel(compressedMarkdown),
                 ToolRegistryPort.empty(),
                 KernelAgentLoopOptions.defaults());
@@ -166,7 +166,7 @@ class KernelAgentLoopMarkdownOutputTests {
                 ###演示文稿结构已生成10页演示文稿，包含：- Redis开源项目概览-核心价值-核心数据结构详解
                 ##九、总结Redis提供坚实技术支撑。---*本文档基于 Redis 官方仓库生成。*
                 """;
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 new FinalAnswerModel(compressedMarkdown),
                 ToolRegistryPort.empty(),
                 KernelAgentLoopOptions.defaults());
@@ -204,7 +204,7 @@ class KernelAgentLoopMarkdownOutputTests {
                 User->>Agent:生成介绍
                 ```
                 """;
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 new FinalAnswerModel(compressedMarkdown),
                 ToolRegistryPort.empty(),
                 KernelAgentLoopOptions.defaults());
@@ -234,7 +234,7 @@ class KernelAgentLoopMarkdownOutputTests {
                 sequenceDiagram participant Client as 客户端 participant Server as Redis服务器 Client->>Server:发送命令 Server->>Client:返回结果
                 ```
                 """;
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 new FinalAnswerModel(compressedMarkdown),
                 ToolRegistryPort.empty(),
                 KernelAgentLoopOptions.defaults());
@@ -261,7 +261,7 @@ class KernelAgentLoopMarkdownOutputTests {
                 flowchart TD subgraph ServerSide [Redis Server内部架构] direction TB N[网络层 Network] P[RESP协议解析] Cmd[命令执行引擎] end Mem --> Pers RedisServer[Redis Server] RedisServer --> Rep
                 ```
                 """;
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 new FinalAnswerModel(compressedMarkdown),
                 ToolRegistryPort.empty(),
                 KernelAgentLoopOptions.defaults());
@@ -287,7 +287,7 @@ class KernelAgentLoopMarkdownOutputTests {
                 flowchart TD Client[客户端] --> Redis[Redis服务]
                 ```
                 """;
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 new FinalAnswerModel(compressedMarkdown),
                 ToolRegistryPort.empty(),
                 KernelAgentLoopOptions.defaults());
@@ -325,7 +325,7 @@ class KernelAgentLoopMarkdownOutputTests {
                 </html>
                 </artifact>
                 """;
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 new FinalAnswerModel(compressedMarkdown),
                 ToolRegistryPort.empty(),
                 KernelAgentLoopOptions.defaults());
@@ -345,6 +345,25 @@ class KernelAgentLoopMarkdownOutputTests {
         assertFalse(answer.contains("# DC382D"));
         assertFalse(answer.contains("# 0f1115"));
         assertFalse(answer.contains("# ffffff"));
+    }
+
+    private static KernelAgentLoop kernelLoop(
+            StreamingChatModelPort modelPort,
+            ToolRegistryPort toolRegistry,
+            KernelAgentLoopOptions options) {
+        return new KernelAgentLoop(new AgentLoopDependencies(
+                modelPort,
+                toolRegistry,
+                null,
+                options,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null));
     }
 
     private static final class FinalAnswerModel implements StreamingChatModelPort {

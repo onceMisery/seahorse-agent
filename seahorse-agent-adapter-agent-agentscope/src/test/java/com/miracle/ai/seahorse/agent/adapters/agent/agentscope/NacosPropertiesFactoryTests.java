@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NacosPropertiesFactoryTests {
@@ -33,7 +34,7 @@ class NacosPropertiesFactoryTests {
     private final NacosPropertiesFactory factory = new NacosPropertiesFactory();
 
     @Test
-    void buildsNacos3PropertiesForRegistryAndConfigCenterWithM3Metadata() {
+    void buildsNacos3AiClientPropertiesWithoutUnsupportedM3ClientKeys() {
         AgentScopeProperties properties = new AgentScopeProperties();
         properties.getNacos().setServerAddr("nacos.example:8848");
         properties.getNacos().setNamespace("tenant-ns");
@@ -51,12 +52,12 @@ class NacosPropertiesFactoryTests {
         assertEquals("tenant-ns", result.getProperty(PropertyKeyConst.NAMESPACE));
         assertEquals("nacos", result.getProperty(PropertyKeyConst.USERNAME));
         assertEquals("secret", result.getProperty(PropertyKeyConst.PASSWORD));
-        assertEquals("M3", result.getProperty(NacosPropertiesFactory.PROP_NACOS_AI_MODE));
-        assertEquals("true", result.getProperty(NacosPropertiesFactory.PROP_M3_ENABLED));
-        assertEquals("m3-ns", result.getProperty(NacosPropertiesFactory.PROP_M3_NAMESPACE));
-        assertEquals("m3-group", result.getProperty(NacosPropertiesFactory.PROP_M3_GROUP));
-        assertEquals("m3-cluster", result.getProperty(NacosPropertiesFactory.PROP_M3_CLUSTER_NAME));
-        assertEquals("cn-shanghai", result.getProperty(NacosPropertiesFactory.PROP_M3_METADATA_PREFIX + "zone"));
+        assertNull(result.getProperty("nacos.ai.mode"));
+        assertNull(result.getProperty("nacos.ai.m3.enabled"));
+        assertNull(result.getProperty("nacos.ai.m3.namespace"));
+        assertNull(result.getProperty("nacos.ai.m3.group"));
+        assertNull(result.getProperty("nacos.ai.m3.cluster-name"));
+        assertNull(result.getProperty("nacos.ai.m3.metadata.zone"));
     }
 
     @Test

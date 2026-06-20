@@ -48,7 +48,10 @@ public class AgentScopeA2aServerRunner implements AgentRunner {
 
     @Override
     public String getAgentName() {
-        return textOrDefault(properties.getA2a().getAgentName(), "seahorse-agent");
+        AgentScopeProperties.A2a a2a = properties.getA2a();
+        return A2ATenantMetadata.tenantQualifiedAgentName(
+                textOrDefault(a2a.getTenantId(), "default"),
+                textOrDefault(a2a.getAgentName(), "seahorse-agent"));
     }
 
     @Override

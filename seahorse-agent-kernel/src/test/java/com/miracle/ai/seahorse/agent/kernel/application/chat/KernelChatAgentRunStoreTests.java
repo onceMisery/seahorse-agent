@@ -17,9 +17,12 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopDependencies;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegistry;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
@@ -30,6 +33,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerati
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
+import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLevel;
@@ -102,13 +107,11 @@ class KernelChatAgentRunStoreTests {
         InMemoryToolRegistry toolRegistry = new InMemoryToolRegistry();
         toolRegistry.register(new ToolDescriptor("weather", "Weather", "Weather lookup", "{}"),
                 (callId, toolId, arguments) -> ToolInvocationResult.ok("{\"temp\":21}"));
-        KernelAgentLoop agentLoop = new KernelAgentLoop(
+        KernelAgentLoop agentLoop = agentLoop(
                 model,
                 toolRegistry,
                 successfulWeatherGateway(),
                 KernelAgentLoopOptions.defaults(),
-                com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder.noop(),
-                new com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver(),
                 new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
         RecordingCallback callback = new RecordingCallback();
         KernelChatInboundService service = new KernelChatInboundService(
@@ -150,7 +153,7 @@ class KernelChatAgentRunStoreTests {
         toolRegistry.register(new ToolDescriptor("weather", "Weather", "Weather lookup", "{}"),
                 (callId, toolId, arguments) -> ToolInvocationResult.ok("{\"temp\":21}"));
         RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("{\"temp\":21}"));
-        KernelAgentLoop agentLoop = new KernelAgentLoop(
+        KernelAgentLoop agentLoop = agentLoop(
                 model,
                 toolRegistry,
                 gateway,
@@ -213,13 +216,11 @@ class KernelChatAgentRunStoreTests {
         toolRegistry.register(new ToolDescriptor("weather", "Weather", "Weather lookup", "{}"),
                 (callId, toolId, arguments) -> ToolInvocationResult.ok("{\"temp\":21}"));
         KernelAgentLoopOptions options = KernelAgentLoopOptions.builder().maxSteps(7).build();
-        KernelAgentLoop agentLoop = new KernelAgentLoop(
+        KernelAgentLoop agentLoop = agentLoop(
                 model,
                 toolRegistry,
                 successfulWeatherGateway(),
                 options,
-                com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder.noop(),
-                new com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver(),
                 new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
         RecordingCallback callback = new RecordingCallback();
         KernelChatInboundService service = new KernelChatInboundService(
@@ -259,13 +260,11 @@ class KernelChatAgentRunStoreTests {
         InMemoryToolRegistry toolRegistry = new InMemoryToolRegistry();
         toolRegistry.register(new ToolDescriptor("memory-forget", "Memory Forget", "Forget memory", "{}"),
                 (callId, toolId, arguments) -> ToolInvocationResult.ok("should-not-run"));
-        KernelAgentLoop agentLoop = new KernelAgentLoop(
+        KernelAgentLoop agentLoop = agentLoop(
                 model,
                 toolRegistry,
                 approvalRequiredGateway(),
                 KernelAgentLoopOptions.defaults(),
-                com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder.noop(),
-                new com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver(),
                 new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK),
                 RepositoryAgentApprovalWaitHandler.fromRepositories(
                         runRepository,
@@ -311,7 +310,7 @@ class KernelChatAgentRunStoreTests {
                 definitionRepository, runRepository,
                 () -> Optional.of(new CurrentUser(1L, "alice", "user", null)), FIXED_CLOCK);
         ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("ops answer")));
-        KernelAgentLoop agentLoop = new KernelAgentLoop(
+        KernelAgentLoop agentLoop = agentLoop(
                 model,
                 new InMemoryToolRegistry(),
                 KernelAgentLoopOptions.defaults(),
@@ -377,7 +376,7 @@ class KernelChatAgentRunStoreTests {
                 definitionRepository, runRepository,
                 () -> Optional.of(new CurrentUser(1L, "alice", "user", null)), FIXED_CLOCK);
         ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("ops answer")));
-        KernelAgentLoop agentLoop = new KernelAgentLoop(
+        KernelAgentLoop agentLoop = agentLoop(
                 model,
                 new InMemoryToolRegistry(),
                 KernelAgentLoopOptions.defaults(),
@@ -441,7 +440,7 @@ class KernelChatAgentRunStoreTests {
         toolRegistry.register(new ToolDescriptor(
                 ImageGenerationToolPortAdapter.TOOL_ID, "Image", "Generate image", "{}"),
                 (callId, toolId, arguments) -> ToolInvocationResult.ok("{}"));
-        KernelAgentLoop agentLoop = new KernelAgentLoop(
+        KernelAgentLoop agentLoop = agentLoop(
                 model,
                 toolRegistry,
                 KernelAgentLoopOptions.defaults(),
@@ -514,7 +513,7 @@ class KernelChatAgentRunStoreTests {
         toolRegistry.register(new ToolDescriptor(
                 ImageGenerationToolPortAdapter.TOOL_ID, "Image", "Generate image", "{}"),
                 (callId, toolId, arguments) -> ToolInvocationResult.ok("{}"));
-        KernelAgentLoop agentLoop = new KernelAgentLoop(
+        KernelAgentLoop agentLoop = agentLoop(
                 model,
                 toolRegistry,
                 KernelAgentLoopOptions.defaults(),
@@ -574,7 +573,7 @@ class KernelChatAgentRunStoreTests {
                 definitionRepository, runRepository,
                 () -> Optional.of(new CurrentUser(1L, "alice", "user", null)), FIXED_CLOCK);
         ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("should-not-run")));
-        KernelAgentLoop agentLoop = new KernelAgentLoop(
+        KernelAgentLoop agentLoop = agentLoop(
                 model,
                 new InMemoryToolRegistry(),
                 KernelAgentLoopOptions.defaults(),
@@ -620,7 +619,7 @@ class KernelChatAgentRunStoreTests {
                     (callId, toolId, arguments) -> ToolInvocationResult.ok("{}"));
             toolRegistry.register(new ToolDescriptor(GetDateTimeToolPortAdapter.TOOL_ID, "Date Time", "Time", "{}"),
                     (callId, toolId, arguments) -> ToolInvocationResult.ok("{}"));
-            KernelAgentLoop agentLoop = new KernelAgentLoop(
+            KernelAgentLoop agentLoop = agentLoop(
                     model,
                     toolRegistry,
                     KernelAgentLoopOptions.defaults(),
@@ -665,6 +664,54 @@ class KernelChatAgentRunStoreTests {
 
     private static ToolGatewayPort successfulWeatherGateway() {
         return request -> ToolInvocationResult.ok("{\"temp\":21}");
+    }
+
+    private static KernelAgentLoop agentLoop(
+            StreamingChatModelPort model,
+            InMemoryToolRegistry toolRegistry,
+            KernelAgentLoopOptions options,
+            AgentRunStepRecorder runStepRecorder) {
+        return agentLoop(model, toolRegistry, null, options, runStepRecorder, AgentApprovalWaitHandler.noop());
+    }
+
+    private static KernelAgentLoop agentLoop(
+            StreamingChatModelPort model,
+            InMemoryToolRegistry toolRegistry,
+            ToolGatewayPort toolGateway,
+            KernelAgentLoopOptions options) {
+        return agentLoop(model, toolRegistry, toolGateway, options, AgentRunStepRecorder.noop(),
+                AgentApprovalWaitHandler.noop());
+    }
+
+    private static KernelAgentLoop agentLoop(
+            StreamingChatModelPort model,
+            InMemoryToolRegistry toolRegistry,
+            ToolGatewayPort toolGateway,
+            KernelAgentLoopOptions options,
+            AgentRunStepRecorder runStepRecorder) {
+        return agentLoop(model, toolRegistry, toolGateway, options, runStepRecorder, AgentApprovalWaitHandler.noop());
+    }
+
+    private static KernelAgentLoop agentLoop(
+            StreamingChatModelPort model,
+            InMemoryToolRegistry toolRegistry,
+            ToolGatewayPort toolGateway,
+            KernelAgentLoopOptions options,
+            AgentRunStepRecorder runStepRecorder,
+            AgentApprovalWaitHandler approvalWaitHandler) {
+        return new KernelAgentLoop(new AgentLoopDependencies(
+                model,
+                toolRegistry,
+                toolGateway,
+                options,
+                KernelRagTraceRecorder.noop(),
+                new DefaultContextWeaver(),
+                runStepRecorder,
+                approvalWaitHandler,
+                null,
+                null,
+                null,
+                null));
     }
 
     private static final class RecordingToolGateway implements ToolGatewayPort {

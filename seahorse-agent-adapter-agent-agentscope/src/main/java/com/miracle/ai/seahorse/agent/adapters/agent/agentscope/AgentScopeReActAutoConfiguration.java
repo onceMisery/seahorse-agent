@@ -22,8 +22,11 @@ import com.alibaba.nacos.api.ai.AiService;
 import com.alibaba.nacos.api.exception.NacosException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.A2AAgentConnectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import io.a2a.spec.TransportProtocol;
@@ -32,12 +35,18 @@ import io.agentscope.core.a2a.server.AgentScopeA2aServer;
 import io.agentscope.core.a2a.server.card.ConfigurableAgentCard;
 import io.agentscope.core.a2a.server.transport.TransportProperties;
 import io.agentscope.core.a2a.agent.card.AgentCardResolver;
+import io.agentscope.core.hook.Hook;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.nacos.a2a.discovery.NacosAgentCardResolver;
 import io.agentscope.core.nacos.a2a.registry.NacosA2aRegistry;
 import io.agentscope.core.nacos.prompt.NacosPromptListener;
+import io.agentscope.core.nacos.skill.NacosSkillRepository;
+import io.agentscope.core.skill.repository.AgentSkillRepository;
+import io.agentscope.core.studio.StudioManager;
+import io.agentscope.core.studio.StudioMessageHook;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -51,10 +60,17 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.type.AnnotatedTypeMetadata;
 
 import java.net.URI;
+import java.util.Properties;
 
 @AutoConfiguration
+@AutoConfigureAfter(name = {
+        "com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentAiAdapterAutoConfiguration",
+        "com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAiModelConfigAutoConfiguration",
+        "com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelAgentAutoConfiguration"
+})
 @ConditionalOnClass(ReActAgent.class)
 @EnableConfigurationProperties(AgentScopeProperties.class)
+@SuppressWarnings("removal")
 public class AgentScopeReActAutoConfiguration {
 
     private static final String PROP_EXECUTOR_ENGINE = "seahorse.agent.executor.engine";
@@ -73,6 +89,24 @@ public class AgentScopeReActAutoConfiguration {
     @ConditionalOnMissingBean
     public AgentScopeAgentCardFactory seahorseAgentScopeAgentCardFactory() {
         return new AgentScopeAgentCardFactory();
+    }
+
+    @Bean
+    @ConditionalOnClass(StudioMessageHook.class)
+    @ConditionalOnProperty(name = PROP_EXECUTOR_ENGINE, havingValue = "agentscope")
+    @ConditionalOnProperty(prefix = "seahorse.agentscope.studio", name = "enabled", havingValue = "true")
+    @ConditionalOnMissingBean
+    public StudioMessageHook seahorseAgentScopeStudioMessageHook() {
+        return new StudioMessageHook(StudioManager.getClient());
+    }
+
+    @Bean(initMethod = "start", destroyMethod = "stop")
+    @ConditionalOnClass(StudioManager.class)
+    @ConditionalOnProperty(name = PROP_EXECUTOR_ENGINE, havingValue = "agentscope")
+    @ConditionalOnProperty(prefix = "seahorse.agentscope.studio", name = "enabled", havingValue = "true")
+    @ConditionalOnMissingBean
+    public AgentScopeStudioLifecycle seahorseAgentScopeStudioLifecycle(AgentScopeProperties properties) {
+        return new AgentScopeStudioLifecycle(properties);
     }
 
     @Bean
@@ -97,8 +131,18 @@ public class AgentScopeReActAutoConfiguration {
     public AgentScopeToolFactory seahorseAgentScopeToolFactory(
             ToolRegistryPort toolRegistry,
             ToolGatewayPort toolGateway,
+            ObjectProvider<ToolPolicyPort> toolPolicy,
+            ObjectProvider<ToolApprovalRequestRepositoryPort> approvalRequestRepository,
+            ObjectProvider<ApprovalRequestQueryPort> approvalRequestQueryPort,
             ObjectProvider<ObjectMapper> objectMapperProvider) {
-        return new AgentScopeToolFactory(toolRegistry, toolGateway, objectMapperProvider.getIfAvailable(ObjectMapper::new));
+        return new AgentScopeToolFactory(
+                toolRegistry,
+                toolGateway,
+                toolPolicy.getIfAvailable(ToolPolicyPort::defaults),
+                approvalRequestRepository.getIfAvailable(ToolApprovalRequestRepositoryPort::noop),
+                approvalRequestQueryPort.getIfAvailable(ApprovalRequestQueryPort::empty),
+                objectMapperProvider.getIfAvailable(ObjectMapper::new),
+                java.time.Clock.systemUTC());
     }
 
     @Bean
@@ -108,14 +152,20 @@ public class AgentScopeReActAutoConfiguration {
             ObjectProvider<AgentScopeModelFactory> modelFactoryProvider,
             ObjectProvider<Model> modelProvider,
             ObjectProvider<AgentScopeToolFactory> toolFactoryProvider,
+            ObjectProvider<AgentScopePromptProvider> promptProvider,
+            ObjectProvider<Hook> hookProvider,
             AgentScopeProperties properties) {
         AgentScopeModelFactory modelFactory = modelFactoryProvider.getIfAvailable();
+        AgentScopePromptProvider prompts = promptProvider.getIfAvailable(AgentScopePromptProvider::local);
+        var hooks = hookProvider.orderedStream().toList();
         if (modelFactory != null) {
-            return new ReActAgentScopeAgentClient(modelFactory, properties, toolFactoryProvider.getIfAvailable());
+            return new ReActAgentScopeAgentClient(modelFactory, properties, toolFactoryProvider.getIfAvailable(),
+                    prompts, hooks);
         }
         Model model = modelProvider.getIfAvailable();
         if (model != null) {
-            return new ReActAgentScopeAgentClient(model, properties, toolFactoryProvider.getIfAvailable());
+            return new ReActAgentScopeAgentClient(model, properties, toolFactoryProvider.getIfAvailable(), prompts,
+                    hooks);
         }
         throw new IllegalStateException("AgentScope executor requires a StreamingChatModelPort or an AgentScope Model bean");
     }
@@ -124,8 +174,13 @@ public class AgentScopeReActAutoConfiguration {
     @ConditionalOnBean(AgentScopeAgentClient.class)
     @ConditionalOnProperty(name = PROP_EXECUTOR_ENGINE, havingValue = "agentscope")
     @ConditionalOnMissingBean(ReActExecutorPort.class)
-    public AgentScopeReActExecutor seahorseAgentScopeReActExecutor(AgentScopeAgentClient client) {
-        return new AgentScopeReActExecutor(client);
+    public AgentScopeReActExecutor seahorseAgentScopeReActExecutor(
+            AgentScopeAgentClient client,
+            ObjectProvider<ApprovalRequestQueryPort> approvalRequestQueryPort) {
+        return new AgentScopeReActExecutor(
+                client,
+                java.util.concurrent.ForkJoinPool.commonPool(),
+                approvalRequestQueryPort.getIfAvailable(ApprovalRequestQueryPort::empty));
     }
 
     @Bean
@@ -168,6 +223,15 @@ public class AgentScopeReActAutoConfiguration {
             AgentCardResolver resolver,
             AgentScopeRemoteAgentInvoker invoker) {
         return new AgentScopeA2AAgentConnector(resolver, invoker);
+    }
+
+    @Bean
+    @ConditionalOnBean(A2AAgentConnectorPort.class)
+    @ConditionalOnProperty(name = PROP_A2A_ENABLED, havingValue = "true")
+    @ConditionalOnMissingBean
+    public AgentScopeA2AToolPortAdapter seahorseAgentScopeA2AToolPortAdapter(
+            A2AAgentConnectorPort connector) {
+        return new AgentScopeA2AToolPortAdapter(connector);
     }
 
     @Bean
@@ -240,6 +304,23 @@ public class AgentScopeReActAutoConfiguration {
         return new AgentScopePromptConfigCenter(promptListener, properties);
     }
 
+    @Bean
+    @ConditionalOnBean(AiService.class)
+    @ConditionalOnProperty(name = PROP_CONFIG_CENTER_ENABLED, havingValue = "true")
+    @ConditionalOnMissingBean(AgentSkillRepository.class)
+    public AgentSkillRepository seahorseAgentScopeNacosSkillRepository(
+            AiService aiService,
+            AgentScopeProperties properties) {
+        AgentScopeProperties.ConfigCenter configCenter = properties.getConfigCenter();
+        Properties skillProperties = new Properties();
+        putIfPresent(skillProperties, NacosSkillRepository.SKILL_VERSION_PATH, configCenter.getSkillVersion());
+        putIfPresent(skillProperties, NacosSkillRepository.SKILL_LABEL_PATH, configCenter.getSkillLabel());
+        return new NacosSkillRepository(
+                aiService,
+                firstText(configCenter.getSkillNamespace(), properties.getNacos().getNamespace()),
+                skillProperties);
+    }
+
     private static final class NacosEnabledAndConfiguredCondition implements Condition {
         @Override
         public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
@@ -262,6 +343,14 @@ public class AgentScopeReActAutoConfiguration {
     private static String firstText(String value, String fallback) {
         String trimmed = trimToNull(value);
         return trimmed == null ? trimToNull(fallback) : trimmed;
+    }
+
+    private static void putIfPresent(Properties properties, String key, String value) {
+        String safeKey = trimToNull(key);
+        String safeValue = trimToNull(value);
+        if (safeKey != null && safeValue != null) {
+            properties.setProperty(safeKey, safeValue);
+        }
     }
 
     private static Integer a2aPort(AgentScopeProperties.A2a a2a, URI endpointUri) {

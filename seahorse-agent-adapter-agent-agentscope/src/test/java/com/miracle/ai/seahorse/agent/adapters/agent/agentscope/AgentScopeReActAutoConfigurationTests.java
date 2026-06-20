@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 
+import com.alibaba.nacos.api.ai.AiService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
@@ -32,6 +33,9 @@ import io.agentscope.core.a2a.agent.card.AgentCardResolver;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.model.Model;
+import io.agentscope.core.nacos.skill.NacosSkillRepository;
+import io.agentscope.core.skill.repository.AgentSkillRepository;
+import io.agentscope.core.studio.StudioMessageHook;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -42,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class AgentScopeReActAutoConfigurationTests {
 
@@ -93,12 +98,28 @@ class AgentScopeReActAutoConfigurationTests {
     }
 
     @Test
+    void agentscopeEngineCreatesStudioHookWhenStudioIsEnabled() {
+        contextRunner
+                .withUserConfiguration(StreamingModelConfiguration.class)
+                .withPropertyValues(
+                        "seahorse.agent.executor.engine=agentscope",
+                        "seahorse.agentscope.studio.enabled=true",
+                        "seahorse.agentscope.studio.auto-initialize=false")
+                .run(context -> {
+                    assertThat(context).hasSingleBean(AgentScopeStudioLifecycle.class);
+                    assertThat(context).hasSingleBean(StudioMessageHook.class);
+                    assertThat(context).hasSingleBean(AgentScopeAgentClient.class);
+                });
+    }
+
+    @Test
     void a2aConnectorCanUseCustomResolverWithoutStartingNacosClient() {
         contextRunner
                 .withUserConfiguration(A2aConfiguration.class)
                 .withPropertyValues("seahorse.agentscope.a2a.enabled=true")
                 .run(context -> {
                     assertThat(context).hasSingleBean(A2AAgentConnectorPort.class);
+                    assertThat(context).hasSingleBean(AgentScopeA2AToolPortAdapter.class);
                     assertThat(context).doesNotHaveBean("seahorseAgentScopeNacosAiService");
                 });
     }
@@ -115,6 +136,23 @@ class AgentScopeReActAutoConfigurationTests {
                     assertThat(context).hasSingleBean(AgentScopeA2aServerController.class);
                     AgentScopeA2aServer server = context.getBean(AgentScopeA2aServer.class);
                     assertThat(server.getTransportWrapper(TransportProtocol.JSONRPC.asString())).isNotNull();
+                });
+    }
+
+    @Test
+    void configCenterCreatesPromptProviderAndNacosSkillRepositoryWhenEnabled() {
+        contextRunner
+                .withUserConfiguration(NacosConfiguration.class)
+                .withPropertyValues(
+                        "seahorse.agentscope.config-center.enabled=true",
+                        "seahorse.agentscope.config-center.prompt-key=agent.system.prompt",
+                        "seahorse.agentscope.config-center.skill-namespace=agent-skills",
+                        "seahorse.agentscope.config-center.skill-version=v1",
+                        "seahorse.agentscope.config-center.skill-label=stable")
+                .run(context -> {
+                    assertThat(context).hasSingleBean(AgentScopePromptConfigCenter.class);
+                    assertThat(context).hasSingleBean(AgentSkillRepository.class);
+                    assertThat(context.getBean(AgentSkillRepository.class)).isInstanceOf(NacosSkillRepository.class);
                 });
     }
 
@@ -172,6 +210,14 @@ class AgentScopeReActAutoConfigurationTests {
                     return () -> { };
                 }
             };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class NacosConfiguration {
+        @Bean
+        AiService aiService() {
+            return mock(AiService.class);
         }
     }
 }
