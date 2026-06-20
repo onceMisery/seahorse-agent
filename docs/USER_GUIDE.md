@@ -226,7 +226,7 @@ RAG 没有上下文时，先确认：
 - `t_knowledge_chunk` 有数据。
 - Milvus collection 存在且维度为 768。
 - Ollama `nomic-embed-text` 可以返回 768 维向量。
-- `/admin/traces` 能看到 retrieval 节点。
+- `/rag/traces/runs` 能看到 retrieval 节点（前端页面路径为 `/admin/traces`）。
 
 记忆没有召回时，先确认：
 

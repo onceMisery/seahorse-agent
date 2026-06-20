@@ -92,7 +92,7 @@ SEAHORSE_AGENT_BILLING_ENABLED=true
 1. 登录 `admin / admin123`。
 2. 打开 `/admin/model-config` 确认 Chat 模型配置。
 3. 在 `/admin/knowledge` 上传文档并完成分块。
-4. 在 `/chat` 提问，观察 `/admin/traces`。
+4. 在 `/chat` 提问，观察 `/rag/traces/runs`（前端页面路径为 `/admin/traces`）。
 5. 输入个人事实，等待记忆聚合后检查 `/memories` 和 `/admin/memory-governance`。
 6. 打开 Prometheus `http://localhost:19090` 和 Grafana `http://localhost:13001`。
 

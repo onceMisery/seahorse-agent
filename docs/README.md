@@ -64,7 +64,7 @@ http://localhost:9090
 - Milvus 健康，向量维度为 768。
 - Elasticsearch 健康，关键词索引适配器启用。
 - 知识库文档完成分块与索引。
-- `/admin/traces` 或 `t_rag_trace_*` 能看到 retrieval 节点。
+- `/rag/traces/runs` 或 `t_rag_trace_*` 能看到 retrieval 节点（前端页面路径为 `/admin/traces`）。
 
 完整记忆与用户画像闭环需要确认：
 
