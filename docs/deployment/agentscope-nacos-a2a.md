@@ -20,6 +20,12 @@ SEAHORSE_AGENTSCOPE_NACOS_SERVER_ADDR=nacos:8848
 SEAHORSE_AGENTSCOPE_A2A_NACOS_SERVER=nacos:8848
 ```
 
+Nacos 3.x validates auth bootstrap variables during container startup even when
+local auth is disabled. The compose files provide a local-development
+`NACOS_AUTH_TOKEN`, `NACOS_AUTH_IDENTITY_KEY`, and
+`NACOS_AUTH_IDENTITY_VALUE`; override them from `.env` for shared or production
+deployments.
+
 The default executor remains `kernel`. To run with AgentScope and register the
 local backend as an A2A agent:
 
@@ -31,6 +37,13 @@ SEAHORSE_AGENTSCOPE_A2A_TENANT_ID=default
 SEAHORSE_AGENTSCOPE_A2A_AGENT_NAME=seahorse-agent
 SEAHORSE_AGENTSCOPE_A2A_URL=http://backend:9090/a2a
 ```
+
+The base compose file defaults `SEAHORSE_AGENT_ADAPTERS_AI_TYPE=mock` so local
+page-level smoke tests do not require an external model key. Set
+`SEAHORSE_AGENT_ADAPTERS_AI_TYPE=openai-compatible`,
+`SEAHORSE_AGENT_ADAPTERS_AI_API_KEY`, and
+`SEAHORSE_AGENT_ADAPTERS_AI_CHAT_MODEL` when validating against a real model
+gateway.
 
 The A2A tool exposed to the Seahorse tool registry is:
 
