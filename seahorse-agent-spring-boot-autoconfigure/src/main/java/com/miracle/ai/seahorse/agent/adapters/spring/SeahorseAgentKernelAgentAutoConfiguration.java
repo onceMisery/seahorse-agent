@@ -20,12 +20,17 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.web.AdvancedFeatureGate;
 import com.miracle.ai.seahorse.agent.adapters.web.ProductMode;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopDependencies;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentStreamEmitter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.CatalogBackedToolPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegistry;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.LocalToolGatewayPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.MarkdownNormalizer;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.ToolCallParser;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.output.DdlSafetyOutputValidator;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.output.JsonSchemaOutputValidator;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.output.OutputGovernanceService;
@@ -171,6 +176,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             "seahorse-agent.advanced.agent-handoff-enabled";
     private static final String PROP_ADVANCED_LOCAL_AGENT =
             "seahorse-agent.advanced.local-agent-enabled";
+    private static final String PROP_AGENT_EXECUTOR_ENGINE = "seahorse.agent.executor.engine";
 
     @Bean
     @ConditionalOnAgentRuntimeEnabled
@@ -192,25 +198,65 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
 
     @Bean
     @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnMissingBean
+    public MarkdownNormalizer seahorseMarkdownNormalizer() {
+        return new MarkdownNormalizer();
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnMissingBean
+    public AgentStreamEmitter seahorseAgentStreamEmitter() {
+        return new AgentStreamEmitter();
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnMissingBean
+    public ToolCallParser seahorseToolCallParser() {
+        return new ToolCallParser();
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(StreamingChatModelPort.class)
     @ConditionalOnMissingBean
-    public KernelAgentLoop seahorseKernelAgentLoop(StreamingChatModelPort modelPort,
-                                                   ToolRegistryPort toolRegistry,
-                                                   KernelAgentLoopOptions options,
-                                                   ObjectProvider<KernelRagTraceRecorder> traceRecorder,
-                                                   ObjectProvider<ContextWeaverPort> contextWeaverPort,
-                                                   ObjectProvider<ToolGatewayPort> toolGatewayPort,
-                                                   ObjectProvider<AgentRunStepRecorder> runStepRecorder,
-                                                   ObjectProvider<AgentApprovalWaitHandler> approvalWaitHandler,
-                                                   ObjectProvider<OutputGovernanceService> outputGovernanceService) {
-        return new KernelAgentLoop(modelPort, toolRegistry,
-                toolGatewayPort.getIfAvailable(() -> new LocalToolGatewayPort(toolRegistry)),
+    public AgentLoopDependencies seahorseAgentLoopDependencies(
+            StreamingChatModelPort modelPort,
+            ObjectProvider<ToolRegistryPort> toolRegistry,
+            KernelAgentLoopOptions options,
+            ObjectProvider<KernelRagTraceRecorder> traceRecorder,
+            ObjectProvider<ContextWeaverPort> contextWeaverPort,
+            ObjectProvider<ToolGatewayPort> toolGatewayPort,
+            ObjectProvider<AgentRunStepRecorder> runStepRecorder,
+            ObjectProvider<AgentApprovalWaitHandler> approvalWaitHandler,
+            ObjectProvider<OutputGovernanceService> outputGovernanceService,
+            MarkdownNormalizer markdownNormalizer,
+            AgentStreamEmitter streamEmitter,
+            ToolCallParser toolCallParser) {
+        ToolRegistryPort registry = toolRegistry.getIfAvailable(ToolRegistryPort::empty);
+        return new AgentLoopDependencies(
+                modelPort,
+                registry,
+                toolGatewayPort.getIfAvailable(),
                 options,
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
                 contextWeaverPort.getIfAvailable(DefaultContextWeaver::new),
                 runStepRecorder.getIfAvailable(AgentRunStepRecorder::noop),
                 approvalWaitHandler.getIfAvailable(AgentApprovalWaitHandler::noop),
-                outputGovernanceService.getIfAvailable());
+                outputGovernanceService.getIfAvailable(),
+                markdownNormalizer,
+                streamEmitter,
+                toolCallParser);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean(AgentLoopDependencies.class)
+    @ConditionalOnProperty(name = PROP_AGENT_EXECUTOR_ENGINE, havingValue = "kernel", matchIfMissing = true)
+    @ConditionalOnMissingBean(ReActExecutorPort.class)
+    public KernelAgentLoop seahorseKernelAgentLoop(AgentLoopDependencies dependencies) {
+        return new KernelAgentLoop(dependencies);
     }
 
     @Bean
