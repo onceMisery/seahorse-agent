@@ -26,6 +26,7 @@
         <mockito-core.version>5.20.0</mockito-core.version>
         <sa-token.version>1.43.0</sa-token.version>
         <transmittable-thread-local.version>2.14.5</transmittable-thread-local.version>
+        <agentscope.version>2.0.0-RC3</agentscope.version>
         <redisson.version>4.0.0</redisson.version>
         <resilience4j.version>2.2.0</resilience4j.version>
         <caffeine.version>3.1.8</caffeine.version>
@@ -46,6 +47,7 @@
         <module>seahorse-agent-adapter-parser-tika</module>
         <module>seahorse-agent-adapter-source-feishu</module>
         <module>seahorse-agent-adapter-ai-openai-compatible</module>
+        <module>seahorse-agent-adapter-agent-agentscope</module>
         <module>seahorse-agent-adapter-mcp-http</module>
         <module>seahorse-agent-adapter-openapi</module>
         <module>seahorse-agent-adapter-vector-milvus</module>
@@ -139,6 +141,36 @@
                 <groupId>com.alibaba</groupId>
                 <artifactId>transmittable-thread-local</artifactId>
                 <version>${transmittable-thread-local.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-extensions-nacos-a2a</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-extensions-a2a-server</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-extensions-nacos-prompt</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-extensions-nacos-skill</artifactId>
+                <version>${agentscope.version}</version>
             </dependency>
 
             <dependency>

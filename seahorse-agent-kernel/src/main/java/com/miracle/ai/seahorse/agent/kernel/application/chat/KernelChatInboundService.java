@@ -20,7 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.chat;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillRuntimeComposer;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillSetJsonSupport;
@@ -120,7 +120,7 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     private final KernelChatPipeline chatPipeline;
     private final StreamTaskPort streamTaskPort;
-    private final Optional<KernelAgentLoop> agentLoop;
+    private final Optional<ReActExecutorPort> agentLoop;
     private final KernelRagTraceRecorder traceRecorder;
     private final ConversationMemoryPort memoryPort;
     private final MemoryEnginePort memoryEnginePort;
@@ -149,7 +149,7 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
-                                    Optional<KernelAgentLoop> agentLoop,
+                                    Optional<? extends ReActExecutorPort> agentLoop,
                                     KernelRagTraceRecorder traceRecorder) {
         this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, ConversationMemoryPort.noop(),
                 MemoryEnginePort.noop());
@@ -157,7 +157,7 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
-                                    Optional<KernelAgentLoop> agentLoop,
+                                    Optional<? extends ReActExecutorPort> agentLoop,
                                     KernelRagTraceRecorder traceRecorder,
                                     ConversationMemoryPort memoryPort) {
         this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, MemoryEnginePort.noop());
@@ -165,7 +165,7 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
-                                    Optional<KernelAgentLoop> agentLoop,
+                                    Optional<? extends ReActExecutorPort> agentLoop,
                                     KernelRagTraceRecorder traceRecorder,
                                     ConversationMemoryPort memoryPort,
                                     MemoryEnginePort memoryEnginePort) {
@@ -174,7 +174,7 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
-                                    Optional<KernelAgentLoop> agentLoop,
+                                    Optional<? extends ReActExecutorPort> agentLoop,
                                     KernelRagTraceRecorder traceRecorder,
                                     ConversationMemoryPort memoryPort,
                                     MemoryEnginePort memoryEnginePort,
@@ -185,7 +185,7 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
-                                    Optional<KernelAgentLoop> agentLoop,
+                                    Optional<? extends ReActExecutorPort> agentLoop,
                                     KernelRagTraceRecorder traceRecorder,
                                     ConversationMemoryPort memoryPort,
                                     MemoryEnginePort memoryEnginePort,
@@ -197,7 +197,7 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
-                                    Optional<KernelAgentLoop> agentLoop,
+                                    Optional<? extends ReActExecutorPort> agentLoop,
                                     KernelRagTraceRecorder traceRecorder,
                                     ConversationMemoryPort memoryPort,
                                     MemoryEnginePort memoryEnginePort,
@@ -211,7 +211,7 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
-                                    Optional<KernelAgentLoop> agentLoop,
+                                    Optional<? extends ReActExecutorPort> agentLoop,
                                     KernelRagTraceRecorder traceRecorder,
                                     ConversationMemoryPort memoryPort,
                                     MemoryEnginePort memoryEnginePort,
@@ -226,7 +226,7 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
-                                    Optional<KernelAgentLoop> agentLoop,
+                                    Optional<? extends ReActExecutorPort> agentLoop,
                                     KernelRagTraceRecorder traceRecorder,
                                     ConversationMemoryPort memoryPort,
                                     MemoryEnginePort memoryEnginePort,
@@ -242,7 +242,7 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
-                                    Optional<KernelAgentLoop> agentLoop,
+                                    Optional<? extends ReActExecutorPort> agentLoop,
                                     KernelRagTraceRecorder traceRecorder,
                                     ConversationMemoryPort memoryPort,
                                     MemoryEnginePort memoryEnginePort,
@@ -259,7 +259,7 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
-                                    Optional<KernelAgentLoop> agentLoop,
+                                    Optional<? extends ReActExecutorPort> agentLoop,
                                     KernelRagTraceRecorder traceRecorder,
                                     ConversationMemoryPort memoryPort,
                                     MemoryEnginePort memoryEnginePort,
@@ -277,7 +277,7 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
-                                    Optional<KernelAgentLoop> agentLoop,
+                                    Optional<? extends ReActExecutorPort> agentLoop,
                                     KernelRagTraceRecorder traceRecorder,
                                     ConversationMemoryPort memoryPort,
                                     MemoryEnginePort memoryEnginePort,
@@ -296,7 +296,7 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
-                                    Optional<KernelAgentLoop> agentLoop,
+                                    Optional<? extends ReActExecutorPort> agentLoop,
                                     KernelRagTraceRecorder traceRecorder,
                                     ConversationMemoryPort memoryPort,
                                     MemoryEnginePort memoryEnginePort,
@@ -311,7 +311,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                                     SkillSemanticMatcher skillSemanticMatcher) {
         this.chatPipeline = Objects.requireNonNull(chatPipeline, "chatPipeline must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
-        this.agentLoop = agentLoop == null ? Optional.empty() : agentLoop;
+        this.agentLoop = agentLoop == null ? Optional.empty() : agentLoop.map(ReActExecutorPort.class::cast);
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
         this.memoryPort = Objects.requireNonNullElse(memoryPort, ConversationMemoryPort.noop());
         this.memoryEnginePort = Objects.requireNonNullElse(memoryEnginePort, MemoryEnginePort.noop());
@@ -359,7 +359,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                     streamTaskPort.bindHandle(safeCommand.taskId(), handle);
                     return;
                 }
-                LOG.warn("chatMode=AGENT but KernelAgentLoop is not configured, fallback to RAG: taskId={}, userId={}",
+                LOG.warn("chatMode=AGENT but ReActExecutorPort is not configured, fallback to RAG: taskId={}, userId={}",
                         safeCommand.taskId(), safeCommand.userId());
             }
             chatPipeline.execute(buildContext(

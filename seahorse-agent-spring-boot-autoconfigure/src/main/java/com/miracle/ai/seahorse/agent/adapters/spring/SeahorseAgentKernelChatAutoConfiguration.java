@@ -23,8 +23,8 @@ import com.miracle.ai.seahorse.agent.adapters.local.LocalChatStreamCallbackFacto
 import com.miracle.ai.seahorse.agent.adapters.local.LocalStreamTaskPort;
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentKernelProperties;
 import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatPreparationPorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatResponsePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ConversationAttachmentContextAssembler;
@@ -208,7 +208,7 @@ public class SeahorseAgentKernelChatAutoConfiguration {
     @ConditionalOnMissingBean
     public ChatInboundPort seahorseChatInboundPort(KernelChatPipeline chatPipeline,
                                                    StreamTaskPort streamTaskPort,
-                                                   ObjectProvider<KernelAgentLoop> agentLoop,
+                                                   ObjectProvider<ReActExecutorPort> agentLoop,
                                                    ObjectProvider<KernelRagTraceRecorder> traceRecorder,
                                                    ObjectProvider<ConversationMemoryPort> memoryPort,
                                                    ObjectProvider<MemoryEnginePort> memoryEnginePort,
