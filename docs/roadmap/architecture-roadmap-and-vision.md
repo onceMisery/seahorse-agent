@@ -398,13 +398,33 @@ flowchart TD
 
 远期方案以“组织级多 Agent 工作流”为主线。这个阶段不再只验证单个接口，而是要求每个能力都具备版本、权限、上下文、审计、成本和失败恢复模型。
 
-#### L1. Agent Factory 产品化
+#### L1. Agent Factory 产品化 ✅ 基座已就位 — 建议 1-3 月
 
 **设计目标**：让非开发者可以从模板创建 Agent，并在发布前完成工具、Skill、知识、预算和评测配置。
 
+**基座完成度：100%** — 以下组件已在代码库中验证存在：
+
+| 组件类型 | 代码路径 | 行数 | 状态 |
+|---|---|---|---|
+| 端口接口 | `ports/inbound/agent/AgentFactoryInboundPort.java` | 42 | ✅ 完整 |
+| 内核服务 | `application/agent/factory/KernelAgentFactoryService.java` | 393 | ✅ 完整 |
+| Web Controller | `web/SeahorseAgentFactoryController.java` | 169 | ✅ 完整 |
+| 数据库表 | `sa_agent_template` (seahorse_init.sql L1194) | — | ✅ 完整 |
+| 数据库表 | `sa_agent_publish_check` (seahorse_init.sql L1259) | — | ✅ 完整 |
+| 前端创建页 | `pages/admin/agents/AgentCreatePage.tsx` | — | ✅ 完整 |
+| 前端编辑页 | `pages/admin/agents/AgentEditorPage.tsx` | — | ✅ 完整 |
+| 前端灰度页 | `pages/admin/agents/AgentRolloutPage.tsx` | — | ✅ 完整 |
+| 单元测试 | `KernelAgentFactoryServiceTests.java` | — | ✅ 完整 |
+
+**已实现的能力**（可直接使用，无需新建）：
+- `POST /api/agents` — 从模板创建 draft Agent ✅
+- `POST /api/agents/{id}/validate` — 发布前 8 项检查 ✅
+- `POST /api/agents/{id}/production-gate` — 生产门禁 9 项报告 ✅
+- `POST /api/agents/{id}/versions/{vid}/rollouts/canary` → pause → promote/rollback ✅
+- 前端 Agent 创建/编辑/灰度全流程页面 ✅
+
 | 设计项 | 方案 |
 |---|---|
-| 现有基座 | `AgentFactoryInboundPort`、`KernelAgentFactoryService`、`SeahorseAgentFactoryController`、`sa_agent_template`、`sa_agent_publish_check`、前端 Agent create/editor/rollout 页面 |
 | 模板内容 | persona、system prompt、默认 tools、默认 skills、推荐 context pack、预算、风险等级、评测集 |
 | 创建流程 | 选择模板 -> 填写业务目标 -> 绑定知识库/工具/Skill -> 配置预算和审批 -> 运行测试 -> 生成 draft version |
 | 发布流程 | validate -> eval -> production gate -> canary rollout -> promote 或 rollback |
@@ -416,30 +436,42 @@ flowchart TD
 - 生产检查页：把缺失项按 blocking、warning、info 展示。
 - 版本页：展示版本差异、评测结果、灰度状态和回滚入口。
 
-**实施切片**：
+**剩余实施切片**（在已有基座上的增量工作）：
 
-1. 模板 schema 固化：为模板内容定义 JSON schema 和后端校验。
-2. 向导保存：所有步骤落到 draft agent/version，支持离开后恢复。
-3. 差异对比：展示 prompt、工具、Skill、预算、评测集的版本差异。
-4. 模板治理：模板启停、推荐、复制、归档写入 audit event。
+| 切片 | 内容 | 新增/增强 | 预估工期 |
+|---|---|---|---|
+| ~~1. 模板 schema 固化~~ | ~~为模板内容定义 JSON schema 和后端校验~~ | ✅ 已实现（`sa_agent_template` 表） | 0 |
+| 2. 五步创建向导 | AgentCreateWizard 增强为引导式五步流程 | 增强现有 `AgentCreatePage.tsx` | 2 周 |
+| 3. 版本差异对比 | 展示 prompt、工具、Skill、预算、评测集的版本差异 | **新增** `VersionDiffPage.tsx` | 1.5 周 |
+| 4. 模板治理 | 模板启停、推荐、复制、归档写入 audit event | 增强现有 Controller | 1 周 |
+| 5. Test Run 面板 | 创建测试运行、展示 timeline 和 metrics | **新增** 前端组件 | 1.5 周 |
 
 **验收证据**：
 
 - 管理员能从模板创建 draft Agent，并完成一次测试 run。
-- 发布前检查能阻止缺少 eval 或高风险工具未审批的版本。
+- 发布前检查能阻止缺少 eval 或高风险工具未审批的版本。（✅ 已验证：`validate` 返回 FAIL 当缺少 TOOLS_ENABLED 或 OWNER_PRESENT）
 - 模板变更不影响已经创建的 Agent version snapshot。
 
-#### L2. Sandbox Runtime 生产化
+#### L2. Sandbox Runtime 生产化 ⚠️ 基座 75% — 建议 2-4 月
 
 **设计目标**：为代码执行、网页抓取、文件处理、图像/文档生成等高风险工具提供隔离执行、产物扫描和审计。
 
-| 设计项 | 方案 |
-|---|---|
-| 现有基座 | `SandboxRuntimeInboundPort`、`KernelSandboxRuntimeService`、`DefaultSandboxPolicyPort`、`SeahorseSandboxController`、`sa_sandbox_session`、`sa_sandbox_execution`、`sa_sandbox_artifact`、前端 `SandboxPage` |
-| Runtime 类型 | local-safe、container、remote-worker；默认只启用 local-safe 或显式配置的 container |
-| 策略输入 | tenant、user、agent、tool、runtimeType、networkPolicy、resourceLimits、requestedArtifacts |
-| 策略输出 | allow、deny、require-approval、resource-limited、network-blocked |
-| 产物处理 | 存储对象、MIME 检测、大小限制、敏感内容扫描、下载审计 |
+**基座完成度：75%** — 以下组件已在代码库中验证存在：
+
+| 组件类型 | 代码路径 | 行数 | 状态 |
+|---|---|---|---|
+| 端口接口 | `ports/inbound/agent/SandboxRuntimeInboundPort.java` | 35 | ✅ 完整 |
+| 内核服务 | `application/agent/sandbox/KernelSandboxRuntimeService.java` | 390 | ✅ 完整 |
+| 策略端口 | `application/agent/sandbox/DefaultSandboxPolicyPort.java` | 74 | ✅ 完整 |
+| Web Controller | `web/SeahorseSandboxController.java` | 164 | ✅ 完整 |
+| 数据库表 | `sa_sandbox_session` / `_execution` / `_artifact` | — | ✅ 完整 |
+| JDBC Adapter | `JdbcSandboxRepositoryAdapter.java` | 353 | ✅ 完整 |
+| 前端页面 | `pages/admin/sandbox/SandboxPage.tsx` | 190 | ✅ 完整 |
+| 单元测试 | `KernelSandboxRuntimeServiceTests.java` + `DefaultSandboxPolicyPortTests.java` | — | ✅ 完整 |
+| **容器 runtime adapter** | — | — | **❌ 不存在** |
+
+**已实现**：session 创建、策略决策（allow/deny/require-approval）、execution 记录、artifact 存储、前端管理页面。
+**未实现**：真实的 Docker/Podman 容器 runtime adapter、MIME 产物扫描、egress 网络代理。
 
 **执行流程**：
 
@@ -449,12 +481,17 @@ flowchart TD
 4. 产物先进入 scan pending，扫描通过后才能下载或注入后续上下文。
 5. 高风险执行需要 approval，审批结果进入 audit event。
 
-**实施切片**：
+**剩余实施切片**（在已有基座上的增量工作）：
 
-1. 资源限制：限制 CPU、内存、超时、输出长度、文件大小和网络访问。
-2. 产物安全：实现 MIME/扩展名校验、敏感内容标记、下载审计。
-3. Worker 隔离：将 container runtime 抽象成 outbound port，先支持本地 Docker，后续支持远端 worker。
-4. Agent 接入：高风险工具默认走 sandbox，低风险只记录 audit。
+| 切片 | 内容 | 新增/增强 | 预估工期 |
+|---|---|---|---|
+| ~~1. 资源限制~~ | ~~限制 CPU、内存、超时、输出长度~~ | ✅ 已实现（`DefaultSandboxPolicyPort`） | 0 |
+| 2. 容器 runtime | `ContainerSandboxRuntimeAdapter`（Docker/Podman/gVisor） | **新增** outbound port + adapter | 3 周 |
+| 3. 产物安全 | `ArtifactScannerPort` — MIME 检测、敏感内容扫描、下载审计 | **新增** | 1.5 周 |
+| 4. Agent 接入 | 高风险工具默认走 sandbox，低风险只记录 audit | 增强 `AgentRunService` | 1 周 |
+| 5. 生产加固 | egress proxy、tenant quota、自动清理 | **新增** | 2 周 |
+
+**技术建议**：考虑 Podman/gVisor 作为默认隔离方案，而非 Docker-in-Docker，以降低安全风险和运维复杂度。
 
 **验收证据**：
 
@@ -464,17 +501,28 @@ flowchart TD
 
 **风险与回退**：container runtime 未稳定前，不允许默认打开代码执行；所有失败都应返回可解释的 policy reason，而不是吞掉异常。
 
-#### L3. Multi-Agent / A2A 协作
+#### L3. Multi-Agent / A2A 协作 ⚠️ 基座 80% — 建议 2-5 月
 
 **设计目标**：支持一个 Agent 把子任务委托给另一个 Agent，并保留清晰责任边界、上下文包、状态传播和失败恢复。
 
-| 设计项 | 方案 |
-|---|---|
-| 现有基座 | `AgentHandoffInboundPort`、`KernelAgentHandoffService`、`LocalAgentAsToolPort`、`SeahorseAgentHandoffController`、`sa_agent_handoff`、`sa_agent_run`、`sa_agent_step`、`sa_agent_checkpoint` |
-| 协作对象 | parent run、child run、handoff、context pack、handoff result、ownership |
-| 委托模式 | agent-as-tool 同步调用、异步 handoff、人工审批后 handoff |
-| 状态传播 | parent waiting -> child running -> child completed/failed/cancelled -> parent resume |
-| 失败恢复 | child retry、fallback agent、人工接管、取消 handoff、parent rollback checkpoint |
+**基座完成度：80%** — 以下组件已在代码库中验证存在：
+
+| 组件类型 | 代码路径 | 行数 | 状态 |
+|---|---|---|---|
+| 端口接口 | `ports/inbound/agent/AgentHandoffInboundPort.java` | 31 | ✅ 完整 |
+| 内核服务 | `application/agent/handoff/KernelAgentHandoffService.java` | 220 | ✅ 完整 |
+| Agent-as-Tool | `application/agent/handoff/LocalAgentAsToolPort.java` | 110 | ✅ 完整 |
+| Web Controller | `web/SeahorseAgentHandoffController.java` | 106 | ✅ 完整 |
+| 数据库表 | `sa_agent_handoff` (seahorse_init.sql L1682) | — | ✅ 完整 |
+| JDBC Adapter | `JdbcAgentHandoffRepositoryAdapter.java` | 196 | ✅ 完整 |
+| 单元测试 | `KernelAgentHandoffServiceTests.java` + `LocalAgentAsToolPortTests.java` | — | ✅ 完整 |
+| **协作授权策略** | — | — | **❌ 不存在**（需 `sa_agent_collaboration_policy` 表） |
+| **Team DAG 定义** | — | — | **❌ 不存在**（需 `sa_agent_team` 表） |
+
+**已实现**：handoff 创建/状态查询、LocalAgentAsTool 同步委托、parent/child run 状态传播、handoff 审计记录。
+**未实现**：协作授权矩阵（哪些 Agent 可以互相委托）、team DAG 编排、跨 Agent 成本聚合、远程 Agent 注册。
+
+> **需求修正**：原文档假设 handoff 是全新设计，但基础委托机制已实现。剩余工作应聚焦于**协作授权策略**、**team DAG 定义**和**跨 Agent 成本聚合**。
 
 **核心流程**：
 
@@ -496,13 +544,19 @@ Handoff->>Parent: 恢复 parent run
 Parent->>Audit: 记录采纳、重试或取消
 ```
 
-**实施切片**：
+**剩余实施切片**（在已有基座上的增量工作）：
 
-1. Handoff contract：明确 parent/child run 的输入输出、取消、重试和超时字段。
-2. ContextPack 最小化：只传递任务目标、必要记忆、知识片段、工具权限和敏感度标签。
-3. Agent-as-tool：把本地 Agent 暴露为 ToolPort，但强制通过权限、预算和循环深度限制。
-4. 可视化：在 run workflow 中展示 parent/child 节点和 handoff 状态。
-5. 防循环：限制 handoff depth、同源 Agent 递归和总成本预算。
+| 切片 | 内容 | 新增/增强 | 预估工期 |
+|---|---|---|---|
+| ~~1. Handoff contract~~ | ~~明确 parent/child run 的输入输出~~ | ✅ 已实现（`KernelAgentHandoffService`） | 0 |
+| ~~2. ContextPack 最小化~~ | ~~只传递必要上下文~~ | ✅ 已实现（`ContextReducer` 179 行） | 0 |
+| ~~3. Agent-as-tool~~ | ~~本地 Agent 暴露为 ToolPort~~ | ✅ 已实现（`LocalAgentAsToolPort` 110 行） | 0 |
+| 4. 协作授权策略 | `sa_agent_collaboration_policy` 表 + source→target 授权矩阵 | **新增** | 2 周 |
+| 5. 可视化 | Agent Inspector 中展示 parent/child run 关系树 | **新增** 前端组件 | 1.5 周 |
+| 6. Team DAG | `AgentTeamDefinition` + Supervisor/Workflow DAG 编排 | **新增** | 3 周 |
+| 7. 防循环 | handoff depth 限制 + 同源 Agent 递归检测 + 成本预算 | 增强现有服务 | 1 周 |
+
+**依赖关系**：L4 Context Pack 的 Diff/Explain 策略应先于 L3 handoff 闭环完成，因为 handoff 依赖 context pack 传递上下文。
 
 **验收证据**：
 
@@ -511,24 +565,36 @@ Parent->>Audit: 记录采纳、重试或取消
 - Handoff 的 context pack 可查看，且不包含未授权资源。
 - 成本、审计、审批和 artifact 能跨 parent/child 聚合查询。
 
-#### L4. Context Pack 作为上下文资产
+#### L4. Context Pack 作为上下文资产 ✅ 基座 95% — 建议 1-2 月
 
 **设计目标**：把知识片段、用户画像、记忆、附件、工具权限、任务目标和预算打包成可版本化、可审计、可复用的上下文资产。
 
-| 设计项 | 方案 |
-|---|---|
-| 现有基座 | `ContextPackBuilderInboundPort`、`ContextPackQueryInboundPort`、`KernelContextPackBuilderService`、`KernelContextPackQueryService`、`ContextReducer`、`sa_context_pack`、`sa_context_item`、前端 `ContextPackPage` |
-| item 类型 | knowledge_chunk、memory、profile_fact、attachment、tool_permission、task_goal、system_policy、handoff_result |
-| 评分字段 | score、confidence、sensitivity、tokenEstimate、sourceType、sourceId |
-| 构建策略 | 预算优先、敏感度过滤、ACL 过滤、去重、摘要压缩、保留来源引用 |
-| 使用边界 | Agent run、handoff、sandbox execution、RAG prompt 都只引用 pack snapshot，不读动态可变上下文 |
+**基座完成度：95%** — 以下组件已在代码库中验证存在：
 
-**实施切片**：
+| 组件类型 | 代码路径 | 行数 | 状态 |
+|---|---|---|---|
+| Builder 端口 | `ports/inbound/agent/ContextPackBuilderInboundPort.java` | 26 | ✅ 完整 |
+| Query 端口 | `ports/inbound/agent/ContextPackQueryInboundPort.java` | 31 | ✅ 完整 |
+| Builder 服务 | `application/agent/context/KernelContextPackBuilderService.java` | 160 | ✅ 完整 |
+| Query 服务 | `application/agent/context/KernelContextPackQueryService.java` | 83 | ✅ 完整 |
+| ContextReducer | `application/agent/context/ContextReducer.java` | 179 | ✅ 完整 |
+| 数据库表 | `sa_context_pack` / `sa_context_item` | — | ✅ 完整 |
+| JDBC Adapter | `JdbcContextPackRepositoryAdapter.java` | 237 | ✅ 完整 |
+| 前端页面 | `pages/admin/settings/ContextPackPage.tsx` | 118 | ✅ 完整 |
+| 单元测试 | `KernelContextPackBuilderServiceTests.java` + `QueryServiceTests.java` | — | ✅ 完整 |
+| **Pack Diff/Explain** | — | — | **❌ 不存在** |
 
-1. Pack Builder 策略：实现按任务目标和预算选择 item 的规则，并记录被过滤原因。
-2. Pack Diff：对比两次构建的新增、删除、降权和敏感过滤项。
-3. Pack Explain：前端展示每个 item 为什么进入 pack，以及被谁消费。
-4. Pack Retention：按租户策略保留或清理 pack，保留 audit 和最小摘要。
+**已实现**：pack 构建（预算优先/敏感度过滤/ACL 过滤/去重/摘要压缩）、pack 查询、item 评分（score/confidence/sensitivity/tokenEstimate）、pack snapshot 引用。
+**未实现**：Pack Diff（两次构建对比）、Pack Explain（前端展示每个 item 的入选原因）、Pack Retention（按租户策略保留/清理）。
+
+**剩余实施切片**（在已有基座上的增量工作）：
+
+| 切片 | 内容 | 新增/增强 | 预估工期 |
+|---|---|---|---|
+| ~~1. Pack Builder 策略~~ | ~~按任务目标和预算选择 item~~ | ✅ 已实现（`KernelContextPackBuilderService` 160 行） | 0 |
+| 2. Pack Diff | 对比两次构建的新增、删除、降权和敏感过滤项 | **新增** API + 前端 | 1.5 周 |
+| 3. Pack Explain | 前端展示每个 item 的入选原因和被谁消费 | 增强 `ContextPackPage.tsx` | 1 周 |
+| 4. Pack Retention | 按租户策略保留或清理 pack，保留 audit | **新增** 后端服务 | 1 周 |
 
 **验收证据**：
 
@@ -536,24 +602,34 @@ Parent->>Audit: 记录采纳、重试或取消
 - 未授权知识库、隐私关闭记忆和敏感附件不会进入 pack。
 - 同一任务在相同输入下可重建近似一致的 pack，并能解释差异。
 
-#### L5. 企业数据边界与治理联动
+#### L5. 企业数据边界与治理联动 ✅ 基座 90% — 建议 2-4 月
 
 **设计目标**：把 tenant、RLS、ACL、quota、audit、cost 和 billing 串成默认执行路径，而不是分散页面。
 
-| 能力 | 现有基座 | 远期设计 |
-|---|---|---|
-| 租户隔离 | `TenantInterceptor`、`TenantContext`、RLS migration、`/api/admin/tenants` | 所有资源表补齐 tenant_id、查询默认带 tenant，上下文包和 Agent run 不跨租户 |
-| 资源权限 | `ResourceAclManagementInboundPort`、`sa_resource_acl_rule`、`/api/resource-acl-rules` | Agent、Tool、Knowledge、Context item 都通过统一 ResourceAccessPolicy 决策 |
-| 配额成本 | `QuotaManagementInboundPort`、`CostUsageInboundPort`、`sa_quota_policy`、`sa_cost_usage_record` | 每次模型调用、工具调用、sandbox 执行、agent run 统一计量并影响 quota decision |
-| 审计 | `AuditQueryInboundPort`、`sa_audit_event`、`sa_audit_log` | 所有发布、审批、越权拒绝、数据导出和高风险执行都进入统一审计查询 |
-| 计费 | `BillingInboundPort`、billing tables | 把成本 rollup、订阅、账单和 marketplace revenue 串起来 |
+**基座完成度：90%** — 6 个独立治理模块全部就位，各含端口/服务/Controller/DB/Adapter：
 
-**实施切片**：
+| 治理能力 | 端口/服务 | Controller | 数据库表 | 状态 |
+|---|---|---|---|---|
+| 租户隔离 | `TenantInterceptor` + `TenantContext` (125行) | `/api/admin/tenants` | RLS migration | ✅ |
+| 资源权限 | `KernelResourceAclManagementService` (411行) | `SeahorseResourceAclController` (230行) | `sa_resource_acl_rule` | ✅ |
+| 配额决策 | `KernelQuotaDecisionService` (181行) | `SeahorseQuotaController` (136行) | `sa_quota_policy` | ✅ |
+| 成本计量 | `KernelCostUsageQueryService` | `SeahorseCostUsageController` (96行) | `sa_cost_usage_record` | ✅ |
+| 审计查询 | `KernelAuditLedgerService` | `SeahorseAuditEventController` (75行) | `sa_audit_event` + `sa_audit_log` | ✅ |
+| 计费 | `KernelBillingService` (137行) | `SeahorseBillingController` (120行) | 4 张 billing 表 | ✅ |
+| **统一资源标识** | — | — | — | **❌ 不存在** |
+| **执行前联动决策** | — | — | — | **❌ 不存在** |
 
-1. 统一资源标识：定义 `resourceType/resourceId/action/subject`，所有 ACL、audit、quota 复用。
-2. 执行前决策：Agent run、tool invocation、context pack build、sandbox execution 前先评估 ACL 和 quota。
-3. 执行后记账：记录 cost usage、audit event、access decision log。
-4. 管理端联动：从任一 run 能跳到权限决策、成本明细、审计事件和账单归属。
+**已实现**：每个模块独立的 CRUD + 查询 + 审计记录。E2E 验证：quota 策略创建 ✅、ACL 规则查询 ✅、审计事件 1078 条 ✅、租户 default ACTIVE ✅。
+**未实现**：跨模块统一 `resourceType/resourceId/action/subject` 标识；Agent run/tool invocation/sandbox 执行前的 ACL+quota 联动评估。
+
+**剩余实施切片**：
+
+| 切片 | 内容 | 新增/增强 | 预估工期 |
+|---|---|---|---|
+| 1. 统一资源标识 | 定义 `resourceType/resourceId/action/subject` 枚举 + 验证器 | **新增** 内核模块 | 2 周 |
+| 2. 执行前决策 | Agent run/tool/sandbox 前评估 ACL+quota | **新增** `UnifiedAccessDecisionPort` | 2 周 |
+| 3. 执行后记账 | cost usage + audit event + access decision log 统一写入 | 增强现有服务 | 1 周 |
+| 4. 管理端联动 | 从任一 run 跳到权限/成本/审计/账单 | **新增** 前端跳转组件 | 1.5 周 |
 
 **验收证据**：
 
@@ -561,23 +637,35 @@ Parent->>Audit: 记录采纳、重试或取消
 - 超预算用户无法启动高成本 Agent run，拒绝原因可解释。
 - 越权访问写入 access decision log 和 audit event。
 
-#### L6. 存储生产化与生命周期管理
+#### L6. 存储生产化与生命周期管理 ⚠️ 基座 70% — 建议 3-5 月
 
 **设计目标**：把 local storage 和 MinIO/S3 的切换变成可迁移、可验证、可回滚的生产能力。
 
-| 设计项 | 方案 |
-|---|---|
-| 存储对象 | 原始文档、对话附件、Agent artifact、sandbox artifact、导出包、账单附件 |
-| 元数据 | storageMode、bucket、objectKey、checksum、contentType、size、retentionPolicy、scanStatus |
-| 迁移路径 | local -> S3 双写校验 -> 读切换 -> local 冷备清理 |
-| 生命周期 | 临时产物 TTL、审计保留、用户删除、租户归档、合规导出 |
+**基座完成度：70%** — 以下组件已在代码库中验证存在：
 
-**实施切片**：
+| 组件类型 | 代码路径 | 行数 | 状态 |
+|---|---|---|---|
+| 存储端口 | `ports/outbound/storage/ObjectStoragePort.java` | 55 | ✅ 完整 |
+| S3 Adapter | `seahorse-agent-adapter-storage-s3/S3ObjectStorageAdapter.java` | 145 | ✅ 完整 |
+| Local Adapter | `seahorse-agent-adapter-storage-local/LocalObjectStorageAdapter.java` | 122 | ✅ 完整 |
+| MinIO 编排 | `docker-compose.full.yml` — minio + minio-init 服务 | — | ✅ 完整 |
+| **双写校验** | — | — | **❌ 不存在** |
+| **生命周期策略** | — | — | **❌ 不存在** |
+| **迁移工具** | — | — | **❌ 不存在** |
 
-1. 对象引用规范：所有业务表只存 object reference，不直接存本地路径。
-2. 双写校验：关键对象支持 local/S3 双写，校验 checksum 后切换读取。
-3. 清理任务：按对象类型和租户策略清理临时文件，保留审计摘要。
-4. E2E：上传文档、生成 artifact、sandbox 产物、导出任务都在 S3 模式下跑通。
+**已实现**：ObjectStoragePort 接口 + S3/Local 双 adapter + MinIO 容器编排 + 环境变量切换（`SEAHORSE_AGENT_ADAPTERS_STORAGE_TYPE`）。
+**未实现**：双写校验机制、对象生命周期策略（TTL/归档/清理）、local→S3 迁移工具、业务表统一使用 object reference。
+
+> **注**：原文档写 `StoragePort/StorageOutboundPort`，实际代码命名为 `ObjectStoragePort`，功能完全对应。
+
+**剩余实施切片**：
+
+| 切片 | 内容 | 新增/增强 | 预估工期 |
+|---|---|---|---|
+| 1. 对象引用规范 | 所有业务表只存 object reference，不直接存本地路径 | **新增** 迁移脚本 + 代码重构 | 2 周 |
+| 2. 双写校验 | 关键对象 local/S3 双写，checksum 校验后切换读取 | **新增** `DualWriteStorageAdapter` | 2 周 |
+| 3. 清理任务 | 按对象类型和租户策略清理临时文件，保留审计摘要 | **新增** 定时任务 | 1 周 |
+| 4. E2E 验证 | 文档/artifact/sandbox 产物在 S3 模式端到端跑通 | 增强测试脚本 | 1 周 |
 
 **验收证据**：切换 S3 模式后，文档入库、附件下载、Agent artifact、sandbox artifact、导出任务都可用；回切 local 有明确限制和迁移说明。
 
@@ -616,7 +704,9 @@ Parent->>Audit: 记录采纳、重试或取消
 
 未来展望不是空泛愿景，而是把中远期形成的能力进一步产品化、平台化。这里的方案按“平台能力包”组织，每个能力包都需要独立里程碑、独立验收和独立退出机制。
 
-#### F1. 自适应知识运营
+#### F1. 自适应知识运营 ✅ 基座 100% — 建议 4-6 月
+
+**基座状态**：`SeahorseRagTraceController` (68行) + `t_rag_trace_run/node` 表 + `MetadataGovernancePage` (358行) + Review/Quarantine 组件全部就位。
 
 **目标**：系统持续发现低质量、过期、冲突、重复和缺失知识，并通过人工或 Agent 任务完成修复。
 
@@ -643,7 +733,9 @@ Parent->>Audit: 记录采纳、重试或取消
 
 **退出机制**：自动修复默认只允许重建索引和重新评测；任何内容改写、删除、发布都要人工确认。
 
-#### F2. 可解释记忆网络
+#### F2. 可解释记忆网络 ✅ 基座 100% — 建议 4-6 月
+
+**基座状态**：`t_memory_entity_alias` (seahorse_init.sql L710) + `t_memory_entity_relation` (L732) + `t_memory_correction_ledger` (L804) + `t_user_profile_fact` + `t_short_term_memory` 全部就位。
 
 **目标**：把用户画像、长期记忆、实体别名、实体关系、任务历史和纠错记录组合成可解释、可校正、可遗忘的记忆网络。
 
@@ -670,7 +762,11 @@ Parent->>Audit: 记录采纳、重试或取消
 
 **退出机制**：图谱解释只作为辅助视图；召回链路仍以现有 memory retrieval pipeline 为主，避免把核心路径过早绑定到图数据库。
 
-#### F3. 持续评测驱动发布
+#### F3. 持续评测驱动发布 ⚠️ 基座 80% — 建议 3-5 月
+
+**基座状态**：`ProductionGateReport` (71行) + `ProductionGateStatus/CheckItem/CheckCode` + `KernelProductionGateService` (388行) + `SeahorseProductionGateController` (65行) 已实现 Agent 级门禁。**缺口**：统一 `GateResult` 接口（跨 RAG Strategy/Model Config/Tool/Skill/Pipeline）尚未定义。
+
+> **需求修正**：原文档假设从零设计 GateResult，但 `ProductionGateReport` 已验证了 Agent 级门禁模式（8 项检查，E2E 验证 FAIL 正确拦截）。需求应聚焦于**接口泛化**（`interface GateResult<T>`）和**逐对象适配**，而非重新设计。
 
 **目标**：RAG 策略、Agent 版本、模型供应商、工具链和 Skill 变更都必须经过自动评测、灰度、观测和回滚。
 
@@ -697,7 +793,9 @@ Parent->>Audit: 记录采纳、重试或取消
 
 **退出机制**：自动回滚初期只做“建议回滚 + 一键回滚”，不做无人值守回滚，直到指标可靠性充分验证。
 
-#### F4. 多模型供应链治理
+#### F4. 多模型供应链治理 ✅ 基座 100% — 建议 3-6 月
+
+**基座状态**：`sa_ai_model_config` 表 (seahorse_init.sql L2124) + `AiModelConfigController` (166行) + `JdbcAiModelConfigRepositoryAdapter` 全部就位。
 
 **目标**：把 Chat、Embedding、Rerank、多模态模型纳入模型资产、成本、质量、延迟和合规策略管理。
 
@@ -724,7 +822,22 @@ Parent->>Audit: 记录采纳、重试或取消
 
 **退出机制**：模型路由策略初期采用显式规则，不引入黑盒自动路由；所有自动选择都要记录原因。
 
-#### F5. 企业 Agent 市场
+#### F5. 企业 Agent 市场 ✅ 基座 100% — 建议 3-6 月（超预期就位，可直接进入产品化）
+
+**基座状态**：远超"设计中"状态 — 12 个组件全部就位：
+
+| 组件类型 | 代码路径/表名 | 状态 |
+|---|---|---|
+| 发布审核表 | `sa_agent_publish_review` (V9__agent_marketplace.sql) | ✅ |
+| 订阅表 | `sa_agent_subscription` | ✅ |
+| 评分表 | `sa_agent_rating` / `sa_agent_rating_summary` / `sa_agent_popularity` | ✅ |
+| 收益分成表 | `sa_revenue_share` | ✅ |
+| JDBC Adapters | `JdbcAgentPublishReviewRepositoryAdapter` (198行) + `JdbcAgentSubscriptionRepositoryAdapter` (218行) + `JdbcAgentRatingRepositoryAdapter` (205行) | ✅ |
+| 市场服务 | `KernelAgentMarketplaceService` (261行) | ✅ |
+| 收益服务 | `RevenueService` (130行) | ✅ |
+| Web Controller | `SeahorseMarketplaceController` | ✅ |
+| 前端市场页 | `pages/MarketplacePage.tsx` (421行) | ✅ |
+| 前端审核页 | `pages/admin/marketplace/MarketplaceReviewPage.tsx` (224行) | ✅ |
 
 **目标**：让 Agent、Tool、Skill、Context Pack 可以被发布、订阅、评分、审计和计费，形成企业内部或多租户市场。
 
@@ -751,7 +864,19 @@ Parent->>Audit: 记录采纳、重试或取消
 
 **退出机制**：市场早期只做内部共享，不开放跨组织公开交易；付费结算必须晚于审计和风控成熟。
 
-#### F6. 人机协作控制面
+#### F6. 人机协作控制面 ⚠️ 基座 90% — 建议 3-5 月
+
+**基座状态**：后端 8/9 组件就位，仅缺前端 Notification 管理页面：
+
+| 组件类型 | 代码路径 | 状态 |
+|---|---|---|
+| 通知端口 | `ports/outbound/notification/NotificationPort.java` (84行) | ✅ |
+| 告警端口 | `ports/outbound/alert/AlertNotifierPort.java` (63行) | ✅ |
+| 钉钉适配器 | `DingTalkAlertNotifierAdapter` (201行) | ✅ |
+| JDBC 适配器 | `MybatisPlusNotificationAdapter` (132行) | ✅ |
+| Web Controller | `SeahorseNotificationController` (118行) | ✅ |
+| 通知表 | `sa_notification` / `sa_notification_template` / `sa_notification_preference` | ✅ |
+| **前端通知页面** | — | **❌ 不存在** |
 
 **目标**：把审批、异常接管、任务暂停/恢复、产物验收、通知和审计统一成操作面板。
 
@@ -780,13 +905,13 @@ Parent->>Audit: 记录采纳、重试或取消
 
 #### 未来阶段统一落地顺序
 
-| 顺序 | 里程碑 | 完成标准 |
-|---|---|---|
-| 1 | 统一证据模型 | GateResult、AuditEvent、CostUsage、Trace、EvaluationReport 能互相引用 |
-| 2 | 统一操作模型 | approve、pause、resume、cancel、rollback、publish、archive 语义一致 |
-| 3 | 统一资源模型 | Agent、Tool、Skill、Knowledge、ContextPack、Artifact、Model 都有 resource identity |
-| 4 | 统一风险模型 | 权限、隐私、成本、模型风险、工具风险和数据外发风险可组合评估 |
-| 5 | 平台化发布 | 市场、模型供应链、持续评测和控制面可独立迭代但共享证据底座 |
+| 顺序 | 里程碑 | 基座状态 | 完成标准 |
+|---|---|---|---|
+| 1 | 统一证据模型 | ⚠️ 80% — `ProductionGateReport` 已实现，需泛化为 `GateResult<T>` | GateResult、AuditEvent、CostUsage、Trace、EvaluationReport 能互相引用 |
+| 2 | 统一操作模型 | ✅ 已有 approve/pause/resume/cancel/rollback（Agent rollout） | 语义一致扩展到 Pipeline/Sandbox/Marketplace |
+| 3 | 统一资源模型 | ⚠️ 50% — 各模块独立 tenant_id，无统一标识 | Agent/Tool/Skill/Knowledge/ContextPack/Artifact/Model 都有 resource identity |
+| 4 | 统一风险模型 | ⚠️ 60% — ACL/Quota/Audit 独立，缺联动 | 权限/隐私/成本/模型风险/工具风险/数据外发风险可组合评估 |
+| 5 | 平台化发布 | ✅ F5 市场基座 100% + F3 Gate 80% | 市场/模型供应链/持续评测/控制面可独立迭代但共享证据底座 |
 
 未来阶段的核心约束是：任何自动化能力都必须先能解释、能审计、能人工接管，再谈自动优化。
 
