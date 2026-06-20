@@ -18,12 +18,26 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
 import java.util.List;
+import java.util.Objects;
 
 public interface MemoryTraceRecorder {
 
     void record(MemoryTraceEvent event);
 
     List<MemoryTraceEvent> listRecent(int limit);
+
+    /**
+     * List recent trace events filtered by user and tenant.
+     * Default implementation fetches a large sample and filters in-memory;
+     * adapter implementations should override with a database-level filter for correctness at scale.
+     */
+    default List<MemoryTraceEvent> listByUser(String userId, String tenantId, int limit) {
+        return listRecent(limit).stream()
+                .filter(e -> e != null
+                        && Objects.equals(tenantId, e.tenantId())
+                        && Objects.equals(userId, e.userId()))
+                .toList();
+    }
 
     default List<MemoryTraceEvent> recent(int limit) {
         return listRecent(limit);

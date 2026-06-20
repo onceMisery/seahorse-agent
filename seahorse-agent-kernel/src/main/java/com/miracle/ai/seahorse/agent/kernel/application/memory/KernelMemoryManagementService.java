@@ -142,10 +142,8 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
         List<MemoryOperationRecord> operations = ports.operationLogPort()
                 .listByUser(safeUserId, safeTenantId, null, sampleLimit);
         List<MemoryQualitySnapshot> snapshots = ports.qualitySnapshotRepositoryPort().listByUser(safeUserId, 1);
-        List<MemoryTraceEvent> traceEvents = userTenantTraceEvents(
-                ports.traceRecorder().listRecent(sampleLimit),
-                safeUserId,
-                safeTenantId);
+        List<MemoryTraceEvent> traceEvents = ports.traceRecorder()
+                .listByUser(safeUserId, safeTenantId, sampleLimit);
 
         Map<String, Long> operationCounts = operationCounts(operations);
         int operationTotal = operations.size();
@@ -188,9 +186,12 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
         int sampleLimit = 200;
         List<MemoryOperationRecord> operations = ports.operationLogPort()
                 .listByUser(safeUserId, safeTenantId, null, sampleLimit);
-        List<MemoryTraceEvent> recentTraceEvents = ports.traceRecorder().listRecent(sampleLimit);
-        List<MemoryTraceEvent> userTraceEvents = userTenantTraceEvents(recentTraceEvents, safeUserId, safeTenantId);
-        List<MemoryTraceEvent> tenantTraceEvents = tenantTraceEvents(recentTraceEvents, safeTenantId);
+        List<MemoryTraceEvent> userTraceEvents = ports.traceRecorder()
+                .listByUser(safeUserId, safeTenantId, sampleLimit);
+        List<MemoryTraceEvent> tenantTraceEvents = ports.traceRecorder()
+                .listRecent(sampleLimit).stream()
+                .filter(e -> e != null && safeTenantId.equals(e.tenantId()))
+                .toList();
         MemoryPolicyConfig policy = ports.policyConfigPort().current();
         List<MemoryReadinessCapability> capabilities = List.of(
                 operationEvidenceCapability(

@@ -71,6 +71,15 @@ public class InMemoryMemoryTraceRecorder implements MemoryTraceRecorder {
         return List.copyOf(recent);
     }
 
+    @Override
+    public synchronized List<MemoryTraceEvent> listByUser(String userId, String tenantId, int limit) {
+        return listRecent(limit <= 0 ? maxEvents : limit).stream()
+                .filter(e -> e != null
+                        && Objects.equals(tenantId, e.tenantId())
+                        && Objects.equals(userId, e.userId()))
+                .toList();
+    }
+
     public synchronized List<MemoryTraceEvent> recent(int limit) {
         return listRecent(limit);
     }

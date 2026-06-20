@@ -87,6 +87,20 @@ public class JdbcMemoryTraceRecorderAdapter implements MemoryTraceRecorder {
                 """, this::mapEvent, safeLimit);
     }
 
+    @Override
+    public List<MemoryTraceEvent> listByUser(String userId, String tenantId, int limit) {
+        int safeLimit = limit > 0 ? Math.min(limit, MAX_LIMIT) : DEFAULT_LIMIT;
+        Long userIdLong = JdbcMemorySupport.toLongIdOrNull(userId);
+        return jdbcTemplate.query("""
+                SELECT trace_id, tenant_id, user_id, conversation_id, session_id, component, event_type,
+                       status, subject_id, subject_type, details_json, occurred_at
+                FROM t_memory_trace_event
+                WHERE tenant_id = ? AND (user_id = ? OR (? IS NULL AND user_id IS NULL))
+                ORDER BY occurred_at DESC, create_time DESC, id DESC
+                LIMIT ?
+                """, this::mapEvent, tenantId, userIdLong, userIdLong, safeLimit);
+    }
+
     private MemoryTraceEvent mapEvent(ResultSet rs, int rowNum) throws SQLException {
         return new MemoryTraceEvent(
                 rs.getString("trace_id"),
