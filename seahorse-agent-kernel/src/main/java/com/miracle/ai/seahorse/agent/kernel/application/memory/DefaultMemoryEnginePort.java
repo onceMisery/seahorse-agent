@@ -1693,7 +1693,23 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         metadata.put("riskScore", decision.riskScore());
         metadata.put("captureSignals", decision.signals());
         metadata.put("captureReasons", decision.reasons());
+        metadata.put("semanticKey", deriveSemanticKey(decision));
         return metadata;
+    }
+
+    /**
+     * Derive a stable semantic key from the capture decision for conflict detection.
+     * Memories sharing the same type + semanticKey pair are compared for content conflicts.
+     */
+    private String deriveSemanticKey(MemoryCaptureDecision decision) {
+        String type = Objects.requireNonNullElse(decision.type(), "").toUpperCase(java.util.Locale.ROOT);
+        String content = Objects.requireNonNullElse(decision.content(), "").trim().toLowerCase(java.util.Locale.ROOT);
+        // Use content hash for stable grouping when content is available
+        if (!content.isEmpty()) {
+            int hash = content.hashCode();
+            return type.toLowerCase(java.util.Locale.ROOT) + ":" + Integer.toHexString(hash & 0xFFFF);
+        }
+        return type.toLowerCase(java.util.Locale.ROOT) + ":unknown";
     }
 
     private String operationId(MemoryIngestionCommand command, MemoryWriteRequest request) {
