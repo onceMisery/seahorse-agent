@@ -381,16 +381,18 @@ flowchart TD
 
 目标：把单 Agent / 单知识库能力扩展为面向组织工作流的多 Agent 平台。
 
-| 方向 | 设计内容 | 成功证据 |
-|---|---|---|
-| Agent Factory UI | 从模板、工具、Skill、权限、预算、评测集生成可发布 Agent。 | 非开发者可创建、验证、发布和回滚 Agent。 |
-| Sandbox Runtime | 为工具执行、代码执行、网页抓取和文件处理提供隔离、审计、产物扫描。 | 高风险工具调用默认经过沙箱和审批策略。 |
-| Multi-Agent / A2A | 支持 Agent 之间任务委托、交接、上下文包、责任边界和失败恢复。 | 一个复杂任务能拆分给多个 Agent，且每段都有 trace 和 ownership。 |
-| Context Pack | 把知识库、记忆、工具权限、用户画像、任务目标打包成可复用上下文资产。 | Agent run 可以声明使用的 context pack，并记录版本。 |
-| 企业数据边界 | 强化多租户、RLS、资源 ACL、审计、配额和成本策略的联动。 | 同一接口在不同租户/角色下有可验证的隔离和审计证据。 |
-| 存储生产化 | 将 local storage 与 MinIO/S3 之间的切换、迁移、生命周期策略文档化和测试化。 | 附件、产物、入库原文可在 S3 模式下端到端验证。 |
+| 方向 | 设计内容 | 成功证据 | 基座完成度 | 实施状态 |
+|---|---|---|---|---|
+| Agent Factory UI | 从模板、工具、Skill、权限、预算、评测集生成可发布 Agent。 | 非开发者可创建、验证、发布和回滚 Agent。 | **✅ 100%** | 后端+DB+前端页面全部就位，需产品化增强（创建向导、版本 diff、模板治理） |
+| Sandbox Runtime | 为工具执行、代码执行、网页抓取和文件处理提供隔离、审计、产物扫描。 | 高风险工具调用默认经过沙箱和审批策略。 | **⚠️ 75%** | 端口/服务/策略/Controller/表/前端全部就位，缺少真实容器 runtime adapter |
+| Multi-Agent / A2A | 支持 Agent 之间任务委托、交接、上下文包、责任边界和失败恢复。 | 一个复杂任务能拆分给多个 Agent，且每段都有 trace 和 ownership。 | **⚠️ 80%** | handoff 服务/LocalAgentAsTool/Controller/表就位，缺少协作授权策略和 team DAG |
+| Context Pack | 把知识库、记忆、工具权限、用户画像、任务目标打包成可复用上下文资产。 | Agent run 可以声明使用的 context pack，并记录版本。 | **✅ 95%** | Builder/Query/Reducer/DB/前端全部就位，缺少 Pack Diff/Explain/Retention 策略 |
+| 企业数据边界 | 强化多租户、RLS、资源 ACL、审计、配额和成本策略的联动。 | 同一接口在不同租户/角色下有可验证的隔离和审计证据。 | **✅ 90%** | Tenant/ACL/Quota/Cost/Audit/Billing 独立模块全部就位，缺少统一资源标识和执行前联动决策 |
+| 存储生产化 | 将 local storage 与 MinIO/S3 之间的切换、迁移、生命周期策略文档化和测试化。 | 附件、产物、入库原文可在 S3 模式下端到端验证。 | **⚠️ 70%** | ObjectStoragePort + S3/Local adapter 代码就位，缺少双写校验、生命周期策略和迁移工具 |
 
-远期重点是“组织级协作”，需要比单次问答更强的任务状态、权限和恢复模型。
+远期重点是"组织级协作"，需要比单次问答更强的任务状态、权限和恢复模型。
+
+> **基座验证说明**：以上"基座完成度"基于 2026-06-20 代码库全量搜索验证。远期 6 个方向共声称 ~53 个组件（Java 端口/服务/Controller + SQL 表 + 前端页面），其中 53/53 (100%) 在代码中真实存在。主要缺口不在"有没有代码"，而在**端到端联动验证**和**产品化增强**。
 
 ### 远期详细设计方案
 
@@ -592,6 +594,24 @@ Parent->>Audit: 记录采纳、重试或取消
 
 这些方向都必须保持同一条底线：任何智能能力都要有证据、有边界、有退出机制。
 
+### 未来展望基座验证
+
+> 基于 2026-06-20 代码库全量搜索，对未来展望 6 个方向声称的"现有基座"进行验证。总计 ~37 个组件，36/37 (97%) 真实存在。
+
+| 方向 | 声称组件数 | 存在 | 缺口 | 基座可信度 |
+|---|---|---|---|---|
+| F1 自适应知识运营 | 5 | 5 | 无 | **100%** |
+| F2 可解释记忆网络 | 3 | 3 | 无 | **100%** |
+| F3 持续评测驱动发布 | 5 | 4 | `GateResult` 统一类型不存在（`ProductionGateReport` 仅覆盖 Agent） | **80%** |
+| F4 多模型供应链治理 | 3 | 3 | 无 | **100%** |
+| F5 企业 Agent 市场 | 12 | 12 | 无 | **100%** |
+| F6 人机协作控制面 | 9 | 8 | 前端 Notification 管理页面不存在 | **90%** |
+
+**关键发现**：
+1. **F3 GateResult 泛化缺失** — `ProductionGateReport` 已实现 Agent 级发布门禁（8 项检查），但跨对象类型（RAG Strategy、Model Config、Tool/Skill、Ingestion Pipeline）的统一 `GateResult` 接口尚未定义。建议先抽象接口再逐对象适配。
+2. **F6 Notification 前端缺失** — 后端 `NotificationPort`/`AlertNotifierPort`/`DingTalkAlertNotifierAdapter`/Controller/DB 表全部就位，但缺少独立的前端通知管理页面（列表/详情/已读/偏好设置）。
+3. **F5 市场后端超预期** — publish_review/subscription/rating/popularity/revenue_share 表 + JDBC adapter + `KernelAgentMarketplaceService` + `RevenueService` + Controller + 前端 MarketplacePage/ReviewPage 全部就位，远超"设计中"状态。
+
 ### 未来展望详细设计方案
 
 未来展望不是空泛愿景，而是把中远期形成的能力进一步产品化、平台化。这里的方案按“平台能力包”组织，每个能力包都需要独立里程碑、独立验收和独立退出机制。
@@ -769,6 +789,50 @@ Parent->>Audit: 记录采纳、重试或取消
 | 5 | 平台化发布 | 市场、模型供应链、持续评测和控制面可独立迭代但共享证据底座 |
 
 未来阶段的核心约束是：任何自动化能力都必须先能解释、能审计、能人工接管，再谈自动优化。
+
+### 远期与未来展望审查建议（2026-06-20）
+
+基于代码库全量验证，对远期设计和未来展望提出以下具体改进建议：
+
+#### 1. 时间线调整建议
+
+| 方向 | 原文档定位 | 建议调整 | 理由 |
+|---|---|---|---|
+| L1 Agent Factory | 3-6 月 | **1-3 月** | 后端+DB+前端 100% 就位，仅需产品化增强（创建向导、版本 diff） |
+| L4 Context Pack | 3-6 月 | **1-2 月** | Builder/Query/Reducer 全部就位，仅需 Diff/Explain/Retention 策略 |
+| L5 企业数据边界 | 3-6 月 | **2-4 月** | 6 个独立模块全部就位，主要工作是统一资源标识和联动决策 |
+| F5 Agent 市场 | 6 月+ | **3-6 月** | 后端服务+DB+前端页面超预期就位，可从"设计"直接跳至"产品化" |
+
+#### 2. 需重新定义需求的项目
+
+- **L3 Multi-Agent/A2A**：原文档假设 handoff 是全新设计，但 `KernelAgentHandoffService` + `LocalAgentAsToolPort` 已实现基础委托。需求应聚焦于**协作授权策略**（`sa_agent_collaboration_policy` 表）、**team DAG 定义**和**跨 Agent 成本聚合**，而非基础 handoff 机制。
+- **F3 持续评测**：原文档假设从零设计 GateResult，但 `ProductionGateReport` 已验证了 Agent 级门禁模式。需求应聚焦于**接口泛化**（`interface GateResult<T>`）和**逐对象适配**，而非重新设计。
+
+#### 3. 依赖冲突与重叠
+
+| 项目 A | 项目 B | 冲突/重叠 | 建议 |
+|---|---|---|---|
+| L1 Agent Factory | L3 Multi-Agent | Agent 创建向导需要选择协作 Agent，但协作授权策略尚未定义 | L1 先实现单机创建向导，L3 补齐后再加协作选项 |
+| L4 Context Pack | L3 Multi-Agent | handoff 依赖 context pack 传递上下文，但 Pack Diff/Explain 尚未实现 | L4 Pack 策略优先于 L3 handoff 闭环 |
+| L5 企业数据边界 | F6 控制面 | 统一资源标识是两者共同前提 | 先定义 `resourceType/resourceId/action/subject` 规范 |
+| F3 GateResult | L1 Agent Factory | Agent Factory 的 validate/gate 已使用 `ProductionGateReport`，泛化后需迁移 | GateResult 接口设计时保持向后兼容 |
+
+#### 4. 技术债务风险
+
+| 风险 | 影响 | 建议 |
+|---|---|---|
+| `DefaultMemoryEnginePort` 超 1700 行 | L2/F2 记忆系统演进困难 | 拆分为 capture/refine/profile/outbox 四个子服务 |
+| `KernelMemoryManagementService` 同时承担 readiness/health/operations | 远期 F2 记忆网络需要扩展查询端口 | 抽取 `MemoryReadinessQueryPort` 独立端口 |
+| JDBC adapter 包含 SQL + row mapper + 业务逻辑 | L5 统一资源标识需要跨 adapter 复用 | 建立 `BaseJdbcRepositoryAdapter` 提取公共模式 |
+| 前端页面分散（Agent/Sandbox/Marketplace/ContextPack 各自独立） | F6 控制面需要统一操作面板 | 建立共享的 `OperationsPanel` 组件库 |
+
+#### 5. 过时技术选型/架构假设
+
+| 原文档假设 | 当前实际情况 | 建议修正 |
+|---|---|---|
+| "先不引入图数据库"（F2） | 记忆实体关系已有 `t_memory_entity_alias/relation` 表，但查询仍是 SQL JOIN | 短期维持 SQL，但预留 `MemoryLineageQueryPort` 接口供未来 Neo4j/图引擎替换 |
+| "MCP 工具安全扫描"（L1/F5） | MCP HTTP adapter 存在但缺少 OAuth 2.1 和凭据保险柜 | 将 `McpCredentialVault` 提升为 P0 优先级 |
+| "本地 Docker runtime"（L2） | Sandbox 策略端口完整但无真实容器 runtime | 考虑 Podman/gVisor 作为默认隔离方案，而非 Docker-in-Docker |
 
 ## 路线图验收方法
 
