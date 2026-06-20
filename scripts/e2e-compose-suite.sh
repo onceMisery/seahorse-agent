@@ -155,6 +155,44 @@ else
   skip "Prometheus 指标不可用 (HTTP $PROM_RESP)"
 fi
 
+# ── 6. RAG 评测冒烟 ──
+
+log "6. RAG 评测冒烟"
+
+# 使用第一个知识库进行评测
+FIRST_KB=$(api GET "/knowledge-base?page=1&size=1" | jq -r '.data.records[0].id // empty' 2>/dev/null || echo "")
+if [[ -z "$FIRST_KB" ]]; then
+  skip "无可用知识库，跳过 RAG 评测"
+else
+  # 创建评测数据集
+  DS_RESP=$(api POST "/knowledge-base/${FIRST_KB}/retrieval-evaluation-datasets" \
+    -d '{"datasetId":"","name":"ci-smoke","description":"CI smoke","enabled":true,"cases":[{"caseId":"s1","question":"Seahorse Agent embedding model","expectedKbIds":["'"$FIRST_KB"'"],"expectedDocIds":[],"expectedChunkIds":[],"negativeChunkIds":[],"tags":["smoke"],"minRecall":0.5}]}' 2>/dev/null || echo "")
+  DS_ID=$(echo "$DS_RESP" | jq -r '.data.datasetId // empty' 2>/dev/null || echo "")
+  if [[ -n "$DS_ID" ]]; then
+    ok "评测数据集创建成功 ($DS_ID)"
+    # 运行评测
+    EVAL_RESP=$(api POST "/knowledge-base/${FIRST_KB}/retrieval-evaluation-datasets/${DS_ID}/evaluate" \
+      -d '{"strategyName":"ci-smoke","topK":5}' 2>/dev/null || echo "")
+    EVAL_RECALL=$(echo "$EVAL_RESP" | jq -r '.data.recallAtK // empty' 2>/dev/null || echo "")
+    EVAL_CASES=$(echo "$EVAL_RESP" | jq -r '.data.evaluableCaseCount // empty' 2>/dev/null || echo "")
+    if [[ -n "$EVAL_RECALL" && "$EVAL_CASES" -gt 0 ]] 2>/dev/null; then
+      ok "评测运行成功: recall@k=$EVAL_RECALL, cases=$EVAL_CASES"
+    else
+      fail "评测运行失败或无结果"
+    fi
+  else
+    fail "评测数据集创建失败"
+  fi
+  # 策略模板检查
+  TMPL_RESP=$(api GET "/knowledge-base/${FIRST_KB}/retrieval-strategy-templates" 2>/dev/null || echo "")
+  TMPL_COUNT=$(echo "$TMPL_RESP" | jq '.data | length' 2>/dev/null || echo "0")
+  if [[ "$TMPL_COUNT" -gt 0 ]]; then
+    ok "策略模板可用: ${TMPL_COUNT} 个"
+  else
+    fail "策略模板为空"
+  fi
+fi
+
 # ── 结果汇总 ──
 
 echo ""
