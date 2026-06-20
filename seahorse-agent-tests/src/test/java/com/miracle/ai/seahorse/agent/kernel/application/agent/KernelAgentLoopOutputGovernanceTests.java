@@ -104,7 +104,19 @@ class KernelAgentLoopOutputGovernanceTests {
     void preservesOriginalBehaviorWhenGovernanceServiceNotConfigured() {
         String modelOutput = "{\"title\":\"only title\"}";
         ScriptedSingleAnswerModel model = new ScriptedSingleAnswerModel(modelOutput);
-        KernelAgentLoop loop = new KernelAgentLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
+        KernelAgentLoop loop = new KernelAgentLoop(new AgentLoopDependencies(
+                model,
+                ToolRegistryPort.empty(),
+                null,
+                KernelAgentLoopOptions.defaults(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null));
 
         AgentLoopResult result = loop.execute(jsonRequest("生成计划", JSON_SCHEMA_TITLE_STEPS));
 
@@ -139,7 +151,7 @@ class KernelAgentLoopOutputGovernanceTests {
 
     private static KernelAgentLoop newLoopWithGovernance(StreamingChatModelPort model,
                                                           OutputGovernanceService governance) {
-        return new KernelAgentLoop(
+        return new KernelAgentLoop(new AgentLoopDependencies(
                 model,
                 ToolRegistryPort.empty(),
                 null,
@@ -148,7 +160,10 @@ class KernelAgentLoopOutputGovernanceTests {
                 new DefaultContextWeaver(),
                 AgentRunStepRecorder.noop(),
                 AgentApprovalWaitHandler.noop(),
-                governance);
+                governance,
+                null,
+                null,
+                null));
     }
 
     private static AgentLoopRequest jsonRequest(String question, String schema) {

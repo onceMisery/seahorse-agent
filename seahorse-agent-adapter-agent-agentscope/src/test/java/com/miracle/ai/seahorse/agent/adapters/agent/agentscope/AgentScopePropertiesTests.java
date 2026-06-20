@@ -18,11 +18,16 @@
 package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class AgentScopePropertiesTests {
+
+    private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(AgentScopeReActAutoConfiguration.class));
 
     @Test
     void defaultsKeepAgentscopeA2aStudioAndConfigCenterDisabled() {
@@ -35,5 +40,27 @@ class AgentScopePropertiesTests {
         assertFalse(properties.getNacos().getM3().isEnabled());
         assertEquals("public", properties.getNacos().getNamespace());
         assertEquals("DEFAULT_GROUP", properties.getNacos().getGroup());
+    }
+
+    @Test
+    void bindsConfigCenterPromptAndSkillSettings() {
+        contextRunner
+                .withPropertyValues(
+                        "seahorse.agentscope.config-center.prompt-key=agent.system.prompt",
+                        "seahorse.agentscope.config-center.prompt-version=v2",
+                        "seahorse.agentscope.config-center.prompt-label=stable",
+                        "seahorse.agentscope.config-center.skill-namespace=agent-skills",
+                        "seahorse.agentscope.config-center.skill-version=2026-06",
+                        "seahorse.agentscope.config-center.skill-label=stable")
+                .run(context -> {
+                    AgentScopeProperties properties = context.getBean(AgentScopeProperties.class);
+
+                    assertEquals("agent.system.prompt", properties.getConfigCenter().getPromptKey());
+                    assertEquals("v2", properties.getConfigCenter().getPromptVersion());
+                    assertEquals("stable", properties.getConfigCenter().getPromptLabel());
+                    assertEquals("agent-skills", properties.getConfigCenter().getSkillNamespace());
+                    assertEquals("2026-06", properties.getConfigCenter().getSkillVersion());
+                    assertEquals("stable", properties.getConfigCenter().getSkillLabel());
+                });
     }
 }

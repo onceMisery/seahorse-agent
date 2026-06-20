@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
@@ -58,7 +59,7 @@ class KernelAgentLoopToolExposureTests {
         registry.register(new ToolDescriptor("calendar", "Calendar", "Calendar lookup", "{}"),
                 (callId, toolId, arguments) -> ToolInvocationResult.ok("unused"));
         List<String> invokedToolIds = new ArrayList<>();
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 registry,
                 request -> {
@@ -95,7 +96,7 @@ class KernelAgentLoopToolExposureTests {
         ScriptedModel model = new ScriptedModel(List.of(
                 Turn.toolCalls("need calendar", List.of(calendar)),
                 Turn.finalAnswer("final summary")));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new SingleToolRegistry("calendar"),
                 request -> ToolInvocationResult.ok("calendar result"),
@@ -111,6 +112,26 @@ class KernelAgentLoopToolExposureTests {
                 .map(ToolDescriptor::toolId)
                 .toList());
         assertEquals("none", model.requests.get(1).getToolChoice());
+    }
+
+    private static KernelAgentLoop kernelLoop(
+            StreamingChatModelPort modelPort,
+            ToolRegistryPort toolRegistry,
+            ToolGatewayPort toolGateway,
+            KernelAgentLoopOptions options) {
+        return new KernelAgentLoop(new AgentLoopDependencies(
+                modelPort,
+                toolRegistry,
+                toolGateway,
+                options,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null));
     }
 
     private static AgentLoopRequest requestWithAllowedTools(int maxSteps, String... toolIds) {

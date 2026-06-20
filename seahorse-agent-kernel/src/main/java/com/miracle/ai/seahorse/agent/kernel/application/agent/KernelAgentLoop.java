@@ -24,7 +24,6 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentAppro
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
@@ -33,7 +32,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopExitReason;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentObservation;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputGovernanceResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationRequest;
@@ -42,15 +40,10 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillInjectMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillToolPolicyMode;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
-import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
-import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
-import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamAgentStepEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamApprovalRequiredEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
@@ -59,34 +52,23 @@ import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamToolCallEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 
 import java.time.Instant;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Kernel layer LLM-driven ReAct loop.
@@ -95,13 +77,8 @@ public class KernelAgentLoop implements ReActExecutorPort {
 
     private static final String TRUNCATED_MESSAGE =
             "Task step limit reached. Narrow the question or check tool configuration.";
-    private static final int MAX_TOOL_OBSERVATION_CHARS = 8 * 1024;
-    private static final String TOOL_OBSERVATION_TRUNCATED_SUFFIX = "...[truncated]";
     private static final String WAITING_APPROVAL_MESSAGE = "Waiting for tool approval.";
-    private static final String RAW_ARGUMENTS_KEY = "_raw";
-    private static final String IDEMPOTENCY_KEY_SEPARATOR = ":";
     private static final String TRACE_TYPE_AGENT_STEP = "AGENT_STEP";
-    private static final String TRACE_TYPE_AGENT_TOOL = "AGENT_TOOL";
     private static final String MODEL_STEP_ID_PREFIX = "model-turn-";
     private static final String MODEL_STEP_TITLE = "Model turn";
     private static final String TOOL_CALL_STARTED_SUMMARY = "Tool call started";
@@ -127,174 +104,41 @@ public class KernelAgentLoop implements ReActExecutorPort {
     private static final String ARTIFACT_TITLE_FIELD = "title";
     private static final String ARTIFACT_TYPE_FIELD = "artifactType";
     private static final String MARKDOWN_ARTIFACT_TYPE = "MARKDOWN";
-    private static final String LEGACY_LOAD_SKILL_TOOL_ID = "load_skill";
-    private static final ToolDescriptor LEGACY_LOAD_SKILL_DESCRIPTOR = new ToolDescriptor(
-            LEGACY_LOAD_SKILL_TOOL_ID,
-            "Load Skill",
-            "Load SKILL.md for a skill selected in the current Agent runtime snapshot.",
-            "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"]}");
     private static final ToolRiskLevel DEFAULT_TOOL_RISK_LEVEL = ToolRiskLevel.HIGH;
     private static final String TRACE_CLASS_NAME =
             "com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final StreamingChatModelPort modelPort;
-    private final ToolRegistryPort toolRegistry;
     private final ToolGatewayPort toolGateway;
     private final KernelAgentLoopOptions options;
     private final KernelRagTraceRecorder traceRecorder;
-    private final ContextWeaverPort contextWeaver;
     private final AgentRunStepRecorder runStepRecorder;
     private final AgentApprovalWaitHandler approvalWaitHandler;
     // Phase D Slice 1a：可选输出治理。null 表示运行时未启用输出治理，保持引入前行为。
     private final OutputGovernanceService outputGovernance;
     private final MarkdownNormalizer markdownNormalizer;
     private final AgentStreamEmitter streamEmitter;
-    private final ToolCallParser toolCallParser;
-
-    public KernelAgentLoop(StreamingChatModelPort modelPort,
-                           ToolRegistryPort toolRegistry,
-                           KernelAgentLoopOptions options) {
-        this(modelPort, toolRegistry, options, KernelRagTraceRecorder.noop());
-    }
-
-    public KernelAgentLoop(StreamingChatModelPort modelPort,
-                           ToolRegistryPort toolRegistry,
-                           ToolGatewayPort toolGateway,
-                           KernelAgentLoopOptions options) {
-        this(modelPort,
-                toolRegistry,
-                toolGateway,
-                options,
-                KernelRagTraceRecorder.noop(),
-                new DefaultContextWeaver(),
-                AgentRunStepRecorder.noop(),
-                AgentApprovalWaitHandler.noop());
-    }
-
-    public KernelAgentLoop(StreamingChatModelPort modelPort,
-                           ToolRegistryPort toolRegistry,
-                           ToolGatewayPort toolGateway,
-                           KernelAgentLoopOptions options,
-                           AgentApprovalWaitHandler approvalWaitHandler) {
-        this(modelPort,
-                toolRegistry,
-                toolGateway,
-                options,
-                KernelRagTraceRecorder.noop(),
-                new DefaultContextWeaver(),
-                AgentRunStepRecorder.noop(),
-                approvalWaitHandler);
-    }
-
-    public KernelAgentLoop(StreamingChatModelPort modelPort,
-                           ToolRegistryPort toolRegistry,
-                           KernelAgentLoopOptions options,
-                           KernelRagTraceRecorder traceRecorder) {
-        this(modelPort, toolRegistry, options, traceRecorder, new DefaultContextWeaver());
-    }
-
-    public KernelAgentLoop(StreamingChatModelPort modelPort,
-                           ToolRegistryPort toolRegistry,
-                           KernelAgentLoopOptions options,
-                           AgentRunStepRecorder runStepRecorder) {
-        this(modelPort, toolRegistry, options, KernelRagTraceRecorder.noop(),
-                new DefaultContextWeaver(), runStepRecorder);
-    }
-
-    public KernelAgentLoop(StreamingChatModelPort modelPort,
-                           ToolRegistryPort toolRegistry,
-                           KernelAgentLoopOptions options,
-                           ContextWeaverPort contextWeaver) {
-        this(modelPort, toolRegistry, options, KernelRagTraceRecorder.noop(), contextWeaver);
-    }
-
-    public KernelAgentLoop(StreamingChatModelPort modelPort,
-                           ToolRegistryPort toolRegistry,
-                           KernelAgentLoopOptions options,
-                           KernelRagTraceRecorder traceRecorder,
-                           ContextWeaverPort contextWeaver) {
-        this(modelPort,
-                toolRegistry,
-                null,
-                options,
-                traceRecorder,
-                contextWeaver,
-                AgentRunStepRecorder.noop(),
-                AgentApprovalWaitHandler.noop());
-    }
-
-    public KernelAgentLoop(StreamingChatModelPort modelPort,
-                           ToolRegistryPort toolRegistry,
-                           KernelAgentLoopOptions options,
-                           KernelRagTraceRecorder traceRecorder,
-                           ContextWeaverPort contextWeaver,
-                           AgentRunStepRecorder runStepRecorder) {
-        this(modelPort, toolRegistry, null, options, traceRecorder, contextWeaver, runStepRecorder,
-                AgentApprovalWaitHandler.noop());
-    }
-
-    public KernelAgentLoop(StreamingChatModelPort modelPort,
-                           ToolRegistryPort toolRegistry,
-                           ToolGatewayPort toolGateway,
-                           KernelAgentLoopOptions options,
-                           KernelRagTraceRecorder traceRecorder,
-                           ContextWeaverPort contextWeaver,
-                           AgentRunStepRecorder runStepRecorder) {
-        this(modelPort, toolRegistry, toolGateway, options, traceRecorder, contextWeaver, runStepRecorder,
-                AgentApprovalWaitHandler.noop());
-    }
-
-    public KernelAgentLoop(StreamingChatModelPort modelPort,
-                           ToolRegistryPort toolRegistry,
-                           ToolGatewayPort toolGateway,
-                           KernelAgentLoopOptions options,
-                           KernelRagTraceRecorder traceRecorder,
-                           ContextWeaverPort contextWeaver,
-                           AgentRunStepRecorder runStepRecorder,
-                           AgentApprovalWaitHandler approvalWaitHandler) {
-        this(modelPort, toolRegistry, toolGateway, options, traceRecorder, contextWeaver,
-                runStepRecorder, approvalWaitHandler, null);
-    }
-
-    public KernelAgentLoop(StreamingChatModelPort modelPort,
-                           ToolRegistryPort toolRegistry,
-                           ToolGatewayPort toolGateway,
-                           KernelAgentLoopOptions options,
-                           KernelRagTraceRecorder traceRecorder,
-                           ContextWeaverPort contextWeaver,
-                           AgentRunStepRecorder runStepRecorder,
-                           AgentApprovalWaitHandler approvalWaitHandler,
-                           OutputGovernanceService outputGovernance) {
-        this(new AgentLoopDependencies(
-                modelPort,
-                toolRegistry,
-                toolGateway,
-                options,
-                traceRecorder,
-                contextWeaver,
-                runStepRecorder,
-                approvalWaitHandler,
-                outputGovernance,
-                null,
-                null,
-                null));
-    }
+    private final AgentLoopStreamEvents streamEvents;
+    private final AgentLoopModelTurns modelTurns;
+    private final AgentLoopToolExecutor toolExecutor;
 
     public KernelAgentLoop(AgentLoopDependencies dependencies) {
         AgentLoopDependencies deps = Objects.requireNonNull(dependencies, "dependencies must not be null");
         this.modelPort = deps.modelPort();
-        this.toolRegistry = deps.toolRegistry();
         this.toolGateway = deps.toolGateway();
         this.options = deps.options();
         this.traceRecorder = deps.traceRecorder();
-        this.contextWeaver = deps.contextWeaver();
         this.runStepRecorder = deps.runStepRecorder();
         this.approvalWaitHandler = deps.approvalWaitHandler();
         this.outputGovernance = deps.outputGovernance();
         this.markdownNormalizer = deps.markdownNormalizer();
         this.streamEmitter = deps.streamEmitter();
-        this.toolCallParser = deps.toolCallParser();
+        this.streamEvents = new AgentLoopStreamEvents(streamEmitter);
+        this.modelTurns = new AgentLoopModelTurns(modelPort, deps.toolRegistry(), deps.contextWeaver(),
+                deps.toolCallParser());
+        this.toolExecutor = new AgentLoopToolExecutor(options, toolGateway, traceRecorder, runStepRecorder,
+                modelTurns);
     }
 
     public AgentLoopResult execute(AgentLoopRequest request) {
@@ -340,8 +184,9 @@ public class KernelAgentLoop implements ReActExecutorPort {
         Objects.requireNonNull(request, "AgentLoopRequest must not be null");
         AgentRunControl runControl = Objects.requireNonNullElseGet(control, AgentRunControl::direct);
         List<ChatMessage> messages = new ArrayList<>(request.history());
-        installRuntimeContext(messages, request.contextPack(), request.memoryContext(), request.skillRuntimeContext());
-        emitSkillRuntimeEvents(callback, request);
+        modelTurns.installRuntimeContext(messages, request.contextPack(), request.memoryContext(),
+                request.skillRuntimeContext());
+        streamEvents.emitSkillRuntimeEvents(callback, request);
         messages.add(ChatMessage.user(request.question()));
 
         List<AgentStep> steps = new ArrayList<>();
@@ -353,51 +198,54 @@ public class KernelAgentLoop implements ReActExecutorPort {
             int stepNo = step + 1;
             String stepId = modelStepId(stepNo);
             Instant stepStartedAt = Instant.now();
-            emitStepStarted(callback, request, stepId, stepNo, stepStartedAt);
+            streamEvents.emitStepStarted(callback, request, stepId, stepNo, stepStartedAt);
             TraceNodeScope stepScope = traceRecorder.startNode(traceRunScope, agentStepCommand(stepNo));
             boolean modelTurnRecorded = false;
             try {
-                ModelTurn turn = requestModelTurn(request, messages, runControl, exhaustedToolIds);
+                ModelTurn turn = modelTurns.requestModelTurn(request, messages, runControl, exhaustedToolIds);
                 recordModelTurn(request, messages, turn, exhaustedToolIds, null);
                 modelTurnRecorded = true;
                 if (turn.toolCalls().isEmpty()) {
                     String finalContent = markdownNormalizer.normalizeFinalMarkdown(
                             applyOutputGovernance(request, turn.content()));
-                    emitContent(callback, finalContent);
-                    emitFinalArtifact(callback, request, finalContent);
+                    streamEvents.emitContent(callback, finalContent);
+                    streamEvents.emitFinalArtifact(callback, request, finalContent);
                     steps.add(AgentStep.finalAnswer(finalContent));
-                    emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
+                    streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
                             null, finalContent);
-                    emitComplete(callback);
+                    streamEvents.emitComplete(callback);
                     traceRecorder.finishNode(stepScope);
                     return new AgentLoopResult(finalContent, steps, false);
                 }
 
-                List<String> effectiveAllowedToolIds = effectiveAllowedToolIds(request);
-                List<AgentObservation> observations = executeTools(
+                List<String> effectiveAllowedToolIds = modelTurns.effectiveAllowedToolIds(request);
+                List<AgentObservation> observations = toolExecutor.executeTools(
                         turn.toolCalls(),
                         effectiveAllowedToolIds,
-                        exposedToolIds(request, exhaustedToolIds),
+                        modelTurns.exposedToolIds(request, exhaustedToolIds),
                         request,
                         runControl,
                         traceRunScope,
                         stepScope,
-                        callback);
+                        toolEvents(callback));
                 markExhaustedTools(turn.toolCalls(), observations, exhaustedToolIds);
                 hasToolObservations = hasToolObservations || !observations.isEmpty();
                 if (requiresApproval(observations)) {
-                    emitToolThinking(callback, turn, observations);
+                    streamEvents.emitToolThinking(callback, turn, observations);
                     AgentStep pendingStep = AgentStep.thought(turn.thought(), turn.toolCalls(), observations);
                     steps.add(pendingStep);
                     AgentToolCall pendingToolCall = pendingToolCall(turn.toolCalls(), observations);
                     approvalWaitHandler.waitForApproval(new AgentApprovalWaitCommand(
-                            toolInvocationRequest(pendingToolCall, allowedToolIdSet(effectiveAllowedToolIds), request),
+                            toolExecutor.toolInvocationRequest(
+                                    pendingToolCall,
+                                    allowedToolIdSet(effectiveAllowedToolIds),
+                                    request),
                             waitingApprovalStateJson(turn, observations),
                             waitingApprovalMessages(messages, turn)));
-                    emitContent(callback, WAITING_APPROVAL_MESSAGE);
-                    emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
+                    streamEvents.emitContent(callback, WAITING_APPROVAL_MESSAGE);
+                    streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
                             null, WAITING_APPROVAL_MESSAGE);
-                    emitComplete(callback);
+                    streamEvents.emitComplete(callback);
                     traceRecorder.finishNode(stepScope);
                     return new AgentLoopResult(
                             WAITING_APPROVAL_MESSAGE,
@@ -406,22 +254,22 @@ public class KernelAgentLoop implements ReActExecutorPort {
                             AgentLoopExitReason.WAITING_APPROVAL);
                 }
                 runControl.checkCancelled();
-                emitToolThinking(callback, turn, observations);
-                emitSourcesFromObservations(callback, turn.toolCalls(), observations);
+                streamEvents.emitToolThinking(callback, turn, observations);
+                streamEvents.emitSourcesFromObservations(callback, turn.toolCalls(), observations);
                 steps.add(AgentStep.thought(turn.thought(), turn.toolCalls(), observations));
                 messages.add(ChatMessage.assistantToolCalls(turn.content(), turn.toolCalls()));
                 for (AgentObservation observation : observations) {
                     messages.add(ChatMessage.tool(observation.toolCallId(), observationText(observation)));
                 }
-                emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
+                streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
                         null, null);
                 traceRecorder.finishNode(stepScope);
             } catch (RuntimeException ex) {
                 if (!modelTurnRecorded) {
                     recordModelTurn(request, messages, null, exhaustedToolIds, ex);
                 }
-                emitRecoverableError(callback, request, stepId, ex);
-                emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
+                streamEvents.emitRecoverableError(callback, request, stepId, ex);
+                streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
                         ex, null);
                 traceRecorder.finishNode(stepScope, ex);
                 throw ex;
@@ -434,8 +282,8 @@ public class KernelAgentLoop implements ReActExecutorPort {
                 return finalResult;
             }
         }
-        emitContent(callback, TRUNCATED_MESSAGE);
-        emitComplete(callback);
+        streamEvents.emitContent(callback, TRUNCATED_MESSAGE);
+        streamEvents.emitComplete(callback);
         return new AgentLoopResult(TRUNCATED_MESSAGE, steps, true);
     }
 
@@ -449,31 +297,31 @@ public class KernelAgentLoop implements ReActExecutorPort {
         runControl.checkCancelled();
         String stepId = modelStepId(stepNo);
         Instant stepStartedAt = Instant.now();
-        emitStepStarted(callback, request, stepId, stepNo, stepStartedAt);
+        streamEvents.emitStepStarted(callback, request, stepId, stepNo, stepStartedAt);
         TraceNodeScope stepScope = traceRecorder.startNode(traceRunScope, agentStepCommand(stepNo));
         try {
-            ModelTurn turn = requestFinalModelTurn(request, messages, runControl);
+            ModelTurn turn = modelTurns.requestFinalModelTurn(request, messages, runControl);
             recordModelTurn(request, messages, turn, Set.of(), null);
             if (!turn.toolCalls().isEmpty()) {
-                emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
+                streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
                         null, "Final answer turn attempted to call tools.");
                 traceRecorder.finishNode(stepScope);
                 return null;
             }
             String finalContent = markdownNormalizer.normalizeFinalMarkdown(
                     applyOutputGovernance(request, turn.content()));
-            emitContent(callback, finalContent);
-            emitFinalArtifact(callback, request, finalContent);
+            streamEvents.emitContent(callback, finalContent);
+            streamEvents.emitFinalArtifact(callback, request, finalContent);
             steps.add(AgentStep.finalAnswer(finalContent));
-            emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
+            streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
                     null, finalContent);
-            emitComplete(callback);
+            streamEvents.emitComplete(callback);
             traceRecorder.finishNode(stepScope);
             return new AgentLoopResult(finalContent, steps, false);
         } catch (RuntimeException ex) {
             recordModelTurn(request, messages, null, Set.of(), ex);
-            emitRecoverableError(callback, request, stepId, ex);
-            emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
+            streamEvents.emitRecoverableError(callback, request, stepId, ex);
+            streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
                     ex, null);
             traceRecorder.finishNode(stepScope, ex);
             throw ex;
@@ -517,123 +365,6 @@ public class KernelAgentLoop implements ReActExecutorPort {
                 + ",\"observationCount\":" + observations.size() + "}";
     }
 
-    private ModelTurn requestModelTurn(AgentLoopRequest request,
-                                       List<ChatMessage> messages,
-                                       AgentRunControl control,
-                                       Set<String> exhaustedToolIds) {
-        return requestModelTurn(
-                request,
-                messages,
-                control,
-                exposedTools(effectiveAllowedToolIds(request), request.skillRuntimeBlocks(), exhaustedToolIds),
-                "auto");
-    }
-
-    private ModelTurn requestFinalModelTurn(AgentLoopRequest request,
-                                            List<ChatMessage> messages,
-                                            AgentRunControl control) {
-        return requestModelTurn(request, messages, control, List.of(), "none");
-    }
-
-    private ModelTurn requestModelTurn(AgentLoopRequest request,
-                                       List<ChatMessage> messages,
-                                       AgentRunControl control,
-                                       List<ToolDescriptor> tools,
-                                       String toolChoice) {
-        TurnBuffer callback = new TurnBuffer();
-        AtomicReference<List<AgentToolCall>> collectedCalls = new AtomicReference<>();
-        AtomicBoolean collectorInvoked = new AtomicBoolean(false);
-
-        StreamCancellationHandle handle = modelPort.streamChatWithTools(ChatRequest.builder()
-                .messages(List.copyOf(messages))
-                .modelId(request.modelId())
-                .samplingOptions(request.samplingOptions())
-                .tools(tools == null ? List.of() : tools)
-                .toolChoice(toolChoice)
-                .build(), callback, toolCalls -> {
-                    if (callback.completed()) {
-                        throw new AgentLoopException("Model adapter protocol error: collector called after onComplete");
-                    }
-                    if (!collectorInvoked.compareAndSet(false, true)) {
-                        throw new AgentLoopException("Tool call collector was called more than once");
-                    }
-                    collectedCalls.set(toolCalls == null ? List.of() : List.copyOf(toolCalls));
-                });
-        control.bindModelHandle(handle);
-        try {
-            callback.awaitCompletion(control);
-        } finally {
-            control.clearModelHandle(handle);
-        }
-
-        if (callback.error() != null) {
-            throw new AgentLoopException("Model streaming call failed", callback.error());
-        }
-        if (!collectorInvoked.get()) {
-            throw new AgentLoopException("Model adapter protocol error: collector was not called");
-        }
-        ModelTurn turn = new ModelTurn(callback.content(), callback.thinking(),
-                Objects.requireNonNullElse(collectedCalls.get(), List.of()));
-        return normalizeTextEncodedToolCalls(turn, tools);
-    }
-
-    private ModelTurn normalizeTextEncodedToolCalls(ModelTurn turn, List<ToolDescriptor> tools) {
-        if (turn == null || !turn.toolCalls().isEmpty() || tools == null || tools.isEmpty()
-                || turn.content().isBlank()) {
-            return turn;
-        }
-        Set<String> exposedToolIds = tools.stream()
-                .filter(Objects::nonNull)
-                .map(ToolDescriptor::toolId)
-                .collect(java.util.stream.Collectors.toSet());
-        ToolCallParser.Result parsed = toolCallParser.parse(turn.content(), exposedToolIds);
-        if (parsed.toolCalls().isEmpty()) {
-            return turn;
-        }
-        return new ModelTurn(parsed.content(), turn.thinking(), parsed.toolCalls());
-    }
-
-    private List<ToolDescriptor> exposedTools(List<String> allowedToolIds,
-                                              List<SkillRuntimeBlock> skillRuntimeBlocks,
-                                              Set<String> exhaustedToolIds) {
-        List<ToolDescriptor> result = new ArrayList<>();
-        List<ToolDescriptor> all = toolRegistry.listTools();
-        List<String> safeAllowedToolIds = allowedToolIds == null ? List.of() : allowedToolIds;
-        Set<String> allowed = new HashSet<>(safeAllowedToolIds);
-        Set<String> exhausted = exhaustedToolIds == null ? Set.of() : exhaustedToolIds;
-        Map<String, ToolDescriptor> descriptorsById = all.stream()
-                .filter(tool -> allowed.contains(tool.toolId()))
-                .filter(tool -> !exhausted.contains(tool.toolId()))
-                .collect(java.util.stream.Collectors.toMap(
-                        ToolDescriptor::toolId,
-                        tool -> tool,
-                        (left, right) -> left,
-                        LinkedHashMap::new));
-        result.addAll(safeAllowedToolIds.stream()
-                .map(descriptorsById::get)
-                .filter(Objects::nonNull)
-                .toList());
-        if (hasLoadableSkills(skillRuntimeBlocks)) {
-            boolean registeredLoadSkill = toolRegistry.find(LoadSkillResourceToolPortAdapter.TOOL_ID)
-                    .flatMap(ignored -> toolRegistry.listTools().stream()
-                            .filter(tool -> LoadSkillResourceToolPortAdapter.TOOL_ID.equals(tool.toolId()))
-                            .findFirst())
-                    .map(result::add)
-                    .orElse(false);
-            if (!registeredLoadSkill) {
-                result.add(LEGACY_LOAD_SKILL_DESCRIPTOR);
-            }
-        }
-        if (!safeAllowedToolIds.isEmpty()) {
-            toolRegistry.find(ToolSearchToolPortAdapter.TOOL_ID)
-                    .flatMap(ignored -> toolRegistry.listTools().stream()
-                            .filter(tool -> ToolSearchToolPortAdapter.TOOL_ID.equals(tool.toolId()))
-                            .findFirst())
-                    .ifPresent(result::add);
-        }
-        return List.copyOf(result);
-    }
-
     private void markExhaustedTools(List<AgentToolCall> toolCalls,
                                     List<AgentObservation> observations,
                                     Set<String> exhaustedToolIds) {
@@ -651,580 +382,45 @@ public class KernelAgentLoop implements ReActExecutorPort {
         }
     }
 
-    private List<String> effectiveAllowedToolIds(AgentLoopRequest request) {
-        if (request == null) {
-            return List.of();
-        }
-        List<String> agentAllowedToolIds = request.allowedToolIds();
-        if (request.skillToolPolicyMode() != SkillToolPolicyMode.RESTRICTIVE) {
-            return agentAllowedToolIds;
-        }
-        List<SkillRuntimeBlock> skillRuntimeBlocks = request.skillRuntimeBlocks();
-        if (skillRuntimeBlocks.isEmpty()) {
-            return agentAllowedToolIds;
-        }
-        Set<String> skillAllowedToolIds = selectedSkillAllowedToolIds(skillRuntimeBlocks);
-        return agentAllowedToolIds.stream()
-                .filter(skillAllowedToolIds::contains)
-                .toList();
-    }
-
-    private Set<String> selectedSkillAllowedToolIds(List<SkillRuntimeBlock> skillRuntimeBlocks) {
-        if (skillRuntimeBlocks == null || skillRuntimeBlocks.isEmpty()) {
-            return Set.of();
-        }
-        Set<String> allowedToolIds = new HashSet<>();
-        for (SkillRuntimeBlock skill : skillRuntimeBlocks) {
-            if (skill != null) {
-                allowedToolIds.addAll(skill.allowedTools());
-            }
-        }
-        return allowedToolIds;
-    }
-
-    private void installRuntimeContext(List<ChatMessage> messages,
-                                       ContextPack contextPack,
-                                       MemoryContext memoryContext,
-                                       String skillRuntimeContext) {
-        String contextText = contextWeaver.weave(contextPack, memoryContext, ContextBudget.defaults());
-        if (skillRuntimeContext != null && !skillRuntimeContext.isBlank()) {
-            contextText = contextText.isBlank()
-                    ? skillRuntimeContext.trim()
-                    : contextText + System.lineSeparator() + System.lineSeparator() + skillRuntimeContext.trim();
-        }
-        if (contextText.isBlank()) {
-            return;
-        }
-        if (!messages.isEmpty() && messages.get(0).getRole() == ChatRole.SYSTEM) {
-            ChatMessage first = messages.get(0);
-            messages.set(0, ChatMessage.system(appendContextText(first.getContent(), contextText)));
-            return;
-        }
-        messages.add(0, ChatMessage.system(contextText));
-    }
-
-    private String appendContextText(String systemPrompt, String contextText) {
-        String safeSystemPrompt = Objects.requireNonNullElse(systemPrompt, "").trim();
-        if (safeSystemPrompt.isBlank()) {
-            return contextText;
-        }
-        return safeSystemPrompt + "\n\n" + contextText;
-    }
-
-    private List<AgentObservation> executeTools(List<AgentToolCall> toolCalls,
-                                                List<String> allowedToolIds,
-                                                Set<String> exposedToolIds,
-                                                AgentLoopRequest request,
-                                                AgentRunControl control,
-                                                TraceRunScope traceRunScope,
-                                                TraceNodeScope stepScope,
-                                                StreamCallback callback) {
-        Set<String> allowed = allowedToolIds == null || allowedToolIds.isEmpty()
-                ? Set.of()
-                : new HashSet<>(allowedToolIds);
-        if (toolCalls.isEmpty()) {
-            return List.of();
-        }
-
-        int parallelism = Math.min(options.maxParallelTools(), toolCalls.size());
-        List<AgentObservation> observations = new ArrayList<>(toolCalls.size());
-        for (int start = 0; start < toolCalls.size(); start += parallelism) {
-            int end = Math.min(start + parallelism, toolCalls.size());
-            observations.addAll(executeToolBatch(
-                    toolCalls.subList(start, end),
-                    allowed,
-                    exposedToolIds,
-                    request,
-                    parallelism,
-                    control,
-                    traceRunScope,
-                    stepScope,
-                    callback));
-            if (Thread.currentThread().isInterrupted() && observations.size() < toolCalls.size()) {
-                for (int i = observations.size(); i < toolCalls.size(); i++) {
-                    observations.add(AgentObservation.failed(toolCalls.get(i).id(), "Tool execution was interrupted"));
-                }
-                break;
-            }
-        }
-        return observations;
-    }
-
-    private List<AgentObservation> executeToolBatch(List<AgentToolCall> toolCalls,
-                                                    Set<String> allowedToolIds,
-                                                    Set<String> exposedToolIds,
-                                                    AgentLoopRequest request,
-                                                    int parallelism,
-                                                    AgentRunControl control,
-                                                    TraceRunScope traceRunScope,
-                                                    TraceNodeScope stepScope,
-                                                    StreamCallback callback) {
-        ExecutorService executor = Executors.newFixedThreadPool(Math.min(parallelism, toolCalls.size()));
-        control.bindToolExecutor(executor);
-        try {
-            for (AgentToolCall toolCall : toolCalls) {
-                emitToolCallStarted(callback, request, toolCall);
-            }
-            List<Callable<AgentObservation>> tasks = toolCalls.stream()
-                    .<Callable<AgentObservation>>map(toolCall ->
-                            () -> executeToolTraced(
-                                    toolCall,
-                                    allowedToolIds,
-                                    exposedToolIds,
-                                    request,
-                                    traceRunScope,
-                                    stepScope))
-                    .toList();
-            List<Future<AgentObservation>> futures = executor.invokeAll(
-                    tasks, perToolTimeoutNanos(), TimeUnit.NANOSECONDS);
-            List<AgentObservation> observations = new ArrayList<>(toolCalls.size());
-            for (int i = 0; i < futures.size(); i++) {
-                AgentObservation observation = toObservation(toolCalls.get(i), futures.get(i));
-                observations.add(observation);
-                runStepRecorder.recordToolCall(request.runId(), toolCalls.get(i), observation);
-                if (!isApprovalRequired(observation)) {
-                    emitToolCallFinished(callback, request, toolCalls.get(i), observation);
-                }
-                emitToolCallWaitingUser(callback, request, toolCalls.get(i), observation);
-                emitSkillResourceLoaded(callback, request, toolCalls.get(i), observation);
-            }
-            return observations;
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            if (control.cancelled()) {
-                throw new AgentLoopCancelledException("Agent loop cancelled", ex);
-            }
-            return toolCalls.stream()
-                    .map(toolCall -> AgentObservation.failed(toolCall.id(), "Tool execution was interrupted"))
-                    .toList();
-        } finally {
-            control.clearToolExecutor(executor);
-            executor.shutdownNow();
-        }
-    }
-
-    private long perToolTimeoutNanos() {
-        try {
-            return Math.max(1L, options.perToolTimeout().toNanos());
-        } catch (ArithmeticException ex) {
-            return Long.MAX_VALUE;
-        }
-    }
-
-    private AgentObservation toObservation(AgentToolCall toolCall, Future<AgentObservation> future) {
-        if (future.isCancelled()) {
-            return AgentObservation.failed(toolCall.id(), "Tool execution timed out");
-        }
-        try {
-            return future.get();
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            return AgentObservation.failed(toolCall.id(), "Tool execution was interrupted");
-        } catch (ExecutionException ex) {
-            Throwable cause = Objects.requireNonNullElse(ex.getCause(), ex);
-            return AgentObservation.failed(toolCall.id(),
-                    Objects.requireNonNullElse(cause.getMessage(), cause.getClass().getName()));
-        }
-    }
-
-    private AgentObservation executeTool(AgentToolCall toolCall,
-                                         Set<String> allowedToolIds,
-                                         Set<String> exposedToolIds,
-                                         AgentLoopRequest request) {
-        if (hasRawArguments(toolCall)) {
-            return AgentObservation.failed(toolCall.id(), "arguments is not valid JSON");
-        }
-        if (LEGACY_LOAD_SKILL_TOOL_ID.equals(toolCall.toolId())) {
-            return loadSkillObservation(toolCall, request);
-        }
-        if (exposedToolIds != null && allowedToolIds != null && allowedToolIds.contains(toolCall.toolId())
-                && !exposedToolIds.contains(toolCall.toolId())) {
-            return AgentObservation.failed(toolCall.id(), unavailableToolMessage(toolCall.toolId(), exposedToolIds));
-        }
-        try {
-            ToolInvocationResult result = toolGateway.invoke(toolInvocationRequest(toolCall, allowedToolIds, request));
-            return result.success()
-                    ? AgentObservation.ok(toolCall.id(), truncateObservationText(result.content()))
-                    : AgentObservation.failed(
-                            toolCall.id(),
-                            truncateObservationText(result.error()),
-                            result.approvalId());
-        } catch (Exception ex) {
-            return AgentObservation.failed(toolCall.id(),
-                    truncateObservationText(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
-        }
-    }
-
-    private boolean hasLoadableSkills(List<SkillRuntimeBlock> skills) {
-        return skills != null && skills.stream().anyMatch(skill -> skill != null && !skill.content().isBlank());
-    }
-
-    private AgentObservation loadSkillObservation(AgentToolCall toolCall, AgentLoopRequest request) {
-        String requestedName = loadSkillName(toolCall);
-        if (requestedName.isBlank()) {
-            return AgentObservation.failed(toolCall.id(), "skill name is required");
-        }
-        String resourcePath = loadSkillResourcePath(toolCall);
-        if (!"SKILL.md".equals(resourcePath)) {
-            return AgentObservation.failed(toolCall.id(), "skill resource is not available");
-        }
-        List<SkillRuntimeBlock> skills = request == null ? List.of() : request.skillRuntimeBlocks();
-        return skills.stream()
-                .filter(skill -> skill.name().equals(requestedName))
-                .findFirst()
-                .map(skill -> AgentObservation.ok(toolCall.id(), loadSkillPayload(skill)))
-                .orElseGet(() -> AgentObservation.failed(toolCall.id(), "skill is not selected in this Agent version"));
-    }
-
-    private String loadSkillName(AgentToolCall toolCall) {
-        Object value = toolCall.arguments().get("skillName");
-        if (value == null) {
-            value = toolCall.arguments().get("name");
-        }
-        return Objects.toString(value, "").trim();
-    }
-
-    private String loadSkillResourcePath(AgentToolCall toolCall) {
-        Object value = toolCall.arguments().get("resourcePath");
-        if (value == null) {
-            return "SKILL.md";
-        }
-        return Objects.toString(value, "").trim();
-    }
-
-    private String loadSkillPayload(SkillRuntimeBlock skill) {
-        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
-        payload.put("name", skill.name());
-        payload.put("revisionId", skill.revisionId());
-        payload.put("contentHash", skill.contentHash());
-        payload.put("description", skill.description());
-        payload.put("category", skill.category().name());
-        payload.put("injectMode", SkillInjectMode.METADATA_AND_BODY.name());
-        payload.put("content", skill.content());
-        try {
-            return OBJECT_MAPPER.writeValueAsString(payload);
-        } catch (Exception ex) {
-            return "{\"name\":\"" + escapeJson(skill.name()) + "\",\"content\":\""
-                    + escapeJson(skill.content()) + "\"}";
-        }
-    }
-
-    private ToolInvocationRequest toolInvocationRequest(AgentToolCall toolCall,
-                                                        Set<String> allowedToolIds,
-                                                        AgentLoopRequest request) {
-        String runId = request == null ? null : request.runId();
-        return new ToolInvocationRequest(
-                runId,
-                toolCall.id(),
-                toolCall.id(),
-                request == null ? null : request.agentId(),
-                request == null ? null : request.versionId(),
-                request == null ? null : request.rolloutId(),
-                request == null ? null : request.tenantId(),
-                request == null ? null : request.userId(),
-                request == null ? null : request.agentIdentityId(),
-                toolCall.toolId(),
-                toolArguments(toolCall, request),
-                java.util.Map.of(),
-                idempotencyKey(runId, toolCall.id()),
-                effectiveAllowedToolIds(toolCall, allowedToolIds));
-    }
-
-    private List<String> effectiveAllowedToolIds(AgentToolCall toolCall, Set<String> allowedToolIds) {
-        LinkedHashMap<String, Boolean> effective = new LinkedHashMap<>();
-        if (allowedToolIds != null) {
-            allowedToolIds.forEach(toolId -> effective.put(toolId, true));
-        }
-        if (LoadSkillResourceToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
-            effective.put(LoadSkillResourceToolPortAdapter.TOOL_ID, true);
-        }
-        if (ToolSearchToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
-            effective.put(ToolSearchToolPortAdapter.TOOL_ID, true);
-        }
-        return List.copyOf(effective.keySet());
-    }
-
-    private String idempotencyKey(String runId, String toolCallId) {
-        if (runId == null || runId.isBlank()) {
-            return toolCallId;
-        }
-        return runId + IDEMPOTENCY_KEY_SEPARATOR + toolCallId;
-    }
-
-    private AgentObservation executeToolTraced(AgentToolCall toolCall,
-                                               Set<String> allowedToolIds,
-                                               Set<String> exposedToolIds,
-                                               AgentLoopRequest request,
-                                               TraceRunScope traceRunScope,
-                                               TraceNodeScope stepScope) {
-        TraceNodeScope toolScope = traceRecorder.startNode(traceRunScope, agentToolCommand(toolCall, stepScope));
-        try {
-            AgentObservation observation = executeTool(toolCall, allowedToolIds, exposedToolIds, request);
-            if (observation.success()) {
-                traceRecorder.finishNode(toolScope);
-            } else {
-                traceRecorder.finishNode(toolScope, new AgentLoopException(observation.error()));
-            }
-            return observation;
-        } catch (RuntimeException ex) {
-            traceRecorder.finishNode(toolScope, ex);
-            throw ex;
-        }
-    }
-
-    private boolean hasRawArguments(AgentToolCall toolCall) {
-        return toolCall.arguments().size() == 1 && toolCall.arguments().containsKey(RAW_ARGUMENTS_KEY);
-    }
-
-    private java.util.Map<String, Object> toolArguments(AgentToolCall toolCall, AgentLoopRequest request) {
-        LinkedHashMap<String, Object> arguments = new LinkedHashMap<>(
-                Objects.requireNonNullElse(toolCall.arguments(), java.util.Map.of()));
-        if (LoadSkillResourceToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
-            arguments.put(LoadSkillResourceToolPortAdapter.RUNTIME_SKILLS_ARGUMENT,
-                    request == null ? List.of() : request.skillRuntimeBlocks());
-        }
-        if (ToolSearchToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
-            arguments.put(ToolSearchToolPortAdapter.ALLOWED_TOOL_IDS_ARGUMENT,
-                    request == null ? List.of() : effectiveAllowedToolIds(request));
-        }
-        if (request == null || request.memoryContext() == null) {
-            return arguments;
-        }
-        arguments.put("_seahorseUserId", Objects.requireNonNullElse(request.memoryContext().getUserId(), ""));
-        arguments.put("_seahorseConversationId", Objects.requireNonNullElse(request.memoryContext().getConversationId(), ""));
-        arguments.put("_seahorseQuestion", Objects.requireNonNullElse(request.memoryContext().getCurrentQuestion(), ""));
-        return arguments;
-    }
-
-    private String truncateObservationText(String text) {
-        if (text == null || text.length() <= MAX_TOOL_OBSERVATION_CHARS) {
-            return text;
-        }
-        return text.substring(0, MAX_TOOL_OBSERVATION_CHARS) + TOOL_OBSERVATION_TRUNCATED_SUFFIX;
-    }
-
-    private Set<String> exposedToolIds(AgentLoopRequest request, Set<String> exhaustedToolIds) {
-        return exposedTools(effectiveAllowedToolIds(request), request.skillRuntimeBlocks(), exhaustedToolIds).stream()
-                .map(ToolDescriptor::toolId)
-                .collect(java.util.stream.Collectors.toCollection(HashSet::new));
-    }
-
-    private String unavailableToolMessage(String toolId, Set<String> exposedToolIds) {
-        String available = exposedToolIds == null || exposedToolIds.isEmpty()
-                ? "none"
-                : String.join(", ", exposedToolIds);
-        return "Tool " + toolId
-                + " is no longer available in this run. Do not call it again. Continue with available tools: "
-                + available + ".";
-    }
-
     private String observationText(AgentObservation observation) {
         return observation.success() ? observation.content() : observation.error();
     }
 
+    private AgentLoopToolExecutor.ToolEvents toolEvents(StreamCallback callback) {
+        return new AgentLoopToolExecutor.ToolEvents() {
+            @Override
+            public void toolCallStarted(AgentLoopRequest request, AgentToolCall toolCall) {
+                streamEvents.emitToolCallStarted(callback, request, toolCall);
+            }
+
+            @Override
+            public void toolCallFinished(
+                    AgentLoopRequest request,
+                    AgentToolCall toolCall,
+                    AgentObservation observation) {
+                streamEvents.emitToolCallFinished(callback, request, toolCall, observation);
+            }
+
+            @Override
+            public void toolCallWaitingUser(
+                    AgentLoopRequest request,
+                    AgentToolCall toolCall,
+                    AgentObservation observation) {
+                streamEvents.emitToolCallWaitingUser(callback, request, toolCall, observation);
+            }
+
+            @Override
+            public void skillResourceLoaded(
+                    AgentLoopRequest request,
+                    AgentToolCall toolCall,
+                    AgentObservation observation) {
+                streamEvents.emitSkillResourceLoaded(callback, request, toolCall, observation);
+            }
+        };
+    }
+
     private String modelStepId(int stepNo) {
         return MODEL_STEP_ID_PREFIX + stepNo;
-    }
-
-    private void emitStepStarted(StreamCallback callback,
-                                 AgentLoopRequest request,
-                                 String stepId,
-                                 int stepNo,
-                                 Instant startedAt) {
-        emitEvent(callback, StreamEventType.STEP_STARTED, new StreamAgentStepEvent(
-                request.runId(),
-                stepId,
-                stepNo,
-                AgentStepType.MODEL_TURN,
-                AgentStepStatus.RUNNING,
-                MODEL_STEP_TITLE,
-                null,
-                startedAt,
-                null,
-                null,
-                null,
-                null,
-                false));
-    }
-
-    private void emitStepFinished(StreamCallback callback,
-                                  AgentLoopRequest request,
-                                  String stepId,
-                                  int stepNo,
-                                  Instant startedAt,
-                                  AgentStepStatus status,
-                                  Throwable error,
-                                  String message) {
-        Instant finishedAt = Instant.now();
-        emitEvent(callback, StreamEventType.STEP_FINISHED, new StreamAgentStepEvent(
-                request.runId(),
-                stepId,
-                stepNo,
-                AgentStepType.MODEL_TURN,
-                status,
-                MODEL_STEP_TITLE,
-                null,
-                startedAt,
-                finishedAt,
-                Math.max(0L, Duration.between(startedAt, finishedAt).toMillis()),
-                error == null ? null : error.getClass().getSimpleName(),
-                error == null ? message : Objects.requireNonNullElse(error.getMessage(), error.getClass().getName()),
-                false));
-    }
-
-    private void emitRecoverableError(StreamCallback callback,
-                                      AgentLoopRequest request,
-                                      String stepId,
-                                      Throwable error) {
-        emitEvent(callback, StreamEventType.RECOVERABLE_ERROR, new StreamAgentStepEvent(
-                request.runId(),
-                stepId,
-                0,
-                AgentStepType.MODEL_TURN,
-                AgentStepStatus.FAILED,
-                MODEL_STEP_TITLE,
-                null,
-                null,
-                Instant.now(),
-                null,
-                error == null ? null : error.getClass().getSimpleName(),
-                error == null ? null : Objects.requireNonNullElse(error.getMessage(), error.getClass().getName()),
-                true));
-    }
-
-    private void emitToolCallStarted(StreamCallback callback, AgentLoopRequest request, AgentToolCall toolCall) {
-        emitEvent(callback, StreamEventType.TOOL_CALL_STARTED, new StreamToolCallEvent(
-                request.runId(),
-                toolCall.id(),
-                toolCall.id(),
-                toolCall.id(),
-                toolCall.toolId(),
-                DEFAULT_TOOL_RISK_LEVEL,
-                TOOL_CALL_STARTED_SUMMARY,
-                Instant.now(),
-                null,
-                null,
-                null));
-    }
-
-    private void emitToolCallWaitingUser(StreamCallback callback,
-                                         AgentLoopRequest request,
-                                         AgentToolCall toolCall,
-                                         AgentObservation observation) {
-        if (!isApprovalRequired(observation)) {
-            return;
-        }
-        emitEvent(callback, StreamEventType.TOOL_CALL_WAITING_USER, new StreamApprovalRequiredEvent(
-                request.runId(),
-                toolCall.id(),
-                observation.approvalId(),
-                toolCall.id(),
-                toolCall.toolId(),
-                DEFAULT_TOOL_RISK_LEVEL,
-                TOOL_CALL_APPROVAL_SUMMARY,
-                argumentsPreview(toolCall),
-                Instant.now()));
-    }
-
-    private void emitToolCallFinished(StreamCallback callback,
-                                      AgentLoopRequest request,
-                                      AgentToolCall toolCall,
-                                      AgentObservation observation) {
-        Instant finishedAt = Instant.now();
-        emitEvent(callback, StreamEventType.TOOL_CALL_FINISHED, new StreamToolCallEvent(
-                request.runId(),
-                toolCall.id(),
-                toolCall.id(),
-                toolCall.id(),
-                toolCall.toolId(),
-                DEFAULT_TOOL_RISK_LEVEL,
-                observationText(observation),
-                null,
-                finishedAt,
-                observation.success() ? null : observation.error(),
-                observation.success() ? TOOL_CALL_SUCCEEDED_STATUS : TOOL_CALL_FAILED_STATUS));
-    }
-
-    private void emitSkillRuntimeEvents(StreamCallback callback, AgentLoopRequest request) {
-        if (request.skillRuntimeBlocks().isEmpty()) {
-            return;
-        }
-        for (SkillRuntimeBlock skill : request.skillRuntimeBlocks()) {
-            if (skill == null) {
-                continue;
-            }
-            StreamEventType eventType = skill.injectMode() == SkillInjectMode.METADATA_AND_BODY && !skill.content().isBlank()
-                    ? StreamEventType.SKILL_LOADED
-                    : StreamEventType.SKILL_SELECTED;
-            String status = eventType == StreamEventType.SKILL_LOADED
-                    ? SKILL_STATUS_LOADED
-                    : skill.injectMode() == SkillInjectMode.METADATA_ONLY
-                    ? SKILL_STATUS_METADATA_ONLY
-                    : SKILL_STATUS_SELECTED;
-            emitEvent(callback, eventType, skillEvent(request, skill, null, status, null));
-        }
-    }
-
-    private void emitSkillResourceLoaded(StreamCallback callback,
-                                         AgentLoopRequest request,
-                                         AgentToolCall toolCall,
-                                         AgentObservation observation) {
-        if (!LoadSkillResourceToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
-            return;
-        }
-        String skillName = loadSkillName(toolCall);
-        SkillRuntimeBlock skill = request.skillRuntimeBlocks().stream()
-                .filter(candidate -> candidate.name().equals(skillName))
-                .findFirst()
-                .orElse(null);
-        if (skill == null) {
-            emitEvent(callback, StreamEventType.SKILL_SKIPPED, new StreamSkillEvent(
-                    request.runId(),
-                    skillName,
-                    null,
-                    null,
-                    null,
-                    null,
-                    List.of(),
-                    loadSkillResourcePath(toolCall),
-                    SKILL_STATUS_SKIPPED,
-                    observation.error()));
-            return;
-        }
-        emitEvent(callback, StreamEventType.SKILL_RESOURCE_LOADED, skillEvent(
-                request,
-                skill,
-                loadSkillResourcePath(toolCall),
-                observation.success() ? SKILL_STATUS_LOADED : SKILL_STATUS_SKIPPED,
-                observation.success() ? null : observation.error()));
-    }
-
-    private StreamSkillEvent skillEvent(AgentLoopRequest request,
-                                        SkillRuntimeBlock skill,
-                                        String resourcePath,
-                                        String status,
-                                        String reason) {
-        return new StreamSkillEvent(
-                request.runId(),
-                skill.name(),
-                skill.revisionId(),
-                skill.injectMode().name(),
-                skill.category().name(),
-                skill.description(),
-                skill.allowedTools(),
-                resourcePath,
-                status,
-                reason);
-    }
-
-    private Map<String, Object> argumentsPreview(AgentToolCall toolCall) {
-        return Map.of(
-                TOOL_ARGUMENT_KEYS_FIELD, toolCall.arguments().keySet(),
-                TOOL_ARGUMENT_COUNT_FIELD, toolCall.arguments().size());
-    }
-
-    private void emitEvent(StreamCallback callback, StreamEventType eventType, Object payload) {
-        streamEmitter.emitEvent(callback, eventType, payload);
     }
 
     private void recordModelTurn(AgentLoopRequest request,
@@ -1235,7 +431,8 @@ public class KernelAgentLoop implements ReActExecutorPort {
         runStepRecorder.recordModelTurn(
                 request.runId(),
                 AgentRunStepRecorder.modelTurnInput(messages,
-                        exposedTools(effectiveAllowedToolIds(request), request.skillRuntimeBlocks(), exhaustedToolIds)),
+                        modelTurns.exposedTools(modelTurns.effectiveAllowedToolIds(request),
+                                request.skillRuntimeBlocks(), exhaustedToolIds)),
                 turn == null ? null : modelTurnOutputJson(turn),
                 error);
     }
@@ -1254,71 +451,6 @@ public class KernelAgentLoop implements ReActExecutorPort {
                 .replace("\"", "\\\"")
                 .replace("\r", "\\r")
                 .replace("\n", "\\n");
-    }
-
-    private void emitToolThinking(StreamCallback callback, ModelTurn turn, List<AgentObservation> observations) {
-        if (callback == null) {
-            return;
-        }
-        if (!turn.thought().isBlank()) {
-            callback.onThinking(turn.thought());
-        }
-        for (int i = 0; i < turn.toolCalls().size(); i++) {
-            AgentToolCall toolCall = turn.toolCalls().get(i);
-            AgentObservation observation = observations.get(i);
-            callback.onThinking("[tool call] " + toolCall.toolId() + " -> "
-                    + (observation.success() ? "ok" : "failed"));
-        }
-    }
-
-    private void emitSourcesFromObservations(StreamCallback callback,
-                                             List<AgentToolCall> toolCalls,
-                                             List<AgentObservation> observations) {
-        if (callback == null || toolCalls == null || observations == null) {
-            return;
-        }
-        for (int i = 0; i < Math.min(toolCalls.size(), observations.size()); i++) {
-            AgentToolCall toolCall = toolCalls.get(i);
-            AgentObservation observation = observations.get(i);
-            if (toolCall == null || observation == null || !observation.success()
-                    || !WEB_SEARCH_TOOL_ID.equals(toolCall.toolId())
-                    || observation.content() == null || observation.content().isBlank()) {
-                continue;
-            }
-            try {
-                JsonNode sources = OBJECT_MAPPER.readTree(observation.content()).path(WEB_SEARCH_SOURCES_FIELD);
-                if (sources.isArray() && !sources.isEmpty()) {
-                    emitEvent(callback, StreamEventType.SOURCE_FOUND,
-                            OBJECT_MAPPER.convertValue(sources, List.class));
-                }
-            } catch (Exception ignored) {
-                // Tool observations are best-effort UI evidence; invalid JSON should not fail the run.
-            }
-        }
-    }
-
-    private void emitContent(StreamCallback callback, String content) {
-        if (callback != null && content != null && !content.isEmpty()) {
-            callback.onContent(content);
-        }
-    }
-
-    private void emitFinalArtifact(StreamCallback callback, AgentLoopRequest request, String content) {
-        if (callback == null || request == null || content == null || content.isBlank()
-                || request.expectedOutputArtifactType() != OutputArtifactType.MARKDOWN) {
-            return;
-        }
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("id", ARTIFACT_ID_PREFIX + Objects.requireNonNullElse(request.runId(), "live"));
-        payload.put(ARTIFACT_TITLE_FIELD, MARKDOWN_ARTIFACT_TITLE);
-        payload.put(ARTIFACT_LANGUAGE_FIELD, MARKDOWN_LANGUAGE);
-        payload.put(ARTIFACT_TYPE_FIELD, MARKDOWN_ARTIFACT_TYPE);
-        payload.put(ARTIFACT_CONTENT_FIELD, content);
-        payload.put(ARTIFACT_CODE_FIELD, content);
-        if (request.runId() != null && !request.runId().isBlank()) {
-            payload.put("runId", request.runId());
-        }
-        emitEvent(callback, StreamEventType.ARTIFACT_CREATED, payload);
     }
 
     private String applyOutputGovernance(AgentLoopRequest request, String originalContent) {
@@ -1340,95 +472,6 @@ public class KernelAgentLoop implements ReActExecutorPort {
         return result.governedContent();
     }
 
-    private void emitComplete(StreamCallback callback) {
-        if (callback != null) {
-            callback.onComplete();
-        }
-    }
-
-    private record ModelTurn(String content, String thinking, List<AgentToolCall> toolCalls) {
-
-        private ModelTurn {
-            content = Objects.requireNonNullElse(content, "");
-            thinking = Objects.requireNonNullElse(thinking, "");
-            toolCalls = toolCalls == null ? List.of() : List.copyOf(toolCalls);
-        }
-
-        private String thought() {
-            if (thinking.isBlank()) {
-                return content;
-            }
-            if (content.isBlank()) {
-                return thinking;
-            }
-            return thinking + System.lineSeparator() + content;
-        }
-    }
-
-    private static final class TurnBuffer implements StreamCallback {
-        private final StringBuilder content = new StringBuilder();
-        private final StringBuilder thinking = new StringBuilder();
-        private final CountDownLatch done = new CountDownLatch(1);
-        private Throwable error;
-        private volatile boolean completed;
-
-        @Override
-        public void onContent(String chunk) {
-            if (chunk != null) {
-                content.append(chunk);
-            }
-        }
-
-        @Override
-        public void onThinking(String chunk) {
-            if (chunk != null) {
-                thinking.append(chunk);
-            }
-        }
-
-        @Override
-        public void onComplete() {
-            completed = true;
-            done.countDown();
-        }
-
-        @Override
-        public void onError(Throwable error) {
-            this.error = error;
-            done.countDown();
-        }
-
-        private String content() {
-            return content.toString();
-        }
-
-        private String thinking() {
-            return thinking.toString();
-        }
-
-        private Throwable error() {
-            return error;
-        }
-
-        private boolean completed() {
-            return completed;
-        }
-
-        private void awaitCompletion(AgentRunControl control) {
-            while (true) {
-                control.checkCancelled();
-                try {
-                    if (done.await(100, TimeUnit.MILLISECONDS)) {
-                        return;
-                    }
-                } catch (InterruptedException ex) {
-                    Thread.currentThread().interrupt();
-                    throw new AgentLoopCancelledException("Agent loop cancelled", ex);
-                }
-            }
-        }
-    }
-
     private TraceNodeStartCommand agentStepCommand(int step) {
         return new TraceNodeStartCommand(
                 "agent-step-" + step,
@@ -1439,84 +482,4 @@ public class KernelAgentLoop implements ReActExecutorPort {
                 0);
     }
 
-    private TraceNodeStartCommand agentToolCommand(AgentToolCall toolCall, TraceNodeScope stepScope) {
-        String toolId = toolCall == null ? "unknown" : toolCall.toolId();
-        return new TraceNodeStartCommand(
-                "agent-tool-" + toolId,
-                TRACE_TYPE_AGENT_TOOL,
-                TRACE_CLASS_NAME,
-                "executeTool",
-                stepScope == null ? null : stepScope.nodeId(),
-                1);
-    }
-
-    private static final class AgentRunControl {
-        private final AtomicBoolean cancelled = new AtomicBoolean(false);
-        private final AtomicReference<StreamCancellationHandle> modelHandle = new AtomicReference<>();
-        private final AtomicReference<Future<?>> workerFuture = new AtomicReference<>();
-        private final Set<ExecutorService> toolExecutors = Collections.newSetFromMap(new ConcurrentHashMap<>());
-
-        private static AgentRunControl direct() {
-            return new AgentRunControl();
-        }
-
-        private void bindWorkerFuture(Future<?> future) {
-            workerFuture.set(future);
-            if (cancelled.get() && future != null) {
-                future.cancel(true);
-            }
-        }
-
-        private void bindModelHandle(StreamCancellationHandle handle) {
-            modelHandle.set(handle);
-            if (cancelled.get() && handle != null) {
-                handle.cancel();
-            }
-        }
-
-        private void clearModelHandle(StreamCancellationHandle handle) {
-            modelHandle.compareAndSet(handle, null);
-        }
-
-        private void bindToolExecutor(ExecutorService executor) {
-            if (executor == null) {
-                return;
-            }
-            toolExecutors.add(executor);
-            if (cancelled.get()) {
-                executor.shutdownNow();
-            }
-        }
-
-        private void clearToolExecutor(ExecutorService executor) {
-            if (executor != null) {
-                toolExecutors.remove(executor);
-            }
-        }
-
-        private boolean cancelled() {
-            return cancelled.get();
-        }
-
-        private void cancel() {
-            if (!cancelled.compareAndSet(false, true)) {
-                return;
-            }
-            StreamCancellationHandle handle = modelHandle.get();
-            if (handle != null) {
-                handle.cancel();
-            }
-            toolExecutors.forEach(ExecutorService::shutdownNow);
-            Future<?> future = workerFuture.get();
-            if (future != null) {
-                future.cancel(true);
-            }
-        }
-
-        private void checkCancelled() {
-            if (cancelled.get() || Thread.currentThread().isInterrupted()) {
-                throw new AgentLoopCancelledException("Agent loop cancelled");
-            }
-        }
-    }
 }

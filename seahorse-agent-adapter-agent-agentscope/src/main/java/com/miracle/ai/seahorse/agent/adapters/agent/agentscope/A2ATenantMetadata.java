@@ -75,7 +75,16 @@ public final class A2ATenantMetadata {
                 .findFirst();
     }
 
-    private static AgentSkill boundarySkill(String tenantId, Map<String, String> m3Metadata) {
+    public static String tenantQualifiedAgentName(String tenantId, String agentName) {
+        String safeTenantId = requiredText(tenantId, "tenantId");
+        String safeAgentName = requiredText(agentName, "agentName");
+        if (safeAgentName.startsWith(safeTenantId + "/")) {
+            return safeAgentName;
+        }
+        return safeTenantId + "/" + safeAgentName;
+    }
+
+    static AgentSkill boundarySkill(String tenantId, Map<String, String> m3Metadata) {
         List<String> tags = new ArrayList<>();
         tags.add(TENANT_TAG_PREFIX + tenantId);
         Objects.requireNonNullElse(m3Metadata, Map.<String, String>of()).forEach((key, value) -> {

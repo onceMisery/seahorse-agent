@@ -70,6 +70,24 @@ class AgentScopeA2AAgentConnectorTests {
         assertEquals("planner", remoteCard.agentName());
     }
 
+    @Test
+    void continuesCandidateLookupWhenResolverThrowsForMissingQualifiedName() {
+        AgentCard matchingTenant = A2ATenantMetadata.withTenant(A2ATenantMetadataTests.baseCard(), "tenant-a", Map.of());
+        AgentScopeA2AAgentConnector connector = new AgentScopeA2AAgentConnector(
+                agentName -> {
+                    if ("planner".equals(agentName)) {
+                        return matchingTenant;
+                    }
+                    throw new IllegalStateException("agent not found: " + agentName);
+                },
+                (ignored, request) -> "remote: " + request.prompt());
+
+        RemoteAgentCard remoteCard = connector.resolve(new A2AAgentResolveRequest("tenant-a", "planner"));
+
+        assertEquals("tenant-a", remoteCard.tenantId());
+        assertEquals("planner", remoteCard.agentName());
+    }
+
     private AgentCardResolver resolver(AgentCard card) {
         return agentName -> card;
     }

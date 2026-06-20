@@ -68,8 +68,15 @@ public class AgentScopeA2AAgentConnector implements A2AAgentConnectorPort {
 
     private AgentCard firstMatchingTenantCard(String tenantId, String agentName) {
         AgentCard fallback = null;
+        RuntimeException lastLookupFailure = null;
         for (String candidateName : candidateNames(tenantId, agentName)) {
-            AgentCard candidate = resolver.getAgentCard(candidateName);
+            AgentCard candidate;
+            try {
+                candidate = resolver.getAgentCard(candidateName);
+            } catch (RuntimeException ex) {
+                lastLookupFailure = ex;
+                continue;
+            }
             if (candidate == null) {
                 continue;
             }
@@ -80,6 +87,9 @@ public class AgentScopeA2AAgentConnector implements A2AAgentConnectorPort {
             if (fallback == null) {
                 fallback = candidate;
             }
+        }
+        if (fallback == null && lastLookupFailure != null) {
+            throw new IllegalStateException("A2A agent card lookup failed: " + agentName, lastLookupFailure);
         }
         return fallback;
     }

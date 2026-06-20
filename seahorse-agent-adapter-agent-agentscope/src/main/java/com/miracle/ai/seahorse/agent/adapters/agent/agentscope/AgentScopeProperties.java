@@ -386,8 +386,12 @@ public class AgentScopeProperties {
 
     public static class ConfigCenter {
         private boolean enabled;
+        private String promptKey = "";
         private String promptVersion = "";
         private String promptLabel = "";
+        private String skillNamespace = "";
+        private String skillVersion = "";
+        private String skillLabel = "";
 
         public boolean isEnabled() {
             return enabled;
@@ -395,6 +399,14 @@ public class AgentScopeProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+
+        public String getPromptKey() {
+            return promptKey;
+        }
+
+        public void setPromptKey(String promptKey) {
+            this.promptKey = promptKey;
         }
 
         public String getPromptVersion() {
@@ -412,10 +424,41 @@ public class AgentScopeProperties {
         public void setPromptLabel(String promptLabel) {
             this.promptLabel = promptLabel;
         }
+
+        public String getSkillNamespace() {
+            return skillNamespace;
+        }
+
+        public void setSkillNamespace(String skillNamespace) {
+            this.skillNamespace = skillNamespace;
+        }
+
+        public String getSkillVersion() {
+            return skillVersion;
+        }
+
+        public void setSkillVersion(String skillVersion) {
+            this.skillVersion = skillVersion;
+        }
+
+        public String getSkillLabel() {
+            return skillLabel;
+        }
+
+        public void setSkillLabel(String skillLabel) {
+            this.skillLabel = skillLabel;
+        }
     }
 
     public static class Studio {
         private boolean enabled;
+        private boolean autoInitialize = true;
+        private String studioUrl = "";
+        private String tracingUrl = "";
+        private String project = "seahorse-agent";
+        private String runName = "seahorse-agent";
+        private int maxRetries = 3;
+        private int reconnectAttempts = 3;
 
         public boolean isEnabled() {
             return enabled;
@@ -423,6 +466,62 @@ public class AgentScopeProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+
+        public boolean isAutoInitialize() {
+            return autoInitialize;
+        }
+
+        public void setAutoInitialize(boolean autoInitialize) {
+            this.autoInitialize = autoInitialize;
+        }
+
+        public String getStudioUrl() {
+            return studioUrl;
+        }
+
+        public void setStudioUrl(String studioUrl) {
+            this.studioUrl = studioUrl;
+        }
+
+        public String getTracingUrl() {
+            return tracingUrl;
+        }
+
+        public void setTracingUrl(String tracingUrl) {
+            this.tracingUrl = tracingUrl;
+        }
+
+        public String getProject() {
+            return project;
+        }
+
+        public void setProject(String project) {
+            this.project = project;
+        }
+
+        public String getRunName() {
+            return runName;
+        }
+
+        public void setRunName(String runName) {
+            this.runName = runName;
+        }
+
+        public int getMaxRetries() {
+            return maxRetries;
+        }
+
+        public void setMaxRetries(int maxRetries) {
+            this.maxRetries = maxRetries;
+        }
+
+        public int getReconnectAttempts() {
+            return reconnectAttempts;
+        }
+
+        public void setReconnectAttempts(int reconnectAttempts) {
+            this.reconnectAttempts = reconnectAttempts;
         }
     }
 }

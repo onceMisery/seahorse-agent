@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
@@ -82,7 +83,7 @@ class KernelAgentLoopToolGatewayTests {
                 Turn.toolCalls("need weather", List.of(toolCall)),
                 Turn.finalAnswer("done")));
         RecordingToolGateway gateway = new RecordingToolGateway();
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -122,7 +123,7 @@ class KernelAgentLoopToolGatewayTests {
                 Turn.toolCalls("try delete", List.of(toolCall)),
                 Turn.finalAnswer("blocked")));
         RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.failed("TOOL_NOT_BOUND"));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -153,7 +154,7 @@ class KernelAgentLoopToolGatewayTests {
                 Turn.finalAnswer("used the research skill")));
         RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok(
                 "{\"name\":\"research\",\"resourcePath\":\"SKILL.md\",\"content\":\"Use sources carefully.\"}"));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -196,7 +197,7 @@ class KernelAgentLoopToolGatewayTests {
         ScriptedModel model = new ScriptedModel(List.of(
                 Turn.toolCalls("try missing skill", List.of(loadSkill)),
                 Turn.finalAnswer("could not load")));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 new RecordingToolGateway(),
@@ -231,7 +232,7 @@ class KernelAgentLoopToolGatewayTests {
                 Turn.toolCalls("need full skill", List.of(loadSkill)),
                 Turn.finalAnswer("used legacy alias")));
         RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.failed("should-not-call"));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -265,7 +266,7 @@ class KernelAgentLoopToolGatewayTests {
                 Turn.toolCalls("need full skill", List.of(loadSkill)),
                 Turn.finalAnswer("used gateway skill loader")));
         ListingOnlyToolRegistry registry = new ListingOnlyToolRegistry();
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 registry,
                 new LocalToolGatewayPort(registry),
@@ -296,7 +297,7 @@ class KernelAgentLoopToolGatewayTests {
     void shouldNotLetSkillAllowedToolsGrantAgentDeniedToolsInAdvisoryMode() {
         ToolListRecordingModel model = new ToolListRecordingModel();
         RecordingToolGateway gateway = new RecordingToolGateway();
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -323,7 +324,7 @@ class KernelAgentLoopToolGatewayTests {
                 Turn.toolCalls("need search", List.of(toolCall)),
                 Turn.finalAnswer("searched")));
         RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("{\"sources\":[]}"));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -348,7 +349,7 @@ class KernelAgentLoopToolGatewayTests {
     @Test
     void shouldExposeNoAgentToolsWhenRestrictiveSkillHasNoAllowedTools() {
         ToolListRecordingModel model = new ToolListRecordingModel();
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 new RecordingToolGateway(),
@@ -375,7 +376,7 @@ class KernelAgentLoopToolGatewayTests {
                 Turn.toolCalls("find tools", List.of(toolCall)),
                 Turn.finalAnswer("searched tools")));
         RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("{\"tools\":[]}"));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -406,7 +407,7 @@ class KernelAgentLoopToolGatewayTests {
     void shouldNotExposeAnyToolsWhenAllowlistIsEmpty() {
         ToolListRecordingModel model = new ToolListRecordingModel();
         RecordingToolGateway gateway = new RecordingToolGateway();
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -452,7 +453,7 @@ class KernelAgentLoopToolGatewayTests {
                 FIXED_CLOCK.instant(),
                 null));
         MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -493,7 +494,7 @@ class KernelAgentLoopToolGatewayTests {
         ScriptedModel model = new ScriptedModel(List.of(Turn.toolCalls("need approval", List.of(toolCall))));
         RecordingToolGateway gateway = new RecordingToolGateway(
                 ToolInvocationResult.failed(ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED, "approval-1"));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -543,7 +544,7 @@ class KernelAgentLoopToolGatewayTests {
         RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("""
                 {"artifactType":"newsletter","format":"markdown","content":"# Redis article\\n\\nGenerated article body."}
                 """));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -577,7 +578,7 @@ class KernelAgentLoopToolGatewayTests {
                 Turn.toolCalls("need search", List.of(toolCall)),
                 Turn.finalAnswer("done")));
         RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("{\"sources\":[{\"title\":\"Seahorse\"}]}"));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -617,7 +618,7 @@ class KernelAgentLoopToolGatewayTests {
         RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("""
                 {"artifactType":"newsletter","format":"markdown","content":"# Redis article\\n\\nGenerated article body."}
                 """));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -648,7 +649,7 @@ class KernelAgentLoopToolGatewayTests {
                 Turn.finalAnswer("used research")));
         RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok(
                 "{\"name\":\"research\",\"resourcePath\":\"SKILL.md\",\"content\":\"Use sources carefully.\"}"));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -695,7 +696,7 @@ class KernelAgentLoopToolGatewayTests {
                 Turn.toolCalls("need search", List.of(toolCall)),
                 Turn.finalAnswer("done")));
         RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.failed("network timeout"));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -731,7 +732,7 @@ class KernelAgentLoopToolGatewayTests {
         RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("""
                 {"sources":[{"title":"Seahorse","url":"https://example.com","snippet":"AI source","score":0.9}]}
                 """));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 gateway,
@@ -754,7 +755,7 @@ class KernelAgentLoopToolGatewayTests {
     @Test
     void shouldEmitMarkdownArtifactWhenExpectedOutputIsMarkdown() {
         ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("# Report\n\nFinal research result.")));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = kernelLoop(
                 model,
                 new ListingOnlyToolRegistry(),
                 new RecordingToolGateway(),
@@ -789,6 +790,35 @@ class KernelAgentLoopToolGatewayTests {
 
     private static List<String> toolIds(List<ToolDescriptor> tools) {
         return tools.stream().map(ToolDescriptor::toolId).toList();
+    }
+
+    private static KernelAgentLoop kernelLoop(
+            StreamingChatModelPort modelPort,
+            ToolRegistryPort toolRegistry,
+            ToolGatewayPort toolGateway,
+            KernelAgentLoopOptions options) {
+        return kernelLoop(modelPort, toolRegistry, toolGateway, options, null);
+    }
+
+    private static KernelAgentLoop kernelLoop(
+            StreamingChatModelPort modelPort,
+            ToolRegistryPort toolRegistry,
+            ToolGatewayPort toolGateway,
+            KernelAgentLoopOptions options,
+            AgentApprovalWaitHandler approvalWaitHandler) {
+        return new KernelAgentLoop(new AgentLoopDependencies(
+                modelPort,
+                toolRegistry,
+                toolGateway,
+                options,
+                null,
+                null,
+                null,
+                approvalWaitHandler,
+                null,
+                null,
+                null,
+                null));
     }
 
     private static final class RecordingToolGateway implements ToolGatewayPort {

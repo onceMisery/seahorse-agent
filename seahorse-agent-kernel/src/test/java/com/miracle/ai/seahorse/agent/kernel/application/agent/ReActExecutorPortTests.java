@@ -21,6 +21,11 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Modifier;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
@@ -28,12 +33,40 @@ class ReActExecutorPortTests {
 
     @Test
     void kernelAgentLoopIsDefaultReActExecutor() {
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = new KernelAgentLoop(new AgentLoopDependencies(
                 StreamingChatModelPort.noop(),
                 ToolRegistryPort.empty(),
-                KernelAgentLoopOptions.defaults());
+                null,
+                KernelAgentLoopOptions.defaults(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null));
 
         ReActExecutorPort executor = assertInstanceOf(ReActExecutorPort.class, loop);
         assertEquals("kernel", executor.engineId());
+    }
+
+    @Test
+    void kernelAgentLoopHasSingleDependenciesConstructor() {
+        var constructors = Arrays.stream(KernelAgentLoop.class.getDeclaredConstructors())
+                .filter(constructor -> !constructor.isSynthetic())
+                .toList();
+
+        assertEquals(1, constructors.size());
+        assertEquals(Modifier.PUBLIC, constructors.get(0).getModifiers() & Modifier.PUBLIC);
+        assertEquals(1, constructors.get(0).getParameterCount());
+        assertEquals(AgentLoopDependencies.class, constructors.get(0).getParameterTypes()[0]);
+    }
+
+    @Test
+    void kernelAgentLoopStaysBelowRefactorLineBudget() throws Exception {
+        Path source = Path.of("src/main/java/com/miracle/ai/seahorse/agent/kernel/application/agent/KernelAgentLoop.java");
+
+        assertEquals(true, Files.readAllLines(source).size() < 700);
     }
 }

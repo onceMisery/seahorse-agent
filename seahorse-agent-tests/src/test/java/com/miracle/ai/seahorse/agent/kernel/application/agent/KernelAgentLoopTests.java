@@ -39,6 +39,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ToolCallCollector;
 import org.junit.jupiter.api.Test;
@@ -69,7 +70,7 @@ class KernelAgentLoopTests {
     @Test
     void returnsFinalAnswerWhenModelDoesNotRequestTools() {
         ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("直接回答")));
-        KernelAgentLoop loop = new KernelAgentLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
+        KernelAgentLoop loop = newLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
 
         AgentLoopResult result = loop.execute(defaultRequest());
 
@@ -89,7 +90,7 @@ class KernelAgentLoopTests {
         InMemoryToolRegistry registry = new InMemoryToolRegistry();
         registry.register(WEATHER_DESCRIPTOR,
                 (callId, toolId, arguments) -> ToolInvocationResult.ok("{\"temp\":21}"));
-        KernelAgentLoop loop = new KernelAgentLoop(model, registry, KernelAgentLoopOptions.defaults());
+        KernelAgentLoop loop = newLoop(model, registry, KernelAgentLoopOptions.defaults());
 
         AgentLoopResult result = loop.execute(requestWithAllowedTools(6, "weather"));
 
@@ -124,7 +125,7 @@ class KernelAgentLoopTests {
                 Turn.toolCalls("step3", List.of(weather))));
         InMemoryToolRegistry registry = new InMemoryToolRegistry();
         registry.register(WEATHER_DESCRIPTOR, (callId, toolId, arguments) -> ToolInvocationResult.ok("ok"));
-        KernelAgentLoop loop = new KernelAgentLoop(model, registry,
+        KernelAgentLoop loop = newLoop(model, registry,
                 KernelAgentLoopOptions.builder().maxSteps(2).build());
 
         AgentLoopResult result = loop.execute(requestWithAllowedTools(2, "weather"));
@@ -140,7 +141,7 @@ class KernelAgentLoopTests {
         ScriptedModel model = new ScriptedModel(List.of(
                 Turn.toolCalls("", List.of(missing)),
                 Turn.finalAnswer("已降级回答")));
-        KernelAgentLoop loop = new KernelAgentLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
+        KernelAgentLoop loop = newLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
 
         AgentLoopResult result = loop.execute(defaultRequest());
 
@@ -158,7 +159,7 @@ class KernelAgentLoopTests {
                 Turn.finalAnswer("已处理失败")));
         InMemoryToolRegistry registry = new InMemoryToolRegistry();
         registry.register(WEATHER_DESCRIPTOR, throwingTool("boom"));
-        KernelAgentLoop loop = new KernelAgentLoop(model, registry, KernelAgentLoopOptions.defaults());
+        KernelAgentLoop loop = newLoop(model, registry, KernelAgentLoopOptions.defaults());
 
         AgentLoopResult result = loop.execute(requestWithAllowedTools(6, "weather"));
 
@@ -177,7 +178,7 @@ class KernelAgentLoopTests {
                 Turn.finalAnswer("已处理截断结果")));
         InMemoryToolRegistry registry = new InMemoryToolRegistry();
         registry.register(WEATHER_DESCRIPTOR, (callId, toolId, arguments) -> ToolInvocationResult.ok(largeResult));
-        KernelAgentLoop loop = new KernelAgentLoop(model, registry, KernelAgentLoopOptions.defaults());
+        KernelAgentLoop loop = newLoop(model, registry, KernelAgentLoopOptions.defaults());
 
         AgentLoopResult result = loop.execute(requestWithAllowedTools(6, "weather"));
 
@@ -201,7 +202,7 @@ class KernelAgentLoopTests {
             sleep(300);
             return ToolInvocationResult.ok("late");
         });
-        KernelAgentLoop loop = new KernelAgentLoop(model, registry,
+        KernelAgentLoop loop = newLoop(model, registry,
                 KernelAgentLoopOptions.builder().perToolTimeout(Duration.ofMillis(50)).build());
 
         AgentLoopResult result = loop.execute(requestWithAllowedTools(6, "weather"));
@@ -230,7 +231,7 @@ class KernelAgentLoopTests {
                     secondStarted.countDown();
                     return ToolInvocationResult.ok("second");
                 });
-        KernelAgentLoop loop = new KernelAgentLoop(model, registry,
+        KernelAgentLoop loop = newLoop(model, registry,
                 KernelAgentLoopOptions.builder()
                         .maxParallelTools(2)
                         .perToolTimeout(Duration.ofSeconds(1))
@@ -265,7 +266,7 @@ class KernelAgentLoopTests {
                 return () -> { };
             }
         };
-        KernelAgentLoop loop = new KernelAgentLoop(badModel, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
+        KernelAgentLoop loop = newLoop(badModel, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
 
         AgentLoopException ex = assertThrows(AgentLoopException.class, () -> loop.execute(defaultRequest()));
         assertTrue(ex.getMessage().contains("collector"));
@@ -290,7 +291,7 @@ class KernelAgentLoopTests {
                 return () -> { };
             }
         };
-        KernelAgentLoop loop = new KernelAgentLoop(badModel, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
+        KernelAgentLoop loop = newLoop(badModel, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
 
         AgentLoopException ex = assertThrows(AgentLoopException.class, () -> loop.execute(defaultRequest()));
         assertTrue(ex.getMessage().contains("onComplete"));
@@ -305,7 +306,7 @@ class KernelAgentLoopTests {
         InMemoryToolRegistry registry = new InMemoryToolRegistry();
         registry.register(WEATHER_DESCRIPTOR,
                 (callId, toolId, arguments) -> ToolInvocationResult.ok("{\"temp\":21}"));
-        KernelAgentLoop loop = new KernelAgentLoop(model, registry, KernelAgentLoopOptions.defaults());
+        KernelAgentLoop loop = newLoop(model, registry, KernelAgentLoopOptions.defaults());
         RecordingCallback callback = new RecordingCallback();
 
         loop.streamExecute(requestWithAllowedTools(6, "weather"), callback);
@@ -321,7 +322,7 @@ class KernelAgentLoopTests {
     @Test
     void streamExecuteCancellationCancelsModelStreamAndSignalsError() {
         BlockingModel model = new BlockingModel();
-        KernelAgentLoop loop = new KernelAgentLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
+        KernelAgentLoop loop = newLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
         RecordingCallback callback = new RecordingCallback();
 
         StreamCancellationHandle handle = loop.streamExecute(defaultRequest(), callback);
@@ -344,7 +345,7 @@ class KernelAgentLoopTests {
         registry.register(WEATHER_DESCRIPTOR, (callId, toolId, arguments) -> {
             throw new AssertionError("tool should not be invoked for raw arguments");
         });
-        KernelAgentLoop loop = new KernelAgentLoop(model, registry, KernelAgentLoopOptions.defaults());
+        KernelAgentLoop loop = newLoop(model, registry, KernelAgentLoopOptions.defaults());
 
         AgentLoopResult result = loop.execute(requestWithAllowedTools(6, "weather"));
 
@@ -369,7 +370,7 @@ class KernelAgentLoopTests {
             assertEquals("真实问题", arguments.get("_seahorseQuestion"));
             return ToolInvocationResult.ok("ok");
         });
-        KernelAgentLoop loop = new KernelAgentLoop(model, registry, KernelAgentLoopOptions.defaults());
+        KernelAgentLoop loop = newLoop(model, registry, KernelAgentLoopOptions.defaults());
 
         AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
                 .question("真实问题")
@@ -389,7 +390,7 @@ class KernelAgentLoopTests {
     @Test
     void memoryContextIsInjectedIntoFirstModelTurn() {
         ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("学生")));
-        KernelAgentLoop loop = new KernelAgentLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
+        KernelAgentLoop loop = newLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
 
         loop.execute(AgentLoopRequest.builder()
                 .question("我的职业是什么")
@@ -414,7 +415,7 @@ class KernelAgentLoopTests {
     @Test
     void memoryContextIsInjectedThroughConfiguredContextWeaver() {
         ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("teacher")));
-        KernelAgentLoop loop = new KernelAgentLoop(
+        KernelAgentLoop loop = newLoop(
                 model,
                 ToolRegistryPort.empty(),
                 KernelAgentLoopOptions.defaults(),
@@ -437,7 +438,7 @@ class KernelAgentLoopTests {
     @Test
     void contextPackIsInjectedIntoFirstModelTurnBeforeLegacyMemory() {
         ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("policy")));
-        KernelAgentLoop loop = new KernelAgentLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
+        KernelAgentLoop loop = newLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
 
         loop.execute(AgentLoopRequest.builder()
                 .question("what is the refund policy?")
@@ -459,7 +460,7 @@ class KernelAgentLoopTests {
     @Test
     void modelIdIsPassedToModelRequest() {
         ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("answer")));
-        KernelAgentLoop loop = new KernelAgentLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
+        KernelAgentLoop loop = newLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
 
         loop.execute(AgentLoopRequest.builder()
                 .question("hello")
@@ -492,6 +493,33 @@ class KernelAgentLoopTests {
                 .maxSteps(maxSteps)
                 .allowedToolIds(List.of(toolIds))
                 .build();
+    }
+
+    private static KernelAgentLoop newLoop(
+            StreamingChatModelPort model,
+            ToolRegistryPort registry,
+            KernelAgentLoopOptions options) {
+        return newLoop(model, registry, options, null);
+    }
+
+    private static KernelAgentLoop newLoop(
+            StreamingChatModelPort model,
+            ToolRegistryPort registry,
+            KernelAgentLoopOptions options,
+            ContextWeaverPort contextWeaver) {
+        return new KernelAgentLoop(new AgentLoopDependencies(
+                model,
+                registry,
+                null,
+                options,
+                null,
+                contextWeaver,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null));
     }
 
     private static ContextPack contextPack(String content) {
