@@ -51,27 +51,32 @@ vi.mock("@/components/ui/select", async () => {
   const SelectContext = ReactModule.createContext<{
     onValueChange?: (value: string) => void;
     disabled?: boolean;
+    value?: string;
   }>({});
   return {
     Select: ({
       children,
       onValueChange,
-      disabled
+      disabled,
+      value
     }: {
       children: React.ReactNode;
       value?: string;
       onValueChange?: (value: string) => void;
       disabled?: boolean;
     }) => (
-      <SelectContext.Provider value={{ onValueChange, disabled }}>
+      <SelectContext.Provider value={{ onValueChange, disabled, value }}>
         <div>{children}</div>
       </SelectContext.Provider>
     ),
-    SelectTrigger: ({ children, ...props }: React.HTMLAttributes<HTMLButtonElement>) => (
-      <button type="button" {...props}>
-        {children}
-      </button>
-    ),
+    SelectTrigger: ({ children, ...props }: React.HTMLAttributes<HTMLButtonElement>) => {
+      const context = ReactModule.useContext(SelectContext);
+      return (
+        <button type="button" data-selected-value={context.value} {...props}>
+          {children}
+        </button>
+      );
+    },
     SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
     SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
     SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => {
@@ -202,6 +207,58 @@ describe("ChatInput run profile selector", () => {
         runProfileId: "77"
       }));
       expect(options.roleCardId).toBeUndefined();
+    });
+  });
+
+  it("shows the role card selector as default while an active run profile owns the role", async () => {
+    serviceMocks.listRoleCards.mockResolvedValue([
+      {
+        id: 99,
+        name: "Default Role",
+        definition: "Default",
+        enabled: true,
+        higherPerm: false
+      }
+    ]);
+    render(<ChatInput />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Research Profile")).toBeInTheDocument();
+      expect(screen.getByText("Default Role")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Research Profile"));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Role card")).toHaveAttribute("data-selected-value", "__default_role__");
+    });
+  });
+
+  it("keeps the auto-selected role card for plain chat without a run profile", async () => {
+    serviceMocks.listRoleCards.mockResolvedValue([
+      {
+        id: 99,
+        name: "Default Role",
+        definition: "Default",
+        enabled: true,
+        higherPerm: false
+      }
+    ]);
+    render(<ChatInput />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Default Role")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Use role" } });
+    const buttons = screen.getAllByRole("button");
+    fireEvent.click(buttons[buttons.length - 1]);
+
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith("Use role", expect.objectContaining({
+        roleCardId: "99",
+        runProfileId: undefined
+      }));
     });
   });
 

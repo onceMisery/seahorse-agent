@@ -39,6 +39,8 @@ const CONSUMER_TENANT_ID = import.meta.env.VITE_CONSUMER_TENANT_ID || "tenant-de
 const HIGH_COST_TIER = "HIGH";
 const QUOTA_EXCEEDED_STATUS = "EXCEEDED";
 const ATTACHMENT_INPUT_ACCEPT = ".pdf,.md,.markdown,.txt,.docx,.csv,.xlsx,image/*";
+const DEFAULT_ROLE_CARD_VALUE = "__default_role__";
+const DEFAULT_RUN_PROFILE_VALUE = "__default_profile__";
 
 const TASK_TEMPLATE_LABELS: Record<string, { name: string; description: string }> = {
   "quick-answer": {
@@ -644,6 +646,9 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
   const selectedTemplate = taskTemplates.find((template) => template.templateId === selectedTaskTemplateId);
   const quota = quotaTone(quotaSummary?.status);
   const canSend = (hasContent || isStreaming) && uploadingCount === 0;
+  const roleCardSelectValue = selectedRunProfileId && !roleCardOverrideTouched
+    ? DEFAULT_ROLE_CARD_VALUE
+    : selectedRoleCardId ?? DEFAULT_ROLE_CARD_VALUE;
 
   return (
     <div className="space-y-4">
@@ -853,10 +858,10 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                   </SelectContent>
                 </Select>
                 <Select
-                  value={selectedRoleCardId ?? "__default_role__"}
+                  value={roleCardSelectValue}
                   onValueChange={(next) => {
-                    setRoleCardOverrideTouched(next !== "__default_role__");
-                    setSelectedRoleCardId(next === "__default_role__" ? null : next);
+                    setRoleCardOverrideTouched(next !== DEFAULT_ROLE_CARD_VALUE);
+                    setSelectedRoleCardId(next === DEFAULT_ROLE_CARD_VALUE ? null : next);
                   }}
                   disabled={isStreaming || roleCardsLoading}
                 >
@@ -872,7 +877,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                     <SelectValue placeholder={roleCardsLoading ? "加载角色" : "角色"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__default_role__">
+                    <SelectItem value={DEFAULT_ROLE_CARD_VALUE}>
                       <span className="inline-flex items-center gap-2">
                         <UserRound className="h-3.5 w-3.5" />
                         默认角色
@@ -889,8 +894,8 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                   </SelectContent>
                 </Select>
                 <Select
-                  value={selectedRunProfileId ?? "__default_profile__"}
-                  onValueChange={(next) => setSelectedRunProfileId(next === "__default_profile__" ? null : next)}
+                  value={selectedRunProfileId ?? DEFAULT_RUN_PROFILE_VALUE}
+                  onValueChange={(next) => setSelectedRunProfileId(next === DEFAULT_RUN_PROFILE_VALUE ? null : next)}
                   disabled={isStreaming || runProfilesLoading}
                 >
                   <SelectTrigger
@@ -905,7 +910,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                     <SelectValue placeholder={runProfilesLoading ? "加载画像" : "画像"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__default_profile__">
+                    <SelectItem value={DEFAULT_RUN_PROFILE_VALUE}>
                       <span className="inline-flex items-center gap-2">
                         <Sparkles className="h-3.5 w-3.5" />
                         默认画像
