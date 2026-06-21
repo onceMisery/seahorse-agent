@@ -15,28 +15,10 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.chat;
+package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 
-/**
- * Seahorse 内核流式输出回调。
- */
-public interface StreamCallback {
-
-    void onContent(String content);
-
-    default void onThinking(String content) {
-    }
-
-    default void onRunStarted(String runId) {
-    }
-
-    default void onEvent(String eventName, Object payload) {
-    }
-
-    default void onUsage(ChatTokenUsage usage) {
-    }
-
-    void onComplete();
-
-    void onError(Throwable error);
+public enum A2aEndpointHealthStatus {
+    UP,
+    UNKNOWN,
+    DOWN
 }

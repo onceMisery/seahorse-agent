@@ -23,6 +23,11 @@ import io.a2a.spec.AgentSkill;
 import io.a2a.spec.TransportProtocol;
 import io.agentscope.core.a2a.server.card.ConfigurableAgentCard;
 
+import java.net.URI;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,11 +35,22 @@ import java.util.Objects;
 
 public class AgentScopeAgentCardFactory {
 
+    private final Clock clock;
+
+    public AgentScopeAgentCardFactory() {
+        this(Clock.systemUTC());
+    }
+
+    AgentScopeAgentCardFactory(Clock clock) {
+        this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
+    }
+
     public AgentCard agentCard(AgentScopeProperties properties) {
         AgentScopeProperties safeProperties = Objects.requireNonNull(properties, "properties must not be null");
         AgentScopeProperties.A2a a2a = safeProperties.getA2a();
         String endpointUrl = endpointUrl(a2a);
         String registeredName = registeredAgentName(a2a);
+        Instant registeredAt = clock.instant();
         AgentCard card = new AgentCard.Builder()
                 .protocolVersion("0.3.0")
                 .name(registeredName)
@@ -49,7 +65,7 @@ public class AgentScopeAgentCardFactory {
                         .id("seahorse.agent")
                         .name(textOrDefault(a2a.getAgentName(), "seahorse-agent"))
                         .description(textOrDefault(a2a.getDescription(), "Seahorse Agent"))
-                        .tags(List.of("seahorse", "a2a"))
+                        .tags(agentTags(a2a, endpointUrl, registeredAt))
                         .build()))
                 .build();
         return A2ATenantMetadata.withTenant(card, a2a.getTenantId(), m3Metadata(safeProperties.getNacos().getM3()));
@@ -58,6 +74,7 @@ public class AgentScopeAgentCardFactory {
     public ConfigurableAgentCard configurableAgentCard(AgentScopeProperties properties) {
         AgentScopeProperties safeProperties = Objects.requireNonNull(properties, "properties must not be null");
         AgentScopeProperties.A2a a2a = safeProperties.getA2a();
+        Instant registeredAt = clock.instant();
         return new ConfigurableAgentCard.Builder()
                 .name(registeredAgentName(a2a))
                 .description(textOrDefault(a2a.getDescription(), "Seahorse Agent"))
@@ -71,7 +88,7 @@ public class AgentScopeAgentCardFactory {
                                 .id("seahorse.agent")
                                 .name(textOrDefault(a2a.getAgentName(), "seahorse-agent"))
                                 .description(textOrDefault(a2a.getDescription(), "Seahorse Agent"))
-                                .tags(List.of("seahorse", "a2a"))
+                                .tags(agentTags(a2a, endpointUrl(a2a), registeredAt))
                                 .build(),
                         A2ATenantMetadata.boundarySkill(a2a.getTenantId(),
                                 m3Metadata(safeProperties.getNacos().getM3()))))
@@ -89,6 +106,43 @@ public class AgentScopeAgentCardFactory {
         putIfPresent(metadata, "clusterName", m3.getClusterName());
         m3.getMetadata().forEach((key, value) -> putIfPresent(metadata, key, value));
         return Map.copyOf(metadata);
+    }
+
+    private List<String> agentTags(AgentScopeProperties.A2a a2a, String endpointUrl, Instant registeredAt) {
+        List<String> tags = new ArrayList<>();
+        tags.add("seahorse");
+        tags.add("a2a");
+        putTag(tags, "authMode", authMode(a2a.getAuthMode()));
+        putTag(tags, "healthUrl", healthUrl(endpointUrl));
+        Duration ttl = a2a.getRegistrationTtl();
+        if (ttl != null && !ttl.isNegative() && !ttl.isZero()) {
+            putTag(tags, "registeredAt", registeredAt.toString());
+            putTag(tags, "expiresAt", registeredAt.plus(ttl).toString());
+        }
+        return List.copyOf(tags);
+    }
+
+    private void putTag(List<String> tags, String key, String value) {
+        if (!isBlank(key) && !isBlank(value)) {
+            tags.add(A2ATenantMetadata.A2A_TAG_PREFIX + key.trim() + "=" + value.trim());
+        }
+    }
+
+    private String authMode(A2aAuthMode mode) {
+        return Objects.requireNonNullElse(mode, A2aAuthMode.SHARED_SECRET)
+                .name()
+                .toLowerCase()
+                .replace('_', '-');
+    }
+
+    private String healthUrl(String endpointUrl) {
+        URI uri = URI.create(endpointUrl);
+        StringBuilder builder = new StringBuilder();
+        builder.append(uri.getScheme()).append("://").append(uri.getHost());
+        if (uri.getPort() > 0) {
+            builder.append(':').append(uri.getPort());
+        }
+        return builder.append("/actuator/health").toString();
     }
 
     private void putIfPresent(Map<String, String> metadata, String key, String value) {

@@ -22,6 +22,7 @@ import com.alibaba.nacos.api.ai.AiService;
 import com.alibaba.nacos.api.exception.NacosException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
+import com.miracle.ai.seahorse.agent.kernel.application.chat.AgentRunMetadataContributor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.A2AAgentConnectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
@@ -29,6 +30,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRep
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import io.a2a.spec.TransportProtocol;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.a2a.server.AgentScopeA2aServer;
@@ -76,6 +78,7 @@ public class AgentScopeReActAutoConfiguration {
     private static final String PROP_EXECUTOR_ENGINE = "seahorse.agent.executor.engine";
     private static final String PROP_A2A_ENABLED = "seahorse.agentscope.a2a.enabled";
     private static final String PROP_CONFIG_CENTER_ENABLED = "seahorse.agentscope.config-center.enabled";
+    private static final String PROP_CONFIG_CENTER_STRICT_STARTUP = "seahorse.agentscope.config-center.strict-startup";
     private static final String PROP_A2A_NACOS_SERVER = "seahorse.agentscope.a2a.nacos-server";
     private static final String PROP_NACOS_SERVER = "seahorse.agentscope.nacos.server-addr";
 
@@ -89,6 +92,20 @@ public class AgentScopeReActAutoConfiguration {
     @ConditionalOnMissingBean
     public AgentScopeAgentCardFactory seahorseAgentScopeAgentCardFactory() {
         return new AgentScopeAgentCardFactory();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public AgentScopeObservationSupport seahorseAgentScopeObservationSupport(
+            ObjectProvider<ObservationPort> observationPortProvider) {
+        return new AgentScopeObservationSupport(observationPortProvider.getIfAvailable(ObservationPort::noop));
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = PROP_CONFIG_CENTER_ENABLED, havingValue = "true")
+    @ConditionalOnMissingBean(name = "seahorseAgentScopeRunMetadataContributor")
+    public AgentRunMetadataContributor seahorseAgentScopeRunMetadataContributor(AgentScopeProperties properties) {
+        return new AgentScopeRunMetadataContributor(properties);
     }
 
     @Bean
@@ -176,11 +193,13 @@ public class AgentScopeReActAutoConfiguration {
     @ConditionalOnMissingBean(ReActExecutorPort.class)
     public AgentScopeReActExecutor seahorseAgentScopeReActExecutor(
             AgentScopeAgentClient client,
-            ObjectProvider<ApprovalRequestQueryPort> approvalRequestQueryPort) {
+            ObjectProvider<ApprovalRequestQueryPort> approvalRequestQueryPort,
+            AgentScopeObservationSupport observationSupport) {
         return new AgentScopeReActExecutor(
                 client,
                 java.util.concurrent.ForkJoinPool.commonPool(),
-                approvalRequestQueryPort.getIfAvailable(ApprovalRequestQueryPort::empty));
+                approvalRequestQueryPort.getIfAvailable(ApprovalRequestQueryPort::empty),
+                observationSupport);
     }
 
     @Bean
@@ -211,8 +230,16 @@ public class AgentScopeReActAutoConfiguration {
     @Bean
     @ConditionalOnProperty(name = PROP_A2A_ENABLED, havingValue = "true")
     @ConditionalOnMissingBean
-    public AgentScopeRemoteAgentInvoker seahorseAgentScopeRemoteAgentInvoker(AgentScopeProperties properties) {
-        return new A2aAgentRemoteInvoker(properties.getExecutor().getTimeout());
+    public AgentScopeRemoteAgentInvoker seahorseAgentScopeRemoteAgentInvoker(
+            AgentScopeProperties properties,
+            AgentScopeObservationSupport observationSupport) {
+        AgentScopeProperties.A2a a2a = properties.getA2a();
+        return new A2aAgentRemoteInvoker(
+                properties.getExecutor().getTimeout(),
+                a2a.getAuthMode(),
+                a2a.getAuthHeaderName(),
+                a2a.getSharedSecret(),
+                observationSupport);
     }
 
     @Bean
@@ -221,8 +248,9 @@ public class AgentScopeReActAutoConfiguration {
     @ConditionalOnMissingBean(A2AAgentConnectorPort.class)
     public AgentScopeA2AAgentConnector seahorseAgentScopeA2AAgentConnector(
             AgentCardResolver resolver,
-            AgentScopeRemoteAgentInvoker invoker) {
-        return new AgentScopeA2AAgentConnector(resolver, invoker);
+            AgentScopeRemoteAgentInvoker invoker,
+            AgentScopeProperties properties) {
+        return new AgentScopeA2AAgentConnector(resolver, invoker, A2aDiscoveryPolicy.fromProperties(properties));
     }
 
     @Bean
@@ -271,8 +299,15 @@ public class AgentScopeReActAutoConfiguration {
     @ConditionalOnBean(AgentScopeA2aServer.class)
     @ConditionalOnProperty(name = PROP_A2A_ENABLED, havingValue = "true")
     @ConditionalOnMissingBean
-    public AgentScopeA2aServerController seahorseAgentScopeA2aServerController(AgentScopeA2aServer server) {
-        return new AgentScopeA2aServerController(server);
+    public AgentScopeA2aServerController seahorseAgentScopeA2aServerController(
+            AgentScopeA2aServer server,
+            AgentScopeProperties properties,
+            AgentScopeObservationSupport observationSupport) {
+        return new AgentScopeA2aServerController(
+                server,
+                properties,
+                new A2aRequestAuthenticator(properties),
+                observationSupport);
     }
 
     @Bean
@@ -283,8 +318,16 @@ public class AgentScopeReActAutoConfiguration {
             NacosA2aRegistry registry,
             NacosPropertiesFactory nacosPropertiesFactory,
             AgentScopeAgentCardFactory cardFactory,
-            AgentScopeProperties properties) {
-        return new AgentScopeAgentCardRegistrar(registry, nacosPropertiesFactory, cardFactory, properties);
+            AgentScopeProperties properties,
+            ObjectProvider<AgentCardResolver> resolverProvider,
+            ObjectProvider<AiService> aiServiceProvider) {
+        return new AgentScopeAgentCardRegistrar(
+                registry,
+                nacosPropertiesFactory,
+                cardFactory,
+                properties,
+                resolverProvider.getIfAvailable(),
+                aiServiceProvider.getIfAvailable());
     }
 
     @Bean
@@ -302,6 +345,22 @@ public class AgentScopeReActAutoConfiguration {
             NacosPromptListener promptListener,
             AgentScopeProperties properties) {
         return new AgentScopePromptConfigCenter(promptListener, properties);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = {
+            PROP_CONFIG_CENTER_ENABLED,
+            PROP_CONFIG_CENTER_STRICT_STARTUP
+    }, havingValue = "true")
+    @ConditionalOnMissingBean
+    public AgentScopeConfigCenterStartupValidator seahorseAgentScopeConfigCenterStartupValidator(
+            AgentScopeProperties properties,
+            ObjectProvider<AgentScopePromptConfigCenter> promptConfigCenterProvider,
+            ObjectProvider<AgentSkillRepository> skillRepositoryProvider) {
+        return new AgentScopeConfigCenterStartupValidator(
+                properties,
+                promptConfigCenterProvider.getIfAvailable(),
+                skillRepositoryProvider.getIfAvailable());
     }
 
     @Bean

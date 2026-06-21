@@ -18,7 +18,9 @@
 package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 
 import com.alibaba.nacos.api.ai.AiService;
+import com.alibaba.nacos.api.ai.model.a2a.AgentEndpoint;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
+import com.miracle.ai.seahorse.agent.kernel.application.chat.AgentRunMetadataContributor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
@@ -40,13 +42,19 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class AgentScopeReActAutoConfigurationTests {
 
@@ -60,6 +68,16 @@ class AgentScopeReActAutoConfigurationTests {
             assertThat(context).doesNotHaveBean(ReActExecutorPort.class);
             assertThat(context).doesNotHaveBean(A2AAgentConnectorPort.class);
         });
+    }
+
+    @Test
+    void componentScanDoesNotCreateA2aControllerWithoutA2aServer() {
+        contextRunner
+                .withUserConfiguration(AgentScopeComponentScanConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).doesNotHaveBean(AgentScopeA2aServerController.class);
+                });
     }
 
     @Test
@@ -146,14 +164,86 @@ class AgentScopeReActAutoConfigurationTests {
                 .withPropertyValues(
                         "seahorse.agentscope.config-center.enabled=true",
                         "seahorse.agentscope.config-center.prompt-key=agent.system.prompt",
+                        "seahorse.agentscope.config-center.prompt-version=stable",
+                        "seahorse.agentscope.config-center.prompt-label=default",
                         "seahorse.agentscope.config-center.skill-namespace=agent-skills",
                         "seahorse.agentscope.config-center.skill-version=v1",
                         "seahorse.agentscope.config-center.skill-label=stable")
                 .run(context -> {
                     assertThat(context).hasSingleBean(AgentScopePromptConfigCenter.class);
                     assertThat(context).hasSingleBean(AgentSkillRepository.class);
+                    assertThat(context).hasSingleBean(AgentRunMetadataContributor.class);
                     assertThat(context.getBean(AgentSkillRepository.class)).isInstanceOf(NacosSkillRepository.class);
+                    assertThat(mapValue(context.getBean(AgentRunMetadataContributor.class).metadata(null), "prompt"))
+                            .containsEntry("source", "nacos")
+                            .containsEntry("key", "agent.system.prompt")
+                            .containsEntry("version", "stable")
+                            .containsEntry("label", "default")
+                            .containsEntry("revision", "stable");
                 });
+    }
+
+    @Test
+    void a2aRegistrarUsesAiServiceForEndpointDeregisterOnDestroy() throws Exception {
+        contextRunner
+                .withUserConfiguration(NacosConfiguration.class)
+                .withPropertyValues(
+                        "seahorse.agentscope.a2a.enabled=true",
+                        "seahorse.agentscope.a2a.register-enabled=true",
+                        "seahorse.agentscope.a2a.tenant-id=tenant-a",
+                        "seahorse.agentscope.a2a.agent-name=planner",
+                        "seahorse.agentscope.a2a.version=1.0.0",
+                        "seahorse.agentscope.a2a.url=https://runtime.example:9443/a2a?slot=blue",
+                        "seahorse.agentscope.a2a.transport=jsonrpc",
+                        "seahorse.agentscope.a2a.host=runtime.example",
+                        "seahorse.agentscope.a2a.port=9443",
+                        "seahorse.agentscope.a2a.path=/a2a",
+                        "seahorse.agentscope.a2a.protocol=https",
+                        "seahorse.agentscope.a2a.query=slot=blue",
+                        "seahorse.agentscope.a2a.support-tls=true")
+                .run(context -> {
+                    assertThat(context).hasSingleBean(AgentScopeAgentCardRegistrar.class);
+                    AgentScopeAgentCardRegistrar registrar = context.getBean(AgentScopeAgentCardRegistrar.class);
+                    AiService aiService = context.getBean(AiService.class);
+
+                    registrar.run(null);
+                    registrar.destroy();
+
+                    verify(aiService).releaseAgentCard(any(), eq("SERVICE"), eq(false));
+                    verify(aiService).registerAgentEndpoint(eq("tenant-a/planner"), any(AgentEndpoint.class));
+                    verify(aiService).deregisterAgentEndpoint(eq("tenant-a/planner"), argThat(endpoint ->
+                            endpoint != null
+                                    && "JSONRPC".equals(endpoint.getTransport())
+                                    && "runtime.example".equals(endpoint.getAddress())
+                                    && endpoint.getPort() == 9443
+                                    && "/a2a".equals(endpoint.getPath())
+                                    && endpoint.isSupportTls()
+                                    && "1.0.0".equals(endpoint.getVersion())
+                                    && "https".equals(endpoint.getProtocol())
+                                    && "slot=blue".equals(endpoint.getQuery())));
+                });
+    }
+
+    @Test
+    void strictConfigCenterFailsStartupWhenConfiguredSkillNamespaceIsEmpty() {
+        contextRunner
+                .withUserConfiguration(StrictConfigCenterConfiguration.class)
+                .withPropertyValues(
+                        "seahorse.agentscope.config-center.enabled=true",
+                        "seahorse.agentscope.config-center.strict-startup=true",
+                        "seahorse.agentscope.config-center.prompt-key=agent.system.prompt",
+                        "seahorse.agentscope.config-center.skill-namespace=agent-skills")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasStackTraceContaining("strict startup")
+                            .hasStackTraceContaining("skill namespace agent-skills is empty or missing");
+                });
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ComponentScan(basePackageClasses = AgentScopeA2aServerController.class)
+    static class AgentScopeComponentScanConfiguration {
     }
 
     @Configuration(proxyBeanMethods = false)
@@ -219,5 +309,29 @@ class AgentScopeReActAutoConfigurationTests {
         AiService aiService() {
             return mock(AiService.class);
         }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class StrictConfigCenterConfiguration {
+        @Bean
+        AgentScopePromptConfigCenter agentScopePromptConfigCenter() throws Exception {
+            AgentScopePromptConfigCenter promptConfigCenter = mock(AgentScopePromptConfigCenter.class);
+            when(promptConfigCenter.getPrompt(eq("agent.system.prompt"), eq(Map.of()), eq(null)))
+                    .thenReturn("system prompt");
+            return promptConfigCenter;
+        }
+
+        @Bean
+        AgentSkillRepository agentSkillRepository() {
+            AgentSkillRepository repository = mock(AgentSkillRepository.class);
+            when(repository.getAllSkillNames()).thenReturn(List.of());
+            return repository;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> mapValue(Map<String, Object> metadata, String key) {
+        assertThat(metadata.get(key)).isInstanceOf(Map.class);
+        return (Map<String, Object>) metadata.get(key);
     }
 }

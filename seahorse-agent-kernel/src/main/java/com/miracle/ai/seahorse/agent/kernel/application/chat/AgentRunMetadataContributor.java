@@ -15,28 +15,17 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.chat;
+package com.miracle.ai.seahorse.agent.kernel.application.chat;
+
+import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
+
+import java.util.Map;
 
 /**
- * Seahorse 内核流式输出回调。
+ * Allows an execution backend to add immutable run-start metadata without coupling kernel to that backend.
  */
-public interface StreamCallback {
+@FunctionalInterface
+public interface AgentRunMetadataContributor {
 
-    void onContent(String content);
-
-    default void onThinking(String content) {
-    }
-
-    default void onRunStarted(String runId) {
-    }
-
-    default void onEvent(String eventName, Object payload) {
-    }
-
-    default void onUsage(ChatTokenUsage usage) {
-    }
-
-    void onComplete();
-
-    void onError(Throwable error);
+    Map<String, Object> metadata(StreamChatCommand command);
 }

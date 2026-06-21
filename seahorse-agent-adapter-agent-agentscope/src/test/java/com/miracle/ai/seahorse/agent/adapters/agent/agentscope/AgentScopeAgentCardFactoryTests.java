@@ -19,6 +19,10 @@ package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -90,5 +94,43 @@ class AgentScopeAgentCardFactoryTests {
                 .filter(skill -> A2ATenantMetadata.TENANT_SKILL_ID.equals(skill.id()))
                 .flatMap(skill -> skill.tags().stream())
                 .anyMatch("seahorse:m3:clusterName=m3-cluster"::equals));
+    }
+
+    @Test
+    void agentCardCarriesA2aGovernanceMetadata() {
+        AgentScopeProperties properties = new AgentScopeProperties();
+        properties.getA2a().setUrl("http://127.0.0.1:8080/a2a");
+        properties.getA2a().setAuthMode(A2aAuthMode.TENANT_SIGNED);
+
+        var card = factory.agentCard(properties);
+
+        assertTrue(card.skills().stream()
+                .filter(skill -> "seahorse.agent".equals(skill.id()))
+                .flatMap(skill -> skill.tags().stream())
+                .anyMatch("seahorse:a2a:authMode=tenant-signed"::equals));
+        assertTrue(card.skills().stream()
+                .filter(skill -> "seahorse.agent".equals(skill.id()))
+                .flatMap(skill -> skill.tags().stream())
+                .anyMatch("seahorse:a2a:healthUrl=http://127.0.0.1:8080/actuator/health"::equals));
+    }
+
+    @Test
+    void agentCardCarriesRegistrationTtlMetadataWhenConfigured() {
+        AgentScopeProperties properties = new AgentScopeProperties();
+        properties.getA2a().setUrl("http://127.0.0.1:8080/a2a");
+        properties.getA2a().setRegistrationTtl(Duration.ofMinutes(5));
+        AgentScopeAgentCardFactory ttlFactory = new AgentScopeAgentCardFactory(
+                Clock.fixed(Instant.parse("2026-06-21T00:00:00Z"), ZoneOffset.UTC));
+
+        var card = ttlFactory.agentCard(properties);
+
+        assertTrue(card.skills().stream()
+                .filter(skill -> "seahorse.agent".equals(skill.id()))
+                .flatMap(skill -> skill.tags().stream())
+                .anyMatch("seahorse:a2a:registeredAt=2026-06-21T00:00:00Z"::equals));
+        assertTrue(card.skills().stream()
+                .filter(skill -> "seahorse.agent".equals(skill.id()))
+                .flatMap(skill -> skill.tags().stream())
+                .anyMatch("seahorse:a2a:expiresAt=2026-06-21T00:05:00Z"::equals));
     }
 }

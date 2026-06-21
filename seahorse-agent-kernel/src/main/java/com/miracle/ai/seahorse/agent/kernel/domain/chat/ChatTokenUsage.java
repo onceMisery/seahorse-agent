@@ -18,25 +18,20 @@
 package com.miracle.ai.seahorse.agent.kernel.domain.chat;
 
 /**
- * Seahorse 内核流式输出回调。
+ * Token usage reported by a chat model turn.
  */
-public interface StreamCallback {
+public record ChatTokenUsage(long inputTokens, long outputTokens) {
 
-    void onContent(String content);
-
-    default void onThinking(String content) {
+    public ChatTokenUsage {
+        if (inputTokens < 0) {
+            throw new IllegalArgumentException("inputTokens must not be negative");
+        }
+        if (outputTokens < 0) {
+            throw new IllegalArgumentException("outputTokens must not be negative");
+        }
     }
 
-    default void onRunStarted(String runId) {
+    public long totalTokens() {
+        return inputTokens + outputTokens;
     }
-
-    default void onEvent(String eventName, Object payload) {
-    }
-
-    default void onUsage(ChatTokenUsage usage) {
-    }
-
-    void onComplete();
-
-    void onError(Throwable error);
 }

@@ -26,20 +26,27 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatTokenUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentEventType;
 import io.agentscope.core.event.AgentResultEvent;
+import io.agentscope.core.event.ModelCallEndEvent;
 import io.agentscope.core.event.RequestStopEvent;
 import io.agentscope.core.event.RequireUserConfirmEvent;
 import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.ToolUseBlock;
+import io.agentscope.core.model.ChatUsage;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 
@@ -94,6 +101,36 @@ class AgentScopeReActExecutorTests {
     }
 
     @Test
+    void streamExecuteRecordsAgentscopeExecuteObservationWithRunDimensions() {
+        CapturingClient client = new CapturingClient();
+        client.events = Flux.just(event("answer", true));
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        AgentScopeReActExecutor executor = new AgentScopeReActExecutor(
+                client,
+                Runnable::run,
+                ApprovalRequestQueryPort.empty(),
+                new AgentScopeObservationSupport(observationPort));
+        RecordingCallback callback = new RecordingCallback();
+        AgentLoopRequest request = AgentLoopRequest.builder()
+                .question("plan")
+                .samplingOptions(ChatSamplingOptions.builder().build())
+                .tenantId("tenant-a")
+                .runId("run-1")
+                .agentId("agent-1")
+                .build();
+
+        executor.streamExecute(request, callback);
+
+        assertEquals(1, observationPort.commands.size());
+        assertEquals("agentscope.execute", observationPort.commands.get(0).name());
+        assertEquals("tenant-a", observationPort.commands.get(0).tenantId());
+        assertEquals("agentscope", observationPort.commands.get(0).attributes().get("engine"));
+        assertEquals("run-1", observationPort.commands.get(0).attributes().get("runId"));
+        assertEquals("agent-1", observationPort.commands.get(0).attributes().get("agentName"));
+        assertEquals(1, observationPort.closed);
+    }
+
+    @Test
     void streamExecuteMapsAgentscopeRuntimeEventsToStepProgress() {
         CapturingClient client = new CapturingClient();
         client.events = Flux.just(new GenericAgentEvent(AgentEventType.MODEL_CALL_START));
@@ -108,6 +145,47 @@ class AgentScopeReActExecutorTests {
         executor.streamExecute(request, callback);
 
         assertEquals(List.of(StreamEventType.STEP_PROGRESS.value()), callback.eventNames);
+        assertEquals(1, callback.completed);
+        assertEquals(0, callback.errors);
+    }
+
+    @Test
+    void streamExecuteClassifiesAgentscopeRuntimeErrorsAsRecoverableEvents() {
+        CapturingClient client = new CapturingClient();
+        client.events = Flux.error(new IllegalStateException("model gateway unavailable"));
+        AgentScopeReActExecutor executor = new AgentScopeReActExecutor(client, Runnable::run);
+        RecordingCallback callback = new RecordingCallback();
+        AgentLoopRequest request = AgentLoopRequest.builder()
+                .question("plan")
+                .samplingOptions(ChatSamplingOptions.builder().build())
+                .runId("run-1")
+                .build();
+
+        executor.streamExecute(request, callback);
+
+        assertEquals(List.of(StreamEventType.RECOVERABLE_ERROR.value()), callback.eventNames);
+        assertEquals("IllegalStateException", ((Map<?, ?>) callback.eventPayloads.get(0)).get("errorType"));
+        assertEquals("model gateway unavailable", ((Map<?, ?>) callback.eventPayloads.get(0)).get("message"));
+        assertEquals(1, callback.errors);
+    }
+
+    @Test
+    void streamExecuteForwardsAgentscopeModelUsage() {
+        CapturingClient client = new CapturingClient();
+        client.events = Flux.just(new ModelCallEndEvent("reply-1", ChatUsage.builder()
+                .inputTokens(13)
+                .outputTokens(8)
+                .build()));
+        AgentScopeReActExecutor executor = new AgentScopeReActExecutor(client, Runnable::run);
+        RecordingCallback callback = new RecordingCallback();
+        AgentLoopRequest request = AgentLoopRequest.builder()
+                .question("plan")
+                .samplingOptions(ChatSamplingOptions.builder().build())
+                .build();
+
+        executor.streamExecute(request, callback);
+
+        assertEquals(List.of(new ChatTokenUsage(13, 8)), callback.usages);
         assertEquals(1, callback.completed);
         assertEquals(0, callback.errors);
     }
@@ -248,6 +326,8 @@ class AgentScopeReActExecutorTests {
     private static final class RecordingCallback implements StreamCallback {
         private final List<String> contents = new ArrayList<>();
         private final List<String> eventNames = new ArrayList<>();
+        private final List<Object> eventPayloads = new ArrayList<>();
+        private final List<ChatTokenUsage> usages = new ArrayList<>();
         private int completed;
         private int errors;
 
@@ -264,11 +344,41 @@ class AgentScopeReActExecutorTests {
         @Override
         public void onEvent(String eventName, Object payload) {
             eventNames.add(eventName);
+            eventPayloads.add(payload);
+        }
+
+        @Override
+        public void onUsage(ChatTokenUsage usage) {
+            usages.add(usage);
         }
 
         @Override
         public void onError(Throwable error) {
             errors++;
+        }
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+        private final List<ObservationCommand> commands = new ArrayList<>();
+        private int closed;
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            commands.add(command);
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                }
+
+                @Override
+                public void close() {
+                    closed++;
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
         }
     }
 
