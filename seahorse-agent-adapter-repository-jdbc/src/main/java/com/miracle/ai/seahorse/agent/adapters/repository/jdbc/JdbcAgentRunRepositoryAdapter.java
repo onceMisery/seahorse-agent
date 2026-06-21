@@ -29,6 +29,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -43,15 +45,16 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
     private static final String RUN_COLUMNS = """
             run_id, agent_id, version_id, rollout_id, tenant_id, user_id, conversation_id, trigger_type, input_summary,
             status, trace_id, token_input, token_output, cost_total, error_code, error_message, started_at,
-            finished_at
+            finished_at, metadata_json
             """;
-    private static final String SQL_INSERT_RUN = """
+    private static final String SQL_INSERT_RUN_TEMPLATE = """
             INSERT INTO sa_agent_run
             (run_id, agent_id, version_id, rollout_id, tenant_id, user_id, conversation_id, trigger_type, input_summary,
-             status, trace_id, token_input, token_output, cost_total, error_code, error_message, started_at, finished_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             status, trace_id, token_input, token_output, cost_total, error_code, error_message, started_at, finished_at,
+             metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, %s)
             """;
-    private static final String SQL_UPDATE_RUN = """
+    private static final String SQL_UPDATE_RUN_TEMPLATE = """
             UPDATE sa_agent_run
             SET agent_id = ?,
                 version_id = ?,
@@ -69,7 +72,8 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
                 error_code = ?,
                 error_message = ?,
                 started_at = ?,
-                finished_at = ?
+                finished_at = ?,
+                metadata_json = %s
             WHERE run_id = ?
             """;
     private static final String SQL_FIND_RUN = """
@@ -92,15 +96,21 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
             """;
 
     private final JdbcTemplate jdbcTemplate;
+    private final String sqlInsertRun;
+    private final String sqlUpdateRun;
 
     public JdbcAgentRunRepositoryAdapter(DataSource dataSource) {
-        this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
+        DataSource safeDataSource = Objects.requireNonNull(dataSource, "dataSource must not be null");
+        this.jdbcTemplate = new JdbcTemplate(safeDataSource);
+        String metadataJsonPlaceholder = isPostgres(safeDataSource) ? "?::jsonb" : "?";
+        this.sqlInsertRun = SQL_INSERT_RUN_TEMPLATE.formatted(metadataJsonPlaceholder);
+        this.sqlUpdateRun = SQL_UPDATE_RUN_TEMPLATE.formatted(metadataJsonPlaceholder);
     }
 
     @Override
     public void createRun(AgentRun run) {
         AgentRun safeRun = Objects.requireNonNull(run, "run must not be null");
-        jdbcTemplate.update(SQL_INSERT_RUN,
+        jdbcTemplate.update(sqlInsertRun,
                 safeRun.runId(),
                 safeRun.agentId(),
                 safeRun.versionId(),
@@ -118,13 +128,14 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
                 safeRun.errorCode(),
                 safeRun.errorMessage(),
                 toTimestamp(safeRun.startedAt()),
-                toTimestamp(safeRun.finishedAt()));
+                toTimestamp(safeRun.finishedAt()),
+                safeRun.metadataJson());
     }
 
     @Override
     public void updateRun(AgentRun run) {
         AgentRun safeRun = Objects.requireNonNull(run, "run must not be null");
-        jdbcTemplate.update(SQL_UPDATE_RUN,
+        jdbcTemplate.update(sqlUpdateRun,
                 safeRun.agentId(),
                 safeRun.versionId(),
                 safeRun.rolloutId(),
@@ -142,6 +153,7 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
                 safeRun.errorMessage(),
                 toTimestamp(safeRun.startedAt()),
                 toTimestamp(safeRun.finishedAt()),
+                safeRun.metadataJson(),
                 safeRun.runId());
     }
 
@@ -223,7 +235,8 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
                 resultSet.getString("error_code"),
                 resultSet.getString("error_message"),
                 toInstant(resultSet.getTimestamp("started_at")),
-                toInstant(resultSet.getTimestamp("finished_at")));
+                toInstant(resultSet.getTimestamp("finished_at")),
+                resultSet.getString("metadata_json"));
     }
 
     private AgentStep mapStep(ResultSet resultSet, int rowNum) throws SQLException {
@@ -251,6 +264,16 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private boolean isPostgres(DataSource dataSource) {
+        try (Connection connection = dataSource.getConnection()) {
+            DatabaseMetaData metaData = connection.getMetaData();
+            String productName = metaData == null ? "" : metaData.getDatabaseProductName();
+            return productName != null && productName.toLowerCase().contains("postgresql");
+        } catch (SQLException ex) {
+            return false;
+        }
     }
 
     private long count(QueryParts parts) {
