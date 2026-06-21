@@ -35,6 +35,9 @@ public class RoleCardRecord {
     private String avatarRef;
     private Integer higherPerm;
     private Integer enabled;
+    private String shareScope;
+    private String approvalStatus;
+    private Integer published;
     private Instant createTime;
     private Instant updateTime;
     private Integer deleted;

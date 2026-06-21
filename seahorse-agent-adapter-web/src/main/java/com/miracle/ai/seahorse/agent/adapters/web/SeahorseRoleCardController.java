@@ -69,7 +69,10 @@ public class SeahorseRoleCardController {
                 safeRequest.getName(),
                 safeRequest.getDefinition(),
                 safeRequest.getAvatarRef(),
-                safeRequest.isHigherPermEnabled()));
+                safeRequest.isHigherPermEnabled(),
+                safeRequest.getShareScope(),
+                safeRequest.getApprovalStatus(),
+                safeRequest.isPublishedEnabled()));
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, id);
     }
 
@@ -87,7 +90,10 @@ public class SeahorseRoleCardController {
                 safeRequest.getName(),
                 safeRequest.getDefinition(),
                 safeRequest.getAvatarRef(),
-                safeRequest.isHigherPermEnabled()));
+                safeRequest.isHigherPermEnabled(),
+                safeRequest.getShareScope(),
+                safeRequest.getApprovalStatus(),
+                safeRequest.isPublishedEnabled()));
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, id);
     }
 

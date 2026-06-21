@@ -7,10 +7,17 @@ CREATE TABLE IF NOT EXISTS sa_role_card (
     avatar_ref  VARCHAR(512),
     higher_perm SMALLINT     NOT NULL DEFAULT 0,
     enabled     SMALLINT     NOT NULL DEFAULT 0,
+    share_scope VARCHAR(32)  NOT NULL DEFAULT 'PRIVATE',
+    approval_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    published   SMALLINT     NOT NULL DEFAULT 0,
     create_time TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
     deleted     SMALLINT     NOT NULL DEFAULT 0
 );
+
+ALTER TABLE sa_role_card ADD COLUMN IF NOT EXISTS share_scope VARCHAR(32) NOT NULL DEFAULT 'PRIVATE';
+ALTER TABLE sa_role_card ADD COLUMN IF NOT EXISTS approval_status VARCHAR(32) NOT NULL DEFAULT 'PENDING';
+ALTER TABLE sa_role_card ADD COLUMN IF NOT EXISTS published SMALLINT NOT NULL DEFAULT 0;
 
 COMMENT ON TABLE sa_role_card IS '角色卡表，保存用户可复用的运行时角色定义、头像引用、高权限标记和默认启用状态';
 COMMENT ON COLUMN sa_role_card.id IS '主键 ID，雪花 ID';

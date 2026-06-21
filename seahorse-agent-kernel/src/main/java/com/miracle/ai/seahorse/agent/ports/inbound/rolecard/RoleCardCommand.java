@@ -22,5 +22,17 @@ public record RoleCardCommand(Long id,
                               String name,
                               String definition,
                               String avatarRef,
-                              boolean higherPerm) {
+                              boolean higherPerm,
+                              String shareScope,
+                              String approvalStatus,
+                              boolean published) {
+
+    public RoleCardCommand(Long id,
+                           String userId,
+                           String name,
+                           String definition,
+                           String avatarRef,
+                           boolean higherPerm) {
+        this(id, userId, name, definition, avatarRef, higherPerm, null, null, false);
+    }
 }

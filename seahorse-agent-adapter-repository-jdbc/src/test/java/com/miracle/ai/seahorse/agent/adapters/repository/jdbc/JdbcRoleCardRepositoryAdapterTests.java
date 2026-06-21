@@ -49,6 +49,9 @@ class JdbcRoleCardRepositoryAdapterTests {
         first.setDefinition("Ask short questions.");
         first.setAvatarRef("coach.png");
         first.setHigherPerm(1);
+        first.setShareScope("TEAM");
+        first.setApprovalStatus("APPROVED");
+        first.setPublished(1);
         Long firstId = adapter.save(first);
 
         RoleCardRecord second = new RoleCardRecord();
@@ -63,6 +66,9 @@ class JdbcRoleCardRepositoryAdapterTests {
         update.setDefinition("Ask concise questions.");
         update.setAvatarRef("senior.png");
         update.setHigherPerm(0);
+        update.setShareScope("PRIVATE");
+        update.setApprovalStatus("PENDING");
+        update.setPublished(0);
         adapter.save(update);
 
         List<RoleCardRecord> cards = adapter.listByUser("default");
@@ -75,6 +81,9 @@ class JdbcRoleCardRepositoryAdapterTests {
                     assertThat(card.getAvatarRef()).isEqualTo("senior.png");
                     assertThat(card.getHigherPerm()).isZero();
                     assertThat(card.getEnabled()).isZero();
+                    assertThat(card.getShareScope()).isEqualTo("PRIVATE");
+                    assertThat(card.getApprovalStatus()).isEqualTo("PENDING");
+                    assertThat(card.getPublished()).isZero();
                 });
         assertThat(adapter.findById("other", firstId)).isEmpty();
     }
@@ -117,6 +126,9 @@ class JdbcRoleCardRepositoryAdapterTests {
                     avatar_ref VARCHAR(512),
                     higher_perm SMALLINT NOT NULL DEFAULT 0,
                     enabled SMALLINT NOT NULL DEFAULT 0,
+                    share_scope VARCHAR(32) NOT NULL DEFAULT 'PRIVATE',
+                    approval_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+                    published SMALLINT NOT NULL DEFAULT 0,
                     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     deleted SMALLINT NOT NULL DEFAULT 0

@@ -49,6 +49,36 @@ class KernelRoleCardServiceTests {
         assertEquals(1L, id);
         assertEquals(List.of("Ask short questions."), guardrail.checkedDefinitions);
         assertEquals(1, repository.records.get(id).getHigherPerm());
+        assertEquals("PRIVATE", repository.records.get(id).getShareScope());
+        assertEquals("PENDING", repository.records.get(id).getApprovalStatus());
+        assertEquals(0, repository.records.get(id).getPublished());
+    }
+
+    @Test
+    void shouldRejectHighPermissionRoleCardWhenSharedOrPublishedWithoutApproval() {
+        InMemoryRoleCardRepository repository = new InMemoryRoleCardRepository();
+        KernelRoleCardService service = new KernelRoleCardService(repository, RoleCardGuardrailPort.noop());
+
+        assertThrows(IllegalStateException.class, () -> service.save(new RoleCardCommand(
+                null, "7", "Team Root", "Use high privilege tools.", null,
+                true, "TEAM", "PENDING", false)));
+        assertThrows(IllegalStateException.class, () -> service.save(new RoleCardCommand(
+                null, "7", "Published Root", "Use high privilege tools.", null,
+                true, "PRIVATE", "PENDING", true)));
+    }
+
+    @Test
+    void shouldAllowApprovedHighPermissionRoleCardToBeSharedAndPublished() {
+        InMemoryRoleCardRepository repository = new InMemoryRoleCardRepository();
+        KernelRoleCardService service = new KernelRoleCardService(repository, RoleCardGuardrailPort.noop());
+
+        Long id = service.save(new RoleCardCommand(
+                null, "7", "Approved Root", "Use approved high privilege tools.", null,
+                true, "TEAM", "APPROVED", true));
+
+        assertEquals("TEAM", repository.records.get(id).getShareScope());
+        assertEquals("APPROVED", repository.records.get(id).getApprovalStatus());
+        assertEquals(1, repository.records.get(id).getPublished());
     }
 
     @Test

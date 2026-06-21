@@ -9,6 +9,9 @@ export interface RoleCardVO {
   avatarRef?: string | null;
   higherPerm?: boolean | number | null;
   enabled?: boolean | number | null;
+  shareScope?: "PRIVATE" | "TEAM" | "ORG" | string | null;
+  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED" | string | null;
+  published?: boolean | number | null;
   createTime?: string | null;
   updateTime?: string | null;
 }
@@ -18,6 +21,9 @@ export interface RoleCardRequest {
   definition: string;
   higherPerm?: boolean;
   avatarRef?: string | null;
+  shareScope?: "PRIVATE" | "TEAM" | "ORG" | string | null;
+  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED" | string | null;
+  published?: boolean;
 }
 
 export async function listRoleCards(): Promise<RoleCardVO[]> {

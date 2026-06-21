@@ -37,14 +37,15 @@ public class JdbcRoleCardRepositoryAdapter implements RoleCardRepositoryPort {
 
     private static final String COLUMNS = """
             id, tenant_id, user_id, name, definition, avatar_ref, higher_perm, enabled,
+            share_scope, approval_status, published,
             create_time, update_time, deleted
             """;
 
     private static final String SQL_INSERT = """
             INSERT INTO sa_role_card
             (id, tenant_id, user_id, name, definition, avatar_ref, higher_perm, enabled,
-             create_time, update_time, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+             share_scope, approval_status, published, create_time, update_time, deleted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
             """;
 
     private static final String SQL_UPDATE = """
@@ -54,6 +55,9 @@ public class JdbcRoleCardRepositoryAdapter implements RoleCardRepositoryPort {
                 avatar_ref = ?,
                 higher_perm = ?,
                 enabled = ?,
+                share_scope = ?,
+                approval_status = ?,
+                published = ?,
                 update_time = ?,
                 deleted = 0
             WHERE id = ? AND user_id = ? AND tenant_id = ?
@@ -145,6 +149,9 @@ public class JdbcRoleCardRepositoryAdapter implements RoleCardRepositoryPort {
         String definition = requireText(safeRecord.getDefinition(), "definition");
         Integer higherPerm = flag(safeRecord.getHigherPerm());
         Integer enabled = flag(safeRecord.getEnabled());
+        String shareScope = enumText(safeRecord.getShareScope(), "PRIVATE");
+        String approvalStatus = enumText(safeRecord.getApprovalStatus(), "PENDING");
+        Integer published = flag(safeRecord.getPublished());
         Timestamp now = Timestamp.from(Instant.now());
 
         if (exists(id, userId, tenantId)) {
@@ -154,6 +161,9 @@ public class JdbcRoleCardRepositoryAdapter implements RoleCardRepositoryPort {
                     blankToNull(safeRecord.getAvatarRef()),
                     higherPerm,
                     enabled,
+                    shareScope,
+                    approvalStatus,
+                    published,
                     now,
                     id,
                     userId,
@@ -168,6 +178,9 @@ public class JdbcRoleCardRepositoryAdapter implements RoleCardRepositoryPort {
                     blankToNull(safeRecord.getAvatarRef()),
                     higherPerm,
                     enabled,
+                    shareScope,
+                    approvalStatus,
+                    published,
                     now,
                     now);
         }
@@ -175,6 +188,9 @@ public class JdbcRoleCardRepositoryAdapter implements RoleCardRepositoryPort {
         safeRecord.setTenantId(tenantId);
         safeRecord.setHigherPerm(higherPerm);
         safeRecord.setEnabled(enabled);
+        safeRecord.setShareScope(shareScope);
+        safeRecord.setApprovalStatus(approvalStatus);
+        safeRecord.setPublished(published);
         safeRecord.setDeleted(0);
         return id;
     }
@@ -216,6 +232,9 @@ public class JdbcRoleCardRepositoryAdapter implements RoleCardRepositoryPort {
         record.setAvatarRef(resultSet.getString("avatar_ref"));
         record.setHigherPerm(resultSet.getInt("higher_perm"));
         record.setEnabled(resultSet.getInt("enabled"));
+        record.setShareScope(resultSet.getString("share_scope"));
+        record.setApprovalStatus(resultSet.getString("approval_status"));
+        record.setPublished(resultSet.getInt("published"));
         record.setCreateTime(toInstant(resultSet.getTimestamp("create_time")));
         record.setUpdateTime(toInstant(resultSet.getTimestamp("update_time")));
         record.setDeleted(resultSet.getInt("deleted"));
@@ -236,6 +255,10 @@ public class JdbcRoleCardRepositoryAdapter implements RoleCardRepositoryPort {
 
     private String blankToNull(String value) {
         return hasText(value) ? value.trim() : null;
+    }
+
+    private String enumText(String value, String defaultValue) {
+        return hasText(value) ? value.trim().toUpperCase() : defaultValue;
     }
 
     private String requireText(String value, String name) {

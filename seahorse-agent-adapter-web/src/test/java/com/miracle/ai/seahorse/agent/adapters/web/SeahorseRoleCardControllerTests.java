@@ -70,7 +70,10 @@ class SeahorseRoleCardControllerTests {
                                   "name": "Coach",
                                   "definition": "Ask short questions.",
                                   "avatarRef": "coach.png",
-                                  "higherPerm": true
+                                  "higherPerm": true,
+                                  "shareScope": "TEAM",
+                                  "approvalStatus": "APPROVED",
+                                  "published": true
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -85,6 +88,9 @@ class SeahorseRoleCardControllerTests {
         assertThat(captor.getValue().definition()).isEqualTo("Ask short questions.");
         assertThat(captor.getValue().avatarRef()).isEqualTo("coach.png");
         assertThat(captor.getValue().higherPerm()).isTrue();
+        assertThat(captor.getValue().shareScope()).isEqualTo("TEAM");
+        assertThat(captor.getValue().approvalStatus()).isEqualTo("APPROVED");
+        assertThat(captor.getValue().published()).isTrue();
     }
 
     @Test

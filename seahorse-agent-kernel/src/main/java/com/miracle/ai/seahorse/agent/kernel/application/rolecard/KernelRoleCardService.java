@@ -37,6 +37,10 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class KernelRoleCardService implements RoleCardInboundPort {
 
+    private static final String SHARE_SCOPE_PRIVATE = "PRIVATE";
+    private static final String APPROVAL_STATUS_PENDING = "PENDING";
+    private static final String APPROVAL_STATUS_APPROVED = "APPROVED";
+
     @NonNull
     private final RoleCardRepositoryPort repositoryPort;
     @NonNull
@@ -53,8 +57,12 @@ public class KernelRoleCardService implements RoleCardInboundPort {
         String userId = requireText(safeCommand.userId(), "userId must not be blank");
         String name = requireText(safeCommand.name(), "name must not be blank");
         String definition = requireText(safeCommand.definition(), "definition must not be blank");
+        String shareScope = normalizeEnumValue(safeCommand.shareScope(), SHARE_SCOPE_PRIVATE);
+        String approvalStatus = normalizeEnumValue(safeCommand.approvalStatus(), APPROVAL_STATUS_PENDING);
+        boolean published = safeCommand.published();
         if (safeCommand.higherPerm()) {
             guardrailPort.assertSafe(definition);
+            requireApprovedBeforeSharingOrPublishing(shareScope, approvalStatus, published);
         }
 
         RoleCardRecord record = safeCommand.id() == null
@@ -67,6 +75,9 @@ public class KernelRoleCardService implements RoleCardInboundPort {
         record.setDefinition(definition);
         record.setAvatarRef(safeCommand.avatarRef());
         record.setHigherPerm(safeCommand.higherPerm() ? 1 : 0);
+        record.setShareScope(shareScope);
+        record.setApprovalStatus(approvalStatus);
+        record.setPublished(published ? 1 : 0);
         if (record.getEnabled() == null) {
             record.setEnabled(0);
         }
@@ -119,5 +130,22 @@ public class KernelRoleCardService implements RoleCardInboundPort {
             throw new IllegalArgumentException(message);
         }
         return value;
+    }
+
+    private static String normalizeEnumValue(String value, String defaultValue) {
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        return value.trim().toUpperCase();
+    }
+
+    private static void requireApprovedBeforeSharingOrPublishing(
+            String shareScope,
+            String approvalStatus,
+            boolean published) {
+        boolean shared = !SHARE_SCOPE_PRIVATE.equals(shareScope);
+        if ((shared || published) && !APPROVAL_STATUS_APPROVED.equals(approvalStatus)) {
+            throw new IllegalStateException("High permission role cards require approval before sharing or publishing");
+        }
     }
 }

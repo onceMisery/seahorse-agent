@@ -29,8 +29,15 @@ public class RoleCardRequest {
     private String definition;
     private String avatarRef;
     private Boolean higherPerm;
+    private String shareScope;
+    private String approvalStatus;
+    private Boolean published;
 
     boolean isHigherPermEnabled() {
         return Boolean.TRUE.equals(higherPerm);
+    }
+
+    boolean isPublishedEnabled() {
+        return Boolean.TRUE.equals(published);
     }
 }

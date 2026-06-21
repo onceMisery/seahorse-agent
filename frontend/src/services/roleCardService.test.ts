@@ -44,7 +44,10 @@ describe("roleCardService", () => {
       name: "Analyst v2",
       definition: "Be precise.",
       higherPerm: true,
-      avatarRef: "avatar://1"
+      avatarRef: "avatar://1",
+      shareScope: "TEAM",
+      approvalStatus: "APPROVED",
+      published: true
     });
     await activateRoleCard(12);
     await deleteRoleCard(12);
@@ -58,7 +61,10 @@ describe("roleCardService", () => {
       name: "Analyst v2",
       definition: "Be precise.",
       higherPerm: true,
-      avatarRef: "avatar://1"
+      avatarRef: "avatar://1",
+      shareScope: "TEAM",
+      approvalStatus: "APPROVED",
+      published: true
     });
     expect(api.put).toHaveBeenCalledWith("/api/role-cards/12/activate");
     expect(api.delete).toHaveBeenCalledWith("/api/role-cards/12");

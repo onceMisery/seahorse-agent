@@ -64,6 +64,7 @@ import { SandboxPage } from "@/pages/admin/sandbox/SandboxPage";
 import { AgentRunListPage } from "@/pages/admin/agent-runs/AgentRunListPage";
 import { RunProfilePage } from "@/pages/admin/run-profiles/RunProfilePage";
 import { RunExperimentPage } from "@/pages/admin/run-profiles/RunExperimentPage";
+import { RoleCardPage } from "@/pages/admin/role-cards/RoleCardPage";
 import { BillingPage } from "@/pages/admin/billing/BillingPage";
 import { MarketplacePage } from "@/pages/MarketplacePage";
 import { TenantListPage } from "@/pages/admin/tenants/TenantListPage";
@@ -168,6 +169,7 @@ const advancedAdminRoutes = [
   { path: "approvals", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "审批中心", <ApprovalCenterPage />) },
   { path: "agent-runs", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "Agent 运行管理", <AgentRunListPage />) },
   { path: "run-profiles", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "运行画像", <RunProfilePage />) },
+  { path: "role-cards", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "角色卡", <RoleCardPage />) },
   { path: "run-experiments", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "对话实验", <RunExperimentPage />) },
   { path: "rag-evaluation", element: withFeature(ADVANCED_ADMIN_FEATURES.RAG_EVALUATION, "RAG 评测", <RagEvaluationPage />) },
   { path: "rag-evaluation/:kbId/:datasetId", element: withFeature(ADVANCED_ADMIN_FEATURES.RAG_EVALUATION, "RAG 评测", <RetrievalDatasetDetailPage />) },
