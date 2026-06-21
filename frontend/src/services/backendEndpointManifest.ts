@@ -437,6 +437,14 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/mcp/servers"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mcp/servers/{}"
+  },
+  {
+    "method": "GET",
     "path": "/api/notifications"
   },
   {

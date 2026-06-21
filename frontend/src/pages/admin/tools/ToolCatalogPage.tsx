@@ -13,6 +13,7 @@ import type { PageResult } from "@/services/metadataGovernanceService";
 import { getAdvancedFeatureState, ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
 import { listTools, enableTool, disableTool, type ToolItem } from "@/services/toolCatalogService";
+import { listMcpServers, type McpServerStatus } from "@/services/mcpServerService";
 import { ToolRiskBadge } from "./components/ToolRiskBadge";
 import { getErrorMessage } from "@/utils/error";
 
@@ -21,6 +22,20 @@ const DEFERRED_TOOL_SEARCH_ID = "tool_search";
 
 function isDeferredDiscoveryTool(tool: ToolItem) {
   return tool.toolId === DEFERRED_TOOL_SEARCH_ID;
+}
+
+function mcpStatusVariant(status?: string): "default" | "destructive" | "secondary" | "outline" {
+  if (status === "READY") return "default";
+  if (status === "FAILED") return "destructive";
+  if (status === "DISABLED") return "secondary";
+  return "outline";
+}
+
+function mcpStatusLabel(status?: string) {
+  if (status === "READY") return "就绪";
+  if (status === "FAILED") return "失败";
+  if (status === "DISABLED") return "已禁用";
+  return status || "-";
 }
 
 export function ToolCatalogPage() {
@@ -36,6 +51,8 @@ export function ToolCatalogPage() {
   const [riskFilter, setRiskFilter] = useState("all");
   const [enabledFilter, setEnabledFilter] = useState("all");
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [mcpServers, setMcpServers] = useState<McpServerStatus[]>([]);
+  const [mcpLoading, setMcpLoading] = useState(true);
 
   const tools = pageData?.records || [];
 
@@ -59,10 +76,27 @@ export function ToolCatalogPage() {
     }
   };
 
+  const loadMcpServers = async () => {
+    try {
+      setMcpLoading(true);
+      setMcpServers(await listMcpServers());
+    } catch (error) {
+      toast.error(getErrorMessage(error, "加载 MCP Server 状态失败"));
+      console.error(error);
+    } finally {
+      setMcpLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!featureState.enabled) return;
     loadTools();
   }, [pageNo, keyword, providerFilter, riskFilter, enabledFilter]);
+
+  useEffect(() => {
+    if (!featureState.enabled) return;
+    loadMcpServers();
+  }, []);
 
   const handleSearch = () => {
     setPageNo(1);
@@ -72,6 +106,7 @@ export function ToolCatalogPage() {
   const handleRefresh = () => {
     setPageNo(1);
     loadTools(1, keyword);
+    loadMcpServers();
   };
 
   const handleToggle = async (toolId: string, currentEnabled: boolean) => {
@@ -146,6 +181,55 @@ export function ToolCatalogPage() {
           </Button>
         </div>
       </div>
+
+      <Card>
+        <CardContent className="pt-6">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">MCP 服务</h2>
+              <p className="text-xs text-muted-foreground">发现状态与诊断输出</p>
+            </div>
+            <Badge variant="secondary">{mcpServers.length} 个服务</Badge>
+          </div>
+          {mcpLoading ? (
+            <div className="text-sm text-muted-foreground">正在加载 MCP 服务...</div>
+          ) : mcpServers.length === 0 ? (
+            <div className="text-sm text-muted-foreground">暂无 MCP 服务</div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {mcpServers.map((server) => (
+                <div key={server.name} className="rounded-md border border-border p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <div className="font-medium text-slate-900">{server.name}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span>{server.transport || "-"}</span>
+                        <span>{server.toolCount ?? server.tools?.length ?? 0} 个工具</span>
+                        <span>{server.enabled ? "已启用" : "已禁用"}</span>
+                      </div>
+                    </div>
+                    <Badge variant={mcpStatusVariant(server.status)}>{mcpStatusLabel(server.status)}</Badge>
+                  </div>
+                  {server.tools && server.tools.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      {server.tools.map((tool, index) => (
+                        <Badge key={`${tool.toolId ?? "tool"}-${index}`} variant="outline">
+                          {tool.toolId}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                  {server.stderrTail ? (
+                    <pre className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-2 text-xs text-muted-foreground">
+                      {server.stderrTail}
+                    </pre>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="pt-6">
