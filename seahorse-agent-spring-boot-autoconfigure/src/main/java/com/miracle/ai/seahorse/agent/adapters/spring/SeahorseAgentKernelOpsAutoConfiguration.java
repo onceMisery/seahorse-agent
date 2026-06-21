@@ -17,14 +17,23 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.kernel.application.conversation.KernelConversationBranchService;
 import com.miracle.ai.seahorse.agent.kernel.application.conversation.KernelConversationAttachmentService;
 import com.miracle.ai.seahorse.agent.kernel.application.conversation.KernelConversationManagementService;
+import com.miracle.ai.seahorse.agent.kernel.application.conversation.MessageTreeAssembler;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.dashboard.KernelDashboardService;
 import com.miracle.ai.seahorse.agent.kernel.application.feedback.KernelFeedbackEvaluationCandidateQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.feedback.KernelMessageFeedbackService;
 import com.miracle.ai.seahorse.agent.kernel.application.intent.KernelIntentTreeService;
 import com.miracle.ai.seahorse.agent.kernel.application.mapping.KernelQueryTermMappingService;
+import com.miracle.ai.seahorse.agent.kernel.application.rolecard.KernelRoleCardService;
+import com.miracle.ai.seahorse.agent.kernel.application.runcontext.KernelRunContextSnapshotService;
+import com.miracle.ai.seahorse.agent.kernel.application.runexperiment.KernelRunExperimentService;
+import com.miracle.ai.seahorse.agent.kernel.application.runexperiment.KernelRunExperimentTrialExecutor;
+import com.miracle.ai.seahorse.agent.kernel.application.runprofile.KernelRunProfileService;
 import com.miracle.ai.seahorse.agent.kernel.application.sample.KernelSampleQuestionService;
+import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationBranchInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationAttachmentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.dashboard.DashboardInboundPort;
@@ -32,8 +41,13 @@ import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCa
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.MessageFeedbackInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.intent.IntentTreeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.mapping.QueryTermMappingInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.rolecard.RoleCardInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.runcontext.RunContextSnapshotInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationBranchRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationAttachmentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.dashboard.DashboardRepositoryPort;
@@ -42,6 +56,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationC
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentTreeRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.rolecard.RoleCardGuardrailPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.rolecard.RoleCardRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentTrialExecutorPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import java.time.Duration;
@@ -87,6 +107,77 @@ public class SeahorseAgentKernelOpsAutoConfiguration {
     public KernelConversationManagementService seahorseConversationManagementInboundPort(
             ConversationRepositoryPort conversationRepositoryPort) {
         return new KernelConversationManagementService(conversationRepositoryPort);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MessageTreeAssembler.class)
+    public MessageTreeAssembler seahorseMessageTreeAssembler() {
+        return new MessageTreeAssembler();
+    }
+
+    @Bean
+    @ConditionalOnBean({ConversationBranchRepositoryPort.class, MessageTreeAssembler.class})
+    @ConditionalOnMissingBean(ConversationBranchInboundPort.class)
+    public KernelConversationBranchService seahorseConversationBranchInboundPort(
+            ConversationBranchRepositoryPort conversationBranchRepositoryPort,
+            MessageTreeAssembler messageTreeAssembler) {
+        return new KernelConversationBranchService(conversationBranchRepositoryPort, messageTreeAssembler);
+    }
+
+    @Bean
+    @ConditionalOnBean(RoleCardRepositoryPort.class)
+    @ConditionalOnMissingBean(RoleCardInboundPort.class)
+    public KernelRoleCardService seahorseRoleCardInboundPort(
+            RoleCardRepositoryPort roleCardRepositoryPort,
+            ObjectProvider<RoleCardGuardrailPort> guardrailPort) {
+        return new KernelRoleCardService(
+                roleCardRepositoryPort,
+                guardrailPort.getIfAvailable(RoleCardGuardrailPort::noop));
+    }
+
+    @Bean
+    @ConditionalOnBean(RunContextSnapshotRepositoryPort.class)
+    @ConditionalOnMissingBean(RunContextSnapshotInboundPort.class)
+    public KernelRunContextSnapshotService seahorseRunContextSnapshotInboundPort(
+            RunContextSnapshotRepositoryPort repositoryPort) {
+        return new KernelRunContextSnapshotService(repositoryPort);
+    }
+
+    @Bean
+    @ConditionalOnBean(RunProfileRepositoryPort.class)
+    @ConditionalOnMissingBean(RunProfileInboundPort.class)
+    public KernelRunProfileService seahorseRunProfileInboundPort(RunProfileRepositoryPort repositoryPort) {
+        return new KernelRunProfileService(repositoryPort);
+    }
+
+    @Bean
+    @ConditionalOnBean(RunExperimentRepositoryPort.class)
+    @ConditionalOnMissingBean(RunExperimentInboundPort.class)
+    public KernelRunExperimentService seahorseRunExperimentInboundPort(
+            RunExperimentRepositoryPort repositoryPort,
+            ObjectProvider<RunExperimentTrialExecutorPort> trialExecutorPortProvider) {
+        return new KernelRunExperimentService(
+                repositoryPort,
+                trialExecutorPortProvider.getIfAvailable(RunExperimentTrialExecutorPort::noop));
+    }
+
+    @Bean
+    @ConditionalOnBean({
+            ReActExecutorPort.class,
+            ConversationBranchRepositoryPort.class,
+            RunProfileRepositoryPort.class
+    })
+    @ConditionalOnMissingBean(RunExperimentTrialExecutorPort.class)
+    public KernelRunExperimentTrialExecutor seahorseRunExperimentTrialExecutor(
+            ReActExecutorPort executorPort,
+            ConversationBranchRepositoryPort conversationBranchRepositoryPort,
+            RunProfileRepositoryPort runProfileRepositoryPort,
+            ObjectProvider<RunContextSnapshotRepositoryPort> runContextSnapshotRepositoryPort) {
+        return new KernelRunExperimentTrialExecutor(
+                executorPort,
+                conversationBranchRepositoryPort,
+                runProfileRepositoryPort,
+                runContextSnapshotRepositoryPort.getIfAvailable(RunContextSnapshotRepositoryPort::noop));
     }
 
     @Bean

@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatTokenUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationResult;
@@ -89,6 +90,70 @@ class OpenAiCompatibleModelAdapterTests {
                 .build(), new NoopStreamCallback());
 
         assertThat(capturedBody.get()).doesNotContain("\"thinking\"");
+    }
+
+    @Test
+    void shouldRequestTokenUsageForStreamingChat() {
+        AtomicReference<String> capturedBody = new AtomicReference<>();
+        OkHttpClient httpClient = new OkHttpClient.Builder()
+                .addInterceptor(chain -> {
+                    Buffer buffer = new Buffer();
+                    chain.request().body().writeTo(buffer);
+                    capturedBody.set(buffer.readUtf8());
+                    return new Response.Builder()
+                            .request(chain.request())
+                            .protocol(Protocol.HTTP_1_1)
+                            .code(200)
+                            .message("OK")
+                            .body(ResponseBody.create("data: [DONE]\n\n", null))
+                            .build();
+                })
+                .build();
+        OpenAiCompatibleModelAdapter adapter = new OpenAiCompatibleModelAdapter(
+                httpClient,
+                new ObjectMapper(),
+                new OpenAiCompatibleModelProperties("http://127.0.0.1:65535/v1", "", "gpt-test", "", "", List.of()),
+                Runnable::run);
+
+        adapter.streamChat(ChatRequest.builder()
+                .messages(List.of(ChatMessage.user("hello")))
+                .build(), new NoopStreamCallback());
+
+        assertThat(capturedBody.get()).contains("\"stream_options\":{\"include_usage\":true}");
+    }
+
+    @Test
+    void shouldEmitTokenUsageFromStreamingChatUsageChunk() {
+        OkHttpClient httpClient = new OkHttpClient.Builder()
+                .addInterceptor(chain -> new Response.Builder()
+                        .request(chain.request())
+                        .protocol(Protocol.HTTP_1_1)
+                        .code(200)
+                        .message("OK")
+                        .body(ResponseBody.create("""
+                                data: {"choices":[{"delta":{"content":"hello"}}]}
+
+                                data: {"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":5,"total_tokens":17}}
+
+                                data: [DONE]
+
+                                """, null))
+                        .build())
+                .build();
+        OpenAiCompatibleModelAdapter adapter = new OpenAiCompatibleModelAdapter(
+                httpClient,
+                new ObjectMapper(),
+                new OpenAiCompatibleModelProperties("http://127.0.0.1:65535/v1", "", "gpt-test", "", "", List.of()),
+                Runnable::run);
+        UsageRecordingCallback callback = new UsageRecordingCallback();
+
+        adapter.streamChat(ChatRequest.builder()
+                .messages(List.of(ChatMessage.user("hello")))
+                .build(), callback);
+
+        assertThat(callback.contents).containsExactly("hello");
+        assertThat(callback.usage.get()).isEqualTo(new ChatTokenUsage(12, 5));
+        assertThat(callback.completeCount).isEqualTo(1);
     }
 
     @Test
@@ -243,6 +308,32 @@ class OpenAiCompatibleModelAdapterTests {
 
         @Override
         public void onError(Throwable error) {
+        }
+    }
+
+    private static final class UsageRecordingCallback implements StreamCallback {
+        private final List<String> contents = new ArrayList<>();
+        private final AtomicReference<ChatTokenUsage> usage = new AtomicReference<>();
+        private int completeCount;
+
+        @Override
+        public void onContent(String content) {
+            contents.add(content);
+        }
+
+        @Override
+        public void onUsage(ChatTokenUsage usage) {
+            this.usage.set(usage);
+        }
+
+        @Override
+        public void onComplete() {
+            completeCount++;
+        }
+
+        @Override
+        public void onError(Throwable error) {
+            throw new AssertionError(error);
         }
     }
 }

@@ -34,7 +34,7 @@ import java.util.Optional;
  * <p>注册表聚合本地和远程 {@link McpToolFeature}，对内核暴露稳定端口。重复 toolId 按后注册覆盖，
  * 与旧注册表语义一致，便于配置级替换远程工具。
  */
-public class NativeMcpToolRegistry implements McpToolRegistryPort {
+public class NativeMcpToolRegistry implements McpToolRegistryPort, AutoCloseable {
 
     private final Map<String, McpToolFeature> executorMap;
     private final Map<String, McpToolDescriptor> descriptorMap;
@@ -72,5 +72,14 @@ public class NativeMcpToolRegistry implements McpToolRegistryPort {
         }
         executorMap.put(descriptor.toolId(), feature);
         descriptorMap.put(descriptor.toolId(), descriptor);
+    }
+
+    @Override
+    public void close() throws Exception {
+        for (McpToolFeature feature : executorMap.values()) {
+            if (feature instanceof AutoCloseable closeable) {
+                closeable.close();
+            }
+        }
     }
 }

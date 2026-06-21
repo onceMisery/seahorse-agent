@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.adapters.web.ProductMode;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAgentDefinitionService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.artifact.KernelAgentArtifactQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.artifact.KernelAgentArtifactUpdateService;
@@ -140,11 +141,13 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryP
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditRedactionPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditWriteFailurePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxNetworkPolicy;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -184,13 +187,15 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             AgentRunRepositoryPort agentRunRepositoryPort,
             CurrentUserPort currentUserPort,
             ObjectProvider<Clock> clockProvider,
-            ObjectProvider<com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService> quotaEnforcementProvider) {
+            ObjectProvider<com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService> quotaEnforcementProvider,
+            ObjectProvider<RunContextSnapshotRepositoryPort> runContextSnapshotRepositoryProvider) {
         return new KernelAgentRunService(
                 agentDefinitionRepositoryPort,
                 agentRunRepositoryPort,
                 currentUserPort,
                 clockProvider.getIfAvailable(Clock::systemUTC),
-                quotaEnforcementProvider.getIfAvailable());
+                quotaEnforcementProvider.getIfAvailable(),
+                runContextSnapshotRepositoryProvider.getIfAvailable(RunContextSnapshotRepositoryPort::noop));
     }
 
     @Bean
@@ -321,8 +326,11 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(ToolProviderExposurePolicyPort.class)
-    public ToolProviderExposurePolicyPort seahorseToolProviderExposurePolicyPort() {
-        return ToolProviderExposurePolicyPort.demoDefaults();
+    public ToolProviderExposurePolicyPort seahorseToolProviderExposurePolicyPort(
+            @Value("${seahorse-agent.product-mode:demo}") String productMode) {
+        return ProductMode.fromProperty(productMode) == ProductMode.DEMO
+                ? ToolProviderExposurePolicyPort.demoDefaults()
+                : ToolProviderExposurePolicyPort.allEnabled();
     }
 
     @Bean

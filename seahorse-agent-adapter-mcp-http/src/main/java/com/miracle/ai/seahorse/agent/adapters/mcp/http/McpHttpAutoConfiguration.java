@@ -42,6 +42,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -105,7 +106,8 @@ public class McpHttpAutoConfiguration {
                                                         ObjectProvider<CredentialProviderPort> credentialProvider) {
         List<McpToolFeature> features = new ArrayList<>();
         for (McpHttpAdapterProperties.Server server : properties.getServers()) {
-            features.addAll(discoverServerFeatures(httpClient, objectMapper, server, credentialProvider));
+            features.addAll(discoverServerFeatures(
+                    httpClient, objectMapper, server, credentialProvider, properties.getCallTimeout()));
         }
         return features;
     }
@@ -113,8 +115,22 @@ public class McpHttpAutoConfiguration {
     private List<McpToolFeature> discoverServerFeatures(OkHttpClient httpClient,
                                                         ObjectMapper objectMapper,
                                                         McpHttpAdapterProperties.Server server,
-                                                        ObjectProvider<CredentialProviderPort> credentialProvider) {
-        if (!server.isEnabled() || server.getUrl().isBlank()) {
+                                                        ObjectProvider<CredentialProviderPort> credentialProvider,
+                                                        Duration callTimeout) {
+        if (!server.isEnabled()) {
+            return List.of();
+        }
+        return switch (server.getTransport()) {
+            case STDIO -> discoverStdioServerFeatures(objectMapper, server, callTimeout);
+            case STREAMABLE_HTTP -> discoverHttpServerFeatures(httpClient, objectMapper, server, credentialProvider);
+        };
+    }
+
+    private List<McpToolFeature> discoverHttpServerFeatures(OkHttpClient httpClient,
+                                                            ObjectMapper objectMapper,
+                                                            McpHttpAdapterProperties.Server server,
+                                                            ObjectProvider<CredentialProviderPort> credentialProvider) {
+        if (server.getUrl().isBlank()) {
             return List.of();
         }
         Optional<CredentialMaterial> credentialMaterial = resolveCredentialMaterial(server, credentialProvider);
@@ -135,6 +151,43 @@ public class McpHttpAutoConfiguration {
                     .toList();
         } catch (Exception ex) {
             LOG.warn("MCP Server 工具发现失败, server={}, reason={}", server.getName(), ex.getMessage());
+            return List.of();
+        }
+    }
+
+    private List<McpToolFeature> discoverStdioServerFeatures(ObjectMapper objectMapper,
+                                                             McpHttpAdapterProperties.Server server,
+                                                             Duration callTimeout) {
+        if (server.getCommand().isBlank()) {
+            LOG.warn("MCP stdio Server skipped, server={}, reason=command missing", server.getName());
+            return List.of();
+        }
+        StdioMcpClient client = new StdioMcpClient(
+                objectMapper,
+                server.getName(),
+                server.getCommand(),
+                server.getArgs(),
+                server.getEnv(),
+                server.getWorkingDir(),
+                callTimeout);
+        try {
+            if (!client.initialize()) {
+                client.close();
+                return List.of();
+            }
+            List<McpToolDescriptor> tools = client.listTools();
+            if (tools.isEmpty()) {
+                client.close();
+                return List.of();
+            }
+            LOG.info("MCP stdio Server 宸ュ叿鍙戠幇瀹屾垚, server={}, toolCount={}", server.getName(), tools.size());
+            return tools.stream()
+                    .map(descriptor -> new RemoteMcpToolFeature(descriptor, client))
+                    .map(McpToolFeature.class::cast)
+                    .toList();
+        } catch (Exception ex) {
+            client.close();
+            LOG.warn("MCP stdio Server 宸ュ叿鍙戠幇澶辫触, server={}, reason={}", server.getName(), ex.getMessage());
             return List.of();
         }
     }

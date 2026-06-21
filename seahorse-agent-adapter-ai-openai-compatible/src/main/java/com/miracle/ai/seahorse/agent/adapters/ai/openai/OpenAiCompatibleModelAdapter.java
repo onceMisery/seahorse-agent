@@ -24,6 +24,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatTokenUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
@@ -282,6 +283,9 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
         payload.put("model", resolveChatModel(modelId));
         payload.put("messages", messages(safeRequest.getMessages()));
         payload.put("stream", stream);
+        if (stream) {
+            payload.put("stream_options", Map.of("include_usage", true));
+        }
         putIfPresent(payload, "temperature", safeRequest.getTemperature());
         putIfPresent(payload, "top_p", safeRequest.getTopP());
         putIfPresent(payload, "top_k", safeRequest.getTopK());
@@ -492,7 +496,9 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
 
     private void consumeStreamDelta(String data, StreamCallback callback) {
         try {
-            JsonNode delta = objectMapper.readTree(data).at("/choices/0/delta");
+            JsonNode chunk = objectMapper.readTree(data);
+            emitUsage(chunk, callback);
+            JsonNode delta = chunk.at("/choices/0/delta");
             String content = delta.path("content").asText("");
             if (!content.isBlank()) {
                 callback.onContent(content);
@@ -508,7 +514,9 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
 
     private boolean consumeStreamDeltaWithTools(String data, StreamCallback callback, ToolCallAggregation aggregation) {
         try {
-            JsonNode delta = objectMapper.readTree(data).at("/choices/0/delta");
+            JsonNode chunk = objectMapper.readTree(data);
+            emitUsage(chunk, callback);
+            JsonNode delta = chunk.at("/choices/0/delta");
             String content = delta.path("content").asText("");
             if (!content.isBlank()) {
                 callback.onContent(content);
@@ -528,6 +536,19 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
             callback.onError(ex);
             return true;
         }
+    }
+
+    private void emitUsage(JsonNode chunk, StreamCallback callback) {
+        JsonNode usage = chunk.path("usage");
+        if (!usage.isObject()) {
+            return;
+        }
+        long inputTokens = usage.path("prompt_tokens").asLong(-1L);
+        long outputTokens = usage.path("completion_tokens").asLong(-1L);
+        if (inputTokens < 0L || outputTokens < 0L) {
+            return;
+        }
+        callback.onUsage(new ChatTokenUsage(inputTokens, outputTokens));
     }
 
     private List<Float> embeddingValues(JsonNode embedding) {

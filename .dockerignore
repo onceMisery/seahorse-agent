@@ -1,4 +1,6 @@
 .git
+.m2
+.worktrees
 .gitignore
 .idea
 .vscode

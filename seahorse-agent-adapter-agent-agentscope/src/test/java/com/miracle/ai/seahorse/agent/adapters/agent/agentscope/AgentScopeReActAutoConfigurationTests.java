@@ -105,6 +105,19 @@ class AgentScopeReActAutoConfigurationTests {
     }
 
     @Test
+    void agentscopeExecutorCanBeRegisteredWithoutBecomingDefaultEngine() {
+        contextRunner
+                .withUserConfiguration(StreamingModelConfiguration.class)
+                .withPropertyValues("seahorse.agentscope.executor.enabled=true")
+                .run(context -> {
+                    assertThat(context).hasSingleBean(AgentScopeModelFactory.class);
+                    assertThat(context).hasSingleBean(AgentScopeAgentClient.class);
+                    assertThat(context).hasSingleBean(ReActExecutorPort.class);
+                    assertThat(context.getBean(ReActExecutorPort.class).engineId()).isEqualTo("agentscope");
+                });
+    }
+
+    @Test
     void agentscopeEngineCreatesReActExecutorFromClientBean() {
         contextRunner
                 .withUserConfiguration(ClientConfiguration.class)
