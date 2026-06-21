@@ -5,11 +5,18 @@ import { RunProfilePage } from "@/pages/admin/run-profiles/RunProfilePage";
 
 const serviceMocks = vi.hoisted(() => ({
   activateRunProfile: vi.fn(),
+  approveRunProfile: vi.fn(),
+  checkRunProfileProductionGate: vi.fn(),
   createRunProfile: vi.fn(),
   deleteRunProfile: vi.fn(),
   getRunProfile: vi.fn(),
+  getRunProfileAuditSummary: vi.fn(),
+  getRunProfileRiskSummary: vi.fn(),
+  listRunProfileExecutorEngines: vi.fn(),
   listRunProfiles: vi.fn(),
   resolveRunProfilePreview: vi.fn(),
+  rejectRunProfile: vi.fn(),
+  submitRunProfileApproval: vi.fn(),
   updateRunProfile: vi.fn()
 }));
 
@@ -19,11 +26,18 @@ const toolMocks = vi.hoisted(() => ({
 
 vi.mock("@/services/runProfileService", () => ({
   activateRunProfile: serviceMocks.activateRunProfile,
+  approveRunProfile: serviceMocks.approveRunProfile,
+  checkRunProfileProductionGate: serviceMocks.checkRunProfileProductionGate,
   createRunProfile: serviceMocks.createRunProfile,
   deleteRunProfile: serviceMocks.deleteRunProfile,
   getRunProfile: serviceMocks.getRunProfile,
+  getRunProfileAuditSummary: serviceMocks.getRunProfileAuditSummary,
+  getRunProfileRiskSummary: serviceMocks.getRunProfileRiskSummary,
+  listRunProfileExecutorEngines: serviceMocks.listRunProfileExecutorEngines,
   listRunProfiles: serviceMocks.listRunProfiles,
   resolveRunProfilePreview: serviceMocks.resolveRunProfilePreview,
+  rejectRunProfile: serviceMocks.rejectRunProfile,
+  submitRunProfileApproval: serviceMocks.submitRunProfileApproval,
   updateRunProfile: serviceMocks.updateRunProfile
 }));
 
@@ -63,6 +77,20 @@ describe("RunProfilePage", () => {
     serviceMocks.activateRunProfile.mockResolvedValue(undefined);
     serviceMocks.createRunProfile.mockResolvedValue(99);
     serviceMocks.deleteRunProfile.mockResolvedValue(undefined);
+    serviceMocks.submitRunProfileApproval.mockResolvedValue(undefined);
+    serviceMocks.approveRunProfile.mockResolvedValue(undefined);
+    serviceMocks.rejectRunProfile.mockResolvedValue(undefined);
+    serviceMocks.getRunProfileAuditSummary.mockResolvedValue({
+      runProfileId: 77,
+      approvalStatus: "APPROVED",
+      riskLevel: "HIGH",
+      runCount: 3,
+      failureCount: 1,
+      estimatedCost: 0.42,
+      enabledToolCount: 2,
+      highRiskToolCount: 1,
+      highRiskToolIds: ["filesystem.read_file"]
+    });
     serviceMocks.getRunProfile.mockResolvedValue({
       profile: {
         id: 77,
@@ -77,6 +105,42 @@ describe("RunProfilePage", () => {
       },
       toolBindings: [
         { toolId: "filesystem.read_file", provider: "MCP", enabled: true }
+      ]
+    });
+    serviceMocks.listRunProfileExecutorEngines.mockResolvedValue(["kernel", "agentscope"]);
+    serviceMocks.getRunProfileRiskSummary.mockResolvedValue({
+      runProfileId: 77,
+      riskLevel: "HIGH",
+      riskCodes: ["EXECUTOR_AGENTSCOPE", "TOOL_MCP"],
+      riskItems: [
+        {
+          code: "EXECUTOR_AGENTSCOPE",
+          level: "MEDIUM",
+          message: "AgentScope execution engine is enabled"
+        },
+        {
+          code: "TOOL_MCP",
+          level: "HIGH",
+          message: "MCP tool is enabled: filesystem.read_file"
+        }
+      ]
+    });
+    serviceMocks.checkRunProfileProductionGate.mockResolvedValue({
+      runProfileId: 77,
+      passed: false,
+      riskLevel: "HIGH",
+      blockingCodes: ["APPROVAL_NOT_ENFORCED"],
+      checkItems: [
+        {
+          code: "APPROVAL_NOT_ENFORCED",
+          status: "BLOCK",
+          message: "High-risk tool approval must be enabled before production"
+        },
+        {
+          code: "AGENTSCOPE_NACOS_NAMESPACE_MISSING",
+          status: "BLOCK",
+          message: "AgentScope Nacos namespace is required before production"
+        }
       ]
     });
     serviceMocks.resolveRunProfilePreview.mockResolvedValue({
@@ -179,6 +243,19 @@ describe("RunProfilePage", () => {
     });
   });
 
+  it("only renders executor engines returned by backend capabilities", async () => {
+    serviceMocks.listRunProfileExecutorEngines.mockResolvedValue(["kernel"]);
+    render(<RunProfilePage />);
+
+    await screen.findByText("Research AgentScope");
+    fireEvent.click(screen.getByRole("button", { name: "新建画像" }));
+    await screen.findByLabelText("Clock");
+
+    const selector = screen.getByLabelText("执行引擎");
+    expect(selector).toHaveTextContent("kernel");
+    expect(selector).not.toHaveTextContent("agentscope");
+  });
+
   it("loads existing tool bindings before updating an existing run profile", async () => {
     render(<RunProfilePage />);
 
@@ -215,9 +292,45 @@ describe("RunProfilePage", () => {
 
     expect(await screen.findByText("生效上下文预览")).toBeInTheDocument();
     expect(serviceMocks.resolveRunProfilePreview).toHaveBeenCalledWith(77);
+    expect(serviceMocks.getRunProfileRiskSummary).toHaveBeenCalledWith(77);
+    expect(screen.getAllByText("HIGH").length).toBeGreaterThan(0);
+    expect(screen.getByText("AgentScope execution engine is enabled")).toBeInTheDocument();
+    expect(screen.getByText("MCP tool is enabled: filesystem.read_file")).toBeInTheDocument();
     expect(screen.getByText("filesystem.read_file")).toBeInTheDocument();
     expect(screen.getByText("seahorse-researcher")).toBeInTheDocument();
     expect(screen.getByText("显式工具白名单")).toBeInTheDocument();
+  });
+
+  it("checks the production gate for a run profile", async () => {
+    render(<RunProfilePage />);
+
+    await screen.findByText("Research AgentScope");
+    fireEvent.click(screen.getAllByRole("button", { name: "发布门禁" })[0]);
+
+    expect(await screen.findByText("生产门禁")).toBeInTheDocument();
+    expect(serviceMocks.checkRunProfileProductionGate).toHaveBeenCalledWith(77);
+    expect(screen.getByText("APPROVAL_NOT_ENFORCED")).toBeInTheDocument();
+    expect(screen.getByText("High-risk tool approval must be enabled before production")).toBeInTheDocument();
+    expect(screen.getByText("AGENTSCOPE_NACOS_NAMESPACE_MISSING")).toBeInTheDocument();
+  });
+
+  it("runs governance approval actions and loads audit summary", async () => {
+    render(<RunProfilePage />);
+
+    await screen.findByText("Research AgentScope");
+    fireEvent.click(screen.getByRole("button", { name: "submit-approval-77" }));
+    fireEvent.click(screen.getByRole("button", { name: "approve-run-profile-77" }));
+    fireEvent.click(screen.getByRole("button", { name: "reject-run-profile-77" }));
+    fireEvent.click(screen.getByRole("button", { name: "audit-summary-77" }));
+
+    await waitFor(() => {
+      expect(serviceMocks.submitRunProfileApproval).toHaveBeenCalledWith(77, "submit from Run Profile governance panel");
+      expect(serviceMocks.approveRunProfile).toHaveBeenCalledWith(77, "approved from Run Profile governance panel");
+      expect(serviceMocks.rejectRunProfile).toHaveBeenCalledWith(77, "rejected from Run Profile governance panel");
+      expect(serviceMocks.getRunProfileAuditSummary).toHaveBeenCalledWith(77);
+    });
+    expect(await screen.findByText("filesystem.read_file")).toBeInTheDocument();
+    expect(screen.getByText("APPROVED")).toBeInTheDocument();
   });
 
   it("deletes a run profile after confirmation and refreshes the list", async () => {

@@ -38,6 +38,15 @@ public interface RunProfileRepositoryPort {
 
     void delete(String userId, Long id);
 
+    default void updateApprovalStatus(
+            String userId,
+            Long id,
+            String approvalStatus,
+            String approvalOperator,
+            String approvalComment) {
+        throw new UnsupportedOperationException("run profile approval status is not supported");
+    }
+
     default void applyToConversation(String userId, String conversationId, Long profileId) {
         throw new UnsupportedOperationException("conversation run profile binding is not supported");
     }

@@ -19,8 +19,11 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileAuditSummary;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileProductionGateCheck;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileResolvedPreview;
+import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileRiskSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileDetails;
 import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileToolBindingRecord;
@@ -99,6 +102,30 @@ class SeahorseRunProfileControllerTests {
         assertThat(command.getExecutorConfigJson()).contains("studioTraceEnabled");
         assertThat(command.getToolBindings()).hasSize(1);
         assertThat(command.getToolBindings().get(0).getToolId()).isEqualTo("filesystem.read_file");
+    }
+
+    @Test
+    void shouldExposeAvailableExecutorEngines() throws Exception {
+        RunProfileInboundPort port = mock(RunProfileInboundPort.class);
+        when(port.supportedExecutorEngines()).thenReturn(List.of("kernel", "agentscope"));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseRunProfileController(provider(port))).build();
+
+        mvc.perform(get("/api/run-profiles/executor-engines"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data[0]").value("kernel"))
+                .andExpect(jsonPath("$.data[1]").value("agentscope"));
+
+        verify(port).supportedExecutorEngines();
+    }
+
+    @Test
+    void shouldRejectNonNumericRunProfileIdPathsBeforeControllerInvocation() throws Exception {
+        RunProfileInboundPort port = mock(RunProfileInboundPort.class);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseRunProfileController(provider(port))).build();
+
+        mvc.perform(get("/api/run-profiles/not-a-number"))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -221,6 +248,116 @@ class SeahorseRunProfileControllerTests {
                 .andExpect(jsonPath("$.data.a2aAgentIds[0]").value("seahorse-researcher"));
 
         verify(port).resolvePreview("100", 12L);
+    }
+
+    @Test
+    void shouldExposeRunProfileRiskSummary() throws Exception {
+        RunProfileInboundPort port = mock(RunProfileInboundPort.class);
+        when(port.riskSummary("100", 12L)).thenReturn(Optional.of(RunProfileRiskSummary.builder()
+                .runProfileId(12L)
+                .riskLevel("HIGH")
+                .riskCodes(List.of("EXECUTOR_AGENTSCOPE", "TOOL_MCP", "TOOL_A2A"))
+                .riskItems(List.of(
+                        RunProfileRiskSummary.RiskItem.builder()
+                                .code("EXECUTOR_AGENTSCOPE")
+                                .level("MEDIUM")
+                                .message("AgentScope execution engine is enabled")
+                                .build(),
+                        RunProfileRiskSummary.RiskItem.builder()
+                                .code("TOOL_MCP")
+                                .level("HIGH")
+                                .message("MCP tool is enabled: filesystem.read_file")
+                                .build(),
+                        RunProfileRiskSummary.RiskItem.builder()
+                                .code("TOOL_A2A")
+                                .level("HIGH")
+                                .message("A2A remote agent is enabled: seahorse-researcher")
+                                .build()))
+                .build()));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseRunProfileController(provider(port))).build();
+
+        mvc.perform(get("/api/run-profiles/12/risk-summary").param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.runProfileId").value(12))
+                .andExpect(jsonPath("$.data.riskLevel").value("HIGH"))
+                .andExpect(jsonPath("$.data.riskCodes[0]").value("EXECUTOR_AGENTSCOPE"))
+                .andExpect(jsonPath("$.data.riskItems[1].code").value("TOOL_MCP"));
+
+        verify(port).riskSummary("100", 12L);
+    }
+
+    @Test
+    void shouldExposeRunProfileProductionGateCheck() throws Exception {
+        RunProfileInboundPort port = mock(RunProfileInboundPort.class);
+        when(port.productionGateCheck("100", 12L)).thenReturn(Optional.of(RunProfileProductionGateCheck.builder()
+                .runProfileId(12L)
+                .passed(false)
+                .riskLevel("HIGH")
+                .blockingCodes(List.of("APPROVAL_NOT_ENFORCED"))
+                .checkItems(List.of(RunProfileProductionGateCheck.CheckItem.builder()
+                        .code("APPROVAL_NOT_ENFORCED")
+                        .status("BLOCK")
+                        .message("High-risk tool approval must be enabled before production")
+                        .build()))
+                .build()));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseRunProfileController(provider(port))).build();
+
+        mvc.perform(post("/api/run-profiles/12/production-gate/check").param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.runProfileId").value(12))
+                .andExpect(jsonPath("$.data.passed").value(false))
+                .andExpect(jsonPath("$.data.blockingCodes[0]").value("APPROVAL_NOT_ENFORCED"))
+                .andExpect(jsonPath("$.data.checkItems[0].status").value("BLOCK"));
+
+        verify(port).productionGateCheck("100", 12L);
+    }
+
+    @Test
+    void shouldExposeRunProfileGovernanceActionsAndAuditSummary() throws Exception {
+        RunProfileInboundPort port = mock(RunProfileInboundPort.class);
+        when(port.auditSummary("100", 12L)).thenReturn(Optional.of(RunProfileAuditSummary.builder()
+                .runProfileId(12L)
+                .approvalStatus("APPROVED")
+                .riskLevel("HIGH")
+                .runCount(3L)
+                .failureCount(1L)
+                .estimatedCost(0.42D)
+                .enabledToolCount(2)
+                .highRiskToolCount(1)
+                .highRiskToolIds(List.of("filesystem.read_file"))
+                .build()));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseRunProfileController(provider(port))).build();
+
+        mvc.perform(post("/api/run-profiles/12/submit-approval")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"request production share\"}")
+                        .param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"));
+        mvc.perform(post("/api/run-profiles/12/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"operator\":\"admin\",\"comment\":\"approved\"}")
+                        .param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"));
+        mvc.perform(post("/api/run-profiles/12/reject")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"operator\":\"security\",\"comment\":\"narrow tools\"}")
+                        .param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"));
+        mvc.perform(get("/api/run-profiles/12/audit-summary").param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.runProfileId").value(12))
+                .andExpect(jsonPath("$.data.approvalStatus").value("APPROVED"))
+                .andExpect(jsonPath("$.data.highRiskToolIds[0]").value("filesystem.read_file"));
+
+        verify(port).submitApproval("100", 12L, "request production share");
+        verify(port).approve("100", 12L, "admin", "approved");
+        verify(port).reject("100", 12L, "security", "narrow tools");
+        verify(port).auditSummary("100", 12L);
     }
 
     private static RunProfileRecord profile(Long id) {

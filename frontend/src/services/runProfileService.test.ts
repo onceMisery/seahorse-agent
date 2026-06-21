@@ -12,13 +12,20 @@ vi.mock("@/services/api", () => ({
 import { api } from "@/services/api";
 import {
   activateRunProfile,
+  approveRunProfile,
+  checkRunProfileProductionGate,
   createRunProfile,
   deleteRunProfile,
   getRunProfile,
+  getRunProfileAuditSummary,
+  getRunProfileRiskSummary,
   getAppliedRunProfileForConversation,
+  listRunProfileExecutorEngines,
   listRunProfiles,
   applyRunProfileToConversation,
   resolveRunProfilePreview,
+  rejectRunProfile,
+  submitRunProfileApproval,
   updateRunProfile
 } from "@/services/runProfileService";
 
@@ -77,6 +84,95 @@ describe("runProfileService", () => {
     });
 
     expect(api.post).toHaveBeenCalledWith("/api/run-profiles/12/resolve-preview");
+  });
+
+  it("lists supported executor engines from the API endpoint", async () => {
+    vi.mocked(api.get).mockResolvedValueOnce(["kernel", "agentscope"]);
+
+    await expect(listRunProfileExecutorEngines()).resolves.toEqual(["kernel", "agentscope"]);
+
+    expect(api.get).toHaveBeenCalledWith("/api/run-profiles/executor-engines");
+  });
+
+  it("gets a run profile risk summary from the API endpoint", async () => {
+    const summary = {
+      runProfileId: 12,
+      riskLevel: "HIGH",
+      riskCodes: ["EXECUTOR_AGENTSCOPE", "TOOL_MCP"],
+      riskItems: [
+        {
+          code: "EXECUTOR_AGENTSCOPE",
+          level: "MEDIUM",
+          message: "AgentScope execution engine is enabled"
+        },
+        {
+          code: "TOOL_MCP",
+          level: "HIGH",
+          message: "MCP tool is enabled: filesystem.read_file"
+        }
+      ]
+    };
+    vi.mocked(api.get).mockResolvedValueOnce(summary);
+
+    await expect(getRunProfileRiskSummary(12)).resolves.toEqual(summary);
+
+    expect(api.get).toHaveBeenCalledWith("/api/run-profiles/12/risk-summary");
+  });
+
+  it("checks a run profile production gate from the API endpoint", async () => {
+    const check = {
+      runProfileId: 12,
+      passed: false,
+      riskLevel: "HIGH",
+      blockingCodes: ["APPROVAL_NOT_ENFORCED"],
+      checkItems: [
+        {
+          code: "APPROVAL_NOT_ENFORCED",
+          status: "BLOCK",
+          message: "High-risk tool approval must be enabled before production"
+        }
+      ]
+    };
+    vi.mocked(api.post).mockResolvedValueOnce(check);
+
+    await expect(checkRunProfileProductionGate(12)).resolves.toEqual(check);
+
+    expect(api.post).toHaveBeenCalledWith("/api/run-profiles/12/production-gate/check");
+  });
+
+  it("runs run profile governance actions from the API endpoints", async () => {
+    const audit = {
+      runProfileId: 12,
+      approvalStatus: "APPROVED",
+      riskLevel: "HIGH",
+      runCount: 3,
+      failureCount: 1,
+      estimatedCost: 0.42,
+      enabledToolCount: 2,
+      highRiskToolCount: 1,
+      highRiskToolIds: ["filesystem.read_file"]
+    };
+    vi.mocked(api.post)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(api.get).mockResolvedValueOnce(audit);
+
+    await submitRunProfileApproval(12, "request production share");
+    await approveRunProfile(12, "approved");
+    await rejectRunProfile(12, "narrow tools");
+    await expect(getRunProfileAuditSummary(12)).resolves.toEqual(audit);
+
+    expect(api.post).toHaveBeenCalledWith("/api/run-profiles/12/submit-approval", {
+      comment: "request production share"
+    });
+    expect(api.post).toHaveBeenCalledWith("/api/run-profiles/12/approve", {
+      comment: "approved"
+    });
+    expect(api.post).toHaveBeenCalledWith("/api/run-profiles/12/reject", {
+      comment: "narrow tools"
+    });
+    expect(api.get).toHaveBeenCalledWith("/api/run-profiles/12/audit-summary");
   });
 
   it("applies a run profile to a conversation", async () => {

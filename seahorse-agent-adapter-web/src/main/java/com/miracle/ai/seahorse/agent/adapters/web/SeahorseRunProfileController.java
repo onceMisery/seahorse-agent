@@ -72,7 +72,12 @@ public class SeahorseRunProfileController {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, runProfilePort().list(resolveUserId(userId, headerUserId)));
     }
 
-    @GetMapping({"/run-profiles/{id}", "/api/run-profiles/{id}"})
+    @GetMapping({"/run-profiles/executor-engines", "/api/run-profiles/executor-engines"})
+    public Map<String, Object> supportedExecutorEngines() {
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, runProfilePort().supportedExecutorEngines());
+    }
+
+    @GetMapping({"/run-profiles/{id:\\d+}", "/api/run-profiles/{id:\\d+}"})
     public Map<String, Object> get(@PathVariable Long id,
                                    @RequestParam(required = false) String userId,
                                    @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
@@ -92,7 +97,7 @@ public class SeahorseRunProfileController {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, id);
     }
 
-    @PutMapping({"/run-profiles/{id}", "/api/run-profiles/{id}"})
+    @PutMapping({"/run-profiles/{id:\\d+}", "/api/run-profiles/{id:\\d+}"})
     public Map<String, Object> update(@PathVariable Long id,
                                       @RequestBody RunProfileRequest request,
                                       @RequestParam(required = false) String userId,
@@ -102,7 +107,7 @@ public class SeahorseRunProfileController {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, savedId);
     }
 
-    @PostMapping({"/run-profiles/{id}/activate", "/api/run-profiles/{id}/activate"})
+    @PostMapping({"/run-profiles/{id:\\d+}/activate", "/api/run-profiles/{id:\\d+}/activate"})
     public Map<String, Object> activate(@PathVariable Long id,
                                         @RequestParam(required = false) String userId,
                                         @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
@@ -111,7 +116,7 @@ public class SeahorseRunProfileController {
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
-    @PostMapping({"/run-profiles/{id}/resolve-preview", "/api/run-profiles/{id}/resolve-preview"})
+    @PostMapping({"/run-profiles/{id:\\d+}/resolve-preview", "/api/run-profiles/{id:\\d+}/resolve-preview"})
     public Map<String, Object> resolvePreview(@PathVariable Long id,
                                                @RequestParam(required = false) String userId,
                                                @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
@@ -122,9 +127,79 @@ public class SeahorseRunProfileController {
                 .orElseGet(() -> Map.of(KEY_CODE, SUCCESS_CODE));
     }
 
+    @GetMapping({"/run-profiles/{id:\\d+}/risk-summary", "/api/run-profiles/{id:\\d+}/risk-summary"})
+    public Map<String, Object> riskSummary(@PathVariable Long id,
+                                           @RequestParam(required = false) String userId,
+                                           @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
+                                           String headerUserId) {
+        return runProfilePort()
+                .riskSummary(resolveUserId(userId, headerUserId), id)
+                .<Map<String, Object>>map(summary -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, summary))
+                .orElseGet(() -> Map.of(KEY_CODE, SUCCESS_CODE));
+    }
+
     @PostMapping({
-            "/conversations/{conversationId}/run-profile/{id}/apply",
-            "/api/conversations/{conversationId}/run-profile/{id}/apply"
+            "/run-profiles/{id:\\d+}/production-gate/check",
+            "/api/run-profiles/{id:\\d+}/production-gate/check"
+    })
+    public Map<String, Object> productionGateCheck(@PathVariable Long id,
+                                                   @RequestParam(required = false) String userId,
+                                                   @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID,
+                                                           required = false)
+                                                   String headerUserId) {
+        return runProfilePort()
+                .productionGateCheck(resolveUserId(userId, headerUserId), id)
+                .<Map<String, Object>>map(check -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, check))
+                .orElseGet(() -> Map.of(KEY_CODE, SUCCESS_CODE));
+    }
+
+    @PostMapping({"/run-profiles/{id:\\d+}/submit-approval", "/api/run-profiles/{id:\\d+}/submit-approval"})
+    public Map<String, Object> submitApproval(@PathVariable Long id,
+                                              @RequestBody(required = false) RunProfileGovernanceRequest request,
+                                              @RequestParam(required = false) String userId,
+                                              @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID,
+                                                      required = false)
+                                              String headerUserId) {
+        runProfilePort().submitApproval(resolveUserId(userId, headerUserId), id, comment(request));
+        return Map.of(KEY_CODE, SUCCESS_CODE);
+    }
+
+    @PostMapping({"/run-profiles/{id:\\d+}/approve", "/api/run-profiles/{id:\\d+}/approve"})
+    public Map<String, Object> approve(@PathVariable Long id,
+                                       @RequestBody(required = false) RunProfileGovernanceRequest request,
+                                       @RequestParam(required = false) String userId,
+                                       @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
+                                       String headerUserId) {
+        String safeUserId = resolveUserId(userId, headerUserId);
+        runProfilePort().approve(safeUserId, id, operator(request, safeUserId), comment(request));
+        return Map.of(KEY_CODE, SUCCESS_CODE);
+    }
+
+    @PostMapping({"/run-profiles/{id:\\d+}/reject", "/api/run-profiles/{id:\\d+}/reject"})
+    public Map<String, Object> reject(@PathVariable Long id,
+                                      @RequestBody(required = false) RunProfileGovernanceRequest request,
+                                      @RequestParam(required = false) String userId,
+                                      @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
+                                      String headerUserId) {
+        String safeUserId = resolveUserId(userId, headerUserId);
+        runProfilePort().reject(safeUserId, id, operator(request, safeUserId), comment(request));
+        return Map.of(KEY_CODE, SUCCESS_CODE);
+    }
+
+    @GetMapping({"/run-profiles/{id:\\d+}/audit-summary", "/api/run-profiles/{id:\\d+}/audit-summary"})
+    public Map<String, Object> auditSummary(@PathVariable Long id,
+                                            @RequestParam(required = false) String userId,
+                                            @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
+                                            String headerUserId) {
+        return runProfilePort()
+                .auditSummary(resolveUserId(userId, headerUserId), id)
+                .<Map<String, Object>>map(summary -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, summary))
+                .orElseGet(() -> Map.of(KEY_CODE, SUCCESS_CODE));
+    }
+
+    @PostMapping({
+            "/conversations/{conversationId}/run-profile/{id:\\d+}/apply",
+            "/api/conversations/{conversationId}/run-profile/{id:\\d+}/apply"
     })
     public Map<String, Object> applyToConversation(@PathVariable String conversationId,
                                                    @PathVariable Long id,
@@ -153,7 +228,7 @@ public class SeahorseRunProfileController {
                 .orElseGet(() -> Map.of(KEY_CODE, SUCCESS_CODE));
     }
 
-    @DeleteMapping({"/run-profiles/{id}", "/api/run-profiles/{id}"})
+    @DeleteMapping({"/run-profiles/{id:\\d+}", "/api/run-profiles/{id:\\d+}"})
     public Map<String, Object> delete(@PathVariable Long id,
                                       @RequestParam(required = false) String userId,
                                       @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
@@ -204,6 +279,17 @@ public class SeahorseRunProfileController {
 
     private String resolveUserId(String userId, String headerUserId) {
         return WebUserIdResolver.resolve(userId, headerUserId);
+    }
+
+    private String comment(RunProfileGovernanceRequest request) {
+        return request == null ? null : request.getComment();
+    }
+
+    private String operator(RunProfileGovernanceRequest request, String defaultOperator) {
+        if (request == null || request.getOperator() == null || request.getOperator().isBlank()) {
+            return defaultOperator;
+        }
+        return request.getOperator().trim();
     }
 
     private RunProfileInboundPort runProfilePort() {

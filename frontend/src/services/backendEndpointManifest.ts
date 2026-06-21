@@ -445,6 +445,22 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/mcp/servers/{}/stderr-tail"
+  },
+  {
+    "method": "POST",
+    "path": "/api/mcp/servers/{}/test"
+  },
+  {
+    "method": "POST",
+    "path": "/api/mcp/servers/{}/restart"
+  },
+  {
+    "method": "POST",
+    "path": "/api/mcp/servers/{}/refresh-tools"
+  },
+  {
+    "method": "GET",
     "path": "/api/notifications"
   },
   {
@@ -469,7 +485,15 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/run-profiles/executor-engines"
+  },
+  {
+    "method": "GET",
     "path": "/api/run-profiles/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/api/run-profiles/{}/risk-summary"
   },
   {
     "method": "GET",

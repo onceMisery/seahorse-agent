@@ -67,7 +67,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionReposit
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -149,8 +152,10 @@ public class SeahorseAgentKernelOpsAutoConfiguration {
     @Bean
     @ConditionalOnBean(RunProfileRepositoryPort.class)
     @ConditionalOnMissingBean(RunProfileInboundPort.class)
-    public KernelRunProfileService seahorseRunProfileInboundPort(RunProfileRepositoryPort repositoryPort) {
-        return new KernelRunProfileService(repositoryPort);
+    public KernelRunProfileService seahorseRunProfileInboundPort(
+            RunProfileRepositoryPort repositoryPort,
+            ObjectProvider<ReActExecutorPort> executorPorts) {
+        return new KernelRunProfileService(repositoryPort, supportedExecutorEngines(executorPorts));
     }
 
     @Bean
@@ -259,5 +264,15 @@ public class SeahorseAgentKernelOpsAutoConfiguration {
             return candidates.get(0);
         }
         return new ReActExecutorRouter(candidates, environment.getProperty("seahorse.agent.executor.engine", "kernel"));
+    }
+
+    private static Set<String> supportedExecutorEngines(ObjectProvider<ReActExecutorPort> executors) {
+        Set<String> engines = executors.orderedStream()
+                .filter(executor -> !(executor instanceof ReActExecutorRouter))
+                .map(ReActExecutorPort::engineId)
+                .filter(engine -> engine != null && !engine.isBlank())
+                .map(engine -> engine.trim().toLowerCase(Locale.ROOT))
+                .collect(Collectors.toUnmodifiableSet());
+        return engines.isEmpty() ? Set.of("kernel") : engines;
     }
 }

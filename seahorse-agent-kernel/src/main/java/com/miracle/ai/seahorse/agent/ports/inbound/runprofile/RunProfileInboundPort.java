@@ -27,9 +27,37 @@ public interface RunProfileInboundPort {
 
     List<RunProfileRecord> list(String userId);
 
+    default List<String> supportedExecutorEngines() {
+        return List.of("kernel");
+    }
+
     Optional<RunProfileDetails> findById(String userId, Long id);
 
     default Optional<RunProfileResolvedPreview> resolvePreview(String userId, Long id) {
+        return Optional.empty();
+    }
+
+    default Optional<RunProfileRiskSummary> riskSummary(String userId, Long id) {
+        return Optional.empty();
+    }
+
+    default Optional<RunProfileProductionGateCheck> productionGateCheck(String userId, Long id) {
+        return Optional.empty();
+    }
+
+    default void submitApproval(String userId, Long id, String comment) {
+        throw new UnsupportedOperationException("run profile approval is not supported");
+    }
+
+    default void approve(String userId, Long id, String operator, String comment) {
+        throw new UnsupportedOperationException("run profile approval is not supported");
+    }
+
+    default void reject(String userId, Long id, String operator, String comment) {
+        throw new UnsupportedOperationException("run profile approval is not supported");
+    }
+
+    default Optional<RunProfileAuditSummary> auditSummary(String userId, Long id) {
         return Optional.empty();
     }
 

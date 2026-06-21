@@ -44,6 +44,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KernelRunExperimentTrialExecutorTests {
 
@@ -73,7 +74,8 @@ class KernelRunExperimentTrialExecutorTests {
         assertEquals(301L, result.getOutputMessageId());
         assertEquals("Explain this code", executor.request.question());
         assertEquals("agentscope", executor.request.executorEngine());
-        assertIterableEquals(List.of("filesystem.read_file"), executor.request.allowedToolIds());
+        assertIterableEquals(List.of("filesystem.read_file", "seahorse-researcher"),
+                executor.request.allowedToolIds());
         assertEquals("previous context", executor.request.history().get(0).getContent());
         assertEquals("assistant", branchRepository.appended.getRole());
         assertEquals("generated answer", branchRepository.appended.getContent());
@@ -92,7 +94,7 @@ class KernelRunExperimentTrialExecutorTests {
         assertEquals("{\"experimentId\":1,\"trialId\":10,\"experimentName\":\"Profile compare\"}",
                 snapshotRepository.saved.getTraceContextJson());
         assertEquals("""
-                {"runProfileId":12,"executorEngine":"agentscope","roleCardId":99,"allowedToolIds":["filesystem.read_file"],"baseLeafMessageId":202}
+                {"runProfileId":12,"executorEngine":"agentscope","roleCardId":99,"runProfile":{"id":12,"name":"AgentScope experiment profile","roleCardId":99,"executorEngine":"agentscope"},"executorConfig":{"studio":true},"modelConfig":{"temperature":0.2},"memoryScope":{"longTerm":true},"guardrailConfig":{"highRiskToolApproval":true},"toolIds":[],"mcpToolIds":["filesystem.read_file"],"a2aAgentIds":["seahorse-researcher"],"allowedToolIds":["filesystem.read_file","seahorse-researcher"],"baseLeafMessageId":202}
                 """.trim(), snapshotRepository.saved.getSnapshotJson());
     }
 
@@ -124,9 +126,10 @@ class KernelRunExperimentTrialExecutorTests {
         assertEquals("previous context", executor.request.history().get(0).getContent());
         assertEquals(202L, branchRepository.appended.getParentId());
         assertEquals(203L, snapshotRepository.saved.getBranchLeafMessageId());
-        assertEquals("""
-                {"runProfileId":12,"executorEngine":"agentscope","roleCardId":99,"allowedToolIds":["filesystem.read_file"],"baseLeafMessageId":203}
-                """.trim(), snapshotRepository.saved.getSnapshotJson());
+        assertTrue(snapshotRepository.saved.getSnapshotJson().contains("\"baseLeafMessageId\":203"));
+        assertTrue(snapshotRepository.saved.getSnapshotJson().contains(
+                "\"runProfile\":{\"id\":12,\"name\":\"AgentScope experiment profile\",\"roleCardId\":99,"
+                        + "\"executorEngine\":\"agentscope\"}"));
     }
 
     private static ConversationMessageRecord message(String id, Long parentId, String role, String content) {
@@ -221,8 +224,12 @@ class KernelRunExperimentTrialExecutorTests {
             RunProfileRecord record = new RunProfileRecord();
             record.setId(id);
             record.setUserId(userId);
+            record.setName("AgentScope experiment profile");
             record.setExecutorEngine("agentscope");
             record.setExecutorConfigJson("{\"studio\":true}");
+            record.setModelConfigJson("{\"temperature\":0.2}");
+            record.setMemoryScopeJson("{\"longTerm\":true}");
+            record.setGuardrailConfigJson("{\"highRiskToolApproval\":true}");
             record.setRoleCardId(99L);
             return Optional.of(record);
         }
@@ -243,11 +250,19 @@ class KernelRunExperimentTrialExecutorTests {
                     RunProfileToolBindingRecord.builder()
                             .profileId(profileId)
                             .toolId("filesystem.read_file")
+                            .provider("MCP")
+                            .enabled(1)
+                            .build(),
+                    RunProfileToolBindingRecord.builder()
+                            .profileId(profileId)
+                            .toolId("seahorse-researcher")
+                            .provider("A2A")
                             .enabled(1)
                             .build(),
                     RunProfileToolBindingRecord.builder()
                             .profileId(profileId)
                             .toolId("danger.disabled")
+                            .provider("BUILT_IN")
                             .enabled(0)
                             .build());
         }

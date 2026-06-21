@@ -15,32 +15,28 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.ports.outbound.runprofile;
+package com.miracle.ai.seahorse.agent.ports.inbound.runprofile;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
-import java.time.Instant;
+import java.util.List;
 
 @Data
-public class RunProfileRecord {
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class RunProfileAuditSummary {
 
-    private Long id;
-    private String tenantId;
-    private String userId;
-    private String name;
-    private String description;
-    private Long roleCardId;
-    private String executorEngine;
-    private String executorConfigJson;
-    private String modelConfigJson;
-    private String memoryScopeJson;
-    private String guardrailConfigJson;
+    private Long runProfileId;
     private String approvalStatus;
-    private String approvalOperator;
-    private String approvalComment;
-    private Instant approvalTime;
-    private Integer enabled;
-    private Instant createTime;
-    private Instant updateTime;
-    private Integer deleted;
+    private String riskLevel;
+    private Long runCount;
+    private Long failureCount;
+    private Double estimatedCost;
+    private Integer enabledToolCount;
+    private Integer highRiskToolCount;
+    private List<String> highRiskToolIds;
 }

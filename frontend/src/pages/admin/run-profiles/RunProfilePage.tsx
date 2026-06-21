@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Eye, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { CheckCircle, ClipboardList, Eye, Pencil, Plus, RefreshCw, Send, ShieldCheck, Trash2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -9,14 +9,24 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   activateRunProfile,
+  approveRunProfile,
+  checkRunProfileProductionGate,
   createRunProfile,
   deleteRunProfile,
   getRunProfile,
+  getRunProfileAuditSummary,
+  getRunProfileRiskSummary,
+  listRunProfileExecutorEngines,
   listRunProfiles,
+  rejectRunProfile,
   resolveRunProfilePreview,
+  submitRunProfileApproval,
   updateRunProfile,
+  type RunProfileAuditSummary,
+  type RunProfileProductionGateCheck,
   type RunProfileRequest,
   type RunProfileResolvedPreview,
+  type RunProfileRiskSummary,
   type RunProfileToolBinding,
   type RunProfileVO
 } from "@/services/runProfileService";
@@ -84,6 +94,11 @@ function parseJsonConfig(label: string, value: string): Record<string, unknown> 
   }
 }
 
+function normalizeExecutorEngines(engines: string[]) {
+  const normalized = engines.map((engine) => engine.trim()).filter(Boolean);
+  return normalized.length > 0 ? normalized : ["kernel"];
+}
+
 export function RunProfilePage() {
   const [profiles, setProfiles] = useState<RunProfileVO[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,7 +108,13 @@ export function RunProfilePage() {
   const [tools, setTools] = useState<ToolItem[]>([]);
   const [toolsLoading, setToolsLoading] = useState(false);
   const [preview, setPreview] = useState<RunProfileResolvedPreview | null>(null);
+  const [riskSummary, setRiskSummary] = useState<RunProfileRiskSummary | null>(null);
+  const [productionGate, setProductionGate] = useState<RunProfileProductionGateCheck | null>(null);
+  const [auditSummary, setAuditSummary] = useState<RunProfileAuditSummary | null>(null);
   const [previewLoadingId, setPreviewLoadingId] = useState<number | string | null>(null);
+  const [gateLoadingId, setGateLoadingId] = useState<number | string | null>(null);
+  const [governanceLoadingId, setGovernanceLoadingId] = useState<string | null>(null);
+  const [executorEngines, setExecutorEngines] = useState<string[]>(["kernel"]);
 
   const loadProfiles = async () => {
     try {
@@ -109,6 +130,15 @@ export function RunProfilePage() {
 
   useEffect(() => {
     loadProfiles();
+  }, []);
+
+  useEffect(() => {
+    listRunProfileExecutorEngines()
+      .then((engines) => setExecutorEngines(normalizeExecutorEngines(engines)))
+      .catch((error) => {
+        setExecutorEngines(["kernel"]);
+        console.error(error);
+      });
   }, []);
 
   const loadTools = async () => {
@@ -139,7 +169,7 @@ export function RunProfilePage() {
   };
 
   const handleCreate = () => {
-    setForm({ ...EMPTY_FORM });
+    setForm({ ...EMPTY_FORM, executorEngine: executorEngines[0] || "kernel" });
     if (tools.length === 0) {
       loadTools();
     }
@@ -157,7 +187,9 @@ export function RunProfilePage() {
         id: detailProfile.id,
         name: detailProfile.name || "",
         description: detailProfile.description || "",
-        executorEngine: detailProfile.executorEngine || "kernel",
+        executorEngine: executorEngines.includes(detailProfile.executorEngine)
+          ? detailProfile.executorEngine
+          : executorEngines[0] || "kernel",
         roleCardId: detailProfile.roleCardId ? String(detailProfile.roleCardId) : "",
         executorConfigJson: prettyJson(detailProfile.executorConfigJson),
         modelConfigJson: prettyJson(detailProfile.modelConfigJson),
@@ -258,12 +290,87 @@ export function RunProfilePage() {
   const handlePreview = async (id: number | string) => {
     try {
       setPreviewLoadingId(id);
-      setPreview(await resolveRunProfilePreview(id));
+      const [resolvedPreview, resolvedRiskSummary] = await Promise.all([
+        resolveRunProfilePreview(id),
+        getRunProfileRiskSummary(id)
+      ]);
+      setPreview(resolvedPreview);
+      setRiskSummary(resolvedRiskSummary);
     } catch (error) {
       toast.error(getErrorMessage(error, "解析运行画像预览失败"));
       console.error(error);
     } finally {
       setPreviewLoadingId(null);
+    }
+  };
+
+  const handleProductionGateCheck = async (id: number | string) => {
+    try {
+      setGateLoadingId(id);
+      setProductionGate(await checkRunProfileProductionGate(id));
+    } catch (error) {
+      toast.error(getErrorMessage(error, "发布门禁检查失败"));
+      console.error(error);
+    } finally {
+      setGateLoadingId(null);
+    }
+  };
+
+  const handleSubmitApproval = async (id: number | string) => {
+    const loadingKey = `submit:${id}`;
+    try {
+      setGovernanceLoadingId(loadingKey);
+      await submitRunProfileApproval(id, "submit from Run Profile governance panel");
+      toast.success("运行画像已提交审批");
+      await loadProfiles();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "提交审批失败"));
+      console.error(error);
+    } finally {
+      setGovernanceLoadingId(null);
+    }
+  };
+
+  const handleApprove = async (id: number | string) => {
+    const loadingKey = `approve:${id}`;
+    try {
+      setGovernanceLoadingId(loadingKey);
+      await approveRunProfile(id, "approved from Run Profile governance panel");
+      toast.success("运行画像已通过审批");
+      await loadProfiles();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "审批通过失败"));
+      console.error(error);
+    } finally {
+      setGovernanceLoadingId(null);
+    }
+  };
+
+  const handleReject = async (id: number | string) => {
+    const loadingKey = `reject:${id}`;
+    try {
+      setGovernanceLoadingId(loadingKey);
+      await rejectRunProfile(id, "rejected from Run Profile governance panel");
+      toast.success("运行画像已拒绝");
+      await loadProfiles();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "审批拒绝失败"));
+      console.error(error);
+    } finally {
+      setGovernanceLoadingId(null);
+    }
+  };
+
+  const handleAuditSummary = async (id: number | string) => {
+    const loadingKey = `audit:${id}`;
+    try {
+      setGovernanceLoadingId(loadingKey);
+      setAuditSummary(await getRunProfileAuditSummary(id));
+    } catch (error) {
+      toast.error(getErrorMessage(error, "加载审计摘要失败"));
+      console.error(error);
+    } finally {
+      setGovernanceLoadingId(null);
     }
   };
 
@@ -305,8 +412,9 @@ export function RunProfilePage() {
                 value={form.executorEngine}
                 onChange={(event) => setForm((prev) => prev ? { ...prev, executorEngine: event.target.value } : prev)}
               >
-                <option value="kernel">kernel</option>
-                <option value="agentscope">agentscope</option>
+                {executorEngines.map((engine) => (
+                  <option key={engine} value={engine}>{engine}</option>
+                ))}
               </select>
             </label>
             <label htmlFor="run-profile-role-card-id" className="space-y-2 text-sm font-medium text-slate-700">
@@ -478,6 +586,117 @@ export function RunProfilePage() {
                 </div>
               </div>
             </div>
+            {riskSummary ? (
+              <div className="rounded-md border border-slate-200 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">治理风险摘要</h3>
+                    <p className="text-xs text-muted-foreground">发布前需要关注的执行引擎、工具和记忆风险</p>
+                  </div>
+                  <Badge variant={riskSummary.riskLevel === "HIGH" ? "destructive" : "secondary"}>
+                    {riskSummary.riskLevel}
+                  </Badge>
+                </div>
+                {riskSummary.riskItems.length > 0 ? (
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    {riskSummary.riskItems.map((item) => (
+                      <div key={item.code} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={item.level === "HIGH" ? "destructive" : "outline"}>{item.level}</Badge>
+                          <span className="font-mono text-xs text-slate-600">{item.code}</span>
+                        </div>
+                        <div className="mt-2 break-words text-sm text-slate-700">{item.message}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-3 text-sm text-muted-foreground">暂无风险项</div>
+                )}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {productionGate ? (
+        <Card>
+          <CardContent className="space-y-4 pt-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">生产门禁</h2>
+                <p className="text-xs text-muted-foreground">发布前检查高风险工具审批和 AgentScope 生产配置</p>
+              </div>
+              <Badge variant={productionGate.passed ? "secondary" : "destructive"}>
+                {productionGate.passed ? "PASS" : "BLOCK"}
+              </Badge>
+            </div>
+            <div className="grid gap-3 text-sm md:grid-cols-3">
+              <div className="rounded-md border border-slate-200 p-3">
+                <div className="text-xs text-muted-foreground">画像 ID</div>
+                <div className="mt-1 font-medium text-slate-900">{productionGate.runProfileId}</div>
+              </div>
+              <div className="rounded-md border border-slate-200 p-3">
+                <div className="text-xs text-muted-foreground">风险等级</div>
+                <div className="mt-1 font-medium text-slate-900">{productionGate.riskLevel}</div>
+              </div>
+              <div className="rounded-md border border-slate-200 p-3">
+                <div className="text-xs text-muted-foreground">阻断项</div>
+                <div className="mt-1 font-medium text-slate-900">{productionGate.blockingCodes.length}</div>
+              </div>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2">
+              {productionGate.checkItems.map((item) => (
+                <div key={item.code} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={item.status === "BLOCK" ? "destructive" : "outline"}>{item.status}</Badge>
+                    <span className="font-mono text-xs text-slate-600">{item.code}</span>
+                  </div>
+                  <div className="mt-2 break-words text-sm text-slate-700">{item.message}</div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {auditSummary ? (
+        <Card>
+          <CardContent className="space-y-4 pt-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">审计摘要</h2>
+                <p className="text-xs text-muted-foreground">按 Run Profile 聚合审批、风险、工具和运行指标。</p>
+              </div>
+              <Badge variant={auditSummary.riskLevel === "HIGH" ? "destructive" : "secondary"}>
+                {auditSummary.approvalStatus}
+              </Badge>
+            </div>
+            <div className="grid gap-3 text-sm md:grid-cols-4">
+              <div className="rounded-md border border-slate-200 p-3">
+                <div className="text-xs text-muted-foreground">运行次数</div>
+                <div className="mt-1 font-medium text-slate-900">{auditSummary.runCount}</div>
+              </div>
+              <div className="rounded-md border border-slate-200 p-3">
+                <div className="text-xs text-muted-foreground">失败次数</div>
+                <div className="mt-1 font-medium text-slate-900">{auditSummary.failureCount}</div>
+              </div>
+              <div className="rounded-md border border-slate-200 p-3">
+                <div className="text-xs text-muted-foreground">启用工具</div>
+                <div className="mt-1 font-medium text-slate-900">{auditSummary.enabledToolCount}</div>
+              </div>
+              <div className="rounded-md border border-slate-200 p-3">
+                <div className="text-xs text-muted-foreground">高风险工具</div>
+                <div className="mt-1 font-medium text-slate-900">{auditSummary.highRiskToolCount}</div>
+              </div>
+            </div>
+            <div className="rounded-md border border-slate-200 p-3">
+              <div className="text-xs font-medium text-muted-foreground">高风险工具 ID</div>
+              <div className="mt-2 space-y-1">
+                {idList(auditSummary.highRiskToolIds).map((toolId) => (
+                  <div key={toolId} className="break-all font-mono text-xs text-slate-700">{toolId}</div>
+                ))}
+              </div>
+            </div>
           </CardContent>
         </Card>
       ) : null}
@@ -547,6 +766,55 @@ export function RunProfilePage() {
                         >
                           <Eye className="mr-1 h-4 w-4" />
                           预览
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={gateLoadingId === profile.id}
+                          onClick={() => handleProductionGateCheck(profile.id)}
+                        >
+                          <ShieldCheck className="mr-1 h-4 w-4" />
+                          发布门禁
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`submit-approval-${profile.id}`}
+                          disabled={governanceLoadingId === `submit:${profile.id}`}
+                          onClick={() => handleSubmitApproval(profile.id)}
+                        >
+                          <Send className="mr-1 h-4 w-4" />
+                          提交审批
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`approve-run-profile-${profile.id}`}
+                          disabled={governanceLoadingId === `approve:${profile.id}`}
+                          onClick={() => handleApprove(profile.id)}
+                        >
+                          <CheckCircle className="mr-1 h-4 w-4" />
+                          通过
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`reject-run-profile-${profile.id}`}
+                          disabled={governanceLoadingId === `reject:${profile.id}`}
+                          onClick={() => handleReject(profile.id)}
+                        >
+                          <XCircle className="mr-1 h-4 w-4" />
+                          拒绝
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`audit-summary-${profile.id}`}
+                          disabled={governanceLoadingId === `audit:${profile.id}`}
+                          onClick={() => handleAuditSummary(profile.id)}
+                        >
+                          <ClipboardList className="mr-1 h-4 w-4" />
+                          审计
                         </Button>
                         <Button
                           variant="ghost"

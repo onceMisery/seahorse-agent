@@ -41,6 +41,7 @@ public class JdbcRunProfileRepositoryAdapter implements RunProfileRepositoryPort
     private static final String PROFILE_COLUMNS = """
             id, tenant_id, user_id, name, description, role_card_id, executor_engine,
             executor_config_json, model_config_json, memory_scope_json, guardrail_config_json,
+            approval_status, approval_operator, approval_comment, approval_time,
             enabled, create_time, update_time, deleted
             """;
 
@@ -52,8 +53,9 @@ public class JdbcRunProfileRepositoryAdapter implements RunProfileRepositoryPort
             INSERT INTO sa_run_profile
             (id, tenant_id, user_id, name, description, role_card_id, executor_engine,
              executor_config_json, model_config_json, memory_scope_json, guardrail_config_json,
+             approval_status, approval_operator, approval_comment, approval_time,
              enabled, create_time, update_time, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
             """;
 
     private static final String SQL_UPDATE_PROFILE = """
@@ -66,6 +68,10 @@ public class JdbcRunProfileRepositoryAdapter implements RunProfileRepositoryPort
                 model_config_json = ?,
                 memory_scope_json = ?,
                 guardrail_config_json = ?,
+                approval_status = ?,
+                approval_operator = ?,
+                approval_comment = ?,
+                approval_time = ?,
                 enabled = ?,
                 update_time = ?,
                 deleted = 0
@@ -106,6 +112,16 @@ public class JdbcRunProfileRepositoryAdapter implements RunProfileRepositoryPort
     private static final String SQL_DELETE = """
             UPDATE sa_run_profile
             SET deleted = 1, enabled = 0, update_time = ?
+            WHERE id = ? AND user_id = ? AND tenant_id = ? AND deleted = 0
+            """;
+
+    private static final String SQL_UPDATE_APPROVAL = """
+            UPDATE sa_run_profile
+            SET approval_status = ?,
+                approval_operator = ?,
+                approval_comment = ?,
+                approval_time = ?,
+                update_time = ?
             WHERE id = ? AND user_id = ? AND tenant_id = ? AND deleted = 0
             """;
 
@@ -172,7 +188,13 @@ public class JdbcRunProfileRepositoryAdapter implements RunProfileRepositoryPort
                 ? safeRecord.getExecutorEngine().trim()
                 : "kernel";
         Integer enabled = flag(safeRecord.getEnabled());
+        String approvalStatus = hasText(safeRecord.getApprovalStatus())
+                ? safeRecord.getApprovalStatus().trim()
+                : "DRAFT";
         Timestamp now = Timestamp.from(Instant.now());
+        Timestamp approvalTime = safeRecord.getApprovalTime() == null
+                ? null
+                : Timestamp.from(safeRecord.getApprovalTime());
 
         if (exists(id, userId, tenantId)) {
             jdbcTemplate.update(SQL_UPDATE_PROFILE,
@@ -184,6 +206,10 @@ public class JdbcRunProfileRepositoryAdapter implements RunProfileRepositoryPort
                     blankToNull(safeRecord.getModelConfigJson()),
                     blankToNull(safeRecord.getMemoryScopeJson()),
                     blankToNull(safeRecord.getGuardrailConfigJson()),
+                    approvalStatus,
+                    blankToNull(safeRecord.getApprovalOperator()),
+                    blankToNull(safeRecord.getApprovalComment()),
+                    approvalTime,
                     enabled,
                     now,
                     id,
@@ -202,6 +228,10 @@ public class JdbcRunProfileRepositoryAdapter implements RunProfileRepositoryPort
                     blankToNull(safeRecord.getModelConfigJson()),
                     blankToNull(safeRecord.getMemoryScopeJson()),
                     blankToNull(safeRecord.getGuardrailConfigJson()),
+                    approvalStatus,
+                    blankToNull(safeRecord.getApprovalOperator()),
+                    blankToNull(safeRecord.getApprovalComment()),
+                    approvalTime,
                     enabled,
                     now,
                     now);
@@ -212,6 +242,7 @@ public class JdbcRunProfileRepositoryAdapter implements RunProfileRepositoryPort
         safeRecord.setUserId(userId);
         safeRecord.setName(name);
         safeRecord.setExecutorEngine(executorEngine);
+        safeRecord.setApprovalStatus(approvalStatus);
         safeRecord.setEnabled(enabled);
         safeRecord.setDeleted(0);
         return id;
@@ -275,6 +306,28 @@ public class JdbcRunProfileRepositoryAdapter implements RunProfileRepositoryPort
             return;
         }
         jdbcTemplate.update(SQL_DELETE, Timestamp.from(Instant.now()), id, requireUserId(userId), tenantId());
+    }
+
+    @Override
+    public void updateApprovalStatus(
+            String userId,
+            Long id,
+            String approvalStatus,
+            String approvalOperator,
+            String approvalComment) {
+        if (id == null || !hasText(approvalStatus)) {
+            return;
+        }
+        Timestamp now = Timestamp.from(Instant.now());
+        jdbcTemplate.update(SQL_UPDATE_APPROVAL,
+                approvalStatus.trim(),
+                blankToNull(approvalOperator),
+                blankToNull(approvalComment),
+                now,
+                now,
+                id,
+                requireUserId(userId),
+                tenantId());
     }
 
     @Override
@@ -342,6 +395,10 @@ public class JdbcRunProfileRepositoryAdapter implements RunProfileRepositoryPort
         record.setModelConfigJson(resultSet.getString("model_config_json"));
         record.setMemoryScopeJson(resultSet.getString("memory_scope_json"));
         record.setGuardrailConfigJson(resultSet.getString("guardrail_config_json"));
+        record.setApprovalStatus(resultSet.getString("approval_status"));
+        record.setApprovalOperator(resultSet.getString("approval_operator"));
+        record.setApprovalComment(resultSet.getString("approval_comment"));
+        record.setApprovalTime(toInstant(resultSet.getTimestamp("approval_time")));
         record.setEnabled(resultSet.getInt("enabled"));
         record.setCreateTime(toInstant(resultSet.getTimestamp("create_time")));
         record.setUpdateTime(toInstant(resultSet.getTimestamp("update_time")));

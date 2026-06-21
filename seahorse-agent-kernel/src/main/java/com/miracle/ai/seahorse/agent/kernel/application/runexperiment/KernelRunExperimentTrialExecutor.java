@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.runexperiment;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
@@ -43,6 +45,8 @@ import java.util.Map;
 import java.util.Objects;
 
 public class KernelRunExperimentTrialExecutor implements RunExperimentTrialExecutorPort {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @NonNull
     private final ReActExecutorPort executorPort;
@@ -89,8 +93,9 @@ public class KernelRunExperimentTrialExecutor implements RunExperimentTrialExecu
         List<ConversationMessageRecord> path = resolvePath(conversationId, userId, baseLeafMessageId);
         ExperimentPrompt prompt = resolvePrompt(path);
         String runId = "run-exp-%d-trial-%d".formatted(safeRequest.getExperimentId(), safeRequest.getTrialId());
-        List<String> allowedToolIds = enabledToolIds(profile.getId());
-        saveRunContextSnapshot(safeRequest, profile, runId, allowedToolIds);
+        List<RunProfileToolBindingRecord> enabledTools = enabledTools(profile.getId());
+        List<String> allowedToolIds = toolIds(enabledTools);
+        saveRunContextSnapshot(safeRequest, profile, runId, enabledTools, allowedToolIds);
         AgentLoopResult result = executorPort.execute(AgentLoopRequest.builder()
                 .question(requireText(prompt.question().getContent(), "base leaf message content must not be blank"))
                 .history(prompt.history().stream().map(this::toChatMessage).toList())
@@ -194,12 +199,17 @@ public class KernelRunExperimentTrialExecutor implements RunExperimentTrialExecu
         return branchRepositoryPort.appendMessage(record);
     }
 
-    private List<String> enabledToolIds(Long profileId) {
+    private List<RunProfileToolBindingRecord> enabledTools(Long profileId) {
         if (profileId == null) {
             return List.of();
         }
         return runProfileRepositoryPort.listTools(profileId).stream()
                 .filter(tool -> tool != null && Objects.equals(tool.getEnabled(), 1))
+                .toList();
+    }
+
+    private List<String> toolIds(List<RunProfileToolBindingRecord> tools) {
+        return Objects.requireNonNullElse(tools, List.<RunProfileToolBindingRecord>of()).stream()
                 .map(RunProfileToolBindingRecord::getToolId)
                 .filter(value -> value != null && !value.isBlank())
                 .distinct()
@@ -210,6 +220,7 @@ public class KernelRunExperimentTrialExecutor implements RunExperimentTrialExecu
             RunExperimentTrialExecutionRequest request,
             RunProfileRecord profile,
             String runId,
+            List<RunProfileToolBindingRecord> enabledTools,
             List<String> allowedToolIds) {
         RunContextSnapshotRecord snapshot = new RunContextSnapshotRecord();
         snapshot.setTenantId(blankToDefault(profile.getTenantId(), "default"));
@@ -221,7 +232,7 @@ public class KernelRunExperimentTrialExecutor implements RunExperimentTrialExecu
         snapshot.setExecutorEngine(blankToDefault(profile.getExecutorEngine(), "kernel"));
         snapshot.setExecutorConfigJson(blankToNull(profile.getExecutorConfigJson()));
         snapshot.setTraceContextJson(traceContextJson(request));
-        snapshot.setSnapshotJson(snapshotJson(profile, request.getBaseLeafMessageId(), allowedToolIds));
+        snapshot.setSnapshotJson(snapshotJson(profile, request.getBaseLeafMessageId(), enabledTools, allowedToolIds));
         snapshot.setDeleted(0);
         runContextSnapshotRepositoryPort.save(snapshot);
     }
@@ -233,21 +244,55 @@ public class KernelRunExperimentTrialExecutor implements RunExperimentTrialExecu
                 escapeJson(Objects.requireNonNullElse(request.getExperimentName(), "")));
     }
 
-    private String snapshotJson(RunProfileRecord profile, Long baseLeafMessageId, List<String> allowedToolIds) {
-        return "{\"runProfileId\":%d,\"executorEngine\":\"%s\",\"roleCardId\":%s,\"allowedToolIds\":[%s],\"baseLeafMessageId\":%d}"
-                .formatted(
-                        profile.getId(),
-                        escapeJson(blankToDefault(profile.getExecutorEngine(), "kernel")),
-                        profile.getRoleCardId() == null ? "null" : profile.getRoleCardId().toString(),
-                        quotedJsonValues(allowedToolIds),
-                        baseLeafMessageId);
+    private String snapshotJson(
+            RunProfileRecord profile,
+            Long baseLeafMessageId,
+            List<RunProfileToolBindingRecord> enabledTools,
+            List<String> allowedToolIds) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("runProfileId", profile.getId());
+        snapshot.put("executorEngine", blankToDefault(profile.getExecutorEngine(), "kernel"));
+        snapshot.put("roleCardId", profile.getRoleCardId());
+        Map<String, Object> profileSnapshot = new LinkedHashMap<>();
+        profileSnapshot.put("id", profile.getId());
+        profileSnapshot.put("name", profile.getName());
+        profileSnapshot.put("roleCardId", profile.getRoleCardId());
+        profileSnapshot.put("executorEngine", profile.getExecutorEngine());
+        snapshot.put("runProfile", profileSnapshot);
+        putJsonSnapshot(snapshot, "executorConfig", profile.getExecutorConfigJson());
+        putJsonSnapshot(snapshot, "modelConfig", profile.getModelConfigJson());
+        putJsonSnapshot(snapshot, "memoryScope", profile.getMemoryScopeJson());
+        putJsonSnapshot(snapshot, "guardrailConfig", profile.getGuardrailConfigJson());
+        snapshot.put("toolIds", toolIdsByProvider(enabledTools, "BUILT_IN"));
+        snapshot.put("mcpToolIds", toolIdsByProvider(enabledTools, "MCP"));
+        snapshot.put("a2aAgentIds", toolIdsByProvider(enabledTools, "A2A"));
+        snapshot.put("allowedToolIds", allowedToolIds);
+        snapshot.put("baseLeafMessageId", baseLeafMessageId);
+        try {
+            return OBJECT_MAPPER.writeValueAsString(snapshot);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize run experiment context snapshot", ex);
+        }
     }
 
-    private String quotedJsonValues(List<String> values) {
-        return Objects.requireNonNullElse(values, List.<String>of()).stream()
-                .map(value -> "\"" + escapeJson(value) + "\"")
-                .reduce((left, right) -> left + "," + right)
-                .orElse("");
+    private void putJsonSnapshot(Map<String, Object> snapshot, String key, String json) {
+        if (json == null || json.isBlank()) {
+            return;
+        }
+        try {
+            snapshot.put(key, OBJECT_MAPPER.readTree(json));
+        } catch (JsonProcessingException ex) {
+            snapshot.put(key, json);
+        }
+    }
+
+    private List<String> toolIdsByProvider(List<RunProfileToolBindingRecord> tools, String provider) {
+        return Objects.requireNonNullElse(tools, List.<RunProfileToolBindingRecord>of()).stream()
+                .filter(tool -> provider.equalsIgnoreCase(Objects.requireNonNullElse(tool.getProvider(), "").trim()))
+                .map(RunProfileToolBindingRecord::getToolId)
+                .filter(value -> value != null && !value.isBlank())
+                .distinct()
+                .toList();
     }
 
     private String metricJson(String executorEngine, AgentLoopResult result) {

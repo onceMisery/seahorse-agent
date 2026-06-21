@@ -104,10 +104,16 @@ CREATE TABLE IF NOT EXISTS sa_role_card (
     avatar_ref  VARCHAR(512),
     higher_perm SMALLINT     NOT NULL DEFAULT 0,
     enabled     SMALLINT     NOT NULL DEFAULT 0,
+    share_scope VARCHAR(32)  NOT NULL DEFAULT 'PRIVATE',
+    approval_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    published   SMALLINT     NOT NULL DEFAULT 0,
     create_time TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
     deleted     SMALLINT     NOT NULL DEFAULT 0
 );
+ALTER TABLE sa_role_card ADD COLUMN IF NOT EXISTS share_scope VARCHAR(32) NOT NULL DEFAULT 'PRIVATE';
+ALTER TABLE sa_role_card ADD COLUMN IF NOT EXISTS approval_status VARCHAR(32) NOT NULL DEFAULT 'PENDING';
+ALTER TABLE sa_role_card ADD COLUMN IF NOT EXISTS published SMALLINT NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_sa_role_card_user
     ON sa_role_card (tenant_id, user_id, enabled, deleted);
 CREATE UNIQUE INDEX IF NOT EXISTS uk_sa_role_card_user_enabled
@@ -181,6 +187,10 @@ CREATE TABLE IF NOT EXISTS sa_run_profile (
     model_config_json TEXT,
     memory_scope_json TEXT,
     guardrail_config_json TEXT,
+    approval_status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
+    approval_operator VARCHAR(64),
+    approval_comment TEXT,
+    approval_time TIMESTAMP,
     enabled SMALLINT NOT NULL DEFAULT 0,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -198,12 +208,18 @@ COMMENT ON COLUMN sa_run_profile.executor_config_json IS '执行引擎配置 JSO
 COMMENT ON COLUMN sa_run_profile.model_config_json IS '模型配置 JSON，例如模型名称、温度、最大输出长度等';
 COMMENT ON COLUMN sa_run_profile.memory_scope_json IS '记忆范围 JSON，例如是否启用长期记忆、知识库范围、用户画像范围等';
 COMMENT ON COLUMN sa_run_profile.guardrail_config_json IS '安全策略 JSON，例如高风险工具限制、输出过滤、审批策略等';
+COMMENT ON COLUMN sa_run_profile.approval_status IS '运行画像审批状态，例如 DRAFT、PENDING_APPROVAL、APPROVED、REJECTED';
+COMMENT ON COLUMN sa_run_profile.approval_operator IS '运行画像审批操作人或处理人标识';
+COMMENT ON COLUMN sa_run_profile.approval_comment IS '运行画像审批提交、通过或拒绝时填写的说明';
+COMMENT ON COLUMN sa_run_profile.approval_time IS '运行画像最近一次审批状态变更时间';
 COMMENT ON COLUMN sa_run_profile.enabled IS '是否为当前用户默认启用画像，0 表示否，1 表示是';
 COMMENT ON COLUMN sa_run_profile.create_time IS '创建时间';
 COMMENT ON COLUMN sa_run_profile.update_time IS '更新时间';
 COMMENT ON COLUMN sa_run_profile.deleted IS '软删除标记，0 表示有效，1 表示已删除';
 CREATE INDEX IF NOT EXISTS idx_run_profile_user
     ON sa_run_profile (tenant_id, user_id, enabled, deleted);
+CREATE INDEX IF NOT EXISTS idx_run_profile_approval
+    ON sa_run_profile (tenant_id, approval_status, deleted);
 
 CREATE TABLE IF NOT EXISTS sa_run_profile_tool (
     id BIGINT NOT NULL PRIMARY KEY,

@@ -18,7 +18,10 @@
 package com.miracle.ai.seahorse.agent.kernel.application.runprofile;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileAuditSummary;
+import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileProductionGateCheck;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileResolvedPreview;
+import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileRiskSummary;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileToolBindingCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileRepositoryPort;
@@ -29,9 +32,12 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class KernelRunProfileServiceTests {
 
@@ -159,6 +165,166 @@ class KernelRunProfileServiceTests {
                 .getExecutorEngine());
     }
 
+    @Test
+    void shouldRejectRunProfileWhenExecutorEngineIsUnavailable() {
+        InMemoryRunProfileRepository repository = new InMemoryRunProfileRepository();
+        KernelRunProfileService service = new KernelRunProfileService(repository, Set.of("kernel"));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> service.save(
+                RunProfileCommand.builder()
+                        .userId("100")
+                        .name("Unavailable AgentScope")
+                        .executorEngine("agentscope")
+                        .build()));
+
+        assertEquals("executorEngine is not available: agentscope", error.getMessage());
+    }
+
+    @Test
+    void shouldListSupportedExecutorEnginesInStableOrder() {
+        InMemoryRunProfileRepository repository = new InMemoryRunProfileRepository();
+        KernelRunProfileService service = new KernelRunProfileService(repository, Set.of("agentscope", "kernel"));
+
+        assertIterableEquals(List.of("kernel", "agentscope"), service.supportedExecutorEngines());
+    }
+
+    @Test
+    void shouldSummarizeRunProfileRiskSignals() {
+        InMemoryRunProfileRepository repository = new InMemoryRunProfileRepository();
+        KernelRunProfileService service = new KernelRunProfileService(repository, Set.of("kernel", "agentscope"));
+        Long id = service.save(RunProfileCommand.builder()
+                .userId("100")
+                .name("Governed AgentScope")
+                .roleCardId(9L)
+                .executorEngine("agentscope")
+                .memoryScopeJson("{\"longTerm\":true}")
+                .guardrailConfigJson("{\"highRiskToolApproval\":false}")
+                .toolBindings(List.of(
+                        RunProfileToolBindingCommand.builder()
+                                .toolId("filesystem.read_file")
+                                .provider("MCP")
+                                .enabled(true)
+                                .build(),
+                        RunProfileToolBindingCommand.builder()
+                                .toolId("seahorse-researcher")
+                                .provider("A2A")
+                                .enabled(true)
+                                .build(),
+                        RunProfileToolBindingCommand.builder()
+                                .toolId("disabled-openapi")
+                                .provider("OPENAPI")
+                                .enabled(false)
+                                .build()))
+                .build());
+
+        RunProfileRiskSummary summary = service.riskSummary("100", id).orElseThrow();
+
+        assertEquals(id, summary.getRunProfileId());
+        assertEquals("HIGH", summary.getRiskLevel());
+        assertIterableEquals(List.of(
+                        "EXECUTOR_AGENTSCOPE",
+                        "ROLE_CARD_BOUND",
+                        "TOOL_MCP",
+                        "TOOL_A2A",
+                        "MEMORY_LONG_TERM",
+                        "APPROVAL_NOT_ENFORCED"),
+                summary.getRiskCodes());
+        assertEquals(6, summary.getRiskItems().size());
+    }
+
+    @Test
+    void shouldBlockProductionGateWhenAgentScopeProfileMissesRequiredGovernance() {
+        InMemoryRunProfileRepository repository = new InMemoryRunProfileRepository();
+        KernelRunProfileService service = new KernelRunProfileService(repository, Set.of("kernel", "agentscope"));
+        Long id = service.save(RunProfileCommand.builder()
+                .userId("100")
+                .name("Ungoverned AgentScope")
+                .executorEngine("agentscope")
+                .executorConfigJson("{\"studioTraceEnabled\":false}")
+                .guardrailConfigJson("{\"highRiskToolApproval\":false}")
+                .toolBindings(List.of(RunProfileToolBindingCommand.builder()
+                        .toolId("filesystem.read_file")
+                        .provider("MCP")
+                        .enabled(true)
+                        .build()))
+                .build());
+
+        RunProfileProductionGateCheck check = service.productionGateCheck("100", id).orElseThrow();
+
+        assertEquals(id, check.getRunProfileId());
+        assertEquals(false, check.isPassed());
+        assertIterableEquals(List.of(
+                        "APPROVAL_NOT_ENFORCED",
+                        "AGENTSCOPE_NACOS_NAMESPACE_MISSING",
+                        "AGENTSCOPE_NACOS_GROUP_MISSING",
+                        "AGENTSCOPE_STUDIO_TRACE_DISABLED"),
+                check.getBlockingCodes());
+    }
+
+    @Test
+    void shouldPassProductionGateWhenHighRiskToolsAndAgentScopeAreGoverned() {
+        InMemoryRunProfileRepository repository = new InMemoryRunProfileRepository();
+        KernelRunProfileService service = new KernelRunProfileService(repository, Set.of("kernel", "agentscope"));
+        Long id = service.save(RunProfileCommand.builder()
+                .userId("100")
+                .name("Governed AgentScope")
+                .executorEngine("agentscope")
+                .executorConfigJson("""
+                        {"nacosNamespace":"public","nacosGroup":"DEFAULT_GROUP","studioTraceEnabled":true}
+                        """)
+                .guardrailConfigJson("{\"highRiskToolApproval\":true}")
+                .toolBindings(List.of(RunProfileToolBindingCommand.builder()
+                        .toolId("filesystem.read_file")
+                        .provider("MCP")
+                        .enabled(true)
+                        .build()))
+                .build());
+
+        RunProfileProductionGateCheck check = service.productionGateCheck("100", id).orElseThrow();
+
+        assertEquals(true, check.isPassed());
+        assertEquals(List.of(), check.getBlockingCodes());
+        assertEquals("HIGH", check.getRiskLevel());
+    }
+
+    @Test
+    void shouldMoveRunProfileThroughApprovalAndExposeAuditSummary() {
+        InMemoryRunProfileRepository repository = new InMemoryRunProfileRepository();
+        KernelRunProfileService service = new KernelRunProfileService(repository, Set.of("kernel", "agentscope"));
+        Long id = service.save(RunProfileCommand.builder()
+                .userId("100")
+                .name("Governed AgentScope")
+                .executorEngine("agentscope")
+                .guardrailConfigJson("{\"highRiskToolApproval\":false}")
+                .toolBindings(List.of(RunProfileToolBindingCommand.builder()
+                        .toolId("filesystem.read_file")
+                        .provider("MCP")
+                        .enabled(true)
+                        .build()))
+                .build());
+
+        service.submitApproval("100", id, "request production share");
+        assertEquals("PENDING_APPROVAL", repository.records.get(id).getApprovalStatus());
+        assertEquals("request production share", repository.records.get(id).getApprovalComment());
+
+        service.approve("100", id, "admin", "approved for team");
+        assertEquals("APPROVED", repository.records.get(id).getApprovalStatus());
+        assertEquals("admin", repository.records.get(id).getApprovalOperator());
+
+        service.reject("100", id, "security", "needs narrower tools");
+        assertEquals("REJECTED", repository.records.get(id).getApprovalStatus());
+        assertEquals("needs narrower tools", repository.records.get(id).getApprovalComment());
+
+        RunProfileAuditSummary summary = service.auditSummary("100", id).orElseThrow();
+
+        assertEquals(id, summary.getRunProfileId());
+        assertEquals("REJECTED", summary.getApprovalStatus());
+        assertEquals("HIGH", summary.getRiskLevel());
+        assertEquals(1, summary.getEnabledToolCount());
+        assertEquals(1, summary.getHighRiskToolCount());
+        assertIterableEquals(List.of("filesystem.read_file"), summary.getHighRiskToolIds());
+    }
+
     private static final class InMemoryRunProfileRepository implements RunProfileRepositoryPort {
         private final LinkedHashMap<Long, RunProfileRecord> records = new LinkedHashMap<>();
         private final LinkedHashMap<Long, List<RunProfileToolBindingRecord>> toolsByProfile = new LinkedHashMap<>();
@@ -217,6 +383,21 @@ class KernelRunProfileServiceTests {
         @Override
         public void delete(String userId, Long id) {
             findById(userId, id).ifPresent(record -> record.setDeleted(1));
+        }
+
+        @Override
+        public void updateApprovalStatus(
+                String userId,
+                Long id,
+                String approvalStatus,
+                String approvalOperator,
+                String approvalComment) {
+            findById(userId, id).ifPresent(record -> {
+                record.setApprovalStatus(approvalStatus);
+                record.setApprovalOperator(approvalOperator);
+                record.setApprovalComment(approvalComment);
+                record.setApprovalTime(Instant.now());
+            });
         }
 
         @Override
