@@ -18,6 +18,8 @@
 package com.miracle.ai.seahorse.agent.adapters.mcp.http;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerStatusView;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialMaterial;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialProviderPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialRequest;
@@ -30,6 +32,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -69,6 +72,23 @@ class McpHttpAutoConfigurationCredentialTests {
                     assertThat(context.getBean(CredentialProviderPort.class))
                             .isNotInstanceOf(SecretStoreCredentialProvider.class);
                 });
+    }
+
+    @Test
+    void shouldBackOffRuntimeRegistryWhenManagementPortAlreadyExists() {
+        contextRunner
+                .withBean(McpServerManagementInboundPort.class, () -> new McpServerManagementInboundPort() {
+                    @Override
+                    public List<McpServerStatusView> listServers() {
+                        return List.of();
+                    }
+
+                    @Override
+                    public Optional<McpServerStatusView> findServer(String serverName) {
+                        return Optional.empty();
+                    }
+                })
+                .run(context -> assertThat(context).doesNotHaveBean(McpServerRuntimeRegistry.class));
     }
 
     @Configuration(proxyBeanMethods = false)

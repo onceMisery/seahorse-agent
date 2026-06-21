@@ -321,6 +321,10 @@ public class StdioMcpClient implements McpClientPort, AutoCloseable {
         return safeMessage + " stderr: " + stderrText;
     }
 
+    public String stderrTail() {
+        return stderrSnapshot();
+    }
+
     private String stderrSnapshot() {
         synchronized (stderrLock) {
             return stderrTail.toString().trim();
