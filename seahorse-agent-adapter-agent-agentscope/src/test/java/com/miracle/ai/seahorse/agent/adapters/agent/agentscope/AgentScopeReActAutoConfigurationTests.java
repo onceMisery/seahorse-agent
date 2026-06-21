@@ -21,17 +21,29 @@ import com.alibaba.nacos.api.ai.AiService;
 import com.alibaba.nacos.api.ai.model.a2a.AgentEndpoint;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.AgentRunMetadataContributor;
+import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.A2AAgentConnectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNode;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNodeFinish;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTracePage;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTracePageRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRun;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRunFinish;
 import io.a2a.spec.AgentCard;
 import io.a2a.spec.TransportProtocol;
 import io.agentscope.core.a2a.server.AgentScopeA2aServer;
 import io.agentscope.core.a2a.agent.card.AgentCardResolver;
+import io.agentscope.core.event.AgentEvent;
+import io.agentscope.core.event.AgentResultEvent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.model.Model;
@@ -44,9 +56,15 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
+import reactor.core.publisher.Flux;
 
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -125,6 +143,35 @@ class AgentScopeReActAutoConfigurationTests {
                 .run(context -> {
                     assertThat(context).hasSingleBean(ReActExecutorPort.class);
                     assertThat(context.getBean(ReActExecutorPort.class).engineId()).isEqualTo("agentscope");
+                });
+    }
+
+    @Test
+    void agentscopeExecutorBeanUsesKernelTraceRecorderWhenAvailable() {
+        contextRunner
+                .withUserConfiguration(ClientConfiguration.class, TraceConfiguration.class)
+                .withPropertyValues("seahorse.agent.executor.engine=agentscope")
+                .run(context -> {
+                    ReActExecutorPort executor = context.getBean(ReActExecutorPort.class);
+                    RecordingTraceRepository traceRepository = context.getBean(RecordingTraceRepository.class);
+                    RecordingCallback callback = new RecordingCallback();
+                    AgentLoopRequest request = AgentLoopRequest.builder()
+                            .question("plan")
+                            .samplingOptions(ChatSamplingOptions.builder().build())
+                            .runId("run-1")
+                            .agentId("agent-1")
+                            .tenantId("tenant-a")
+                            .build();
+
+                    executor.streamExecute(request, callback, TraceRunScope.active("trace-1", Instant.now()));
+                    callback.awaitComplete();
+
+                    assertThat(traceRepository.startedNodes)
+                            .extracting(RagTraceNode::getNodeName)
+                            .containsExactly("agentscope-step");
+                    assertThat(traceRepository.finishedNodes)
+                            .extracting(RagTraceNodeFinish::status)
+                            .containsExactly(KernelRagTraceRecorder.STATUS_SUCCESS);
                 });
     }
 
@@ -268,7 +315,28 @@ class AgentScopeReActAutoConfigurationTests {
                 public Msg call(AgentLoopRequest request, List<Msg> messages) {
                     return Msg.builder().role(MsgRole.ASSISTANT).textContent("ok").build();
                 }
+
+                @Override
+                public Flux<AgentEvent> stream(AgentLoopRequest request, List<Msg> messages) {
+                    return Flux.just(new AgentResultEvent(Msg.builder()
+                            .role(MsgRole.ASSISTANT)
+                            .textContent("ok")
+                            .build()));
+                }
             };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TraceConfiguration {
+        @Bean
+        RecordingTraceRepository recordingTraceRepository() {
+            return new RecordingTraceRepository();
+        }
+
+        @Bean
+        KernelRagTraceRecorder kernelRagTraceRecorder(RecordingTraceRepository traceRepository) {
+            return new KernelRagTraceRecorder(traceRepository);
         }
     }
 
@@ -346,5 +414,65 @@ class AgentScopeReActAutoConfigurationTests {
     private static Map<String, Object> mapValue(Map<String, Object> metadata, String key) {
         assertThat(metadata.get(key)).isInstanceOf(Map.class);
         return (Map<String, Object>) metadata.get(key);
+    }
+
+    private static final class RecordingCallback implements StreamCallback {
+        private final CountDownLatch terminal = new CountDownLatch(1);
+
+        @Override
+        public void onContent(String content) {
+        }
+
+        @Override
+        public void onComplete() {
+            terminal.countDown();
+        }
+
+        @Override
+        public void onError(Throwable error) {
+            terminal.countDown();
+        }
+
+        private void awaitComplete() throws InterruptedException {
+            assertThat(terminal.await(5, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    private static final class RecordingTraceRepository implements RagTraceRepositoryPort {
+        private final List<RagTraceNode> startedNodes = new ArrayList<>();
+        private final List<RagTraceNodeFinish> finishedNodes = new ArrayList<>();
+
+        @Override
+        public RagTracePage<RagTraceRun> pageRuns(RagTracePageRequest request) {
+            return new RagTracePage<>(1, 10, 0, List.of());
+        }
+
+        @Override
+        public Optional<RagTraceRun> findRun(String traceId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<RagTraceNode> listNodes(String traceId) {
+            return List.of();
+        }
+
+        @Override
+        public void startRun(RagTraceRun run) {
+        }
+
+        @Override
+        public void finishRun(RagTraceRunFinish finish) {
+        }
+
+        @Override
+        public void startNode(RagTraceNode node) {
+            startedNodes.add(node);
+        }
+
+        @Override
+        public void finishNode(RagTraceNodeFinish finish) {
+            finishedNodes.add(finish);
+        }
     }
 }

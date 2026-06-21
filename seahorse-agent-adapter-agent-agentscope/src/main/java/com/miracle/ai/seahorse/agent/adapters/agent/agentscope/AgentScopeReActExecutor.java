@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
+import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopExitReason;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
@@ -29,6 +30,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatTokenUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamApprovalRequiredEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
@@ -54,21 +58,28 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
-import java.time.Instant;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class AgentScopeReActExecutor implements ReActExecutorPort {
 
     private static final String WAITING_APPROVAL_MESSAGE = "Waiting for tool approval.";
     private static final String TOOL_CALL_APPROVAL_SUMMARY = "Tool call requires approval";
     private static final String AGENTSCOPE_STEP_ID = "agentscope-step";
+    private static final String TRACE_TYPE_AGENT_STEP = "AGENT_STEP";
+    private static final String TRACE_CLASS_NAME =
+            "com.miracle.ai.seahorse.agent.adapters.agent.agentscope.AgentScopeReActExecutor";
 
     private final AgentScopeAgentClient client;
     private final Executor asyncExecutor;
     private final ApprovalRequestQueryPort approvalQueryPort;
     private final AgentScopeObservationSupport observationSupport;
+    private final KernelRagTraceRecorder traceRecorder;
 
     public AgentScopeReActExecutor(AgentScopeAgentClient client) {
         this(client, ForkJoinPool.commonPool());
@@ -90,10 +101,20 @@ public class AgentScopeReActExecutor implements ReActExecutorPort {
             Executor asyncExecutor,
             ApprovalRequestQueryPort approvalQueryPort,
             AgentScopeObservationSupport observationSupport) {
+        this(client, asyncExecutor, approvalQueryPort, observationSupport, KernelRagTraceRecorder.noop());
+    }
+
+    public AgentScopeReActExecutor(
+            AgentScopeAgentClient client,
+            Executor asyncExecutor,
+            ApprovalRequestQueryPort approvalQueryPort,
+            AgentScopeObservationSupport observationSupport,
+            KernelRagTraceRecorder traceRecorder) {
         this.client = Objects.requireNonNull(client, "client must not be null");
         this.asyncExecutor = Objects.requireNonNull(asyncExecutor, "asyncExecutor must not be null");
         this.approvalQueryPort = Objects.requireNonNullElseGet(approvalQueryPort, ApprovalRequestQueryPort::empty);
         this.observationSupport = Objects.requireNonNullElseGet(observationSupport, AgentScopeObservationSupport::noop);
+        this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
     }
 
     @Override
@@ -121,32 +142,55 @@ public class AgentScopeReActExecutor implements ReActExecutorPort {
 
     @Override
     public StreamCancellationHandle streamExecute(AgentLoopRequest request, StreamCallback callback) {
+        return streamExecute(request, callback, TraceRunScope.disabled());
+    }
+
+    @Override
+    public StreamCancellationHandle streamExecute(
+            AgentLoopRequest request,
+            StreamCallback callback,
+            TraceRunScope traceRunScope) {
         StreamCallback safeCallback = Objects.requireNonNull(callback, "callback must not be null");
         String capturedTenant = TenantContext.capture();
+        AtomicReference<TraceNodeScope> traceNodeScope = new AtomicReference<>(TraceNodeScope.disabled());
+        AtomicBoolean traceFinished = new AtomicBoolean(false);
+        AtomicBoolean cancellationRequested = new AtomicBoolean(false);
         CompletableFuture<Disposable> subscriptionFuture = CompletableFuture.supplyAsync(() -> {
             TenantContext.restore(capturedTenant);
             AgentLoopRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
+            TraceNodeScope startedNode = traceRecorder.startNode(traceRunScope, agentScopeStepCommand(safeRequest));
+            traceNodeScope.set(startedNode);
+            StreamCallback tracedCallback = finishTraceNodeOnTerminal(safeCallback, startedNode, traceFinished);
             ObservationScope scope = observationSupport.start("agentscope.execute", safeRequest.tenantId(),
                     observationSupport.attributes(
                             "engine", engineId(),
                             "runId", Objects.requireNonNullElse(safeRequest.runId(), ""),
                             "agentName", Objects.requireNonNullElse(safeRequest.agentId(), "")));
             try {
+                if (cancellationRequested.get()) {
+                    finishTraceNode(startedNode, traceFinished, new CancellationException("stream cancelled"));
+                    return null;
+                }
                 StreamEmissionState emissionState = new StreamEmissionState();
-                return client.stream(safeRequest, toAgentScopeMessages(safeRequest))
+                Disposable subscription = client.stream(safeRequest, toAgentScopeMessages(safeRequest))
                         .doFinally(ignored -> scope.close())
                         .subscribe(
-                                event -> emitEvent(event, safeRequest, safeCallback, emissionState),
-                                error -> emitErrorOrApprovalRequired(error, safeRequest, safeCallback),
-                                safeCallback::onComplete);
+                                event -> emitEvent(event, safeRequest, tracedCallback, emissionState),
+                                error -> emitErrorOrApprovalRequired(error, safeRequest, tracedCallback),
+                                tracedCallback::onComplete);
+                if (cancellationRequested.get()) {
+                    subscription.dispose();
+                    finishTraceNode(startedNode, traceFinished, new CancellationException("stream cancelled"));
+                }
+                return subscription;
             } catch (Throwable ex) {
                 scope.close();
                 AgentScopeToolApprovalRequiredException approval = approvalRequired(ex);
                 if (approval == null) {
-                    emitRecoverableError(safeRequest, ex, safeCallback);
-                    safeCallback.onError(ex);
+                    emitRecoverableError(safeRequest, ex, tracedCallback);
+                    tracedCallback.onError(ex);
                 } else {
-                    emitApprovalRequired(safeRequest, approval, safeCallback);
+                    emitApprovalRequired(safeRequest, approval, tracedCallback);
                 }
                 return null;
             } finally {
@@ -154,17 +198,103 @@ public class AgentScopeReActExecutor implements ReActExecutorPort {
             }
         }, asyncExecutor);
         return () -> {
+            cancellationRequested.set(true);
             Disposable subscription = subscriptionFuture.getNow(null);
             if (subscription != null) {
                 subscription.dispose();
             }
             subscriptionFuture.cancel(true);
+            finishTraceNode(traceNodeScope.get(), traceFinished, new CancellationException("stream cancelled"));
         };
     }
 
     @Override
     public String engineId() {
         return "agentscope";
+    }
+
+    private TraceNodeStartCommand agentScopeStepCommand(AgentLoopRequest request) {
+        return new TraceNodeStartCommand(
+                AGENTSCOPE_STEP_ID,
+                TRACE_TYPE_AGENT_STEP,
+                TRACE_CLASS_NAME,
+                "streamExecute",
+                null,
+                0,
+                traceExtraData(request));
+    }
+
+    private String traceExtraData(AgentLoopRequest request) {
+        if (request == null) {
+            return "{\"engine\":\"agentscope\"}";
+        }
+        return "{\"engine\":\"agentscope\",\"runId\":\"" + escapeJson(request.runId())
+                + "\",\"agentId\":\"" + escapeJson(request.agentId()) + "\"}";
+    }
+
+    private StreamCallback finishTraceNodeOnTerminal(
+            StreamCallback delegate,
+            TraceNodeScope nodeScope,
+            AtomicBoolean traceFinished) {
+        return new StreamCallback() {
+            @Override
+            public void onContent(String content) {
+                delegate.onContent(content);
+            }
+
+            @Override
+            public void onThinking(String content) {
+                delegate.onThinking(content);
+            }
+
+            @Override
+            public void onUsage(ChatTokenUsage usage) {
+                delegate.onUsage(usage);
+            }
+
+            @Override
+            public void onRunStarted(String runId) {
+                delegate.onRunStarted(runId);
+            }
+
+            @Override
+            public void onEvent(String eventName, Object payload) {
+                delegate.onEvent(eventName, payload);
+            }
+
+            @Override
+            public void onComplete() {
+                try {
+                    delegate.onComplete();
+                } finally {
+                    finishOnce(null);
+                }
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                try {
+                    delegate.onError(error);
+                } finally {
+                    finishOnce(error);
+                }
+            }
+
+            private void finishOnce(Throwable error) {
+                finishTraceNode(nodeScope, traceFinished, error);
+            }
+        };
+    }
+
+    private void finishTraceNode(TraceNodeScope nodeScope, AtomicBoolean traceFinished, Throwable error) {
+        if (!traceFinished.compareAndSet(false, true)) {
+            return;
+        }
+        if (error == null) {
+            traceRecorder.finishNode(nodeScope);
+        } else {
+            traceRecorder.finishNode(nodeScope, error);
+        }
     }
 
     private AgentLoopResult waitingApprovalResult() {
@@ -376,6 +506,16 @@ public class AgentScopeReActExecutor implements ReActExecutorPort {
             case TOOL -> MsgRole.TOOL;
             case USER -> MsgRole.USER;
         };
+    }
+
+    private String escapeJson(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\r", "\\r")
+                .replace("\n", "\\n");
     }
 
     private static final class StreamEmissionState {

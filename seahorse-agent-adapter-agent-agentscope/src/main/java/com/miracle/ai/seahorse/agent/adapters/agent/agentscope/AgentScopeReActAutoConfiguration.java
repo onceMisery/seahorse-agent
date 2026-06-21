@@ -24,6 +24,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorRouter;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.AgentRunMetadataContributor;
+import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.A2AAgentConnectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
@@ -197,12 +198,14 @@ public class AgentScopeReActAutoConfiguration {
     public AgentScopeReActExecutor seahorseAgentScopeReActExecutor(
             AgentScopeAgentClient client,
             ObjectProvider<ApprovalRequestQueryPort> approvalRequestQueryPort,
+            ObjectProvider<KernelRagTraceRecorder> traceRecorderProvider,
             AgentScopeObservationSupport observationSupport) {
         return new AgentScopeReActExecutor(
                 client,
                 java.util.concurrent.ForkJoinPool.commonPool(),
                 approvalRequestQueryPort.getIfAvailable(ApprovalRequestQueryPort::empty),
-                observationSupport);
+                observationSupport,
+                traceRecorderProvider.getIfAvailable(KernelRagTraceRecorder::noop));
     }
 
     @Bean

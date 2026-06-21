@@ -28,6 +28,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatTokenUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
+import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQuery;
@@ -36,6 +39,13 @@ import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationComma
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNode;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNodeFinish;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTracePage;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTracePageRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRun;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRunFinish;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentEventType;
 import io.agentscope.core.event.AgentResultEvent;
@@ -175,6 +185,67 @@ class AgentScopeReActExecutorTests {
         assertEquals("run-1", observationPort.commands.get(0).attributes().get("runId"));
         assertEquals("agent-1", observationPort.commands.get(0).attributes().get("agentName"));
         assertEquals(1, observationPort.closed);
+    }
+
+    @Test
+    void streamExecuteRecordsAgentscopeSpanInProvidedTraceRun() {
+        CapturingClient client = new CapturingClient();
+        client.events = Flux.just(event("answer", true));
+        RecordingTraceRepository traceRepository = new RecordingTraceRepository();
+        AgentScopeReActExecutor executor = new AgentScopeReActExecutor(
+                client,
+                Runnable::run,
+                ApprovalRequestQueryPort.empty(),
+                AgentScopeObservationSupport.noop(),
+                new KernelRagTraceRecorder(traceRepository));
+        RecordingCallback callback = new RecordingCallback();
+        AgentLoopRequest request = AgentLoopRequest.builder()
+                .question("plan")
+                .samplingOptions(ChatSamplingOptions.builder().build())
+                .runId("run-1")
+                .agentId("agent-1")
+                .tenantId("tenant-a")
+                .build();
+
+        executor.streamExecute(request, callback, TraceRunScope.active("trace-1", Instant.now()));
+
+        assertEquals(1, traceRepository.startedNodes.size());
+        assertEquals("trace-1", traceRepository.startedNodes.get(0).getTraceId());
+        assertEquals("agentscope-step", traceRepository.startedNodes.get(0).getNodeName());
+        assertEquals("AGENT_STEP", traceRepository.startedNodes.get(0).getNodeType());
+        assertEquals(1, traceRepository.finishedNodes.size());
+        assertEquals(KernelRagTraceRecorder.STATUS_SUCCESS, traceRepository.finishedNodes.get(0).status());
+    }
+
+    @Test
+    void streamExecuteFinishesAgentscopeSpanWhenCancelled() {
+        CapturingClient client = new CapturingClient();
+        client.events = Flux.never();
+        RecordingTraceRepository traceRepository = new RecordingTraceRepository();
+        AgentScopeReActExecutor executor = new AgentScopeReActExecutor(
+                client,
+                Runnable::run,
+                ApprovalRequestQueryPort.empty(),
+                AgentScopeObservationSupport.noop(),
+                new KernelRagTraceRecorder(traceRepository));
+        RecordingCallback callback = new RecordingCallback();
+        AgentLoopRequest request = AgentLoopRequest.builder()
+                .question("plan")
+                .samplingOptions(ChatSamplingOptions.builder().build())
+                .runId("run-1")
+                .agentId("agent-1")
+                .tenantId("tenant-a")
+                .build();
+
+        StreamCancellationHandle handle = executor.streamExecute(
+                request,
+                callback,
+                TraceRunScope.active("trace-1", Instant.now()));
+        handle.cancel();
+
+        assertEquals(1, traceRepository.startedNodes.size());
+        assertEquals(1, traceRepository.finishedNodes.size());
+        assertEquals(KernelRagTraceRecorder.STATUS_FAILED, traceRepository.finishedNodes.get(0).status());
     }
 
     @Test
@@ -426,6 +497,44 @@ class AgentScopeReActExecutorTests {
 
         @Override
         public void recordEvent(ObservationEvent event) {
+        }
+    }
+
+    private static final class RecordingTraceRepository implements RagTraceRepositoryPort {
+        private final List<RagTraceNode> startedNodes = new ArrayList<>();
+        private final List<RagTraceNodeFinish> finishedNodes = new ArrayList<>();
+
+        @Override
+        public RagTracePage<RagTraceRun> pageRuns(RagTracePageRequest request) {
+            return new RagTracePage<>(1, 10, 0, List.of());
+        }
+
+        @Override
+        public Optional<RagTraceRun> findRun(String traceId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<RagTraceNode> listNodes(String traceId) {
+            return List.of();
+        }
+
+        @Override
+        public void startRun(RagTraceRun run) {
+        }
+
+        @Override
+        public void finishRun(RagTraceRunFinish finish) {
+        }
+
+        @Override
+        public void startNode(RagTraceNode node) {
+            startedNodes.add(node);
+        }
+
+        @Override
+        public void finishNode(RagTraceNodeFinish finish) {
+            finishedNodes.add(finish);
         }
     }
 
