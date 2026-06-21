@@ -403,11 +403,10 @@ services:
       SEAHORSE_AGENT_ADAPTERS_KEYWORD_INDEX_ELASTICSEARCH_INDEX_NAME: seahorse_keyword_chunk
       # 仓储
       SEAHORSE_AGENT_ADAPTERS_REPOSITORY_TYPE: jdbc
-      # AgentScope / Nacos A2A. Defaults keep kernel as the global executor.
-      # Set SEAHORSE_AGENTSCOPE_EXECUTOR_ENABLED=true to register the AgentScope executor
-      # for Run Profile routing, or set SEAHORSE_AGENT_EXECUTOR_ENGINE=agentscope to make it global.
+      # AgentScope / Nacos A2A. Defaults keep kernel as the global executor while registering
+      # the AgentScope executor so Run Profile routing can select engine=agentscope.
       SEAHORSE_AGENT_EXECUTOR_ENGINE: ${SEAHORSE_AGENT_EXECUTOR_ENGINE:-kernel}
-      SEAHORSE_AGENTSCOPE_EXECUTOR_ENABLED: ${SEAHORSE_AGENTSCOPE_EXECUTOR_ENABLED:-false}
+      SEAHORSE_AGENTSCOPE_EXECUTOR_ENABLED: ${SEAHORSE_AGENTSCOPE_EXECUTOR_ENABLED:-true}
       SEAHORSE_AGENTSCOPE_NACOS_SERVER_ADDR: ${SEAHORSE_AGENTSCOPE_NACOS_SERVER_ADDR:-nacos:8848}
       SEAHORSE_AGENTSCOPE_NACOS_NAMESPACE: ${SEAHORSE_AGENTSCOPE_NACOS_NAMESPACE:-public}
       SEAHORSE_AGENTSCOPE_NACOS_GROUP: ${SEAHORSE_AGENTSCOPE_NACOS_GROUP:-DEFAULT_GROUP}

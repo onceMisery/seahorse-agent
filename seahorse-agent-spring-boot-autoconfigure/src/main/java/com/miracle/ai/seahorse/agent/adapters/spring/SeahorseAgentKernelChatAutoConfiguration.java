@@ -267,9 +267,6 @@ public class SeahorseAgentKernelChatAutoConfiguration {
         if (candidates.isEmpty()) {
             return Optional.empty();
         }
-        if (candidates.size() == 1) {
-            return Optional.of(candidates.get(0));
-        }
         String defaultEngine = environment == null ? "kernel" : environment.getProperty(PROP_AGENT_EXECUTOR_ENGINE, "kernel");
         return Optional.of(new ReActExecutorRouter(candidates, defaultEngine));
     }
