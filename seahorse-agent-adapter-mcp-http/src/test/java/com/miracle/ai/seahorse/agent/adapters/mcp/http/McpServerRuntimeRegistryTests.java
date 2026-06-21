@@ -18,11 +18,17 @@
 package com.miracle.ai.seahorse.agent.adapters.mcp.http;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerStatusView;
+import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerTestResultView;
+import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionRequest;
+import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolDescriptor;
+import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolExecutorPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -62,6 +68,69 @@ class McpServerRuntimeRegistryTests {
         assertThat(registry.findServer("")).isEmpty();
     }
 
+    @Test
+    void shouldRunSafeEchoTestCallThroughRegisteredExecutor() {
+        McpServerRuntimeRegistry registry = new McpServerRuntimeRegistry();
+        registry.recordReady(server("local-echo", McpHttpAdapterProperties.Transport.STDIO, true),
+                List.of(new McpToolDescriptor("echo", "Echo text", Map.of())),
+                "");
+        CapturingExecutor executor = new CapturingExecutor();
+        registry.setToolRegistry(new SingleToolRegistry("echo", executor));
+
+        McpServerTestResultView result = registry.testServer("local-echo");
+
+        assertThat(result.getServerName()).isEqualTo("local-echo");
+        assertThat(result.getToolId()).isEqualTo("echo");
+        assertThat(result.getSuccess()).isTrue();
+        assertThat(result.getContent()).isEqualTo("echo seahorse mcp health check");
+        assertThat(executor.lastRequest.toolId()).isEqualTo("echo");
+        assertThat(executor.lastRequest.arguments()).containsEntry("text", "seahorse mcp health check");
+    }
+
+    @Test
+    void shouldRejectTestCallWhenNoSafeEchoToolExists() {
+        McpServerRuntimeRegistry registry = new McpServerRuntimeRegistry();
+        registry.recordReady(server("filesystem", McpHttpAdapterProperties.Transport.STDIO, true),
+                List.of(new McpToolDescriptor("filesystem.read_file", "Read file", Map.of())),
+                "");
+
+        McpServerTestResultView result = registry.testServer("filesystem");
+
+        assertThat(result.getSuccess()).isFalse();
+        assertThat(result.getToolId()).isEmpty();
+        assertThat(result.getMessage()).isEqualTo("safe echo tool not found");
+    }
+
+    @Test
+    void shouldRestartServerThroughLifecycleAction() {
+        McpServerRuntimeRegistry registry = new McpServerRuntimeRegistry();
+        registry.recordFailed(server("local-echo", McpHttpAdapterProperties.Transport.STDIO, true), "boom");
+        registry.setLifecycleActions(new CapturingLifecycleActions(registry));
+
+        McpServerStatusView status = registry.restartServer("local-echo");
+
+        assertThat(status.getName()).isEqualTo("local-echo");
+        assertThat(status.getStatus()).isEqualTo(McpServerRuntimeRegistry.STATUS_READY);
+        assertThat(status.getToolCount()).isEqualTo(1);
+        assertThat(status.getStderrTail()).isEqualTo("restarted");
+    }
+
+    @Test
+    void shouldRefreshToolsThroughLifecycleAction() {
+        McpServerRuntimeRegistry registry = new McpServerRuntimeRegistry();
+        registry.recordReady(server("local-echo", McpHttpAdapterProperties.Transport.STDIO, true),
+                List.of(new McpToolDescriptor("echo", "Echo text", Map.of())),
+                "old");
+        registry.setLifecycleActions(new CapturingLifecycleActions(registry));
+
+        McpServerStatusView status = registry.refreshTools("local-echo");
+
+        assertThat(status.getStatus()).isEqualTo(McpServerRuntimeRegistry.STATUS_READY);
+        assertThat(status.getStderrTail()).isEqualTo("refreshed");
+        assertThat(status.getTools()).extracting(McpServerStatusView.ToolView::getToolId)
+                .containsExactly("echo", "local-echo.extra");
+    }
+
     private static McpHttpAdapterProperties.Server server(
             String name,
             McpHttpAdapterProperties.Transport transport,
@@ -71,5 +140,46 @@ class McpServerRuntimeRegistryTests {
         server.setTransport(transport);
         server.setEnabled(enabled);
         return server;
+    }
+
+    private static final class CapturingExecutor implements McpToolExecutorPort {
+        private McpToolExecutionRequest lastRequest;
+
+        @Override
+        public McpToolExecutionResult execute(McpToolExecutionRequest request) {
+            lastRequest = request;
+            return McpToolExecutionResult.success(request.toolId(), "echo " + request.arguments().get("text"));
+        }
+    }
+
+    private record SingleToolRegistry(String toolId, McpToolExecutorPort executor) implements McpToolRegistryPort {
+        @Override
+        public Optional<McpToolExecutorPort> findExecutor(String requestedToolId) {
+            return toolId.equals(requestedToolId) ? Optional.of(executor) : Optional.empty();
+        }
+    }
+
+    private static final class CapturingLifecycleActions implements McpServerRuntimeRegistry.LifecycleActions {
+        private final McpServerRuntimeRegistry registry;
+
+        private CapturingLifecycleActions(McpServerRuntimeRegistry registry) {
+            this.registry = registry;
+        }
+
+        @Override
+        public void restart(String serverName) {
+            registry.recordReady(server(serverName, McpHttpAdapterProperties.Transport.STDIO, true),
+                    List.of(new McpToolDescriptor("echo", "Echo text", Map.of())),
+                    "restarted");
+        }
+
+        @Override
+        public void refreshTools(String serverName) {
+            registry.recordReady(server(serverName, McpHttpAdapterProperties.Transport.STDIO, true),
+                    List.of(
+                            new McpToolDescriptor("echo", "Echo text", Map.of()),
+                            new McpToolDescriptor(serverName + ".extra", "Extra", Map.of())),
+                    "refreshed");
+        }
     }
 }

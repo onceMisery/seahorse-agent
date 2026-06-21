@@ -25,4 +25,23 @@ public interface McpServerManagementInboundPort {
     List<McpServerStatusView> listServers();
 
     Optional<McpServerStatusView> findServer(String serverName);
+
+    default McpServerStatusView restartServer(String serverName) {
+        throw new UnsupportedOperationException("MCP server restart is unsupported");
+    }
+
+    default McpServerStatusView refreshTools(String serverName) {
+        throw new UnsupportedOperationException("MCP server tool refresh is unsupported");
+    }
+
+    default McpServerTestResultView testServer(String serverName) {
+        return McpServerTestResultView.builder()
+                .serverName(serverName)
+                .toolId("")
+                .success(false)
+                .status("UNSUPPORTED")
+                .content("")
+                .message("MCP server test is unsupported")
+                .build();
+    }
 }

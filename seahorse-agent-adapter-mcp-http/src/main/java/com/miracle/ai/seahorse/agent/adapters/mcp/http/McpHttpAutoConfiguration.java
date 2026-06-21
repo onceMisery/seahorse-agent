@@ -92,7 +92,8 @@ public class McpHttpAutoConfiguration {
             ObjectProvider<McpToolFeature> localToolFeatures,
             ObjectProvider<CredentialProviderPort> credentialProvider,
             ObjectProvider<McpServerRuntimeRegistry> mcpServerRuntimeRegistryProvider) {
-        List<McpToolFeature> features = new ArrayList<>(localToolFeatures.orderedStream().toList());
+        List<McpToolFeature> baseFeatures = new ArrayList<>(localToolFeatures.orderedStream().toList());
+        List<McpToolFeature> features = new ArrayList<>(baseFeatures);
         McpServerRuntimeRegistry mcpServerRuntimeRegistry = mcpServerRuntimeRegistryProvider
                 .getIfAvailable(McpServerRuntimeRegistry::new);
         OkHttpClient effectiveHttpClient = httpClient.newBuilder()
@@ -104,7 +105,32 @@ public class McpHttpAutoConfiguration {
                 properties,
                 credentialProvider,
                 mcpServerRuntimeRegistry));
-        return new NativeMcpToolRegistry(features);
+        NativeMcpToolRegistry registry = new NativeMcpToolRegistry(features);
+        mcpServerRuntimeRegistry.setToolRegistry(registry);
+        mcpServerRuntimeRegistry.setLifecycleActions(new McpServerRuntimeRegistry.LifecycleActions() {
+            @Override
+            public void restart(String serverName) {
+                rediscoverRemoteFeatures();
+            }
+
+            @Override
+            public void refreshTools(String serverName) {
+                rediscoverRemoteFeatures();
+            }
+
+            private void rediscoverRemoteFeatures() {
+                List<McpToolFeature> refreshedFeatures = new ArrayList<>(baseFeatures);
+                refreshedFeatures.addAll(discoverRemoteFeatures(
+                        effectiveHttpClient,
+                        objectMapper,
+                        properties,
+                        credentialProvider,
+                        mcpServerRuntimeRegistry));
+                registry.replaceAll(refreshedFeatures);
+                mcpServerRuntimeRegistry.setToolRegistry(registry);
+            }
+        });
+        return registry;
     }
 
     @Bean

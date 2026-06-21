@@ -23,10 +23,13 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolExecutorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 
 import java.util.Collection;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Seahorse 原生 MCP 工具注册表。
@@ -48,12 +51,12 @@ public class NativeMcpToolRegistry implements McpToolRegistryPort, AutoCloseable
     }
 
     @Override
-    public Optional<McpToolExecutorPort> findExecutor(String toolId) {
+    public synchronized Optional<McpToolExecutorPort> findExecutor(String toolId) {
         return Optional.ofNullable(executorMap.get(toolId));
     }
 
     @Override
-    public Optional<McpToolDescriptor> findTool(String toolId) {
+    public synchronized Optional<McpToolDescriptor> findTool(String toolId) {
         return Optional.ofNullable(descriptorMap.get(toolId));
     }
 
@@ -62,7 +65,7 @@ public class NativeMcpToolRegistry implements McpToolRegistryPort, AutoCloseable
      *
      * @param feature 工具 Feature
      */
-    public final void register(McpToolFeature feature) {
+    public final synchronized void register(McpToolFeature feature) {
         if (feature == null) {
             return;
         }
@@ -74,11 +77,31 @@ public class NativeMcpToolRegistry implements McpToolRegistryPort, AutoCloseable
         descriptorMap.put(descriptor.toolId(), descriptor);
     }
 
+    public synchronized void replaceAll(Collection<McpToolFeature> features) {
+        closeRegisteredFeatures();
+        executorMap.clear();
+        descriptorMap.clear();
+        for (McpToolFeature feature : Objects.requireNonNullElse(features, java.util.List.<McpToolFeature>of())) {
+            register(feature);
+        }
+    }
+
     @Override
-    public void close() throws Exception {
+    public synchronized void close() {
+        closeRegisteredFeatures();
+        executorMap.clear();
+        descriptorMap.clear();
+    }
+
+    private void closeRegisteredFeatures() {
+        Set<McpToolFeature> closed = Collections.newSetFromMap(new IdentityHashMap<>());
         for (McpToolFeature feature : executorMap.values()) {
-            if (feature instanceof AutoCloseable closeable) {
-                closeable.close();
+            if (feature instanceof AutoCloseable closeable && closed.add(feature)) {
+                try {
+                    closeable.close();
+                } catch (Exception ex) {
+                    throw new IllegalStateException("Failed to close MCP tool feature", ex);
+                }
             }
         }
     }

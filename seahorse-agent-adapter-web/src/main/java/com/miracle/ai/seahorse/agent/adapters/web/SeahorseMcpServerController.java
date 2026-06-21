@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -41,5 +42,30 @@ public class SeahorseMcpServerController {
     public ApiResponse<Object> findServer(@PathVariable String serverName) {
         return ApiResponses.requireService(mcpServerPortProvider, port -> port.findServer(serverName)
                 .orElseThrow(() -> new ResourceNotFoundException("MCP server not found")));
+    }
+
+    @GetMapping({
+            "/mcp/servers/{serverName}/stderr-tail",
+            "/api/mcp/servers/{serverName}/stderr-tail"
+    })
+    public ApiResponse<Object> stderrTail(@PathVariable String serverName) {
+        return ApiResponses.requireService(mcpServerPortProvider, port -> port.findServer(serverName)
+                .map(view -> view.getStderrTail() == null ? "" : view.getStderrTail())
+                .orElseThrow(() -> new ResourceNotFoundException("MCP server not found")));
+    }
+
+    @PostMapping({"/mcp/servers/{serverName}/test", "/api/mcp/servers/{serverName}/test"})
+    public ApiResponse<Object> testServer(@PathVariable String serverName) {
+        return ApiResponses.requireService(mcpServerPortProvider, port -> port.testServer(serverName));
+    }
+
+    @PostMapping({"/mcp/servers/{serverName}/restart", "/api/mcp/servers/{serverName}/restart"})
+    public ApiResponse<Object> restartServer(@PathVariable String serverName) {
+        return ApiResponses.requireService(mcpServerPortProvider, port -> port.restartServer(serverName));
+    }
+
+    @PostMapping({"/mcp/servers/{serverName}/refresh-tools", "/api/mcp/servers/{serverName}/refresh-tools"})
+    public ApiResponse<Object> refreshTools(@PathVariable String serverName) {
+        return ApiResponses.requireService(mcpServerPortProvider, port -> port.refreshTools(serverName));
     }
 }

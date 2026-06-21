@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerStatusView;
+import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerTestResultView;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
@@ -33,6 +34,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -69,6 +71,74 @@ class SeahorseMcpServerControllerTests {
                 .andExpect(jsonPath("$.data.tools[0].toolId").value("echo"));
 
         verify(port).findServer("local-echo");
+    }
+
+    @Test
+    void shouldExposeMcpServerStderrTailByName() throws Exception {
+        McpServerManagementInboundPort port = mock(McpServerManagementInboundPort.class);
+        when(port.findServer("local-echo")).thenReturn(Optional.of(server()));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseMcpServerController(provider(port))).build();
+
+        mvc.perform(get("/api/mcp/servers/local-echo/stderr-tail"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data").value("ready"));
+
+        verify(port).findServer("local-echo");
+    }
+
+    @Test
+    void shouldRunSafeMcpServerTestCall() throws Exception {
+        McpServerManagementInboundPort port = mock(McpServerManagementInboundPort.class);
+        when(port.testServer("local-echo")).thenReturn(McpServerTestResultView.builder()
+                .serverName("local-echo")
+                .toolId("echo")
+                .success(true)
+                .status("SUCCESS")
+                .content("echo seahorse mcp health check")
+                .message("SUCCESS")
+                .build());
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseMcpServerController(provider(port))).build();
+
+        mvc.perform(post("/api/mcp/servers/local-echo/test"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.serverName").value("local-echo"))
+                .andExpect(jsonPath("$.data.toolId").value("echo"))
+                .andExpect(jsonPath("$.data.success").value(true))
+                .andExpect(jsonPath("$.data.content").value("echo seahorse mcp health check"));
+
+        verify(port).testServer("local-echo");
+    }
+
+    @Test
+    void shouldRestartMcpServerByName() throws Exception {
+        McpServerManagementInboundPort port = mock(McpServerManagementInboundPort.class);
+        when(port.restartServer("local-echo")).thenReturn(server());
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseMcpServerController(provider(port))).build();
+
+        mvc.perform(post("/api/mcp/servers/local-echo/restart"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.name").value("local-echo"))
+                .andExpect(jsonPath("$.data.status").value("READY"));
+
+        verify(port).restartServer("local-echo");
+    }
+
+    @Test
+    void shouldRefreshMcpServerToolsByName() throws Exception {
+        McpServerManagementInboundPort port = mock(McpServerManagementInboundPort.class);
+        when(port.refreshTools("local-echo")).thenReturn(server());
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseMcpServerController(provider(port))).build();
+
+        mvc.perform(post("/api/mcp/servers/local-echo/refresh-tools"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.name").value("local-echo"))
+                .andExpect(jsonPath("$.data.tools[0].toolId").value("echo"));
+
+        verify(port).refreshTools("local-echo");
     }
 
     private static McpServerStatusView server() {
