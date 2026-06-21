@@ -211,6 +211,36 @@ class SeahorseChatControllerTests {
     }
 
     @Test
+    void shouldPassAssistantParentMessageIdIntoStreamChatCommandAndCallback() throws Exception {
+        ChatInboundPort chatPort = mock(ChatInboundPort.class);
+        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
+        RecordingCallbackFactory callbackFactory = new RecordingCallbackFactory();
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseChatController(
+                        provider(ChatInboundPort.class, chatPort),
+                        callbackFactory,
+                        streamTaskPort,
+                        1_000L,
+                        provider(AgentRunSnapshotInboundPort.class, null))).build();
+
+        mvc.perform(get("/rag/v3/chat")
+                        .param("question", "Regenerate this answer")
+                        .param("conversationId", "conversation-1")
+                        .param("userId", "user-1")
+                        .param("branchLeafMessageId", "123")
+                        .param("assistantParentMessageId", "123"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+
+        ArgumentCaptor<StreamChatCommand> captor = ArgumentCaptor.forClass(StreamChatCommand.class);
+        verify(chatPort).streamChat(captor.capture(), org.mockito.ArgumentMatchers.any());
+        assertThat(captor.getValue().branchLeafMessageId()).isEqualTo(123L);
+        assertThat(captor.getValue().assistantParentMessageId()).isEqualTo(123L);
+        assertThat(callbackFactory.assistantParentMessageId).isEqualTo(123L);
+    }
+
+    @Test
     void shouldPassRunProfileIdIntoStreamChatCommand() throws Exception {
         ChatInboundPort chatPort = mock(ChatInboundPort.class);
         StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
@@ -325,6 +355,30 @@ class SeahorseChatControllerTests {
 
         @Override
         public void onError(Throwable error) {
+        }
+    }
+
+    private static final class RecordingCallbackFactory implements ChatStreamCallbackFactoryPort {
+
+        private Long assistantParentMessageId;
+
+        @Override
+        public com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback create(
+                org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter,
+                String conversationId,
+                String taskId) {
+            return new NoopStreamCallback();
+        }
+
+        @Override
+        public com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback create(
+                org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter,
+                String conversationId,
+                String taskId,
+                String userId,
+                Long assistantParentMessageId) {
+            this.assistantParentMessageId = assistantParentMessageId;
+            return new NoopStreamCallback();
         }
     }
 }

@@ -41,6 +41,20 @@ class StreamChatCommandTests {
     }
 
     @Test
+    void assistantParentMessageIdNormalized() {
+        var cmd = new StreamChatCommand("q", "c", "t", "u", false,
+                ChatMode.RAG, null, null, null, List.of(), List.of(),
+                List.of(), null, 100L, 200L, 300L);
+
+        assertEquals(200L, cmd.assistantParentMessageId());
+
+        var blank = new StreamChatCommand("q", "c", "t", "u", false,
+                ChatMode.RAG, null, null, null, List.of(), List.of(),
+                List.of(), null, 100L, 0L, 300L);
+        assertNull(blank.assistantParentMessageId());
+    }
+
+    @Test
     void selectedSkillNamesOverLimitThrows() {
         assertThrows(IllegalArgumentException.class, () -> new StreamChatCommand(
                 "q", "c", "t", "u", false, ChatMode.AGENT,

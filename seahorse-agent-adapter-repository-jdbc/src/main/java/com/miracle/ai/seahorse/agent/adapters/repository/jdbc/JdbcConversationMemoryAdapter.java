@@ -55,6 +55,23 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
             ORDER BY create_time DESC, id DESC
             LIMIT ?
             """;
+    private static final String SQL_LIST_BRANCH_PATH = """
+            WITH RECURSIVE branch_path(id, role, content, thinking_content, thinking_duration, parent_id, depth) AS (
+                SELECT id, role, content, thinking_content, thinking_duration, parent_id, 0 AS depth
+                FROM t_message
+                WHERE conversation_id = ? AND user_id = ? AND tenant_id = ? AND deleted = 0 AND id = ?
+                UNION ALL
+                SELECT parent.id, parent.role, parent.content, parent.thinking_content,
+                       parent.thinking_duration, parent.parent_id, branch_path.depth + 1
+                FROM t_message parent
+                JOIN branch_path ON parent.id = branch_path.parent_id
+                WHERE parent.conversation_id = ? AND parent.user_id = ? AND parent.tenant_id = ?
+                  AND parent.deleted = 0
+            )
+            SELECT role, content, thinking_content, thinking_duration
+            FROM branch_path
+            ORDER BY depth DESC
+            """;
     private static final String SQL_INSERT_MESSAGE = """
             INSERT INTO t_message
             (id, conversation_id, user_id, role, content, thinking_content, thinking_duration,
@@ -135,19 +152,55 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
     }
 
     @Override
+    public List<ChatMessage> loadAndAppend(
+            String conversationId,
+            String userId,
+            ChatMessage message,
+            Long branchLeafMessageId) {
+        if (branchLeafMessageId == null) {
+            return loadAndAppend(conversationId, userId, message);
+        }
+        List<ChatMessage> history = loadBranchPath(conversationId, userId, branchLeafMessageId);
+        if (history.isEmpty()) {
+            return loadAndAppend(conversationId, userId, message);
+        }
+        appendUnderParent(conversationId, userId, message, null, branchLeafMessageId);
+        return trimLeadingAssistant(history);
+    }
+
+    @Override
     public void append(String conversationId, String userId, ChatMessage message) {
         append(conversationId, userId, message, null);
     }
 
     @Override
     public void append(String conversationId, String userId, ChatMessage message, String agentRunId) {
+        appendUnderParent(conversationId, userId, message, agentRunId, null);
+    }
+
+    @Override
+    public void append(
+            String conversationId,
+            String userId,
+            ChatMessage message,
+            String agentRunId,
+            Long parentMessageId) {
+        appendUnderParent(conversationId, userId, message, agentRunId, parentMessageId);
+    }
+
+    private void appendUnderParent(
+            String conversationId,
+            String userId,
+            ChatMessage message,
+            String agentRunId,
+            Long requestedParentId) {
         if (!hasText(conversationId) || !hasText(userId) || message == null || !hasText(message.getContent())) {
             return;
         }
         long convId = toLongId(conversationId);
         long uid = toLongId(userId);
         String tenantId = JdbcTenantSupport.resolveTenantId();
-        Long parentId = activeLeafId(convId, uid, tenantId);
+        Long parentId = requestedParentId == null ? activeLeafId(convId, uid, tenantId) : requestedParentId;
         int siblingSeq = siblingCount(convId, uid, tenantId, parentId);
         Timestamp now = Timestamp.from(Instant.now());
         long messageId = JdbcMemorySupport.nextId();
@@ -188,6 +241,16 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
                 toLongId(conversationId), toLongId(userId), JdbcTenantSupport.resolveTenantId(), historyLimit);
         Collections.reverse(messages);
         return trimLeadingAssistant(messages);
+    }
+
+    @Override
+    public List<ChatMessage> loadBranchPath(String conversationId, String userId, Long branchLeafMessageId) {
+        if (!hasText(conversationId) || !hasText(userId) || branchLeafMessageId == null) {
+            return List.of();
+        }
+        return jdbcTemplate.query(SQL_LIST_BRANCH_PATH, this::mapMessage,
+                toLongId(conversationId), toLongId(userId), JdbcTenantSupport.resolveTenantId(), branchLeafMessageId,
+                toLongId(conversationId), toLongId(userId), JdbcTenantSupport.resolveTenantId());
     }
 
     private Long activeLeafId(long conversationId, long userId, String tenantId) {

@@ -80,6 +80,46 @@ class JdbcChatSchemaUpgradeTests {
     }
 
     @Test
+    void shouldBackfillRoleCardGovernanceColumnsForExistingTable() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:chat-schema-upgrade-role-card;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.execute("""
+                CREATE TABLE sa_role_card (
+                    id BIGINT PRIMARY KEY,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    user_id VARCHAR(64) NOT NULL,
+                    name VARCHAR(128) NOT NULL,
+                    definition TEXT NOT NULL,
+                    avatar_ref VARCHAR(512),
+                    higher_perm SMALLINT NOT NULL DEFAULT 0,
+                    enabled SMALLINT NOT NULL DEFAULT 0,
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted SMALLINT NOT NULL DEFAULT 0
+                )
+                """);
+
+        new JdbcChatSchemaUpgrade(dataSource).upgrade();
+
+        assertThat(columnExists(jdbcTemplate, "sa_role_card", "share_scope")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_role_card", "approval_status")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_role_card", "published")).isTrue();
+        jdbcTemplate.update("""
+                INSERT INTO sa_role_card (id, user_id, name, definition)
+                VALUES (1, 'default', 'Default', 'Default role card')
+                """);
+        assertThat(jdbcTemplate.queryForMap("""
+                SELECT share_scope, approval_status, published
+                FROM sa_role_card
+                WHERE id = 1
+                """))
+                .containsEntry("SHARE_SCOPE", "PRIVATE")
+                .containsEntry("APPROVAL_STATUS", "PENDING")
+                .containsEntry("PUBLISHED", 0);
+    }
+
+    @Test
     void shouldBackfillMaintenanceCompactionColumnsForExistingTable() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:chat-schema-upgrade-maintenance-run;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");

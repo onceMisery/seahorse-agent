@@ -8,7 +8,9 @@ export interface SendMessageOptions {
   versionId?: string | null;
   roleCardId?: string | number | null;
   branchLeafMessageId?: string | number | null;
+  assistantParentMessageId?: string | number | null;
   runProfileId?: string | number | null;
+  reuseUserMessage?: boolean;
 }
 
 export interface SubmitFeedbackOptions {
@@ -43,6 +45,8 @@ export interface ChatState {
   setDeepThinkingEnabled: (enabled: boolean) => void;
   setSelectedTaskTemplateId: (templateId: TaskTemplateId | string | null) => void;
   switchMessageBranch: (messageId: string, targetMessageId: string) => Promise<void>;
+  editUserMessageBranch: (messageId: string, content: string) => Promise<void>;
+  regenerateAssistantMessageBranch: (messageId: string) => Promise<void>;
   sendMessage: (content: string, options?: SendMessageOptions) => Promise<void>;
   refreshRunSnapshot: (messageId: string, runId: string) => Promise<void>;
   cancelGeneration: () => void;

@@ -37,6 +37,30 @@ public interface ConversationMemoryPort {
     List<ChatMessage> loadAndAppend(String conversationId, String userId, ChatMessage message);
 
     /**
+     * Load the selected branch path and append the current user message under that leaf.
+     *
+     * @param conversationId       conversation ID
+     * @param userId               user ID
+     * @param message              user message to append
+     * @param branchLeafMessageId  selected branch leaf message ID
+     * @return history messages before append
+     */
+    default List<ChatMessage> loadAndAppend(
+            String conversationId,
+            String userId,
+            ChatMessage message,
+            Long branchLeafMessageId) {
+        return loadAndAppend(conversationId, userId, message);
+    }
+
+    /**
+     * Load the selected branch path without appending a new message.
+     */
+    default List<ChatMessage> loadBranchPath(String conversationId, String userId, Long branchLeafMessageId) {
+        return List.of();
+    }
+
+    /**
      * 追加单条会话消息。
      *
      * @param conversationId 会话 ID
@@ -51,6 +75,18 @@ public interface ConversationMemoryPort {
      */
     default void append(String conversationId, String userId, ChatMessage message, String agentRunId) {
         append(conversationId, userId, message);
+    }
+
+    /**
+     * Append a conversation message under a requested parent message.
+     */
+    default void append(
+            String conversationId,
+            String userId,
+            ChatMessage message,
+            String agentRunId,
+            Long parentMessageId) {
+        append(conversationId, userId, message, agentRunId);
     }
 
     static ConversationMemoryPort noop() {

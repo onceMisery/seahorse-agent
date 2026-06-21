@@ -14,6 +14,7 @@ import {
   listMessageTree,
   listSessions,
   deleteSession as deleteSessionRequest,
+  forkMessage,
   renameSession as renameSessionRequest,
   switchMessageBranch as switchMessageBranchRequest
 } from "@/services/sessionService";
@@ -303,7 +304,11 @@ export const useChatStore = create<ChatState>()(
       };
 
       set((s) => {
-        s.messages.push(userMessage, assistantMessage);
+        if (options?.reuseUserMessage) {
+          s.messages.push(assistantMessage);
+        } else {
+          s.messages.push(userMessage, assistantMessage);
+        }
         s.isStreaming = true;
         s.streamingMessageId = assistantId;
         s.thinkingStartAt = null;
@@ -318,6 +323,7 @@ export const useChatStore = create<ChatState>()(
       const versionId = options?.versionId || undefined;
       const roleCardId = options?.roleCardId ?? undefined;
       const runProfileId = options?.runProfileId ?? undefined;
+      const assistantParentMessageId = normalizePersistedMessageId(options?.assistantParentMessageId);
       const branchLeafMessageId = normalizePersistedMessageId(options?.branchLeafMessageId)
         ?? currentBranchLeafMessageId(get().messages);
       const query = buildQuery({
@@ -330,6 +336,7 @@ export const useChatStore = create<ChatState>()(
         roleCardId,
         runProfileId,
         branchLeafMessageId,
+        assistantParentMessageId,
         taskTemplateId: selectedTaskTemplateId || undefined,
         attachmentIds: attachmentIdsFiltered,
         selectedSkillNames
@@ -464,6 +471,66 @@ export const useChatStore = create<ChatState>()(
       } catch (error) {
         console.error("Failed to switch message branch:", error);
         toast.error("切换分支失败");
+      }
+    },
+
+    editUserMessageBranch: async (messageId, content) => {
+      const sessionId = get().currentSessionId;
+      const trimmed = content.trim();
+      if (!sessionId || !messageId || !trimmed || get().isStreaming) {
+        return;
+      }
+      try {
+        const result = await forkMessage(sessionId, {
+          anchorMessageId: messageId,
+          content: trimmed,
+          role: "user",
+          regenerate: false
+        });
+        const newMessageId = normalizePersistedMessageId(result?.newMessageId);
+        if (!newMessageId) {
+          return;
+        }
+        const nodes = await switchMessageBranchRequest(sessionId, newMessageId);
+        const nextMessages = messagesFromTree(nodes);
+        if (get().currentSessionId !== sessionId) return;
+        set((state) => {
+          state.messages = nextMessages;
+        });
+        await hydrateSelectedSessionAgentRuns(sessionId, nextMessages, set);
+      } catch (error) {
+        console.error("Failed to edit message branch:", error);
+        toast.error("缂栬緫鍒嗘敮澶辫触");
+      }
+    },
+
+    regenerateAssistantMessageBranch: async (messageId) => {
+      const sessionId = get().currentSessionId;
+      const messages = get().messages;
+      const assistant = messages.find((message) => message.id === messageId && message.role === "assistant");
+      const parentMessageId = normalizePersistedMessageId(assistant?.parentId);
+      const parent = parentMessageId
+        ? messages.find((message) => message.id === parentMessageId && message.role === "user")
+        : undefined;
+      if (!sessionId || !assistant || !parent || !parentMessageId || get().isStreaming) {
+        return;
+      }
+      try {
+        await get().sendMessage(parent.content, {
+          branchLeafMessageId: parentMessageId,
+          assistantParentMessageId: parentMessageId,
+          reuseUserMessage: true
+        });
+        const nodes = await listMessageTree(sessionId);
+        const nextMessages = messagesFromTree(nodes);
+        if (get().currentSessionId !== sessionId) return;
+        set((state) => {
+          state.messages = nextMessages;
+        });
+        await hydrateSelectedSessionAgentRuns(sessionId, nextMessages, set);
+      } catch (error) {
+        console.error("Failed to regenerate assistant branch:", error);
+        toast.error("重新生成回答失败");
       }
     },
 

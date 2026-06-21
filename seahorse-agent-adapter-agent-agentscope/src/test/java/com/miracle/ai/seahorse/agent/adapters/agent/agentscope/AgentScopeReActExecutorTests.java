@@ -42,6 +42,7 @@ import io.agentscope.core.event.AgentResultEvent;
 import io.agentscope.core.event.ModelCallEndEvent;
 import io.agentscope.core.event.RequestStopEvent;
 import io.agentscope.core.event.RequireUserConfirmEvent;
+import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
@@ -96,6 +97,52 @@ class AgentScopeReActExecutorTests {
         executor.streamExecute(request, callback);
 
         assertEquals(List.of("first ", "second"), callback.contents);
+        assertEquals(1, callback.completed);
+        assertEquals(0, callback.errors);
+    }
+
+    @Test
+    void streamExecuteDoesNotAppendFinalResultContentAfterTextDeltas() {
+        CapturingClient client = new CapturingClient();
+        client.events = Flux.just(
+                new TextBlockDeltaEvent("reply-1", "block-1", "收到"),
+                new AgentResultEvent(Msg.builder()
+                        .role(MsgRole.ASSISTANT)
+                        .textContent("收到")
+                        .build()));
+        AgentScopeReActExecutor executor = new AgentScopeReActExecutor(client, Runnable::run);
+        RecordingCallback callback = new RecordingCallback();
+        AgentLoopRequest request = AgentLoopRequest.builder()
+                .question("plan")
+                .samplingOptions(ChatSamplingOptions.builder().build())
+                .build();
+
+        executor.streamExecute(request, callback);
+
+        assertEquals(List.of("收到"), callback.contents);
+        assertEquals(1, callback.completed);
+        assertEquals(0, callback.errors);
+    }
+
+    @Test
+    void streamExecuteStillEmitsFinalResultContentAfterBlankTextDelta() {
+        CapturingClient client = new CapturingClient();
+        client.events = Flux.just(
+                new TextBlockDeltaEvent("reply-1", "block-1", ""),
+                new AgentResultEvent(Msg.builder()
+                        .role(MsgRole.ASSISTANT)
+                        .textContent("final answer")
+                        .build()));
+        AgentScopeReActExecutor executor = new AgentScopeReActExecutor(client, Runnable::run);
+        RecordingCallback callback = new RecordingCallback();
+        AgentLoopRequest request = AgentLoopRequest.builder()
+                .question("plan")
+                .samplingOptions(ChatSamplingOptions.builder().build())
+                .build();
+
+        executor.streamExecute(request, callback);
+
+        assertEquals(List.of("final answer"), callback.contents);
         assertEquals(1, callback.completed);
         assertEquals(0, callback.errors);
     }

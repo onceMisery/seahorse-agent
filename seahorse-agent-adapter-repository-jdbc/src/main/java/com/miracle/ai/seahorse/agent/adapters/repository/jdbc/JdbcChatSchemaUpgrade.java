@@ -41,6 +41,7 @@ public class JdbcChatSchemaUpgrade {
         ensureConversationAttachmentTable();
         ensureMemoryProfileTables();
         ensureTaskTable();
+        ensureRoleCardGovernanceColumns();
         widenColumns("t_conversation", List.of("id", "conversation_id", "user_id"));
         widenColumns("t_conversation_summary", List.of("id", "conversation_id", "user_id", "last_message_id"));
         widenColumns("t_message", List.of("id", "conversation_id", "user_id"));
@@ -79,6 +80,15 @@ public class JdbcChatSchemaUpgrade {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_sa_task_status ON sa_task(status)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_sa_task_conv ON sa_task(conversation_id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_sa_task_tenant ON sa_task(tenant_id)");
+    }
+
+    private void ensureRoleCardGovernanceColumns() {
+        if (!tableExists("sa_role_card")) {
+            return;
+        }
+        addColumnIfMissing("sa_role_card", "share_scope", "VARCHAR(32) NOT NULL DEFAULT 'PRIVATE'");
+        addColumnIfMissing("sa_role_card", "approval_status", "VARCHAR(32) NOT NULL DEFAULT 'PENDING'");
+        addColumnIfMissing("sa_role_card", "published", "SMALLINT NOT NULL DEFAULT 0");
     }
 
     private void ensureAgentSkillTables() {

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Brain, ChevronDown, ChevronLeft, ChevronRight, ScanSearch } from "lucide-react";
+import { Brain, Check, ChevronDown, ChevronLeft, ChevronRight, Pencil, RotateCcw, ScanSearch, X } from "lucide-react";
 
 import { AgentLiveStatus } from "@/components/chat/AgentLiveStatus";
 import { AgentTracePanel } from "@/components/chat/AgentTracePanel";
@@ -40,18 +40,95 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
     message.status !== "streaming" &&
     message.id &&
     !message.id.startsWith("assistant-");
+  const canRegenerate =
+    message.role === "assistant" &&
+    message.status !== "streaming" &&
+    Boolean(message.parentId) &&
+    !message.id.startsWith("assistant-");
   const isThinking = Boolean(message.isThinking);
   const [thinkingExpanded, setThinkingExpanded] = React.useState(false);
   const hasThinking = Boolean(message.thinking && message.thinking.trim().length > 0);
   const hasContent = message.content.trim().length > 0;
   const isWaiting = message.status === "streaming" && !isThinking && !hasContent;
   const showEmptyResult = !hasContent && message.status === "done";
+  const editUserMessageBranch = useChatStore((state) => state.editUserMessageBranch);
+  const regenerateAssistantMessageBranch = useChatStore((state) => state.regenerateAssistantMessageBranch);
+  const [editingUserMessage, setEditingUserMessage] = React.useState(false);
+  const [editedUserContent, setEditedUserContent] = React.useState(message.content);
+
+  React.useEffect(() => {
+    setEditedUserContent(message.content);
+    setEditingUserMessage(false);
+  }, [message.id, message.content]);
 
   if (isUser) {
+    const canEdit = message.status !== "streaming" && !message.id.startsWith("user-");
+    const saveEdit = () => {
+      const trimmed = editedUserContent.trim();
+      if (!trimmed || trimmed === message.content.trim()) {
+        setEditingUserMessage(false);
+        setEditedUserContent(message.content);
+        return;
+      }
+      void editUserMessageBranch(message.id, trimmed);
+      setEditingUserMessage(false);
+    };
     return (
       <div className="flex flex-col items-end gap-2">
-        <div className="user-message">
-          <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        <div className="flex max-w-full items-end gap-2">
+          {canEdit ? (
+            <button
+              type="button"
+              aria-label="Edit message"
+              title="Edit message"
+              onClick={() => setEditingUserMessage(true)}
+              className="rounded p-1 text-xs opacity-70 transition hover:bg-[var(--theme-accent-alpha-10)] hover:opacity-100"
+              style={{ color: "var(--theme-text-secondary)" }}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+          <div className="user-message">
+            {editingUserMessage ? (
+              <div className="flex min-w-[240px] flex-col gap-2">
+                <textarea
+                  aria-label="Edit message content"
+                  value={editedUserContent}
+                  onChange={(event) => setEditedUserContent(event.target.value)}
+                  className="min-h-20 resize-y rounded-md border bg-transparent p-2 text-sm outline-none"
+                  style={{
+                    borderColor: "var(--theme-accent-alpha-20)",
+                    color: "var(--theme-text-primary)"
+                  }}
+                />
+                <div className="flex justify-end gap-1">
+                  <button
+                    type="button"
+                    aria-label="Cancel edit"
+                    title="Cancel edit"
+                    onClick={() => {
+                      setEditingUserMessage(false);
+                      setEditedUserContent(message.content);
+                    }}
+                    className="rounded p-1 transition hover:bg-[var(--theme-accent-alpha-10)]"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Save edit"
+                    title="Save edit"
+                    onClick={saveEdit}
+                    className="rounded p-1 transition hover:bg-[var(--theme-accent-alpha-10)]"
+                  >
+                    <Check className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="whitespace-pre-wrap break-words">{message.content}</p>
+            )}
+          </div>
         </div>
         <BranchSwitcher message={message} />
       </div>
@@ -196,12 +273,26 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
               <p className="text-xs text-rose-400">生成已中断。</p>
             ) : null}
             {showFeedback ? (
-              <FeedbackButtons
-                messageId={message.id}
-                feedback={message.feedback ?? null}
-                content={message.content}
-                alwaysVisible={Boolean(isLast)}
-              />
+              <div className="flex items-center gap-2">
+                {canRegenerate ? (
+                  <button
+                    type="button"
+                    aria-label="Regenerate response"
+                    title="Regenerate response"
+                    onClick={() => regenerateAssistantMessageBranch(message.id)}
+                    className="rounded p-1 transition hover:bg-[var(--theme-accent-alpha-10)]"
+                    style={{ color: "var(--theme-text-secondary)" }}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </button>
+                ) : null}
+                <FeedbackButtons
+                  messageId={message.id}
+                  feedback={message.feedback ?? null}
+                  content={message.content}
+                  alwaysVisible={Boolean(isLast)}
+                />
+              </div>
             ) : null}
             <BranchSwitcher message={message} />
           </div>

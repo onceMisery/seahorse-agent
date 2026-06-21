@@ -108,6 +108,61 @@ class JdbcConversationMemoryAdapterTests {
     }
 
     @Test
+    void shouldLoadSelectedBranchPathAndAppendUnderBranchLeaf() {
+        Timestamp sameMoment = Timestamp.from(Instant.parse("2026-05-19T12:00:00Z"));
+        insertMessage("1", "1", "1", "user", "hello", sameMoment, null, 1, 0);
+        insertMessage("2", "1", "1", "assistant", "active answer", sameMoment, 1L, 1, 0);
+        insertMessage("3", "1", "1", "assistant", "alternate answer", sameMoment, 1L, 0, 1);
+        insertMessage("4", "1", "1", "user", "alternate follow up", sameMoment, 3L, 0, 0);
+
+        List<ChatMessage> history = adapter.loadAndAppend("1", "1", ChatMessage.user("continue alternate"), 4L);
+
+        assertThat(history).extracting(ChatMessage::getContent)
+                .containsExactly("hello", "alternate answer", "alternate follow up");
+        assertThat(jdbcTemplate.queryForMap("""
+                SELECT parent_id, active, sibling_seq
+                FROM t_message
+                WHERE content = 'continue alternate'
+                """))
+                .containsEntry("PARENT_ID", 4L)
+                .containsEntry("ACTIVE", 1)
+                .containsEntry("SIBLING_SEQ", 0);
+    }
+
+    @Test
+    void shouldLoadSelectedBranchPathWithoutAppendingMessage() {
+        Timestamp sameMoment = Timestamp.from(Instant.parse("2026-05-19T12:00:00Z"));
+        insertMessage("1", "1", "1", "user", "hello", sameMoment, null, 1, 0);
+        insertMessage("2", "1", "1", "assistant", "active answer", sameMoment, 1L, 1, 0);
+        insertMessage("3", "1", "1", "assistant", "alternate answer", sameMoment, 1L, 0, 1);
+        insertMessage("4", "1", "1", "user", "alternate follow up", sameMoment, 3L, 0, 0);
+
+        List<ChatMessage> history = adapter.loadBranchPath("1", "1", 4L);
+
+        assertThat(history).extracting(ChatMessage::getContent)
+                .containsExactly("hello", "alternate answer", "alternate follow up");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(1) FROM t_message", Integer.class)).isEqualTo(4);
+    }
+
+    @Test
+    void shouldAppendAssistantMessageUnderRequestedParent() {
+        Timestamp sameMoment = Timestamp.from(Instant.parse("2026-05-19T12:00:00Z"));
+        insertMessage("1", "1", "1", "user", "hello", sameMoment, null, 1, 0);
+        insertMessage("2", "1", "1", "assistant", "old answer", sameMoment, 1L, 1, 0);
+
+        adapter.append("1", "1", ChatMessage.assistant("new answer"), "run-2", 1L);
+
+        assertThat(jdbcTemplate.queryForMap("""
+                SELECT parent_id, agent_run_id, sibling_seq
+                FROM t_message
+                WHERE content = 'new answer'
+                """))
+                .containsEntry("PARENT_ID", 1L)
+                .containsEntry("AGENT_RUN_ID", "run-2")
+                .containsEntry("SIBLING_SEQ", 1);
+    }
+
+    @Test
     void shouldRetryAppendWithMaxSiblingSeqWhenExistingSiblingsHaveGap() {
         Timestamp sameMoment = Timestamp.from(Instant.parse("2026-05-19T12:00:00Z"));
         insertMessage("1", "1", "1", "user", "hello", sameMoment, null, 1, 0);

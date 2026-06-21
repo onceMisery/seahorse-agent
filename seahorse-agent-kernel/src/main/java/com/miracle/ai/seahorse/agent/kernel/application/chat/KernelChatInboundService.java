@@ -104,6 +104,7 @@ public class KernelChatInboundService implements ChatInboundPort {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final double DEFAULT_AGENT_TEMPERATURE = 0.3D;
     private static final String MODEL_CONFIG_MODEL_ID = "modelId";
+    private static final String MODEL_CONFIG_MODEL = "model";
     private static final String MODEL_CONFIG_TEMPERATURE = "temperature";
     private static final String MODEL_CONFIG_TOP_P = "topP";
     private static final String MODEL_CONFIG_TOP_K = "topK";
@@ -495,6 +496,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                 safeCommand.conversationId(),
                 safeCommand.taskId(),
                 safeCommand.userId()));
+        StreamCallback errorCallback = safeCallback;
         try {
             if (safeCommand.chatMode() == ChatMode.AGENT) {
                 if (agentLoop.isPresent()) {
@@ -507,6 +509,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                     AgentLoopRequest loopRequest = buildAgentLoopRequest(safeCommand, run);
                     StreamCallback terminalCallback = finishTraceOnTerminal(
                             safeCallback, traceRunScope, run == null ? null : run.runId());
+                    errorCallback = terminalCallback;
                     StreamCancellationHandle handle = agentLoop.get().streamExecute(
                             loopRequest,
                             recordAgentUsageOnUsage(terminalCallback, run, loopRequest),
@@ -523,8 +526,12 @@ public class KernelChatInboundService implements ChatInboundPort {
                     finishTraceOnTerminal(safeCallback, traceRunScope, null),
                     traceRunScope));
         } catch (Exception ex) {
-            traceRecorder.finishRun(traceRunScope, ex);
-            safeCallback.onError(ex);
+            if (errorCallback == safeCallback) {
+                traceRecorder.finishRun(traceRunScope, ex);
+                safeCallback.onError(ex);
+                return;
+            }
+            errorCallback.onError(ex);
         }
     }
 
@@ -548,6 +555,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .knowledgeBaseIds(command.knowledgeBaseIds())
                 .roleCardId(effectiveRoleCardId(command))
                 .branchLeafMessageId(command.branchLeafMessageId())
+                .assistantParentMessageId(command.assistantParentMessageId())
                 .roleCard(resolveRoleCard(command.userId(), effectiveRoleCardId(command)))
                 .build();
     }
@@ -588,7 +596,7 @@ public class KernelChatInboundService implements ChatInboundPort {
         }
         String tenantId = run == null ? null : run.tenantId();
         Optional<AgentVersion> selectedVersion = selectedVersion(agentId, versionId);
-        AgentModelExecutionConfig modelConfig = modelExecutionConfig(agentId, versionId);
+        AgentModelExecutionConfig modelConfig = effectiveModelExecutionConfig(command, agentId, versionId);
         ContextPack contextPack = contextPackAssembler.assembleForAgent(
                 command.question(),
                 runId,
@@ -808,7 +816,10 @@ public class KernelChatInboundService implements ChatInboundPort {
                 AgentRunTriggerType.CHAT,
                 inputSummary(command.question()),
                 traceRunScope == null ? null : traceRunScope.traceId(),
-                metadataJson));
+                metadataJson,
+                effectiveRunProfileId(command),
+                effectiveExecutorEngine(command),
+                effectiveExecutorConfig(command)));
     }
 
     private void saveRunContextSnapshot(StreamChatCommand command, AgentRun run, TraceRunScope traceRunScope) {
@@ -824,6 +835,7 @@ public class KernelChatInboundService implements ChatInboundPort {
             record.setRoleCardId(effectiveRoleCardId(command));
             record.setRunProfileId(effectiveRunProfileId(command));
             record.setExecutorEngine(effectiveExecutorEngine(command));
+            record.setExecutorConfigJson(effectiveExecutorConfigJson(command));
             record.setTraceContextJson(traceContextJson(traceRunScope, run));
             record.setSnapshotJson(runContextSnapshotJson(command, run, record.getExecutorEngine()));
             runContextSnapshotRepository.get().save(record);
@@ -846,6 +858,7 @@ public class KernelChatInboundService implements ChatInboundPort {
             record.setRoleCardId(effectiveRoleCardId(command));
             record.setRunProfileId(effectiveRunProfileId(command));
             record.setExecutorEngine(effectiveExecutorEngine(command));
+            record.setExecutorConfigJson(effectiveExecutorConfigJson(command));
             record.setTraceContextJson(traceContextJson(traceRunScope, null));
             record.setSnapshotJson(runContextSnapshotJson(command, record.getExecutorEngine()));
             runContextSnapshotRepository.get().save(record);
@@ -860,6 +873,7 @@ public class KernelChatInboundService implements ChatInboundPort {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("conversationId", command.conversationId());
         snapshot.put("branchLeafMessageId", command.branchLeafMessageId());
+        snapshot.put("assistantParentMessageId", command.assistantParentMessageId());
         snapshot.put("roleCardId", effectiveRoleCardId(command));
         snapshot.put("runProfileId", effectiveRunProfileId(command));
         snapshot.put("executorEngine", executorEngine);
@@ -871,7 +885,8 @@ public class KernelChatInboundService implements ChatInboundPort {
         snapshot.put("a2aAgentIds", allowedToolIdsByProvider(command, "A2A"));
         snapshot.put("explicitToolAllowlist", explicitToolAllowlist(command));
         snapshot.put("knowledgeBaseIds", command.knowledgeBaseIds());
-        snapshot.put("modelConfig", modelConfigSnapshot(run.agentId(), run.versionId()));
+        snapshot.put("modelConfig",
+                modelConfigSnapshot(effectiveModelExecutionConfig(command, run.agentId(), run.versionId())));
         appendRunProfileSnapshot(snapshot, command);
         ResolvedRoleCard roleCard = resolveRoleCard(command.userId(), effectiveRoleCardId(command));
         if (roleCard != null) {
@@ -887,6 +902,7 @@ public class KernelChatInboundService implements ChatInboundPort {
         snapshot.put("taskId", command.taskId());
         snapshot.put("chatMode", command.chatMode().name());
         snapshot.put("branchLeafMessageId", command.branchLeafMessageId());
+        snapshot.put("assistantParentMessageId", command.assistantParentMessageId());
         snapshot.put("roleCardId", effectiveRoleCardId(command));
         snapshot.put("runProfileId", effectiveRunProfileId(command));
         snapshot.put("executorEngine", executorEngine);
@@ -925,6 +941,31 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .orElse(null);
     }
 
+    private String effectiveExecutorConfigJson(StreamChatCommand command) {
+        return runProfile(command)
+                .map(RunProfileDetails::getProfile)
+                .map(RunProfileRecord::getExecutorConfigJson)
+                .filter(this::hasText)
+                .orElse(null);
+    }
+
+    private Map<String, Object> effectiveExecutorConfig(StreamChatCommand command) {
+        String json = effectiveExecutorConfigJson(command);
+        if (!hasText(json)) {
+            return Map.of();
+        }
+        try {
+            return OBJECT_MAPPER.readValue(
+                    json,
+                    new com.fasterxml.jackson.core.type.TypeReference<LinkedHashMap<String, Object>>() {
+                    });
+        } catch (JsonProcessingException ex) {
+            LOG.warn("Run profile executorConfig is not valid JSON, ignoring it: conversationId={}, runProfileId={}",
+                    command.conversationId(), effectiveRunProfileId(command), ex);
+            return Map.of();
+        }
+    }
+
     private void appendRunProfileSnapshot(Map<String, Object> snapshot, StreamChatCommand command) {
         runProfile(command).ifPresent(details -> {
             RunProfileRecord profile = details.getProfile();
@@ -956,7 +997,10 @@ public class KernelChatInboundService implements ChatInboundPort {
     }
 
     private Map<String, Object> modelConfigSnapshot(String agentId, String versionId) {
-        AgentModelExecutionConfig modelConfig = modelExecutionConfig(agentId, versionId);
+        return modelConfigSnapshot(modelExecutionConfig(agentId, versionId));
+    }
+
+    private Map<String, Object> modelConfigSnapshot(AgentModelExecutionConfig modelConfig) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         if (modelConfig.modelId() != null) {
             snapshot.put("modelId", modelConfig.modelId());
@@ -1013,7 +1057,7 @@ public class KernelChatInboundService implements ChatInboundPort {
             String versionId = command.versionId();
             Optional<AgentVersion> version = selectedVersion(agentId, versionId);
             Map<String, Object> metadata = new LinkedHashMap<>();
-            metadata.put("engine", agentLoop.map(ReActExecutorPort::engineId).orElse("kernel"));
+            metadata.put("engine", effectiveExecutorEngine(command));
             metadata.put("agentVersion", version
                     .map(this::agentVersionSnapshot)
                     .orElseGet(() -> {
@@ -1081,6 +1125,19 @@ public class KernelChatInboundService implements ChatInboundPort {
         return selectedVersion(agentId, versionId)
                 .map(this::modelExecutionConfig)
                 .orElseGet(AgentModelExecutionConfig::defaults);
+    }
+
+    private AgentModelExecutionConfig effectiveModelExecutionConfig(
+            StreamChatCommand command,
+            String agentId,
+            String versionId) {
+        AgentModelExecutionConfig base = modelExecutionConfig(agentId, versionId);
+        return runProfile(command)
+                .map(RunProfileDetails::getProfile)
+                .map(RunProfileRecord::getModelConfigJson)
+                .filter(this::hasText)
+                .map(json -> modelExecutionConfig(json, base, "run profile", command.conversationId()))
+                .orElse(base);
     }
 
     /**
@@ -1185,24 +1242,38 @@ public class KernelChatInboundService implements ChatInboundPort {
         if (version == null || version.modelConfigJson() == null || version.modelConfigJson().isBlank()) {
             return AgentModelExecutionConfig.defaults();
         }
+        return modelExecutionConfig(
+                version.modelConfigJson(),
+                AgentModelExecutionConfig.defaults(),
+                "agent version",
+                version.agentId() + ":" + version.versionId());
+    }
+
+    private AgentModelExecutionConfig modelExecutionConfig(
+            String modelConfigJson,
+            AgentModelExecutionConfig fallback,
+            String source,
+            String sourceId) {
+        AgentModelExecutionConfig base = fallback == null ? AgentModelExecutionConfig.defaults() : fallback;
         try {
-            JsonNode root = OBJECT_MAPPER.readTree(version.modelConfigJson());
+            JsonNode root = OBJECT_MAPPER.readTree(modelConfigJson);
             if (root == null || !root.isObject()) {
-                return AgentModelExecutionConfig.defaults();
+                return base;
             }
+            ChatSamplingOptions baseSampling = base.samplingOptions();
             return new AgentModelExecutionConfig(
-                    text(root, MODEL_CONFIG_MODEL_ID),
+                    firstText(root, MODEL_CONFIG_MODEL_ID, MODEL_CONFIG_MODEL, base.modelId()),
                     ChatSamplingOptions.builder()
-                            .temperature(doubleValue(root, MODEL_CONFIG_TEMPERATURE, DEFAULT_AGENT_TEMPERATURE))
-                            .topP(doubleValue(root, MODEL_CONFIG_TOP_P, null))
-                            .topK(intValue(root, MODEL_CONFIG_TOP_K, null))
-                            .maxTokens(intValue(root, MODEL_CONFIG_MAX_TOKENS, null))
-                            .thinking(booleanValue(root, MODEL_CONFIG_THINKING, null))
+                            .temperature(doubleValue(root, MODEL_CONFIG_TEMPERATURE, baseSampling.getTemperature()))
+                            .topP(doubleValue(root, MODEL_CONFIG_TOP_P, baseSampling.getTopP()))
+                            .topK(intValue(root, MODEL_CONFIG_TOP_K, baseSampling.getTopK()))
+                            .maxTokens(intValue(root, MODEL_CONFIG_MAX_TOKENS, baseSampling.getMaxTokens()))
+                            .thinking(booleanValue(root, MODEL_CONFIG_THINKING, baseSampling.getThinking()))
                             .build());
         } catch (JsonProcessingException ex) {
-            LOG.warn("Agent version model config is not valid JSON, fallback to defaults: agentId={}, versionId={}",
-                    version.agentId(), version.versionId(), ex);
-            return AgentModelExecutionConfig.defaults();
+            LOG.warn("{} model config is not valid JSON, fallback to base config: sourceId={}",
+                    source, sourceId, ex);
+            return base;
         }
     }
 
@@ -1290,10 +1361,17 @@ public class KernelChatInboundService implements ChatInboundPort {
     }
 
     private List<ChatMessage> loadAgentHistory(StreamChatCommand command) {
+        if (command.assistantParentMessageId() != null) {
+            return memoryPort.loadBranchPath(
+                    command.conversationId(),
+                    command.userId(),
+                    command.assistantParentMessageId());
+        }
         return memoryPort.loadAndAppend(
                 command.conversationId(),
                 command.userId(),
-                ChatMessage.user(command.question()));
+                ChatMessage.user(command.question()),
+                command.branchLeafMessageId());
     }
 
     private String inputSummary(String question) {
@@ -1319,6 +1397,15 @@ public class KernelChatInboundService implements ChatInboundPort {
         }
         String text = value.asText();
         return hasText(text) ? text.trim() : null;
+    }
+
+    private String firstText(JsonNode root, String primaryField, String secondaryField, String fallback) {
+        String primary = text(root, primaryField);
+        if (hasText(primary)) {
+            return primary;
+        }
+        String secondary = text(root, secondaryField);
+        return hasText(secondary) ? secondary : fallback;
     }
 
     private Double doubleValue(JsonNode root, String fieldName, Double fallback) {

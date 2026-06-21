@@ -132,10 +132,11 @@ public class AgentScopeReActExecutor implements ReActExecutorPort {
                             "runId", Objects.requireNonNullElse(safeRequest.runId(), ""),
                             "agentName", Objects.requireNonNullElse(safeRequest.agentId(), "")));
             try {
+                StreamEmissionState emissionState = new StreamEmissionState();
                 return client.stream(safeRequest, toAgentScopeMessages(safeRequest))
                         .doFinally(ignored -> scope.close())
                         .subscribe(
-                                event -> emitEvent(event, safeRequest, safeCallback),
+                                event -> emitEvent(event, safeRequest, safeCallback, emissionState),
                                 error -> emitErrorOrApprovalRequired(error, safeRequest, safeCallback),
                                 safeCallback::onComplete);
             } catch (Throwable ex) {
@@ -174,7 +175,11 @@ public class AgentScopeReActExecutor implements ReActExecutorPort {
                 AgentLoopExitReason.WAITING_APPROVAL);
     }
 
-    private void emitEvent(AgentEvent event, AgentLoopRequest request, StreamCallback callback) {
+    private void emitEvent(
+            AgentEvent event,
+            AgentLoopRequest request,
+            StreamCallback callback,
+            StreamEmissionState emissionState) {
         if (event == null) {
             return;
         }
@@ -191,7 +196,9 @@ public class AgentScopeReActExecutor implements ReActExecutorPort {
             return;
         }
         if (event instanceof TextBlockDeltaEvent text) {
-            emitContent(text.getDelta(), callback);
+            if (emitContent(text.getDelta(), callback)) {
+                emissionState.markTextDeltaEmitted();
+            }
             return;
         }
         if (event instanceof ModelCallEndEvent modelCallEnd) {
@@ -200,17 +207,20 @@ public class AgentScopeReActExecutor implements ReActExecutorPort {
         }
         if (event instanceof AgentResultEvent result && result.getResult() != null) {
             emitUsage(result.getResult().getUsage(), callback);
-            emitContent(result.getResult().getTextContent(), callback);
+            if (!emissionState.textDeltaEmitted()) {
+                emitContent(result.getResult().getTextContent(), callback);
+            }
             return;
         }
         emitProgress(event, callback);
     }
 
-    private void emitContent(String content, StreamCallback callback) {
+    private boolean emitContent(String content, StreamCallback callback) {
         if (content == null || content.isBlank()) {
-            return;
+            return false;
         }
         callback.onContent(content);
+        return true;
     }
 
     private void emitThinking(String content, StreamCallback callback) {
@@ -366,5 +376,17 @@ public class AgentScopeReActExecutor implements ReActExecutorPort {
             case TOOL -> MsgRole.TOOL;
             case USER -> MsgRole.USER;
         };
+    }
+
+    private static final class StreamEmissionState {
+        private boolean textDeltaEmitted;
+
+        private void markTextDeltaEmitted() {
+            textDeltaEmitted = true;
+        }
+
+        private boolean textDeltaEmitted() {
+            return textDeltaEmitted;
+        }
     }
 }

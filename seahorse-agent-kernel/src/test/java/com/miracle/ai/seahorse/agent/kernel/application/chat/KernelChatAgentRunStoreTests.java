@@ -106,6 +106,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KernelChatAgentRunStoreTests {
@@ -381,7 +382,7 @@ class KernelChatAgentRunStoreTests {
                 FIXED_CLOCK.instant(),
                 null);
         RecordingAgentRunInboundPort runPort = new RecordingAgentRunInboundPort(run);
-        CapturingAgentLoop agentLoop = new CapturingAgentLoop("profile answer", "agentscope");
+        CapturingAgentLoop agentLoop = new CapturingAgentLoop("profile answer", "kernel");
         RecordingRunContextSnapshotRepository snapshotRepository = new RecordingRunContextSnapshotRepository();
         InMemoryRunProfilePort runProfilePort = new InMemoryRunProfilePort(profileDetails());
         RecordingCallback callback = new RecordingCallback();
@@ -431,14 +432,27 @@ class KernelChatAgentRunStoreTests {
                 List.of("profile-tool-a", "filesystem.read_file", "seahorse-researcher"),
                 agentLoop.lastRequest.allowedToolIds());
         assertTrue(agentLoop.lastRequest.explicitToolAllowlist());
+        assertEquals(0.2D, agentLoop.lastRequest.samplingOptions().getTemperature());
+        assertEquals(77L, runPort.startCommand.runProfileId());
+        assertEquals("agentscope", runPort.startCommand.executorEngine());
+        assertEquals(Map.of("studioTraceEnabled", true), runPort.startCommand.executorConfig());
+        assertTrue(runPort.startCommand.metadataJson().contains("\"engine\":\"agentscope\""),
+                runPort.startCommand.metadataJson());
         assertEquals(1, snapshotRepository.records.size());
         RunContextSnapshotRecord snapshot = snapshotRepository.records.get(0);
         assertEquals(77L, snapshot.getRunProfileId());
         assertEquals(200L, snapshot.getRoleCardId());
         assertEquals("agentscope", snapshot.getExecutorEngine());
+        assertEquals("{\"studioTraceEnabled\":true}", snapshot.getExecutorConfigJson());
         assertTrue(snapshot.getSnapshotJson().contains("\"runProfileId\":77"));
         assertTrue(snapshot.getSnapshotJson().contains("\"executorEngine\":\"agentscope\""));
+        assertTrue(snapshot.getSnapshotJson().contains(
+                "\"runProfile\":{\"id\":77,\"name\":\"AgentScope profile\",\"roleCardId\":200,"
+                        + "\"executorEngine\":\"agentscope\"}"));
         assertTrue(snapshot.getSnapshotJson().contains("\"executorConfig\":{\"studioTraceEnabled\":true}"));
+        assertTrue(snapshot.getSnapshotJson().contains("\"modelConfig\":{\"temperature\":0.2}"));
+        assertTrue(snapshot.getSnapshotJson().contains("\"profileModelConfig\":{\"temperature\":0.2}"));
+        assertTrue(snapshot.getSnapshotJson().contains("\"memoryScope\":{\"longTerm\":true}"));
         assertTrue(snapshot.getSnapshotJson().contains(
                 "\"toolIds\":[\"profile-tool-a\",\"filesystem.read_file\",\"seahorse-researcher\"]"));
         assertTrue(snapshot.getSnapshotJson().contains("\"mcpToolIds\":[\"filesystem.read_file\"]"));
@@ -517,11 +531,83 @@ class KernelChatAgentRunStoreTests {
 
         assertTrue(callback.awaitTerminal());
         assertEquals(List.of("agentscope answer"), callback.contents);
-        assertEquals(null, kernelLoop.lastRequest);
+        assertNull(kernelLoop.lastRequest);
         assertNotNull(agentScopeLoop.lastRequest);
         assertEquals("agentscope", agentScopeLoop.lastRequest.executorEngine());
         assertEquals(1, snapshotRepository.records.size());
         assertEquals("agentscope", snapshotRepository.records.get(0).getExecutorEngine());
+    }
+
+    @Test
+    void shouldFailAgentRunWhenProfileExecutorEngineIsUnavailable() {
+        AgentRun run = new AgentRun(
+                "run-profile-router-missing-1",
+                "legacy-react-agent",
+                null,
+                null,
+                "tenant-a",
+                "user-1",
+                "101",
+                AgentRunTriggerType.CHAT,
+                "Use unavailable profile router",
+                AgentRunStatus.RUNNING,
+                "trace-1",
+                0L,
+                0L,
+                BigDecimal.ZERO,
+                null,
+                null,
+                FIXED_CLOCK.instant(),
+                null);
+        RecordingAgentRunInboundPort runPort = new RecordingAgentRunInboundPort(run);
+        CapturingAgentLoop kernelLoop = new CapturingAgentLoop("kernel answer", "kernel");
+        ReActExecutorRouter router = new ReActExecutorRouter(List.of(kernelLoop), "kernel");
+        InMemoryRunProfilePort runProfilePort = new InMemoryRunProfilePort(profileDetails());
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.of(router),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.of(runPort),
+                Optional.empty(),
+                Optional.empty(),
+                ConversationAttachmentContextAssembler.noop(),
+                Optional.empty(),
+                KernelAgentLoopOptions.defaults(),
+                Optional.empty(),
+                true,
+                null,
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(runProfilePort),
+                List.of());
+
+        service.streamChat(new StreamChatCommand(
+                "Use unavailable profile router",
+                "101",
+                "task-profile-router-missing-1",
+                "user-1",
+                false,
+                ChatMode.AGENT,
+                null,
+                null,
+                null,
+                List.of(),
+                List.of(),
+                List.of(),
+                null,
+                null,
+                77L), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertNotNull(callback.error);
+        assertEquals(run.runId(), callback.runId);
+        assertEquals(run.runId(), runPort.failedRunId);
+        assertTrue(runPort.failureMessage.contains("agentscope"), runPort.failureMessage);
     }
 
     @Test
@@ -1455,6 +1541,8 @@ class KernelChatAgentRunStoreTests {
     private static final class RecordingAgentRunInboundPort implements AgentRunInboundPort {
         private final AgentRun startedRun;
         private AgentRunStartCommand startCommand;
+        private String failedRunId;
+        private String failureMessage;
 
         private RecordingAgentRunInboundPort(AgentRun startedRun) {
             this.startedRun = startedRun;
@@ -1493,6 +1581,8 @@ class KernelChatAgentRunStoreTests {
 
         @Override
         public AgentRun fail(String runId, String errorCode, String errorMessage) {
+            this.failedRunId = runId;
+            this.failureMessage = errorMessage;
             return startedRun;
         }
     }

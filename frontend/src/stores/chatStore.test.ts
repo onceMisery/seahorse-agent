@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useChatStore } from "@/stores/chatStore";
 import { getAgentRunCostSummary, getAgentRunSnapshot, listAgentRunEvents } from "@/services/agentRunService";
 import { createStreamResponse } from "@/hooks/useStreamResponse";
-import { listMessages, listMessageTree, switchMessageBranch } from "@/services/sessionService";
+import { forkMessage, listMessages, listMessageTree, switchMessageBranch } from "@/services/sessionService";
 import { AGENT_STREAM_EVENTS, type AgentRunSnapshot, type Message, type StreamEventEnvelope } from "@/types";
 import { storage } from "@/utils/storage";
 import { toast } from "sonner";
@@ -35,6 +35,7 @@ vi.mock("@/services/sessionService", () => ({
   listMessageTree: vi.fn(),
   listSessions: vi.fn().mockResolvedValue([]),
   renameSession: vi.fn(),
+  forkMessage: vi.fn(),
   switchMessageBranch: vi.fn()
 }));
 
@@ -573,6 +574,118 @@ describe("chatStore snapshot hydration", () => {
       content: "new branch",
       branchIndex: 3,
       branchTotal: 3
+    });
+  });
+
+  it("edits a user message by forking a sibling and switching to the new branch", async () => {
+    useChatStore.setState({
+      currentSessionId: "conversation-branch",
+      messages: [{
+        id: "2",
+        role: "user",
+        content: "old prompt",
+        status: "done",
+        branchIndex: 1,
+        branchTotal: 1
+      }],
+      isLoading: false
+    });
+    vi.mocked(forkMessage).mockResolvedValue({
+      newMessageId: "4",
+      parentId: "1"
+    });
+    vi.mocked(switchMessageBranch).mockResolvedValue([{
+      message: {
+        id: "4",
+        conversationId: "conversation-branch",
+        role: "user",
+        content: "edited prompt",
+        vote: null,
+        parentId: "1",
+        active: 1,
+        siblingSeq: 2,
+        createTime: "2026-06-09T00:00:00Z"
+      },
+      preSiblings: ["2"],
+      nextSiblings: [],
+      branchIndex: 2,
+      branchTotal: 2
+    }]);
+
+    await useChatStore.getState().editUserMessageBranch("2", "edited prompt");
+
+    expect(forkMessage).toHaveBeenCalledWith("conversation-branch", {
+      anchorMessageId: "2",
+      content: "edited prompt",
+      role: "user",
+      regenerate: false
+    });
+    expect(switchMessageBranch).toHaveBeenCalledWith("conversation-branch", "4");
+    expect(useChatStore.getState().messages[0]).toMatchObject({
+      id: "4",
+      content: "edited prompt",
+      branchIndex: 2,
+      branchTotal: 2
+    });
+  });
+
+  it("regenerates an assistant message from the parent user without appending another user message", async () => {
+    useChatStore.setState({
+      currentSessionId: "conversation-branch",
+      selectedTaskTemplateId: null,
+      messages: [
+        { id: "101", role: "user", content: "original prompt", status: "done" },
+        { id: "102", role: "assistant", content: "old answer", status: "done", parentId: "101" }
+      ] as Message[],
+      isLoading: false
+    });
+    vi.mocked(listMessageTree).mockResolvedValue([{
+      message: {
+        id: "101",
+        conversationId: "conversation-branch",
+        role: "user",
+        content: "original prompt",
+        vote: null,
+        active: 1,
+        siblingSeq: 0,
+        createTime: "2026-06-09T00:00:00Z"
+      },
+      preSiblings: [],
+      nextSiblings: [],
+      branchIndex: 1,
+      branchTotal: 1
+    }, {
+      message: {
+        id: "103",
+        conversationId: "conversation-branch",
+        role: "assistant",
+        content: "new answer",
+        vote: null,
+        parentId: "101",
+        active: 1,
+        siblingSeq: 1,
+        createTime: "2026-06-09T00:00:01Z"
+      },
+      preSiblings: ["102"],
+      nextSiblings: [],
+      branchIndex: 2,
+      branchTotal: 2
+    }]);
+
+    await useChatStore.getState().regenerateAssistantMessageBranch("102");
+
+    expect(streamStarts).toHaveLength(1);
+    const url = new URL(streamStarts[0], "http://localhost");
+    expect(url.searchParams.get("question")).toBe("original prompt");
+    expect(url.searchParams.get("branchLeafMessageId")).toBe("101");
+    expect(url.searchParams.get("assistantParentMessageId")).toBe("101");
+    expect(useChatStore.getState().messages.filter((message) => message.role === "user")).toHaveLength(1);
+    expect(useChatStore.getState().messages[1]).toMatchObject({
+      id: "103",
+      content: "new answer",
+      parentId: "101",
+      branchIndex: 2,
+      branchTotal: 2
     });
   });
 

@@ -67,6 +67,8 @@ public class StreamChatContext {
 
     private Long branchLeafMessageId;
 
+    private Long assistantParentMessageId;
+
     private ResolvedRoleCard roleCard;
 
     public static Builder builder() {
@@ -135,6 +137,11 @@ public class StreamChatContext {
 
         public Builder branchLeafMessageId(Long branchLeafMessageId) {
             context.setBranchLeafMessageId(branchLeafMessageId);
+            return this;
+        }
+
+        public Builder assistantParentMessageId(Long assistantParentMessageId) {
+            context.setAssistantParentMessageId(assistantParentMessageId);
             return this;
         }
 

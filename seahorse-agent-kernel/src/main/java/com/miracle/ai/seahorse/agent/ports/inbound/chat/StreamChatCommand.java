@@ -40,6 +40,7 @@ public record StreamChatCommand(
         List<String> knowledgeBaseIds,
         Long roleCardId,
         Long branchLeafMessageId,
+        Long assistantParentMessageId,
         Long runProfileId) {
 
     public StreamChatCommand {
@@ -56,7 +57,27 @@ public record StreamChatCommand(
         knowledgeBaseIds = normalizeIds(knowledgeBaseIds);
         roleCardId = normalizeRoleCardId(roleCardId);
         branchLeafMessageId = normalizePositiveId(branchLeafMessageId);
+        assistantParentMessageId = normalizePositiveId(assistantParentMessageId);
         runProfileId = normalizePositiveId(runProfileId);
+    }
+
+    public StreamChatCommand(String question,
+                             String conversationId,
+                             String taskId,
+                             String userId,
+                             boolean deepThinking,
+                             ChatMode chatMode,
+                             String agentId,
+                             String versionId,
+                             String taskTemplateId,
+                             List<String> attachmentIds,
+                             List<String> selectedSkillNames,
+                             List<String> knowledgeBaseIds,
+                             Long roleCardId,
+                             Long branchLeafMessageId,
+                             Long runProfileId) {
+        this(question, conversationId, taskId, userId, deepThinking, chatMode, agentId, versionId, taskTemplateId,
+                attachmentIds, selectedSkillNames, knowledgeBaseIds, roleCardId, branchLeafMessageId, null, runProfileId);
     }
 
     public StreamChatCommand(String question,
@@ -74,7 +95,7 @@ public record StreamChatCommand(
                              Long roleCardId,
                              Long branchLeafMessageId) {
         this(question, conversationId, taskId, userId, deepThinking, chatMode, agentId, versionId, taskTemplateId,
-                attachmentIds, selectedSkillNames, knowledgeBaseIds, roleCardId, branchLeafMessageId, null);
+                attachmentIds, selectedSkillNames, knowledgeBaseIds, roleCardId, branchLeafMessageId, null, null);
     }
 
     public StreamChatCommand(String question,
@@ -199,7 +220,7 @@ public record StreamChatCommand(
                 .toList();
     }
 
-    private static int MAX_SELECTED_SKILLS = 5;
+    private static final int MAX_SELECTED_SKILLS = 5;
 
     private static List<String> normalizeSkillNames(List<String> values) {
         if (values == null || values.isEmpty()) {
