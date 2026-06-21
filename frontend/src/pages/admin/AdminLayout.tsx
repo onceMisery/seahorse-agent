@@ -122,6 +122,8 @@ const menuGroups: MenuGroup[] = [
       },
       { path: "/admin/skills", feature: "SKILL_MANAGEMENT", label: "Skill 管理", icon: BookOpen },
       { path: "/admin/agent-runs", feature: "AGENT_RUN_MANAGEMENT", label: "Agent 运行", icon: Workflow },
+      { path: "/admin/run-profiles", feature: "AGENT_RUN_MANAGEMENT", label: "运行画像", icon: ClipboardCheck },
+      { path: "/admin/run-experiments", feature: "AGENT_RUN_MANAGEMENT", label: "对话实验", icon: FlaskConical },
       { path: "/admin/agent-inspector", feature: "AI_INFRA_CONSOLE", label: "Agent 检视器", icon: ScanSearch },
       { path: "/admin/ai-infra", feature: "AI_INFRA_CONSOLE", label: "Agent 控制台", icon: Cpu },
       { path: "/admin/approvals", feature: "AGENT_RUN_MANAGEMENT", label: "审批中心", icon: FileCheck },
@@ -217,6 +219,8 @@ const breadcrumbMap: Record<string, string> = {
   "tool-invocations": "工具调用审计",
   approvals: "审批中心",
   "agent-runs": "Agent 运行",
+  "run-profiles": "运行画像",
+  "run-experiments": "对话实验",
   "rag-evaluation": "RAG 评测",
   "rag-strategies": "策略模板",
   "rag-version-compare": "版本质量对比",
@@ -265,6 +269,7 @@ export function AdminLayout() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
@@ -280,6 +285,10 @@ export function AdminLayout() {
   const capabilities = useFeatureStore((state) => state.capabilities);
   const visibleGroups = useMemo(() => visibleMenuGroups(getFeatureState), [getFeatureState, capabilities]);
   const isDashboardRoute = location.pathname.startsWith("/admin/dashboard");
+
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     if (!searchFocused) return;
@@ -421,6 +430,7 @@ export function AdminLayout() {
         to={`${path}${search || ""}`}
         title={collapsed ? label : undefined}
         className={cn("admin-sidebar__item", isActive && "admin-sidebar__item--active", collapsed && "justify-center")}
+        onClick={() => setMobileSidebarOpen(false)}
       >
         <span className={cn("admin-sidebar__item-indicator", isActive && "is-active")} />
         <Icon className="admin-sidebar__item-icon" />
@@ -435,7 +445,13 @@ export function AdminLayout() {
 
   return (
     <div className="admin-layout flex h-screen">
-      <aside className={cn("admin-sidebar", collapsed && "admin-sidebar--collapsed")}>
+      <button
+        type="button"
+        className={cn("admin-sidebar-backdrop", mobileSidebarOpen && "admin-sidebar-backdrop--open")}
+        aria-label="关闭侧边栏"
+        onClick={() => setMobileSidebarOpen(false)}
+      />
+      <aside className={cn("admin-sidebar", collapsed && "admin-sidebar--collapsed", mobileSidebarOpen && "admin-sidebar--mobile-open")}>
         <div className="admin-sidebar__brand">
           <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
             <SeahorseLogo size={40} />
@@ -506,7 +522,7 @@ export function AdminLayout() {
         <header className="admin-topbar">
           <div className="admin-topbar-inner">
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setCollapsed((prev) => !prev)} aria-label="切换侧边栏">
+              <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileSidebarOpen(true)} aria-label="打开侧边栏">
                 <Menu className="h-5 w-5" />
               </Button>
               <div className="admin-topbar-search">

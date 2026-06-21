@@ -6,6 +6,9 @@ export interface SendMessageOptions {
   selectedSkillNames?: string[];
   agentId?: string | null;
   versionId?: string | null;
+  roleCardId?: string | number | null;
+  branchLeafMessageId?: string | number | null;
+  runProfileId?: string | number | null;
 }
 
 export interface SubmitFeedbackOptions {
@@ -39,6 +42,7 @@ export interface ChatState {
   updateSessionTitle: (sessionId: string, title: string) => void;
   setDeepThinkingEnabled: (enabled: boolean) => void;
   setSelectedTaskTemplateId: (templateId: TaskTemplateId | string | null) => void;
+  switchMessageBranch: (messageId: string, targetMessageId: string) => Promise<void>;
   sendMessage: (content: string, options?: SendMessageOptions) => Promise<void>;
   refreshRunSnapshot: (messageId: string, runId: string) => Promise<void>;
   cancelGeneration: () => void;

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Brain, ChevronDown, ScanSearch } from "lucide-react";
+import { Brain, ChevronDown, ChevronLeft, ChevronRight, ScanSearch } from "lucide-react";
 
 import { AgentLiveStatus } from "@/components/chat/AgentLiveStatus";
 import { AgentTracePanel } from "@/components/chat/AgentTracePanel";
@@ -8,6 +8,7 @@ import { FeedbackButtons } from "@/components/chat/FeedbackButtons";
 import { MessageContent } from "@/components/chat/MessageContent";
 import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
 import { cn } from "@/lib/utils";
+import { useChatStore } from "@/stores/chatStore";
 import { useWorkbenchStore } from "@/stores/workbenchStore";
 import type { Message } from "@/types";
 
@@ -48,10 +49,11 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
 
   if (isUser) {
     return (
-      <div className="flex">
+      <div className="flex flex-col items-end gap-2">
         <div className="user-message">
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
         </div>
+        <BranchSwitcher message={message} />
       </div>
     );
   }
@@ -201,9 +203,61 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
                 alwaysVisible={Boolean(isLast)}
               />
             ) : null}
+            <BranchSwitcher message={message} />
           </div>
         </div>
       </div>
     </motion.div>
   );
 });
+
+function BranchSwitcher({ message }: { message: Message }) {
+  const switchMessageBranch = useChatStore((state) => state.switchMessageBranch);
+  const branchTotal = message.branchTotal ?? 1;
+  if (branchTotal <= 1 || message.status === "streaming") {
+    return null;
+  }
+
+  const branchIndex = message.branchIndex ?? 1;
+  const previousId = message.preSiblings?.at(-1);
+  const nextId = message.nextSiblings?.[0];
+  const switchTo = (targetMessageId?: string) => {
+    if (!targetMessageId) return;
+    void switchMessageBranch(message.id, targetMessageId);
+  };
+
+  return (
+    <div
+      className="flex w-fit items-center gap-1 rounded-md border px-1.5 py-1 text-xs"
+      style={{
+        borderColor: "var(--theme-accent-alpha-20)",
+        backgroundColor: "var(--theme-bg-elevated)",
+        color: "var(--theme-text-secondary)"
+      }}
+    >
+      <button
+        type="button"
+        aria-label="Previous branch"
+        title="Previous branch"
+        disabled={!previousId}
+        onClick={() => switchTo(previousId)}
+        className="rounded p-0.5 transition hover:bg-[var(--theme-accent-alpha-10)] active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" />
+      </button>
+      <span className="min-w-10 text-center tabular-nums">
+        {branchIndex} / {branchTotal}
+      </span>
+      <button
+        type="button"
+        aria-label="Next branch"
+        title="Next branch"
+        disabled={!nextId}
+        onClick={() => switchTo(nextId)}
+        className="rounded p-0.5 transition hover:bg-[var(--theme-accent-alpha-10)] active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+      >
+        <ChevronRight className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}

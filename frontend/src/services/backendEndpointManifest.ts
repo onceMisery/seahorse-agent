@@ -37,6 +37,14 @@ export const backendEndpointManifest = [
   },
   {
     "method": "DELETE",
+    "path": "/api/role-cards/{}"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/run-profiles/{}"
+  },
+  {
+    "method": "DELETE",
     "path": "/api/skills/custom/{}"
   },
   {
@@ -221,6 +229,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/agent-runs/{}/context-snapshot"
+  },
+  {
+    "method": "GET",
     "path": "/api/agent-runs/{}/events"
   },
   {
@@ -301,6 +313,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/role-cards"
+  },
+  {
+    "method": "GET",
     "path": "/api/audit-events"
   },
   {
@@ -354,6 +370,10 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/api/conversations/{}/attachments"
+  },
+  {
+    "method": "GET",
+    "path": "/api/conversations/{}/branch-cursor"
   },
   {
     "method": "GET",
@@ -429,6 +449,22 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/run-context-snapshots/by-run/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/api/run-experiments/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/api/run-profiles"
+  },
+  {
+    "method": "GET",
+    "path": "/api/run-profiles/{}"
+  },
+  {
+    "method": "GET",
     "path": "/api/sandbox/sessions/{}/artifacts"
   },
   {
@@ -486,6 +522,10 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/conversations"
+  },
+  {
+    "method": "GET",
+    "path": "/conversations/{}/branch-cursor"
   },
   {
     "method": "GET",
@@ -937,6 +977,34 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/api/role-cards"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-experiments"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-experiments/{}/cancel"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-experiments/{}/trials/{}/score"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-experiments/{}/trials/{}/fork-to-branch"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-profiles"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-profiles/{}/activate"
+  },
+  {
+    "method": "POST",
     "path": "/api/billing/callbacks/{}"
   },
   {
@@ -966,6 +1034,10 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/api/conversations/{}/attachments"
+  },
+  {
+    "method": "POST",
+    "path": "/api/conversations/{}/branch-cursor"
   },
   {
     "method": "POST",
@@ -1106,6 +1178,10 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/conversations"
+  },
+  {
+    "method": "POST",
+    "path": "/conversations/{}/branch-cursor"
   },
   {
     "method": "POST",
@@ -1385,6 +1461,18 @@ export const backendEndpointManifest = [
   },
   {
     "method": "PUT",
+    "path": "/api/role-cards/{}"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/role-cards/{}/activate"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/run-profiles/{}"
+  },
+  {
+    "method": "PUT",
     "path": "/api/skills/custom/{}"
   },
   {
@@ -1442,5 +1530,77 @@ export const backendEndpointManifest = [
   {
     "method": "PUT",
     "path": "/users/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agents/{}/versions/{}"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/refresh"
+  },
+  {
+    "method": "POST",
+    "path": "/ingestion/tasks/{}/retry"
+  },
+  {
+    "method": "POST",
+    "path": "/ingestion/tasks/{}/rollback"
+  },
+  {
+    "method": "POST",
+    "path": "/knowledge-base/{}/retrieval-evaluation-datasets/{}/samples/import"
+  },
+  {
+    "method": "POST",
+    "path": "/knowledge-base/{}/retrieval-evaluation-datasets/{}/comparisons/{}/promote"
+  },
+  {
+    "method": "GET",
+    "path": "/readiness/summary"
+  },
+  {
+    "method": "GET",
+    "path": "/readiness/checks"
+  },
+  {
+    "method": "POST",
+    "path": "/readiness/checks/{}/run"
+  },
+  {
+    "method": "GET",
+    "path": "/readiness/product-mode"
+  },
+  {
+    "method": "GET",
+    "path": "/api/conversations/{}/run-profile"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-profiles/{}/resolve-preview"
+  },
+  {
+    "method": "POST",
+    "path": "/api/conversations/{}/run-profile/{}/apply"
+  },
+  {
+    "method": "POST",
+    "path": "/tasks"
+  },
+  {
+    "method": "GET",
+    "path": "/tasks/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/tasks"
+  },
+  {
+    "method": "POST",
+    "path": "/tasks/{}/cancel"
+  },
+  {
+    "method": "GET",
+    "path": "/tasks/{}/artifacts"
   }
 ] as const;

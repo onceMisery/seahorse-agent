@@ -191,6 +191,7 @@ export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
       }}
       className="prose max-w-none prose-p:leading-[1.8] prose-li:leading-[1.8]"
       style={{
+        color: "var(--theme-text-primary)",
         "--tw-prose-headings": "var(--theme-text-primary)",
         "--tw-prose-body": "var(--theme-text-primary)",
         "--tw-prose-bold": "var(--theme-text-primary)",

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Eye, Gauge, Lightbulb, Loader2, Mic, Paperclip, Send, Sparkles, Square, X } from "lucide-react";
+import { CheckCircle2, Eye, Gauge, Lightbulb, Loader2, Mic, Paperclip, Send, Sparkles, Square, UserRound, X } from "lucide-react";
 import { PromptEnhancerButton } from "@/components/chat/prompt/PromptEnhancerButton";
 import { PromptEnhancerDialog } from "@/components/chat/prompt/PromptEnhancerDialog";
 import { SkillTrigger, type SkillTriggerHandle } from "@/components/chat/SkillTrigger";
@@ -18,6 +18,13 @@ import {
 import { getQuotaSummary } from "@/services/quotaSummaryService";
 import { listTaskTemplates } from "@/services/taskTemplateService";
 import { listAgents, type AgentDefinition } from "@/services/agentService";
+import { listRoleCards, type RoleCardVO } from "@/services/roleCardService";
+import {
+  applyRunProfileToConversation,
+  getAppliedRunProfileForConversation,
+  listRunProfiles,
+  type RunProfileVO
+} from "@/services/runProfileService";
 import { useChatStore } from "@/stores/chatStore";
 import type {
   ConversationAttachment,
@@ -196,6 +203,14 @@ function formatEstimatedDuration(value?: string | null) {
   return DURATION_LABELS[value] || value;
 }
 
+function isRoleCardEnabled(card: RoleCardVO) {
+  return card.enabled === true || card.enabled === 1;
+}
+
+function isRunProfileEnabled(profile: RunProfileVO) {
+  return profile.enabled === true || profile.enabled === 1;
+}
+
 function formatBytes(value: number) {
   if (!Number.isFinite(value) || value <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
@@ -228,6 +243,14 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
   const [agents, setAgents] = React.useState<AgentDefinition[]>([]);
   const [agentsLoading, setAgentsLoading] = React.useState(false);
   const [selectedAgentId, setSelectedAgentId] = React.useState<string | null>(null);
+  const [roleCards, setRoleCards] = React.useState<RoleCardVO[]>([]);
+  const [roleCardsLoading, setRoleCardsLoading] = React.useState(false);
+  const [selectedRoleCardId, setSelectedRoleCardId] = React.useState<string | null>(null);
+  const [roleCardOverrideTouched, setRoleCardOverrideTouched] = React.useState(false);
+  const [runProfiles, setRunProfiles] = React.useState<RunProfileVO[]>([]);
+  const [runProfilesLoading, setRunProfilesLoading] = React.useState(false);
+  const [selectedRunProfileId, setSelectedRunProfileId] = React.useState<string | null>(null);
+  const [applyingRunProfile, setApplyingRunProfile] = React.useState(false);
   const [quotaSummary, setQuotaSummary] = React.useState<UserQuotaSummary | null>(null);
   const [quotaLoading, setQuotaLoading] = React.useState(false);
   const [attachments, setAttachments] = React.useState<AttachmentChip[]>([]);
@@ -331,6 +354,78 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
       active = false;
     };
   }, []);
+
+  React.useEffect(() => {
+    let active = true;
+    setRoleCardsLoading(true);
+    listRoleCards()
+      .then((data) => {
+        if (!active) return;
+        setRoleCards(data);
+        setSelectedRoleCardId((current) => {
+          if (current && data.some((card) => String(card.id) === current)) {
+            return current;
+          }
+          const enabled = data.find(isRoleCardEnabled);
+          return enabled ? String(enabled.id) : null;
+        });
+      })
+      .catch(() => {
+        if (active) setRoleCards([]);
+      })
+      .finally(() => {
+        if (active) setRoleCardsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    let active = true;
+    setRunProfilesLoading(true);
+    listRunProfiles()
+      .then((data) => {
+        if (!active) return;
+        setRunProfiles(data);
+        setSelectedRunProfileId((current) => {
+          if (current && data.some((profile) => String(profile.id) === current)) {
+            return current;
+          }
+          const enabled = data.find(isRunProfileEnabled);
+          return enabled ? String(enabled.id) : null;
+        });
+      })
+      .catch(() => {
+        if (active) setRunProfiles([]);
+      })
+      .finally(() => {
+        if (active) setRunProfilesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!currentSessionId) {
+      return;
+    }
+    let active = true;
+    getAppliedRunProfileForConversation(currentSessionId)
+      .then((details) => {
+        if (!active || !details?.profile?.id) {
+          return;
+        }
+        setSelectedRunProfileId(String(details.profile.id));
+      })
+      .catch(() => {
+        // Missing or unavailable binding should not block normal chat input.
+      });
+    return () => {
+      active = false;
+    };
+  }, [currentSessionId]);
 
   const focusInput = React.useCallback(() => {
     const el = textareaRef.current;
@@ -479,6 +574,26 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
     setSelectedSkills((prev) => prev.filter((s) => s.name !== name));
   }, []);
 
+  const handleApplyRunProfile = async () => {
+    if (!currentSessionId) {
+      toast.error("请先打开一个会话");
+      return;
+    }
+    if (!selectedRunProfileId) {
+      toast.error("请先选择画像");
+      return;
+    }
+    setApplyingRunProfile(true);
+    try {
+      await applyRunProfileToConversation(currentSessionId, selectedRunProfileId);
+      toast.success("画像已应用到当前会话");
+    } catch (error) {
+      toast.error((error as Error).message || "应用画像失败");
+    } finally {
+      setApplyingRunProfile(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (isStreaming) {
       cancelGeneration();
@@ -505,6 +620,9 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
       .filter((attachment) => attachment.uploadState !== "failed" && attachment.uploadState !== "uploading")
       .map((attachment) => attachment.attachmentId);
     const skillNames = selectedSkills.map((s) => s.name);
+    const effectiveRoleCardId = selectedRunProfileId && !roleCardOverrideTouched
+      ? undefined
+      : selectedRoleCardId || undefined;
     setValue("");
     focusInput();
     await sendMessage(next, {
@@ -512,7 +630,9 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
       conversationIdOverride,
       selectedSkillNames: skillNames.length > 0 ? skillNames : undefined,
       agentId: selectedAgentId || undefined,
-      versionId: selectedAgentId ? agents.find(a => a.agentId === selectedAgentId)?.versionId : undefined
+      versionId: selectedAgentId ? agents.find(a => a.agentId === selectedAgentId)?.versionId : undefined,
+      roleCardId: effectiveRoleCardId,
+      runProfileId: selectedRunProfileId || undefined
     });
     setAttachments([]);
     setSelectedSkills([]);
@@ -732,6 +852,94 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                     ))}
                   </SelectContent>
                 </Select>
+                <Select
+                  value={selectedRoleCardId ?? "__default_role__"}
+                  onValueChange={(next) => {
+                    setRoleCardOverrideTouched(next !== "__default_role__");
+                    setSelectedRoleCardId(next === "__default_role__" ? null : next);
+                  }}
+                  disabled={isStreaming || roleCardsLoading}
+                >
+                  <SelectTrigger
+                    aria-label="Role card"
+                    className="h-9 max-w-[180px] shrink rounded-xl border text-xs shadow-none focus:ring-1 focus:ring-offset-0"
+                    style={{
+                      backgroundColor: "var(--theme-bg-elevated)",
+                      borderColor: "var(--theme-accent-alpha-20)",
+                      color: "var(--theme-text-primary)"
+                    }}
+                  >
+                    <SelectValue placeholder={roleCardsLoading ? "加载角色" : "角色"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__default_role__">
+                      <span className="inline-flex items-center gap-2">
+                        <UserRound className="h-3.5 w-3.5" />
+                        默认角色
+                      </span>
+                    </SelectItem>
+                    {roleCards.map((card) => (
+                      <SelectItem key={card.id} value={String(card.id)}>
+                        <span className="inline-flex items-center gap-2">
+                          <UserRound className="h-3.5 w-3.5" />
+                          {card.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={selectedRunProfileId ?? "__default_profile__"}
+                  onValueChange={(next) => setSelectedRunProfileId(next === "__default_profile__" ? null : next)}
+                  disabled={isStreaming || runProfilesLoading}
+                >
+                  <SelectTrigger
+                    aria-label="Run profile"
+                    className="h-9 max-w-[190px] shrink rounded-xl border text-xs shadow-none focus:ring-1 focus:ring-offset-0"
+                    style={{
+                      backgroundColor: "var(--theme-bg-elevated)",
+                      borderColor: "var(--theme-accent-alpha-20)",
+                      color: "var(--theme-text-primary)"
+                    }}
+                  >
+                    <SelectValue placeholder={runProfilesLoading ? "加载画像" : "画像"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__default_profile__">
+                      <span className="inline-flex items-center gap-2">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        默认画像
+                      </span>
+                    </SelectItem>
+                    {runProfiles.map((profile) => (
+                      <SelectItem key={profile.id} value={String(profile.id)}>
+                        <span className="inline-flex items-center gap-2">
+                          <Sparkles className="h-3.5 w-3.5" />
+                          {profile.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <button
+                  type="button"
+                  onClick={handleApplyRunProfile}
+                  disabled={isStreaming || runProfilesLoading || applyingRunProfile || !selectedRunProfileId || !currentSessionId}
+                  aria-label="应用画像到当前会话"
+                  title="应用画像到当前会话"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{
+                    backgroundColor: "var(--theme-bg-elevated)",
+                    border: "1px solid var(--theme-accent-alpha-10)",
+                    color: selectedRunProfileId ? "var(--theme-accent)" : "var(--theme-text-secondary)"
+                  }}
+                >
+                  {applyingRunProfile ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4" />
+                  )}
+                </button>
                 <span
                   className="inline-flex h-9 max-w-[220px] items-center gap-2 rounded-xl px-3 text-xs"
                   style={{

@@ -329,6 +329,14 @@ export interface Message {
   id: string;
   role: Role;
   content: string;
+  parentId?: string | null;
+  active?: number | null;
+  branchRootId?: string | null;
+  siblingSeq?: number | null;
+  branchIndex?: number;
+  branchTotal?: number;
+  preSiblings?: string[];
+  nextSiblings?: string[];
   agentRunId?: string;
   thinking?: string;
   thinkingDuration?: number;

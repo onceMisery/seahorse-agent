@@ -627,10 +627,12 @@ select:focus:not(:focus-visible),
 .assistant-message .prose {
   font-size: 15px;
   line-height: 1.8;
+  color: var(--theme-text-primary);
 }
 
 .assistant-message .prose p {
   letter-spacing: 0.01em;
+  color: var(--theme-text-primary);
 }
 
 /* 缩小 Markdown 元素之间的间距 */
@@ -728,6 +730,7 @@ select:focus:not(:focus-visible),
 
   .admin-layout .admin-main {
     @apply flex-1 bg-[#F3F4F6];
+    min-width: 0;
   }
 
   .admin-layout .admin-content {
@@ -865,6 +868,10 @@ select:focus:not(:focus-visible),
     @apply w-16;
   }
 
+  .admin-layout .admin-sidebar-backdrop {
+    display: none;
+  }
+
   .admin-layout .admin-sidebar__brand {
     @apply px-5 pb-4 pt-6;
   }
@@ -955,6 +962,76 @@ select:focus:not(:focus-visible),
 
   .admin-layout .admin-sidebar__collapse {
     @apply mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 py-2 text-xs text-white/60 transition hover:bg-white/10;
+  }
+
+  @media (max-width: 1023px) {
+    .admin-layout {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .admin-layout .admin-main {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .admin-layout .admin-sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      z-index: 50;
+      width: min(18rem, calc(100vw - 2rem)) !important;
+      max-width: calc(100vw - 2rem);
+      transform: translateX(-100%);
+      transition: transform 200ms ease;
+      box-shadow: 24px 0 48px rgba(15, 23, 42, 0.28);
+    }
+
+    .admin-layout .admin-sidebar--mobile-open {
+      transform: translateX(0);
+    }
+
+    .admin-layout .admin-sidebar__collapse {
+      display: none;
+    }
+
+    .admin-layout .admin-sidebar-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 45;
+      display: block;
+      pointer-events: none;
+      cursor: default;
+      border: 0;
+      opacity: 0;
+      background: rgba(15, 23, 42, 0.45);
+      backdrop-filter: blur(2px);
+      transition: opacity 200ms ease;
+    }
+
+    .admin-layout .admin-sidebar-backdrop--open {
+      pointer-events: auto;
+      opacity: 1;
+    }
+
+    .admin-layout .admin-topbar-inner {
+      @apply px-4;
+    }
+
+    .admin-layout .admin-content {
+      @apply px-4 py-5;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .admin-layout .admin-topbar-search {
+      display: none;
+    }
+
+    .admin-layout .admin-page-actions {
+      @apply justify-start;
+    }
   }
 
   .admin-layout .ui-card {

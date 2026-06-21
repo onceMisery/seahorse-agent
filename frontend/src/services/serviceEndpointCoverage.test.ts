@@ -43,6 +43,9 @@ const KNOWN_GAPS = new Set([
   "DELETE /conversations/{}",
   "PUT /conversations/{}",
   "GET /conversations/{}/messages",
+  "GET /conversations/{}/messages/tree",
+  "POST /conversations/{}/messages/branch/switch",
+  "POST /conversations/{}/messages/fork",
   // sampleQuestionService — legacy non-/api/ path
   "GET /rag/sample-questions",
   "GET /sample-questions",

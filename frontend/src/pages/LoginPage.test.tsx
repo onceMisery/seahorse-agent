@@ -31,6 +31,7 @@ describe("LoginPage", () => {
   beforeEach(() => {
     loginMock.mockReset();
     navigateMock.mockReset();
+    window.history.pushState({}, "", "/login");
   });
 
   it("prefills the admin login with the current default password", () => {
@@ -58,5 +59,55 @@ describe("LoginPage", () => {
 
     expect(loginMock).toHaveBeenCalledWith("admin", "admin123");
     expect(navigateMock).toHaveBeenCalledWith("/workspace");
+  });
+
+  it("ignores external redirect targets after login", async () => {
+    loginMock.mockResolvedValueOnce(undefined);
+    window.history.pushState({}, "", "/login?redirect=https%3A%2F%2Fevil.example%2Fadmin");
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <LoginPage />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole("button", { name: "进入系统" }));
+
+    expect(navigateMock).toHaveBeenCalledWith("/workspace");
+  });
+
+  it("opens an internal redirect target after login", async () => {
+    loginMock.mockResolvedValueOnce(undefined);
+    window.history.pushState({}, "", "/login?redirect=%2Fadmin%2Frun-profiles%3Ftab%3Dactive");
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <LoginPage />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole("button", { name: "进入系统" }));
+
+    expect(navigateMock).toHaveBeenCalledWith("/admin/run-profiles?tab=active");
+  });
+
+  it("keeps the original redirect when auth state changes location during login", async () => {
+    loginMock.mockImplementationOnce(async () => {
+      window.history.pushState({}, "", "/workspace");
+    });
+    window.history.pushState({}, "", "/login?redirect=%2Fadmin%2Frun-profiles%3Ffrom%3De2e");
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <LoginPage />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole("button", { name: "进入系统" }));
+
+    expect(navigateMock).toHaveBeenCalledWith("/admin/run-profiles?from=e2e");
   });
 });

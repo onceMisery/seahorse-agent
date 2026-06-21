@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useChatStore } from "@/stores/chatStore";
 import { getAgentRunCostSummary, getAgentRunSnapshot, listAgentRunEvents } from "@/services/agentRunService";
 import { createStreamResponse } from "@/hooks/useStreamResponse";
-import { listMessages } from "@/services/sessionService";
+import { listMessages, listMessageTree, switchMessageBranch } from "@/services/sessionService";
 import { AGENT_STREAM_EVENTS, type AgentRunSnapshot, type Message, type StreamEventEnvelope } from "@/types";
 import { storage } from "@/utils/storage";
 import { toast } from "sonner";
@@ -32,8 +32,10 @@ vi.mock("@/services/sessionService", () => ({
   createSession: vi.fn(),
   deleteSession: vi.fn(),
   listMessages: vi.fn(),
+  listMessageTree: vi.fn(),
   listSessions: vi.fn().mockResolvedValue([]),
-  renameSession: vi.fn()
+  renameSession: vi.fn(),
+  switchMessageBranch: vi.fn()
 }));
 
 vi.mock("@/services/chatService", () => ({
@@ -71,6 +73,7 @@ describe("chatStore snapshot hydration", () => {
     streamStarts.length = 0;
     streamRequests.length = 0;
     storage.clearAuth();
+    vi.mocked(listMessageTree).mockResolvedValue(undefined as unknown as Awaited<ReturnType<typeof listMessageTree>>);
     setMessages([]);
     useChatStore.setState({
       currentSessionId: null,
@@ -249,6 +252,56 @@ describe("chatStore snapshot hydration", () => {
     expect(url.pathname).toBe("/api/rag/v3/chat");
     expect(url.searchParams.has("chatMode")).toBe(false);
     expect(url.searchParams.has("agentId")).toBe(false);
+  });
+
+  it("passes the selected role card to the chat stream request", async () => {
+    useChatStore.setState({
+      currentSessionId: "conversation-1",
+      selectedTaskTemplateId: null
+    });
+
+    await useChatStore.getState().sendMessage("Use a role", {
+      roleCardId: "99"
+    });
+
+    expect(streamStarts).toHaveLength(1);
+    const url = new URL(streamStarts[0], "http://localhost");
+    expect(url.pathname).toBe("/api/rag/v3/chat");
+    expect(url.searchParams.get("roleCardId")).toBe("99");
+  });
+
+  it("passes the selected run profile to the chat stream request", async () => {
+    useChatStore.setState({
+      currentSessionId: "conversation-1",
+      selectedTaskTemplateId: null
+    });
+
+    await useChatStore.getState().sendMessage("Use a profile", {
+      runProfileId: "77"
+    });
+
+    expect(streamStarts).toHaveLength(1);
+    const url = new URL(streamStarts[0], "http://localhost");
+    expect(url.pathname).toBe("/api/rag/v3/chat");
+    expect(url.searchParams.get("runProfileId")).toBe("77");
+  });
+
+  it("passes the current persisted branch leaf to the chat stream request", async () => {
+    useChatStore.setState({
+      currentSessionId: "conversation-1",
+      selectedTaskTemplateId: null,
+      messages: [
+        { id: "101", role: "user", content: "First", status: "done" },
+        { id: "102", role: "assistant", content: "Answer", status: "done" }
+      ] as Message[]
+    });
+
+    await useChatStore.getState().sendMessage("Continue from current branch");
+
+    expect(streamStarts).toHaveLength(1);
+    const url = new URL(streamStarts[0], "http://localhost");
+    expect(url.pathname).toBe("/api/rag/v3/chat");
+    expect(url.searchParams.get("branchLeafMessageId")).toBe("102");
   });
 
   it("uses Bearer authorization for the chat stream request", async () => {
@@ -452,6 +505,75 @@ describe("chatStore snapshot hydration", () => {
     expect(getAgentRunSnapshot).not.toHaveBeenCalled();
     expect(listAgentRunEvents).not.toHaveBeenCalled();
     expect(getAgentRunCostSummary).not.toHaveBeenCalled();
+  });
+
+  it("loads branch tree metadata when selecting a session", async () => {
+    vi.mocked(listMessageTree).mockResolvedValue([{
+      message: {
+        id: "2",
+        conversationId: "conversation-branch",
+        role: "assistant",
+        content: "branch answer",
+        vote: null,
+        parentId: "1",
+        active: 1,
+        siblingSeq: 1,
+        createTime: "2026-06-09T00:00:00Z"
+      },
+      preSiblings: ["1"],
+      nextSiblings: ["3"],
+      branchIndex: 2,
+      branchTotal: 3
+    }]);
+
+    await useChatStore.getState().selectSession("conversation-branch");
+
+    expect(listMessageTree).toHaveBeenCalledWith("conversation-branch");
+    expect(listMessages).not.toHaveBeenCalled();
+    expect(useChatStore.getState().messages[0]).toMatchObject({
+      id: "2",
+      parentId: "1",
+      branchIndex: 2,
+      branchTotal: 3,
+      preSiblings: ["1"],
+      nextSiblings: ["3"]
+    });
+  });
+
+  it("switches a message branch and replaces the visible active path", async () => {
+    useChatStore.setState({
+      currentSessionId: "conversation-branch",
+      messages: [assistantMessage({ id: "2", content: "old branch" })],
+      isLoading: false
+    });
+    vi.mocked(switchMessageBranch).mockResolvedValue([{
+      message: {
+        id: "3",
+        conversationId: "conversation-branch",
+        role: "assistant",
+        content: "new branch",
+        vote: null,
+        parentId: "1",
+        active: 1,
+        siblingSeq: 2,
+        createTime: "2026-06-09T00:00:00Z"
+      },
+      preSiblings: ["1", "2"],
+      nextSiblings: [],
+      branchIndex: 3,
+      branchTotal: 3
+    }]);
+
+    await useChatStore.getState().switchMessageBranch("2", "3");
+
+    expect(switchMessageBranch).toHaveBeenCalledWith("conversation-branch", "3");
+    expect(useChatStore.getState().messages).toHaveLength(1);
+    expect(useChatStore.getState().messages[0]).toMatchObject({
+      id: "3",
+      content: "new branch",
+      branchIndex: 3,
+      branchTotal: 3
+    });
   });
 
   it("does not overwrite live auto-sent messages when session history resolves later", async () => {

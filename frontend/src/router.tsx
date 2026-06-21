@@ -1,4 +1,4 @@
-import { Navigate, Outlet, createBrowserRouter } from "react-router-dom";
+import { Navigate, Outlet, createBrowserRouter, useLocation } from "react-router-dom";
 
 import { CommandPalette } from "@/components/CommandPalette";
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
@@ -62,6 +62,8 @@ import { AuditEventPage } from "@/pages/admin/audit/AuditEventPage";
 import { CostAnalyticsPage } from "@/pages/admin/cost/CostAnalyticsPage";
 import { SandboxPage } from "@/pages/admin/sandbox/SandboxPage";
 import { AgentRunListPage } from "@/pages/admin/agent-runs/AgentRunListPage";
+import { RunProfilePage } from "@/pages/admin/run-profiles/RunProfilePage";
+import { RunExperimentPage } from "@/pages/admin/run-profiles/RunExperimentPage";
 import { BillingPage } from "@/pages/admin/billing/BillingPage";
 import { MarketplacePage } from "@/pages/MarketplacePage";
 import { TenantListPage } from "@/pages/admin/tenants/TenantListPage";
@@ -69,24 +71,33 @@ import { AuditLogPage } from "@/pages/admin/audit/AuditLogPage";
 import { MarketplaceReviewPage } from "@/pages/admin/marketplace/MarketplaceReviewPage";
 import { useAuthStore } from "@/stores/authStore";
 import { useFeatureStore } from "@/stores/featureStore";
+import { loginPathWithRedirect, sanitizeAuthRedirect } from "@/utils/authRedirect";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  return isAuthenticated ? children : <Navigate to="/login" replace />;
+  const location = useLocation();
+  const redirectTarget = `${location.pathname}${location.search}${location.hash}`;
+  return isAuthenticated ? children : <Navigate to={loginPathWithRedirect(redirectTarget)} replace />;
 }
 
 function RequireAdmin({ children }: { children: JSX.Element }) {
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const location = useLocation();
 
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!isAuthenticated) {
+    const redirectTarget = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={loginPathWithRedirect(redirectTarget)} replace />;
+  }
   if (user?.role !== "admin") return <Navigate to="/workspace" replace />;
   return children;
 }
 
 function RedirectIfAuth({ children }: { children: JSX.Element }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  return isAuthenticated ? <Navigate to="/workspace" replace /> : children;
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  return isAuthenticated ? <Navigate to={sanitizeAuthRedirect(params.get("redirect"))} replace /> : children;
 }
 
 function HomeRedirect() {
@@ -156,6 +167,8 @@ const advancedAdminRoutes = [
   { path: "tool-invocations", element: withFeature(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT, "工具调用审计", <ToolInvocationAuditPage />) },
   { path: "approvals", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "审批中心", <ApprovalCenterPage />) },
   { path: "agent-runs", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "Agent 运行管理", <AgentRunListPage />) },
+  { path: "run-profiles", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "运行画像", <RunProfilePage />) },
+  { path: "run-experiments", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "对话实验", <RunExperimentPage />) },
   { path: "rag-evaluation", element: withFeature(ADVANCED_ADMIN_FEATURES.RAG_EVALUATION, "RAG 评测", <RagEvaluationPage />) },
   { path: "rag-evaluation/:kbId/:datasetId", element: withFeature(ADVANCED_ADMIN_FEATURES.RAG_EVALUATION, "RAG 评测", <RetrievalDatasetDetailPage />) },
   { path: "rag-strategies", element: withFeature(ADVANCED_ADMIN_FEATURES.RAG_EVALUATION, "策略模板", <RetrievalStrategyTemplatePage />) },

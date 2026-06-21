@@ -191,6 +191,8 @@ function CheckItemCard({
             onClick={onRerun}
             disabled={isRunning}
             className="shrink-0"
+            aria-label={`重新检查 ${check.name}`}
+            title={`重新检查 ${check.name}`}
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isRunning ? "animate-spin" : ""}`} />
           </Button>
