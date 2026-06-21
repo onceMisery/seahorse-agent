@@ -71,6 +71,87 @@ class JdbcConversationRepositoryAdapterTests {
         assertThat(messages.get(1).getAgentRunId()).isEqualTo("run-1");
     }
 
+    @Test
+    void shouldListOnlyActiveMessagesAndMapBranchFields() {
+        insertConversation();
+        insertMessage("msg-1", "user", null, null, null, 1, 0);
+        insertMessage("msg-2", "assistant", null, null, 1L, 0, 0);
+        insertMessage("msg-3", "assistant", null, null, 1L, 1, 1);
+
+        List<ConversationMessageRecord> activeMessages = adapter.listMessages("1", "1");
+        List<ConversationMessageRecord> siblings = adapter.listSiblings("1", "1", 1L);
+
+        assertThat(activeMessages).extracting(ConversationMessageRecord::getId).containsExactly("1", "3");
+        assertThat(activeMessages.get(1).getParentId()).isEqualTo(1L);
+        assertThat(activeMessages.get(1).getSiblingSeq()).isEqualTo(1);
+        assertThat(siblings).extracting(ConversationMessageRecord::getId).containsExactly("2", "3");
+    }
+
+    @Test
+    void shouldAppendMessageAndSetActivePath() {
+        insertConversation();
+        insertMessage("msg-1", "user", null, null, null, 1, 0);
+
+        ConversationMessageRecord record = new ConversationMessageRecord();
+        record.setConversationId("1");
+        record.setUserId("1");
+        record.setRole("assistant");
+        record.setContent("fresh");
+        record.setParentId(1L);
+        record.setActive(1);
+        record.setSiblingSeq(0);
+        Long newId = adapter.appendMessage(record);
+        adapter.setActivePath("1", "1", java.util.Set.of(1L, newId));
+
+        List<ConversationMessageRecord> tree = adapter.listTree("1", "1");
+
+        assertThat(tree).extracting(ConversationMessageRecord::getId).contains(String.valueOf(newId));
+        assertThat(adapter.listMessages("1", "1")).extracting(ConversationMessageRecord::getId)
+                .containsExactly("1", String.valueOf(newId));
+    }
+
+    @Test
+    void shouldRetryAppendWithNextSiblingSeqWhenRequestedSeqAlreadyExists() {
+        insertConversation();
+        insertMessage("msg-1", "user", null, null, null, 1, 0);
+        insertMessage("msg-2", "assistant", null, null, 1L, 0, 0);
+
+        ConversationMessageRecord record = new ConversationMessageRecord();
+        record.setConversationId("1");
+        record.setUserId("1");
+        record.setRole("assistant");
+        record.setContent("fresh branch");
+        record.setParentId(1L);
+        record.setActive(1);
+        record.setSiblingSeq(0);
+
+        Long newId = adapter.appendMessage(record);
+
+        Integer siblingSeq = jdbcTemplate.queryForObject("""
+                SELECT sibling_seq
+                FROM t_message
+                WHERE id = ?
+                """, Integer.class, newId);
+        assertThat(siblingSeq).isEqualTo(1);
+    }
+
+    @Test
+    void shouldUpsertAndFindBranchCursor() {
+        insertConversation();
+        insertMessage("msg-1", "user", null, null, null, 1, 0);
+        insertMessage("msg-2", "assistant", null, null, 1L, 1, 0);
+
+        adapter.upsertCursor("1", "1", 1L);
+        adapter.upsertCursor("1", "1", 2L);
+
+        assertThat(adapter.findCursor("1", "1")).hasValueSatisfying(cursor -> {
+            assertThat(cursor.getTenantId()).isEqualTo("default");
+            assertThat(cursor.getConversationId()).isEqualTo("1");
+            assertThat(cursor.getUserId()).isEqualTo("1");
+            assertThat(cursor.getLeafMessageId()).isEqualTo(2L);
+        });
+    }
+
     private void insertConversation() {
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update("""
@@ -85,13 +166,19 @@ class JdbcConversationRepositoryAdapterTests {
     }
 
     private void insertMessage(String id, String role, Integer vote, String agentRunId) {
+        insertMessage(id, role, vote, agentRunId, null, 1, 0);
+    }
+
+    private void insertMessage(String id, String role, Integer vote, String agentRunId, Long parentId,
+                               int active, int siblingSeq) {
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update("""
                 INSERT INTO t_message
                 (id, conversation_id, user_id, role, content, thinking_content, thinking_duration,
-                 agent_run_id, create_time, update_time, deleted, tenant_id)
-                VALUES (?, 1, 1, ?, ?, null, null, ?, ?, ?, 0, 'default')
-                """, Long.parseLong(id.replace("msg-", "")), role, "content-" + id, agentRunId, now, now);
+                 agent_run_id, parent_id, active, branch_root_id, sibling_seq, create_time, update_time, deleted, tenant_id)
+                VALUES (?, 1, 1, ?, ?, null, null, ?, ?, ?, null, ?, ?, ?, 0, 'default')
+                """, Long.parseLong(id.replace("msg-", "")), role, "content-" + id, agentRunId,
+                parentId, active, siblingSeq, now, now);
         if (vote == null) {
             return;
         }
@@ -104,6 +191,7 @@ class JdbcConversationRepositoryAdapterTests {
 
     private void createSchema() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_message_feedback");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_conversation_branch_cursor");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_message");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_conversation_summary");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_conversation");
@@ -140,6 +228,10 @@ class JdbcConversationRepositoryAdapterTests {
                     thinking_content TEXT,
                     thinking_duration INTEGER,
                     agent_run_id VARCHAR(64),
+                    parent_id BIGINT,
+                    active SMALLINT NOT NULL DEFAULT 1,
+                    branch_root_id BIGINT,
+                    sibling_seq INTEGER NOT NULL DEFAULT 0,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0,
@@ -157,6 +249,26 @@ class JdbcConversationRepositoryAdapterTests {
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0
                 )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_conversation_branch_cursor (
+                    id BIGINT PRIMARY KEY,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    conversation_id BIGINT NOT NULL,
+                    user_id BIGINT NOT NULL,
+                    leaf_message_id BIGINT NOT NULL,
+                    create_time TIMESTAMP,
+                    update_time TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE UNIQUE INDEX uk_conversation_branch_cursor_user
+                ON t_conversation_branch_cursor (tenant_id, conversation_id, user_id)
+                """);
+        jdbcTemplate.execute("""
+                CREATE UNIQUE INDEX uk_t_message_sibling_seq
+                ON t_message (tenant_id, conversation_id, user_id, parent_id, sibling_seq)
                 """);
     }
 }

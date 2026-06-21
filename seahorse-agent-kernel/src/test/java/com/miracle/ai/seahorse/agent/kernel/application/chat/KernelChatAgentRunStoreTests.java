@@ -21,6 +21,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopDependenc
 import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegistry;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorRouter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
@@ -36,6 +38,11 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchTool
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageAggregate;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageRecord;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageSource;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentStatus;
@@ -53,16 +60,21 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequ
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatTokenUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileResolvedPreview;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
@@ -70,6 +82,11 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ToolCallCollector;
+import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileDetails;
+import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileToolBindingRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.junit.jupiter.api.Test;
 
@@ -82,6 +99,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -141,6 +159,447 @@ class KernelChatAgentRunStoreTests {
         assertEquals(AgentStepStatus.SUCCEEDED, steps.get(1).status());
         assertTrue(steps.get(1).inputJson().contains("weather"));
         assertTrue(steps.get(1).outputJson().contains("temp"));
+    }
+
+    @Test
+    void shouldRecordAgentModeModelUsageForAgentRun() {
+        AgentRun run = new AgentRun(
+                "run-usage-1",
+                "ops-agent",
+                "ops-agent-v1",
+                "rollout-1",
+                "tenant-a",
+                "alice",
+                "conversation-1",
+                AgentRunTriggerType.CHAT,
+                "Count tokens",
+                AgentRunStatus.RUNNING,
+                "trace-1",
+                0L,
+                0L,
+                BigDecimal.ZERO,
+                null,
+                null,
+                FIXED_CLOCK.instant(),
+                null);
+        RecordingAgentRunInboundPort runPort = new RecordingAgentRunInboundPort(run);
+        RecordingCostUsageRepository usageRepository = new RecordingCostUsageRepository();
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.create(agentDefinition("ops-agent", "ops-agent-v1"));
+        definitionRepository.saveVersion(agentVersion("ops-agent", "ops-agent-v1", "{\"modelId\":\"ops-model\"}"));
+        UsageEmittingAgentLoop agentLoop = new UsageEmittingAgentLoop(new ChatTokenUsage(12, 5));
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.of(agentLoop),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.of(runPort),
+                Optional.empty(),
+                Optional.of(definitionRepository),
+                ConversationAttachmentContextAssembler.noop(),
+                Optional.empty(),
+                KernelAgentLoopOptions.defaults(),
+                Optional.empty(),
+                true,
+                null,
+                Optional.empty(),
+                Optional.of(usageRepository));
+
+        service.streamChat(new StreamChatCommand(
+                "Count tokens", "conversation-1", "task-1", "alice", false,
+                ChatMode.AGENT, "ops-agent", "ops-agent-v1"), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertEquals(List.of("answer"), callback.contents);
+        assertEquals(1, usageRepository.records.size());
+        CostUsageRecord record = usageRepository.records.get(0);
+        assertEquals("tenant-a", record.tenantId());
+        assertEquals("ops-agent", record.agentId());
+        assertEquals("run-usage-1", record.runId());
+        assertEquals("rollout-1", record.rolloutId());
+        assertEquals("alice", record.userId());
+        assertEquals("ops-model", record.modelId());
+        assertEquals(CostUsageSource.MODEL, record.source());
+        assertEquals(17L, record.tokens());
+        assertEquals(1L, record.calls());
+        assertEquals(0.0D, record.cost());
+    }
+
+    @Test
+    void shouldSaveRunContextSnapshotWhenAgentRunStarts() {
+        AgentRun run = new AgentRun(
+                "run-context-1",
+                "legacy-react-agent",
+                null,
+                null,
+                "tenant-a",
+                "user-1",
+                "101",
+                AgentRunTriggerType.CHAT,
+                "Use tools",
+                AgentRunStatus.RUNNING,
+                "trace-1",
+                0L,
+                0L,
+                BigDecimal.ZERO,
+                null,
+                null,
+                FIXED_CLOCK.instant(),
+                null);
+        RecordingAgentRunInboundPort runPort = new RecordingAgentRunInboundPort(run);
+        UsageEmittingAgentLoop agentLoop = new UsageEmittingAgentLoop(new ChatTokenUsage(0, 0));
+        RecordingRunContextSnapshotRepository snapshotRepository = new RecordingRunContextSnapshotRepository();
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.of(agentLoop),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.of(runPort),
+                Optional.empty(),
+                Optional.empty(),
+                ConversationAttachmentContextAssembler.noop(),
+                Optional.empty(),
+                KernelAgentLoopOptions.defaults(),
+                Optional.empty(),
+                true,
+                null,
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(snapshotRepository),
+                List.of());
+
+        service.streamChat(new StreamChatCommand(
+                "Use tools",
+                "101",
+                "task-1",
+                "user-1",
+                false,
+                ChatMode.AGENT,
+                null,
+                null,
+                null,
+                List.of(),
+                List.of(),
+                List.of("kb-1"),
+                99L), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertEquals(1, snapshotRepository.records.size());
+        RunContextSnapshotRecord snapshot = snapshotRepository.records.get(0);
+        assertEquals("tenant-a", snapshot.getTenantId());
+        assertEquals("run-context-1", snapshot.getRunId());
+        assertEquals(101L, snapshot.getConversationId());
+        assertEquals(99L, snapshot.getRoleCardId());
+        assertEquals("kernel", snapshot.getExecutorEngine());
+        assertTrue(snapshot.getSnapshotJson().contains("\"knowledgeBaseIds\":[\"kb-1\"]"));
+        assertTrue(snapshot.getSnapshotJson().contains("\"executorEngine\":\"kernel\""));
+        assertTrue(snapshot.getTraceContextJson().contains("trace-1"));
+    }
+
+    @Test
+    void shouldSaveRunContextSnapshotForRagChat() {
+        RecordingRunContextSnapshotRepository snapshotRepository = new RecordingRunContextSnapshotRepository();
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.empty(),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                ConversationAttachmentContextAssembler.noop(),
+                Optional.empty(),
+                KernelAgentLoopOptions.defaults(),
+                Optional.empty(),
+                true,
+                null,
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(snapshotRepository),
+                List.of());
+
+        service.streamChat(new StreamChatCommand(
+                "Explain the current design",
+                "101",
+                "task-rag-1",
+                "user-1",
+                false,
+                ChatMode.RAG,
+                null,
+                null,
+                null,
+                List.of("attachment-1"),
+                List.of("java-review"),
+                List.of("kb-1"),
+                99L,
+                123L), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertEquals(1, snapshotRepository.records.size());
+        RunContextSnapshotRecord snapshot = snapshotRepository.records.get(0);
+        assertEquals("default", snapshot.getTenantId());
+        assertEquals("task-rag-1", snapshot.getRunId());
+        assertEquals(101L, snapshot.getConversationId());
+        assertEquals(123L, snapshot.getBranchLeafMessageId());
+        assertEquals(99L, snapshot.getRoleCardId());
+        assertEquals("kernel", snapshot.getExecutorEngine());
+        assertTrue(snapshot.getSnapshotJson().contains("\"chatMode\":\"RAG\""));
+        assertTrue(snapshot.getSnapshotJson().contains("\"branchLeafMessageId\":123"));
+        assertTrue(snapshot.getSnapshotJson().contains("\"knowledgeBaseIds\":[\"kb-1\"]"));
+        assertTrue(snapshot.getSnapshotJson().contains("\"attachmentIds\":[\"attachment-1\"]"));
+        assertTrue(snapshot.getSnapshotJson().contains("\"selectedSkillNames\":[\"java-review\"]"));
+    }
+
+    @Test
+    void shouldApplyRunProfileToolBindingsAndSnapshotForAgentChat() {
+        AgentRun run = new AgentRun(
+                "run-profile-run-1",
+                "legacy-react-agent",
+                null,
+                null,
+                "tenant-a",
+                "user-1",
+                "101",
+                AgentRunTriggerType.CHAT,
+                "Use profile",
+                AgentRunStatus.RUNNING,
+                "trace-1",
+                0L,
+                0L,
+                BigDecimal.ZERO,
+                null,
+                null,
+                FIXED_CLOCK.instant(),
+                null);
+        RecordingAgentRunInboundPort runPort = new RecordingAgentRunInboundPort(run);
+        CapturingAgentLoop agentLoop = new CapturingAgentLoop("profile answer", "agentscope");
+        RecordingRunContextSnapshotRepository snapshotRepository = new RecordingRunContextSnapshotRepository();
+        InMemoryRunProfilePort runProfilePort = new InMemoryRunProfilePort(profileDetails());
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.of(agentLoop),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.of(runPort),
+                Optional.empty(),
+                Optional.empty(),
+                ConversationAttachmentContextAssembler.noop(),
+                Optional.empty(),
+                KernelAgentLoopOptions.defaults(),
+                Optional.empty(),
+                true,
+                null,
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(snapshotRepository),
+                Optional.of(runProfilePort),
+                List.of());
+
+        service.streamChat(new StreamChatCommand(
+                "Use profile",
+                "101",
+                "task-profile-1",
+                "user-1",
+                false,
+                ChatMode.AGENT,
+                null,
+                null,
+                null,
+                List.of(),
+                List.of(),
+                List.of("kb-1"),
+                null,
+                123L,
+                77L), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertEquals(List.of("profile answer"), callback.contents);
+        assertNotNull(agentLoop.lastRequest);
+        assertEquals(
+                List.of("profile-tool-a", "filesystem.read_file", "seahorse-researcher"),
+                agentLoop.lastRequest.allowedToolIds());
+        assertTrue(agentLoop.lastRequest.explicitToolAllowlist());
+        assertEquals(1, snapshotRepository.records.size());
+        RunContextSnapshotRecord snapshot = snapshotRepository.records.get(0);
+        assertEquals(77L, snapshot.getRunProfileId());
+        assertEquals(200L, snapshot.getRoleCardId());
+        assertEquals("agentscope", snapshot.getExecutorEngine());
+        assertTrue(snapshot.getSnapshotJson().contains("\"runProfileId\":77"));
+        assertTrue(snapshot.getSnapshotJson().contains("\"executorEngine\":\"agentscope\""));
+        assertTrue(snapshot.getSnapshotJson().contains("\"executorConfig\":{\"studioTraceEnabled\":true}"));
+        assertTrue(snapshot.getSnapshotJson().contains(
+                "\"toolIds\":[\"profile-tool-a\",\"filesystem.read_file\",\"seahorse-researcher\"]"));
+        assertTrue(snapshot.getSnapshotJson().contains("\"mcpToolIds\":[\"filesystem.read_file\"]"));
+        assertTrue(snapshot.getSnapshotJson().contains("\"a2aAgentIds\":[\"seahorse-researcher\"]"));
+        assertTrue(snapshot.getSnapshotJson().contains("\"explicitToolAllowlist\":true"));
+        assertTrue(snapshot.getSnapshotJson().contains("\"guardrailConfig\":{\"highRiskToolApproval\":true}"));
+    }
+
+    @Test
+    void shouldRouteAgentChatToRunProfileExecutorEngine() {
+        AgentRun run = new AgentRun(
+                "run-profile-router-1",
+                "legacy-react-agent",
+                null,
+                null,
+                "tenant-a",
+                "user-1",
+                "101",
+                AgentRunTriggerType.CHAT,
+                "Use profile router",
+                AgentRunStatus.RUNNING,
+                "trace-1",
+                0L,
+                0L,
+                BigDecimal.ZERO,
+                null,
+                null,
+                FIXED_CLOCK.instant(),
+                null);
+        RecordingAgentRunInboundPort runPort = new RecordingAgentRunInboundPort(run);
+        CapturingAgentLoop kernelLoop = new CapturingAgentLoop("kernel answer", "kernel");
+        CapturingAgentLoop agentScopeLoop = new CapturingAgentLoop("agentscope answer", "agentscope");
+        ReActExecutorRouter router = new ReActExecutorRouter(List.of(kernelLoop, agentScopeLoop), "kernel");
+        assertEquals("kernel", router.engineId());
+        RecordingRunContextSnapshotRepository snapshotRepository = new RecordingRunContextSnapshotRepository();
+        InMemoryRunProfilePort runProfilePort = new InMemoryRunProfilePort(profileDetails());
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.of(router),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.of(runPort),
+                Optional.empty(),
+                Optional.empty(),
+                ConversationAttachmentContextAssembler.noop(),
+                Optional.empty(),
+                KernelAgentLoopOptions.defaults(),
+                Optional.empty(),
+                true,
+                null,
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(snapshotRepository),
+                Optional.of(runProfilePort),
+                List.of());
+
+        service.streamChat(new StreamChatCommand(
+                "Use profile router",
+                "101",
+                "task-profile-router-1",
+                "user-1",
+                false,
+                ChatMode.AGENT,
+                null,
+                null,
+                null,
+                List.of(),
+                List.of(),
+                List.of(),
+                null,
+                null,
+                77L), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertEquals(List.of("agentscope answer"), callback.contents);
+        assertEquals(null, kernelLoop.lastRequest);
+        assertNotNull(agentScopeLoop.lastRequest);
+        assertEquals("agentscope", agentScopeLoop.lastRequest.executorEngine());
+        assertEquals(1, snapshotRepository.records.size());
+        assertEquals("agentscope", snapshotRepository.records.get(0).getExecutorEngine());
+    }
+
+    @Test
+    void shouldUseConversationAppliedRunProfileWhenRequestDoesNotSpecifyProfile() {
+        AgentRun run = new AgentRun(
+                "run-profile-conversation-1",
+                "legacy-react-agent",
+                null,
+                null,
+                "tenant-a",
+                "user-1",
+                "101",
+                AgentRunTriggerType.CHAT,
+                "Use conversation profile",
+                AgentRunStatus.RUNNING,
+                "trace-1",
+                0L,
+                0L,
+                BigDecimal.ZERO,
+                null,
+                null,
+                FIXED_CLOCK.instant(),
+                null);
+        RecordingAgentRunInboundPort runPort = new RecordingAgentRunInboundPort(run);
+        CapturingAgentLoop agentLoop = new CapturingAgentLoop("conversation profile answer", "agentscope");
+        RecordingRunContextSnapshotRepository snapshotRepository = new RecordingRunContextSnapshotRepository();
+        InMemoryRunProfilePort runProfilePort = new InMemoryRunProfilePort(profileDetails());
+        runProfilePort.applyToConversation("user-1", "101", 77L);
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.of(agentLoop),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.of(runPort),
+                Optional.empty(),
+                Optional.empty(),
+                ConversationAttachmentContextAssembler.noop(),
+                Optional.empty(),
+                KernelAgentLoopOptions.defaults(),
+                Optional.empty(),
+                true,
+                null,
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(snapshotRepository),
+                Optional.of(runProfilePort),
+                List.of());
+
+        service.streamChat(new StreamChatCommand(
+                "Use conversation profile",
+                "101",
+                "task-profile-conversation-1",
+                "user-1",
+                false,
+                ChatMode.AGENT,
+                null,
+                null,
+                null,
+                List.of(),
+                List.of(),
+                List.of(),
+                null,
+                null,
+                null), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertEquals(List.of("conversation profile answer"), callback.contents);
+        assertNotNull(agentLoop.lastRequest);
+        assertEquals("agentscope", agentLoop.lastRequest.executorEngine());
+        assertEquals(List.of("profile-tool-a", "filesystem.read_file", "seahorse-researcher"),
+                agentLoop.lastRequest.allowedToolIds());
+        assertEquals(1, snapshotRepository.records.size());
+        RunContextSnapshotRecord snapshot = snapshotRepository.records.get(0);
+        assertEquals(77L, snapshot.getRunProfileId());
+        assertTrue(snapshot.getSnapshotJson().contains("\"runProfileId\":77"));
     }
 
     @Test
@@ -406,6 +865,89 @@ class KernelChatAgentRunStoreTests {
         assertTrue(systemPrompt.contains("Always verify claims with sources."));
         assertTrue(modelRequest.getTools().stream().anyMatch(tool -> "load_skill".equals(tool.toolId())));
         assertTrue(modelRequest.getTools().stream().noneMatch(tool -> "web_search".equals(tool.toolId())));
+        AgentRun run = runRepository.runs.values().iterator().next();
+        assertTrue(run.metadataJson().contains("\"agentId\":\"ops-agent\""));
+        assertTrue(run.metadataJson().contains("\"versionId\":\"ops-agent-v1\""));
+        assertTrue(run.metadataJson().contains("\"instructions\":\"You are an ops assistant.\""));
+        assertTrue(run.metadataJson().contains("\"modelConfigJson\":\"{\\\"modelId\\\":\\\"agent-chat-model\\\"}\""));
+        assertTrue(run.metadataJson().contains("\"skillSetJson\""));
+        assertTrue(run.metadataJson().contains("deep-research"), run.metadataJson());
+        assertTrue(run.metadataJson().contains("\"allowedToolIds\""), run.metadataJson());
+        assertTrue(run.metadataJson().contains("\"load_skill\""), run.metadataJson());
+    }
+
+    @Test
+    void agentRunMetadataIncludesExecutionBackendPromptSourceSnapshot() {
+        AgentRun run = new AgentRun(
+                "run-metadata-1",
+                "ops-agent",
+                "ops-agent-v1",
+                "rollout-1",
+                "tenant-a",
+                "alice",
+                "conversation-1",
+                AgentRunTriggerType.CHAT,
+                "Run ops",
+                AgentRunStatus.RUNNING,
+                "trace-1",
+                0L,
+                0L,
+                BigDecimal.ZERO,
+                null,
+                null,
+                FIXED_CLOCK.instant(),
+                null);
+        RecordingAgentRunInboundPort runPort = new RecordingAgentRunInboundPort(run);
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.create(agentDefinition("ops-agent", "ops-agent-v1"));
+        definitionRepository.saveVersion(agentVersion("ops-agent", "ops-agent-v1", "{\"modelId\":\"ops-model\"}"));
+        UsageEmittingAgentLoop agentLoop = new UsageEmittingAgentLoop(new ChatTokenUsage(0, 0));
+        AgentRunMetadataContributor metadataContributor = command -> Map.of(
+                "prompt", Map.of(
+                        "source", "nacos",
+                        "key", "seahorse.agent.prompt",
+                        "version", "stable",
+                        "label", "default",
+                        "namespace", "public",
+                        "group", "DEFAULT_GROUP",
+                        "revision", "stable"));
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.of(agentLoop),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.of(runPort),
+                Optional.empty(),
+                Optional.of(definitionRepository),
+                ConversationAttachmentContextAssembler.noop(),
+                Optional.empty(),
+                KernelAgentLoopOptions.defaults(),
+                Optional.empty(),
+                true,
+                null,
+                Optional.empty(),
+                Optional.empty(),
+                List.of(metadataContributor));
+
+        service.streamChat(new StreamChatCommand(
+                "Run ops", "conversation-1", "task-1", "alice", false,
+                ChatMode.AGENT, "ops-agent", "ops-agent-v1"), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertTrue(runPort.startCommand.metadataJson().contains("\"prompt\""), runPort.startCommand.metadataJson());
+        assertTrue(runPort.startCommand.metadataJson().contains("\"source\":\"nacos\""),
+                runPort.startCommand.metadataJson());
+        assertTrue(runPort.startCommand.metadataJson().contains("\"key\":\"seahorse.agent.prompt\""),
+                runPort.startCommand.metadataJson());
+        assertTrue(runPort.startCommand.metadataJson().contains("\"version\":\"stable\""),
+                runPort.startCommand.metadataJson());
+        assertTrue(runPort.startCommand.metadataJson().contains("\"label\":\"default\""),
+                runPort.startCommand.metadataJson());
+        assertTrue(runPort.startCommand.metadataJson().contains("\"revision\":\"stable\""),
+                runPort.startCommand.metadataJson());
     }
 
     @Test
@@ -726,6 +1268,187 @@ class KernelChatAgentRunStoreTests {
         public ToolInvocationResult invoke(ToolInvocationRequest request) {
             requests.add(request);
             return result;
+        }
+    }
+
+    private static final class UsageEmittingAgentLoop implements ReActExecutorPort {
+        private final ChatTokenUsage usage;
+
+        private UsageEmittingAgentLoop(ChatTokenUsage usage) {
+            this.usage = usage;
+        }
+
+        @Override
+        public AgentLoopResult execute(AgentLoopRequest request) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public StreamCancellationHandle streamExecute(AgentLoopRequest request, StreamCallback callback) {
+            callback.onUsage(usage);
+            callback.onContent("answer");
+            callback.onComplete();
+            return () -> {
+            };
+        }
+    }
+
+    private static final class CapturingAgentLoop implements ReActExecutorPort {
+        private final String answer;
+        private final String engineId;
+        private AgentLoopRequest lastRequest;
+
+        private CapturingAgentLoop(String answer, String engineId) {
+            this.answer = answer;
+            this.engineId = engineId;
+        }
+
+        @Override
+        public AgentLoopResult execute(AgentLoopRequest request) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public StreamCancellationHandle streamExecute(AgentLoopRequest request, StreamCallback callback) {
+            this.lastRequest = request;
+            callback.onContent(answer);
+            callback.onComplete();
+            return () -> {
+            };
+        }
+
+        @Override
+        public String engineId() {
+            return engineId;
+        }
+    }
+
+    private static RunProfileDetails profileDetails() {
+        RunProfileRecord profile = new RunProfileRecord();
+        profile.setId(77L);
+        profile.setTenantId("tenant-a");
+        profile.setUserId("user-1");
+        profile.setName("AgentScope profile");
+        profile.setRoleCardId(200L);
+        profile.setExecutorEngine("agentscope");
+        profile.setExecutorConfigJson("{\"studioTraceEnabled\":true}");
+        profile.setModelConfigJson("{\"temperature\":0.2}");
+        profile.setMemoryScopeJson("{\"longTerm\":true}");
+        profile.setGuardrailConfigJson("{\"highRiskToolApproval\":true}");
+        return RunProfileDetails.builder()
+                .profile(profile)
+                .toolBindings(List.of(
+                        RunProfileToolBindingRecord.builder()
+                                .profileId(77L)
+                                .toolId("profile-tool-a")
+                                .provider("BUILT_IN")
+                                .enabled(1)
+                                .build(),
+                        RunProfileToolBindingRecord.builder()
+                                .profileId(77L)
+                                .toolId("profile-tool-disabled")
+                                .provider("BUILT_IN")
+                                .enabled(0)
+                                .build(),
+                        RunProfileToolBindingRecord.builder()
+                                .profileId(77L)
+                                .toolId("filesystem.read_file")
+                                .provider("MCP")
+                                .enabled(1)
+                                .build(),
+                        RunProfileToolBindingRecord.builder()
+                                .profileId(77L)
+                                .toolId("seahorse-researcher")
+                                .provider("A2A")
+                                .enabled(1)
+                                .build()))
+                .build();
+    }
+
+    private static final class InMemoryRunProfilePort implements RunProfileInboundPort {
+        private final RunProfileDetails details;
+        private final Map<String, Long> appliedProfiles = new LinkedHashMap<>();
+
+        private InMemoryRunProfilePort(RunProfileDetails details) {
+            this.details = details;
+        }
+
+        @Override
+        public List<RunProfileRecord> list(String userId) {
+            return details == null || details.getProfile() == null ? List.of() : List.of(details.getProfile());
+        }
+
+        @Override
+        public Optional<RunProfileDetails> findById(String userId, Long id) {
+            if (details == null || details.getProfile() == null || !Objects.equals(details.getProfile().getId(), id)) {
+                return Optional.empty();
+            }
+            return Optional.of(details);
+        }
+
+        @Override
+        public RunProfileResolvedPreview applyToConversation(String userId, String conversationId, Long id) {
+            appliedProfiles.put(userId + ":" + conversationId, id);
+            return RunProfileResolvedPreview.builder()
+                    .runProfileId(id)
+                    .executorEngine(details.getProfile().getExecutorEngine())
+                    .explicitToolAllowlist(true)
+                    .toolIds(List.of())
+                    .mcpToolIds(List.of())
+                    .a2aAgentIds(List.of())
+                    .build();
+        }
+
+        @Override
+        public Optional<RunProfileDetails> findAppliedToConversation(String userId, String conversationId) {
+            return findById(userId, appliedProfiles.get(userId + ":" + conversationId));
+        }
+
+        @Override
+        public Long save(com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileCommand command) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void activate(String userId, Long id) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void delete(String userId, Long id) {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+    private static final class RecordingCostUsageRepository implements CostUsageRepositoryPort {
+        private final List<CostUsageRecord> records = new ArrayList<>();
+
+        @Override
+        public CostUsageRecord append(CostUsageRecord record) {
+            records.add(record);
+            return record;
+        }
+
+        @Override
+        public CostUsageAggregate aggregate(CostUsageQuery query) {
+            return new CostUsageAggregate("tenant-a", null, null, 0L, 0L, 0.0D, 0L);
+        }
+    }
+
+    private static final class RecordingRunContextSnapshotRepository implements RunContextSnapshotRepositoryPort {
+        private final List<RunContextSnapshotRecord> records = new ArrayList<>();
+
+        @Override
+        public Long save(RunContextSnapshotRecord record) {
+            records.add(record);
+            return 1L;
+        }
+
+        @Override
+        public Optional<RunContextSnapshotRecord> findByRunId(String runId) {
+            return records.stream()
+                    .filter(record -> runId.equals(record.getRunId()))
+                    .findFirst();
         }
     }
 

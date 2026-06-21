@@ -47,14 +47,19 @@ class JdbcConversationMemoryAdapterTests {
     @Test
     void shouldLoadHistoryAndAppendUserMessage() {
         Timestamp sameMoment = Timestamp.from(Instant.parse("2026-05-19T12:00:00Z"));
-        insertMessage("1", "1", "1", "user", "hello", sameMoment);
-        insertMessage("2", "1", "1", "assistant", "hi", sameMoment);
+        insertMessage("1", "1", "1", "user", "hello", sameMoment, null, 1, 0);
+        insertMessage("2", "1", "1", "assistant", "hi", sameMoment, 1L, 1, 0);
 
         List<ChatMessage> history = adapter.loadAndAppend("1", "1", ChatMessage.user("next"));
 
         assertThat(history).extracting(ChatMessage::getContent).containsExactly("hello", "hi");
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(1) FROM t_message", Integer.class)).isEqualTo(3);
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(1) FROM t_conversation", Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT parent_id
+                FROM t_message
+                WHERE content = 'next'
+                """, Long.class)).isEqualTo(2L);
     }
 
     @Test
@@ -80,6 +85,45 @@ class JdbcConversationMemoryAdapterTests {
                 """, String.class, 1L, 1L, "assistant");
 
         assertThat(runId).isEqualTo("run-1");
+    }
+
+    @Test
+    void shouldLoadActivePathOnlyAndAppendUnderActiveLeaf() {
+        Timestamp sameMoment = Timestamp.from(Instant.parse("2026-05-19T12:00:00Z"));
+        insertMessage("1", "1", "1", "user", "hello", sameMoment, null, 1, 0);
+        insertMessage("2", "1", "1", "assistant", "old answer", sameMoment, 1L, 0, 0);
+        insertMessage("3", "1", "1", "assistant", "new answer", sameMoment, 1L, 1, 1);
+
+        List<ChatMessage> history = adapter.loadAndAppend("1", "1", ChatMessage.user("follow up"));
+
+        assertThat(history).extracting(ChatMessage::getContent).containsExactly("hello", "new answer");
+        assertThat(jdbcTemplate.queryForMap("""
+                SELECT parent_id, active, sibling_seq
+                FROM t_message
+                WHERE content = 'follow up'
+                """))
+                .containsEntry("PARENT_ID", 3L)
+                .containsEntry("ACTIVE", 1)
+                .containsEntry("SIBLING_SEQ", 0);
+    }
+
+    @Test
+    void shouldRetryAppendWithMaxSiblingSeqWhenExistingSiblingsHaveGap() {
+        Timestamp sameMoment = Timestamp.from(Instant.parse("2026-05-19T12:00:00Z"));
+        insertMessage("1", "1", "1", "user", "hello", sameMoment, null, 1, 0);
+        insertMessage("2", "1", "1", "assistant", "active leaf", sameMoment, 1L, 1, 0);
+        insertMessage("3", "1", "1", "assistant", "old child", sameMoment, 2L, 0, 0);
+        insertMessage("4", "1", "1", "assistant", "gap child", sameMoment, 2L, 0, 2);
+
+        adapter.append("1", "1", ChatMessage.user("fresh child"));
+
+        assertThat(jdbcTemplate.queryForMap("""
+                SELECT parent_id, sibling_seq
+                FROM t_message
+                WHERE content = 'fresh child'
+                """))
+                .containsEntry("PARENT_ID", 2L)
+                .containsEntry("SIBLING_SEQ", 3);
     }
 
     private void createSchema() {
@@ -108,21 +152,29 @@ class JdbcConversationMemoryAdapterTests {
                     thinking_content TEXT,
                     thinking_duration INTEGER,
                     agent_run_id VARCHAR(64),
+                    parent_id BIGINT,
+                    active SMALLINT NOT NULL DEFAULT 1,
+                    branch_root_id BIGINT,
+                    sibling_seq INTEGER NOT NULL DEFAULT 0,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0,
                     tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
+        jdbcTemplate.execute("""
+                CREATE UNIQUE INDEX uk_t_message_sibling_seq
+                ON t_message (tenant_id, conversation_id, user_id, parent_id, sibling_seq)
+                """);
     }
 
     private void insertMessage(String id, String conversationId, String userId, String role, String content,
-                               Timestamp timestamp) {
+                               Timestamp timestamp, Long parentId, int active, int siblingSeq) {
         jdbcTemplate.update("""
                 INSERT INTO t_message
                 (id, conversation_id, user_id, role, content, thinking_content, thinking_duration,
-                 agent_run_id, create_time, update_time, deleted)
-                VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, 0)
-                """, id, conversationId, userId, role, content, timestamp, timestamp);
+                 agent_run_id, parent_id, active, branch_root_id, sibling_seq, create_time, update_time, deleted)
+                VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, NULL, ?, ?, ?, 0)
+                """, id, conversationId, userId, role, content, parentId, active, siblingSeq, timestamp, timestamp);
     }
 }

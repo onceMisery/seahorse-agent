@@ -34,12 +34,16 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class SeahorseAgentRepositoryAutoConfigurationTests {
 
@@ -48,7 +52,7 @@ class SeahorseAgentRepositoryAutoConfigurationTests {
                     SeahorseAgentOpsRepositoryAutoConfiguration.class,
                     SeahorseAgentIngestionRepositoryAutoConfiguration.class,
                     SeahorseAgentRetrievalRepositoryAutoConfiguration.class))
-            .withBean(DataSource.class, () -> mock(DataSource.class));
+            .withBean(DataSource.class, SeahorseAgentRepositoryAutoConfigurationTests::jdbcDataSource);
 
     @Test
     void registersJsonBackedRepositoriesWhenObjectMapperIsNotReadyYet() {
@@ -66,7 +70,7 @@ class SeahorseAgentRepositoryAutoConfigurationTests {
     void registersJdbcAgentRunEventBufferWhenObjectMapperIsReady() {
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(SeahorseAgentRegistryRepositoryAutoConfiguration.class))
-                .withBean(DataSource.class, () -> mock(DataSource.class))
+                .withBean(DataSource.class, SeahorseAgentRepositoryAutoConfigurationTests::jdbcDataSource)
                 .withBean(ObjectMapper.class, ObjectMapper::new)
                 .run(context -> {
                     assertThat(context).hasNotFailed();
@@ -80,7 +84,7 @@ class SeahorseAgentRepositoryAutoConfigurationTests {
     void registersJdbcAgentRunEventBufferWhenObjectMapperBeanIsNotReadyYet() {
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(SeahorseAgentRegistryRepositoryAutoConfiguration.class))
-                .withBean(DataSource.class, () -> mock(DataSource.class))
+                .withBean(DataSource.class, SeahorseAgentRepositoryAutoConfigurationTests::jdbcDataSource)
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(AgentRunEventBufferPort.class);
@@ -107,6 +111,20 @@ class SeahorseAgentRepositoryAutoConfigurationTests {
                             .extracting(StreamEventEnvelope::runId)
                             .containsExactly("run-1");
                 });
+    }
+
+    private static DataSource jdbcDataSource() {
+        DataSource dataSource = mock(DataSource.class);
+        Connection connection = mock(Connection.class);
+        DatabaseMetaData metaData = mock(DatabaseMetaData.class);
+        try {
+            when(dataSource.getConnection()).thenReturn(connection);
+            when(connection.getMetaData()).thenReturn(metaData);
+            when(metaData.getDatabaseProductName()).thenReturn("H2");
+        } catch (SQLException ex) {
+            throw new AssertionError(ex);
+        }
+        return dataSource;
     }
 
     private static final class RecordingEventBuffer implements AgentRunEventBufferPort {

@@ -40,9 +40,11 @@ public final class AgentLoopRequest {
     private static final int DEFAULT_MAX_STEPS = 6;
 
     private final String question;
+    private final String executorEngine;
     private final String modelId;
     private final List<ChatMessage> history;
     private final List<String> allowedToolIds;
+    private final boolean explicitToolAllowlist;
     private final ChatSamplingOptions samplingOptions;
     private final int maxSteps;
     private final ContextPack contextPack;
@@ -68,9 +70,11 @@ public final class AgentLoopRequest {
         }
         Objects.requireNonNull(b.samplingOptions, "AgentLoopRequest.samplingOptions 不能为空");
         this.question = b.question;
+        this.executorEngine = defaultText(b.executorEngine, "kernel");
         this.modelId = trimToNull(b.modelId);
         this.history = b.history == null ? List.of() : List.copyOf(b.history);
         this.allowedToolIds = b.allowedToolIds == null ? List.of() : List.copyOf(b.allowedToolIds);
+        this.explicitToolAllowlist = b.explicitToolAllowlist;
         this.samplingOptions = b.samplingOptions;
         this.maxSteps = b.maxSteps <= 0 ? DEFAULT_MAX_STEPS : b.maxSteps;
         this.contextPack = b.contextPack;
@@ -93,6 +97,10 @@ public final class AgentLoopRequest {
         return question;
     }
 
+    public String executorEngine() {
+        return executorEngine;
+    }
+
     public String modelId() {
         return modelId;
     }
@@ -103,6 +111,10 @@ public final class AgentLoopRequest {
 
     public List<String> allowedToolIds() {
         return allowedToolIds;
+    }
+
+    public boolean explicitToolAllowlist() {
+        return explicitToolAllowlist;
     }
 
     public ChatSamplingOptions samplingOptions() {
@@ -175,9 +187,11 @@ public final class AgentLoopRequest {
 
     public static final class Builder {
         private String question;
+        private String executorEngine;
         private String modelId;
         private List<ChatMessage> history;
         private List<String> allowedToolIds;
+        private boolean explicitToolAllowlist;
         private ChatSamplingOptions samplingOptions;
         private int maxSteps;
         private ContextPack contextPack;
@@ -200,6 +214,11 @@ public final class AgentLoopRequest {
             return this;
         }
 
+        public Builder executorEngine(String executorEngine) {
+            this.executorEngine = executorEngine;
+            return this;
+        }
+
         public Builder modelId(String modelId) {
             this.modelId = modelId;
             return this;
@@ -212,6 +231,11 @@ public final class AgentLoopRequest {
 
         public Builder allowedToolIds(List<String> allowedToolIds) {
             this.allowedToolIds = allowedToolIds;
+            return this;
+        }
+
+        public Builder explicitToolAllowlist(boolean explicitToolAllowlist) {
+            this.explicitToolAllowlist = explicitToolAllowlist;
             return this;
         }
 

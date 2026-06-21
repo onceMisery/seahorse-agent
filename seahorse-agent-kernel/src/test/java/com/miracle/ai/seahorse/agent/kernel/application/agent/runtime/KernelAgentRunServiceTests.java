@@ -27,11 +27,17 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileDetails;
+import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileRecord;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -95,6 +101,86 @@ class KernelAgentRunServiceTests {
 
         assertEquals("rollout-1", run.rolloutId());
         assertEquals("rollout-1", runRepository.runs.get(run.runId()).rolloutId());
+    }
+
+    @Test
+    void shouldStartRunWithRunProfileMetadataAndSnapshot() {
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.save(agent("data-analyst", AgentStatus.PUBLISHED, "version-1"));
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        RecordingRunContextSnapshotRepository snapshotRepository = new RecordingRunContextSnapshotRepository();
+        KernelAgentRunService service = new KernelAgentRunService(
+                definitionRepository,
+                runRepository,
+                currentUser(),
+                FIXED_CLOCK,
+                null,
+                snapshotRepository);
+
+        AgentRun run = service.startRun(new AgentRunStartCommand(
+                "data-analyst",
+                null,
+                "rollout-1",
+                AgentDefinition.DEFAULT_TENANT_ID,
+                "101",
+                AgentRunTriggerType.CHAT,
+                "summarized input",
+                "trace-1",
+                "{\"source\":\"api\"}",
+                77L,
+                "agentscope",
+                Map.of("studioTraceEnabled", true)));
+
+        assertTrue(run.metadataJson().contains("\"source\":\"api\""), run.metadataJson());
+        assertTrue(run.metadataJson().contains("\"runProfileId\":77"), run.metadataJson());
+        assertTrue(run.metadataJson().contains("\"executorEngine\":\"agentscope\""), run.metadataJson());
+        assertTrue(run.metadataJson().contains("\"studioTraceEnabled\":true"), run.metadataJson());
+        assertEquals(1, snapshotRepository.records.size());
+        RunContextSnapshotRecord snapshot = snapshotRepository.records.get(0);
+        assertEquals(run.runId(), snapshot.getRunId());
+        assertEquals(101L, snapshot.getConversationId());
+        assertEquals(77L, snapshot.getRunProfileId());
+        assertEquals("agentscope", snapshot.getExecutorEngine());
+        assertTrue(snapshot.getTraceContextJson().contains("\"traceId\":\"trace-1\""), snapshot.getTraceContextJson());
+        assertTrue(snapshot.getSnapshotJson().contains("\"runProfileId\":77"), snapshot.getSnapshotJson());
+    }
+
+    @Test
+    void shouldInheritConversationAppliedRunProfileWhenRequestDoesNotSpecifyOne() {
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.save(agent("data-analyst", AgentStatus.PUBLISHED, "version-1"));
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        RecordingRunContextSnapshotRepository snapshotRepository = new RecordingRunContextSnapshotRepository();
+        MemoryRunProfilePort runProfilePort = new MemoryRunProfilePort();
+        runProfilePort.applied = runProfileDetails(88L, "agentscope", "{\"studioTraceEnabled\":true}");
+        KernelAgentRunService service = new KernelAgentRunService(
+                definitionRepository,
+                runRepository,
+                currentUser(),
+                FIXED_CLOCK,
+                null,
+                snapshotRepository,
+                runProfilePort);
+
+        AgentRun run = service.startRun(new AgentRunStartCommand(
+                "data-analyst",
+                null,
+                "rollout-1",
+                AgentDefinition.DEFAULT_TENANT_ID,
+                "101",
+                AgentRunTriggerType.CHAT,
+                "summarized input",
+                "trace-1"));
+
+        assertTrue(run.metadataJson().contains("\"runProfileId\":88"), run.metadataJson());
+        assertTrue(run.metadataJson().contains("\"executorEngine\":\"agentscope\""), run.metadataJson());
+        assertTrue(run.metadataJson().contains("\"studioTraceEnabled\":true"), run.metadataJson());
+        assertEquals("user-1", runProfilePort.lastUserId);
+        assertEquals("101", runProfilePort.lastConversationId);
+        RunContextSnapshotRecord snapshot = snapshotRepository.records.get(0);
+        assertEquals(88L, snapshot.getRunProfileId());
+        assertEquals("agentscope", snapshot.getExecutorEngine());
+        assertTrue(snapshot.getSnapshotJson().contains("\"runProfileId\":88"), snapshot.getSnapshotJson());
     }
 
     @Test
@@ -344,6 +430,19 @@ class KernelAgentRunServiceTests {
                 "publish version");
     }
 
+    private static RunProfileDetails runProfileDetails(Long id, String executorEngine, String executorConfigJson) {
+        RunProfileRecord profile = new RunProfileRecord();
+        profile.setId(id);
+        profile.setTenantId(AgentDefinition.DEFAULT_TENANT_ID);
+        profile.setUserId("user-1");
+        profile.setName("Conversation profile");
+        profile.setExecutorEngine(executorEngine);
+        profile.setExecutorConfigJson(executorConfigJson);
+        return RunProfileDetails.builder()
+                .profile(profile)
+                .build();
+    }
+
     private static CurrentUserPort currentUser() {
         return () -> Optional.of(new CurrentUser(1L, "user-1", "user", null));
     }
@@ -436,6 +535,59 @@ class KernelAgentRunServiceTests {
             return steps.stream()
                     .filter(step -> runId.equals(step.runId()))
                     .toList();
+        }
+    }
+
+    private static class RecordingRunContextSnapshotRepository implements RunContextSnapshotRepositoryPort {
+        private final List<RunContextSnapshotRecord> records = new ArrayList<>();
+
+        @Override
+        public Long save(RunContextSnapshotRecord record) {
+            records.add(record);
+            return 1L;
+        }
+
+        @Override
+        public Optional<RunContextSnapshotRecord> findByRunId(String runId) {
+            return records.stream()
+                    .filter(record -> runId.equals(record.getRunId()))
+                    .findFirst();
+        }
+    }
+
+    private static class MemoryRunProfilePort implements RunProfileInboundPort {
+        private RunProfileDetails applied;
+        private String lastUserId;
+        private String lastConversationId;
+
+        @Override
+        public List<RunProfileRecord> list(String userId) {
+            return List.of();
+        }
+
+        @Override
+        public Optional<RunProfileDetails> findById(String userId, Long id) {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<RunProfileDetails> findAppliedToConversation(String userId, String conversationId) {
+            this.lastUserId = userId;
+            this.lastConversationId = conversationId;
+            return Optional.ofNullable(applied);
+        }
+
+        @Override
+        public Long save(RunProfileCommand command) {
+            return 1L;
+        }
+
+        @Override
+        public void activate(String userId, Long id) {
+        }
+
+        @Override
+        public void delete(String userId, Long id) {
         }
     }
 }

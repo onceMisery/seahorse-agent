@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.conversation.KernelConve
 import com.miracle.ai.seahorse.agent.kernel.application.conversation.KernelConversationManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.conversation.MessageTreeAssembler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorRouter;
 import com.miracle.ai.seahorse.agent.kernel.application.dashboard.KernelDashboardService;
 import com.miracle.ai.seahorse.agent.kernel.application.feedback.KernelFeedbackEvaluationCandidateQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.feedback.KernelMessageFeedbackService;
@@ -65,6 +66,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileReposit
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -73,6 +75,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 /**
  * 运营管理类内核入口自动配置。
@@ -169,12 +172,13 @@ public class SeahorseAgentKernelOpsAutoConfiguration {
     })
     @ConditionalOnMissingBean(RunExperimentTrialExecutorPort.class)
     public KernelRunExperimentTrialExecutor seahorseRunExperimentTrialExecutor(
-            ReActExecutorPort executorPort,
+            ObjectProvider<ReActExecutorPort> executorPorts,
             ConversationBranchRepositoryPort conversationBranchRepositoryPort,
             RunProfileRepositoryPort runProfileRepositoryPort,
-            ObjectProvider<RunContextSnapshotRepositoryPort> runContextSnapshotRepositoryPort) {
+            ObjectProvider<RunContextSnapshotRepositoryPort> runContextSnapshotRepositoryPort,
+            Environment environment) {
         return new KernelRunExperimentTrialExecutor(
-                executorPort,
+                resolveReActExecutor(executorPorts, environment),
                 conversationBranchRepositoryPort,
                 runProfileRepositoryPort,
                 runContextSnapshotRepositoryPort.getIfAvailable(RunContextSnapshotRepositoryPort::noop));
@@ -240,5 +244,20 @@ public class SeahorseAgentKernelOpsAutoConfiguration {
                 return false;
             }
         };
+    }
+
+    private static ReActExecutorPort resolveReActExecutor(
+            ObjectProvider<ReActExecutorPort> executors,
+            Environment environment) {
+        List<ReActExecutorPort> candidates = executors.orderedStream()
+                .filter(executor -> !(executor instanceof ReActExecutorRouter))
+                .toList();
+        if (candidates.isEmpty()) {
+            throw new IllegalStateException("Run experiment requires at least one ReActExecutorPort");
+        }
+        if (candidates.size() == 1) {
+            return candidates.get(0);
+        }
+        return new ReActExecutorRouter(candidates, environment.getProperty("seahorse.agent.executor.engine", "kernel"));
     }
 }

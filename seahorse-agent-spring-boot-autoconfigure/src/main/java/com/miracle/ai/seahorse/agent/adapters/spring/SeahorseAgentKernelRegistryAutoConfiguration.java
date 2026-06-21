@@ -92,6 +92,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutInboundPort
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.TaskTemplateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCatalogQueryPort;
@@ -188,14 +189,16 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             CurrentUserPort currentUserPort,
             ObjectProvider<Clock> clockProvider,
             ObjectProvider<com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService> quotaEnforcementProvider,
-            ObjectProvider<RunContextSnapshotRepositoryPort> runContextSnapshotRepositoryProvider) {
+            ObjectProvider<RunContextSnapshotRepositoryPort> runContextSnapshotRepositoryProvider,
+            ObjectProvider<RunProfileInboundPort> runProfilePortProvider) {
         return new KernelAgentRunService(
                 agentDefinitionRepositoryPort,
                 agentRunRepositoryPort,
                 currentUserPort,
                 clockProvider.getIfAvailable(Clock::systemUTC),
                 quotaEnforcementProvider.getIfAvailable(),
-                runContextSnapshotRepositoryProvider.getIfAvailable(RunContextSnapshotRepositoryPort::noop));
+                runContextSnapshotRepositoryProvider.getIfAvailable(RunContextSnapshotRepositoryPort::noop),
+                runProfilePortProvider.getIfAvailable());
     }
 
     @Bean

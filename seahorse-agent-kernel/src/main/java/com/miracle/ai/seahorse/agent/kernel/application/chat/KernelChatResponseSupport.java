@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.PromptContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ResolvedRoleCard;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.RewriteResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
@@ -119,6 +120,7 @@ final class KernelChatResponseSupport {
                 .intentChunks(retrievalContext.getIntentChunks())
                 .contextPack(context.getContextPack())
                 .memoryContext(memoryContext)
+                .roleCard(context.getRoleCard())
                 .build();
 
         List<ChatMessage> messages = responsePorts.ragPromptPort().buildStructuredMessages(
@@ -174,6 +176,7 @@ final class KernelChatResponseSupport {
         systemPrompt = renderStaticSystemPrompt(systemPrompt);
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.system(systemPrompt));
+        appendRoleCard(messages, context.getRoleCard());
         runtimeContextMessage(context).ifPresent(messages::add);
         messages.addAll(safeHistory(context));
         messages.add(ChatMessage.user(rewriteResult.rewrittenQuestion()));
@@ -186,6 +189,27 @@ final class KernelChatResponseSupport {
                         .build())
                 .build();
         return responsePorts.streamingChatModelPort().streamChat(request, requireCallback(context));
+    }
+
+    private void appendRoleCard(List<ChatMessage> messages, ResolvedRoleCard roleCard) {
+        if (roleCard == null || isBlank(roleCard.name()) && isBlank(roleCard.definition())) {
+            return;
+        }
+        String content = """
+                # [ROLE DEFINITION]
+                - Your name is %s.
+                - Your Characteristics:
+                %s
+                """.formatted(
+                Objects.requireNonNullElse(roleCard.name(), "").trim(),
+                Objects.requireNonNullElse(roleCard.definition(), "").trim()).trim();
+        messages.add(roleCard.higherPerm()
+                ? ChatMessage.system(content)
+                : ChatMessage.user(content));
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private Optional<ChatMessage> runtimeContextMessage(StreamChatContext context) {

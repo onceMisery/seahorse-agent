@@ -33,6 +33,8 @@ CREATE TABLE t_conversation (
     create_time     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted         SMALLINT    DEFAULT 0,
+    tenant_id       VARCHAR(64) NOT NULL DEFAULT 'default',
+    run_profile_id  BIGINT,
     CONSTRAINT uk_conversation_user UNIQUE (conversation_id, user_id)
 );
 CREATE INDEX idx_user_time ON t_conversation (user_id, last_time);
@@ -58,12 +60,20 @@ CREATE TABLE t_message (
     agent_run_id      VARCHAR(64),
     thinking_content  TEXT,
     thinking_duration INTEGER,
+    parent_id         BIGINT,
+    active            SMALLINT    NOT NULL DEFAULT 1,
+    branch_root_id    BIGINT,
+    sibling_seq       INTEGER     NOT NULL DEFAULT 0,
     create_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted           SMALLINT    DEFAULT 0
 );
 CREATE INDEX idx_conversation_user_time ON t_message (conversation_id, user_id, create_time);
 CREATE INDEX idx_message_agent_run ON t_message (agent_run_id, user_id, create_time);
+CREATE INDEX IF NOT EXISTS idx_t_message_parent
+    ON t_message (conversation_id, user_id, parent_id, sibling_seq);
+CREATE INDEX IF NOT EXISTS idx_t_message_active
+    ON t_message (conversation_id, user_id, active, create_time);
 
 CREATE TABLE sa_conversation_attachment (
     pk_id             BIGSERIAL PRIMARY KEY,
@@ -84,6 +94,141 @@ CREATE TABLE sa_conversation_attachment (
 );
 CREATE INDEX idx_sa_conversation_attachment_user
     ON sa_conversation_attachment (conversation_id, user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS sa_role_card (
+    id          BIGINT       NOT NULL PRIMARY KEY,
+    tenant_id   VARCHAR(64)  NOT NULL DEFAULT 'default',
+    user_id     VARCHAR(64)  NOT NULL,
+    name        VARCHAR(128) NOT NULL,
+    definition  TEXT         NOT NULL,
+    avatar_ref  VARCHAR(512),
+    higher_perm SMALLINT     NOT NULL DEFAULT 0,
+    enabled     SMALLINT     NOT NULL DEFAULT 0,
+    create_time TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    deleted     SMALLINT     NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_sa_role_card_user
+    ON sa_role_card (tenant_id, user_id, enabled, deleted);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_sa_role_card_user_enabled
+    ON sa_role_card (tenant_id, user_id)
+    WHERE enabled = 1 AND deleted = 0;
+
+CREATE TABLE IF NOT EXISTS t_run_context_snapshot (
+    id BIGINT NOT NULL PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    run_id VARCHAR(64) NOT NULL,
+    conversation_id BIGINT,
+    branch_leaf_message_id BIGINT,
+    role_card_id BIGINT,
+    run_profile_id BIGINT,
+    executor_engine VARCHAR(32) NOT NULL DEFAULT 'kernel',
+    executor_config_json TEXT,
+    trace_context_json TEXT,
+    snapshot_json TEXT NOT NULL,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted SMALLINT NOT NULL DEFAULT 0
+);
+COMMENT ON TABLE t_run_context_snapshot IS '运行上下文快照表，记录每次 Chat 或 Agent Run 启动时实际生效的角色、工具、模型、记忆、安全策略和执行引擎，用于历史复现、审计和评测';
+COMMENT ON COLUMN t_run_context_snapshot.id IS '主键 ID，雪花 ID';
+COMMENT ON COLUMN t_run_context_snapshot.tenant_id IS '租户 ID，用于多租户隔离';
+COMMENT ON COLUMN t_run_context_snapshot.run_id IS '运行 ID，对应 Chat 请求或 Agent Run 的稳定标识';
+COMMENT ON COLUMN t_run_context_snapshot.conversation_id IS '会话 ID，记录本次运行所属会话，可为空';
+COMMENT ON COLUMN t_run_context_snapshot.branch_leaf_message_id IS '运行时选中的消息分支叶子节点 ID，用于复现当时的对话路径';
+COMMENT ON COLUMN t_run_context_snapshot.role_card_id IS '运行时选中的角色卡 ID，可为空';
+COMMENT ON COLUMN t_run_context_snapshot.run_profile_id IS '运行时选中的运行画像 ID，可为空';
+COMMENT ON COLUMN t_run_context_snapshot.executor_engine IS '执行引擎标识，例如 kernel 或 agentscope';
+COMMENT ON COLUMN t_run_context_snapshot.executor_config_json IS '执行引擎配置快照 JSON，例如 AgentScope 的 Nacos、A2A、Studio 配置摘要';
+COMMENT ON COLUMN t_run_context_snapshot.trace_context_json IS '链路追踪上下文 JSON，例如 traceId、spanId、Studio traceId';
+COMMENT ON COLUMN t_run_context_snapshot.snapshot_json IS '运行上下文完整快照 JSON，保存角色卡副本、工具集、MCP 工具、模型配置、记忆范围和安全策略';
+COMMENT ON COLUMN t_run_context_snapshot.create_time IS '创建时间';
+COMMENT ON COLUMN t_run_context_snapshot.deleted IS '软删除标记，0 表示有效，1 表示已删除';
+CREATE INDEX IF NOT EXISTS idx_run_context_snapshot_run
+    ON t_run_context_snapshot (tenant_id, run_id);
+
+CREATE TABLE IF NOT EXISTS t_conversation_branch_cursor (
+    id BIGINT NOT NULL PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    conversation_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    leaf_message_id BIGINT NOT NULL,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted SMALLINT NOT NULL DEFAULT 0
+);
+COMMENT ON TABLE t_conversation_branch_cursor IS '会话分支游标表，记录用户在某个会话中最后选中的消息分支叶子节点，避免多个窗口共享全局 active 路径';
+COMMENT ON COLUMN t_conversation_branch_cursor.id IS '主键 ID，雪花 ID';
+COMMENT ON COLUMN t_conversation_branch_cursor.tenant_id IS '租户 ID，用于多租户隔离';
+COMMENT ON COLUMN t_conversation_branch_cursor.conversation_id IS '会话 ID';
+COMMENT ON COLUMN t_conversation_branch_cursor.user_id IS '用户 ID';
+COMMENT ON COLUMN t_conversation_branch_cursor.leaf_message_id IS '当前视图选中的分支叶子消息 ID';
+COMMENT ON COLUMN t_conversation_branch_cursor.create_time IS '创建时间';
+COMMENT ON COLUMN t_conversation_branch_cursor.update_time IS '更新时间';
+COMMENT ON COLUMN t_conversation_branch_cursor.deleted IS '软删除标记，0 表示有效，1 表示已删除';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_conversation_branch_cursor_user
+    ON t_conversation_branch_cursor (tenant_id, conversation_id, user_id)
+    WHERE deleted = 0;
+
+CREATE TABLE IF NOT EXISTS sa_run_profile (
+    id BIGINT NOT NULL PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    user_id VARCHAR(64) NOT NULL,
+    name VARCHAR(128) NOT NULL,
+    description TEXT,
+    role_card_id BIGINT,
+    executor_engine VARCHAR(32) NOT NULL DEFAULT 'kernel',
+    executor_config_json TEXT,
+    model_config_json TEXT,
+    memory_scope_json TEXT,
+    guardrail_config_json TEXT,
+    enabled SMALLINT NOT NULL DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted SMALLINT NOT NULL DEFAULT 0
+);
+COMMENT ON TABLE sa_run_profile IS '运行画像表，保存用户可复用的 Agent 运行配置，包括角色卡、执行引擎、模型配置、记忆范围、安全策略和默认启用状态';
+COMMENT ON COLUMN sa_run_profile.id IS '主键 ID，雪花 ID';
+COMMENT ON COLUMN sa_run_profile.tenant_id IS '租户 ID，用于多租户隔离';
+COMMENT ON COLUMN sa_run_profile.user_id IS '创建或归属用户 ID';
+COMMENT ON COLUMN sa_run_profile.name IS '运行画像名称';
+COMMENT ON COLUMN sa_run_profile.description IS '运行画像描述';
+COMMENT ON COLUMN sa_run_profile.role_card_id IS '默认绑定的角色卡 ID，可为空';
+COMMENT ON COLUMN sa_run_profile.executor_engine IS '默认执行引擎，例如 kernel 或 agentscope';
+COMMENT ON COLUMN sa_run_profile.executor_config_json IS '执行引擎配置 JSON，例如 AgentScope 的 Nacos、A2A、Studio 配置';
+COMMENT ON COLUMN sa_run_profile.model_config_json IS '模型配置 JSON，例如模型名称、温度、最大输出长度等';
+COMMENT ON COLUMN sa_run_profile.memory_scope_json IS '记忆范围 JSON，例如是否启用长期记忆、知识库范围、用户画像范围等';
+COMMENT ON COLUMN sa_run_profile.guardrail_config_json IS '安全策略 JSON，例如高风险工具限制、输出过滤、审批策略等';
+COMMENT ON COLUMN sa_run_profile.enabled IS '是否为当前用户默认启用画像，0 表示否，1 表示是';
+COMMENT ON COLUMN sa_run_profile.create_time IS '创建时间';
+COMMENT ON COLUMN sa_run_profile.update_time IS '更新时间';
+COMMENT ON COLUMN sa_run_profile.deleted IS '软删除标记，0 表示有效，1 表示已删除';
+CREATE INDEX IF NOT EXISTS idx_run_profile_user
+    ON sa_run_profile (tenant_id, user_id, enabled, deleted);
+
+CREATE TABLE IF NOT EXISTS sa_run_profile_tool (
+    id BIGINT NOT NULL PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    profile_id BIGINT NOT NULL,
+    tool_id VARCHAR(128) NOT NULL,
+    provider VARCHAR(32) NOT NULL,
+    enabled SMALLINT NOT NULL DEFAULT 1,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted SMALLINT NOT NULL DEFAULT 0
+);
+COMMENT ON TABLE sa_run_profile_tool IS '运行画像工具绑定表，记录某个 Run Profile 可使用的工具目录项，包括内置工具、MCP 工具、OpenAPI 工具和 A2A 远程 Agent 工具';
+COMMENT ON COLUMN sa_run_profile_tool.id IS '主键 ID，雪花 ID';
+COMMENT ON COLUMN sa_run_profile_tool.tenant_id IS '租户 ID，用于多租户隔离';
+COMMENT ON COLUMN sa_run_profile_tool.profile_id IS '运行画像 ID，对应 sa_run_profile.id';
+COMMENT ON COLUMN sa_run_profile_tool.tool_id IS '工具 ID，对应工具目录中的稳定 toolId 或 A2A agentId';
+COMMENT ON COLUMN sa_run_profile_tool.provider IS '工具提供方，例如 BUILT_IN、MCP、OPENAPI、A2A';
+COMMENT ON COLUMN sa_run_profile_tool.enabled IS '该工具在当前运行画像中是否启用，0 表示禁用，1 表示启用';
+COMMENT ON COLUMN sa_run_profile_tool.create_time IS '创建时间';
+COMMENT ON COLUMN sa_run_profile_tool.update_time IS '更新时间';
+COMMENT ON COLUMN sa_run_profile_tool.deleted IS '软删除标记，0 表示有效，1 表示已删除';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_run_profile_tool
+    ON sa_run_profile_tool (tenant_id, profile_id, tool_id)
+    WHERE deleted = 0;
 
 CREATE TABLE t_message_feedback (
     id              BIGINT       NOT NULL PRIMARY KEY,
@@ -1012,7 +1157,8 @@ CREATE TABLE IF NOT EXISTS sa_agent_run (
   error_code VARCHAR(128),
   error_message VARCHAR(1000),
   started_at TIMESTAMP NOT NULL,
-  finished_at TIMESTAMP
+  finished_at TIMESTAMP,
+  metadata_json JSONB
 );
 
 CREATE INDEX IF NOT EXISTS idx_sa_agent_run_agent_status
@@ -2173,6 +2319,13 @@ CREATE INDEX IF NOT EXISTS idx_t_user_tenant ON t_user (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_t_conversation_tenant ON t_conversation (tenant_id, user_id, last_time);
 CREATE INDEX IF NOT EXISTS idx_t_conv_summary_tenant ON t_conversation_summary (tenant_id, conversation_id);
 CREATE INDEX IF NOT EXISTS idx_t_message_tenant ON t_message (tenant_id, conversation_id, create_time);
+CREATE INDEX IF NOT EXISTS idx_t_message_parent_tenant
+    ON t_message (tenant_id, conversation_id, user_id, parent_id, sibling_seq);
+CREATE INDEX IF NOT EXISTS idx_t_message_active_tenant
+    ON t_message (tenant_id, conversation_id, user_id, active, create_time);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_t_message_sibling_seq
+    ON t_message (tenant_id, conversation_id, user_id, COALESCE(parent_id, 0), sibling_seq)
+    WHERE deleted = 0;
 CREATE INDEX IF NOT EXISTS idx_sa_conv_attach_tenant ON sa_conversation_attachment (tenant_id, conversation_id);
 CREATE INDEX IF NOT EXISTS idx_t_msg_feedback_tenant ON t_message_feedback (tenant_id, conversation_id);
 CREATE INDEX IF NOT EXISTS idx_t_kb_tenant ON t_knowledge_base (tenant_id);
@@ -2191,6 +2344,11 @@ ALTER TABLE t_conversation ENABLE ROW LEVEL SECURITY;
 ALTER TABLE t_conversation_summary ENABLE ROW LEVEL SECURITY;
 ALTER TABLE t_message ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sa_conversation_attachment ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sa_role_card ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_run_context_snapshot ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_conversation_branch_cursor ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sa_run_profile ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sa_run_profile_tool ENABLE ROW LEVEL SECURITY;
 ALTER TABLE t_message_feedback ENABLE ROW LEVEL SECURITY;
 ALTER TABLE t_knowledge_base ENABLE ROW LEVEL SECURITY;
 ALTER TABLE t_knowledge_document ENABLE ROW LEVEL SECURITY;
@@ -2211,6 +2369,11 @@ ALTER TABLE t_conversation FORCE ROW LEVEL SECURITY;
 ALTER TABLE t_conversation_summary FORCE ROW LEVEL SECURITY;
 ALTER TABLE t_message FORCE ROW LEVEL SECURITY;
 ALTER TABLE sa_conversation_attachment FORCE ROW LEVEL SECURITY;
+ALTER TABLE sa_role_card FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_run_context_snapshot FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_conversation_branch_cursor FORCE ROW LEVEL SECURITY;
+ALTER TABLE sa_run_profile FORCE ROW LEVEL SECURITY;
+ALTER TABLE sa_run_profile_tool FORCE ROW LEVEL SECURITY;
 ALTER TABLE t_message_feedback FORCE ROW LEVEL SECURITY;
 ALTER TABLE t_knowledge_base FORCE ROW LEVEL SECURITY;
 ALTER TABLE t_knowledge_document FORCE ROW LEVEL SECURITY;
@@ -2235,6 +2398,16 @@ CREATE POLICY rls_tenant_isolation ON t_conversation_summary
 CREATE POLICY rls_tenant_isolation ON t_message
     USING (tenant_id = current_setting('app.current_tenant_id', true));
 CREATE POLICY rls_tenant_isolation ON sa_conversation_attachment
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON sa_role_card
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_run_context_snapshot
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_conversation_branch_cursor
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON sa_run_profile
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON sa_run_profile_tool
     USING (tenant_id = current_setting('app.current_tenant_id', true));
 CREATE POLICY rls_tenant_isolation ON t_message_feedback
     USING (tenant_id = current_setting('app.current_tenant_id', true));
@@ -2331,6 +2504,90 @@ VALUES
     (3, 'PRO', 'Pro', 'Professional plan for growing teams', 99.99, 999.99, 10000000, 107374182400, 20, TRUE),
     (4, 'ENTERPRISE', 'Enterprise', 'Enterprise plan with unlimited quota', 499.99, 4999.99, 100000000, 1099511627776, 100, TRUE)
 ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- Run experiment and profile comparison
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS sa_run_experiment (
+    id BIGINT PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    user_id BIGINT NOT NULL,
+    conversation_id BIGINT NOT NULL,
+    base_leaf_message_id BIGINT,
+    name VARCHAR(128) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted SMALLINT NOT NULL DEFAULT 0
+);
+
+COMMENT ON TABLE sa_run_experiment IS '运行实验表，记录基于同一会话分支发起的多个 Run Profile 对比实验';
+COMMENT ON COLUMN sa_run_experiment.id IS '主键 ID，雪花 ID';
+COMMENT ON COLUMN sa_run_experiment.tenant_id IS '租户 ID，用于多租户隔离';
+COMMENT ON COLUMN sa_run_experiment.user_id IS '发起实验的用户 ID';
+COMMENT ON COLUMN sa_run_experiment.conversation_id IS '实验所属会话 ID';
+COMMENT ON COLUMN sa_run_experiment.base_leaf_message_id IS '实验基准分支叶子消息 ID';
+COMMENT ON COLUMN sa_run_experiment.name IS '实验名称';
+COMMENT ON COLUMN sa_run_experiment.status IS '实验状态，例如 PENDING、RUNNING、SUCCEEDED、FAILED、CANCELLED';
+COMMENT ON COLUMN sa_run_experiment.create_time IS '创建时间';
+COMMENT ON COLUMN sa_run_experiment.update_time IS '更新时间';
+COMMENT ON COLUMN sa_run_experiment.deleted IS '软删除标记，0 表示有效，1 表示已删除';
+
+CREATE TABLE IF NOT EXISTS sa_run_experiment_trial (
+    id BIGINT PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    experiment_id BIGINT NOT NULL,
+    run_profile_id BIGINT NOT NULL,
+    run_id VARCHAR(128),
+    output_message_id BIGINT,
+    score_json TEXT,
+    metric_json TEXT,
+    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    error_message TEXT,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted SMALLINT NOT NULL DEFAULT 0
+);
+
+COMMENT ON TABLE sa_run_experiment_trial IS '运行实验试验项表，记录某个 Run Profile 在一次实验中的运行结果、评分和成本指标';
+COMMENT ON COLUMN sa_run_experiment_trial.id IS '主键 ID，雪花 ID';
+COMMENT ON COLUMN sa_run_experiment_trial.tenant_id IS '租户 ID，用于多租户隔离';
+COMMENT ON COLUMN sa_run_experiment_trial.experiment_id IS '运行实验 ID，对应 sa_run_experiment.id';
+COMMENT ON COLUMN sa_run_experiment_trial.run_profile_id IS '参与实验的运行画像 ID';
+COMMENT ON COLUMN sa_run_experiment_trial.run_id IS '本次试验对应的 Agent run ID，用于关联运行上下文快照、Trace、成本和审计';
+COMMENT ON COLUMN sa_run_experiment_trial.output_message_id IS '本次试验生成的 assistant 消息 ID，可为空';
+COMMENT ON COLUMN sa_run_experiment_trial.score_json IS '实验评分 JSON，例如人工评分、自动评分、偏好标签';
+COMMENT ON COLUMN sa_run_experiment_trial.metric_json IS '运行指标 JSON，例如耗时、token、费用、工具调用次数';
+COMMENT ON COLUMN sa_run_experiment_trial.status IS '试验项状态，例如 PENDING、RUNNING、SUCCEEDED、FAILED、CANCELLED';
+COMMENT ON COLUMN sa_run_experiment_trial.error_message IS '失败原因或错误摘要';
+COMMENT ON COLUMN sa_run_experiment_trial.create_time IS '创建时间';
+COMMENT ON COLUMN sa_run_experiment_trial.update_time IS '更新时间';
+COMMENT ON COLUMN sa_run_experiment_trial.deleted IS '软删除标记，0 表示有效，1 表示已删除';
+
+CREATE INDEX IF NOT EXISTS idx_run_experiment_user_status
+    ON sa_run_experiment (tenant_id, user_id, status, update_time DESC)
+    WHERE deleted = 0;
+
+CREATE INDEX IF NOT EXISTS idx_run_experiment_conversation
+    ON sa_run_experiment (tenant_id, conversation_id, base_leaf_message_id)
+    WHERE deleted = 0;
+
+CREATE INDEX IF NOT EXISTS idx_run_experiment_trial_experiment
+    ON sa_run_experiment_trial (tenant_id, experiment_id, id)
+    WHERE deleted = 0;
+
+CREATE INDEX IF NOT EXISTS idx_run_experiment_trial_profile
+    ON sa_run_experiment_trial (tenant_id, run_profile_id, status)
+    WHERE deleted = 0;
+
+ALTER TABLE t_conversation ADD COLUMN IF NOT EXISTS run_profile_id BIGINT;
+
+COMMENT ON COLUMN t_conversation.run_profile_id IS '当前会话应用的运行画像 ID，用于未显式指定 runProfileId 的后续 Chat 或 Agent Run 继承画像配置';
+
+CREATE INDEX IF NOT EXISTS idx_t_conversation_run_profile
+    ON t_conversation (tenant_id, user_id, run_profile_id)
+    WHERE deleted = 0 AND run_profile_id IS NOT NULL;
 
 -- Tenant subscriptions
 CREATE TABLE IF NOT EXISTS sa_subscription (

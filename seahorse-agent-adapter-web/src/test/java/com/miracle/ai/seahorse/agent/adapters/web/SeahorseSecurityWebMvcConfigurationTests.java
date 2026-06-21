@@ -58,6 +58,8 @@ class SeahorseSecurityWebMvcConfigurationTests {
         assertThat(SeahorseSecurityWebMvcConfiguration.isPublicPath("/prototype/ai-infra")).isTrue();
         assertThat(SeahorseSecurityWebMvcConfiguration.isPublicPath("/features")).isTrue();
         assertThat(SeahorseSecurityWebMvcConfiguration.isPublicPath("/api/features")).isTrue();
+        assertThat(SeahorseSecurityWebMvcConfiguration.isPublicPath("/a2a")).isTrue();
+        assertThat(SeahorseSecurityWebMvcConfiguration.isPublicPath("/a2a/tasks")).isTrue();
         assertThat(SeahorseSecurityWebMvcConfiguration.isPublicPath("/admin/ai-infra")).isFalse();
         assertThat(SeahorseSecurityWebMvcConfiguration.isPublicPath("/user/me")).isFalse();
         assertThat(SeahorseSecurityWebMvcConfiguration.isPublicPath("/agents")).isFalse();

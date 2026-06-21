@@ -77,16 +77,20 @@ public class SeahorseAgentRunController {
                                         @RequestBody AgentRunStartRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
         AgentRunStartRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        requireTriggerAllowed(safeRequest.triggerType());
+        requireTriggerAllowed(safeRequest.getTriggerType());
         return ApiResponses.requireService(agentRunPortProvider, port -> port.startRun(new AgentRunStartCommand(
                 agentId,
-                safeRequest.versionId(),
-                safeRequest.rolloutId(),
-                safeRequest.tenantId(),
-                safeRequest.conversationId(),
-                safeRequest.triggerType(),
-                safeRequest.inputSummary(),
-                safeRequest.traceId())));
+                safeRequest.getVersionId(),
+                safeRequest.getRolloutId(),
+                safeRequest.getTenantId(),
+                safeRequest.getConversationId(),
+                safeRequest.getTriggerType(),
+                safeRequest.getInputSummary(),
+                safeRequest.getTraceId(),
+                null,
+                safeRequest.getRunProfileId(),
+                safeRequest.getExecutorEngine(),
+                safeRequest.getExecutorConfig())));
     }
 
     private void requireTriggerAllowed(AgentRunTriggerType triggerType) {

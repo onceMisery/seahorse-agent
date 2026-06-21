@@ -17,8 +17,11 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationBranchInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ForkCommand;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -45,9 +48,17 @@ public class SeahorseConversationController {
     private static final String SUCCESS_CODE = "0";
 
     private final ObjectProvider<ConversationManagementInboundPort> conversationPortProvider;
+    private final ObjectProvider<ConversationBranchInboundPort> branchPortProvider;
 
     public SeahorseConversationController(ObjectProvider<ConversationManagementInboundPort> conversationPortProvider) {
+        this(conversationPortProvider, null);
+    }
+
+    @Autowired
+    public SeahorseConversationController(ObjectProvider<ConversationManagementInboundPort> conversationPortProvider,
+            ObjectProvider<ConversationBranchInboundPort> branchPortProvider) {
         this.conversationPortProvider = conversationPortProvider;
+        this.branchPortProvider = branchPortProvider;
     }
 
     @PostMapping({"/conversations", "/api/conversations"})
@@ -95,7 +106,81 @@ public class SeahorseConversationController {
                 conversationPortProvider.getIfAvailable().listMessages(conversationId, resolveUserId(userId, headerUserId)));
     }
 
+    @GetMapping({"/conversations/{conversationId}/messages/tree", "/api/conversations/{conversationId}/messages/tree"})
+    public Map<String, Object> loadActiveTree(@PathVariable String conversationId,
+                                              @RequestParam(required = false) String userId,
+                                              @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
+                                              String headerUserId) {
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                branchPort().loadActiveTree(conversationId, resolveUserId(userId, headerUserId)));
+    }
+
+    @PostMapping({"/conversations/{conversationId}/messages/fork", "/api/conversations/{conversationId}/messages/fork"})
+    public Map<String, Object> fork(@PathVariable String conversationId,
+                                    @RequestBody ConversationForkRequest request,
+                                    @RequestParam(required = false) String userId,
+                                    @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
+                                    String headerUserId) {
+        ConversationForkRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
+        String resolvedUserId = resolveUserId(userId, headerUserId);
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                branchPort().fork(new ForkCommand(
+                        conversationId,
+                        resolvedUserId,
+                        safeRequest.anchorMessageId(),
+                        safeRequest.content(),
+                        safeRequest.role(),
+                        safeRequest.regenerate())));
+    }
+
+    @PostMapping({
+            "/conversations/{conversationId}/messages/branch/switch",
+            "/api/conversations/{conversationId}/messages/branch/switch"
+    })
+    public Map<String, Object> switchBranch(@PathVariable String conversationId,
+                                            @RequestBody ConversationBranchSwitchRequest request,
+                                            @RequestParam(required = false) String userId,
+                                            @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
+                                            String headerUserId) {
+        ConversationBranchSwitchRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                branchPort().switchBranch(conversationId, resolveUserId(userId, headerUserId), safeRequest.targetNodeId()));
+    }
+
+    @PostMapping({"/conversations/{conversationId}/branch-cursor", "/api/conversations/{conversationId}/branch-cursor"})
+    public Map<String, Object> saveBranchCursor(@PathVariable String conversationId,
+                                                @RequestBody ConversationBranchCursorRequest request,
+                                                @RequestParam(required = false) String userId,
+                                                @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
+                                                String headerUserId) {
+        ConversationBranchCursorRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                branchPort().saveCursor(
+                        conversationId,
+                        resolveUserId(userId, headerUserId),
+                        safeRequest.getLeafMessageId()));
+    }
+
+    @GetMapping({"/conversations/{conversationId}/branch-cursor", "/api/conversations/{conversationId}/branch-cursor"})
+    public Map<String, Object> loadBranchCursor(@PathVariable String conversationId,
+                                                @RequestParam(required = false) String userId,
+                                                @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
+                                                String headerUserId) {
+        return branchPort()
+                .loadCursor(conversationId, resolveUserId(userId, headerUserId))
+                .<Map<String, Object>>map(cursor -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, cursor))
+                .orElseGet(() -> Map.of(KEY_CODE, SUCCESS_CODE));
+    }
+
     private String resolveUserId(String userId, String headerUserId) {
         return WebUserIdResolver.resolve(userId, headerUserId);
+    }
+
+    private ConversationBranchInboundPort branchPort() {
+        ConversationBranchInboundPort port = branchPortProvider == null ? null : branchPortProvider.getIfAvailable();
+        if (port == null) {
+            throw new IllegalStateException("ConversationBranchInboundPort is not configured");
+        }
+        return port;
     }
 }

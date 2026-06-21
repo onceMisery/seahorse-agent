@@ -159,6 +159,84 @@ class SeahorseChatControllerTests {
     }
 
     @Test
+    void shouldPassRoleCardIdIntoStreamChatCommand() throws Exception {
+        ChatInboundPort chatPort = mock(ChatInboundPort.class);
+        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseChatController(
+                        provider(ChatInboundPort.class, chatPort),
+                        (emitter, conversationId, taskId) -> new NoopStreamCallback(),
+                        streamTaskPort,
+                        1_000L,
+                        provider(AgentRunSnapshotInboundPort.class, null))).build();
+
+        mvc.perform(get("/rag/v3/chat")
+                        .param("question", "Use this role")
+                        .param("conversationId", "conversation-1")
+                        .param("userId", "user-1")
+                        .param("roleCardId", "99"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+
+        ArgumentCaptor<StreamChatCommand> captor = ArgumentCaptor.forClass(StreamChatCommand.class);
+        verify(chatPort).streamChat(captor.capture(), org.mockito.ArgumentMatchers.any());
+        assertThat(captor.getValue().roleCardId()).isEqualTo(99L);
+    }
+
+    @Test
+    void shouldPassBranchLeafMessageIdIntoStreamChatCommand() throws Exception {
+        ChatInboundPort chatPort = mock(ChatInboundPort.class);
+        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseChatController(
+                        provider(ChatInboundPort.class, chatPort),
+                        (emitter, conversationId, taskId) -> new NoopStreamCallback(),
+                        streamTaskPort,
+                        1_000L,
+                        provider(AgentRunSnapshotInboundPort.class, null))).build();
+
+        mvc.perform(get("/rag/v3/chat")
+                        .param("question", "Continue from this branch")
+                        .param("conversationId", "conversation-1")
+                        .param("userId", "user-1")
+                        .param("branchLeafMessageId", "123"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+
+        ArgumentCaptor<StreamChatCommand> captor = ArgumentCaptor.forClass(StreamChatCommand.class);
+        verify(chatPort).streamChat(captor.capture(), org.mockito.ArgumentMatchers.any());
+        assertThat(captor.getValue().branchLeafMessageId()).isEqualTo(123L);
+    }
+
+    @Test
+    void shouldPassRunProfileIdIntoStreamChatCommand() throws Exception {
+        ChatInboundPort chatPort = mock(ChatInboundPort.class);
+        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseChatController(
+                        provider(ChatInboundPort.class, chatPort),
+                        (emitter, conversationId, taskId) -> new NoopStreamCallback(),
+                        streamTaskPort,
+                        1_000L,
+                        provider(AgentRunSnapshotInboundPort.class, null))).build();
+
+        mvc.perform(get("/rag/v3/chat")
+                        .param("question", "Use this run profile")
+                        .param("conversationId", "conversation-1")
+                        .param("userId", "user-1")
+                        .param("runProfileId", "77"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+
+        ArgumentCaptor<StreamChatCommand> captor = ArgumentCaptor.forClass(StreamChatCommand.class);
+        verify(chatPort).streamChat(captor.capture(), org.mockito.ArgumentMatchers.any());
+        assertThat(captor.getValue().runProfileId()).isEqualTo(77L);
+    }
+
+    @Test
     void resumeRunShouldEmitSnapshotWithoutStartingNewChat() throws Exception {
         ChatInboundPort chatPort = mock(ChatInboundPort.class);
         StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);

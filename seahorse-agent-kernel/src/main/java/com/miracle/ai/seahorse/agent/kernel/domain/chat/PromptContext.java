@@ -50,6 +50,8 @@ public class PromptContext {
 
     private MemoryContext memoryContext;
 
+    private ResolvedRoleCard roleCard;
+
     public boolean hasMcp() {
         return mcpContext != null && !mcpContext.isBlank();
     }

@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcTenantSupport;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
@@ -41,6 +42,7 @@ import java.util.Objects;
  */
 public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
 
+    private static final int APPEND_RETRY_LIMIT = 3;
     private static final int DEFAULT_HISTORY_LIMIT = 20;
     private static final int TITLE_MAX_LENGTH = 128;
     private static final String ROLE_USER = "user";
@@ -49,15 +51,54 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
     private static final String SQL_LIST_MESSAGES = """
             SELECT role, content, thinking_content, thinking_duration
             FROM t_message
-            WHERE conversation_id = ? AND user_id = ? AND deleted = 0 AND tenant_id = ?
+            WHERE conversation_id = ? AND user_id = ? AND deleted = 0 AND tenant_id = ? AND active = 1
             ORDER BY create_time DESC, id DESC
             LIMIT ?
             """;
     private static final String SQL_INSERT_MESSAGE = """
             INSERT INTO t_message
             (id, conversation_id, user_id, role, content, thinking_content, thinking_duration,
-             agent_run_id, create_time, update_time, deleted, tenant_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+             agent_run_id, parent_id, active, branch_root_id, sibling_seq, create_time, update_time, deleted, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+            """;
+    private static final String SQL_FIND_ACTIVE_LEAF = """
+            SELECT m.id
+            FROM t_message m
+            WHERE m.conversation_id = ? AND m.user_id = ? AND m.deleted = 0 AND m.tenant_id = ? AND m.active = 1
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM t_message child
+                  WHERE child.conversation_id = m.conversation_id
+                    AND child.user_id = m.user_id
+                    AND child.tenant_id = m.tenant_id
+                    AND child.deleted = 0
+                    AND child.active = 1
+                    AND child.parent_id = m.id
+              )
+            ORDER BY m.create_time DESC, m.id DESC
+            LIMIT 1
+            """;
+    private static final String SQL_COUNT_ROOT_SIBLINGS = """
+            SELECT COUNT(1)
+            FROM t_message
+            WHERE conversation_id = ? AND user_id = ? AND deleted = 0 AND tenant_id = ? AND parent_id IS NULL
+            """;
+    private static final String SQL_COUNT_CHILD_SIBLINGS = """
+            SELECT COUNT(1)
+            FROM t_message
+            WHERE conversation_id = ? AND user_id = ? AND deleted = 0 AND tenant_id = ? AND parent_id = ?
+            """;
+    private static final String SQL_NEXT_ROOT_SIBLING_SEQ = """
+            SELECT COALESCE(MAX(sibling_seq), -1) + 1
+            FROM t_message
+            WHERE conversation_id = ? AND user_id = ? AND deleted = 0 AND tenant_id = ?
+              AND parent_id IS NULL
+            """;
+    private static final String SQL_NEXT_CHILD_SIBLING_SEQ = """
+            SELECT COALESCE(MAX(sibling_seq), -1) + 1
+            FROM t_message
+            WHERE conversation_id = ? AND user_id = ? AND deleted = 0 AND tenant_id = ?
+              AND parent_id = ?
             """;
     private static final String SQL_COUNT_CONVERSATION = """
             SELECT COUNT(1) FROM t_conversation
@@ -103,19 +144,39 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
         if (!hasText(conversationId) || !hasText(userId) || message == null || !hasText(message.getContent())) {
             return;
         }
+        long convId = toLongId(conversationId);
+        long uid = toLongId(userId);
+        String tenantId = JdbcTenantSupport.resolveTenantId();
+        Long parentId = activeLeafId(convId, uid, tenantId);
+        int siblingSeq = siblingCount(convId, uid, tenantId, parentId);
         Timestamp now = Timestamp.from(Instant.now());
-        jdbcTemplate.update(SQL_INSERT_MESSAGE,
-                JdbcMemorySupport.nextId(),
-                toLongId(conversationId),
-                toLongId(userId),
-                roleValue(message.getRole()),
-                message.getContent(),
-                message.getThinkingContent(),
-                message.getThinkingDuration(),
-                trimToNull(agentRunId),
-                now,
-                now,
-                JdbcTenantSupport.resolveTenantId());
+        long messageId = JdbcMemorySupport.nextId();
+        for (int attempt = 0; attempt < APPEND_RETRY_LIMIT; attempt++) {
+            try {
+                jdbcTemplate.update(SQL_INSERT_MESSAGE,
+                        messageId,
+                        convId,
+                        uid,
+                        roleValue(message.getRole()),
+                        message.getContent(),
+                        message.getThinkingContent(),
+                        message.getThinkingDuration(),
+                        trimToNull(agentRunId),
+                        parentId,
+                        1,
+                        null,
+                        siblingSeq,
+                        now,
+                        now,
+                        tenantId);
+                break;
+            } catch (DuplicateKeyException ex) {
+                if (attempt + 1 >= APPEND_RETRY_LIMIT) {
+                    throw ex;
+                }
+                siblingSeq = nextSiblingSeq(convId, uid, tenantId, parentId);
+            }
+        }
         upsertConversation(conversationId, userId, message, now);
     }
 
@@ -129,7 +190,30 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
         return trimLeadingAssistant(messages);
     }
 
-    
+    private Long activeLeafId(long conversationId, long userId, String tenantId) {
+        List<Long> ids = jdbcTemplate.queryForList(SQL_FIND_ACTIVE_LEAF, Long.class, conversationId, userId, tenantId);
+        return ids.isEmpty() ? null : ids.get(0);
+    }
+
+    private int siblingCount(long conversationId, long userId, String tenantId, Long parentId) {
+        Integer count;
+        if (parentId == null) {
+            count = jdbcTemplate.queryForObject(
+                    SQL_COUNT_ROOT_SIBLINGS, Integer.class, conversationId, userId, tenantId);
+        } else {
+            count = jdbcTemplate.queryForObject(
+                    SQL_COUNT_CHILD_SIBLINGS, Integer.class, conversationId, userId, tenantId, parentId);
+        }
+        return Objects.requireNonNullElse(count, 0);
+    }
+
+    private int nextSiblingSeq(long conversationId, long userId, String tenantId, Long parentId) {
+        Integer next = parentId == null
+                ? jdbcTemplate.queryForObject(SQL_NEXT_ROOT_SIBLING_SEQ, Integer.class, conversationId, userId, tenantId)
+                : jdbcTemplate.queryForObject(
+                        SQL_NEXT_CHILD_SIBLING_SEQ, Integer.class, conversationId, userId, tenantId, parentId);
+        return Objects.requireNonNullElse(next, 0);
+    }
 
     private ChatMessage mapMessage(ResultSet resultSet, int rowNum) throws SQLException {
         ChatRole role = role(resultSet.getString("role"));

@@ -19,12 +19,15 @@ package com.miracle.ai.seahorse.agent.starter.all;
 
 import com.miracle.ai.seahorse.agent.adapters.agent.agentscope.AgentScopeReActExecutor;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorRouter;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -43,9 +46,16 @@ class AgentScopeStarterAllAutoConfigurationTests {
     void starterAllSelectsAgentscopeExecutorWhenEngineIsAgentscope() {
         contextRunner.run(context -> {
             assertThat(context).hasNotFailed();
-            assertThat(context).hasSingleBean(ReActExecutorPort.class);
             assertThat(context).hasSingleBean(AgentScopeReActExecutor.class);
-            assertThat(context.getBean(ReActExecutorPort.class).engineId()).isEqualTo("agentscope");
+            assertThat(context.getBeansOfType(ReActExecutorPort.class))
+                    .containsKeys("seahorseKernelAgentLoop", "seahorseAgentScopeReActExecutor");
+
+            ReActExecutorRouter router = new ReActExecutorRouter(
+                    List.copyOf(context.getBeansOfType(ReActExecutorPort.class).values()),
+                    "agentscope");
+            assertThat(router.engineId()).isEqualTo("agentscope");
+            assertThat(router.supports("agentscope")).isTrue();
+            assertThat(router.supports("kernel")).isTrue();
         });
     }
 
