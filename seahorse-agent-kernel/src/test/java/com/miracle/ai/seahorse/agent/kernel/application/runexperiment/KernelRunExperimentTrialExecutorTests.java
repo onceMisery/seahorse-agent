@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentStep;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationBranchCursor;
@@ -37,6 +38,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -78,6 +80,9 @@ class KernelRunExperimentTrialExecutorTests {
         assertEquals(202L, branchRepository.appended.getParentId());
         assertEquals("run-exp-1-trial-10", branchRepository.appended.getAgentRunId());
         assertEquals("run-exp-1-trial-10", result.getRunId());
+        assertEquals(
+                "{\"executorEngine\":\"agentscope\",\"truncated\":false,\"stepCount\":2,\"toolCallCount\":1,\"outputChars\":16}",
+                result.getMetricJson());
         assertEquals("run-exp-1-trial-10", snapshotRepository.saved.getRunId());
         assertEquals(101L, snapshotRepository.saved.getConversationId());
         assertEquals(202L, snapshotRepository.saved.getBranchLeafMessageId());
@@ -142,7 +147,15 @@ class KernelRunExperimentTrialExecutorTests {
         @Override
         public AgentLoopResult execute(AgentLoopRequest request) {
             this.request = request;
-            return new AgentLoopResult("generated answer", List.of(AgentStep.finalAnswer("generated answer")), false);
+            return new AgentLoopResult(
+                    "generated answer",
+                    List.of(
+                            AgentStep.thought(
+                                    "lookup",
+                                    List.of(AgentToolCall.of("tool-1", "filesystem.read_file", Map.of())),
+                                    List.of()),
+                            AgentStep.finalAnswer("generated answer")),
+                    false);
         }
 
         @Override

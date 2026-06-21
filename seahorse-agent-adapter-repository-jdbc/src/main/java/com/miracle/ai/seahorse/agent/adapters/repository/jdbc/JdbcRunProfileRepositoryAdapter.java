@@ -282,11 +282,16 @@ public class JdbcRunProfileRepositoryAdapter implements RunProfileRepositoryPort
         if (profileId == null) {
             throw new IllegalArgumentException("profileId must not be null");
         }
+        Long convIdLong = parseLongOrNull(conversationId);
+        Long userIdLong = parseLongOrNull(userId);
+        if (convIdLong == null || userIdLong == null) {
+            return; // non-numeric IDs cannot match BIGINT columns
+        }
         jdbcTemplate.update(SQL_APPLY_TO_CONVERSATION,
                 profileId,
                 Timestamp.from(Instant.now()),
-                Long.parseLong(requireText(conversationId, "conversationId")),
-                Long.parseLong(requireUserId(userId)),
+                convIdLong,
+                userIdLong,
                 tenantId());
     }
 
@@ -295,10 +300,15 @@ public class JdbcRunProfileRepositoryAdapter implements RunProfileRepositoryPort
         if (!hasText(userId) || !hasText(conversationId)) {
             return Optional.empty();
         }
+        Long convIdLong = parseLongOrNull(conversationId);
+        Long userIdLong = parseLongOrNull(userId);
+        if (convIdLong == null || userIdLong == null) {
+            return Optional.empty();
+        }
         return jdbcTemplate.query(SQL_FIND_APPLIED_PROFILE,
                         (rs, rowNum) -> nullableLong(rs, "run_profile_id"),
-                        Long.parseLong(conversationId.trim()),
-                        Long.parseLong(userId.trim()),
+                        convIdLong,
+                        userIdLong,
                         tenantId())
                 .stream()
                 .filter(Objects::nonNull)
@@ -308,6 +318,15 @@ public class JdbcRunProfileRepositoryAdapter implements RunProfileRepositoryPort
     private boolean exists(Long id, String userId, String tenantId) {
         Long count = jdbcTemplate.queryForObject(SQL_EXISTS_PROFILE, Long.class, id, userId, tenantId);
         return count != null && count > 0;
+    }
+
+    private static Long parseLongOrNull(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private RunProfileRecord mapProfile(ResultSet resultSet, int rowNumber) throws SQLException {

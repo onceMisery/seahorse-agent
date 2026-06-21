@@ -107,7 +107,7 @@ public class KernelRunExperimentTrialExecutor implements RunExperimentTrialExecu
                 .status("SUCCEEDED")
                 .runId(runId)
                 .outputMessageId(outputMessageId)
-                .metricJson(metricJson(profile.getExecutorEngine(), result.truncated()))
+                .metricJson(metricJson(profile.getExecutorEngine(), result))
                 .build();
     }
 
@@ -250,10 +250,21 @@ public class KernelRunExperimentTrialExecutor implements RunExperimentTrialExecu
                 .orElse("");
     }
 
-    private String metricJson(String executorEngine, boolean truncated) {
-        return "{\"executorEngine\":\"%s\",\"truncated\":%s}".formatted(
+    private String metricJson(String executorEngine, AgentLoopResult result) {
+        AgentLoopResult safeResult = Objects.requireNonNullElseGet(
+                result,
+                () -> new AgentLoopResult("", List.of(), false));
+        int stepCount = safeResult.steps().size();
+        int toolCallCount = safeResult.steps().stream()
+                .mapToInt(step -> step.toolCalls().size())
+                .sum();
+        int outputChars = Objects.requireNonNullElse(safeResult.finalAnswer(), "").length();
+        return "{\"executorEngine\":\"%s\",\"truncated\":%s,\"stepCount\":%d,\"toolCallCount\":%d,\"outputChars\":%d}".formatted(
                 escapeJson(blankToDefault(executorEngine, "kernel")),
-                truncated);
+                safeResult.truncated(),
+                stepCount,
+                toolCallCount,
+                outputChars);
     }
 
     private Long parseId(String value) {
