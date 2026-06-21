@@ -42,6 +42,7 @@ public class JdbcChatSchemaUpgrade {
         ensureMemoryProfileTables();
         ensureTaskTable();
         ensureRoleCardGovernanceColumns();
+        ensureRunProfileGovernanceColumns();
         widenColumns("t_conversation", List.of("id", "conversation_id", "user_id"));
         widenColumns("t_conversation_summary", List.of("id", "conversation_id", "user_id", "last_message_id"));
         widenColumns("t_message", List.of("id", "conversation_id", "user_id"));
@@ -89,6 +90,20 @@ public class JdbcChatSchemaUpgrade {
         addColumnIfMissing("sa_role_card", "share_scope", "VARCHAR(32) NOT NULL DEFAULT 'PRIVATE'");
         addColumnIfMissing("sa_role_card", "approval_status", "VARCHAR(32) NOT NULL DEFAULT 'PENDING'");
         addColumnIfMissing("sa_role_card", "published", "SMALLINT NOT NULL DEFAULT 0");
+    }
+
+    private void ensureRunProfileGovernanceColumns() {
+        if (!tableExists("sa_run_profile")) {
+            return;
+        }
+        addColumnIfMissing("sa_run_profile", "approval_status", "VARCHAR(32) NOT NULL DEFAULT 'DRAFT'");
+        addColumnIfMissing("sa_run_profile", "approval_operator", "VARCHAR(64)");
+        addColumnIfMissing("sa_run_profile", "approval_comment", "TEXT");
+        addColumnIfMissing("sa_run_profile", "approval_time", "TIMESTAMP");
+        createIndexIfTableExists("sa_run_profile", """
+                CREATE INDEX IF NOT EXISTS idx_run_profile_approval
+                ON sa_run_profile (tenant_id, approval_status, deleted)
+                """);
     }
 
     private void ensureAgentSkillTables() {
