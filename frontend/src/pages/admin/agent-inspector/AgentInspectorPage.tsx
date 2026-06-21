@@ -195,7 +195,7 @@ export function AgentInspectorPage() {
         </Tabs.Content>
 
         <Tabs.Content value="context">
-          <AgentContextView snapshot={snapshot} />
+          <AgentContextView runId={activeRunId} snapshot={snapshot} />
         </Tabs.Content>
 
         <Tabs.Content value="tools">
