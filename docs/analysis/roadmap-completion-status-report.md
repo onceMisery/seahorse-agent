@@ -1,10 +1,42 @@
 # 架构路线图近期与中期设计完成情况分析报告
 
-日期：2026-06-19
+日期：2026-06-22
 
-本报告基于代码库实际实现，对 `docs/roadmap/architecture-roadmap-and-vision.md` 中近期设计（0-4 周）和中期设计（1-3 个月）的完成情况进行客观评估。
+本报告基于代码库实际实现，对 `docs/roadmap/architecture-roadmap-and-vision.md` 中已经完成或已合入 main 的能力进行归档。路线图文档只保留未完成、待真实测试、待联调和待产品化的规划项；已完成内容以本报告为准。
 
-## 1. 总体评估
+## 0. 2026-06-22 已完成基线归档
+
+以下能力已经合入 main，不再作为未来规划放在路线图主体中。若缺少真实端到端测试，它们应进入路线图的“真实 Test Case 门禁”，而不是继续按功能建设规划重复描述。
+
+| 已完成能力 | 当前证据 | 后续仅保留为 |
+|---|---|---|
+| Clean Architecture + Ports and Adapters 模块边界 | `seahorse-agent-kernel`、`seahorse-agent-adapter-*`、`seahorse-agent-spring-boot-autoconfigure` | 架构基线 |
+| 轻量/全量 Docker 部署路径 | `docker-compose.yml`、`docker-compose.full.yml`、readiness 诊断 | 回归验证基线 |
+| RAG 检索与 Trace | `SeahorseRagTraceController`、`t_rag_trace_run/node`、Milvus/Elasticsearch/Ollama 链路 | 质量回归基线 |
+| 记忆、用户画像、outbox、maintenance、quality/conflict 基座 | `SeahorseMemory*Controller`、`t_user_profile_fact`、`t_memory_*` 表 | 记忆治理基线 |
+| Agent、Tool、Skill、审批、配额、资源 ACL、审计、成本接口与页面 | `SeahorseAgent*Controller`、`sa_agent_*`、`sa_audit_event`、`sa_cost_usage_record` | 企业治理基线 |
+| 消息树与分支游标 | `t_conversation_branch_cursor`、`ConversationBranchInboundPort`、`SeahorseConversationController`、前端 `sessionService` | 真实测试门禁 |
+| 角色卡 | `RoleCardPage`、`SeahorseRoleCardController`、`sa_role_card` 相关表/仓储 | 真实测试门禁 |
+| 运行方案 | `RunProfilePage`、`KernelRunProfileService`、`sa_run_profile`、risk/audit/gate API | 真实测试门禁 |
+| 运行实验 | `RunExperimentPage`、`KernelRunExperimentService`、`sa_run_experiment*` | 真实测试门禁与报告增强 |
+| RunContextSnapshot | `t_run_context_snapshot`、`KernelRunContextSnapshotService`、`ContextSnapshotInspectorTab` | 审计与回归基线 |
+| AgentScope / Nacos A2A 基座 | `seahorse-agent-adapter-agent-agentscope`、`scripts/agentscope-a2a-e2e.ps1`、AgentScope tests | 生产硬化与真实长链路验证 |
+| MCP HTTP / stdio 基座 | `seahorse-agent-adapter-mcp-http`、`StdioMcpClient`、`McpServerRuntimeRegistry`、前端 MCP service | 安全治理与真实测试门禁 |
+| 管理后台入口可达性 | `AdminLayout`、各 `/admin/*` 页面、feature unavailable/empty state | 回归测试基线 |
+
+## 1. 当前完成状态摘要
+
+| 分类 | 当前状态 | 后续去向 |
+|---|---|---|
+| 近期/中期历史切片 | 作为已完成基线归档 | 仅保留持续回归，不再写入路线图规划主体 |
+| 6/22 合入的 Agent 控制面能力 | 已合入 main，需补真实 test case | 路线图“真实 Test Case 门禁” |
+| AgentScope / Nacos A2A | 基座已合入，需生产硬化和真实长链路验证 | 路线图近期/中期 |
+| MCP stdio / HTTP | 基座已合入，需安全治理与 Tool Gateway 收敛 | 路线图近期/中期 |
+| Marketplace / Sandbox / Context Pack 等远期基座 | 多数已有代码基座，但仍需产品化、联动和真实验收 | 路线图中期/远期 |
+
+## 2. 历史评估（2026-06-19，保留用于审计）
+
+以下内容是 2026-06-19 的完成度审计记录，用于追溯当时的差距判断；不代表 2026-06-22 当前状态。当前状态以“2026-06-22 已完成基线归档”和“当前完成状态摘要”为准。
 
 | 阶段 | 总目标数 | 已完成 | 部分完成 | 未完成 | 完成率 |
 |---|---|---|---|---|---|
@@ -16,7 +48,7 @@
 | 中期 M5: starter-all 验收 | 4 切片 | 4 | 0 | 0 | **100%** |
 | **总计** | **29 切片** | **25** | **3** | **0** | **91%** |
 
-## 2. 近期设计（0-4 周）完成情况
+## 3. 近期设计（0-4 周）历史完成情况
 
 ### D1: 登录与会话稳定性 — ✅ 已完成
 
@@ -76,7 +108,7 @@
 
 **成功证据**：文档、compose 和排错指南口径一致 ✅
 
-## 3. 中期设计（1-3 个月）完成情况
+## 4. 中期设计（1-3 个月）历史完成情况
 
 ### M1: RAG 质量评测与策略治理 — 85% 完成
 
@@ -206,7 +238,7 @@
 | 3. Full Compose 冒烟 | login/ingestion/RAG/memory/agent run/metrics | **已完成** | `e2e-compose-suite.sh` + `e2e-full-test.sh` + `e2e-backend-smoke.ps1` 650 行 |
 | 4. 故障项文档化 | 失败项写入 TROUBLESHOOTING_GUIDE | **已完成** | 319 行 8 大章节，含具体命令和迁移脚本引用 |
 
-## 4. 规划与实现的差异分析
+## 5. 规划与实现的差异分析（历史记录）
 
 ### 4.1 超出规划的实现
 
@@ -240,7 +272,7 @@
 - M4 基座 20 项：20/20 存在 ✅
 - M5 基座 7 个适配器：7/7 已配置 ✅
 
-## 5. 成功证据标准达成评估
+## 6. 成功证据标准达成评估（历史记录）
 
 ### 近期设计
 
@@ -262,7 +294,7 @@
 | M4 Agent 生产 | run 可追踪步骤/审批/产物/成本 | ✅ 全部 9 Controller + 11 表 | ✅ 单元测试覆盖 |
 | M5 starter-all | full compose smoke suite 通过 | ✅ 脚本/测试/文档完整 | ⚠️ 需 full compose 环境验证 |
 
-## 6. 总结
+## 7. 历史总结
 
 ### 架构演进一致性评估
 
