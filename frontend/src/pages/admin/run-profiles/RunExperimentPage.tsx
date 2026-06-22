@@ -133,7 +133,7 @@ export function RunExperimentPage() {
       setLoadingProfiles(true);
       setProfiles(await listRunProfiles());
     } catch (error) {
-      toast.error(getErrorMessage(error, "加载运行画像失败"));
+      toast.error(getErrorMessage(error, "加载运行方案失败"));
       console.error(error);
     } finally {
       setLoadingProfiles(false);
@@ -166,7 +166,7 @@ export function RunExperimentPage() {
 
   const handleCreate = async () => {
     if (form.runProfileIds.length === 0) {
-      toast.error("请选择至少一个运行画像");
+      toast.error("请选择至少一个运行方案");
       return;
     }
     try {
@@ -241,7 +241,7 @@ export function RunExperimentPage() {
         <div className="admin-page-actions">
           <Button variant="outline" onClick={loadProfiles} disabled={loadingProfiles}>
             <RefreshCw className="mr-1 h-4 w-4" />
-            刷新画像
+            刷新方案
           </Button>
         </div>
       </div>
@@ -278,18 +278,18 @@ export function RunExperimentPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-sm font-semibold text-slate-900">运行画像</h2>
+                  <h2 className="text-sm font-semibold text-slate-900">运行方案</h2>
                   <p className="text-xs text-muted-foreground">选择参与对比的执行配置</p>
                 </div>
                 <Badge variant="secondary">{form.runProfileIds.length} 已选</Badge>
               </div>
               {loadingProfiles ? (
                 <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-sm text-muted-foreground">
-                  加载运行画像中...
+                  加载运行方案中...
                 </div>
               ) : profiles.length === 0 ? (
                 <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-sm text-muted-foreground">
-                  暂无可用运行画像
+                  暂无可用运行方案
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -337,7 +337,7 @@ export function RunExperimentPage() {
                 <Star className="h-8 w-8 text-slate-300" />
                 <div className="mt-3 text-sm font-medium text-slate-900">尚未发起实验</div>
                 <div className="mt-1 max-w-[360px] text-sm text-muted-foreground">
-                  选择会话、基准消息和运行画像后，可在这里查看 trial 状态、评分和分支操作。
+                  选择会话、基准消息和运行方案后，可在这里查看 trial 状态、评分和分支操作。
                 </div>
               </div>
             ) : (
@@ -395,7 +395,7 @@ export function RunExperimentPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Trial</TableHead>
-                        <TableHead>运行画像</TableHead>
+                        <TableHead>运行方案</TableHead>
                         <TableHead>执行引擎</TableHead>
                         <TableHead>状态</TableHead>
                         <TableHead>Run ID</TableHead>

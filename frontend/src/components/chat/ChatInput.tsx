@@ -582,15 +582,15 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
       return;
     }
     if (!selectedRunProfileId) {
-      toast.error("请先选择画像");
+      toast.error("请先选择运行方案");
       return;
     }
     setApplyingRunProfile(true);
     try {
       await applyRunProfileToConversation(currentSessionId, selectedRunProfileId);
-      toast.success("画像已应用到当前会话");
+      toast.success("方案已应用到当前会话");
     } catch (error) {
-      toast.error((error as Error).message || "应用画像失败");
+      toast.error((error as Error).message || "应用方案失败");
     } finally {
       setApplyingRunProfile(false);
     }
@@ -907,13 +907,13 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                       color: "var(--theme-text-primary)"
                     }}
                   >
-                    <SelectValue placeholder={runProfilesLoading ? "加载画像" : "画像"} />
+                    <SelectValue placeholder={runProfilesLoading ? "加载方案" : "方案"} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={DEFAULT_RUN_PROFILE_VALUE}>
                       <span className="inline-flex items-center gap-2">
                         <Sparkles className="h-3.5 w-3.5" />
-                        默认画像
+                        默认方案
                       </span>
                     </SelectItem>
                     {runProfiles.map((profile) => (
@@ -930,8 +930,8 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                   type="button"
                   onClick={handleApplyRunProfile}
                   disabled={isStreaming || runProfilesLoading || applyingRunProfile || !selectedRunProfileId || !currentSessionId}
-                  aria-label="应用画像到当前会话"
-                  title="应用画像到当前会话"
+                  aria-label="应用方案到当前会话"
+                  title="应用方案到当前会话"
                   className="flex h-9 w-9 items-center justify-center rounded-xl transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                   style={{
                     backgroundColor: "var(--theme-bg-elevated)",

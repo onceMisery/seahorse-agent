@@ -121,7 +121,7 @@ describe("WorkspaceInspector", () => {
     useWorkbenchStore.setState({ activeTab: "context", inspectorOpen: true });
     render(<WorkspaceInspector message={{ ...message, agentRunId: "run-2" }} open onClose={() => undefined} />);
 
-    expect(await screen.findByText("运行画像")).toBeInTheDocument();
+    expect(await screen.findByText("运行方案")).toBeInTheDocument();
     expect(screen.getAllByText("77").length).toBeGreaterThan(0);
     expect(screen.getByText("分支叶子")).toBeInTheDocument();
     expect(screen.getAllByText("200").length).toBeGreaterThan(0);

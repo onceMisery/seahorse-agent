@@ -211,7 +211,7 @@ export function ContextSnapshotInspectorTab({ agentRunId }: ContextSnapshotInspe
         <FieldRow label="Run ID" value={snapshot.runId} />
         <FieldRow label="会话" value={snapshot.conversationId} />
         <FieldRow label="分支叶子" value={branchLeafMessageId} />
-        <FieldRow label="运行画像" value={runProfileId} />
+        <FieldRow label="运行方案" value={runProfileId} />
         <FieldRow label="Trace" value={asString(traceContext.traceId)} />
         <FieldRow label="Studio Trace" value={studioTraceId} />
         <FieldRow label="创建" value={snapshot.createTime} />

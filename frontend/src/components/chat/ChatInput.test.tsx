@@ -270,7 +270,7 @@ describe("ChatInput run profile selector", () => {
     });
 
     fireEvent.click(screen.getByText("Research Profile"));
-    fireEvent.click(screen.getByLabelText("应用画像到当前会话"));
+    fireEvent.click(screen.getByLabelText("应用方案到当前会话"));
 
     await waitFor(() => {
       expect(serviceMocks.applyRunProfileToConversation).toHaveBeenCalledWith("conversation-1", "77");

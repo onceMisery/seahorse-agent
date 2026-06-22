@@ -203,7 +203,7 @@ describe("RunProfilePage", () => {
     render(<RunProfilePage />);
 
     await screen.findByText("Research AgentScope");
-    fireEvent.click(screen.getByRole("button", { name: "新建画像" }));
+    fireEvent.click(screen.getByRole("button", { name: "新建方案" }));
     expect(document.querySelector('label[for="run-profile-executor-engine"]')).toBeInTheDocument();
     expect(document.querySelector("#run-profile-executor-engine")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("名称"), { target: { value: "Tool Safe Profile" } });
@@ -223,7 +223,7 @@ describe("RunProfilePage", () => {
       target: { value: "{\"highRiskToolApproval\":true}" }
     });
     fireEvent.click(await screen.findByLabelText("Clock"));
-    fireEvent.click(screen.getByRole("button", { name: "保存画像" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存方案" }));
 
     await waitFor(() => {
       expect(serviceMocks.createRunProfile).toHaveBeenCalledWith(expect.objectContaining({
@@ -248,7 +248,7 @@ describe("RunProfilePage", () => {
     render(<RunProfilePage />);
 
     await screen.findByText("Research AgentScope");
-    fireEvent.click(screen.getByRole("button", { name: "新建画像" }));
+    fireEvent.click(screen.getByRole("button", { name: "新建方案" }));
     await screen.findByLabelText("Clock");
 
     const selector = screen.getByLabelText("执行引擎");
@@ -269,7 +269,7 @@ describe("RunProfilePage", () => {
 
     fireEvent.change(screen.getByLabelText("名称"), { target: { value: "Research AgentScope v2" } });
     fireEvent.change(screen.getByLabelText("执行引擎"), { target: { value: "kernel" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存画像" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存方案" }));
 
     await waitFor(() => {
       expect(serviceMocks.updateRunProfile).toHaveBeenCalledWith(77, expect.objectContaining({

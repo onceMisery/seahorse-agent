@@ -121,7 +121,7 @@ export function RunProfilePage() {
       setLoading(true);
       setProfiles(await listRunProfiles());
     } catch (error) {
-      toast.error(getErrorMessage(error, "加载运行画像失败"));
+      toast.error(getErrorMessage(error, "加载运行方案失败"));
       console.error(error);
     } finally {
       setLoading(false);
@@ -158,7 +158,7 @@ export function RunProfilePage() {
     try {
       setOperatingId(id);
       await activateRunProfile(id);
-      toast.success("运行画像已设为默认");
+      toast.success("运行方案已设为默认");
       await loadProfiles();
     } catch (error) {
       toast.error(getErrorMessage(error, "设为默认失败"));
@@ -198,7 +198,7 @@ export function RunProfilePage() {
         toolBindings: (details.toolBindings || []).filter((binding) => binding.enabled !== false && binding.enabled !== 0)
       });
     } catch (error) {
-      toast.error(getErrorMessage(error, "加载运行画像详情失败"));
+      toast.error(getErrorMessage(error, "加载运行方案详情失败"));
       console.error(error);
     } finally {
       setOperatingId(null);
@@ -229,7 +229,7 @@ export function RunProfilePage() {
     if (!form) return;
     const name = form.name.trim();
     if (!name) {
-      toast.error("请输入运行画像名称");
+      toast.error("请输入运行方案名称");
       return;
     }
     let request: RunProfileRequest;
@@ -261,11 +261,11 @@ export function RunProfilePage() {
       } else {
         await createRunProfile(request);
       }
-      toast.success("运行画像已保存");
+      toast.success("运行方案已保存");
       setForm(null);
       await loadProfiles();
     } catch (error) {
-      toast.error(getErrorMessage(error, "保存运行画像失败"));
+      toast.error(getErrorMessage(error, "保存运行方案失败"));
       console.error(error);
     } finally {
       setSaving(false);
@@ -273,14 +273,14 @@ export function RunProfilePage() {
   };
 
   const handleDelete = async (id: number | string) => {
-    if (!confirm("确认删除此运行画像？删除后不会影响历史运行快照。")) return;
+    if (!confirm("确认删除此运行方案？删除后不会影响历史运行快照。")) return;
     try {
       setOperatingId(id);
       await deleteRunProfile(id);
-      toast.success("运行画像已删除");
+      toast.success("运行方案已删除");
       await loadProfiles();
     } catch (error) {
-      toast.error(getErrorMessage(error, "删除运行画像失败"));
+      toast.error(getErrorMessage(error, "删除运行方案失败"));
       console.error(error);
     } finally {
       setOperatingId(null);
@@ -297,7 +297,7 @@ export function RunProfilePage() {
       setPreview(resolvedPreview);
       setRiskSummary(resolvedRiskSummary);
     } catch (error) {
-      toast.error(getErrorMessage(error, "解析运行画像预览失败"));
+      toast.error(getErrorMessage(error, "解析运行方案预览失败"));
       console.error(error);
     } finally {
       setPreviewLoadingId(null);
@@ -321,7 +321,7 @@ export function RunProfilePage() {
     try {
       setGovernanceLoadingId(loadingKey);
       await submitRunProfileApproval(id, "submit from Run Profile governance panel");
-      toast.success("运行画像已提交审批");
+      toast.success("运行方案已提交审批");
       await loadProfiles();
     } catch (error) {
       toast.error(getErrorMessage(error, "提交审批失败"));
@@ -336,7 +336,7 @@ export function RunProfilePage() {
     try {
       setGovernanceLoadingId(loadingKey);
       await approveRunProfile(id, "approved from Run Profile governance panel");
-      toast.success("运行画像已通过审批");
+      toast.success("运行方案已通过审批");
       await loadProfiles();
     } catch (error) {
       toast.error(getErrorMessage(error, "审批通过失败"));
@@ -351,7 +351,7 @@ export function RunProfilePage() {
     try {
       setGovernanceLoadingId(loadingKey);
       await rejectRunProfile(id, "rejected from Run Profile governance panel");
-      toast.success("运行画像已拒绝");
+      toast.success("运行方案已拒绝");
       await loadProfiles();
     } catch (error) {
       toast.error(getErrorMessage(error, "审批拒绝失败"));
@@ -378,13 +378,13 @@ export function RunProfilePage() {
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
-          <h1 className="admin-page-title">运行画像</h1>
+          <h1 className="admin-page-title">运行方案</h1>
           <p className="admin-page-subtitle">管理 Role Card、工具白名单、执行引擎和安全策略的可复用运行配置</p>
         </div>
         <div className="admin-page-actions">
           <Button onClick={handleCreate}>
             <Plus className="mr-1 h-4 w-4" />
-            新建画像
+            新建方案
           </Button>
           <Button variant="outline" onClick={loadProfiles} disabled={loading}>
             <RefreshCw className="mr-1 h-4 w-4" />
@@ -474,7 +474,7 @@ export function RunProfilePage() {
             <div className="space-y-3 md:col-span-2">
               <div>
                 <h2 className="text-sm font-medium text-slate-700">工具白名单</h2>
-                <p className="text-xs text-muted-foreground">未勾选工具时，运行画像会显式传递空白名单。</p>
+                <p className="text-xs text-muted-foreground">未勾选工具时，运行方案会显式传递空白名单。</p>
               </div>
               {toolsLoading ? (
                 <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-sm text-muted-foreground">
@@ -516,7 +516,7 @@ export function RunProfilePage() {
             </div>
             <div className="flex gap-2 md:col-span-2">
               <Button onClick={handleSave} disabled={saving}>
-                保存画像
+                保存方案
               </Button>
               <Button variant="outline" onClick={() => setForm(null)} disabled={saving}>
                 取消
@@ -540,7 +540,7 @@ export function RunProfilePage() {
             </div>
             <div className="grid gap-3 text-sm md:grid-cols-2">
               <div className="rounded-md border border-slate-200 p-3">
-                <div className="text-xs text-muted-foreground">画像 ID</div>
+                <div className="text-xs text-muted-foreground">方案 ID</div>
                 <div className="mt-1 font-medium text-slate-900">{preview.runProfileId}</div>
               </div>
               <div className="rounded-md border border-slate-200 p-3">
@@ -632,7 +632,7 @@ export function RunProfilePage() {
             </div>
             <div className="grid gap-3 text-sm md:grid-cols-3">
               <div className="rounded-md border border-slate-200 p-3">
-                <div className="text-xs text-muted-foreground">画像 ID</div>
+                <div className="text-xs text-muted-foreground">方案 ID</div>
                 <div className="mt-1 font-medium text-slate-900">{productionGate.runProfileId}</div>
               </div>
               <div className="rounded-md border border-slate-200 p-3">
@@ -706,7 +706,7 @@ export function RunProfilePage() {
           {loading ? (
             <div className="py-8 text-center text-muted-foreground">加载中...</div>
           ) : profiles.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground">暂无运行画像</div>
+            <div className="py-8 text-center text-muted-foreground">暂无运行方案</div>
           ) : (
             <Table className="min-w-[920px]">
               <TableHeader>
