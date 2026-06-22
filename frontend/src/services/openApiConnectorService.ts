@@ -1,5 +1,6 @@
 import { api } from "@/services/api";
 import type { PageResult } from "@/services/metadataGovernanceService";
+import { emptyPage, optionalGet } from "@/services/optionalEndpoint";
 
 // ── 类型定义 ──
 
@@ -44,12 +45,18 @@ export function importOpenApiSpec(payload: ImportSpecPayload) {
 }
 
 export function listConnectors(params?: { current?: number; size?: number; keyword?: string }) {
-  return api.get<PageResult<OpenApiConnector>>("/api/connectors", { params });
+  return optionalGet(
+    api.get<PageResult<OpenApiConnector>>("/api/connectors", { params, suppressErrorToast: true }),
+    emptyPage<OpenApiConnector>(params?.current, params?.size)
+  );
 }
 
 export function getConnectorOperations(connectorId: string) {
-  return api.get<ConnectorOperation[]>(
-    `/api/connectors/${encodeURIComponent(connectorId)}/operations`
+  return optionalGet(
+    api.get<ConnectorOperation[]>(`/api/connectors/${encodeURIComponent(connectorId)}/operations`, {
+      suppressErrorToast: true
+    }),
+    []
   );
 }
 

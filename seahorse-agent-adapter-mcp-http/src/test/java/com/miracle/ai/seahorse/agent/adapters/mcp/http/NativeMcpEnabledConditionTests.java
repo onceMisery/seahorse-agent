@@ -45,6 +45,16 @@ class NativeMcpEnabledConditionTests {
     }
 
     @Test
+    void shouldMatchWhenFirstStdioCommandExists() {
+        NativeMcpEnabledCondition condition = new NativeMcpEnabledCondition();
+        Map<String, Object> properties = Map.of(
+                "seahorse-agent.adapters.mcp.servers[0].transport", "stdio",
+                "seahorse-agent.adapters.mcp.servers[0].command", "node");
+
+        Assertions.assertTrue(condition.matches(context(properties), Mockito.mock(AnnotatedTypeMetadata.class)));
+    }
+
+    @Test
     void shouldNotMatchWhenExplicitlyDisabled() {
         NativeMcpEnabledCondition condition = new NativeMcpEnabledCondition();
         Map<String, Object> properties = Map.of(

@@ -2,8 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { AgentPublishDialog } from "./AgentPublishDialog";
 import { publishAgent } from "@/services/agentDefinitionService";
+import { AgentPublishDialog } from "./AgentPublishDialog";
 
 vi.mock("sonner", () => ({
   toast: {
@@ -40,7 +40,7 @@ describe("AgentPublishDialog", () => {
     const confirm = screen.getByRole("button", { name: "确认发布" });
     expect(confirm).toBeDisabled();
 
-    await user.type(screen.getByPlaceholderText("请输入本版本 Agent instructions"), "be useful");
+    await user.type(screen.getByPlaceholderText("请输入本版本 Agent 指令"), "be useful");
     expect(confirm).toBeDisabled();
 
     await user.type(screen.getByPlaceholderText("请输入发布原因或备注"), "initial release");
@@ -61,7 +61,7 @@ describe("AgentPublishDialog", () => {
       />
     );
 
-    await user.type(screen.getByPlaceholderText("请输入本版本 Agent instructions"), "be useful");
+    await user.type(screen.getByPlaceholderText("请输入本版本 Agent 指令"), "be useful");
     await user.type(screen.getByPlaceholderText("请输入发布原因或备注"), "initial release");
     await user.click(screen.getByRole("button", { name: "确认发布" }));
 

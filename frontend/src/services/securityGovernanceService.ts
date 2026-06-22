@@ -1,5 +1,6 @@
 import { api } from "@/services/api";
 import type { PageResult } from "@/services/metadataGovernanceService";
+import { emptyPage, optionalGet } from "@/services/optionalEndpoint";
 
 // ── 类型定义 ──
 
@@ -115,7 +116,10 @@ export function listAclRules(params: {
   effect?: string;
   status?: string;
 }) {
-  return api.get<PageResult<ResourceAclRule>>("/api/resource-acl-rules", { params });
+  return optionalGet(
+    api.get<PageResult<ResourceAclRule>>("/api/resource-acl-rules", { params, suppressErrorToast: true }),
+    emptyPage<ResourceAclRule>(params.current, params.size)
+  );
 }
 
 export function dryRunImportAclRules(payload: Record<string, unknown>) {
@@ -150,7 +154,10 @@ export function listAccessDecisions(params: {
   agentId?: string;
   runId?: string;
 }) {
-  return api.get<PageResult<AccessDecision>>("/api/access-decisions", { params });
+  return optionalGet(
+    api.get<PageResult<AccessDecision>>("/api/access-decisions", { params, suppressErrorToast: true }),
+    emptyPage<AccessDecision>(params.current, params.size)
+  );
 }
 
 // ── 密钥 ──

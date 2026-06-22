@@ -229,6 +229,13 @@ public class AgentScopeProperties {
         private String description = "Seahorse Agent";
         private String url = "";
         private String preferredTransport = "jsonrpc";
+        private A2aAuthMode authMode = A2aAuthMode.SHARED_SECRET;
+        private String authHeaderName = "X-Seahorse-A2A-Token";
+        private String sharedSecret = "";
+        private Duration allowedTimestampSkew = Duration.ofMinutes(5);
+        private Duration nonceTtl = Duration.ofMinutes(10);
+        private Duration registrationTtl = Duration.ZERO;
+        private A2aDuplicateRegistrationPolicy duplicateRegistrationPolicy = A2aDuplicateRegistrationPolicy.REJECT;
         private boolean setAsLatest;
         private boolean registerEndpoint = true;
         private String transport = "jsonrpc";
@@ -309,6 +316,64 @@ public class AgentScopeProperties {
 
         public void setPreferredTransport(String preferredTransport) {
             this.preferredTransport = preferredTransport;
+        }
+
+        public A2aAuthMode getAuthMode() {
+            return authMode;
+        }
+
+        public void setAuthMode(A2aAuthMode authMode) {
+            this.authMode = authMode == null ? A2aAuthMode.SHARED_SECRET : authMode;
+        }
+
+        public String getAuthHeaderName() {
+            return authHeaderName;
+        }
+
+        public void setAuthHeaderName(String authHeaderName) {
+            this.authHeaderName = authHeaderName;
+        }
+
+        public String getSharedSecret() {
+            return sharedSecret;
+        }
+
+        public void setSharedSecret(String sharedSecret) {
+            this.sharedSecret = sharedSecret;
+        }
+
+        public Duration getAllowedTimestampSkew() {
+            return allowedTimestampSkew;
+        }
+
+        public void setAllowedTimestampSkew(Duration allowedTimestampSkew) {
+            this.allowedTimestampSkew = allowedTimestampSkew;
+        }
+
+        public Duration getNonceTtl() {
+            return nonceTtl;
+        }
+
+        public void setNonceTtl(Duration nonceTtl) {
+            this.nonceTtl = nonceTtl;
+        }
+
+        public Duration getRegistrationTtl() {
+            return registrationTtl;
+        }
+
+        public void setRegistrationTtl(Duration registrationTtl) {
+            this.registrationTtl = registrationTtl == null ? Duration.ZERO : registrationTtl;
+        }
+
+        public A2aDuplicateRegistrationPolicy getDuplicateRegistrationPolicy() {
+            return duplicateRegistrationPolicy;
+        }
+
+        public void setDuplicateRegistrationPolicy(A2aDuplicateRegistrationPolicy duplicateRegistrationPolicy) {
+            this.duplicateRegistrationPolicy = duplicateRegistrationPolicy == null
+                    ? A2aDuplicateRegistrationPolicy.REJECT
+                    : duplicateRegistrationPolicy;
         }
 
         public boolean isSetAsLatest() {
@@ -392,6 +457,7 @@ public class AgentScopeProperties {
         private String skillNamespace = "";
         private String skillVersion = "";
         private String skillLabel = "";
+        private boolean strictStartup;
 
         public boolean isEnabled() {
             return enabled;
@@ -447,6 +513,14 @@ public class AgentScopeProperties {
 
         public void setSkillLabel(String skillLabel) {
             this.skillLabel = skillLabel;
+        }
+
+        public boolean isStrictStartup() {
+            return strictStartup;
+        }
+
+        public void setStrictStartup(boolean strictStartup) {
+            this.strictStartup = strictStartup;
         }
     }
 

@@ -152,6 +152,9 @@ public class AgentScopeToolFactory {
         List<ToolDescriptor> allTools = toolRegistry.listTools();
         List<String> requestedToolIds = request.allowedToolIds();
         if (requestedToolIds.isEmpty()) {
+            if (request.explicitToolAllowlist()) {
+                return List.of();
+            }
             return List.copyOf(allTools);
         }
         Set<String> allowed = requestedToolIds.stream().collect(Collectors.toSet());

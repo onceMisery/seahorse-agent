@@ -3,6 +3,7 @@ import { create } from "zustand";
 export type WorkbenchTab =
   | "artifacts"
   | "timeline"
+  | "context"
   | "sources"
   | "approvals"
   | "tools"

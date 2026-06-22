@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
 
+import java.util.Map;
+
 /**
  * 启动 AgentRun 的入站命令。
  *
@@ -29,6 +31,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTrigger
  * @param triggerType    触发来源
  * @param inputSummary   输入摘要
  * @param traceId        外部链路追踪 ID
+ * @param metadataJson   运行时快照 JSON
  */
 public record AgentRunStartCommand(String agentId,
                                    String versionId,
@@ -37,7 +40,27 @@ public record AgentRunStartCommand(String agentId,
                                    String conversationId,
                                    AgentRunTriggerType triggerType,
                                    String inputSummary,
-                                   String traceId) {
+                                   String traceId,
+                                   String metadataJson,
+                                   Long runProfileId,
+                                   String executorEngine,
+                                   Map<String, Object> executorConfig) {
+
+    public AgentRunStartCommand {
+        executorConfig = executorConfig == null ? Map.of() : Map.copyOf(executorConfig);
+    }
+
+    public AgentRunStartCommand(String agentId,
+                                String versionId,
+                                String rolloutId,
+                                String tenantId,
+                                String conversationId,
+                                AgentRunTriggerType triggerType,
+                                String inputSummary,
+                                String traceId) {
+        this(agentId, versionId, rolloutId, tenantId, conversationId, triggerType, inputSummary, traceId, null, null,
+                null, Map.of());
+    }
 
     public AgentRunStartCommand(String agentId,
                                 String versionId,
@@ -46,6 +69,20 @@ public record AgentRunStartCommand(String agentId,
                                 AgentRunTriggerType triggerType,
                                 String inputSummary,
                                 String traceId) {
-        this(agentId, versionId, null, tenantId, conversationId, triggerType, inputSummary, traceId);
+        this(agentId, versionId, null, tenantId, conversationId, triggerType, inputSummary, traceId, null, null, null,
+                Map.of());
+    }
+
+    public AgentRunStartCommand(String agentId,
+                                String versionId,
+                                String rolloutId,
+                                String tenantId,
+                                String conversationId,
+                                AgentRunTriggerType triggerType,
+                                String inputSummary,
+                                String traceId,
+                                String metadataJson) {
+        this(agentId, versionId, rolloutId, tenantId, conversationId, triggerType, inputSummary, traceId, metadataJson,
+                null, null, Map.of());
     }
 }

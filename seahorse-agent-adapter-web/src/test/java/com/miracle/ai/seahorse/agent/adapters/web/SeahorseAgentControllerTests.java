@@ -275,7 +275,10 @@ class SeahorseAgentControllerTests {
                                 "conversationId", "conversation-1",
                                 "triggerType", "CHAT",
                                 "inputSummary", "summary",
-                                "traceId", "trace-1"))))
+                                "traceId", "trace-1",
+                                "runProfileId", 77,
+                                "executorEngine", "agentscope",
+                                "executorConfig", Map.of("studioTraceEnabled", true)))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.runId").value("run-1"));
 
@@ -283,6 +286,9 @@ class SeahorseAgentControllerTests {
         verify(port).startRun(startCaptor.capture());
         assertThat(startCaptor.getValue().agentId()).isEqualTo("agent-1");
         assertThat(startCaptor.getValue().triggerType()).isEqualTo(AgentRunTriggerType.CHAT);
+        assertThat(startCaptor.getValue().runProfileId()).isEqualTo(77L);
+        assertThat(startCaptor.getValue().executorEngine()).isEqualTo("agentscope");
+        assertThat(startCaptor.getValue().executorConfig()).containsEntry("studioTraceEnabled", true);
 
         mvc.perform(get("/api/agent-runs")
                         .param("agentId", "agent-1")

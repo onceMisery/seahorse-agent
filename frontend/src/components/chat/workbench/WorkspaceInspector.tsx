@@ -7,6 +7,7 @@ import {
   Brain,
   CheckSquare,
   Coins,
+  FileJson2,
   Globe,
   Library,
   LayoutGrid,
@@ -16,6 +17,7 @@ import {
 
 import { ArtifactInspectorTab } from "@/components/chat/workbench/ArtifactInspectorTab";
 import { ApprovalsInspectorTab } from "@/components/chat/workbench/ApprovalsInspectorTab";
+import { ContextSnapshotInspectorTab } from "@/components/run-context/ContextSnapshotInspectorTab";
 import { CostQuotaInspectorTab } from "@/components/chat/workbench/CostQuotaInspectorTab";
 import { InspectorEmptyState } from "@/components/chat/workbench/InspectorEmptyState";
 import { InspectorTabButton } from "@/components/chat/workbench/InspectorTabButton";
@@ -45,6 +47,7 @@ export function WorkspaceInspector({ message, open, onClose }: WorkspaceInspecto
   const skillCount = message?.skills?.length ?? 0;
   const memoryCount = message?.memories?.length ?? 0;
   const hasCost = Boolean(message?.costSummary);
+  const hasContext = Boolean(message?.agentRunId);
 
   return (
     open ? (
@@ -109,6 +112,9 @@ export function WorkspaceInspector({ message, open, onClose }: WorkspaceInspecto
               <InspectorTabButton value="timeline" label="时间线" count={timelineCount}>
                 <Activity className="h-3.5 w-3.5" />
               </InspectorTabButton>
+              <InspectorTabButton value="context" label="上下文" count={hasContext ? 1 : 0}>
+                <FileJson2 className="h-3.5 w-3.5" />
+              </InspectorTabButton>
               <InspectorTabButton value="artifacts" label="产物" count={artifactCount}>
                 <Boxes className="h-3.5 w-3.5" />
               </InspectorTabButton>
@@ -153,6 +159,9 @@ export function WorkspaceInspector({ message, open, onClose }: WorkspaceInspecto
                         timeline={message.timeline ?? []}
                         currentStepId={message.currentStepId}
                       />
+                    )}
+                    {activeTab === "context" && (
+                      <ContextSnapshotInspectorTab agentRunId={message.agentRunId} />
                     )}
                     {activeTab === "artifacts" && (
                       <ArtifactInspectorTab

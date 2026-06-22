@@ -65,11 +65,11 @@ describe("ArtifactInspectorTab", () => {
     const downloadButton = screen.getAllByRole("button")[2];
     expect(downloadButton).toBeEnabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit content" }));
+    fireEvent.click(screen.getByRole("button", { name: "编辑内容" }));
     fireEvent.change(screen.getByLabelText("artifact editor"), {
       target: { value: "changed" }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save content" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存内容" }));
 
     await waitFor(() => {
       expect(updateAgentArtifact).toHaveBeenCalledWith("artifact-1", "changed");

@@ -1,4 +1,5 @@
 import { api } from "@/services/api";
+import { optionalGet } from "@/services/optionalEndpoint";
 
 export interface TenantInfo {
   tenantId: string;
@@ -73,5 +74,8 @@ export function forceLogout(userId: number) {
 
 // Audit logs
 export function queryAuditLogs(params: { tenantId?: string; action?: string; startTime?: string; endTime?: string; page?: number; size?: number }) {
-  return api.get<AuditLogEntry[], AuditLogEntry[]>("/api/admin/audit-logs", { params });
+  return optionalGet(
+    api.get<AuditLogEntry[], AuditLogEntry[]>("/api/admin/audit-logs", { params, suppressErrorToast: true }),
+    []
+  );
 }

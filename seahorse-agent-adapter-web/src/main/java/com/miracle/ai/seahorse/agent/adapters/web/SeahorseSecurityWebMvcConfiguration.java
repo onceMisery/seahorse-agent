@@ -43,12 +43,14 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
             "/",
             "/index.html",
             "/login",
+            "/a2a",
             "/error",
             "/features",
             "/api/features",
             "/prototype/ai-infra");
     private static final Set<String> PUBLIC_PATH_PREFIXES = Set.of(
             "/auth/",
+            "/a2a/",
             "/assets/",
             "/readiness/",
             "/prototype/");
@@ -102,6 +104,8 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
                         "/",
                         "/index.html",
                         "/login",
+                        "/a2a",
+                        "/a2a/**",
                         "/features",
                         "/api/features",
                         "/readiness/**",
@@ -118,6 +122,8 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
                         "/",
                         "/index.html",
                         "/login",
+                        "/a2a",
+                        "/a2a/**",
                         "/features",
                         "/api/features",
                         "/readiness/**",

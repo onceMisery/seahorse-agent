@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 
 import { api } from "@/services/api";
 
@@ -50,5 +51,21 @@ describe("api request path normalization", () => {
     await api.get("/api/audit-events");
 
     expect(seen).toEqual(["/api/audit-events"]);
+  });
+
+  it("suppresses global error toast when request config opts out", async () => {
+    const toastSpy = vi.spyOn(toast, "error").mockImplementation(() => "toast-id");
+    api.defaults.adapter = async (config) =>
+      Promise.reject({
+        config,
+        response: { status: 404, data: {} },
+        message: "Request failed with status code 404"
+      });
+
+    await expect(api.get("/missing", { suppressErrorToast: true })).rejects.toMatchObject({
+      response: { status: 404 }
+    });
+
+    expect(toastSpy).not.toHaveBeenCalled();
   });
 });

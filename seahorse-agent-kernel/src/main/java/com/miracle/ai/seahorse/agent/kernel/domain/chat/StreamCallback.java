@@ -33,6 +33,9 @@ public interface StreamCallback {
     default void onEvent(String eventName, Object payload) {
     }
 
+    default void onUsage(ChatTokenUsage usage) {
+    }
+
     void onComplete();
 
     void onError(Throwable error);

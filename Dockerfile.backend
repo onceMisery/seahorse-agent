@@ -20,6 +20,7 @@ COPY seahorse-agent-spring-boot-starter/pom.xml seahorse-agent-spring-boot-start
 COPY seahorse-agent-spring-boot-starter-all/pom.xml seahorse-agent-spring-boot-starter-all/
 COPY seahorse-agent-kernel/pom.xml seahorse-agent-kernel/
 COPY seahorse-agent-adapter-web/pom.xml seahorse-agent-adapter-web/
+COPY seahorse-agent-adapter-agent-agentscope/pom.xml seahorse-agent-adapter-agent-agentscope/
 COPY seahorse-agent-adapter-ai-openai-compatible/pom.xml seahorse-agent-adapter-ai-openai-compatible/
 COPY seahorse-agent-adapter-cache-local/pom.xml seahorse-agent-adapter-cache-local/
 COPY seahorse-agent-adapter-mq-direct/pom.xml seahorse-agent-adapter-mq-direct/
@@ -48,14 +49,32 @@ RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && ./mvnw dependency:go-offline -B -p
 COPY . .
 
 # Fix line endings for full source copy and build
-RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && ./mvnw package -B -pl seahorse-agent-bootstrap -am -DskipTests -Dspotless.check.skip=true
+RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && ./mvnw package -B -pl seahorse-agent-bootstrap -am -DskipTests -Dmaven.test.skip=true -Dspotless.check.skip=true
 
-# Stage 2: Run
+# Stage 2: Node runtime for stdio MCP servers
+FROM node:20-alpine AS node-runtime
+
+# Stage 3: Run
 FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=node-runtime /lib/ld-musl-x86_64.so.1 /lib/ld-musl-x86_64.so.1
+COPY --from=node-runtime /usr/lib/libstdc++.so.6 /usr/lib/libstdc++.so.6
+COPY --from=node-runtime /usr/lib/libgcc_s.so.1 /usr/lib/libgcc_s.so.1
+
 COPY --from=builder /app/seahorse-agent-bootstrap/target/seahorse-agent-bootstrap-0.0.1-SNAPSHOT-exec.jar app.jar
+COPY resources/docker/mcp-stdio-echo.js /app/mcp-stdio-echo.js
+
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && chmod +x /app/mcp-stdio-echo.js \
+    && curl --version >/dev/null \
+    && node --version \
+    && npm --version \
+    && npx --version
 
 EXPOSE 9090
 

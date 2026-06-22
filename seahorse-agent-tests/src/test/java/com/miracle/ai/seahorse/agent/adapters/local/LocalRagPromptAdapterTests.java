@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.local;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.PromptContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ResolvedRoleCard;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItemSourceType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
@@ -112,6 +113,41 @@ class LocalRagPromptAdapterTests {
         assertThat(messages.get(1).getContent())
                 .contains("<runtime-context>", "知识库上下文", "工具上下文", "context pack policy evidence");
         assertThat(messages.get(2).getContent()).isEqualTo("历史回答");
+    }
+
+    @Test
+    void shouldInjectRoleCardAsUserMessageByDefault() {
+        LocalRagPromptAdapter adapter = new LocalRagPromptAdapter();
+        PromptContext context = PromptContext.builder()
+                .roleCard(new ResolvedRoleCard("card-1", "Study Coach", "Ask one clarifying question first.", false))
+                .build();
+
+        List<ChatMessage> messages = adapter.buildStructuredMessages(
+                context, List.of(), "How should I revise?", List.of());
+
+        assertThat(messages).hasSize(4);
+        assertThat(messages.get(0).getRole()).isEqualTo(ChatRole.SYSTEM);
+        assertThat(messages.get(1).getRole()).isEqualTo(ChatRole.USER);
+        assertThat(messages.get(1).getContent())
+                .contains("# [ROLE DEFINITION]", "Study Coach", "Ask one clarifying question first.");
+        assertThat(messages.get(2).getContent()).contains("<runtime-context>");
+    }
+
+    @Test
+    void shouldInjectHigherPermissionRoleCardAsSystemMessage() {
+        LocalRagPromptAdapter adapter = new LocalRagPromptAdapter();
+        PromptContext context = PromptContext.builder()
+                .roleCard(new ResolvedRoleCard("card-1", "Operator", "Use terse operational language.", true))
+                .build();
+
+        List<ChatMessage> messages = adapter.buildStructuredMessages(
+                context, List.of(), "Summarize status.", List.of());
+
+        assertThat(messages).hasSize(4);
+        assertThat(messages.get(0).getRole()).isEqualTo(ChatRole.SYSTEM);
+        assertThat(messages.get(1).getRole()).isEqualTo(ChatRole.SYSTEM);
+        assertThat(messages.get(1).getContent())
+                .contains("# [ROLE DEFINITION]", "Operator", "Use terse operational language.");
     }
 
     private static ContextPack contextPack(String content) {

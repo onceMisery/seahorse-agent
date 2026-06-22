@@ -18,11 +18,15 @@
 package com.miracle.ai.seahorse.agent.adapters.mcp.http;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialAuthType;
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -76,6 +80,24 @@ public class McpHttpAdapterProperties {
         private String url = "";
 
         private boolean enabled = true;
+
+        @Getter
+        @Setter
+        private Transport transport = Transport.STREAMABLE_HTTP;
+
+        @Getter
+        @Setter
+        private String command = "";
+
+        @Getter
+        private List<String> args = new ArrayList<>();
+
+        @Getter
+        private Map<String, String> env = new LinkedHashMap<>();
+
+        @Getter
+        @Setter
+        private String workingDir = "";
 
         private CredentialAuthType authType = CredentialAuthType.NONE;
 
@@ -190,5 +212,18 @@ public class McpHttpAdapterProperties {
         public void setResource(String resource) {
             this.resource = Objects.requireNonNullElse(resource, "");
         }
+
+        public void setArgs(List<String> args) {
+            this.args = new ArrayList<>(Objects.requireNonNullElse(args, List.of()));
+        }
+
+        public void setEnv(Map<String, String> env) {
+            this.env = new LinkedHashMap<>(Objects.requireNonNullElse(env, Map.of()));
+        }
+    }
+
+    public enum Transport {
+        STREAMABLE_HTTP,
+        STDIO
     }
 }

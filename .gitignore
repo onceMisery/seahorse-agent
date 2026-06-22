@@ -47,3 +47,6 @@ dist/
 .vite/
 .env
 .env.local
+
+# Qoder IDE workspace
+.qoder/

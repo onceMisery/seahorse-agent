@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.local;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.PromptContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ResolvedRoleCard;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
@@ -65,10 +66,28 @@ public class LocalRagPromptAdapter implements RagPromptPort {
                                                      List<String> subQuestions) {
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.system(DEFAULT_SYSTEM_PROMPT.trim()));
+        appendRoleCard(messages, context == null ? null : context.getRoleCard());
         buildRuntimeContext(context).ifPresent(runtimeContext -> messages.add(ChatMessage.user(runtimeContext)));
         messages.addAll(safeHistory(history));
         messages.add(ChatMessage.user(buildUserPrompt(question, subQuestions)));
         return messages;
+    }
+
+    private void appendRoleCard(List<ChatMessage> messages, ResolvedRoleCard roleCard) {
+        if (roleCard == null || isBlank(roleCard.name()) && isBlank(roleCard.definition())) {
+            return;
+        }
+        String content = """
+                # [ROLE DEFINITION]
+                - Your name is %s.
+                - Your Characteristics:
+                %s
+                """.formatted(
+                Objects.requireNonNullElse(roleCard.name(), "").trim(),
+                Objects.requireNonNullElse(roleCard.definition(), "").trim()).trim();
+        messages.add(roleCard.higherPerm()
+                ? ChatMessage.system(content)
+                : ChatMessage.user(content));
     }
 
     private Optional<String> buildRuntimeContext(PromptContext context) {
@@ -116,5 +135,9 @@ public class LocalRagPromptAdapter implements RagPromptPort {
         return Objects.requireNonNullElse(history, List.<ChatMessage>of()).stream()
                 .filter(Objects::nonNull)
                 .toList();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

@@ -27,6 +27,10 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMessageFeedbac
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcOutboxEventRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQueryTermMappingRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRagTraceRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRoleCardRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRunContextSnapshotRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRunExperimentRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRunProfileRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSampleQuestionRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationAttachmentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRepositoryPort;
@@ -36,6 +40,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentTreeRepositoryP
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.rolecard.RoleCardRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
 import org.springframework.beans.factory.ObjectProvider;
@@ -76,6 +84,43 @@ public class SeahorseAgentOpsRepositoryAutoConfiguration {
     public JdbcConversationAttachmentRepositoryAdapter seahorseJdbcConversationAttachmentRepositoryAdapter(
             DataSource dataSource) {
         return new JdbcConversationAttachmentRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type",
+            havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(RoleCardRepositoryPort.class)
+    public JdbcRoleCardRepositoryAdapter seahorseJdbcRoleCardRepositoryAdapter(DataSource dataSource) {
+        return new JdbcRoleCardRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type",
+            havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(RunContextSnapshotRepositoryPort.class)
+    public JdbcRunContextSnapshotRepositoryAdapter seahorseJdbcRunContextSnapshotRepositoryAdapter(
+            DataSource dataSource) {
+        return new JdbcRunContextSnapshotRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type",
+            havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(RunProfileRepositoryPort.class)
+    public JdbcRunProfileRepositoryAdapter seahorseJdbcRunProfileRepositoryAdapter(DataSource dataSource) {
+        return new JdbcRunProfileRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type",
+            havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(RunExperimentRepositoryPort.class)
+    public JdbcRunExperimentRepositoryAdapter seahorseJdbcRunExperimentRepositoryAdapter(DataSource dataSource) {
+        return new JdbcRunExperimentRepositoryAdapter(dataSource);
     }
 
     @Bean

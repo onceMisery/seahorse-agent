@@ -69,11 +69,20 @@ final class KernelChatPreparationSupport {
     }
 
     void loadMemory(StreamChatContext context) {
-        List<ChatMessage> history = preparationPorts.memoryPort().loadAndAppend(
-                context.getConversationId(),
-                context.getUserId(),
-                ChatMessage.user(context.getQuestion())
-        );
+        List<ChatMessage> history;
+        if (context.getAssistantParentMessageId() != null) {
+            history = preparationPorts.memoryPort().loadBranchPath(
+                    context.getConversationId(),
+                    context.getUserId(),
+                    context.getAssistantParentMessageId());
+        } else {
+            history = preparationPorts.memoryPort().loadAndAppend(
+                    context.getConversationId(),
+                    context.getUserId(),
+                    ChatMessage.user(context.getQuestion()),
+                    context.getBranchLeafMessageId()
+            );
+        }
         context.setHistory(history);
     }
 

@@ -54,7 +54,11 @@ public class AgentScopePromptConfigCenter implements AgentScopePromptProvider {
         try {
             return getPrompt(promptKey, promptArgs(request), fallback);
         } catch (NacosException ex) {
-            throw new IllegalStateException("Failed to load AgentScope system prompt from Nacos", ex);
+            if (properties.getConfigCenter().isStrictStartup()) {
+                throw new IllegalStateException(
+                        "Failed to load AgentScope system prompt from Nacos in strict startup mode", ex);
+            }
+            return fallback;
         }
     }
 

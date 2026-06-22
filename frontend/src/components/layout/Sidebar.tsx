@@ -161,6 +161,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   return (
     <>
       <div
+        aria-hidden="true"
         className={cn(
           "fixed inset-0 z-30 backdrop-blur-sm transition-opacity",
           isOpen ? "opacity-100" : "pointer-events-none opacity-0"
@@ -169,6 +170,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         onClick={onClose}
       />
       <aside
+        aria-hidden={!isOpen}
+        inert={!isOpen ? "" : undefined}
         className={cn(
           "fixed left-0 top-0 z-40 flex h-screen w-[280px] flex-shrink-0 flex-col glass p-3 transition-transform",
           isOpen ? "translate-x-0" : "-translate-x-full"

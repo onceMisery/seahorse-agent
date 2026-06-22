@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.local;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventEnvelope;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
@@ -77,6 +78,26 @@ class LocalChatStreamCallbackFactoryTests {
         assertThat(eventBuffer.events)
                 .extracting(StreamEventEnvelope::eventType)
                 .containsExactly(com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType.RUN_STARTED);
+    }
+
+    @Test
+    void shouldAppendAssistantMessageUnderRequestedParentOnComplete() {
+        RecordingMemoryPort memoryPort = new RecordingMemoryPort();
+        LocalChatStreamCallbackFactory factory = new LocalChatStreamCallbackFactory(
+                new LocalStreamTaskPort(),
+                memoryPort,
+                AgentRunEventBufferPort.noop());
+        StreamCallback callback = factory.create(new SseEmitter(), "conversation-1", "task-1", "user-1", 123L);
+
+        callback.onRunStarted("run-1");
+        callback.onContent("answer");
+        callback.onComplete();
+
+        assertThat(memoryPort.conversationId).isEqualTo("conversation-1");
+        assertThat(memoryPort.userId).isEqualTo("user-1");
+        assertThat(memoryPort.message.getContent()).isEqualTo("answer");
+        assertThat(memoryPort.agentRunId).isEqualTo("run-1");
+        assertThat(memoryPort.parentMessageId).isEqualTo(123L);
     }
 
     @Test
@@ -204,6 +225,34 @@ class LocalChatStreamCallbackFactoryTests {
                 return Optional.of(nextSeq);
             }
             return latest;
+        }
+    }
+
+    private static final class RecordingMemoryPort implements ConversationMemoryPort {
+
+        private String conversationId;
+        private String userId;
+        private ChatMessage message;
+        private String agentRunId;
+        private Long parentMessageId;
+
+        @Override
+        public List<ChatMessage> loadAndAppend(String conversationId, String userId, ChatMessage message) {
+            return List.of();
+        }
+
+        @Override
+        public void append(
+                String conversationId,
+                String userId,
+                ChatMessage message,
+                String agentRunId,
+                Long parentMessageId) {
+            this.conversationId = conversationId;
+            this.userId = userId;
+            this.message = message;
+            this.agentRunId = agentRunId;
+            this.parentMessageId = parentMessageId;
         }
     }
 

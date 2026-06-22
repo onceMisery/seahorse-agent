@@ -80,6 +80,92 @@ class JdbcChatSchemaUpgradeTests {
     }
 
     @Test
+    void shouldBackfillRoleCardGovernanceColumnsForExistingTable() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:chat-schema-upgrade-role-card;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.execute("""
+                CREATE TABLE sa_role_card (
+                    id BIGINT PRIMARY KEY,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    user_id VARCHAR(64) NOT NULL,
+                    name VARCHAR(128) NOT NULL,
+                    definition TEXT NOT NULL,
+                    avatar_ref VARCHAR(512),
+                    higher_perm SMALLINT NOT NULL DEFAULT 0,
+                    enabled SMALLINT NOT NULL DEFAULT 0,
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted SMALLINT NOT NULL DEFAULT 0
+                )
+                """);
+
+        new JdbcChatSchemaUpgrade(dataSource).upgrade();
+
+        assertThat(columnExists(jdbcTemplate, "sa_role_card", "share_scope")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_role_card", "approval_status")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_role_card", "published")).isTrue();
+        jdbcTemplate.update("""
+                INSERT INTO sa_role_card (id, user_id, name, definition)
+                VALUES (1, 'default', 'Default', 'Default role card')
+                """);
+        assertThat(jdbcTemplate.queryForMap("""
+                SELECT share_scope, approval_status, published
+                FROM sa_role_card
+                WHERE id = 1
+                """))
+                .containsEntry("SHARE_SCOPE", "PRIVATE")
+                .containsEntry("APPROVAL_STATUS", "PENDING")
+                .containsEntry("PUBLISHED", 0);
+    }
+
+    @Test
+    void shouldBackfillRunProfileGovernanceColumnsForExistingTable() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:chat-schema-upgrade-run-profile;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.execute("""
+                CREATE TABLE sa_run_profile (
+                    id BIGINT PRIMARY KEY,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    user_id VARCHAR(64) NOT NULL,
+                    name VARCHAR(128) NOT NULL,
+                    description TEXT,
+                    role_card_id BIGINT,
+                    executor_engine VARCHAR(64) NOT NULL DEFAULT 'kernel',
+                    executor_config_json TEXT,
+                    model_config_json TEXT,
+                    memory_scope_json TEXT,
+                    guardrail_config_json TEXT,
+                    enabled SMALLINT NOT NULL DEFAULT 0,
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted SMALLINT NOT NULL DEFAULT 0
+                )
+                """);
+
+        new JdbcChatSchemaUpgrade(dataSource).upgrade();
+
+        assertThat(columnExists(jdbcTemplate, "sa_run_profile", "approval_status")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_run_profile", "approval_operator")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_run_profile", "approval_comment")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_run_profile", "approval_time")).isTrue();
+        jdbcTemplate.update("""
+                INSERT INTO sa_run_profile (id, user_id, name)
+                VALUES (1, 'default', 'Default profile')
+                """);
+        assertThat(jdbcTemplate.queryForMap("""
+                SELECT approval_status, approval_operator, approval_comment, approval_time
+                FROM sa_run_profile
+                WHERE id = 1
+                """))
+                .containsEntry("APPROVAL_STATUS", "DRAFT")
+                .containsEntry("APPROVAL_OPERATOR", null)
+                .containsEntry("APPROVAL_COMMENT", null)
+                .containsEntry("APPROVAL_TIME", null);
+    }
+
+    @Test
     void shouldBackfillMaintenanceCompactionColumnsForExistingTable() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:chat-schema-upgrade-maintenance-run;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");

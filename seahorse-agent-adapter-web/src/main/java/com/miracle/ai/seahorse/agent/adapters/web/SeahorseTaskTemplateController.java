@@ -36,12 +36,12 @@ public class SeahorseTaskTemplateController {
         this.taskTemplateQueryPortProvider = taskTemplateQueryPortProvider;
     }
 
-    @GetMapping("/api/task-templates")
+    @GetMapping({"/task-templates", "/api/task-templates"})
     public ApiResponse<List<TaskTemplate>> listEnabled() {
         return ApiResponses.requireService(taskTemplateQueryPortProvider, TaskTemplateQueryInboundPort::listEnabled);
     }
 
-    @GetMapping("/api/task-templates/{templateId}")
+    @GetMapping({"/task-templates/{templateId}", "/api/task-templates/{templateId}"})
     public ApiResponse<TaskTemplate> getById(@PathVariable String templateId) {
         TaskTemplateId stableTemplateId = TaskTemplateId.fromValue(templateId);
         return ApiResponses.requireService(taskTemplateQueryPortProvider,

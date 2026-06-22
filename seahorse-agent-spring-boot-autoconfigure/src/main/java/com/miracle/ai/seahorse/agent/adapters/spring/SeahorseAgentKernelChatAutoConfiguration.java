@@ -25,6 +25,8 @@ import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentKernelPropertie
 import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorRouter;
+import com.miracle.ai.seahorse.agent.kernel.application.chat.AgentRunMetadataContributor;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatPreparationPorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatResponsePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ConversationAttachmentContextAssembler;
@@ -39,10 +41,13 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.TaskTemplateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.rolecard.RoleCardInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.task.TaskInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentSkillRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentResolutionPort;
@@ -61,8 +66,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.beans.factory.ObjectProvider;
@@ -73,6 +80,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 /**
  * 聊天链路自动配置。
@@ -86,6 +94,8 @@ import org.springframework.context.annotation.Configuration;
         SeahorseAgentKernelAgentAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelChatAutoConfiguration {
+
+    private static final String PROP_AGENT_EXECUTOR_ENGINE = "seahorse.agent.executor.engine";
 
     @Bean
     @ConditionalOnMissingBean
@@ -220,9 +230,15 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                                    ObjectProvider<KernelAgentLoopOptions> agentLoopOptions,
                                                    ObjectProvider<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
                                                    ObjectProvider<com.miracle.ai.seahorse.agent.kernel.application.chat.SkillSemanticMatcher> skillSemanticMatcher,
+                                                   ObjectProvider<RoleCardInboundPort> roleCardPort,
+                                                   ObjectProvider<CostUsageRepositoryPort> costUsageRepository,
+                                                   ObjectProvider<RunContextSnapshotRepositoryPort> runContextSnapshotRepository,
+                                                   ObjectProvider<RunProfileInboundPort> runProfilePort,
+                                                   ObjectProvider<AgentRunMetadataContributor> agentRunMetadataContributors,
+                                                   Environment environment,
                                                    AgentKernelProperties kernelProperties) {
         return new KernelChatInboundService(chatPipeline, streamTaskPort,
-                Optional.ofNullable(agentLoop.getIfAvailable()),
+                resolveReActExecutor(agentLoop, environment),
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
                 memoryPort.getIfAvailable(ConversationMemoryPort::noop),
                 memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
@@ -234,6 +250,24 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                 agentLoopOptions.getIfAvailable(KernelAgentLoopOptions::defaults),
                 Optional.ofNullable(taskTemplateQueryPort.getIfAvailable()),
                 kernelProperties.isEnableSmartSkillMatching(),
-                skillSemanticMatcher.getIfAvailable());
+                skillSemanticMatcher.getIfAvailable(),
+                Optional.ofNullable(roleCardPort.getIfAvailable()),
+                Optional.ofNullable(costUsageRepository.getIfAvailable()),
+                Optional.ofNullable(runContextSnapshotRepository.getIfAvailable()),
+                Optional.ofNullable(runProfilePort.getIfAvailable()),
+                agentRunMetadataContributors.orderedStream().toList());
+    }
+
+    private Optional<ReActExecutorPort> resolveReActExecutor(
+            ObjectProvider<ReActExecutorPort> executors,
+            Environment environment) {
+        List<ReActExecutorPort> candidates = executors.orderedStream()
+                .filter(executor -> !(executor instanceof ReActExecutorRouter))
+                .toList();
+        if (candidates.isEmpty()) {
+            return Optional.empty();
+        }
+        String defaultEngine = environment == null ? "kernel" : environment.getProperty(PROP_AGENT_EXECUTOR_ENGINE, "kernel");
+        return Optional.of(new ReActExecutorRouter(candidates, defaultEngine));
     }
 }

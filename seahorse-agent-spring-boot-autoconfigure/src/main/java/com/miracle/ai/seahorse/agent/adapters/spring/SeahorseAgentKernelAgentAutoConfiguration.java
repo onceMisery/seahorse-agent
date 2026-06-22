@@ -29,7 +29,6 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOpt
 import com.miracle.ai.seahorse.agent.kernel.application.agent.LocalToolGatewayPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.MarkdownNormalizer;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ToolCallParser;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.output.DdlSafetyOutputValidator;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.output.JsonSchemaOutputValidator;
@@ -176,8 +175,6 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             "seahorse-agent.advanced.agent-handoff-enabled";
     private static final String PROP_ADVANCED_LOCAL_AGENT =
             "seahorse-agent.advanced.local-agent-enabled";
-    private static final String PROP_AGENT_EXECUTOR_ENGINE = "seahorse.agent.executor.engine";
-
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnMissingBean(ToolRegistryPort.class)
@@ -253,8 +250,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(AgentLoopDependencies.class)
-    @ConditionalOnProperty(name = PROP_AGENT_EXECUTOR_ENGINE, havingValue = "kernel", matchIfMissing = true)
-    @ConditionalOnMissingBean(ReActExecutorPort.class)
+    @ConditionalOnMissingBean(KernelAgentLoop.class)
     public KernelAgentLoop seahorseKernelAgentLoop(AgentLoopDependencies dependencies) {
         return new KernelAgentLoop(dependencies);
     }

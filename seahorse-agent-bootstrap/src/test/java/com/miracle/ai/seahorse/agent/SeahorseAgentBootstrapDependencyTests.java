@@ -18,7 +18,9 @@
 package com.miracle.ai.seahorse.agent;
 
 import com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelAdapter;
+import com.miracle.ai.seahorse.agent.adapters.agent.agentscope.AgentScopeReActAutoConfiguration;
 import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisCacheAdapter;
+import com.miracle.ai.seahorse.agent.adapters.mcp.http.McpHttpAutoConfiguration;
 import com.miracle.ai.seahorse.agent.adapters.observation.micrometer.MicrometerObservationAdapter;
 import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordSearchAdapter;
 import org.junit.jupiter.api.Test;
@@ -37,5 +39,15 @@ class SeahorseAgentBootstrapDependencyTests {
         assertThat(RedisCacheAdapter.class).isNotNull();
         assertThat(ElasticsearchKeywordSearchAdapter.class).isNotNull();
         assertThat(MicrometerObservationAdapter.class).isNotNull();
+    }
+
+    @Test
+    void shouldPackageAgentScopeAdapterForConfiguredRuntime() {
+        assertThat(AgentScopeReActAutoConfiguration.class).isNotNull();
+    }
+
+    @Test
+    void shouldPackageMcpAdapterForConfiguredRuntime() {
+        assertThat(McpHttpAutoConfiguration.class).isNotNull();
     }
 }

@@ -1,4 +1,5 @@
 import { api } from "@/services/api";
+import { emptyPage, optionalGet } from "@/services/optionalEndpoint";
 
 export type ApiRecord = Record<string, unknown>;
 
@@ -92,6 +93,12 @@ export type EvalRegressionRequest = {
 };
 
 const DEFAULT_PAGE_SIZE = 10;
+const EMPTY_SRE_HEALTH: SreHealthReport = {
+  reportId: "unavailable",
+  status: "WARN",
+  items: [],
+  checkedAt: ""
+};
 
 function withPageDefaults<T extends { current?: number; size?: number }>(params: T) {
   return {
@@ -102,18 +109,28 @@ function withPageDefaults<T extends { current?: number; size?: number }>(params:
 }
 
 export async function getAiInfraAgents(params: AgentPageParams): Promise<PageResult<ApiRecord>> {
-  return api.get<PageResult<ApiRecord>, PageResult<ApiRecord>>("/api/agents", {
-    params: withPageDefaults(params)
-  });
+  const pageParams = withPageDefaults(params);
+  return optionalGet(
+    api.get<PageResult<ApiRecord>, PageResult<ApiRecord>>("/api/agents", {
+      params: pageParams,
+      suppressErrorToast: true
+    }),
+    emptyPage<ApiRecord>(pageParams.current, pageParams.size)
+  );
 }
 
 export async function getAiInfraApprovals(params: ApprovalPageParams): Promise<PageResult<ApiRecord>> {
-  return api.get<PageResult<ApiRecord>, PageResult<ApiRecord>>("/api/approvals", {
-    params: withPageDefaults({
-      ...params,
-      status: params.status || undefined
-    })
+  const pageParams = withPageDefaults({
+    ...params,
+    status: params.status || undefined
   });
+  return optionalGet(
+    api.get<PageResult<ApiRecord>, PageResult<ApiRecord>>("/api/approvals", {
+      params: pageParams,
+      suppressErrorToast: true
+    }),
+    emptyPage<ApiRecord>(pageParams.current, pageParams.size)
+  );
 }
 
 export async function approveAiInfraApproval(approvalId: string, decisionComment: string) {
@@ -129,25 +146,46 @@ export async function rejectAiInfraApproval(approvalId: string, decisionComment:
 }
 
 export async function getAiInfraTools(params: ToolPageParams): Promise<PageResult<ApiRecord>> {
-  return api.get<PageResult<ApiRecord>, PageResult<ApiRecord>>("/api/tools", {
-    params: withPageDefaults(params)
-  });
+  const pageParams = withPageDefaults(params);
+  return optionalGet(
+    api.get<PageResult<ApiRecord>, PageResult<ApiRecord>>("/api/tools", {
+      params: pageParams,
+      suppressErrorToast: true
+    }),
+    emptyPage<ApiRecord>(pageParams.current, pageParams.size)
+  );
 }
 
 export async function getAiInfraSreHealth(): Promise<SreHealthReport> {
-  return api.get<SreHealthReport, SreHealthReport>("/api/sre/health");
+  return optionalGet(
+    api.get<SreHealthReport, SreHealthReport>("/api/sre/health", { suppressErrorToast: true }),
+    EMPTY_SRE_HEALTH
+  );
 }
 
 export async function getAiInfraCostUsageAggregate(params: CostUsageAggregateParams): Promise<ApiRecord> {
-  return api.get<ApiRecord, ApiRecord>("/api/cost-usage:aggregate", { params });
+  return optionalGet(
+    api.get<ApiRecord, ApiRecord>("/api/cost-usage:aggregate", { params, suppressErrorToast: true }),
+    {
+      tenantId: params.tenantId,
+      totalTokens: 0,
+      totalCalls: 0,
+      totalCost: 0
+    }
+  );
 }
 
 export async function getFeedbackEvaluationCandidates(
   params: FeedbackEvaluationCandidateParams
 ): Promise<PageResult<ApiRecord>> {
-  return api.get<PageResult<ApiRecord>, PageResult<ApiRecord>>("/api/feedback/evaluation-candidates", {
-    params: withPageDefaults(params)
-  });
+  const pageParams = withPageDefaults(params);
+  return optionalGet(
+    api.get<PageResult<ApiRecord>, PageResult<ApiRecord>>("/api/feedback/evaluation-candidates", {
+      params: pageParams,
+      suppressErrorToast: true
+    }),
+    emptyPage<ApiRecord>(pageParams.current, pageParams.size)
+  );
 }
 
 export async function acceptEvalCandidate(candidateId: string, note?: string): Promise<ApiRecord> {

@@ -1,8 +1,0 @@
-schema_version: 1
-module_path: backend/agent_bootstrap
-title: Seahorse Agent 应用启动引导模块
-scope:
-    - seahorse-agent-bootstrap/
-source_files: []
-depends_on: []
-related_to: []

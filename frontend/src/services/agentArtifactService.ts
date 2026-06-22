@@ -47,7 +47,22 @@ export interface AgentArtifactItem {
 
 // ── Agent Run 管理 ──
 
-export function createAgentRun(agentId: string, payload: { input?: string; context?: Record<string, unknown> }) {
+export interface AgentRunStartPayload {
+  versionId?: string;
+  rolloutId?: string;
+  tenantId?: string;
+  conversationId?: string;
+  triggerType?: string;
+  inputSummary?: string;
+  traceId?: string;
+  runProfileId?: string | number;
+  executorEngine?: "kernel" | "agentscope" | string;
+  executorConfig?: Record<string, unknown>;
+  input?: string;
+  context?: Record<string, unknown>;
+}
+
+export function createAgentRun(agentId: string, payload: AgentRunStartPayload) {
   return api.post<Record<string, unknown>, Record<string, unknown>>(
     `/agents/${encodeURIComponent(agentId)}/runs`,
     payload

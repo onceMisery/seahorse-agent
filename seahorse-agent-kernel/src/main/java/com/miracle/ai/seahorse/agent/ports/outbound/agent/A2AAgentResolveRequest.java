@@ -19,11 +19,16 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
 import java.util.Objects;
 
-public record A2AAgentResolveRequest(String tenantId, String agentName) {
+public record A2AAgentResolveRequest(String tenantId, String agentName, String version) {
+
+    public A2AAgentResolveRequest(String tenantId, String agentName) {
+        this(tenantId, agentName, "");
+    }
 
     public A2AAgentResolveRequest {
         tenantId = requiredText(tenantId, "tenantId");
         agentName = requiredText(agentName, "agentName");
+        version = optionalText(version);
     }
 
     private static String requiredText(String value, String fieldName) {
@@ -32,5 +37,9 @@ public record A2AAgentResolveRequest(String tenantId, String agentName) {
             throw new IllegalArgumentException(fieldName + " must not be blank");
         }
         return trimmed;
+    }
+
+    private static String optionalText(String value) {
+        return Objects.requireNonNullElse(value, "").trim();
     }
 }

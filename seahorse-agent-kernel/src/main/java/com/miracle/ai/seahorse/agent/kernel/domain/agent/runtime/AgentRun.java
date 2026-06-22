@@ -43,6 +43,7 @@ import java.util.Objects;
  * @param errorMessage   失败原因说明
  * @param startedAt      开始时间
  * @param finishedAt     结束时间；运行中为空
+ * @param metadataJson   运行时快照 JSON，用于回放 prompt、skill、模型和工具配置
  */
 public record AgentRun(String runId,
                        String agentId,
@@ -61,7 +62,8 @@ public record AgentRun(String runId,
                        String errorCode,
                        String errorMessage,
                        Instant startedAt,
-                       Instant finishedAt) {
+                       Instant finishedAt,
+                       String metadataJson) {
 
     public static final BigDecimal ZERO_COST = BigDecimal.ZERO;
 
@@ -99,7 +101,47 @@ public record AgentRun(String runId,
                 errorCode,
                 errorMessage,
                 startedAt,
-                finishedAt);
+                finishedAt,
+                null);
+    }
+
+    public AgentRun(String runId,
+                    String agentId,
+                    String versionId,
+                    String rolloutId,
+                    String tenantId,
+                    String userId,
+                    String conversationId,
+                    AgentRunTriggerType triggerType,
+                    String inputSummary,
+                    AgentRunStatus status,
+                    String traceId,
+                    long tokenInput,
+                    long tokenOutput,
+                    BigDecimal costTotal,
+                    String errorCode,
+                    String errorMessage,
+                    Instant startedAt,
+                    Instant finishedAt) {
+        this(runId,
+                agentId,
+                versionId,
+                rolloutId,
+                tenantId,
+                userId,
+                conversationId,
+                triggerType,
+                inputSummary,
+                status,
+                traceId,
+                tokenInput,
+                tokenOutput,
+                costTotal,
+                errorCode,
+                errorMessage,
+                startedAt,
+                finishedAt,
+                null);
     }
 
     public AgentRun {
@@ -124,6 +166,7 @@ public record AgentRun(String runId,
         errorCode = trimToNull(errorCode);
         errorMessage = trimToNull(errorMessage);
         startedAt = Objects.requireNonNull(startedAt, "startedAt 不能为空");
+        metadataJson = trimToNull(metadataJson);
     }
 
     /**
@@ -170,7 +213,8 @@ public record AgentRun(String runId,
                 nextErrorCode,
                 nextErrorMessage,
                 startedAt,
-                doneAt);
+                doneAt,
+                metadataJson);
     }
 
     private static String defaultTenant(String value) {

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuthStore } from "@/stores/authStore";
 import { SeahorseLogo } from "@/components/common/SeahorseLogo";
+import { sanitizeAuthRedirect } from "@/utils/authRedirect";
 
 const BUBBLES = [
   { size: 10, left: "7%", delay: "0s", dur: "9s" },
@@ -46,9 +47,10 @@ export function LoginPage() {
       return;
     }
     try {
-      await login(form.username.trim(), form.password.trim());
       const params = new URLSearchParams(window.location.search);
-      navigate(params.get("redirect") || "/workspace");
+      const redirectTarget = sanitizeAuthRedirect(params.get("redirect"));
+      await login(form.username.trim(), form.password.trim());
+      navigate(redirectTarget);
     } catch (err) {
       setError((err as Error).message || "登录失败，请稍后重试。");
     }

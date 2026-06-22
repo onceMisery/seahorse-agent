@@ -96,8 +96,18 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
 
     @Override
     public StreamCallback create(SseEmitter emitter, String conversationId, String taskId, String userId) {
+        return create(emitter, conversationId, taskId, userId, null);
+    }
+
+    @Override
+    public StreamCallback create(
+            SseEmitter emitter,
+            String conversationId,
+            String taskId,
+            String userId,
+            Long assistantParentMessageId) {
         return new LocalChatStreamCallback(emitter, conversationId, taskId, userId,
-                streamTaskPort, memoryPort, eventBufferPort(), taskPortProvider);
+                assistantParentMessageId, streamTaskPort, memoryPort, eventBufferPort(), taskPortProvider);
     }
 
     private AgentRunEventBufferPort eventBufferPort() {
@@ -112,6 +122,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
         private final String conversationId;
         private final String taskId;
         private final String userId;
+        private final Long assistantParentMessageId;
         private final StreamTaskPort streamTaskPort;
         private final ConversationMemoryPort memoryPort;
         private final AgentRunEventBufferPort eventBufferPort;
@@ -127,6 +138,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
                                         String conversationId,
                                         String taskId,
                                         String userId,
+                                        Long assistantParentMessageId,
                                         StreamTaskPort streamTaskPort,
                                         ConversationMemoryPort memoryPort,
                                         AgentRunEventBufferPort eventBufferPort,
@@ -135,6 +147,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             this.conversationId = conversationId;
             this.taskId = taskId;
             this.userId = Objects.requireNonNullElse(userId, "");
+            this.assistantParentMessageId = assistantParentMessageId;
             this.streamTaskPort = streamTaskPort;
             this.memoryPort = Objects.requireNonNullElse(memoryPort, ConversationMemoryPort.noop());
             this.eventBufferPort = Objects.requireNonNullElse(eventBufferPort, AgentRunEventBufferPort.noop());
@@ -262,7 +275,8 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             }
             memoryPort.append(conversationId, userId,
                     ChatMessage.assistant(answer.toString(), thinking.toString(), null),
-                    currentRunId);
+                    currentRunId,
+                    assistantParentMessageId);
         }
 
         private void sendRunCompletedEvent() {

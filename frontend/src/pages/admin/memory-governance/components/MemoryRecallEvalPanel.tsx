@@ -35,7 +35,7 @@ export function MemoryRecallEvalPanel() {
   const handleRunProfile = async (profileId: string) => {
     try {
       await runGoldenProfileEval(profileId);
-      toast.success(`画像 ${profileId} 评测已触发`);
+      toast.success(`方案 ${profileId} 评测已触发`);
     } catch (error) {
       toast.error(getErrorMessage(error, "评测失败"));
     }

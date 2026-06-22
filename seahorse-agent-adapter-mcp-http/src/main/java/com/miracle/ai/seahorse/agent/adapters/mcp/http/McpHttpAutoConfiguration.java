@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.mcp.http;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolFeature;
+import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialAuthType;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialMaterial;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialProviderPort;
@@ -42,6 +43,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -75,6 +77,12 @@ public class McpHttpAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(McpServerManagementInboundPort.class)
+    public McpServerRuntimeRegistry seahorseMcpServerRuntimeRegistry() {
+        return new McpServerRuntimeRegistry();
+    }
+
+    @Bean
     @ConditionalOnBean(OkHttpClient.class)
     @ConditionalOnMissingBean(McpToolRegistryPort.class)
     public NativeMcpToolRegistry seahorseNativeMcpToolRegistry(
@@ -82,13 +90,47 @@ public class McpHttpAutoConfiguration {
             ObjectMapper objectMapper,
             McpHttpAdapterProperties properties,
             ObjectProvider<McpToolFeature> localToolFeatures,
-            ObjectProvider<CredentialProviderPort> credentialProvider) {
-        List<McpToolFeature> features = new ArrayList<>(localToolFeatures.orderedStream().toList());
+            ObjectProvider<CredentialProviderPort> credentialProvider,
+            ObjectProvider<McpServerRuntimeRegistry> mcpServerRuntimeRegistryProvider) {
+        List<McpToolFeature> baseFeatures = new ArrayList<>(localToolFeatures.orderedStream().toList());
+        List<McpToolFeature> features = new ArrayList<>(baseFeatures);
+        McpServerRuntimeRegistry mcpServerRuntimeRegistry = mcpServerRuntimeRegistryProvider
+                .getIfAvailable(McpServerRuntimeRegistry::new);
         OkHttpClient effectiveHttpClient = httpClient.newBuilder()
                 .callTimeout(properties.getCallTimeout())
                 .build();
-        features.addAll(discoverRemoteFeatures(effectiveHttpClient, objectMapper, properties, credentialProvider));
-        return new NativeMcpToolRegistry(features);
+        features.addAll(discoverRemoteFeatures(
+                effectiveHttpClient,
+                objectMapper,
+                properties,
+                credentialProvider,
+                mcpServerRuntimeRegistry));
+        NativeMcpToolRegistry registry = new NativeMcpToolRegistry(features);
+        mcpServerRuntimeRegistry.setToolRegistry(registry);
+        mcpServerRuntimeRegistry.setLifecycleActions(new McpServerRuntimeRegistry.LifecycleActions() {
+            @Override
+            public void restart(String serverName) {
+                rediscoverRemoteFeatures();
+            }
+
+            @Override
+            public void refreshTools(String serverName) {
+                rediscoverRemoteFeatures();
+            }
+
+            private void rediscoverRemoteFeatures() {
+                List<McpToolFeature> refreshedFeatures = new ArrayList<>(baseFeatures);
+                refreshedFeatures.addAll(discoverRemoteFeatures(
+                        effectiveHttpClient,
+                        objectMapper,
+                        properties,
+                        credentialProvider,
+                        mcpServerRuntimeRegistry));
+                registry.replaceAll(refreshedFeatures);
+                mcpServerRuntimeRegistry.setToolRegistry(registry);
+            }
+        });
+        return registry;
     }
 
     @Bean
@@ -102,10 +144,17 @@ public class McpHttpAutoConfiguration {
     private List<McpToolFeature> discoverRemoteFeatures(OkHttpClient httpClient,
                                                         ObjectMapper objectMapper,
                                                         McpHttpAdapterProperties properties,
-                                                        ObjectProvider<CredentialProviderPort> credentialProvider) {
+                                                        ObjectProvider<CredentialProviderPort> credentialProvider,
+                                                        McpServerRuntimeRegistry mcpServerRuntimeRegistry) {
         List<McpToolFeature> features = new ArrayList<>();
         for (McpHttpAdapterProperties.Server server : properties.getServers()) {
-            features.addAll(discoverServerFeatures(httpClient, objectMapper, server, credentialProvider));
+            features.addAll(discoverServerFeatures(
+                    httpClient,
+                    objectMapper,
+                    server,
+                    credentialProvider,
+                    properties.getCallTimeout(),
+                    mcpServerRuntimeRegistry));
         }
         return features;
     }
@@ -113,28 +162,98 @@ public class McpHttpAutoConfiguration {
     private List<McpToolFeature> discoverServerFeatures(OkHttpClient httpClient,
                                                         ObjectMapper objectMapper,
                                                         McpHttpAdapterProperties.Server server,
-                                                        ObjectProvider<CredentialProviderPort> credentialProvider) {
-        if (!server.isEnabled() || server.getUrl().isBlank()) {
+                                                        ObjectProvider<CredentialProviderPort> credentialProvider,
+                                                        Duration callTimeout,
+                                                        McpServerRuntimeRegistry mcpServerRuntimeRegistry) {
+        if (!server.isEnabled()) {
+            mcpServerRuntimeRegistry.recordDisabled(server);
+            return List.of();
+        }
+        return switch (server.getTransport()) {
+            case STDIO -> discoverStdioServerFeatures(objectMapper, server, callTimeout, mcpServerRuntimeRegistry);
+            case STREAMABLE_HTTP -> discoverHttpServerFeatures(
+                    httpClient,
+                    objectMapper,
+                    server,
+                    credentialProvider,
+                    mcpServerRuntimeRegistry);
+        };
+    }
+
+    private List<McpToolFeature> discoverHttpServerFeatures(OkHttpClient httpClient,
+                                                            ObjectMapper objectMapper,
+                                                            McpHttpAdapterProperties.Server server,
+                                                            ObjectProvider<CredentialProviderPort> credentialProvider,
+                                                            McpServerRuntimeRegistry mcpServerRuntimeRegistry) {
+        if (server.getUrl().isBlank()) {
+            mcpServerRuntimeRegistry.recordFailed(server, "url missing");
             return List.of();
         }
         Optional<CredentialMaterial> credentialMaterial = resolveCredentialMaterial(server, credentialProvider);
         if (credentialMaterial.isEmpty()) {
+            mcpServerRuntimeRegistry.recordFailed(server, "credential unavailable");
             return List.of();
         }
         try {
             StreamableHttpMcpClient client = new StreamableHttpMcpClient(
                     httpClient, objectMapper, server.getName(), server.getUrl(), credentialMaterial.get());
             if (!client.initialize()) {
+                mcpServerRuntimeRegistry.recordFailed(server, "initialize failed");
                 return List.of();
             }
             List<McpToolDescriptor> tools = client.listTools();
+            mcpServerRuntimeRegistry.recordReady(server, tools, "");
             LOG.info("MCP Server 工具发现完成, server={}, toolCount={}", server.getName(), tools.size());
             return tools.stream()
                     .map(descriptor -> new RemoteMcpToolFeature(descriptor, client))
                     .map(McpToolFeature.class::cast)
                     .toList();
         } catch (Exception ex) {
+            mcpServerRuntimeRegistry.recordFailed(server, ex.getMessage());
             LOG.warn("MCP Server 工具发现失败, server={}, reason={}", server.getName(), ex.getMessage());
+            return List.of();
+        }
+    }
+
+    private List<McpToolFeature> discoverStdioServerFeatures(ObjectMapper objectMapper,
+                                                             McpHttpAdapterProperties.Server server,
+                                                             Duration callTimeout,
+                                                             McpServerRuntimeRegistry mcpServerRuntimeRegistry) {
+        if (server.getCommand().isBlank()) {
+            mcpServerRuntimeRegistry.recordFailed(server, "command missing");
+            LOG.warn("MCP stdio Server skipped, server={}, reason=command missing", server.getName());
+            return List.of();
+        }
+        StdioMcpClient client = new StdioMcpClient(
+                objectMapper,
+                server.getName(),
+                server.getCommand(),
+                server.getArgs(),
+                server.getEnv(),
+                server.getWorkingDir(),
+                callTimeout);
+        try {
+            if (!client.initialize()) {
+                mcpServerRuntimeRegistry.recordFailed(server, client.stderrTail());
+                client.close();
+                return List.of();
+            }
+            List<McpToolDescriptor> tools = client.listTools();
+            if (tools.isEmpty()) {
+                mcpServerRuntimeRegistry.recordFailed(server, "no tools discovered");
+                client.close();
+                return List.of();
+            }
+            mcpServerRuntimeRegistry.recordReady(server, tools, client.stderrTail());
+            LOG.info("MCP stdio Server 宸ュ叿鍙戠幇瀹屾垚, server={}, toolCount={}", server.getName(), tools.size());
+            return tools.stream()
+                    .map(descriptor -> new RemoteMcpToolFeature(descriptor, client))
+                    .map(McpToolFeature.class::cast)
+                    .toList();
+        } catch (Exception ex) {
+            mcpServerRuntimeRegistry.recordFailed(server, ex.getMessage());
+            client.close();
+            LOG.warn("MCP stdio Server 宸ュ叿鍙戠幇澶辫触, server={}, reason={}", server.getName(), ex.getMessage());
             return List.of();
         }
     }

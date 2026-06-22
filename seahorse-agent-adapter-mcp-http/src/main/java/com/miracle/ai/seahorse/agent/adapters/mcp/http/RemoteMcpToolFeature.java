@@ -30,7 +30,7 @@ import java.util.Objects;
  *
  * <p>该类只持有工具元数据和远程客户端引用，业务编排仍由 kernel MCP orchestrator 统一完成。
  */
-public class RemoteMcpToolFeature implements McpToolFeature {
+public class RemoteMcpToolFeature implements McpToolFeature, AutoCloseable {
 
     private final McpToolDescriptor descriptor;
     private final McpClientPort client;
@@ -48,5 +48,12 @@ public class RemoteMcpToolFeature implements McpToolFeature {
     @Override
     public McpToolExecutionResult execute(McpToolExecutionRequest request) {
         return client.call(request);
+    }
+
+    @Override
+    public void close() throws Exception {
+        if (client instanceof AutoCloseable closeable) {
+            closeable.close();
+        }
     }
 }

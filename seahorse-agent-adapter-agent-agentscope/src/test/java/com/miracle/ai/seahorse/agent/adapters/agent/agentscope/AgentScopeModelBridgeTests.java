@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatTokenUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
@@ -29,6 +30,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.ToolCallCollector;
 import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.ThinkingBlock;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.model.ChatResponse;
 import io.agentscope.core.model.GenerateOptions;
@@ -166,14 +168,69 @@ class AgentScopeModelBridgeTests {
         assertEquals("Hangzhou", toolUse.getInput().get("city"));
     }
 
+    @Test
+    void preservesSeahorseThinkingDeltasAsAgentscopeThinkingBlocks() {
+        CapturingStreamingModelPort modelPort = new CapturingStreamingModelPort();
+        modelPort.thinking.set("ponder");
+        AgentLoopRequest request = AgentLoopRequest.builder()
+                .question("draft")
+                .samplingOptions(ChatSamplingOptions.builder().build())
+                .build();
+
+        List<ChatResponse> responses = new AgentScopeModelBridge(modelPort, "fallback-model")
+                .forRequest(request)
+                .stream(List.of(Msg.builder().role(MsgRole.USER).textContent("draft").build()), List.of(), null)
+                .collectList()
+                .block();
+
+        assertEquals(2, responses.size());
+        ContentBlock thinkingBlock = responses.get(0).getContent().get(0);
+        assertEquals(ThinkingBlock.class, thinkingBlock.getClass());
+        assertEquals("ponder", ((ThinkingBlock) thinkingBlock).getThinking());
+    }
+
+    @Test
+    void preservesSeahorseTokenUsageAsAgentscopeChatUsage() {
+        CapturingStreamingModelPort modelPort = new CapturingStreamingModelPort();
+        modelPort.usage.set(new ChatTokenUsage(11, 7));
+        AgentLoopRequest request = AgentLoopRequest.builder()
+                .question("draft")
+                .samplingOptions(ChatSamplingOptions.builder().build())
+                .build();
+
+        List<ChatResponse> responses = new AgentScopeModelBridge(modelPort, "fallback-model")
+                .forRequest(request)
+                .stream(List.of(Msg.builder().role(MsgRole.USER).textContent("draft").build()), List.of(), null)
+                .collectList()
+                .block();
+
+        ChatResponse usageResponse = responses.stream()
+                .filter(response -> response.getUsage() != null)
+                .findFirst()
+                .orElseThrow();
+        assertEquals(11, usageResponse.getUsage().getInputTokens());
+        assertEquals(7, usageResponse.getUsage().getOutputTokens());
+        assertEquals(18, usageResponse.getUsage().getTotalTokens());
+    }
+
     private static final class CapturingStreamingModelPort implements StreamingChatModelPort {
         private final AtomicReference<ChatRequest> request = new AtomicReference<>();
         private final AtomicReference<List<AgentToolCall>> toolCalls = new AtomicReference<>(List.of());
+        private final AtomicReference<String> thinking = new AtomicReference<>("");
+        private final AtomicReference<ChatTokenUsage> usage = new AtomicReference<>();
         private final AtomicInteger streamChatWithToolsCalls = new AtomicInteger();
 
         @Override
         public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
             this.request.set(request);
+            String thinkingDelta = thinking.get();
+            if (thinkingDelta != null && !thinkingDelta.isBlank()) {
+                callback.onThinking(thinkingDelta);
+            }
+            ChatTokenUsage tokenUsage = usage.get();
+            if (tokenUsage != null) {
+                callback.onUsage(tokenUsage);
+            }
             callback.onContent("ok");
             callback.onComplete();
             return () -> { };

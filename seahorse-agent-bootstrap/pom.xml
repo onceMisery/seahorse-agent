@@ -28,6 +28,16 @@
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-agent-agentscope</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-mcp-http</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-storage-s3</artifactId>
             <version>${project.version}</version>
         </dependency>

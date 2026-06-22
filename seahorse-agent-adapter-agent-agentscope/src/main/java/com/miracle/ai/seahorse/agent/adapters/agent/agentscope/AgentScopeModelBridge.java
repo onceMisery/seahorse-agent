@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatTokenUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
@@ -32,9 +33,11 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort
 import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.ThinkingBlock;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.model.ChatResponse;
+import io.agentscope.core.model.ChatUsage;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.model.ToolSchema;
@@ -98,6 +101,22 @@ public class AgentScopeModelBridge implements Model {
                 }
 
                 @Override
+                public void onThinking(String content) {
+                    if (!sink.isCancelled()) {
+                        sink.next(response(List.of(ThinkingBlock.builder()
+                                .thinking(Objects.requireNonNullElse(content, ""))
+                                .build())));
+                    }
+                }
+
+                @Override
+                public void onUsage(ChatTokenUsage usage) {
+                    if (!sink.isCancelled() && usage != null) {
+                        sink.next(response(List.of(), usage));
+                    }
+                }
+
+                @Override
                 public void onComplete() {
                     sink.complete();
                 }
@@ -152,8 +171,23 @@ public class AgentScopeModelBridge implements Model {
     }
 
     private ChatResponse response(List<ContentBlock> content) {
+        return response(content, null);
+    }
+
+    private ChatResponse response(List<ContentBlock> content, ChatTokenUsage usage) {
         return ChatResponse.builder()
                 .content(content == null ? List.of() : content)
+                .usage(toChatUsage(usage))
+                .build();
+    }
+
+    private ChatUsage toChatUsage(ChatTokenUsage usage) {
+        if (usage == null) {
+            return null;
+        }
+        return ChatUsage.builder()
+                .inputTokens(toIntTokenCount(usage.inputTokens()))
+                .outputTokens(toIntTokenCount(usage.outputTokens()))
                 .build();
     }
 
@@ -213,6 +247,10 @@ public class AgentScopeModelBridge implements Model {
 
     private static <T> T first(T value, T fallback) {
         return value == null ? fallback : value;
+    }
+
+    private static int toIntTokenCount(long value) {
+        return value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) value;
     }
 
     private static String textOrDefault(String value, String fallback) {

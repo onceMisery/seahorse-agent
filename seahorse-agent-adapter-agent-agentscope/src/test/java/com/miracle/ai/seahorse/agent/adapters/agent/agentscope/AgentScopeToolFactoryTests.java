@@ -141,6 +141,26 @@ class AgentScopeToolFactoryTests {
     }
 
     @Test
+    void explicitEmptyAllowedToolIdsExposeNoTools() {
+        CapturingGateway gateway = new CapturingGateway();
+        AgentScopeToolFactory factory = new AgentScopeToolFactory(new StaticRegistry(), gateway);
+        AgentLoopRequest request = AgentLoopRequest.builder()
+                .question("lookup")
+                .samplingOptions(ChatSamplingOptions.builder().build())
+                .allowedToolIds(List.of())
+                .explicitToolAllowlist(true)
+                .runId("run-1")
+                .agentId("legacy-react-agent")
+                .tenantId("tenant-a")
+                .build();
+
+        Toolkit toolkit = factory.toolkitFor(request);
+
+        assertEquals(List.of(), toolkit.getToolNames().stream().toList());
+        assertEquals(null, gateway.request.get());
+    }
+
+    @Test
     void restoresRequestTenantWhileInvokingGatewayAndThenRestoresPreviousTenant() {
         TenantContext.set("outer-tenant");
         CapturingGateway gateway = new CapturingGateway();

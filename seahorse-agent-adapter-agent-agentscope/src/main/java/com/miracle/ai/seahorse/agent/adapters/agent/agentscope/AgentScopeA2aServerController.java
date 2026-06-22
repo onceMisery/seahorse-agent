@@ -21,6 +21,9 @@ import io.a2a.spec.AgentCard;
 import io.a2a.spec.TransportProtocol;
 import io.agentscope.core.a2a.server.AgentScopeA2aServer;
 import io.agentscope.core.a2a.server.transport.jsonrpc.JsonRpcTransportWrapper;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
+import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,18 +32,18 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
-import java.util.Objects;
 
 @RestController
+@RequiredArgsConstructor
+@ConditionalOnProperty(name = "seahorse.agentscope.a2a.controller-component-scan-enabled", havingValue = "true")
 public class AgentScopeA2aServerController {
 
     private static final String JSONRPC_TRANSPORT = TransportProtocol.JSONRPC.asString();
 
     private final AgentScopeA2aServer server;
-
-    public AgentScopeA2aServerController(AgentScopeA2aServer server) {
-        this.server = Objects.requireNonNull(server, "server must not be null");
-    }
+    private final AgentScopeProperties properties;
+    private final A2aRequestAuthenticator authenticator;
+    private final AgentScopeObservationSupport observationSupport;
 
     @GetMapping(
             path = "${seahorse.agentscope.a2a.path:/a2a}",
@@ -56,6 +59,12 @@ public class AgentScopeA2aServerController {
     public Object handleJsonRpc(
             @RequestBody String body,
             @RequestHeader Map<String, String> headers) {
+        try (ObservationScope ignored = observationSupport.start("a2a.auth", properties.getA2a().getTenantId(),
+                observationSupport.attributes(
+                        "agentName", properties.getA2a().getAgentName(),
+                        "a2a.authMode", properties.getA2a().getAuthMode().name()))) {
+            authenticator.authenticate(body, headers);
+        }
         JsonRpcTransportWrapper wrapper = server.getTransportWrapper(JSONRPC_TRANSPORT, JsonRpcTransportWrapper.class);
         return wrapper.handleRequest(body, headers, Map.of());
     }

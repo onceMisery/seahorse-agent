@@ -4,6 +4,12 @@ import { toast } from "sonner";
 import { handleUnauthorizedSession } from "@/utils/authSession";
 import { storage } from "@/utils/storage";
 
+declare module "axios" {
+  interface AxiosRequestConfig {
+    suppressErrorToast?: boolean;
+  }
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 const API_PROXY_PREFIX = "/api";
 
@@ -12,10 +18,20 @@ function isAbsoluteUrl(url: string) {
 }
 
 function normalizeApiPath(url?: string, baseURL?: string) {
-  if (!url || baseURL || isAbsoluteUrl(url)) {
+  if (!url || isAbsoluteUrl(url)) {
     return url;
   }
-  const path = url.startsWith("/") ? url : `/${url}`;
+  let path = url.startsWith("/") ? url : `/${url}`;
+
+  // When baseURL is already set (e.g. Docker build VITE_API_BASE_URL=/api),
+  // strip redundant /api prefix from the path to avoid /api/api/... double prefix.
+  if (baseURL) {
+    if (path === API_PROXY_PREFIX || path.startsWith(`${API_PROXY_PREFIX}/`)) {
+      path = path.slice(API_PROXY_PREFIX.length) || "/";
+    }
+    return path;
+  }
+
   if (path === API_PROXY_PREFIX || path.startsWith(`${API_PROXY_PREFIX}/`)) {
     return path;
   }
@@ -118,6 +134,9 @@ api.interceptors.response.use(
 
     if (is401) {
       handleUnauthorizedSession(error?.response?.data?.message);
+    }
+    if (error?.config?.suppressErrorToast) {
+      return Promise.reject(error);
     }
     const responseData = error?.response?.data;
     if (responseData && typeof responseData === "object" && "message" in responseData && responseData.message) {

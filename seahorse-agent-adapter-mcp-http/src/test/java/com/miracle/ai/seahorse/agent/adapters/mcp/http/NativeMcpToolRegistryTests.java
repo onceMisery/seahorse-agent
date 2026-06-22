@@ -48,6 +48,18 @@ class NativeMcpToolRegistryTests {
         Assertions.assertTrue(registry.findTool("").isEmpty());
     }
 
+    @Test
+    void shouldReplaceToolsInPlaceAndClosePreviousFeatures() {
+        CloseTrackingMcpToolFeature oldFeature = new CloseTrackingMcpToolFeature("old_tool");
+        NativeMcpToolRegistry registry = new NativeMcpToolRegistry(List.of(oldFeature));
+
+        registry.replaceAll(List.of(new StubMcpToolFeature("new_tool")));
+
+        Assertions.assertTrue(registry.findExecutor("old_tool").isEmpty());
+        Assertions.assertTrue(registry.findExecutor("new_tool").isPresent());
+        Assertions.assertTrue(oldFeature.closed);
+    }
+
     private record StubMcpToolFeature(String toolId) implements McpToolFeature {
 
         @Override
@@ -58,6 +70,30 @@ class NativeMcpToolRegistryTests {
         @Override
         public McpToolExecutionResult execute(McpToolExecutionRequest request) {
             return McpToolExecutionResult.success(toolId, "ok");
+        }
+    }
+
+    private static final class CloseTrackingMcpToolFeature implements McpToolFeature, AutoCloseable {
+        private final String toolId;
+        private boolean closed;
+
+        private CloseTrackingMcpToolFeature(String toolId) {
+            this.toolId = toolId;
+        }
+
+        @Override
+        public McpToolDescriptor descriptor() {
+            return new McpToolDescriptor(toolId, "test tool", Map.of());
+        }
+
+        @Override
+        public McpToolExecutionResult execute(McpToolExecutionRequest request) {
+            return McpToolExecutionResult.success(toolId, "ok");
+        }
+
+        @Override
+        public void close() {
+            closed = true;
         }
     }
 }

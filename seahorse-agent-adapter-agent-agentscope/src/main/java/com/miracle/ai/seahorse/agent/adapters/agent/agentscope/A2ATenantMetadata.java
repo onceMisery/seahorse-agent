@@ -31,6 +31,7 @@ public final class A2ATenantMetadata {
     public static final String TENANT_SKILL_ID = "seahorse.tenant-boundary";
     public static final String TENANT_TAG_PREFIX = "seahorse:tenant:";
     public static final String M3_TAG_PREFIX = "seahorse:m3:";
+    public static final String A2A_TAG_PREFIX = "seahorse:a2a:";
 
     private A2ATenantMetadata() {
     }

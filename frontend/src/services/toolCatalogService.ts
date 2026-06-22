@@ -1,5 +1,6 @@
 import { api } from "@/services/api";
 import type { PageResult } from "@/services/metadataGovernanceService";
+import { emptyPage, optionalGet } from "@/services/optionalEndpoint";
 
 // ── 类型定义 ──
 
@@ -55,7 +56,10 @@ export function listTools(params: {
   riskLevel?: string;
   enabled?: boolean;
 }) {
-  return api.get<PageResult<ToolItem>>("/api/tools", { params });
+  return optionalGet(
+    api.get<PageResult<ToolItem>>("/api/tools", { params, suppressErrorToast: true }),
+    emptyPage<ToolItem>(params.current, params.size)
+  );
 }
 
 export function getTool(toolId: string) {
@@ -91,5 +95,8 @@ export function listToolInvocations(params: {
   startTime?: string;
   endTime?: string;
 }) {
-  return api.get<PageResult<ToolInvocation>>("/api/tool-invocations", { params });
+  return optionalGet(
+    api.get<PageResult<ToolInvocation>>("/api/tool-invocations", { params, suppressErrorToast: true }),
+    emptyPage<ToolInvocation>(params.current, params.size)
+  );
 }

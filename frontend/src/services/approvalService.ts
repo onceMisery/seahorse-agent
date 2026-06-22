@@ -1,5 +1,6 @@
 import { api } from "@/services/api";
 import type { PageResult } from "@/services/metadataGovernanceService";
+import { emptyPage, optionalGet } from "@/services/optionalEndpoint";
 
 // ── 类型定义 ──
 
@@ -69,7 +70,10 @@ export function listApprovals(params: {
   startTime?: string;
   endTime?: string;
 }) {
-  return api.get<PageResult<ApprovalItem>>("/api/approvals", { params });
+  return optionalGet(
+    api.get<PageResult<ApprovalItem>>("/api/approvals", { params, suppressErrorToast: true }),
+    emptyPage<ApprovalItem>(params.current, params.size)
+  );
 }
 
 export function getApproval(approvalId: string) {

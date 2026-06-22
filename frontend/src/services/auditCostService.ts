@@ -1,5 +1,6 @@
 import { api } from "@/services/api";
 import type { PageResult } from "@/services/metadataGovernanceService";
+import { emptyPage, optionalGet } from "@/services/optionalEndpoint";
 
 // ── 类型定义 ──
 
@@ -114,7 +115,10 @@ export async function listAuditEvents(params: {
   startTime?: string;
   endTime?: string;
 }) {
-  const data = await api.get<PageResult<AuditEvent> | AuditEvent[]>("/api/audit-events", { params });
+  const data = await optionalGet<PageResult<AuditEvent> | AuditEvent[]>(
+    api.get<PageResult<AuditEvent> | AuditEvent[]>("/api/audit-events", { params, suppressErrorToast: true }),
+    emptyPage<AuditEvent>(params.current, params.size)
+  );
   return normalizeAuditEventPage(data);
 }
 
@@ -139,5 +143,17 @@ export function aggregateCostUsage(params: {
   endTime?: string;
   groupBy?: string;
 }) {
-  return api.get<CostAggregate>("/api/cost-usage:aggregate", { params });
+  return optionalGet(
+    api.get<CostAggregate>("/api/cost-usage:aggregate", { params, suppressErrorToast: true }),
+    {
+      totalCost: 0,
+      totalTokens: 0,
+      totalCalls: 0,
+      byAgent: [],
+      byModel: [],
+      byTool: [],
+      byTenant: [],
+      timeBuckets: []
+    }
+  );
 }

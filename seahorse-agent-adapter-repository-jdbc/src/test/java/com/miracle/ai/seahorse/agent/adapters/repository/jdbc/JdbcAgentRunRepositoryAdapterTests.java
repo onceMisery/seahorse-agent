@@ -26,12 +26,14 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQuery;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -44,9 +46,10 @@ class JdbcAgentRunRepositoryAdapterTests {
         createRunSchema(jdbcTemplate);
         JdbcAgentRunRepositoryAdapter adapter = new JdbcAgentRunRepositoryAdapter(dataSource);
         Instant startedAt = Instant.parse("2026-05-23T00:00:00Z");
-        AgentRun run = new AgentRun("run-1", "agent-1", "version-1", "tenant-a", "user-1",
+        AgentRun run = new AgentRun("run-1", "agent-1", "version-1", null, "tenant-a", "user-1",
                 "conversation-1", AgentRunTriggerType.CHAT, "summary", AgentRunStatus.RUNNING, "trace-1",
-                3L, 5L, new BigDecimal("0.010000"), null, null, startedAt, null);
+                3L, 5L, new BigDecimal("0.010000"), null, null, startedAt, null,
+                "{\"agentVersion\":{\"versionId\":\"version-1\"}}");
 
         adapter.createRun(run);
         adapter.updateRun(run.withStatus(AgentRunStatus.SUCCEEDED, null, null, startedAt.plusSeconds(30)));
@@ -55,6 +58,58 @@ class JdbcAgentRunRepositoryAdapterTests {
         assertThat(found.status()).isEqualTo(AgentRunStatus.SUCCEEDED);
         assertThat(found.finishedAt()).isEqualTo(startedAt.plusSeconds(30));
         assertThat(found.costTotal()).isEqualByComparingTo("0.010000");
+        assertThat(found.metadataJson()).contains("\"versionId\":\"version-1\"");
+    }
+
+    @Test
+    @EnabledIfSystemProperty(named = "seahorse.postgres.contract", matches = "true")
+    void shouldPersistRunMetadataAsPostgresJsonb() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                System.getProperty("seahorse.postgres.url", "jdbc:postgresql://localhost:5432/seahorse"),
+                System.getProperty("seahorse.postgres.username", "seahorse"),
+                System.getProperty("seahorse.postgres.password", "seahorse"));
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        JdbcAgentRunRepositoryAdapter adapter = new JdbcAgentRunRepositoryAdapter(dataSource);
+        String runId = "agent-run-jsonb-contract-" + UUID.randomUUID();
+        Instant startedAt = Instant.parse("2026-06-21T00:00:00Z");
+        try {
+            adapter.createRun(new AgentRun(
+                    runId,
+                    "agent-jsonb",
+                    "version-jsonb",
+                    "rollout-jsonb",
+                    "tenant-a",
+                    "user-jsonb",
+                    "conversation-jsonb",
+                    AgentRunTriggerType.CHAT,
+                    "jsonb contract",
+                    AgentRunStatus.RUNNING,
+                    "trace-jsonb",
+                    0L,
+                    0L,
+                    BigDecimal.ZERO,
+                    null,
+                    null,
+                    startedAt,
+                    null,
+                    "{\"prompt\":{\"source\":\"nacos\"}}"));
+
+            String jsonType = jdbcTemplate.queryForObject("""
+                    SELECT jsonb_typeof(metadata_json)
+                    FROM sa_agent_run
+                    WHERE run_id = ?
+                    """, String.class, runId);
+            String promptSource = jdbcTemplate.queryForObject("""
+                    SELECT metadata_json -> 'prompt' ->> 'source'
+                    FROM sa_agent_run
+                    WHERE run_id = ?
+                    """, String.class, runId);
+
+            assertThat(jsonType).isEqualTo("object");
+            assertThat(promptSource).isEqualTo("nacos");
+        } finally {
+            jdbcTemplate.update("DELETE FROM sa_agent_run WHERE run_id = ?", runId);
+        }
     }
 
     @Test
@@ -202,7 +257,8 @@ class JdbcAgentRunRepositoryAdapterTests {
                     error_code VARCHAR(128),
                     error_message VARCHAR(1000),
                     started_at TIMESTAMP NOT NULL,
-                    finished_at TIMESTAMP
+                    finished_at TIMESTAMP,
+                    metadata_json CLOB
                 )
                 """);
         jdbcTemplate.execute("""

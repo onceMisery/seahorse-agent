@@ -17,6 +17,9 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
@@ -27,15 +30,22 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeCon
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileDetails;
+import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileRecord;
 
 import java.time.Clock;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -44,12 +54,17 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     private static final String RUN_ID_PREFIX = "run_";
     private static final String VERSION_REQUIRED_MESSAGE = "Agent run requires a versionId";
     private static final String VERSION_NOT_FOUND_MESSAGE = "Agent version does not exist";
+    private static final TypeReference<LinkedHashMap<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
 
     private final AgentDefinitionRepositoryPort definitionRepository;
     private final AgentRunRepositoryPort runRepository;
     private final CurrentUserPort currentUserPort;
     private final Clock clock;
     private final QuotaEnforcementService quotaEnforcementService;
+    private final RunContextSnapshotRepositoryPort runContextSnapshotRepository;
+    private final Optional<RunProfileInboundPort> runProfilePort;
+    private final ObjectMapper objectMapper;
 
     public KernelAgentRunService(AgentDefinitionRepositoryPort definitionRepository,
                                  AgentRunRepositoryPort runRepository,
@@ -63,11 +78,47 @@ public class KernelAgentRunService implements AgentRunInboundPort {
                                  CurrentUserPort currentUserPort,
                                  Clock clock,
                                  QuotaEnforcementService quotaEnforcementService) {
+        this(definitionRepository,
+                runRepository,
+                currentUserPort,
+                clock,
+                quotaEnforcementService,
+                RunContextSnapshotRepositoryPort.noop(),
+                null);
+    }
+
+    public KernelAgentRunService(AgentDefinitionRepositoryPort definitionRepository,
+                                 AgentRunRepositoryPort runRepository,
+                                 CurrentUserPort currentUserPort,
+                                 Clock clock,
+                                 QuotaEnforcementService quotaEnforcementService,
+                                 RunContextSnapshotRepositoryPort runContextSnapshotRepository) {
+        this(definitionRepository,
+                runRepository,
+                currentUserPort,
+                clock,
+                quotaEnforcementService,
+                runContextSnapshotRepository,
+                null);
+    }
+
+    public KernelAgentRunService(AgentDefinitionRepositoryPort definitionRepository,
+                                 AgentRunRepositoryPort runRepository,
+                                 CurrentUserPort currentUserPort,
+                                 Clock clock,
+                                 QuotaEnforcementService quotaEnforcementService,
+                                 RunContextSnapshotRepositoryPort runContextSnapshotRepository,
+                                 RunProfileInboundPort runProfilePort) {
         this.definitionRepository = Objects.requireNonNull(definitionRepository, "definitionRepository must not be null");
         this.runRepository = Objects.requireNonNull(runRepository, "runRepository must not be null");
         this.currentUserPort = Objects.requireNonNull(currentUserPort, "currentUserPort must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.quotaEnforcementService = quotaEnforcementService;
+        this.runContextSnapshotRepository = Objects.requireNonNullElseGet(
+                runContextSnapshotRepository,
+                RunContextSnapshotRepositoryPort::noop);
+        this.runProfilePort = Optional.ofNullable(runProfilePort);
+        this.objectMapper = new ObjectMapper();
     }
 
     @Override
@@ -97,7 +148,9 @@ public class KernelAgentRunService implements AgentRunInboundPort {
             }
         }
 
+        EffectiveRunProfileContext runProfileContext = effectiveRunProfileContext(safeCommand, currentUser);
         String versionId = resolveVersionId(safeCommand, definition);
+        String metadataJson = runtimeMetadataJson(safeCommand, runProfileContext);
         AgentRun run = new AgentRun(
                 nextRunId(),
                 definition == null ? safeCommand.agentId() : definition.agentId(),
@@ -116,9 +169,185 @@ public class KernelAgentRunService implements AgentRunInboundPort {
                 null,
                 null,
                 clock.instant(),
-                null);
+                null,
+                metadataJson);
         runRepository.createRun(run);
+        saveRunContextSnapshot(run, safeCommand, runProfileContext, metadataJson);
         return run;
+    }
+
+    private EffectiveRunProfileContext effectiveRunProfileContext(AgentRunStartCommand command, CurrentUser currentUser) {
+        Long runProfileId = command.runProfileId();
+        String executorEngine = trimToNull(command.executorEngine());
+        Map<String, Object> executorConfig = command.executorConfig();
+        if (runProfileId == null) {
+            Optional<RunProfileRecord> appliedProfile = runProfilePort
+                    .flatMap(port -> findAppliedRunProfile(port, currentUser, command.conversationId()))
+                    .map(RunProfileDetails::getProfile)
+                    .filter(profile -> profile.getId() != null);
+            if (appliedProfile.isPresent()) {
+                RunProfileRecord profile = appliedProfile.orElseThrow();
+                runProfileId = profile.getId();
+                if (executorEngine == null) {
+                    executorEngine = trimToNull(profile.getExecutorEngine());
+                }
+                if (executorConfig == null || executorConfig.isEmpty()) {
+                    executorConfig = readJsonObjectOrEmpty(profile.getExecutorConfigJson());
+                }
+            }
+        }
+        return new EffectiveRunProfileContext(
+                runProfileId,
+                executorEngine,
+                executorConfig == null ? Map.of() : Map.copyOf(executorConfig));
+    }
+
+    private Optional<RunProfileDetails> findAppliedRunProfile(
+            RunProfileInboundPort port,
+            CurrentUser currentUser,
+            String conversationId) {
+        String normalizedConversationId = trimToNull(conversationId);
+        if (normalizedConversationId == null) {
+            return Optional.empty();
+        }
+        return port.findAppliedToConversation(currentUser.operator(), normalizedConversationId);
+    }
+
+    private String runtimeMetadataJson(AgentRunStartCommand command, EffectiveRunProfileContext runProfileContext) {
+        Map<String, Object> metadata = readMetadata(command.metadataJson());
+        if (runProfileContext.runProfileId() != null) {
+            metadata.put("runProfileId", runProfileContext.runProfileId());
+        }
+        if (runProfileContext.executorEngine() != null) {
+            metadata.put("executorEngine", runProfileContext.executorEngine());
+        }
+        if (!runProfileContext.executorConfig().isEmpty()) {
+            metadata.put("executorConfig", runProfileContext.executorConfig());
+        }
+        if (metadata.isEmpty()) {
+            return trimToNull(command.metadataJson());
+        }
+        return writeJson(metadata);
+    }
+
+    private Map<String, Object> readMetadata(String metadataJson) {
+        String normalized = trimToNull(metadataJson);
+        if (normalized == null) {
+            return new LinkedHashMap<>();
+        }
+        try {
+            return objectMapper.readValue(normalized, MAP_TYPE);
+        } catch (Exception ignored) {
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("legacyMetadataJson", normalized);
+            return metadata;
+        }
+    }
+
+    private Map<String, Object> readJsonObjectOrEmpty(String json) {
+        String normalized = trimToNull(json);
+        if (normalized == null) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(normalized, MAP_TYPE);
+        } catch (Exception ignored) {
+            return Map.of();
+        }
+    }
+
+    private void saveRunContextSnapshot(
+            AgentRun run,
+            AgentRunStartCommand command,
+            EffectiveRunProfileContext runProfileContext,
+            String metadataJson) {
+        RunContextSnapshotRecord snapshot = new RunContextSnapshotRecord();
+        snapshot.setTenantId(run.tenantId());
+        snapshot.setRunId(run.runId());
+        snapshot.setConversationId(parseLong(run.conversationId()));
+        snapshot.setRunProfileId(runProfileContext.runProfileId());
+        snapshot.setExecutorEngine(defaultText(runProfileContext.executorEngine(), "kernel"));
+        snapshot.setExecutorConfigJson(writeJsonOrNull(runProfileContext.executorConfig()));
+        snapshot.setTraceContextJson(traceContextJson(run));
+        snapshot.setSnapshotJson(snapshotJson(run, command, runProfileContext, metadataJson));
+        runContextSnapshotRepository.save(snapshot);
+    }
+
+    private String traceContextJson(AgentRun run) {
+        Map<String, Object> traceContext = new LinkedHashMap<>();
+        putIfPresent(traceContext, "traceId", run.traceId());
+        putIfPresent(traceContext, "agentId", run.agentId());
+        putIfPresent(traceContext, "versionId", run.versionId());
+        putIfPresent(traceContext, "rolloutId", run.rolloutId());
+        return writeJson(traceContext);
+    }
+
+    private String snapshotJson(
+            AgentRun run,
+            AgentRunStartCommand command,
+            EffectiveRunProfileContext runProfileContext,
+            String metadataJson) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("runId", run.runId());
+        putIfPresent(snapshot, "agentId", run.agentId());
+        putIfPresent(snapshot, "versionId", run.versionId());
+        putIfPresent(snapshot, "rolloutId", run.rolloutId());
+        snapshot.put("tenantId", run.tenantId());
+        snapshot.put("userId", run.userId());
+        putIfPresent(snapshot, "conversationId", run.conversationId());
+        snapshot.put("triggerType", run.triggerType().name());
+        putIfPresent(snapshot, "inputSummary", run.inputSummary());
+        putIfPresent(snapshot, "traceId", run.traceId());
+        if (runProfileContext.runProfileId() != null) {
+            snapshot.put("runProfileId", runProfileContext.runProfileId());
+        }
+        snapshot.put("executorEngine", defaultText(runProfileContext.executorEngine(), "kernel"));
+        if (!runProfileContext.executorConfig().isEmpty()) {
+            snapshot.put("executorConfig", runProfileContext.executorConfig());
+        }
+        Map<String, Object> metadata = readMetadata(metadataJson);
+        if (!metadata.isEmpty()) {
+            snapshot.put("metadata", metadata);
+        }
+        snapshot.put("startedAt", run.startedAt().toString());
+        return writeJson(snapshot);
+    }
+
+    private String writeJsonOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Map<?, ?> map && map.isEmpty()) {
+            return null;
+        }
+        return writeJson(value);
+    }
+
+    private String writeJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize agent run context", ex);
+        }
+    }
+
+    private void putIfPresent(Map<String, Object> target, String key, String value) {
+        String text = trimToNull(value);
+        if (text != null) {
+            target.put(key, text);
+        }
+    }
+
+    private Long parseLong(String value) {
+        String text = trimToNull(value);
+        if (text == null) {
+            return null;
+        }
+        try {
+            return Long.valueOf(text);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private String resolveVersionId(AgentRunStartCommand command, AgentDefinition definition) {
@@ -267,5 +496,11 @@ public class KernelAgentRunService implements AgentRunInboundPort {
             case "PAUSED", "SUSPENDED" -> AgentRunStatus.RETRYING.name();
             default -> trimmed.toUpperCase();
         };
+    }
+
+    private record EffectiveRunProfileContext(
+            Long runProfileId,
+            String executorEngine,
+            Map<String, Object> executorConfig) {
     }
 }

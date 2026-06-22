@@ -1,4 +1,5 @@
 import { api } from "@/services/api";
+import { optionalGet } from "@/services/optionalEndpoint";
 
 export type SkillCategory = "PUBLIC" | "CUSTOM";
 export type SkillStatus = "ACTIVE" | "DELETED";
@@ -49,7 +50,13 @@ export interface SkillPage {
 }
 
 export function listSkills(params?: { tenantId?: string; current?: number; size?: number; keyword?: string }) {
-  return api.get<SkillPage>("/api/skills", { params });
+  return optionalGet(api.get<SkillPage>("/api/skills", { params, suppressErrorToast: true }), {
+    records: [],
+    total: 0,
+    size: params?.size ?? 0,
+    current: params?.current ?? 1,
+    pages: 0
+  });
 }
 
 export function getSkill(name: string, tenantId?: string) {

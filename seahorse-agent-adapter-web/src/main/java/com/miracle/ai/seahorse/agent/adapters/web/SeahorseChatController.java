@@ -191,6 +191,10 @@ public class SeahorseChatController {
                            @RequestParam(required = false) List<String> attachmentIds,
                            @RequestParam(required = false) List<String> selectedSkillNames,
                            @RequestParam(required = false) List<String> knowledgeBaseIds,
+                           @RequestParam(required = false) Long roleCardId,
+                           @RequestParam(required = false) String branchLeafMessageId,
+                           @RequestParam(required = false) String assistantParentMessageId,
+                           @RequestParam(required = false) Long runProfileId,
                            @RequestParam(required = false) String resumeRunId,
                            @RequestParam(required = false) Long lastEventSeq) {
         String actualConversationId = resolveId(conversationId);
@@ -212,7 +216,14 @@ public class SeahorseChatController {
         if (isDeepResearchTemplate(taskTemplateId)) {
             return dispatchResearch(emitter, question, actualConversationId, actualUserId, taskId, taskTemplateId);
         }
-        StreamCallback callback = callbackFactory.create(emitter, actualConversationId, taskId, actualUserId);
+        Long parsedBranchLeafMessageId = parseLongOrNull(branchLeafMessageId);
+        Long parsedAssistantParentMessageId = parseLongOrNull(assistantParentMessageId);
+        StreamCallback callback = callbackFactory.create(
+                emitter,
+                actualConversationId,
+                taskId,
+                actualUserId,
+                parsedAssistantParentMessageId);
         StreamChatCommand command = new StreamChatCommand(
                 question,
                 actualConversationId,
@@ -225,7 +236,11 @@ public class SeahorseChatController {
                 taskTemplateId,
                 attachmentIds,
                 selectedSkillNames,
-                knowledgeBaseIds);
+                knowledgeBaseIds,
+                roleCardId,
+                parsedBranchLeafMessageId,
+                parsedAssistantParentMessageId,
+                runProfileId);
         try {
             ChatInboundPort chatInboundPort = chatInboundPortProvider.getIfAvailable();
             if (chatInboundPort == null) {
@@ -458,6 +473,15 @@ public class SeahorseChatController {
             emitter.complete();
         } catch (IOException sendError) {
             emitter.complete();
+        }
+    }
+
+    private static Long parseLongOrNull(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 }

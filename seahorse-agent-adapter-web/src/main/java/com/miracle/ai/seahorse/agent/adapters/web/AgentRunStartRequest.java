@@ -18,12 +18,21 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
+import lombok.Data;
 
-public record AgentRunStartRequest(String versionId,
-                                   String rolloutId,
-                                   String tenantId,
-                                   String conversationId,
-                                   AgentRunTriggerType triggerType,
-                                   String inputSummary,
-                                   String traceId) {
+import java.util.Map;
+
+@Data
+public class AgentRunStartRequest {
+
+    private String versionId;
+    private String rolloutId;
+    private String tenantId;
+    private String conversationId;
+    private AgentRunTriggerType triggerType;
+    private String inputSummary;
+    private String traceId;
+    private Long runProfileId;
+    private String executorEngine;
+    private Map<String, Object> executorConfig;
 }

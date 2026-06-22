@@ -35,6 +35,7 @@ public class NativeMcpEnabledCondition implements Condition {
     private static final String KEY_ENABLED = "seahorse-agent.adapters.mcp.enabled";
     private static final String KEY_TYPE = "seahorse-agent.adapters.mcp.type";
     private static final String KEY_FIRST_SERVER_URL = "seahorse-agent.adapters.mcp.servers[0].url";
+    private static final String KEY_FIRST_SERVER_COMMAND = "seahorse-agent.adapters.mcp.servers[0].command";
     private static final String TYPE_HTTP = "http";
 
     @Override
@@ -46,7 +47,8 @@ public class NativeMcpEnabledCondition implements Condition {
         }
         return Boolean.TRUE.equals(enabled)
                 || TYPE_HTTP.equalsIgnoreCase(environment.getProperty(KEY_TYPE, ""))
-                || hasText(environment.getProperty(KEY_FIRST_SERVER_URL));
+                || hasText(environment.getProperty(KEY_FIRST_SERVER_URL))
+                || hasText(environment.getProperty(KEY_FIRST_SERVER_COMMAND));
     }
 
     private boolean hasText(String value) {

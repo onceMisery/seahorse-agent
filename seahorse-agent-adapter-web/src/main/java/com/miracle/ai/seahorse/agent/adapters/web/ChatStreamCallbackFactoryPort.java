@@ -30,4 +30,13 @@ public interface ChatStreamCallbackFactoryPort {
     default StreamCallback create(SseEmitter emitter, String conversationId, String taskId, String userId) {
         return create(emitter, conversationId, taskId);
     }
+
+    default StreamCallback create(
+            SseEmitter emitter,
+            String conversationId,
+            String taskId,
+            String userId,
+            Long assistantParentMessageId) {
+        return create(emitter, conversationId, taskId, userId);
+    }
 }

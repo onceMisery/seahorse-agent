@@ -11,9 +11,12 @@ import {
 import {
   createSession as createSessionRequest,
   listMessages,
+  listMessageTree,
   listSessions,
   deleteSession as deleteSessionRequest,
-  renameSession as renameSessionRequest
+  forkMessage,
+  renameSession as renameSessionRequest,
+  switchMessageBranch as switchMessageBranchRequest
 } from "@/services/sessionService";
 import { getAgentRunCostSummary, getAgentRunSnapshot, listAgentRunEvents } from "@/services/agentRunService";
 import { submitFeedback } from "@/services/chatService";
@@ -23,6 +26,7 @@ import { storage } from "@/utils/storage";
 import { parseStreamingText } from "@/lib/parser/streamingParser";
 import type {
   ConversationMessageVO,
+  MessageTreeNodeVO,
   ConversationVO
 } from "@/services/sessionService";
 import type { ChatState } from "@/stores/chatStoreTypes";
@@ -73,6 +77,20 @@ function appendMissingMessages(messages: Message[], additions: Message[]) {
     merged.push(message);
   }
   return merged;
+}
+
+function normalizePersistedMessageId(value: string | number | null | undefined) {
+  if (value === null || value === undefined) return undefined;
+  const text = String(value).trim();
+  return /^\d+$/.test(text) ? text : undefined;
+}
+
+function currentBranchLeafMessageId(messages: Message[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const id = normalizePersistedMessageId(messages[index]?.id);
+    if (id) return id;
+  }
+  return undefined;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -221,18 +239,7 @@ export const useChatStore = create<ChatState>()(
             s.isCreatingNew = false;
             s.isLoading = true;
           });
-          const messages = await listMessages(sessionId) as unknown as ConversationMessageVO[];
-          const nextMessages: Message[] = messages.map((m) => ({
-            id: String(m.id),
-            role: m.role as Role,
-            content: m.content,
-            status: "done" as const,
-            thinking: m.thinkingContent || undefined,
-            thinkingDuration: m.thinkingDuration || undefined,
-            feedback: m.vote !== null ? (m.vote > 0 ? "like" as const : "dislike" as const) : null,
-            createdAt: m.createTime || new Date().toISOString(),
-            agentRunId: m.agentRunId || undefined
-          }));
+          const nextMessages = await loadConversationMessages(sessionId);
           if (get().currentSessionId !== sessionId) return;
           set((s) => {
             s.messages = appendMissingMessages(nextMessages, messagesCreatedSince(s.messages, loadStartedAt));
@@ -297,7 +304,11 @@ export const useChatStore = create<ChatState>()(
       };
 
       set((s) => {
-        s.messages.push(userMessage, assistantMessage);
+        if (options?.reuseUserMessage) {
+          s.messages.push(assistantMessage);
+        } else {
+          s.messages.push(userMessage, assistantMessage);
+        }
         s.isStreaming = true;
         s.streamingMessageId = assistantId;
         s.thinkingStartAt = null;
@@ -310,6 +321,11 @@ export const useChatStore = create<ChatState>()(
       const selectedSkillNames = options?.selectedSkillNames?.length ? options.selectedSkillNames : undefined;
       const agentId = options?.agentId || undefined;
       const versionId = options?.versionId || undefined;
+      const roleCardId = options?.roleCardId ?? undefined;
+      const runProfileId = options?.runProfileId ?? undefined;
+      const assistantParentMessageId = normalizePersistedMessageId(options?.assistantParentMessageId);
+      const branchLeafMessageId = normalizePersistedMessageId(options?.branchLeafMessageId)
+        ?? currentBranchLeafMessageId(get().messages);
       const query = buildQuery({
         question: trimmed,
         conversationId: conversationId || undefined,
@@ -317,6 +333,10 @@ export const useChatStore = create<ChatState>()(
         chatMode: agentId ? "agent" : chatModeForTaskTemplate(selectedTaskTemplateId as TaskTemplateId | undefined),
         agentId,
         versionId,
+        roleCardId,
+        runProfileId,
+        branchLeafMessageId,
+        assistantParentMessageId,
         taskTemplateId: selectedTaskTemplateId || undefined,
         attachmentIds: attachmentIdsFiltered,
         selectedSkillNames
@@ -435,6 +455,85 @@ export const useChatStore = create<ChatState>()(
       set((s) => { s.selectedTaskTemplateId = taskTemplateId; });
     },
 
+    switchMessageBranch: async (_messageId, targetMessageId) => {
+      const sessionId = get().currentSessionId;
+      if (!sessionId || !targetMessageId || get().isStreaming) {
+        return;
+      }
+      try {
+        const nodes = await switchMessageBranchRequest(sessionId, targetMessageId);
+        const nextMessages = messagesFromTree(nodes);
+        if (get().currentSessionId !== sessionId) return;
+        set((state) => {
+          state.messages = nextMessages;
+        });
+        await hydrateSelectedSessionAgentRuns(sessionId, nextMessages, set);
+      } catch (error) {
+        console.error("Failed to switch message branch:", error);
+        toast.error("切换分支失败");
+      }
+    },
+
+    editUserMessageBranch: async (messageId, content) => {
+      const sessionId = get().currentSessionId;
+      const trimmed = content.trim();
+      if (!sessionId || !messageId || !trimmed || get().isStreaming) {
+        return;
+      }
+      try {
+        const result = await forkMessage(sessionId, {
+          anchorMessageId: messageId,
+          content: trimmed,
+          role: "user",
+          regenerate: false
+        });
+        const newMessageId = normalizePersistedMessageId(result?.newMessageId);
+        if (!newMessageId) {
+          return;
+        }
+        const nodes = await switchMessageBranchRequest(sessionId, newMessageId);
+        const nextMessages = messagesFromTree(nodes);
+        if (get().currentSessionId !== sessionId) return;
+        set((state) => {
+          state.messages = nextMessages;
+        });
+        await hydrateSelectedSessionAgentRuns(sessionId, nextMessages, set);
+      } catch (error) {
+        console.error("Failed to edit message branch:", error);
+        toast.error("缂栬緫鍒嗘敮澶辫触");
+      }
+    },
+
+    regenerateAssistantMessageBranch: async (messageId) => {
+      const sessionId = get().currentSessionId;
+      const messages = get().messages;
+      const assistant = messages.find((message) => message.id === messageId && message.role === "assistant");
+      const parentMessageId = normalizePersistedMessageId(assistant?.parentId);
+      const parent = parentMessageId
+        ? messages.find((message) => message.id === parentMessageId && message.role === "user")
+        : undefined;
+      if (!sessionId || !assistant || !parent || !parentMessageId || get().isStreaming) {
+        return;
+      }
+      try {
+        await get().sendMessage(parent.content, {
+          branchLeafMessageId: parentMessageId,
+          assistantParentMessageId: parentMessageId,
+          reuseUserMessage: true
+        });
+        const nodes = await listMessageTree(sessionId);
+        const nextMessages = messagesFromTree(nodes);
+        if (get().currentSessionId !== sessionId) return;
+        set((state) => {
+          state.messages = nextMessages;
+        });
+        await hydrateSelectedSessionAgentRuns(sessionId, nextMessages, set);
+      } catch (error) {
+        console.error("Failed to regenerate assistant branch:", error);
+        toast.error("重新生成回答失败");
+      }
+    },
+
     submitFeedback: async (messageId, feedback, options) => {
       try {
         const vote = feedback === "like" ? 1 : feedback === "dislike" ? -1 : 0;
@@ -543,6 +642,63 @@ function mergeArtifactsById(current: Message["artifacts"], incoming: Message["ar
     });
   }
   return Array.from(map.values()).map(({ append, ...item }) => item);
+}
+
+async function loadConversationMessages(sessionId: string): Promise<Message[]> {
+  try {
+    const tree = await listMessageTree(sessionId) as unknown as MessageTreeNodeVO[] | undefined;
+    if (Array.isArray(tree)) {
+      return messagesFromTree(tree);
+    }
+  } catch (error) {
+    if (!isMissingTreeEndpoint(error)) {
+      throw error;
+    }
+  }
+  const messages = await listMessages(sessionId) as unknown as ConversationMessageVO[];
+  return messages.map((message) => messageFromRecord(message));
+}
+
+function messagesFromTree(nodes: MessageTreeNodeVO[] | null | undefined): Message[] {
+  return (nodes ?? []).map((node) => messageFromRecord(node.message, node));
+}
+
+function messageFromRecord(record: ConversationMessageVO, node?: MessageTreeNodeVO): Message {
+  const id = String(record.id);
+  return {
+    id,
+    role: record.role as Role,
+    content: record.content,
+    status: "done",
+    thinking: record.thinkingContent || undefined,
+    thinkingDuration: record.thinkingDuration || undefined,
+    feedback: record.vote !== null && record.vote !== undefined
+      ? (record.vote > 0 ? "like" : "dislike")
+      : null,
+    createdAt: record.createTime || new Date().toISOString(),
+    agentRunId: record.agentRunId || record.runId || undefined,
+    parentId: optionalString(record.parentId),
+    active: record.active ?? null,
+    branchRootId: optionalString(record.branchRootId),
+    siblingSeq: record.siblingSeq ?? null,
+    branchIndex: node?.branchIndex,
+    branchTotal: node?.branchTotal,
+    preSiblings: node ? siblingIds(node.preSiblings) : undefined,
+    nextSiblings: node ? siblingIds(node.nextSiblings) : undefined
+  };
+}
+
+function siblingIds(values: Array<number | string> | null | undefined): string[] {
+  return (values ?? []).map(String);
+}
+
+function optionalString(value: number | string | null | undefined): string | null {
+  return value === null || value === undefined ? null : String(value);
+}
+
+function isMissingTreeEndpoint(error: unknown) {
+  const candidate = error as { response?: { status?: number }; message?: string };
+  return candidate.response?.status === 404 || /404|not found/i.test(candidate.message || "");
 }
 
 function chatModeForTaskTemplate(taskTemplateId?: TaskTemplateId): string | undefined {

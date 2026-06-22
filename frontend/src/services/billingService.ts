@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { optionalGet } from "@/services/optionalEndpoint";
 
 export interface SubscriptionPlan {
   id: number;
@@ -44,11 +45,14 @@ export interface Bill {
 }
 
 export function listPlans() {
-  return api.get<SubscriptionPlan[]>("/api/billing/plans");
+  return optionalGet(api.get<SubscriptionPlan[]>("/api/billing/plans", { suppressErrorToast: true }), []);
 }
 
 export function getActiveSubscription() {
-  return api.get<Subscription>("/api/billing/subscription");
+  return optionalGet<Subscription | null>(
+    api.get<Subscription>("/api/billing/subscription", { suppressErrorToast: true }),
+    null
+  );
 }
 
 export function createOrder(planCode: string, paymentChannel: string) {
@@ -60,5 +64,5 @@ export function getOrderStatus(orderNo: string) {
 }
 
 export function listBills(page: number = 1, size: number = 20) {
-  return api.get<Bill[]>("/api/billing/bills", { params: { page, size } });
+  return optionalGet(api.get<Bill[]>("/api/billing/bills", { params: { page, size }, suppressErrorToast: true }), []);
 }

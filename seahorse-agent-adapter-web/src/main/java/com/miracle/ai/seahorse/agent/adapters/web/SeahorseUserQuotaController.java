@@ -35,7 +35,7 @@ public class SeahorseUserQuotaController {
         this.quotaSummaryPortProvider = quotaSummaryPortProvider;
     }
 
-    @GetMapping("/api/me/quota-summary")
+    @GetMapping({"/me/quota-summary", "/api/me/quota-summary"})
     public ApiResponse<UserQuotaSummary> summary(
             @RequestParam(required = false) String tenantId,
             @RequestParam(required = false) String taskTemplateId,

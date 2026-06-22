@@ -1,9 +1,0 @@
-schema_version: 1
-module_path: docs
-title: Seahorse Agent 架构文档与 Aegis 治理中心
-scope:
-    - docs/
-source_files: []
-depends_on: []
-related_to:
-    - path: backend

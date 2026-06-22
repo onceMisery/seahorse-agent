@@ -63,6 +63,14 @@ public class StreamChatContext {
 
     private List<String> knowledgeBaseIds;
 
+    private Long roleCardId;
+
+    private Long branchLeafMessageId;
+
+    private Long assistantParentMessageId;
+
+    private ResolvedRoleCard roleCard;
+
     public static Builder builder() {
         return new Builder();
     }
@@ -119,6 +127,26 @@ public class StreamChatContext {
 
         public Builder knowledgeBaseIds(List<String> knowledgeBaseIds) {
             context.setKnowledgeBaseIds(knowledgeBaseIds == null ? List.of() : List.copyOf(knowledgeBaseIds));
+            return this;
+        }
+
+        public Builder roleCardId(Long roleCardId) {
+            context.setRoleCardId(roleCardId);
+            return this;
+        }
+
+        public Builder branchLeafMessageId(Long branchLeafMessageId) {
+            context.setBranchLeafMessageId(branchLeafMessageId);
+            return this;
+        }
+
+        public Builder assistantParentMessageId(Long assistantParentMessageId) {
+            context.setAssistantParentMessageId(assistantParentMessageId);
+            return this;
+        }
+
+        public Builder roleCard(ResolvedRoleCard roleCard) {
+            context.setRoleCard(roleCard);
             return this;
         }
 

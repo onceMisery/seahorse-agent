@@ -1,7 +1,14 @@
+import { ContextSnapshotInspectorTab } from "@/components/run-context/ContextSnapshotInspectorTab";
 import type { AgentRunSnapshot } from "@/types";
 
-export function AgentContextView({ snapshot }: { snapshot: AgentRunSnapshot | null }) {
-  if (!snapshot) {
+export function AgentContextView({
+  runId,
+  snapshot
+}: {
+  runId?: string;
+  snapshot: AgentRunSnapshot | null;
+}) {
+  if (!snapshot && !runId) {
     return (
       <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
         暂未加载快照
@@ -9,12 +16,16 @@ export function AgentContextView({ snapshot }: { snapshot: AgentRunSnapshot | nu
     );
   }
 
-  const sources = snapshot.sources ?? [];
-  const artifacts = snapshot.artifacts ?? [];
-  const pendingApprovals = snapshot.pendingApprovals ?? [];
+  const sources = snapshot?.sources ?? [];
+  const artifacts = snapshot?.artifacts ?? [];
+  const pendingApprovals = snapshot?.pendingApprovals ?? [];
 
   return (
     <div className="space-y-4">
+      {runId ? (
+        <ContextSnapshotInspectorTab agentRunId={runId} />
+      ) : null}
+
       <div>
         <h3 className="mb-2 text-sm font-medium text-slate-700">
           来源 ({sources.length})
