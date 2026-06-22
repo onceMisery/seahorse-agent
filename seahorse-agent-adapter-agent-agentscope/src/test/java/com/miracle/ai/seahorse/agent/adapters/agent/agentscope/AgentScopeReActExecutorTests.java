@@ -48,14 +48,22 @@ import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRun;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRunFinish;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentEventType;
+import io.agentscope.core.event.AgentEndEvent;
 import io.agentscope.core.event.AgentResultEvent;
+import io.agentscope.core.event.AgentStartEvent;
 import io.agentscope.core.event.ModelCallEndEvent;
+import io.agentscope.core.event.ModelCallStartEvent;
 import io.agentscope.core.event.RequestStopEvent;
 import io.agentscope.core.event.RequireUserConfirmEvent;
 import io.agentscope.core.event.TextBlockDeltaEvent;
+import io.agentscope.core.event.ToolCallEndEvent;
+import io.agentscope.core.event.ToolCallStartEvent;
+import io.agentscope.core.event.ToolResultEndEvent;
+import io.agentscope.core.event.ToolResultStartEvent;
 import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.ToolResultState;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.model.ChatUsage;
 import org.junit.jupiter.api.Test;
@@ -215,6 +223,62 @@ class AgentScopeReActExecutorTests {
         assertEquals("AGENT_STEP", traceRepository.startedNodes.get(0).getNodeType());
         assertEquals(1, traceRepository.finishedNodes.size());
         assertEquals(KernelRagTraceRecorder.STATUS_SUCCESS, traceRepository.finishedNodes.get(0).status());
+    }
+
+    @Test
+    void streamExecuteRecordsAgentscopeRuntimeEventSpansUnderExecutorSpan() {
+        CapturingClient client = new CapturingClient();
+        client.events = Flux.just(
+                new AgentStartEvent("session-1", "reply-1", "planner"),
+                new ModelCallStartEvent("reply-1"),
+                new ModelCallEndEvent("reply-1", ChatUsage.builder()
+                        .inputTokens(13)
+                        .outputTokens(8)
+                        .build()),
+                new ToolCallStartEvent("reply-1", "call-1", "weather"),
+                new ToolCallEndEvent("reply-1", "call-1", "weather"),
+                new ToolResultStartEvent("reply-1", "call-1", "weather"),
+                new ToolResultEndEvent("reply-1", "call-1", "weather", ToolResultState.SUCCESS),
+                new AgentEndEvent("reply-1"));
+        RecordingTraceRepository traceRepository = new RecordingTraceRepository();
+        AgentScopeReActExecutor executor = new AgentScopeReActExecutor(
+                client,
+                Runnable::run,
+                ApprovalRequestQueryPort.empty(),
+                AgentScopeObservationSupport.noop(),
+                new KernelRagTraceRecorder(traceRepository));
+        RecordingCallback callback = new RecordingCallback();
+        AgentLoopRequest request = AgentLoopRequest.builder()
+                .question("plan")
+                .samplingOptions(ChatSamplingOptions.builder().build())
+                .runId("run-1")
+                .agentId("agent-1")
+                .tenantId("tenant-a")
+                .build();
+
+        executor.streamExecute(request, callback, TraceRunScope.active("trace-1", Instant.now()));
+
+        assertEquals(5, traceRepository.startedNodes.size());
+        RagTraceNode root = traceRepository.startedNodes.get(0);
+        RagTraceNode agent = traceRepository.startedNodes.get(1);
+        RagTraceNode model = traceRepository.startedNodes.get(2);
+        RagTraceNode toolCall = traceRepository.startedNodes.get(3);
+        RagTraceNode toolResult = traceRepository.startedNodes.get(4);
+        assertEquals("agentscope-step", root.getNodeName());
+        assertEquals("agentscope-agent:planner", agent.getNodeName());
+        assertEquals(root.getNodeId(), agent.getParentNodeId());
+        assertEquals(1, agent.getDepth());
+        assertEquals("agentscope-model-call", model.getNodeName());
+        assertEquals(agent.getNodeId(), model.getParentNodeId());
+        assertEquals("agentscope-tool-call:weather", toolCall.getNodeName());
+        assertEquals(agent.getNodeId(), toolCall.getParentNodeId());
+        assertEquals("agentscope-tool-result:weather", toolResult.getNodeName());
+        assertEquals(agent.getNodeId(), toolResult.getParentNodeId());
+        assertEquals(5, traceRepository.finishedNodes.size());
+        RagTraceNodeFinish modelFinish = finishFor(traceRepository, model);
+        assertEquals(KernelRagTraceRecorder.STATUS_SUCCESS, modelFinish.status());
+        assertEquals("{\"eventType\":\"model_call_end\",\"replyId\":\"reply-1\",\"usage\":{\"inputTokens\":13,\"outputTokens\":8,\"totalTokens\":21}}",
+                modelFinish.extraData());
     }
 
     @Test
@@ -536,6 +600,13 @@ class AgentScopeReActExecutorTests {
         public void finishNode(RagTraceNodeFinish finish) {
             finishedNodes.add(finish);
         }
+    }
+
+    private static RagTraceNodeFinish finishFor(RecordingTraceRepository repository, RagTraceNode node) {
+        return repository.finishedNodes.stream()
+                .filter(finish -> finish.nodeId().equals(node.getNodeId()))
+                .findFirst()
+                .orElseThrow();
     }
 
     private static ApprovalRequestQueryPort approvalQuery(
