@@ -62,7 +62,7 @@ public class SeahorseUserMemoryController {
         this.privacyPortProvider = privacyPortProvider;
     }
 
-    @GetMapping("/api/me/memories")
+    @GetMapping({"/me/memories", "/api/me/memories"})
     public ApiResponse<UserMemoryCenterResponse> list(
             @RequestParam(required = false) Integer limit,
             @RequestParam(required = false) String userId,
@@ -80,7 +80,7 @@ public class SeahorseUserMemoryController {
                         .toList()));
     }
 
-    @DeleteMapping("/api/me/memories/{memoryId}")
+    @DeleteMapping({"/me/memories/{memoryId}", "/api/me/memories/{memoryId}"})
     public ApiResponse<Map<String, Boolean>> delete(
             @PathVariable String memoryId,
             @RequestParam(required = false) String userId,
@@ -94,7 +94,7 @@ public class SeahorseUserMemoryController {
         return ApiResponse.ok(Map.of("deleted", managementPort().deleteMemory(USER_MEMORY_LAYER, memoryId)));
     }
 
-    @PostMapping("/api/me/memory-settings/privacy-mode")
+    @PostMapping({"/me/memory-settings/privacy-mode", "/api/me/memory-settings/privacy-mode"})
     public ApiResponse<UserMemoryPrivacyResponse> updatePrivacyMode(
             @RequestBody(required = false) UserMemoryPrivacyModeRequest request,
             @RequestParam(required = false) String userId,

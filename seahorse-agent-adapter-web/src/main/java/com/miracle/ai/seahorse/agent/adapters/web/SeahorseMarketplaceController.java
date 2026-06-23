@@ -55,14 +55,14 @@ public class SeahorseMarketplaceController {
         this.currentUserPort = currentUserPort;
     }
 
-    @PostMapping("/api/marketplace/agents/{agentId}/publish")
+    @PostMapping({"/marketplace/agents/{agentId}/publish", "/api/marketplace/agents/{agentId}/publish"})
     public ApiResponse<Long> submitForReview(@PathVariable String agentId) {
         CurrentUser user = currentUserPort.requireCurrentUser();
         return ApiResponses.requireService(marketplaceServiceProvider,
                 svc -> svc.submitForReview(agentId, user.operator()));
     }
 
-    @GetMapping("/api/marketplace/reviews/pending")
+    @GetMapping({"/marketplace/reviews/pending", "/api/marketplace/reviews/pending"})
     public ApiResponse<List<ReviewResponse>> listPendingReviews(@RequestParam(defaultValue = "1") int page,
                                                                 @RequestParam(defaultValue = "20") int size) {
         return ApiResponses.requireService(marketplaceServiceProvider,
@@ -71,7 +71,7 @@ public class SeahorseMarketplaceController {
                         .toList());
     }
 
-    @PutMapping("/api/marketplace/reviews/{reviewId}/approve")
+    @PutMapping({"/marketplace/reviews/{reviewId}/approve", "/api/marketplace/reviews/{reviewId}/approve"})
     public ApiResponse<Void> approve(@PathVariable Long reviewId,
                                      @RequestBody(required = false) ReviewActionRequest request) {
         CurrentUser user = currentUserPort.requireCurrentUser();
@@ -83,7 +83,7 @@ public class SeahorseMarketplaceController {
                 });
     }
 
-    @PutMapping("/api/marketplace/reviews/{reviewId}/reject")
+    @PutMapping({"/marketplace/reviews/{reviewId}/reject", "/api/marketplace/reviews/{reviewId}/reject"})
     public ApiResponse<Void> reject(@PathVariable Long reviewId,
                                     @RequestBody(required = false) ReviewActionRequest request) {
         CurrentUser user = currentUserPort.requireCurrentUser();
@@ -95,7 +95,7 @@ public class SeahorseMarketplaceController {
                 });
     }
 
-    @GetMapping("/api/marketplace/agents")
+    @GetMapping({"/marketplace/agents", "/api/marketplace/agents"})
     public ApiResponse<Object> listMarketplace(@RequestParam(required = false) String category,
                                                @RequestParam(required = false) String sort,
                                                @RequestParam(defaultValue = "1") int page,
@@ -110,14 +110,14 @@ public class SeahorseMarketplaceController {
         return ApiResponse.ok(catalogPort.page(query));
     }
 
-    @PostMapping("/api/marketplace/agents/{agentId}/subscribe")
+    @PostMapping({"/marketplace/agents/{agentId}/subscribe", "/api/marketplace/agents/{agentId}/subscribe"})
     public ApiResponse<Long> subscribe(@PathVariable String agentId) {
         CurrentUser user = currentUserPort.requireCurrentUser();
         return ApiResponses.requireService(marketplaceServiceProvider,
                 svc -> svc.subscribe(agentId, user.userId()));
     }
 
-    @DeleteMapping("/api/marketplace/agents/{agentId}/subscribe")
+    @DeleteMapping({"/marketplace/agents/{agentId}/subscribe", "/api/marketplace/agents/{agentId}/subscribe"})
     public ApiResponse<Void> unsubscribe(@PathVariable String agentId) {
         CurrentUser user = currentUserPort.requireCurrentUser();
         return ApiResponses.requireService(marketplaceServiceProvider,
@@ -127,7 +127,7 @@ public class SeahorseMarketplaceController {
                 });
     }
 
-    @GetMapping("/api/marketplace/agents/my-subscriptions")
+    @GetMapping({"/marketplace/agents/my-subscriptions", "/api/marketplace/agents/my-subscriptions"})
     public ApiResponse<List<SubscriptionResponse>> mySubscriptions(
             @RequestParam(defaultValue = "true") boolean activeOnly) {
         CurrentUser user = currentUserPort.requireCurrentUser();
@@ -137,7 +137,7 @@ public class SeahorseMarketplaceController {
                         .toList());
     }
 
-    @PostMapping("/api/marketplace/agents/{agentId}/ratings")
+    @PostMapping({"/marketplace/agents/{agentId}/ratings", "/api/marketplace/agents/{agentId}/ratings"})
     public ApiResponse<Long> rate(@PathVariable String agentId,
                                   @RequestBody RateRequest request) {
         CurrentUser user = currentUserPort.requireCurrentUser();

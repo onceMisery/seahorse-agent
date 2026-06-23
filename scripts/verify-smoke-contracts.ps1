@@ -1,5 +1,6 @@
 param(
     [string]$SmokeScript = "scripts/e2e-backend-smoke.ps1",
+    [string]$RagEvaluationSmokeScript = "scripts/e2e-rag-evaluation-smoke.ps1",
     [string]$FrontendDockerfile = "frontend/Dockerfile.frontend"
 )
 
@@ -11,6 +12,13 @@ if (-not (Test-Path -LiteralPath $scriptPath)) {
 }
 
 $content = Get-Content -LiteralPath $scriptPath -Raw
+
+$ragEvaluationScriptPath = Join-Path (Get-Location) $RagEvaluationSmokeScript
+if (-not (Test-Path -LiteralPath $ragEvaluationScriptPath)) {
+    throw "RAG evaluation smoke script not found: $RagEvaluationSmokeScript"
+}
+
+$ragEvaluationContent = Get-Content -LiteralPath $ragEvaluationScriptPath -Raw
 
 $frontendDockerfilePath = Join-Path (Get-Location) $FrontendDockerfile
 if (-not (Test-Path -LiteralPath $frontendDockerfilePath)) {
@@ -91,6 +99,38 @@ if ($missing.Count -gt 0 -or $forbidden.Count -gt 0) {
     exit 1
 }
 
+$requiredRagEvaluationSnippets = @(
+    'function Wait-ForDocumentChunks',
+    '"$BaseUrl/knowledge-base/docs/$DocumentId/chunks?current=1&size=10"',
+    'Assert-ApiOk $chunkResp "Start document chunking"',
+    '$indexedChunks = @(Test-Step "Verify document chunks exist"',
+    'expectedDocIds = @($docId)',
+    'expectedChunkIds = $expectedChunkIds',
+    'if ([double]$d.recallAtK -le 0) { throw "Expected recall@k > 0 after indexing smoke chunks" }',
+    'Invoke-RestMethod -Uri "$BaseUrl/knowledge-base/docs/$docId" -Method DELETE'
+)
+
+$forbiddenRagEvaluationSnippets = @(
+    'Start-Sleep -Seconds 15',
+    'return ($docs.data.total -gt 0)',
+    'return ($d.evaluableCaseCount -gt 0 -and $d.emptyRecallRate -lt 1.0)'
+)
+
+$missingRagEvaluation = @($requiredRagEvaluationSnippets | Where-Object { -not $ragEvaluationContent.Contains($_) })
+$forbiddenRagEvaluation = @($forbiddenRagEvaluationSnippets | Where-Object { $ragEvaluationContent.Contains($_) })
+
+if ($missingRagEvaluation.Count -gt 0 -or $forbiddenRagEvaluation.Count -gt 0) {
+    if ($missingRagEvaluation.Count -gt 0) {
+        Write-Host "Missing required RAG evaluation smoke snippets:" -ForegroundColor Red
+        $missingRagEvaluation | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    }
+    if ($forbiddenRagEvaluation.Count -gt 0) {
+        Write-Host "Forbidden stale RAG evaluation smoke snippets:" -ForegroundColor Red
+        $forbiddenRagEvaluation | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    }
+    exit 1
+}
+
 $requiredFrontendDockerfileSnippets = @(
     'npm ci',
     'npm run build',
@@ -116,4 +156,4 @@ if ($missingFrontend.Count -gt 0 -or $forbiddenFrontend.Count -gt 0) {
     exit 1
 }
 
-Write-Host "Smoke contract check passed for $SmokeScript and $FrontendDockerfile"
+Write-Host "Smoke contract check passed for $SmokeScript, $RagEvaluationSmokeScript, and $FrontendDockerfile"

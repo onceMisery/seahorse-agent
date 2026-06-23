@@ -15,6 +15,7 @@ $ErrorActionPreference = "Stop"
 $passed = 0
 $failed = 0
 $total = 0
+$docId = $null
 
 function Test-Step {
     param([string]$Name, [scriptblock]$Action)
@@ -36,6 +37,36 @@ function Test-Step {
         Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red
         return $null
     }
+}
+
+function Assert-ApiOk {
+    param(
+        [object]$Response,
+        [string]$Name
+    )
+    if ($null -eq $Response -or $Response.code -ne "0") {
+        throw "$Name API error: $($Response | ConvertTo-Json -Depth 10 -Compress)"
+    }
+}
+
+function Wait-ForDocumentChunks {
+    param(
+        [string]$DocumentId,
+        [int]$Attempts = 20,
+        [int]$DelaySeconds = 3
+    )
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        $chunksResp = Invoke-RestMethod -Uri "$BaseUrl/knowledge-base/docs/$DocumentId/chunks?current=1&size=10" -Headers $h
+        Assert-ApiOk $chunksResp "Document chunks"
+        $records = @($chunksResp.data.records)
+        if ($records.Count -gt 0) {
+            return ,$records
+        }
+        if ($attempt -lt $Attempts) {
+            Start-Sleep -Seconds $DelaySeconds
+        }
+    }
+    throw "Document $DocumentId has no chunks after $Attempts attempts"
 }
 
 # ---- Step 0: Login ----
@@ -79,23 +110,35 @@ Test-Step "Upload smoke document" {
         -F "file=@$tmpFile;filename=smoke-eval.md" `
         -F "chunkSize=256" -F "chunkOverlap=32"
     Write-Host "  Upload response: $($uploadResp.Substring(0, [Math]::Min(120, $uploadResp.Length)))"
-    return $uploadResp -match '"code"'
+    $upload = $uploadResp | ConvertFrom-Json
+    Assert-ApiOk $upload "Upload document"
+    $script:docId = [string]$upload.data.id
+    if ([string]::IsNullOrWhiteSpace($script:docId)) { throw "Upload did not return document id" }
+    return $script:docId
 }
 Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
 
-# Wait for indexing
-Write-Host "`n  Waiting 15s for document indexing..." -ForegroundColor Yellow
-Start-Sleep -Seconds 15
+# Manual chunking makes the smoke deterministic in both queue-backed and local modes.
+Test-Step "Start document chunking" {
+    $chunkResp = Invoke-RestMethod -Uri "$BaseUrl/knowledge-base/docs/$docId/chunk" -Method POST -Headers $h
+    Assert-ApiOk $chunkResp "Start document chunking"
+    return $true
+}
 
 # ---- Step 3: Verify document is indexed ----
-Test-Step "Verify document chunks exist" {
+$indexedChunks = @(Test-Step "Verify document chunks exist" {
     $docs = Invoke-RestMethod -Uri "$BaseUrl/knowledge-base/$kbId/docs?page=1&size=5" -Headers $h
-    Write-Host "  Documents: $($docs.data.total), Chunks in first doc: $($docs.data.records[0].chunkCount)"
-    return ($docs.data.total -gt 0)
-}
+    Assert-ApiOk $docs "Document page"
+    $chunks = @(Wait-ForDocumentChunks -DocumentId $docId)
+    $firstDoc = @($docs.data.records | Where-Object { [string]$_.id -eq $docId })[0]
+    Write-Host "  Documents: $($docs.data.total), chunk records: $($chunks.Count), listed chunkCount: $($firstDoc.chunkCount)"
+    return ,$chunks
+})
 
 # ---- Step 4: Create evaluation dataset ----
 $dsResp = Test-Step "Create evaluation dataset" {
+    $expectedChunkIds = @($indexedChunks | Select-Object -First 3 | ForEach-Object { [string]$_.id })
+    if ($expectedChunkIds.Count -eq 0) { throw "No expected chunk ids available for evaluation dataset" }
     $dsBody = @{
         datasetId = ""
         name = "ci-smoke-dataset"
@@ -106,8 +149,8 @@ $dsResp = Test-Step "Create evaluation dataset" {
                 caseId = "smoke-1"
                 question = "What embedding model and dimension does Seahorse use?"
                 expectedKbIds = @($kbId)
-                expectedDocIds = @()
-                expectedChunkIds = @()
+                expectedDocIds = @($docId)
+                expectedChunkIds = $expectedChunkIds
                 negativeChunkIds = @()
                 tags = @("smoke", "embedding")
                 minRecall = 0.5
@@ -116,8 +159,8 @@ $dsResp = Test-Step "Create evaluation dataset" {
                 caseId = "smoke-2"
                 question = "What are the core RAG pipeline components?"
                 expectedKbIds = @($kbId)
-                expectedDocIds = @()
-                expectedChunkIds = @()
+                expectedDocIds = @($docId)
+                expectedChunkIds = $expectedChunkIds
                 negativeChunkIds = @()
                 tags = @("smoke", "rag")
                 minRecall = 0.5
@@ -126,7 +169,7 @@ $dsResp = Test-Step "Create evaluation dataset" {
     } | ConvertTo-Json -Depth 5
     $r = Invoke-RestMethod -Uri "$BaseUrl/knowledge-base/$kbId/retrieval-evaluation-datasets" `
         -Method POST -Headers $h -ContentType "application/json" -Body $dsBody
-    if ($r.code -ne "0") { throw "API error: $($r | ConvertTo-Json -Compress)" }
+    Assert-ApiOk $r "Create evaluation dataset"
     Write-Host "  Dataset ID: $($r.data.datasetId), Cases: $($r.data.cases.Count)"
     return $r.data.datasetId
 }
@@ -138,12 +181,15 @@ $evalResp = Test-Step "Run evaluation" {
     $evalBody = '{"strategyName":"ci-smoke","topK":5}'
     $r = Invoke-RestMethod -Uri "$BaseUrl/knowledge-base/$kbId/retrieval-evaluation-datasets/$dsId/evaluate" `
         -Method POST -Headers $h -ContentType "application/json" -Body $evalBody
-    if ($r.code -ne "0") { throw "API error: $($r | ConvertTo-Json -Compress)" }
+    Assert-ApiOk $r "Run evaluation"
     $d = $r.data
     Write-Host "  recall@k=$($d.recallAtK), precision@k=$($d.precisionAtK), MRR=$($d.mrr), NDCG=$($d.ndcgAtK)"
     Write-Host "  emptyRecallRate=$($d.emptyRecallRate), avgLatency=$($d.averageLatencyMs)ms"
     Write-Host "  Cases evaluated: $($d.evaluableCaseCount)/$($d.caseCount)"
-    return ($d.evaluableCaseCount -gt 0 -and $d.emptyRecallRate -lt 1.0)
+    if ($d.evaluableCaseCount -lt 2) { throw "Expected both smoke cases to be evaluable" }
+    if ([double]$d.recallAtK -le 0) { throw "Expected recall@k > 0 after indexing smoke chunks" }
+    if ([double]$d.emptyRecallRate -ge 1.0) { throw "Expected non-empty recall results" }
+    return $true
 }
 
 # ---- Step 6: Verify strategy templates exist ----
@@ -164,6 +210,10 @@ Write-Host "============================================" -ForegroundColor White
 # Cleanup: delete the KB
 Write-Host "`nCleanup: deleting KB $kbId..." -ForegroundColor Yellow
 try {
+    if ($docId) {
+        Invoke-RestMethod -Uri "$BaseUrl/knowledge-base/docs/$docId" -Method DELETE -Headers $h | Out-Null
+        Write-Host "  Document deleted" -ForegroundColor Green
+    }
     Invoke-RestMethod -Uri "$BaseUrl/knowledge-base/$kbId" -Method DELETE -Headers $h | Out-Null
     Write-Host "  KB deleted" -ForegroundColor Green
 } catch {

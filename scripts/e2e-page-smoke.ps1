@@ -22,7 +22,15 @@ if (-not (Test-Path -LiteralPath $runtimePackage)) {
 
 if (-not (Test-Path -LiteralPath $playwrightPackage)) {
     Write-Host "Installing Playwright runtime into $runtimeDir"
-    npm --prefix $runtimeDir install --no-audit --no-fund
+    Push-Location $runtimeDir
+    try {
+        npm install --no-audit --no-fund
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm install failed with exit code $LASTEXITCODE"
+        }
+    } finally {
+        Pop-Location
+    }
 }
 
 $env:PLAYWRIGHT_RUNTIME_DIR = $runtimeDir
