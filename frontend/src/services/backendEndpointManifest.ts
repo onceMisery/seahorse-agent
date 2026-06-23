@@ -9,11 +9,11 @@ export const backendEndpointManifest = [
   },
   {
     "method": "DELETE",
-    "path": "/api/agents/{}"
+    "path": "/api/admin/tenants/{}"
   },
   {
     "method": "DELETE",
-    "path": "/api/admin/tenants/{}"
+    "path": "/api/agents/{}"
   },
   {
     "method": "DELETE",
@@ -97,6 +97,14 @@ export const backendEndpointManifest = [
   },
   {
     "method": "DELETE",
+    "path": "/role-cards/{}"
+  },
+  {
+    "method": "DELETE",
+    "path": "/run-profiles/{}"
+  },
+  {
+    "method": "DELETE",
     "path": "/sample-questions/{}"
   },
   {
@@ -137,7 +145,15 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/agent-runs/{}/context-snapshot"
+  },
+  {
+    "method": "GET",
     "path": "/agent-runs/{}/cost-summary"
+  },
+  {
+    "method": "GET",
+    "path": "/agent-runs/{}/events"
   },
   {
     "method": "GET",
@@ -170,6 +186,10 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/agents/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/{}/versions/{}"
   },
   {
     "method": "GET",
@@ -225,11 +245,11 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
-    "path": "/api/agent-runs/{}/cost-summary"
+    "path": "/api/agent-runs/{}/context-snapshot"
   },
   {
     "method": "GET",
-    "path": "/api/agent-runs/{}/context-snapshot"
+    "path": "/api/agent-runs/{}/cost-summary"
   },
   {
     "method": "GET",
@@ -281,11 +301,19 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/agents/{}/rollouts/{}/cost-summary"
+  },
+  {
+    "method": "GET",
     "path": "/api/agents/{}/skills"
   },
   {
     "method": "GET",
     "path": "/api/agents/{}/skills/snapshot"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agents/{}/versions/{}"
   },
   {
     "method": "GET",
@@ -310,10 +338,6 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/api/approvals/{}"
-  },
-  {
-    "method": "GET",
-    "path": "/api/role-cards"
   },
   {
     "method": "GET",
@@ -381,6 +405,14 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/conversations/{}/messages/tree"
+  },
+  {
+    "method": "GET",
+    "path": "/api/conversations/{}/run-profile"
+  },
+  {
+    "method": "GET",
     "path": "/api/cost-usage:aggregate"
   },
   {
@@ -413,15 +445,27 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
-    "path": "/api/marketplace/reviews/pending"
-  },
-  {
-    "method": "GET",
     "path": "/api/marketplace/revenue/my-earnings"
   },
   {
     "method": "GET",
     "path": "/api/marketplace/revenue/my-earnings/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/api/marketplace/reviews/pending"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mcp/servers"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mcp/servers/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mcp/servers/{}/stderr-tail"
   },
   {
     "method": "GET",
@@ -437,30 +481,6 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
-    "path": "/api/mcp/servers"
-  },
-  {
-    "method": "GET",
-    "path": "/api/mcp/servers/{}"
-  },
-  {
-    "method": "GET",
-    "path": "/api/mcp/servers/{}/stderr-tail"
-  },
-  {
-    "method": "POST",
-    "path": "/api/mcp/servers/{}/test"
-  },
-  {
-    "method": "POST",
-    "path": "/api/mcp/servers/{}/restart"
-  },
-  {
-    "method": "POST",
-    "path": "/api/mcp/servers/{}/refresh-tools"
-  },
-  {
-    "method": "GET",
     "path": "/api/notifications"
   },
   {
@@ -470,6 +490,10 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/api/resource-acl-rules"
+  },
+  {
+    "method": "GET",
+    "path": "/api/role-cards"
   },
   {
     "method": "GET",
@@ -485,15 +509,19 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
-    "path": "/api/run-profiles/executor-engines"
-  },
-  {
-    "method": "GET",
     "path": "/api/run-profiles/{}"
   },
   {
     "method": "GET",
+    "path": "/api/run-profiles/{}/audit-summary"
+  },
+  {
+    "method": "GET",
     "path": "/api/run-profiles/{}/risk-summary"
+  },
+  {
+    "method": "GET",
+    "path": "/api/run-profiles/executor-engines"
   },
   {
     "method": "GET",
@@ -562,6 +590,14 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/conversations/{}/messages"
+  },
+  {
+    "method": "GET",
+    "path": "/conversations/{}/messages/tree"
+  },
+  {
+    "method": "GET",
+    "path": "/conversations/{}/run-profile"
   },
   {
     "method": "GET",
@@ -690,6 +726,22 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/mappings/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/mcp/servers"
+  },
+  {
+    "method": "GET",
+    "path": "/mcp/servers/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/mcp/servers/{}/stderr-tail"
+  },
+  {
+    "method": "GET",
+    "path": "/me/quota-summary"
   },
   {
     "method": "GET",
@@ -845,11 +897,79 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/readiness/checks"
+  },
+  {
+    "method": "GET",
+    "path": "/readiness/product-mode"
+  },
+  {
+    "method": "GET",
+    "path": "/readiness/summary"
+  },
+  {
+    "method": "GET",
+    "path": "/role-cards"
+  },
+  {
+    "method": "GET",
+    "path": "/run-context-snapshots/by-run/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/run-experiments/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/run-profiles"
+  },
+  {
+    "method": "GET",
+    "path": "/run-profiles/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/run-profiles/{}/audit-summary"
+  },
+  {
+    "method": "GET",
+    "path": "/run-profiles/{}/risk-summary"
+  },
+  {
+    "method": "GET",
+    "path": "/run-profiles/executor-engines"
+  },
+  {
+    "method": "GET",
     "path": "/sample-questions"
   },
   {
     "method": "GET",
     "path": "/sample-questions/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/task-templates"
+  },
+  {
+    "method": "GET",
+    "path": "/task-templates/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/tasks"
+  },
+  {
+    "method": "GET",
+    "path": "/tasks/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/tasks/{}/artifacts"
+  },
+  {
+    "method": "GET",
+    "path": "/tasks/{}/events"
   },
   {
     "method": "GET",
@@ -1009,34 +1129,6 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
-    "path": "/api/role-cards"
-  },
-  {
-    "method": "POST",
-    "path": "/api/run-experiments"
-  },
-  {
-    "method": "POST",
-    "path": "/api/run-experiments/{}/cancel"
-  },
-  {
-    "method": "POST",
-    "path": "/api/run-experiments/{}/trials/{}/score"
-  },
-  {
-    "method": "POST",
-    "path": "/api/run-experiments/{}/trials/{}/fork-to-branch"
-  },
-  {
-    "method": "POST",
-    "path": "/api/run-profiles"
-  },
-  {
-    "method": "POST",
-    "path": "/api/run-profiles/{}/activate"
-  },
-  {
-    "method": "POST",
     "path": "/api/billing/callbacks/{}"
   },
   {
@@ -1073,6 +1165,18 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/api/conversations/{}/messages/branch/switch"
+  },
+  {
+    "method": "POST",
+    "path": "/api/conversations/{}/messages/fork"
+  },
+  {
+    "method": "POST",
+    "path": "/api/conversations/{}/run-profile/{}/apply"
+  },
+  {
+    "method": "POST",
     "path": "/api/cost-usage-records"
   },
   {
@@ -1106,6 +1210,18 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/api/marketplace/agents/{}/subscribe"
+  },
+  {
+    "method": "POST",
+    "path": "/api/mcp/servers/{}/refresh-tools"
+  },
+  {
+    "method": "POST",
+    "path": "/api/mcp/servers/{}/restart"
+  },
+  {
+    "method": "POST",
+    "path": "/api/mcp/servers/{}/test"
   },
   {
     "method": "POST",
@@ -1146,6 +1262,54 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/api/resource-acl-rules/{}/disable"
+  },
+  {
+    "method": "POST",
+    "path": "/api/role-cards"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-experiments"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-experiments/{}/cancel"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-experiments/{}/trials/{}/fork-to-branch"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-experiments/{}/trials/{}/score"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-profiles"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-profiles/{}/activate"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-profiles/{}/approve"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-profiles/{}/production-gate/check"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-profiles/{}/reject"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-profiles/{}/resolve-preview"
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-profiles/{}/submit-approval"
   },
   {
     "method": "POST",
@@ -1201,6 +1365,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/auth/refresh"
+  },
+  {
+    "method": "POST",
     "path": "/auth/register"
   },
   {
@@ -1217,6 +1385,18 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/conversations/{}/messages/branch/switch"
+  },
+  {
+    "method": "POST",
+    "path": "/conversations/{}/messages/fork"
+  },
+  {
+    "method": "POST",
+    "path": "/conversations/{}/run-profile/{}/apply"
+  },
+  {
+    "method": "POST",
     "path": "/conversations/messages/{}/feedback"
   },
   {
@@ -1230,6 +1410,14 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/ingestion/tasks"
+  },
+  {
+    "method": "POST",
+    "path": "/ingestion/tasks/{}/retry"
+  },
+  {
+    "method": "POST",
+    "path": "/ingestion/tasks/{}/rollback"
   },
   {
     "method": "POST",
@@ -1281,7 +1469,15 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/knowledge-base/{}/retrieval-evaluation-datasets/{}/comparisons/{}/promote"
+  },
+  {
+    "method": "POST",
     "path": "/knowledge-base/{}/retrieval-evaluation-datasets/{}/evaluate"
+  },
+  {
+    "method": "POST",
+    "path": "/knowledge-base/{}/retrieval-evaluation-datasets/{}/samples/import"
   },
   {
     "method": "POST",
@@ -1325,6 +1521,18 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/mcp/servers/{}/refresh-tools"
+  },
+  {
+    "method": "POST",
+    "path": "/mcp/servers/{}/restart"
+  },
+  {
+    "method": "POST",
+    "path": "/mcp/servers/{}/test"
+  },
+  {
+    "method": "POST",
     "path": "/memories/conflicts/{}/resolve"
   },
   {
@@ -1346,6 +1554,10 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/memories/policy-config"
+  },
+  {
+    "method": "POST",
+    "path": "/memories/profile-facts/{}/disable"
   },
   {
     "method": "POST",
@@ -1433,7 +1645,67 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/readiness/checks/{}/run"
+  },
+  {
+    "method": "POST",
+    "path": "/role-cards"
+  },
+  {
+    "method": "POST",
+    "path": "/run-experiments"
+  },
+  {
+    "method": "POST",
+    "path": "/run-experiments/{}/cancel"
+  },
+  {
+    "method": "POST",
+    "path": "/run-experiments/{}/trials/{}/fork-to-branch"
+  },
+  {
+    "method": "POST",
+    "path": "/run-experiments/{}/trials/{}/score"
+  },
+  {
+    "method": "POST",
+    "path": "/run-profiles"
+  },
+  {
+    "method": "POST",
+    "path": "/run-profiles/{}/activate"
+  },
+  {
+    "method": "POST",
+    "path": "/run-profiles/{}/approve"
+  },
+  {
+    "method": "POST",
+    "path": "/run-profiles/{}/production-gate/check"
+  },
+  {
+    "method": "POST",
+    "path": "/run-profiles/{}/reject"
+  },
+  {
+    "method": "POST",
+    "path": "/run-profiles/{}/resolve-preview"
+  },
+  {
+    "method": "POST",
+    "path": "/run-profiles/{}/submit-approval"
+  },
+  {
+    "method": "POST",
     "path": "/sample-questions"
+  },
+  {
+    "method": "POST",
+    "path": "/tasks"
+  },
+  {
+    "method": "POST",
+    "path": "/tasks/{}/cancel"
   },
   {
     "method": "POST",
@@ -1553,6 +1825,18 @@ export const backendEndpointManifest = [
   },
   {
     "method": "PUT",
+    "path": "/role-cards/{}"
+  },
+  {
+    "method": "PUT",
+    "path": "/role-cards/{}/activate"
+  },
+  {
+    "method": "PUT",
+    "path": "/run-profiles/{}"
+  },
+  {
+    "method": "PUT",
     "path": "/sample-questions/{}"
   },
   {
@@ -1562,77 +1846,5 @@ export const backendEndpointManifest = [
   {
     "method": "PUT",
     "path": "/users/{}"
-  },
-  {
-    "method": "GET",
-    "path": "/api/agents/{}/versions/{}"
-  },
-  {
-    "method": "POST",
-    "path": "/auth/refresh"
-  },
-  {
-    "method": "POST",
-    "path": "/ingestion/tasks/{}/retry"
-  },
-  {
-    "method": "POST",
-    "path": "/ingestion/tasks/{}/rollback"
-  },
-  {
-    "method": "POST",
-    "path": "/knowledge-base/{}/retrieval-evaluation-datasets/{}/samples/import"
-  },
-  {
-    "method": "POST",
-    "path": "/knowledge-base/{}/retrieval-evaluation-datasets/{}/comparisons/{}/promote"
-  },
-  {
-    "method": "GET",
-    "path": "/readiness/summary"
-  },
-  {
-    "method": "GET",
-    "path": "/readiness/checks"
-  },
-  {
-    "method": "POST",
-    "path": "/readiness/checks/{}/run"
-  },
-  {
-    "method": "GET",
-    "path": "/readiness/product-mode"
-  },
-  {
-    "method": "GET",
-    "path": "/api/conversations/{}/run-profile"
-  },
-  {
-    "method": "POST",
-    "path": "/api/run-profiles/{}/resolve-preview"
-  },
-  {
-    "method": "POST",
-    "path": "/api/conversations/{}/run-profile/{}/apply"
-  },
-  {
-    "method": "POST",
-    "path": "/tasks"
-  },
-  {
-    "method": "GET",
-    "path": "/tasks/{}"
-  },
-  {
-    "method": "GET",
-    "path": "/tasks"
-  },
-  {
-    "method": "POST",
-    "path": "/tasks/{}/cancel"
-  },
-  {
-    "method": "GET",
-    "path": "/tasks/{}/artifacts"
   }
 ] as const;

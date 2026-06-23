@@ -30,6 +30,102 @@ import java.util.Objects;
 public class JdbcChatSchemaUpgrade {
 
     private static final int TARGET_LENGTH = 64;
+    private static final String SYSTEM_TENANT_ID = "default";
+    private static final String SYSTEM_USER_ID = "system";
+
+    private static final List<SystemRoleCardPreset> SYSTEM_ROLE_CARD_PRESETS = List.of(
+            new SystemRoleCardPreset(
+                    -9001L,
+                    "通用助手",
+                    "你是 Seahorse 的通用助手。回答要准确、简洁，遇到不确定信息先说明边界，再给出可执行建议。",
+                    "role.general-assistant"),
+            new SystemRoleCardPreset(
+                    -9002L,
+                    "需求分析师",
+                    "你是需求分析师。先澄清目标、用户、约束和验收标准，再输出结构化方案、风险和下一步。",
+                    "role.requirement-analyst"),
+            new SystemRoleCardPreset(
+                    -9003L,
+                    "代码开发助手",
+                    "你是代码开发助手。优先阅读现有实现，遵循项目风格，小步修改并说明验证结果。",
+                    "role.code-developer"),
+            new SystemRoleCardPreset(
+                    -9004L,
+                    "测试质量审查",
+                    "你是测试和质量审查助手。重点发现边界条件、回归风险、缺失测试和可验证的修复建议。",
+                    "role.quality-reviewer"),
+            new SystemRoleCardPreset(
+                    -9005L,
+                    "文档知识库助手",
+                    "你是文档和知识库助手。优先整理来源、术语、结论和引用关系，输出可维护的文档结构。",
+                    "role.knowledge-writer"),
+            new SystemRoleCardPreset(
+                    -9006L,
+                    "数据分析助手",
+                    "你是数据分析助手。先明确指标口径和数据来源，再给出分析步骤、异常点和结论置信度。",
+                    "role.data-analyst"),
+            new SystemRoleCardPreset(
+                    -9007L,
+                    "AgentScope 调试助手",
+                    "你是 AgentScope 调试助手。关注执行引擎、Nacos 配置、trace 链路、工具调用和可复现验证。",
+                    "role.agentscope-debugger"));
+
+    private static final List<SystemRunProfilePreset> SYSTEM_RUN_PROFILE_PRESETS = List.of(
+            new SystemRunProfilePreset(
+                    -9101L,
+                    "默认轻量方案",
+                    "适合日常问答和低风险任务，使用 kernel 执行引擎。",
+                    -9001L,
+                    "kernel",
+                    null,
+                    "{\"temperature\":0.3}",
+                    "{\"longTerm\":false}",
+                    "{\"highRiskToolApproval\":false}",
+                    "plan.default-light"),
+            new SystemRunProfilePreset(
+                    -9102L,
+                    "研发执行方案",
+                    "适合代码理解、实现和小步验证，默认绑定代码开发助手。",
+                    -9003L,
+                    "kernel",
+                    null,
+                    "{\"temperature\":0.2}",
+                    "{\"longTerm\":true}",
+                    "{\"highRiskToolApproval\":true}",
+                    "plan.code-development"),
+            new SystemRunProfilePreset(
+                    -9103L,
+                    "深度研究方案",
+                    "适合需求分析、资料整理和多轮研究，启用长期记忆范围。",
+                    -9002L,
+                    "kernel",
+                    null,
+                    "{\"temperature\":0.4}",
+                    "{\"longTerm\":true,\"knowledgeBase\":true}",
+                    "{\"highRiskToolApproval\":false}",
+                    "plan.deep-research"),
+            new SystemRunProfilePreset(
+                    -9104L,
+                    "AgentScope 观测方案",
+                    "适合 AgentScope 引擎调试和 trace 验证，默认开启 Studio trace。",
+                    -9007L,
+                    "agentscope",
+                    "{\"studioTraceEnabled\":true}",
+                    "{\"temperature\":0.2}",
+                    "{\"longTerm\":true}",
+                    "{\"highRiskToolApproval\":true}",
+                    "plan.agentscope-observe"),
+            new SystemRunProfilePreset(
+                    -9105L,
+                    "安全审批方案",
+                    "适合高风险工具或生产前验证，要求高风险工具审批。",
+                    -9004L,
+                    "kernel",
+                    null,
+                    "{\"temperature\":0.2}",
+                    "{\"longTerm\":false}",
+                    "{\"highRiskToolApproval\":true,\"outputReview\":true}",
+                    "plan.safety-approval"));
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -43,6 +139,7 @@ public class JdbcChatSchemaUpgrade {
         ensureTaskTable();
         ensureRoleCardGovernanceColumns();
         ensureRunProfileGovernanceColumns();
+        ensureSystemPresetAssets();
         widenColumns("t_conversation", List.of("id", "conversation_id", "user_id"));
         widenColumns("t_conversation_summary", List.of("id", "conversation_id", "user_id", "last_message_id"));
         widenColumns("t_message", List.of("id", "conversation_id", "user_id"));
@@ -94,6 +191,14 @@ public class JdbcChatSchemaUpgrade {
         addColumnIfMissing("sa_role_card", "preset_key", "VARCHAR(128)");
         addColumnIfMissing("sa_role_card", "preset_version", "INTEGER NOT NULL DEFAULT 1");
         addColumnIfMissing("sa_role_card", "readonly", "SMALLINT NOT NULL DEFAULT 0");
+        createBestEffortIndex("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uk_sa_role_card_system_preset
+                ON sa_role_card (tenant_id, preset_key)
+                WHERE preset_key IS NOT NULL AND deleted = 0
+                """, """
+                CREATE INDEX IF NOT EXISTS uk_sa_role_card_system_preset
+                ON sa_role_card (tenant_id, preset_key)
+                """);
     }
 
     private void ensureRunProfileGovernanceColumns() {
@@ -112,6 +217,142 @@ public class JdbcChatSchemaUpgrade {
                 CREATE INDEX IF NOT EXISTS idx_run_profile_approval
                 ON sa_run_profile (tenant_id, approval_status, deleted)
                 """);
+        createBestEffortIndex("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uk_sa_run_profile_system_preset
+                ON sa_run_profile (tenant_id, preset_key)
+                WHERE preset_key IS NOT NULL AND deleted = 0
+                """, """
+                CREATE INDEX IF NOT EXISTS uk_sa_run_profile_system_preset
+                ON sa_run_profile (tenant_id, preset_key)
+                """);
+    }
+
+    private void ensureSystemPresetAssets() {
+        if (tableExists("sa_role_card")) {
+            for (SystemRoleCardPreset preset : SYSTEM_ROLE_CARD_PRESETS) {
+                upsertSystemRoleCard(preset);
+            }
+        }
+        if (tableExists("sa_run_profile")) {
+            for (SystemRunProfilePreset preset : SYSTEM_RUN_PROFILE_PRESETS) {
+                upsertSystemRunProfile(preset);
+            }
+        }
+    }
+
+    private void upsertSystemRoleCard(SystemRoleCardPreset preset) {
+        int updated = jdbcTemplate.update("""
+                UPDATE sa_role_card
+                SET tenant_id = ?,
+                    user_id = ?,
+                    name = ?,
+                    definition = ?,
+                    avatar_ref = NULL,
+                    higher_perm = 0,
+                    enabled = 0,
+                    share_scope = 'ORG',
+                    approval_status = 'APPROVED',
+                    published = 1,
+                    asset_source = 'SYSTEM',
+                    preset_key = ?,
+                    preset_version = 1,
+                    readonly = 1,
+                    update_time = CURRENT_TIMESTAMP,
+                    deleted = 0
+                WHERE id = ?
+                """,
+                SYSTEM_TENANT_ID,
+                SYSTEM_USER_ID,
+                preset.name(),
+                preset.definition(),
+                preset.presetKey(),
+                preset.id());
+        if (updated > 0) {
+            return;
+        }
+        jdbcTemplate.update("""
+                INSERT INTO sa_role_card (
+                    id, tenant_id, user_id, name, definition, avatar_ref, higher_perm, enabled,
+                    share_scope, approval_status, published, asset_source, preset_key, preset_version,
+                    readonly, create_time, update_time, deleted
+                )
+                VALUES (?, ?, ?, ?, ?, NULL, 0, 0, 'ORG', 'APPROVED', 1, 'SYSTEM', ?, 1, 1,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                """,
+                preset.id(),
+                SYSTEM_TENANT_ID,
+                SYSTEM_USER_ID,
+                preset.name(),
+                preset.definition(),
+                preset.presetKey());
+    }
+
+    private void upsertSystemRunProfile(SystemRunProfilePreset preset) {
+        int updated = jdbcTemplate.update("""
+                UPDATE sa_run_profile
+                SET tenant_id = ?,
+                    user_id = ?,
+                    name = ?,
+                    description = ?,
+                    role_card_id = ?,
+                    executor_engine = ?,
+                    executor_config_json = ?,
+                    model_config_json = ?,
+                    memory_scope_json = ?,
+                    guardrail_config_json = ?,
+                    approval_status = 'APPROVED',
+                    approval_operator = ?,
+                    approval_comment = 'system preset',
+                    approval_time = CURRENT_TIMESTAMP,
+                    asset_source = 'SYSTEM',
+                    preset_key = ?,
+                    preset_version = 1,
+                    readonly = 1,
+                    enabled = 0,
+                    update_time = CURRENT_TIMESTAMP,
+                    deleted = 0
+                WHERE id = ?
+                """,
+                SYSTEM_TENANT_ID,
+                SYSTEM_USER_ID,
+                preset.name(),
+                preset.description(),
+                preset.roleCardId(),
+                preset.executorEngine(),
+                preset.executorConfigJson(),
+                preset.modelConfigJson(),
+                preset.memoryScopeJson(),
+                preset.guardrailConfigJson(),
+                SYSTEM_USER_ID,
+                preset.presetKey(),
+                preset.id());
+        if (updated > 0) {
+            return;
+        }
+        jdbcTemplate.update("""
+                INSERT INTO sa_run_profile (
+                    id, tenant_id, user_id, name, description, role_card_id, executor_engine,
+                    executor_config_json, model_config_json, memory_scope_json, guardrail_config_json,
+                    approval_status, approval_operator, approval_comment, approval_time,
+                    asset_source, preset_key, preset_version, readonly, enabled,
+                    create_time, update_time, deleted
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED', ?, 'system preset',
+                        CURRENT_TIMESTAMP, 'SYSTEM', ?, 1, 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                """,
+                preset.id(),
+                SYSTEM_TENANT_ID,
+                SYSTEM_USER_ID,
+                preset.name(),
+                preset.description(),
+                preset.roleCardId(),
+                preset.executorEngine(),
+                preset.executorConfigJson(),
+                preset.modelConfigJson(),
+                preset.memoryScopeJson(),
+                preset.guardrailConfigJson(),
+                SYSTEM_USER_ID,
+                preset.presetKey());
     }
 
     private void ensureAgentSkillTables() {
@@ -680,6 +921,30 @@ public class JdbcChatSchemaUpgrade {
         } catch (BadSqlGrammarException ex) {
             jdbcTemplate.execute(fallbackSql);
         }
+    }
+
+    private void createBestEffortIndex(String postgresSql, String fallbackSql) {
+        try {
+            executePostgresPartialIndexOrPlainIndex(postgresSql, fallbackSql);
+        } catch (Exception ignored) {
+            // Existing volumes may contain duplicate legacy data; seeding still repairs the visible presets.
+        }
+    }
+
+    private record SystemRoleCardPreset(long id, String name, String definition, String presetKey) {
+    }
+
+    private record SystemRunProfilePreset(
+            long id,
+            String name,
+            String description,
+            long roleCardId,
+            String executorEngine,
+            String executorConfigJson,
+            String modelConfigJson,
+            String memoryScopeJson,
+            String guardrailConfigJson,
+            String presetKey) {
     }
 
     private void ensureLayeredMemoryLifecycleColumns() {

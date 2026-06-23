@@ -40,7 +40,7 @@ public class SeahorseToolInvocationAuditController {
         this.auditQueryPortProvider = auditQueryPortProvider;
     }
 
-    @GetMapping("/api/tool-invocations")
+    @GetMapping({"/tool-invocations", "/api/tool-invocations"})
     public ApiResponse<Object> page(@RequestParam(required = false) String tenantId,
                                     @RequestParam(required = false) String agentId,
                                     @RequestParam(required = false) String versionId,

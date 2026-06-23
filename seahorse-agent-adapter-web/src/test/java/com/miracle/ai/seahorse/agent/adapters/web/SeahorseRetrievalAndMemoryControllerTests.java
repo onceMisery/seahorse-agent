@@ -18,6 +18,8 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDataset;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetPayload;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseDiagnostics;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationChunkDiagnostic;
@@ -152,6 +154,47 @@ class SeahorseRetrievalAndMemoryControllerTests {
                 .andExpect(jsonPath("$.code").value("0"));
 
         verify(port).listDatasets("kb-1", false);
+    }
+
+    @Test
+    void shouldImportRetrievalEvaluationSamplesFromFrontendExportShape() throws Exception {
+        RetrievalEvaluationDatasetInboundPort port = mock(RetrievalEvaluationDatasetInboundPort.class);
+        when(port.getDataset("kb-1", "dataset-1")).thenReturn(
+                new RetrievalEvaluationDataset("dataset-1", "kb-1", "daily", "daily gate",
+                        true, List.of(), null, null));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseRetrievalEvaluationDatasetController(
+                        provider(RetrievalEvaluationDatasetInboundPort.class, port))).build();
+
+        mvc.perform(post("/knowledge-base/kb-1/retrieval-evaluation-datasets/dataset-1/samples/import")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                [
+                                  {
+                                    "sampleId": "sample-1",
+                                    "query": "How do I deploy Seahorse?",
+                                    "expectedDocumentIds": ["doc-1"],
+                                    "expectedChunkIds": ["chunk-1"],
+                                    "remark": "smoke"
+                                  }
+                                ]
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data").value(1));
+
+        var captor = forClass(RetrievalEvaluationDatasetPayload.class);
+        verify(port).upsertDataset(eq("kb-1"), captor.capture());
+        assertThat(captor.getValue().datasetId()).isEqualTo("dataset-1");
+        assertThat(captor.getValue().name()).isEqualTo("daily");
+        assertThat(captor.getValue().description()).isEqualTo("daily gate");
+        assertThat(captor.getValue().enabled()).isTrue();
+        assertThat(captor.getValue().cases()).hasSize(1);
+        assertThat(captor.getValue().cases().get(0).caseId()).isEqualTo("sample-1");
+        assertThat(captor.getValue().cases().get(0).question()).isEqualTo("How do I deploy Seahorse?");
+        assertThat(captor.getValue().cases().get(0).expectedDocIds()).containsExactly("doc-1");
+        assertThat(captor.getValue().cases().get(0).expectedChunkIds()).containsExactly("chunk-1");
+        assertThat(captor.getValue().cases().get(0).tags()).containsExactly("smoke");
     }
 
     // --- RetrievalStrategyTemplate ---

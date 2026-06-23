@@ -501,6 +501,41 @@ class SeahorseAgentControllerTests {
     }
 
     @Test
+    void shouldExposeToolCatalogManagementApiBehindDockerProxy() throws Exception {
+        ToolCatalogManagementInboundPort port = mock(ToolCatalogManagementInboundPort.class);
+        when(port.page(null, null, 1L, 10L, null))
+                .thenReturn(new ToolCatalogPage(List.of(tool(true)), 1L, 10L, 1L, 1L));
+        when(port.findById("weather_query")).thenReturn(Optional.of(tool(true)));
+        when(port.disable("weather_query")).thenReturn(tool(false));
+        when(port.enable("weather_query")).thenReturn(tool(true));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseToolCatalogController(provider(ToolCatalogManagementInboundPort.class, port))).build();
+
+        mvc.perform(get("/tools"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.records[0].toolId").value("weather_query"));
+
+        mvc.perform(get("/tools/weather_query"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.provider").value("MCP"));
+
+        mvc.perform(post("/tools/weather_query/disable"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.enabled").value(false));
+
+        mvc.perform(post("/tools/weather_query/enable"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.enabled").value(true));
+
+        verify(port).page(null, null, 1L, 10L, null);
+        verify(port).findById("weather_query");
+        verify(port).disable("weather_query");
+        verify(port).enable("weather_query");
+    }
+
+    @Test
     void shouldExposeAgentToolBindingManagementApi() throws Exception {
         AgentToolBindingManagementInboundPort port = mock(AgentToolBindingManagementInboundPort.class);
         when(port.replaceBindings(eq("agent-1"), eq("agent-1-v1"), any()))
@@ -570,6 +605,25 @@ class SeahorseAgentControllerTests {
                 ToolInvocationStatus.SUCCEEDED,
                 2L,
                 20L);
+    }
+
+    @Test
+    void shouldExposeToolInvocationAuditQueryApiBehindDockerProxy() throws Exception {
+        ToolInvocationAuditQueryInboundPort port = mock(ToolInvocationAuditQueryInboundPort.class);
+        when(port.page(null, null, null, null, null, null, 1L, 10L))
+                .thenReturn(new ToolInvocationAuditPage(List.of(invocation()), 1L, 10L, 1L, 1L));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseToolInvocationAuditController(provider(ToolInvocationAuditQueryInboundPort.class, port)))
+                .build();
+
+        mvc.perform(get("/tool-invocations"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.records[0].invocationId").value("invocation-1"))
+                .andExpect(jsonPath("$.data.records[0].status").value("SUCCEEDED"));
+
+        verify(port).page(null, null, null, null, null, null, 1L, 10L);
     }
 
     @Test

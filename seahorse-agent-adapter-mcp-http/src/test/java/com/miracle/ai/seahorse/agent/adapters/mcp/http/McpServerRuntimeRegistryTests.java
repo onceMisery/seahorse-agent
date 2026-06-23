@@ -102,6 +102,25 @@ class McpServerRuntimeRegistryTests {
     }
 
     @Test
+    void shouldReportExecutorFailureWithoutThrowingDuringSafeTestCall() {
+        McpServerRuntimeRegistry registry = new McpServerRuntimeRegistry();
+        registry.recordReady(server("local-echo", McpHttpAdapterProperties.Transport.STDIO, true),
+                List.of(new McpToolDescriptor("echo", "Echo text", Map.of())),
+                "");
+        registry.setToolRegistry(new SingleToolRegistry("echo", request -> {
+            throw new IllegalStateException("stdio process stopped");
+        }));
+
+        McpServerTestResultView result = registry.testServer("local-echo");
+
+        assertThat(result.getServerName()).isEqualTo("local-echo");
+        assertThat(result.getToolId()).isEqualTo("echo");
+        assertThat(result.getSuccess()).isFalse();
+        assertThat(result.getStatus()).isEqualTo("EXECUTION_FAILED");
+        assertThat(result.getMessage()).isEqualTo("stdio process stopped");
+    }
+
+    @Test
     void shouldRestartServerThroughLifecycleAction() {
         McpServerRuntimeRegistry registry = new McpServerRuntimeRegistry();
         registry.recordFailed(server("local-echo", McpHttpAdapterProperties.Transport.STDIO, true), "boom");

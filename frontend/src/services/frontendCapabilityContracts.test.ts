@@ -113,7 +113,8 @@ describe("frontend capability service contracts", () => {
     await skillService.getAgentSkillSnapshot("agent-1");
 
     expect(mockedApi.get).toHaveBeenNthCalledWith(1, "/api/skills", {
-      params: { current: 1, size: 20, keyword: "research" }
+      params: { current: 1, size: 20, keyword: "research" },
+      suppressErrorToast: true
     });
     expect(mockedApi.get).toHaveBeenNthCalledWith(2, "/api/skills/research", {
       params: { tenantId: undefined }

@@ -61,7 +61,7 @@ public class SeahorseToolCatalogController {
                 : advancedFeatureGate;
     }
 
-    @GetMapping("/api/tools")
+    @GetMapping({"/tools", "/api/tools"})
     public ApiResponse<Object> page(@RequestParam(required = false) String resourceType,
                                     @RequestParam(required = false) String keyword,
                                     @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,
@@ -72,20 +72,20 @@ public class SeahorseToolCatalogController {
                 port -> port.page(resourceType, keyword, current, size, enabled));
     }
 
-    @GetMapping("/api/tools/{toolId}")
+    @GetMapping({"/tools/{toolId}", "/api/tools/{toolId}"})
     public ApiResponse<Object> findById(@PathVariable String toolId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.TOOL_CATALOG_MANAGEMENT);
         return ApiResponses.requireService(toolCatalogPortProvider,
                 port -> port.findById(toolId).orElseThrow(() -> new ResourceNotFoundException("Tool not found")));
     }
 
-    @PostMapping("/api/tools/{toolId}/enable")
+    @PostMapping({"/tools/{toolId}/enable", "/api/tools/{toolId}/enable"})
     public ApiResponse<Object> enable(@PathVariable String toolId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.TOOL_CATALOG_MANAGEMENT);
         return ApiResponses.requireService(toolCatalogPortProvider, port -> port.enable(toolId));
     }
 
-    @PostMapping("/api/tools/{toolId}/disable")
+    @PostMapping({"/tools/{toolId}/disable", "/api/tools/{toolId}/disable"})
     public ApiResponse<Object> disable(@PathVariable String toolId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.TOOL_CATALOG_MANAGEMENT);
         return ApiResponses.requireService(toolCatalogPortProvider, port -> port.disable(toolId));

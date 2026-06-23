@@ -119,6 +119,43 @@ class KernelRunExperimentServiceTests {
         assertEquals(202L, captured.get().getBaseLeafMessageId());
     }
 
+    @Test
+    void shouldKeepSuccessfulTrialEvidenceWhenAnotherTrialFails() {
+        InMemoryRunExperimentRepository repository = new InMemoryRunExperimentRepository();
+        RunExperimentTrialExecutorPort executor = request -> {
+            if (Long.valueOf(12L).equals(request.getRunProfileId())) {
+                return RunExperimentTrialExecutionResult.builder()
+                        .status("SUCCEEDED")
+                        .runId("run-exp-1-trial-10")
+                        .outputMessageId(301L)
+                        .metricJson("{\"cost\":0.11,\"traceId\":\"trace-success\"}")
+                        .build();
+            }
+            throw new IllegalStateException("AgentScope timeout");
+        };
+        KernelRunExperimentService service = new KernelRunExperimentService(repository, executor);
+
+        RunExperimentDetails details = service.create(RunExperimentCommand.builder()
+                .userId("100")
+                .conversationId(101L)
+                .baseLeafMessageId(202L)
+                .name("Profile compare")
+                .runProfileIds(List.of(12L, 13L))
+                .build());
+
+        assertEquals("FAILED", details.getExperiment().getStatus());
+        assertIterableEquals(List.of("SUCCEEDED", "FAILED"), details.getTrials()
+                .stream()
+                .map(RunExperimentTrialRecord::getStatus)
+                .toList());
+        RunExperimentTrialRecord succeeded = details.getTrials().get(0);
+        assertEquals("run-exp-1-trial-10", succeeded.getRunId());
+        assertEquals(301L, succeeded.getOutputMessageId());
+        assertEquals("{\"cost\":0.11,\"traceId\":\"trace-success\"}", succeeded.getMetricJson());
+        RunExperimentTrialRecord failed = details.getTrials().get(1);
+        assertEquals("AgentScope timeout", failed.getErrorMessage());
+    }
+
     private static final class InMemoryRunExperimentRepository implements RunExperimentRepositoryPort {
 
         private RunExperimentDetails details;

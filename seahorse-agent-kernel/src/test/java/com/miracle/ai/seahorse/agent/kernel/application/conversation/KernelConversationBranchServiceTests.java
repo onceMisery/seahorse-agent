@@ -72,6 +72,26 @@ class KernelConversationBranchServiceTests {
     }
 
     @Test
+    void shouldRestoreSavedBranchCursorWhenConversationReloads() {
+        InMemoryBranchRepository repository = new InMemoryBranchRepository();
+        repository.messages.add(message(1L, null, 1, 0, "user", "first"));
+        repository.messages.add(message(2L, 1L, 1, 0, "assistant", "old branch answer"));
+        repository.messages.add(message(3L, 1L, 0, 1, "assistant", "new branch answer"));
+        repository.messages.add(message(4L, 3L, 0, 0, "user", "follow the new branch"));
+        repository.cursorLeafMessageId = 4L;
+        KernelConversationBranchService service =
+                new KernelConversationBranchService(repository, new MessageTreeAssembler());
+
+        List<String> activeMessageIds = service.loadActiveTree("1", "1").stream()
+                .map(node -> node.message().getId())
+                .toList();
+
+        assertIterableEquals(List.of("1", "3", "4"), activeMessageIds);
+        assertIterableEquals(List.of(2L), service.loadActiveTree("1", "1").get(1).preSiblings());
+        assertEquals(0, repository.messages.get(2).getActive());
+    }
+
+    @Test
     void shouldSaveCursorWhenSwitchingBranch() {
         InMemoryBranchRepository repository = new InMemoryBranchRepository();
         repository.messages.add(message(1L, null, 1, 0, "user", "first"));

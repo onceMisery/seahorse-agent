@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetPayload;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCase;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -74,6 +75,27 @@ public class SeahorseRetrievalEvaluationDatasetController {
                 "request must not be null");
         return ApiResponses.requireServiceOrError(datasetPortProvider,
                 port -> port.upsertDataset(kbId, safeRequest.withDatasetId(datasetId)));
+    }
+
+    @PostMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/samples/import")
+    public ApiResponse<Object> importSamples(@PathVariable("kb-id") String kbId,
+                                             @PathVariable("dataset-id") String datasetId,
+                                             @RequestBody List<RetrievalEvaluationSampleImportRequest> request) {
+        List<RetrievalEvaluationSampleImportRequest> safeRequest = Objects.requireNonNullElse(request, List.of());
+        return ApiResponses.requireServiceOrError(datasetPortProvider, port -> {
+            var dataset = port.getDataset(kbId, datasetId);
+            List<RetrievalEvaluationCase> cases = safeRequest.stream()
+                    .filter(Objects::nonNull)
+                    .map(RetrievalEvaluationSampleImportRequest::toCase)
+                    .toList();
+            port.upsertDataset(kbId, new RetrievalEvaluationDatasetPayload(
+                    datasetId,
+                    dataset.name(),
+                    dataset.description(),
+                    dataset.enabled(),
+                    cases));
+            return cases.size();
+        });
     }
 
     @DeleteMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}")
@@ -136,5 +158,29 @@ public class SeahorseRetrievalEvaluationDatasetController {
                                       @PathVariable("dataset-id") String datasetId,
                                       @PathVariable("run-id") String runId) {
         return ApiResponses.requireServiceOrError(datasetPortProvider, port -> port.getRun(kbId, datasetId, runId));
+    }
+
+    private record RetrievalEvaluationSampleImportRequest(
+            String sampleId,
+            String query,
+            List<String> expectedDocumentIds,
+            List<String> expectedChunkIds,
+            String remark
+    ) {
+
+        RetrievalEvaluationCase toCase() {
+            return new RetrievalEvaluationCase(
+                    sampleId,
+                    query,
+                    List.of(),
+                    Objects.requireNonNullElse(expectedDocumentIds, List.of()),
+                    Objects.requireNonNullElse(expectedChunkIds, List.of()),
+                    null,
+                    null,
+                    List.of(),
+                    remark == null || remark.isBlank() ? List.of() : List.of(remark.trim()),
+                    null,
+                    null);
+        }
     }
 }
