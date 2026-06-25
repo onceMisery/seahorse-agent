@@ -120,6 +120,33 @@ class KernelRunExperimentServiceTests {
     }
 
     @Test
+    void shouldResolveTrialExecutorLazilyWhenExperimentIsCreated() {
+        InMemoryRunExperimentRepository repository = new InMemoryRunExperimentRepository();
+        AtomicReference<RunExperimentTrialExecutorPort> executorRef =
+                new AtomicReference<>(RunExperimentTrialExecutorPort.noop());
+        KernelRunExperimentService service = new KernelRunExperimentService(repository, executorRef::get);
+        executorRef.set(request -> RunExperimentTrialExecutionResult.builder()
+                .status("SUCCEEDED")
+                .runId("run-exp-1-trial-10")
+                .outputMessageId(301L)
+                .metricJson("{\"elapsedMs\":12}")
+                .build());
+
+        RunExperimentDetails details = service.create(RunExperimentCommand.builder()
+                .userId("100")
+                .conversationId(101L)
+                .baseLeafMessageId(202L)
+                .name("Profile compare")
+                .runProfileIds(List.of(12L))
+                .build());
+
+        assertEquals("SUCCEEDED", details.getExperiment().getStatus());
+        assertEquals("SUCCEEDED", details.getTrials().get(0).getStatus());
+        assertEquals("run-exp-1-trial-10", details.getTrials().get(0).getRunId());
+        assertEquals(301L, details.getTrials().get(0).getOutputMessageId());
+    }
+
+    @Test
     void shouldKeepSuccessfulTrialEvidenceWhenAnotherTrialFails() {
         InMemoryRunExperimentRepository repository = new InMemoryRunExperimentRepository();
         RunExperimentTrialExecutorPort executor = request -> {

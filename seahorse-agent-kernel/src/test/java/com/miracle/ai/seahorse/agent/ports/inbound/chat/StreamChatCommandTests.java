@@ -55,6 +55,20 @@ class StreamChatCommandTests {
     }
 
     @Test
+    void systemPresetRoleCardIdIsPreserved() {
+        var cmd = new StreamChatCommand("q", "c", "t", "u", false,
+                ChatMode.RAG, null, null, null, List.of(), List.of(),
+                List.of(), -9003L, null, null, null);
+
+        assertEquals(-9003L, cmd.roleCardId());
+
+        var blank = new StreamChatCommand("q", "c", "t", "u", false,
+                ChatMode.RAG, null, null, null, List.of(), List.of(),
+                List.of(), 0L, null, null, null);
+        assertNull(blank.roleCardId());
+    }
+
+    @Test
     void selectedSkillNamesOverLimitThrows() {
         assertThrows(IllegalArgumentException.class, () -> new StreamChatCommand(
                 "q", "c", "t", "u", false, ChatMode.AGENT,

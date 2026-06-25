@@ -49,4 +49,22 @@ class SeahorseAgentAutoConfigurationOrderingTests {
         assertThat(Arrays.asList(imported.value()))
                 .doesNotContain(SeahorseAgentKernelAuthAutoConfiguration.class);
     }
+
+    @Test
+    void kernelAutoConfigurationImportsAgentBeforeOpsForRunExperimentExecutor() {
+        Import imported = SeahorseAgentKernelAutoConfiguration.class.getAnnotation(Import.class);
+
+        assertThat(imported).isNotNull();
+        assertThat(Arrays.asList(imported.value()).indexOf(SeahorseAgentKernelAgentAutoConfiguration.class))
+                .isLessThan(Arrays.asList(imported.value()).indexOf(SeahorseAgentKernelOpsAutoConfiguration.class));
+    }
+
+    @Test
+    void kernelAutoConfigurationImportsRetrievalBeforeAgentForMcpToolRegistration() {
+        Import imported = SeahorseAgentKernelAutoConfiguration.class.getAnnotation(Import.class);
+
+        assertThat(imported).isNotNull();
+        assertThat(Arrays.asList(imported.value()).indexOf(SeahorseAgentKernelRetrievalAutoConfiguration.class))
+                .isLessThan(Arrays.asList(imported.value()).indexOf(SeahorseAgentKernelAgentAutoConfiguration.class));
+    }
 }

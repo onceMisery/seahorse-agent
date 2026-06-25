@@ -91,7 +91,7 @@ import org.springframework.core.env.Environment;
 @EnableConfigurationProperties(AgentKernelProperties.class)
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKernelMemoryAutoConfiguration.class,
         SeahorseAgentAiAdapterAutoConfiguration.class, SeahorseAgentKernelRegistryAutoConfiguration.class,
-        SeahorseAgentKernelAgentAutoConfiguration.class})
+        SeahorseAgentKernelAgentAutoConfiguration.class, SeahorseAgentS3StorageAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelChatAutoConfiguration {
 
@@ -180,7 +180,7 @@ public class SeahorseAgentKernelChatAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean({ConversationAttachmentRepositoryPort.class, ObjectStoragePort.class})
+    @ConditionalOnBean(ConversationAttachmentRepositoryPort.class)
     @ConditionalOnMissingBean
     public ConversationAttachmentContextAssembler seahorseConversationAttachmentContextAssembler(
             ConversationAttachmentRepositoryPort attachmentRepositoryPort,

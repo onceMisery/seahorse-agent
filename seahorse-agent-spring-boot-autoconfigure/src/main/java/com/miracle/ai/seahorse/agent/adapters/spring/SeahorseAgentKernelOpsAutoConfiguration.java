@@ -86,7 +86,8 @@ import org.springframework.core.env.Environment;
  * <p>该配置只承载后台运营和治理页面使用的轻量入站服务，避免这些低耦合管理能力继续堆在主 kernel 装配类中。
  */
 @Configuration(proxyBeanMethods = false)
-@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentOpsRepositoryAutoConfiguration.class})
+@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentOpsRepositoryAutoConfiguration.class,
+        SeahorseAgentStorageAdapterAutoConfiguration.class, SeahorseAgentS3StorageAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelOpsAutoConfiguration {
 
@@ -166,7 +167,7 @@ public class SeahorseAgentKernelOpsAutoConfiguration {
             ObjectProvider<RunExperimentTrialExecutorPort> trialExecutorPortProvider) {
         return new KernelRunExperimentService(
                 repositoryPort,
-                trialExecutorPortProvider.getIfAvailable(RunExperimentTrialExecutorPort::noop));
+                () -> trialExecutorPortProvider.getIfAvailable(RunExperimentTrialExecutorPort::noop));
     }
 
     @Bean
@@ -190,7 +191,7 @@ public class SeahorseAgentKernelOpsAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean({ConversationAttachmentRepositoryPort.class, ObjectStoragePort.class})
+    @ConditionalOnBean(ConversationAttachmentRepositoryPort.class)
     @ConditionalOnMissingBean(ConversationAttachmentInboundPort.class)
     public KernelConversationAttachmentService seahorseConversationAttachmentInboundPort(
             ConversationAttachmentRepositoryPort attachmentRepositoryPort,

@@ -51,7 +51,7 @@ import org.springframework.context.annotation.Configuration;
  * 自动配置中。
  */
 @Configuration(proxyBeanMethods = false)
-@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKernelKnowledgeAutoConfiguration.class, SeahorseAgentKnowledgeRepositoryAutoConfiguration.class, SeahorseAgentIngestionRepositoryAutoConfiguration.class, SeahorseAgentStorageAdapterAutoConfiguration.class, SeahorseAgentLocalAdapterAutoConfiguration.class, SeahorseAgentMqAdapterAutoConfiguration.class})
+@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKernelKnowledgeAutoConfiguration.class, SeahorseAgentKnowledgeRepositoryAutoConfiguration.class, SeahorseAgentIngestionRepositoryAutoConfiguration.class, SeahorseAgentStorageAdapterAutoConfiguration.class, SeahorseAgentS3StorageAutoConfiguration.class, SeahorseAgentLocalAdapterAutoConfiguration.class, SeahorseAgentMqAdapterAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelDocumentRefreshAutoConfiguration {
 

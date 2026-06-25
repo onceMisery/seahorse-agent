@@ -80,6 +80,23 @@ class JdbcChatSchemaUpgradeTests {
     }
 
     @Test
+    void shouldCreateRunExperimentTablesDuringStartupUpgrade() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:chat-schema-upgrade-run-experiment;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+
+        new JdbcChatSchemaUpgrade(dataSource).upgrade();
+
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        assertThat(tableExists(jdbcTemplate, "sa_run_experiment")).isTrue();
+        assertThat(tableExists(jdbcTemplate, "sa_run_experiment_trial")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_run_experiment", "base_leaf_message_id")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_run_experiment_trial", "run_id")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_run_experiment_trial", "output_message_id")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_run_experiment_trial", "score_json")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_run_experiment_trial", "metric_json")).isTrue();
+    }
+
+    @Test
     void shouldBackfillRoleCardGovernanceColumnsForExistingTable() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:chat-schema-upgrade-role-card;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");

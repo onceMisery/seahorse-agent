@@ -139,6 +139,7 @@ public class JdbcChatSchemaUpgrade {
         ensureTaskTable();
         ensureRoleCardGovernanceColumns();
         ensureRunProfileGovernanceColumns();
+        ensureRunExperimentTables();
         ensureSystemPresetAssets();
         widenColumns("t_conversation", List.of("id", "conversation_id", "user_id"));
         widenColumns("t_conversation_summary", List.of("id", "conversation_id", "user_id", "last_message_id"));
@@ -224,6 +225,72 @@ public class JdbcChatSchemaUpgrade {
                 """, """
                 CREATE INDEX IF NOT EXISTS uk_sa_run_profile_system_preset
                 ON sa_run_profile (tenant_id, preset_key)
+                """);
+    }
+
+    private void ensureRunExperimentTables() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS sa_run_experiment (
+                    id BIGINT PRIMARY KEY,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    user_id BIGINT NOT NULL,
+                    conversation_id BIGINT NOT NULL,
+                    base_leaf_message_id BIGINT,
+                    name VARCHAR(128) NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+                    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    deleted SMALLINT NOT NULL DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS sa_run_experiment_trial (
+                    id BIGINT PRIMARY KEY,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    experiment_id BIGINT NOT NULL,
+                    run_profile_id BIGINT NOT NULL,
+                    run_id VARCHAR(128),
+                    output_message_id BIGINT,
+                    score_json TEXT,
+                    metric_json TEXT,
+                    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+                    error_message TEXT,
+                    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    deleted SMALLINT NOT NULL DEFAULT 0
+                )
+                """);
+        createBestEffortIndex("""
+                CREATE INDEX IF NOT EXISTS idx_run_experiment_user_status
+                ON sa_run_experiment (tenant_id, user_id, status, update_time DESC)
+                WHERE deleted = 0
+                """, """
+                CREATE INDEX IF NOT EXISTS idx_run_experiment_user_status
+                ON sa_run_experiment (tenant_id, user_id, status, update_time DESC)
+                """);
+        createBestEffortIndex("""
+                CREATE INDEX IF NOT EXISTS idx_run_experiment_conversation
+                ON sa_run_experiment (tenant_id, conversation_id, base_leaf_message_id)
+                WHERE deleted = 0
+                """, """
+                CREATE INDEX IF NOT EXISTS idx_run_experiment_conversation
+                ON sa_run_experiment (tenant_id, conversation_id, base_leaf_message_id)
+                """);
+        createBestEffortIndex("""
+                CREATE INDEX IF NOT EXISTS idx_run_experiment_trial_experiment
+                ON sa_run_experiment_trial (tenant_id, experiment_id, id)
+                WHERE deleted = 0
+                """, """
+                CREATE INDEX IF NOT EXISTS idx_run_experiment_trial_experiment
+                ON sa_run_experiment_trial (tenant_id, experiment_id, id)
+                """);
+        createBestEffortIndex("""
+                CREATE INDEX IF NOT EXISTS idx_run_experiment_trial_profile
+                ON sa_run_experiment_trial (tenant_id, run_profile_id, status)
+                WHERE deleted = 0
+                """, """
+                CREATE INDEX IF NOT EXISTS idx_run_experiment_trial_profile
+                ON sa_run_experiment_trial (tenant_id, run_profile_id, status)
                 """);
     }
 

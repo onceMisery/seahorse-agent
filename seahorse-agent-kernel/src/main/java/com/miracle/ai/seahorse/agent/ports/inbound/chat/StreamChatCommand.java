@@ -242,7 +242,7 @@ public record StreamChatCommand(
     }
 
     private static Long normalizeRoleCardId(Long value) {
-        return normalizePositiveId(value);
+        return value == null || value == 0 ? null : value;
     }
 
     private static Long normalizePositiveId(Long value) {

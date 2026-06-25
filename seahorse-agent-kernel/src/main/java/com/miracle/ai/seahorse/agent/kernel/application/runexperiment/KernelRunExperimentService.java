@@ -31,6 +31,7 @@ import lombok.NonNull;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 public class KernelRunExperimentService implements RunExperimentInboundPort {
 
@@ -43,7 +44,7 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
     @NonNull
     private final RunExperimentRepositoryPort repositoryPort;
     @NonNull
-    private final RunExperimentTrialExecutorPort trialExecutorPort;
+    private final Supplier<RunExperimentTrialExecutorPort> trialExecutorPortSupplier;
 
     public KernelRunExperimentService(RunExperimentRepositoryPort repositoryPort) {
         this(repositoryPort, RunExperimentTrialExecutorPort.noop());
@@ -52,10 +53,16 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
     public KernelRunExperimentService(
             RunExperimentRepositoryPort repositoryPort,
             RunExperimentTrialExecutorPort trialExecutorPort) {
+        this(repositoryPort, () -> trialExecutorPort);
+    }
+
+    public KernelRunExperimentService(
+            RunExperimentRepositoryPort repositoryPort,
+            Supplier<RunExperimentTrialExecutorPort> trialExecutorPortSupplier) {
         this.repositoryPort = Objects.requireNonNull(repositoryPort, "repositoryPort must not be null");
-        this.trialExecutorPort = Objects.requireNonNullElseGet(
-                trialExecutorPort,
-                RunExperimentTrialExecutorPort::noop);
+        this.trialExecutorPortSupplier = Objects.requireNonNullElseGet(
+                trialExecutorPortSupplier,
+                () -> RunExperimentTrialExecutorPort::noop);
     }
 
     @Override
@@ -90,10 +97,11 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                         .build())
                 .toList();
         RunExperimentDetails created = repositoryPort.create(experiment, trials);
+        RunExperimentTrialExecutorPort trialExecutorPort = resolveTrialExecutor();
         if (!trialExecutorPort.enabled()) {
             return created;
         }
-        return executeCreatedExperiment(userId, created);
+        return executeCreatedExperiment(userId, created, trialExecutorPort);
     }
 
     @Override
@@ -139,12 +147,21 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         return value.trim();
     }
 
-    private RunExperimentDetails executeCreatedExperiment(String userId, RunExperimentDetails created) {
+    private RunExperimentTrialExecutorPort resolveTrialExecutor() {
+        return Objects.requireNonNullElseGet(
+                trialExecutorPortSupplier.get(),
+                RunExperimentTrialExecutorPort::noop);
+    }
+
+    private RunExperimentDetails executeCreatedExperiment(
+            String userId,
+            RunExperimentDetails created,
+            RunExperimentTrialExecutorPort trialExecutorPort) {
         RunExperimentRecord experiment = created.getExperiment();
         repositoryPort.updateExperimentOnlyStatus(userId, experiment.getId(), STATUS_RUNNING);
         boolean failed = false;
         for (RunExperimentTrialRecord trial : created.getTrials()) {
-            RunExperimentTrialExecutionResult result = executeTrial(userId, experiment, trial);
+            RunExperimentTrialExecutionResult result = executeTrial(userId, experiment, trial, trialExecutorPort);
             String trialStatus = normalizeTrialStatus(result.getStatus());
             if (STATUS_FAILED.equals(trialStatus)) {
                 failed = true;
@@ -167,7 +184,8 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
     private RunExperimentTrialExecutionResult executeTrial(
             String userId,
             RunExperimentRecord experiment,
-            RunExperimentTrialRecord trial) {
+            RunExperimentTrialRecord trial,
+            RunExperimentTrialExecutorPort trialExecutorPort) {
         try {
             return Objects.requireNonNullElseGet(
                     trialExecutorPort.execute(RunExperimentTrialExecutionRequest.builder()

@@ -17,9 +17,11 @@
 
 package com.miracle.ai.seahorse.agent;
 
+import com.miracle.ai.seahorse.agent.adapters.openapi.OpenApiAdapterAutoConfiguration;
 import org.redisson.spring.starter.RedissonAutoConfigurationV2;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Import;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
@@ -33,6 +35,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         exclude = RedissonAutoConfigurationV2.class
 )
 @EnableScheduling
+@Import(OpenApiAdapterAutoConfiguration.class)
 public class SeahorseAgentApplication {
 
     public static void main(String[] args) {
