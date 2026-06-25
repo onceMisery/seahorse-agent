@@ -86,16 +86,16 @@
 
 **成功证据**：`/memories/readiness` 必需链路有证据 ✅；`t_user_profile_fact` 表已定义 ✅
 
-### D4: 文档事实源收敛 — ⚠️ 部分完成
+### D4: 文档事实源收敛 — ✅ 已完成
 
 | 设计内容 | 代码证据 | 状态 |
 |---|---|---|
 | 旧 RepoWiki 归档声明 | `docs/zh/content/_ARCHIVED_NOTICE.md` 已创建 | **已实现** |
 | 架构基线文档 | `docs/architecture/current-code-architecture.md` 225 行 | **已实现** |
 | 事实源优先级 | 架构文档 Section 8 明确 6 级优先级 | **已实现** |
-| 旧端点引用清理 | `docs/deployment/local-embedding-model-guide.md` 第 87 行仍引用 `/admin/traces` | **待修复** |
+| 旧端点引用清理 | `docs/deployment/local-embedding-model-guide.md` 已改为仅使用 `/rag/traces/runs` 或 `t_rag_trace_*` 验证 retrieval 节点 | **已实现** |
 
-**成功证据**：stale reference 扫描基本通过 ⚠️；残留 1 处旧端点引用（`/admin/traces` 应改为 `/rag/traces/runs`）
+**成功证据**：`rg -n "/admin/traces" docs/deployment/local-embedding-model-guide.md` 无匹配；本地 Embedding 验证文档不再把前端页面路径混作 API 验证端点。
 
 ### D5: Embedding 配置清晰化 — ✅ 已完成
 
@@ -134,8 +134,8 @@
 | 1. 数据集治理 | 导入/导出/启停/标签/case 校验 | **已完成** | DatasetController 含 CRUD + enable/disable |
 | 2. 运行稳定性 | 幂等 key/超时/最大 case 数 | **已完成** | `KernelRetrievalEvaluationService` 含 evaluable filter |
 | 3. 对比报告 | 前端 baseline/candidate 指标差异 | **已完成** | `VersionQualityComparePage` + comparison 表 |
-| 4. 策略推广 | 显式按钮 + audit event | **部分完成** | Strategy Template API 存在，但显式推广按钮和 audit 联动待确认 |
-| 5. CI 冒烟 | 内置 dataset + Docker full 模式验证 | **未完成** | 无内置示例 dataset 的 CI 冒烟测试 |
+| 4. 策略推广 | 显式按钮 + audit event | **已完成并有真实验证** | `scripts/e2e-rag-strategy-promotion-smoke.ps1` 已在 full Docker 中验证策略对比、页面 promotion、`t_retrieval_strategy_template` 推荐模板和 `RETRIEVAL_STRATEGY_PROMOTED` audit 事件 |
+| 5. CI 冒烟 | 内置 dataset + Docker full 模式验证 | **已完成并有真实验证** | RAG evaluation strict smoke 已创建 KB/doc/chunks/dataset，评测 2/2 cases，并要求非零 recall |
 
 ### M2: 入库治理与可恢复 Pipeline — 100% 完成
 
@@ -163,7 +163,7 @@
 | 4. 隔离队列 | metadata review/quarantine 关联 | **已完成** | 入库失败状态 `failed`/`quarantined` + metadata governance 页面 |
 | 5. 回滚策略 | document/chunk/vector/index 补偿 | **已完成** | `IngestionTaskCompensationPort` + rollback 测试覆盖（含 kbId/docId/collectionName） |
 
-### M3: 记忆质量与用户画像可信度治理 — 70% 完成
+### M3: 记忆质量与用户画像可信度治理 — 100% 完成
 
 #### 基础设施层
 
@@ -189,8 +189,8 @@
 
 | 切片 | 描述 | 状态 | 说明 |
 |---|---|---|---|
-| 1. 画像详情页 | 来源/置信度/冲突/版本/引用次数 | **部分完成** | `t_user_profile_fact` 含 confidence/source_memory_id，但前端详情页的完整来源追溯展示待增强 |
-| 2. 冲突工作台 | conflict_log + 候选 + 画像 + ledger 关联视图 | **部分完成** | 后端表和 API 已就位，前端 MemoryGovernancePage 存在，但统一冲突处理视图待完善 |
+| 1. 画像详情页 | 来源/置信度/冲突/版本/引用次数 | **已完成并有真实验证** | `scripts/e2e-memory-profile-facts-smoke.ps1` 已在 full Docker 中验证 `t_user_profile_fact.source_ids`、API `sourceIds`、置信度、版本、引用次数和治理页展开详情展示 |
+| 2. 冲突工作台 | conflict_log + 候选 + 画像 + ledger 关联视图 | **已完成并有真实验证** | `scripts/e2e-memory-governance-smoke.ps1` 已在 full Docker 前端/API/PostgreSQL 中验证 PENDING 冲突展示、页面 resolve 和 `t_memory_conflict_log` 变为 RESOLVED |
 | 3. 召回评测 | golden cases 覆盖 | **已完成** | `MemoryRecallEvaluationService` + `MemoryRecallGoldenCase` + `MemoryRecallGoldenHarnessInboundPort` |
 | 4. 低价值清理 | quality snapshot + accessCount 清理建议 | **已完成** | `t_memory_quality_snapshot` 表 + maintenance run 产出快照 |
 | 5. 隐私闭环 | 记忆删除 → profile fact + 索引同步失效 | **已完成** | `KernelMemoryReviewService` 含 forget 操作 + 级联失效逻辑 |
@@ -212,7 +212,7 @@
 |---|---|---|---|
 | 1. 发布前检查 | validate + publish-check + production-gate 组合报告 | **已完成** | `POST /api/agents/{id}/validate` + `POST /api/agents/{id}/production-gate` + `sa_production_gate_report` + `sa_agent_publish_check` |
 | 2. Agent Eval | eval summary 绑定每个可发布版本 | **已完成** | `SeahorseAgentEvalController` CRUD + `sa_agent_eval_summary` 含 5 种 eval_type + 4 种 status |
-| 3. 灰度面板 | rollout 比例/错误率/成本/回滚按钮 | **已完成** | `AgentRolloutPage` 含暂停/全量发布/回滚 + `AgentVersionRollout` 6 种状态 + cost-summary 端点 |
+| 3. 灰度面板 | rollout 比例/错误率/成本/回滚按钮 | **已完成并有真实验证** | `AgentRolloutPage` 含暂停/全量发布/回滚 + `AgentVersionRollout` 6 种状态 + cost-summary 端点；`scripts/e2e-agent-rollout-smoke.ps1` 已在 full Docker 中验证缺 gate 失败、页面创建 Canary、全量发布、DB 状态和 audit 事件 |
 | 4. 成本治理 | per-run token/tool/model 成本汇总 | **已完成** | `GET /agent-runs/{id}/cost-summary` + `sa_cost_usage_record` 含 4 种 source + `sa_quota_policy` 6 种 scope |
 | 5. 审计闭环 | publish/pause/upgrade/rollback/approval 写入 audit | **已完成** | `sa_audit_event` 含 19 种事件类型 + `AuditEventPage` 搜索/过滤/详情 |
 
@@ -257,10 +257,10 @@
 
 | 差异项 | 规划描述 | 实际实现 | 原因分析 |
 |---|---|---|---|
-| M1 策略推广审计 | 推广动作写入 audit event | Strategy Template API 存在，但推广按钮与 audit 的显式联动待确认 | 前端集成深度待增强 |
-| M1 CI 冒烟 | 内置 dataset + Docker full 最小评测 | 无内置示例 dataset 的 CI 测试 | 优先级后移，先保证 API 和前端可用 |
-| M3 画像详情页 | 来源对话/记忆/置信度/冲突/版本/引用次数 | 后端字段已就位，前端展示可进一步增强 | 前端迭代中 |
-| M3 冲突工作台 | 统一处理视图 | 后端 API + 治理页面存在，统一视图待完善 | 前端迭代中 |
+| M1 策略推广审计 | 推广动作写入 audit event | 已有 full Docker 页面/API/DB/audit 真实验证 | `scripts/e2e-rag-strategy-promotion-smoke.ps1` |
+| M1 CI 冒烟 | 内置 dataset + Docker full 最小评测 | 已有严格 RAG evaluation smoke 运行证据 | RAG eval smoke 创建真实 dataset 并要求非零 recall |
+| M3 画像详情页 | 来源对话/记忆/置信度/冲突/版本/引用次数 | 已有 full Docker DB/API/页面真实验证 | `scripts/e2e-memory-profile-facts-smoke.ps1` |
+| M3 冲突工作台 | 统一处理视图 | 已有 full Docker 页面/API/PostgreSQL 真实验证 | `scripts/e2e-memory-governance-smoke.ps1` |
 
 ### 4.3 文档中描述的"现有基座"验证
 
@@ -279,20 +279,20 @@
 | 方向 | 成功证据标准 | 代码层面 | 运行层面 |
 |---|---|---|---|
 | D1 登录稳定性 | 登录后直调不再误报过期 | ✅ 代码完整 | ✅ E2E 验证通过 |
-| D2 RAG 冒烟 | `t_knowledge_chunk` 有数据 + Trace 有 retrieval 节点 | ✅ 表/API 完整 | ⚠️ 需实际运行验证 |
-| D3 记忆画像 | readiness 有证据 + profile_fact 有 active 事实 | ✅ 端点完整 | ⚠️ 需实际运行验证 |
-| D4 文档收敛 | stale reference 扫描无旧引用 | ⚠️ 残留 1 处 | — |
+| D2 RAG 冒烟 | `t_knowledge_chunk` 有数据 + Trace 有 retrieval 节点 | ✅ 表/API 完整 | ✅ full Docker backend smoke 已产生 document chunk、RAG SSE 和 retrieval trace evidence |
+| D3 记忆画像 | readiness 有证据 + profile_fact 有 active 事实 | ✅ 端点完整 | ✅ full Docker backend smoke 已产生 readiness、memory chat、maintenance 和 active profile facts |
+| D4 文档收敛 | stale reference 扫描无旧引用 | ✅ 指定旧引用已清理 | — |
 | D5 Embedding | 文档/compose/排错口径一致 | ✅ 口径一致 | — |
 
 ### 中期设计
 
 | 模块 | 成功证据标准 | 代码层面 | 运行层面 |
 |---|---|---|---|
-| M1 RAG 评测 | evaluation API 产出可对比报告 | ✅ API/表/前端完整 | ⚠️ 需实际运行评测验证 |
+| M1 RAG 评测 | evaluation API 产出可对比报告 | ✅ API/表/前端完整 | ✅ RAG evaluation strict smoke 与策略 promotion 页面/API/DB/audit smoke 已覆盖 |
 | M2 入库治理 | 任务节点可追踪 + 失败可重放 | ✅ retry/rollback API 完整 | ✅ 单元测试覆盖 |
-| M3 记忆治理 | conflicts/quality-snapshots 可解释 | ✅ 表和 API 完整 | ⚠️ 前端展示深度待增强 |
-| M4 Agent 生产 | run 可追踪步骤/审批/产物/成本 | ✅ 全部 9 Controller + 11 表 | ✅ 单元测试覆盖 |
-| M5 starter-all | full compose smoke suite 通过 | ✅ 脚本/测试/文档完整 | ⚠️ 需 full compose 环境验证 |
+| M3 记忆治理 | conflicts/quality-snapshots 可解释 | ✅ 表和 API 完整 | ✅ MemoryGovernancePage 已用 full Docker 页面/API/PostgreSQL 验证冲突展示、resolve 和质量快照 |
+| M4 Agent 生产 | run 可追踪步骤/审批/产物/成本 | ✅ 全部 9 Controller + 11 表 | ✅ Agent rollout 页面/API/DB/audit 真实烟测已覆盖灰度发布主链路 |
+| M5 starter-all | full compose smoke suite 通过 | ✅ 脚本/测试/文档完整 | ✅ full Docker backend/page/RAG eval/S3/Pulsar 真实验证已补齐当前 smoke baseline |
 
 ## 7. 历史总结
 
@@ -300,9 +300,9 @@
 
 **整体一致性程度：高（91%）**
 
-1. **近期设计**（5 个方向）：4 个完全达标，1 个接近达标（残留 1 处旧引用）。核心闭环（登录、RAG、记忆画像、Embedding）的代码基础设施已全部就位。
+1. **近期设计**（5 个方向）：5 个方向的代码与文档基线已达标；真实运行证据仍按路线图门禁持续补齐。核心闭环（登录、RAG、记忆画像、Embedding）的代码基础设施已全部就位。
 
-2. **中期设计**（24 个实施切片）：21 个已完成，3 个部分完成。代码层面的 Controller、Service、Port、数据库表、前端页面几乎 100% 覆盖了路线图规划的所有"现有基座"。
+2. **中期设计**（24 个实施切片）：24 个已有完成或真实验证证据。代码层面的 Controller、Service、Port、数据库表、前端页面已经覆盖路线图规划的所有"现有基座"。
 
 3. **超出规划**：代码库还额外实现了产品模式封装、任务 Facade API、Workspace 工作台、Readiness 诊断系统、插件管理、Marketplace 等路线图远期才提到的能力。
 
@@ -310,12 +310,19 @@
 
 | 优先级 | 工作项 | 所属模块 | 工作量 |
 |---|---|---|---|
-| P0 | 修复 `local-embedding-model-guide.md` 中 `/admin/traces` → `/rag/traces/runs` | D4 | 极小 |
-| P1 | M1 策略推广与 audit event 显式联动 | M1-Slice4 | 中 |
-| P1 | M1 内置示例 dataset + CI 冒烟测试 | M1-Slice5 | 中 |
-| P2 | M3 画像详情页前端来源追溯增强 | M3-Slice1 | 中 |
-| P2 | M3 冲突工作台统一处理视图 | M3-Slice2 | 中 |
-
+| — | 当前近期已开发能力无剩余 P0/P1/P2 真实验证项 | 近期稳定基线 | — |
 ### 结论
 
-架构路线图中近期和中期设计的**代码基础设施已基本全部就位**。当前状态是"代码完成度高，运行验证待补齐"——所有 Controller、Service、Port、数据库表和前端页面均已实现，但部分功能的端到端运行验证（如 RAG 评测 CI 冒烟、记忆冲突前端深度集成）仍需在 full compose 环境中完成实际闭环验证。
+架构路线图中近期和中期设计的**代码基础设施已基本全部就位**。当前状态是"近期已开发能力的真实运行验证已补齐到当前基线"——Agent 控制面、RAG 评测/策略推广、记忆画像来源追溯、记忆冲突治理、S3 和 Pulsar 等近期已开发能力已经有 full Docker 证据；后续主要转向尚未产品化或仍需生产联调的 AgentScope/OTEL、统一 GateResult/Tool Gateway 等中长期能力。
+
+### 2026-06-25 Runtime Evidence Update
+
+M5 full-compose evidence now includes S3 adapter switching proof: `scripts/e2e-s3-storage-smoke.ps1` passed against real Docker backend/PostgreSQL/MinIO with upload, DB `s3://` storage ref, MinIO object stat, API list/delete, DB soft delete, and MinIO object removal.
+
+M5/P2 full-compose evidence now also includes Pulsar consume-loop proof: `scripts/e2e-pulsar-mq-smoke.ps1` passed against the main running Docker backend and real Pulsar broker. It verified `SEAHORSE_AGENT_ADAPTERS_MQ_TYPE=pulsar`, active topic subscription `seahorse-document-chunk-consumer`, knowledge-document chunk API trigger, PostgreSQL document success and marker chunk materialization, Pulsar `msgIn/msgOut` counter advance, zero backlog/unacked messages, and backend log completion for the same document id.
+
+M3 profile detail/source-tracing evidence now includes `scripts/e2e-memory-profile-facts-smoke.ps1`: it seeds a real `t_user_profile_fact` row with `source_ids`, verifies `/api/memories/profile-facts` returns `sourceIds`, opens the deployed `/admin/memory-governance` operations/profile-facts view, expands the row, and verifies the source id is visible in the browser.
+
+### 2026-06-25 Completion Audit Evidence Update
+
+The real-verification work now has an explicit completion audit in `docs/aegis/work/2026-06-23-roadmap-real-verification/92-completion-audit.md`. Fresh full-Docker reruns covered backend smoke, page smoke, role cards, message tree, run profiles, run experiments, AgentScope, temporary A2A/Nacos live path, MCP stdio/HTTP, OpenAPI connector, governance page/error states, ingestion, RAG evaluation/strategy promotion, memory governance/profile source tracing, agent rollout, S3 switching, and Pulsar consume loop. Added `scripts/e2e-openapi-connector-smoke.ps1` as the repeatable OpenAPI connector smoke, and stabilized governance/memory page smokes for repeat runs.

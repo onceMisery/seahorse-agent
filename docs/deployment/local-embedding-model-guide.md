@@ -84,7 +84,7 @@ SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_BASE_URL=http://host.docker.internal:11434/
 3. 如果是自定义模型，配置 `SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL_DIMENSIONS=模型名=维度`。
 4. 清理或重建 Milvus collection。
 5. 重新处理知识库文档。
-6. 用 `/rag/traces/runs` 或 `t_rag_trace_*` 验证 retrieval 节点（前端页面路径为 `/admin/traces`）。
+6. 用 `/rag/traces/runs` 或 `t_rag_trace_*` 验证 retrieval 节点。
 
 示例：
 
