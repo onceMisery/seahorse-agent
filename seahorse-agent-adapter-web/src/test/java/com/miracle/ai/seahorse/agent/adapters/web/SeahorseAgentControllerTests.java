@@ -462,7 +462,7 @@ class SeahorseAgentControllerTests {
     @Test
     void shouldExposeToolCatalogManagementApi() throws Exception {
         ToolCatalogManagementInboundPort port = mock(ToolCatalogManagementInboundPort.class);
-        when(port.page("MCP", "weather", 2L, 20L, true))
+        when(port.page("MCP", "MCP", "MEDIUM", "weather", 2L, 20L, true))
                 .thenReturn(new ToolCatalogPage(List.of(tool(true)), 1L, 20L, 2L, 1L));
         when(port.findById("weather_query")).thenReturn(Optional.of(tool(true)));
         when(port.disable("weather_query")).thenReturn(tool(false));
@@ -472,7 +472,9 @@ class SeahorseAgentControllerTests {
                 new SeahorseToolCatalogController(provider(ToolCatalogManagementInboundPort.class, port))).build();
 
         mvc.perform(get("/api/tools")
+                        .param("provider", "MCP")
                         .param("resourceType", "MCP")
+                        .param("riskLevel", "MEDIUM")
                         .param("keyword", "weather")
                         .param("current", "2")
                         .param("size", "20")
@@ -494,7 +496,7 @@ class SeahorseAgentControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.enabled").value(true));
 
-        verify(port).page("MCP", "weather", 2L, 20L, true);
+        verify(port).page("MCP", "MCP", "MEDIUM", "weather", 2L, 20L, true);
         verify(port).findById("weather_query");
         verify(port).disable("weather_query");
         verify(port).enable("weather_query");
@@ -503,7 +505,7 @@ class SeahorseAgentControllerTests {
     @Test
     void shouldExposeToolCatalogManagementApiBehindDockerProxy() throws Exception {
         ToolCatalogManagementInboundPort port = mock(ToolCatalogManagementInboundPort.class);
-        when(port.page(null, null, 1L, 10L, null))
+        when(port.page(null, null, null, null, 1L, 10L, null))
                 .thenReturn(new ToolCatalogPage(List.of(tool(true)), 1L, 10L, 1L, 1L));
         when(port.findById("weather_query")).thenReturn(Optional.of(tool(true)));
         when(port.disable("weather_query")).thenReturn(tool(false));
@@ -529,7 +531,7 @@ class SeahorseAgentControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.enabled").value(true));
 
-        verify(port).page(null, null, 1L, 10L, null);
+        verify(port).page(null, null, null, null, 1L, 10L, null);
         verify(port).findById("weather_query");
         verify(port).disable("weather_query");
         verify(port).enable("weather_query");
@@ -857,6 +859,16 @@ class SeahorseAgentControllerTests {
         assertThat(importCaptor.getValue().name()).isEqualTo("crm-api");
         assertThat(importCaptor.getValue().importedBy()).isEqualTo("admin-1");
 
+        mvc.perform(post("/connectors/openapi")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-a",
+                                "name", "crm-api",
+                                "specJson", "{\"openapi\":\"3.0.3\",\"paths\":{}}",
+                                "importedBy", "admin-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.connectorId").value("conn-1"));
+
         mvc.perform(get("/api/connectors")
                         .param("tenantId", "tenant-a")
                         .param("keyword", "crm")
@@ -875,11 +887,22 @@ class SeahorseAgentControllerTests {
         assertThat(queryCaptor.getValue().current()).isEqualTo(2L);
         assertThat(queryCaptor.getValue().size()).isEqualTo(20L);
 
+        mvc.perform(get("/connectors")
+                        .param("tenantId", "tenant-a")
+                        .param("current", "1")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records[0].connectorId").value("conn-1"));
+
         mvc.perform(get("/api/connectors/conn-1/operations"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].operationId").value("op-1"))
                 .andExpect(jsonPath("$.data[0].status").value("DISABLED"))
                 .andExpect(jsonPath("$.data[0].requiresApproval").value(true));
+
+        mvc.perform(get("/connectors/conn-1/operations"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].operationId").value("op-1"));
 
         mvc.perform(put("/api/connectors/conn-1/operations/op-1/credential-binding")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -927,6 +950,14 @@ class SeahorseAgentControllerTests {
         assertThat(enableCaptor.getValue().approvalPolicyId()).isEqualTo("approval-policy-1");
         assertThat(enableCaptor.getValue().operatorConfirmedRisk()).isFalse();
 
+        mvc.perform(post("/connectors/conn-1/operations/op-1/enable")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "approvalPolicyId", "approval-policy-1",
+                                "operatorConfirmedRisk", false))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ENABLED"));
+
         mvc.perform(post("/api/connectors/conn-1/operations/op-1/disable")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("reasonCode", "admin-disabled"))))
@@ -940,6 +971,12 @@ class SeahorseAgentControllerTests {
         assertThat(disableCaptor.getValue().connectorId()).isEqualTo("conn-1");
         assertThat(disableCaptor.getValue().operationId()).isEqualTo("op-1");
         assertThat(disableCaptor.getValue().reasonCode()).isEqualTo("admin-disabled");
+
+        mvc.perform(post("/connectors/conn-1/operations/op-1/disable")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("reasonCode", "admin-disabled"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("DISABLED"));
     }
 
     @Test

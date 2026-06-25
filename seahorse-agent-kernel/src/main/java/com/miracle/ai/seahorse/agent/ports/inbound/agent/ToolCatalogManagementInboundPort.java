@@ -27,7 +27,13 @@ public interface ToolCatalogManagementInboundPort {
     /**
      * 分页查询工具目录，用于管理端查看工具风险、动作类型和启用状态。
      */
-    ToolCatalogPage page(String resourceType, String keyword, long current, long size, Boolean enabled);
+    ToolCatalogPage page(String provider,
+                         String resourceType,
+                         String riskLevel,
+                         String keyword,
+                         long current,
+                         long size,
+                         Boolean enabled);
 
     /**
      * 按工具 ID 查询工具目录详情。

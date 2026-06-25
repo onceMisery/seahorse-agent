@@ -8,10 +8,13 @@ export interface OpenApiConnector {
   connectorId?: string;
   name?: string;
   specSource?: string;
+  status?: string;
   operationCount?: number;
   parseErrors?: string[];
   createTime?: string;
+  createdAt?: string;
   updateTime?: string;
+  updatedAt?: string;
 }
 
 export interface ConnectorOperation {
@@ -20,7 +23,10 @@ export interface ConnectorOperation {
   method?: string;
   path?: string;
   operationName?: string;
+  originalOperationId?: string;
+  operationKey?: string;
   riskLevel?: string;
+  status?: string;
   enabled?: boolean;
   credentialBound?: boolean;
   credentialBindingId?: string;
@@ -41,23 +47,50 @@ export interface ImportSpecPayload {
 // ── 连接器管理 ──
 
 export function importOpenApiSpec(payload: ImportSpecPayload) {
-  return api.post<OpenApiConnector, OpenApiConnector>("/api/connectors/openapi", payload);
+  return api.post<OpenApiConnector, OpenApiConnector>("/api/connectors/openapi", {
+    name: payload.name,
+    specJson: payload.specContent,
+    importedBy: "frontend"
+  });
 }
 
-export function listConnectors(params?: { current?: number; size?: number; keyword?: string }) {
-  return optionalGet(
+function normalizeConnector(connector: OpenApiConnector): OpenApiConnector {
+  return {
+    ...connector,
+    createTime: connector.createTime ?? connector.createdAt,
+    updateTime: connector.updateTime ?? connector.updatedAt
+  };
+}
+
+function normalizeOperation(operation: ConnectorOperation): ConnectorOperation {
+  const status = operation.status ?? (operation.enabled ? "ENABLED" : "DISABLED");
+  return {
+    ...operation,
+    operationName: operation.operationName ?? operation.originalOperationId ?? operation.operationKey,
+    status,
+    enabled: operation.enabled ?? status === "ENABLED"
+  };
+}
+
+export async function listConnectors(params?: { current?: number; size?: number; keyword?: string }) {
+  const page = await optionalGet(
     api.get<PageResult<OpenApiConnector>>("/api/connectors", { params, suppressErrorToast: true }),
     emptyPage<OpenApiConnector>(params?.current, params?.size)
   );
+  return {
+    ...page,
+    records: (page.records ?? []).map(normalizeConnector)
+  };
 }
 
-export function getConnectorOperations(connectorId: string) {
-  return optionalGet(
+export async function getConnectorOperations(connectorId: string) {
+  const operations = await optionalGet(
     api.get<ConnectorOperation[]>(`/api/connectors/${encodeURIComponent(connectorId)}/operations`, {
       suppressErrorToast: true
     }),
     []
   );
+  return operations.map(normalizeOperation);
 }
 
 export function bindCredential(connectorId: string, operationId: string, payload: CredentialBindingPayload) {

@@ -55,10 +55,16 @@ public class KernelToolCatalogManagementService implements ToolCatalogManagement
     }
 
     @Override
-    public ToolCatalogPage page(String resourceType, String keyword, long current, long size, Boolean enabled) {
+    public ToolCatalogPage page(String provider,
+                                String resourceType,
+                                String riskLevel,
+                                String keyword,
+                                long current,
+                                long size,
+                                Boolean enabled) {
         requireAdmin();
-        ToolCatalogPage page = toolCatalogRepository.page(new ToolCatalogQuery(resourceType, keyword, current, size,
-                enabled));
+        ToolCatalogPage page = toolCatalogRepository.page(new ToolCatalogQuery(provider, resourceType, riskLevel,
+                keyword, current, size, enabled));
         List<ToolCatalogEntry> records = page.records().stream()
                 .filter(providerExposurePolicy::isToolAllowed)
                 .toList();

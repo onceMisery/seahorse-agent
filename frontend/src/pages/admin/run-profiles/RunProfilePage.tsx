@@ -30,6 +30,7 @@ import {
   type RunProfileToolBinding,
   type RunProfileVO
 } from "@/services/runProfileService";
+import { listRoleCards, type RoleCardVO } from "@/services/roleCardService";
 import { listTools, type ToolItem } from "@/services/toolCatalogService";
 import { getErrorMessage } from "@/utils/error";
 
@@ -107,12 +108,32 @@ function normalizeExecutorEngines(engines: string[]) {
   return normalized.length > 0 ? normalized : ["kernel"];
 }
 
+function roleCardValue(id: number | string | null | undefined) {
+  return id === null || id === undefined || id === "" ? "" : String(id);
+}
+
+function formatRoleCardOption(card: RoleCardVO) {
+  const tags = [card.assetSource === "SYSTEM" ? "系统预设" : null, truthy(card.published) ? "已发布" : null]
+    .filter(Boolean)
+    .join(" / ");
+  return `${card.name || `角色卡 ${card.id}`}${tags ? ` (${tags})` : ""} - ${card.id}`;
+}
+
+function roleCardDisplayName(cards: RoleCardVO[], id: number | string | null | undefined) {
+  const value = roleCardValue(id);
+  if (!value) return "-";
+  const card = cards.find((item) => roleCardValue(item.id) === value);
+  return card ? `${card.name || "角色卡"} (${value})` : `角色卡 ${value}`;
+}
+
 export function RunProfilePage() {
   const [profiles, setProfiles] = useState<RunProfileVO[]>([]);
   const [loading, setLoading] = useState(true);
   const [operatingId, setOperatingId] = useState<number | string | null>(null);
   const [form, setForm] = useState<RunProfileFormState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [roleCards, setRoleCards] = useState<RoleCardVO[]>([]);
+  const [roleCardsLoading, setRoleCardsLoading] = useState(false);
   const [tools, setTools] = useState<ToolItem[]>([]);
   const [toolsLoading, setToolsLoading] = useState(false);
   const [preview, setPreview] = useState<RunProfileResolvedPreview | null>(null);
@@ -138,6 +159,22 @@ export function RunProfilePage() {
 
   useEffect(() => {
     loadProfiles();
+  }, []);
+
+  const loadRoleCards = async () => {
+    try {
+      setRoleCardsLoading(true);
+      setRoleCards(await listRoleCards());
+    } catch (error) {
+      toast.error(getErrorMessage(error, "加载角色卡失败"));
+      console.error(error);
+    } finally {
+      setRoleCardsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRoleCards();
   }, []);
 
   useEffect(() => {
@@ -178,6 +215,9 @@ export function RunProfilePage() {
 
   const handleCreate = () => {
     setForm({ ...EMPTY_FORM, executorEngine: executorEngines[0] || "kernel" });
+    if (roleCards.length === 0) {
+      loadRoleCards();
+    }
     if (tools.length === 0) {
       loadTools();
     }
@@ -192,6 +232,9 @@ export function RunProfilePage() {
       setOperatingId(profile.id);
       if (tools.length === 0) {
         await loadTools();
+      }
+      if (roleCards.length === 0) {
+        await loadRoleCards();
       }
       const details = await getRunProfile(profile.id);
       const detailProfile = details.profile;
@@ -435,13 +478,24 @@ export function RunProfilePage() {
               </select>
             </label>
             <label htmlFor="run-profile-role-card-id" className="space-y-2 text-sm font-medium text-slate-700">
-              <span>角色卡 ID</span>
-              <Input
+              <span>角色卡</span>
+              <select
                 id="run-profile-role-card-id"
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 value={form.roleCardId}
-                inputMode="numeric"
                 onChange={(event) => setForm((prev) => prev ? { ...prev, roleCardId: event.target.value } : prev)}
-              />
+                disabled={roleCardsLoading}
+              >
+                <option value="">{roleCardsLoading ? "加载角色卡..." : "不绑定角色卡"}</option>
+                {roleCards.map((card) => (
+                  <option key={roleCardValue(card.id)} value={roleCardValue(card.id)}>
+                    {formatRoleCardOption(card)}
+                  </option>
+                ))}
+                {form.roleCardId && !roleCards.some((card) => roleCardValue(card.id) === form.roleCardId) ? (
+                  <option value={form.roleCardId}>当前角色卡 ID {form.roleCardId}</option>
+                ) : null}
+              </select>
             </label>
             <label htmlFor="run-profile-description" className="space-y-2 text-sm font-medium text-slate-700 md:col-span-2">
               <span>描述</span>
@@ -562,7 +616,7 @@ export function RunProfilePage() {
               </div>
               <div className="rounded-md border border-slate-200 p-3">
                 <div className="text-xs text-muted-foreground">角色卡</div>
-                <div className="mt-1 font-medium text-slate-900">{textOrDash(preview.roleCardId)}</div>
+                <div className="mt-1 font-medium text-slate-900">{roleCardDisplayName(roleCards, preview.roleCardId)}</div>
               </div>
               <div className="rounded-md border border-slate-200 p-3">
                 <div className="text-xs text-muted-foreground">工具策略</div>
@@ -756,7 +810,7 @@ export function RunProfilePage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {profile.roleCardId ? `角色卡 ${profile.roleCardId}` : "-"}
+                      {roleCardDisplayName(roleCards, profile.roleCardId)}
                     </TableCell>
                     <TableCell>
                       {enabled(profile) ? (

@@ -51,6 +51,7 @@ export function ToolCatalogPage() {
 
   const [pageData, setPageData] = useState<PageResult<ToolItem> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [toolsError, setToolsError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [keyword, setKeyword] = useState("");
   const [pageNo, setPageNo] = useState(1);
@@ -77,9 +78,12 @@ export function ToolCatalogPage() {
         riskLevel: riskFilter !== "all" ? riskFilter : undefined,
         enabled: enabledFilter === "enabled" ? true : enabledFilter === "disabled" ? false : undefined
       });
+      setToolsError(null);
       setPageData(data);
     } catch (error) {
-      toast.error(getErrorMessage(error, "加载工具列表失败"));
+      const message = getErrorMessage(error, "加载工具列表失败");
+      setToolsError(message);
+      toast.error(message);
       console.error(error);
     } finally {
       setLoading(false);
@@ -336,6 +340,14 @@ export function ToolCatalogPage() {
         <CardContent className="pt-6">
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">加载中...</div>
+          ) : toolsError ? (
+            <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+              <div className="font-medium">工具列表加载失败</div>
+              <div className="mt-1 break-words">{toolsError}</div>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => loadTools(pageNo, keyword)}>
+                重试
+              </Button>
+            </div>
           ) : tools.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">暂无工具</div>
           ) : (

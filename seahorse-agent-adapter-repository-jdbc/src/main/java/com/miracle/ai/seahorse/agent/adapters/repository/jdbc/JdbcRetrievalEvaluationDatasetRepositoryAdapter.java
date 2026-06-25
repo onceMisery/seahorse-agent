@@ -38,6 +38,8 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -60,15 +62,18 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
     private final JavaType caseListType;
     private final JavaType comparisonReportType;
     private final JavaType reportType;
+    private final String jsonPlaceholder;
 
     public JdbcRetrievalEvaluationDatasetRepositoryAdapter(DataSource dataSource, ObjectMapper objectMapper) {
-        this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
+        DataSource safeDataSource = Objects.requireNonNull(dataSource, "dataSource must not be null");
+        this.jdbcTemplate = new JdbcTemplate(safeDataSource);
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.caseListType = this.objectMapper.getTypeFactory()
                 .constructCollectionType(List.class, RetrievalEvaluationCase.class);
         this.comparisonReportType = this.objectMapper.getTypeFactory()
                 .constructType(RetrievalEvaluationComparisonReport.class);
         this.reportType = this.objectMapper.getTypeFactory().constructType(RetrievalEvaluationReport.class);
+        this.jsonPlaceholder = isPostgres(safeDataSource) ? "?::jsonb" : "?";
     }
 
     @Override
@@ -119,21 +124,21 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
                 UPDATE t_retrieval_evaluation_dataset
                 SET dataset_name = ?,
                     description = ?,
-                    cases_json = ?::jsonb,
+                    cases_json = %s,
                     enabled = ?,
                     deleted = 0,
                     update_time = CURRENT_TIMESTAMP
                 WHERE kb_id = ?
                   AND id = ?
-                """, safePayload.name(), safePayload.description(), casesJson, enabled,
+                """.formatted(jsonPlaceholder), safePayload.name(), safePayload.description(), casesJson, enabled,
                 safeKnowledgeBaseId, datasetId);
         if (updated <= 0) {
             jdbcTemplate.update("""
                     INSERT INTO t_retrieval_evaluation_dataset(
                         id, kb_id, dataset_name, description, cases_json, enabled,
                         create_time, update_time, deleted
-                    ) VALUES (?, ?, ?, ?, ?::jsonb, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
-                    """, datasetId, safeKnowledgeBaseId, safePayload.name(), safePayload.description(),
+                    ) VALUES (?, ?, ?, ?, %s, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                    """.formatted(jsonPlaceholder), datasetId, safeKnowledgeBaseId, safePayload.name(), safePayload.description(),
                     casesJson, enabled);
         }
         return findDataset(safeKnowledgeBaseId, datasetId)
@@ -173,8 +178,8 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
                         id, kb_id, dataset_id, strategy_name, top_k, case_count, evaluable_case_count,
                         recall_at_k, mrr, ndcg_at_k, empty_recall_rate, avg_latency_ms, p95_latency_ms,
                         report_json, create_time
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                    """,
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, %s, CURRENT_TIMESTAMP)
+                    """.formatted(jsonPlaceholder),
                     runId,
                     safeKnowledgeBaseId,
                     safeDatasetId,
@@ -256,8 +261,8 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
                     INSERT INTO t_retrieval_evaluation_comparison(
                         id, kb_id, dataset_id, baseline_strategy_name, winner_strategy_name,
                         strategy_count, case_count, report_json, create_time
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                    """,
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, %s, CURRENT_TIMESTAMP)
+                    """.formatted(jsonPlaceholder),
                     comparisonId,
                     safeKnowledgeBaseId,
                     safeDatasetId,
@@ -473,5 +478,15 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
 
     private Instant instant(Timestamp timestamp) {
         return timestamp == null ? Instant.now() : timestamp.toInstant();
+    }
+
+    private boolean isPostgres(DataSource dataSource) {
+        try (Connection connection = dataSource.getConnection()) {
+            DatabaseMetaData metaData = connection.getMetaData();
+            String productName = metaData == null ? "" : metaData.getDatabaseProductName();
+            return productName != null && productName.toLowerCase().contains("postgresql");
+        } catch (SQLException ex) {
+            return false;
+        }
     }
 }

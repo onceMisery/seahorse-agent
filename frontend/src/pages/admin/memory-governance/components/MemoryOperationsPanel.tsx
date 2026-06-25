@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/services/api";
+import { storage } from "@/utils/storage";
 import { getErrorMessage } from "@/utils/error";
 
 type DataView = "operations" | "outbox" | "profile-facts" | "corrections";
@@ -60,6 +61,7 @@ interface ProfileFactRow {
   confidence?: number | null;
   sourceType?: string | null;
   sourceMemoryId?: string | null;
+  sourceIds?: string[] | string | null;
   generationId?: string | null;
   status?: string | null;
   version?: number | null;
@@ -212,7 +214,9 @@ export function MemoryOperationsPanel() {
     if (!endpoint) return;
     setLoading(true);
     try {
-      const result = await api.get<unknown[]>(endpoint);
+      const userId = storage.getUser()?.userId;
+      const params = userId && view !== "outbox" ? { userId } : undefined;
+      const result = await api.get<unknown[]>(endpoint, params ? { params } : undefined);
       setData(Array.isArray(result) ? result : []);
     } catch {
       setData([]);

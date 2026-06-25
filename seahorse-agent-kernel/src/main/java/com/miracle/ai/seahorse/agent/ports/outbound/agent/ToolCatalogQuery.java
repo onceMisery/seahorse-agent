@@ -26,13 +26,25 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
  * @param size         每页大小
  * @param enabled      启用状态过滤条件，可为空
  */
-public record ToolCatalogQuery(String resourceType, String keyword, long current, long size, Boolean enabled) {
+public record ToolCatalogQuery(String provider,
+                               String resourceType,
+                               String riskLevel,
+                               String keyword,
+                               long current,
+                               long size,
+                               Boolean enabled) {
 
     public static final long DEFAULT_CURRENT = 1L;
     public static final long DEFAULT_PAGE_SIZE = 10L;
 
+    public ToolCatalogQuery(String resourceType, String keyword, long current, long size, Boolean enabled) {
+        this(null, resourceType, null, keyword, current, size, enabled);
+    }
+
     public ToolCatalogQuery {
+        provider = trimToNull(provider);
         resourceType = trimToNull(resourceType);
+        riskLevel = trimToNull(riskLevel);
         keyword = trimToNull(keyword);
         current = current <= 0 ? DEFAULT_CURRENT : current;
         size = size <= 0 ? DEFAULT_PAGE_SIZE : size;

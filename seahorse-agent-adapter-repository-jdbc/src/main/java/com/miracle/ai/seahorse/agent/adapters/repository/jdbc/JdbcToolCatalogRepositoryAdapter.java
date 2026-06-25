@@ -123,7 +123,7 @@ public class JdbcToolCatalogRepositoryAdapter implements ToolCatalogRepositoryPo
 
     @Override
     public ToolCatalogPage page(ToolCatalogQuery query) {
-        ToolCatalogQuery safeQuery = query == null ? new ToolCatalogQuery(null, null,
+        ToolCatalogQuery safeQuery = query == null ? new ToolCatalogQuery(null, null, null, null,
                 ToolCatalogQuery.DEFAULT_CURRENT,
                 ToolCatalogQuery.DEFAULT_PAGE_SIZE,
                 null) : query;
@@ -201,9 +201,17 @@ public class JdbcToolCatalogRepositoryAdapter implements ToolCatalogRepositoryPo
     private QueryParts filters(ToolCatalogQuery query) {
         List<String> clauses = new ArrayList<>();
         List<Object> args = new ArrayList<>();
+        if (hasText(query.provider())) {
+            clauses.add("provider = ?");
+            args.add(query.provider());
+        }
         if (hasText(query.resourceType())) {
             clauses.add("resource_type = ?");
             args.add(query.resourceType());
+        }
+        if (hasText(query.riskLevel())) {
+            clauses.add("risk_level = ?");
+            args.add(query.riskLevel());
         }
         if (hasText(query.keyword())) {
             String keyword = like(query.keyword());

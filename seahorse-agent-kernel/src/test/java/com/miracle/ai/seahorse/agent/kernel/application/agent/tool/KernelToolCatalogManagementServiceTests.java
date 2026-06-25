@@ -50,10 +50,12 @@ class KernelToolCatalogManagementServiceTests {
                 true));
         KernelToolCatalogManagementService service = new KernelToolCatalogManagementService(repository, adminUser());
 
-        ToolCatalogPage page = service.page("BUILTIN", "weather", 2L, 20L, true);
+        ToolCatalogPage page = service.page("BUILTIN", "BUILTIN", "MEDIUM", "weather", 2L, 20L, true);
         Optional<ToolCatalogEntry> found = service.findById("weather_query");
 
+        assertEquals("BUILTIN", repository.lastQuery.provider());
         assertEquals("BUILTIN", repository.lastQuery.resourceType());
+        assertEquals("MEDIUM", repository.lastQuery.riskLevel());
         assertEquals("weather", repository.lastQuery.keyword());
         assertEquals(2L, repository.lastQuery.current());
         assertEquals(20L, repository.lastQuery.size());
@@ -85,7 +87,7 @@ class KernelToolCatalogManagementServiceTests {
                 tool("mcp_weather", ToolProvider.MCP, true));
         KernelToolCatalogManagementService service = new KernelToolCatalogManagementService(repository, adminUser());
 
-        ToolCatalogPage page = service.page(null, null, 1L, 10L, true);
+        ToolCatalogPage page = service.page(null, null, null, null, 1L, 10L, true);
         Optional<ToolCatalogEntry> hidden = service.findById("mcp_weather");
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> service.enable("mcp_weather"));
@@ -101,7 +103,7 @@ class KernelToolCatalogManagementServiceTests {
                 new MemoryToolCatalogRepository(tool("weather_query", ToolProvider.BUILTIN, true)), user());
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> service.page(null, null, 1L, 10L, null));
+                () -> service.page(null, null, null, null, 1L, 10L, null));
 
         assertEquals("权限不足", error.getMessage());
     }

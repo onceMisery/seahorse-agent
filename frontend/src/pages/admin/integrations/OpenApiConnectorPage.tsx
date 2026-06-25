@@ -89,7 +89,7 @@ export function OpenApiConnectorPage() {
                 {connectors.map((conn) => (
                   <TableRow key={conn.connectorId}>
                     <TableCell className="font-medium">{conn.name || "-"}</TableCell>
-                    <TableCell className="text-muted-foreground">{conn.operationCount ?? 0}</TableCell>
+                    <TableCell className="text-muted-foreground">{conn.operationCount ?? "-"}</TableCell>
                     <TableCell>
                       {(conn.parseErrors?.length ?? 0) > 0 ? (
                         <Badge variant="destructive">{conn.parseErrors!.length} 个错误</Badge>

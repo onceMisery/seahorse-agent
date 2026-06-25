@@ -59,7 +59,7 @@ public class SeahorseOpenApiConnectorController {
                 : advancedFeatureGate;
     }
 
-    @PostMapping("/api/connectors/openapi")
+    @PostMapping({"/api/connectors/openapi", "/connectors/openapi"})
     public ApiResponse<Object> importOpenApi(@RequestBody OpenApiImportRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.CONNECTOR_MANAGEMENT);
         OpenApiImportRequest safeRequest = request == null
@@ -73,7 +73,7 @@ public class SeahorseOpenApiConnectorController {
                         safeRequest.importedBy())));
     }
 
-    @GetMapping("/api/connectors")
+    @GetMapping({"/api/connectors", "/connectors"})
     public ApiResponse<Object> page(@RequestParam(required = false) String tenantId,
                                     @RequestParam(required = false) String keyword,
                                     @RequestParam(required = false) ConnectorStatus status,
@@ -84,13 +84,16 @@ public class SeahorseOpenApiConnectorController {
                 port -> port.page(new ConnectorQuery(tenantId, keyword, status, current, size)));
     }
 
-    @GetMapping("/api/connectors/{connectorId}/operations")
+    @GetMapping({"/api/connectors/{connectorId}/operations", "/connectors/{connectorId}/operations"})
     public ApiResponse<Object> listOperations(@PathVariable String connectorId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.CONNECTOR_MANAGEMENT);
         return ApiResponses.requireService(connectorPortProvider, port -> port.listOperations(connectorId));
     }
 
-    @PutMapping("/api/connectors/{connectorId}/operations/{operationId}/credential-binding")
+    @PutMapping({
+            "/api/connectors/{connectorId}/operations/{operationId}/credential-binding",
+            "/connectors/{connectorId}/operations/{operationId}/credential-binding"
+    })
     public ApiResponse<Object> bindCredential(@PathVariable String connectorId,
                                               @PathVariable String operationId,
                                               @RequestBody ConnectorCredentialBindingRequest request) {
@@ -107,7 +110,10 @@ public class SeahorseOpenApiConnectorController {
                         safeRequest.boundBy())));
     }
 
-    @GetMapping("/api/connectors/{connectorId}/operations/{operationId}/credential-binding")
+    @GetMapping({
+            "/api/connectors/{connectorId}/operations/{operationId}/credential-binding",
+            "/connectors/{connectorId}/operations/{operationId}/credential-binding"
+    })
     public ApiResponse<Object> listActiveCredentialBindings(@PathVariable String connectorId,
                                                             @PathVariable String operationId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.CONNECTOR_MANAGEMENT);
@@ -115,7 +121,10 @@ public class SeahorseOpenApiConnectorController {
                 port -> port.listActiveCredentialBindings(connectorId, operationId));
     }
 
-    @PostMapping("/api/connectors/{connectorId}/operations/{operationId}/enable")
+    @PostMapping({
+            "/api/connectors/{connectorId}/operations/{operationId}/enable",
+            "/connectors/{connectorId}/operations/{operationId}/enable"
+    })
     public ApiResponse<Object> enableOperation(@PathVariable String connectorId,
                                                @PathVariable String operationId,
                                                @RequestBody(required = false) ConnectorOperationEnableRequest request) {
@@ -131,7 +140,10 @@ public class SeahorseOpenApiConnectorController {
                         safeRequest.operatorConfirmedRisk())));
     }
 
-    @PostMapping("/api/connectors/{connectorId}/operations/{operationId}/disable")
+    @PostMapping({
+            "/api/connectors/{connectorId}/operations/{operationId}/disable",
+            "/connectors/{connectorId}/operations/{operationId}/disable"
+    })
     public ApiResponse<Object> disableOperation(@PathVariable String connectorId,
                                                 @PathVariable String operationId,
                                                 @RequestBody(required = false) ConnectorOperationDisableRequest request) {

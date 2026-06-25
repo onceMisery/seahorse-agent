@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -31,6 +32,7 @@ public record ProfileFact(
         String valueText,
         double confidenceLevel,
         String sourceType,
+        List<String> sourceIds,
         String generationId,
         String status,
         Instant updatedAt,
@@ -46,6 +48,7 @@ public record ProfileFact(
         slotKey = Objects.requireNonNullElse(slotKey, "");
         valueText = Objects.requireNonNullElse(valueText, "");
         sourceType = Objects.requireNonNullElse(sourceType, "");
+        sourceIds = List.copyOf(Objects.requireNonNullElse(sourceIds, List.of()));
         generationId = Objects.requireNonNullElse(generationId, "");
         status = Objects.requireNonNullElse(status, "ACTIVE");
         updatedAt = Objects.requireNonNullElse(updatedAt, Instant.EPOCH);
@@ -64,7 +67,7 @@ public record ProfileFact(
                        String generationId,
                        String status,
                        Instant updatedAt) {
-        this(id, userId, tenantId, slotKey, valueText, confidenceLevel, sourceType, generationId, status,
+        this(id, userId, tenantId, slotKey, valueText, confidenceLevel, sourceType, List.of(), generationId, status,
                 updatedAt, 1L, Instant.EPOCH, 0);
     }
 }

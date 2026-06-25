@@ -16,6 +16,10 @@ import { getErrorMessage } from "@/utils/error";
 import { RolloutTimeline } from "./components/RolloutTimeline";
 import { RolloutActionDialog, type RolloutActionType } from "./components/RolloutActionDialog";
 
+function isActiveRolloutStatus(status?: string | null) {
+  return status === "RUNNING" || status === "CANARY" || status === "ACTIVE";
+}
+
 export function AgentRolloutPage() {
   const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.AGENT_ROLLOUT_MANAGEMENT);
   const { agentId } = useParams<{ agentId: string }>();
@@ -114,7 +118,7 @@ export function AgentRolloutPage() {
               </div>
 
               <div className="flex gap-2">
-                {rollout.status === "CANARY" || rollout.status === "ACTIVE" ? (
+                {isActiveRolloutStatus(rollout.status) ? (
                   <>
                     <Button variant="outline" onClick={() => setActionType("pause")}>暂停</Button>
                     <Button onClick={() => setActionType("promote")}>全量发布</Button>

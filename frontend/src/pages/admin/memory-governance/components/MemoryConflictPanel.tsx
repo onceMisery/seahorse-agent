@@ -9,9 +9,13 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { listMemoryConflicts, resolveMemoryConflict, type MemoryConflict } from "@/services/memoryGovernanceService";
+import { useAuthStore } from "@/stores/authStore";
 import { getErrorMessage } from "@/utils/error";
 
+const PENDING_STATUS = "PENDING";
+
 export function MemoryConflictPanel() {
+  const userId = useAuthStore((state) => state.user?.userId);
   const [conflicts, setConflicts] = useState<MemoryConflict[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -25,7 +29,7 @@ export function MemoryConflictPanel() {
   const loadConflicts = async () => {
     try {
       setLoading(true);
-      const data = await listMemoryConflicts({ status: "open" });
+      const data = await listMemoryConflicts({ userId, status: PENDING_STATUS, limit: 50 });
       setConflicts(data || []);
     } catch (error) {
       toast.error(getErrorMessage(error, "加载冲突列表失败"));
@@ -37,15 +41,15 @@ export function MemoryConflictPanel() {
 
   useEffect(() => {
     loadConflicts();
-  }, []);
+  }, [userId]);
 
   const handleResolve = async () => {
-    if (!selectedConflict?.conflictId) return;
+    if (!selectedConflict?.id) return;
 
     try {
       setResolving(true);
       await resolveMemoryConflict(
-        selectedConflict.conflictId,
+        selectedConflict.id,
         resolution,
         resolution === "merge" ? mergedContent : undefined
       );
@@ -77,21 +81,27 @@ export function MemoryConflictPanel() {
           ) : (
             <div className="space-y-4">
               {conflicts.map((conflict) => (
-                <div key={conflict.conflictId} className="p-4 bg-slate-50 rounded-lg">
+                <div key={conflict.id} className="p-4 bg-slate-50 rounded-lg">
                   <div className="flex items-center justify-between mb-3">
-                    <Badge variant={conflict.status === "open" ? "destructive" : "default"}>{conflict.status || "-"}</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={conflict.resolutionStatus === PENDING_STATUS ? "destructive" : "default"}>
+                        {conflict.resolutionStatus || "-"}
+                      </Badge>
+                      <Badge variant="outline">{conflict.severity || "-"}</Badge>
+                      <span className="text-xs text-slate-500">{conflict.conflictType || "-"}</span>
+                    </div>
                     <Button variant="outline" size="sm" onClick={() => { setSelectedConflict(conflict); setResolveOpen(true); }}>
                       解决
                     </Button>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-3 bg-white rounded border">
-                      <div className="text-xs text-slate-500 mb-1">记忆 A ({conflict.memoryIdA})</div>
-                      <div className="text-sm">{conflict.contentA || "-"}</div>
+                      <div className="text-xs text-slate-500 mb-1">记忆 A</div>
+                      <div className="break-all font-mono text-xs">{conflict.memoryId1 || "-"}</div>
                     </div>
                     <div className="p-3 bg-white rounded border">
-                      <div className="text-xs text-slate-500 mb-1">记忆 B ({conflict.memoryIdB})</div>
-                      <div className="text-sm">{conflict.contentB || "-"}</div>
+                      <div className="text-xs text-slate-500 mb-1">记忆 B</div>
+                      <div className="break-all font-mono text-xs">{conflict.memoryId2 || "-"}</div>
                     </div>
                   </div>
                 </div>

@@ -187,13 +187,20 @@ export function RetrievalDatasetDetailPage() {
                 <div className="text-center py-4 text-muted-foreground">暂无对比记录</div>
               ) : (
                 <div className="space-y-3">
-                  {comparisons.map((comp) => (
+                  {comparisons.map((comp) => {
+                    const baselineName = comp.baseStrategyKey || comp.baselineStrategyName || "";
+                    const winnerName = comp.candidateStrategyKey || comp.winnerStrategyName || "";
+                    const winnerTemplate = strategies.find((strategy) => strategy.templateKey === winnerName);
+                    const canPromote = Boolean(comp.comparisonId && winnerName && (comp.status === "COMPLETED" || comp.winnerStrategyName));
+                    return (
                     <div key={comp.comparisonId} className="p-4 bg-slate-50 rounded-lg">
                       <div className="flex items-center gap-4 mb-3">
-                        <Badge variant="outline">{comp.baseStrategyKey}</Badge>
+                        <Badge variant="outline">{baselineName}</Badge>
                         <span className="text-slate-400">vs</span>
-                        <Badge variant="outline">{comp.candidateStrategyKey}</Badge>
-                        <Badge variant={comp.status === "COMPLETED" ? "default" : "secondary"}>{comp.status}</Badge>
+                        <Badge variant="outline">{winnerName}</Badge>
+                        <Badge variant={comp.status === "COMPLETED" || comp.winnerStrategyName ? "default" : "secondary"}>
+                          {comp.status || "COMPLETED"}
+                        </Badge>
                       </div>
                       {comp.diffHitRate !== undefined && (
                         <div className="grid grid-cols-3 gap-4 text-sm">
@@ -213,7 +220,7 @@ export function RetrievalDatasetDetailPage() {
                           </div>
                         </div>
                       )}
-                      {comp.status === "COMPLETED" && comp.comparisonId && (comp.diffHitRate ?? 0) >= 0 && (
+                      {canPromote && (
                         <div className="mt-3 flex justify-end">
                           <Button
                             size="sm"
@@ -223,7 +230,12 @@ export function RetrievalDatasetDetailPage() {
                               if (!kbId || !datasetId || !comp.comparisonId) return;
                               try {
                                 await promoteStrategyFromComparison(kbId, datasetId, comp.comparisonId, {
-                                  strategyKey: comp.candidateStrategyKey || ""
+                                  templateKey: winnerName,
+                                  displayName: winnerTemplate?.displayName || winnerTemplate?.name || winnerName,
+                                  description: winnerTemplate?.description || `Promoted from comparison ${comp.comparisonId}`,
+                                  options: winnerTemplate?.options || {},
+                                  enabled: true,
+                                  comment: `Promoted from comparison ${comp.comparisonId}`
                                 });
                                 toast.success("策略已推广为推荐模板");
                                 const st = await listStrategyTemplates(kbId);
@@ -238,7 +250,8 @@ export function RetrievalDatasetDetailPage() {
                         </div>
                       )}
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               )}
             </CardContent>

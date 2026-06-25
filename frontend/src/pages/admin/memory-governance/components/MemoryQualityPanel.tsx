@@ -5,9 +5,26 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getMemoryQualitySnapshots, runMemoryQuality, type MemoryQualitySnapshot } from "@/services/memoryGovernanceService";
+import { useAuthStore } from "@/stores/authStore";
 import { getErrorMessage } from "@/utils/error";
 
+function snapshotNumber(snapshot: MemoryQualitySnapshot, key: string) {
+  const value = snapshot.snapshot?.[key];
+  if (typeof value === "number") return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function snapshotSuggestions(snapshot: MemoryQualitySnapshot) {
+  const raw = snapshot.snapshot?.cleanupSuggestions;
+  return Array.isArray(raw) ? raw : [];
+}
+
 export function MemoryQualityPanel() {
+  const userId = useAuthStore((state) => state.user?.userId);
   const [snapshots, setSnapshots] = useState<MemoryQualitySnapshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -15,7 +32,7 @@ export function MemoryQualityPanel() {
   const loadSnapshots = async () => {
     try {
       setLoading(true);
-      const data = await getMemoryQualitySnapshots();
+      const data = await getMemoryQualitySnapshots({ userId, limit: 20 });
       setSnapshots(data || []);
     } catch (error) {
       toast.error(getErrorMessage(error, "加载质量快照失败"));
@@ -27,12 +44,12 @@ export function MemoryQualityPanel() {
 
   useEffect(() => {
     loadSnapshots();
-  }, []);
+  }, [userId]);
 
   const handleRunQuality = async () => {
     try {
       setRunning(true);
-      await runMemoryQuality();
+      await runMemoryQuality({ userId });
       toast.success("质量检查已触发");
       loadSnapshots();
     } catch (error) {
@@ -65,34 +82,40 @@ export function MemoryQualityPanel() {
       ) : (
         <div className="space-y-4">
           {snapshots.map((snap) => (
-            <Card key={snap.snapshotId}>
+            <Card key={snap.id}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">快照 {snap.snapshotTime ? new Date(snap.snapshotTime).toLocaleString("zh-CN") : "-"}</CardTitle>
+                <CardTitle className="text-sm">快照 {snap.createTime ? new Date(snap.createTime).toLocaleString("zh-CN") : "-"}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-4 gap-4 text-sm">
                   <div>
-                    <div className="text-slate-500">总记忆数</div>
-                    <div className="font-medium">{snap.totalMemories ?? 0}</div>
+                    <div className="text-slate-500">短期记忆</div>
+                    <div className="font-medium">{snapshotNumber(snap, "shortTermCount")}</div>
                   </div>
                   <div>
-                    <div className="text-slate-500">高质量</div>
-                    <div className="font-medium text-green-600">{snap.highQualityCount ?? 0}</div>
+                    <div className="text-slate-500">长期记忆</div>
+                    <div className="font-medium">{snapshotNumber(snap, "longTermCount")}</div>
                   </div>
                   <div>
-                    <div className="text-slate-500">低质量</div>
-                    <div className="font-medium text-red-600">{snap.lowQualityCount ?? 0}</div>
+                    <div className="text-slate-500">语义记忆</div>
+                    <div className="font-medium">{snapshotNumber(snap, "semanticCount")}</div>
                   </div>
                   <div>
-                    <div className="text-slate-500">平均质量</div>
-                    <div className="font-medium">{((snap.averageQuality ?? 0) * 100).toFixed(1)}%</div>
+                    <div className="text-slate-500">冲突数</div>
+                    <div className="font-medium text-amber-600">{snapshotNumber(snap, "conflictCount")}</div>
                   </div>
                 </div>
-                {snap.governanceSuggestions && snap.governanceSuggestions.length > 0 && (
+                {snapshotSuggestions(snap).length > 0 && (
                   <div className="mt-3">
                     <div className="text-xs text-slate-500 mb-1">治理建议</div>
                     <ul className="text-sm list-disc list-inside space-y-1">
-                      {snap.governanceSuggestions.map((s, i) => <li key={i}>{s}</li>)}
+                      {snapshotSuggestions(snap).map((suggestion, i) => (
+                        <li key={i}>
+                          {typeof suggestion === "string"
+                            ? suggestion
+                            : JSON.stringify(suggestion)}
+                        </li>
+                      ))}
                     </ul>
                   </div>
                 )}

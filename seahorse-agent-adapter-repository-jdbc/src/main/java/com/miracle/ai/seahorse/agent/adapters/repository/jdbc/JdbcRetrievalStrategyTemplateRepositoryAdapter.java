@@ -28,6 +28,8 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.LinkedHashMap;
@@ -45,10 +47,13 @@ public class JdbcRetrievalStrategyTemplateRepositoryAdapter implements Retrieval
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final String optionsJsonPlaceholder;
 
     public JdbcRetrievalStrategyTemplateRepositoryAdapter(DataSource dataSource, ObjectMapper objectMapper) {
-        this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
+        DataSource safeDataSource = Objects.requireNonNull(dataSource, "dataSource must not be null");
+        this.jdbcTemplate = new JdbcTemplate(safeDataSource);
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
+        this.optionsJsonPlaceholder = isPostgres(safeDataSource) ? "?::jsonb" : "?";
     }
 
     @Override
@@ -84,7 +89,7 @@ public class JdbcRetrievalStrategyTemplateRepositoryAdapter implements Retrieval
                 UPDATE t_retrieval_strategy_template
                 SET display_name = ?,
                     description = ?,
-                    options_json = ?,
+                    options_json = %s,
                     sort_order = ?,
                     recommended = 0,
                     enabled = ?,
@@ -92,15 +97,15 @@ public class JdbcRetrievalStrategyTemplateRepositoryAdapter implements Retrieval
                     update_time = CURRENT_TIMESTAMP
                 WHERE COALESCE(kb_id, '') = ?
                   AND template_key = ?
-                """, safePayload.displayName(), safePayload.description(), optionsJson,
+                """.formatted(optionsJsonPlaceholder), safePayload.displayName(), safePayload.description(), optionsJson,
                 safePayload.sortOrder(), enabled, safeKbId, safePayload.templateKey());
         if (updated <= 0) {
             jdbcTemplate.update("""
                     INSERT INTO t_retrieval_strategy_template(
                         id, kb_id, template_key, display_name, description, options_json,
                         sort_order, recommended, enabled, create_time, update_time, deleted
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
-                    """, SnowflakeIds.nextIdString(), safeKbId, safePayload.templateKey(),
+                    ) VALUES (?, ?, ?, ?, ?, %s, ?, 0, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                    """.formatted(optionsJsonPlaceholder), SnowflakeIds.nextIdString(), safeKbId, safePayload.templateKey(),
                     safePayload.displayName(), safePayload.description(), optionsJson,
                     safePayload.sortOrder(), enabled);
         }
@@ -125,7 +130,7 @@ public class JdbcRetrievalStrategyTemplateRepositoryAdapter implements Retrieval
                 UPDATE t_retrieval_strategy_template
                 SET display_name = ?,
                     description = ?,
-                    options_json = ?,
+                    options_json = %s,
                     sort_order = ?,
                     recommended = 1,
                     enabled = ?,
@@ -133,15 +138,15 @@ public class JdbcRetrievalStrategyTemplateRepositoryAdapter implements Retrieval
                     update_time = CURRENT_TIMESTAMP
                 WHERE COALESCE(kb_id, '') = ?
                   AND template_key = ?
-                """, safePayload.displayName(), safePayload.description(), optionsJson,
+                """.formatted(optionsJsonPlaceholder), safePayload.displayName(), safePayload.description(), optionsJson,
                 safePayload.sortOrder(), enabled, safeKbId, safePayload.templateKey());
         if (updated <= 0) {
             jdbcTemplate.update("""
                     INSERT INTO t_retrieval_strategy_template(
                         id, kb_id, template_key, display_name, description, options_json,
                         sort_order, recommended, enabled, create_time, update_time, deleted
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
-                    """, SnowflakeIds.nextIdString(), safeKbId, safePayload.templateKey(),
+                    ) VALUES (?, ?, ?, ?, ?, %s, ?, 1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                    """.formatted(optionsJsonPlaceholder), SnowflakeIds.nextIdString(), safeKbId, safePayload.templateKey(),
                     safePayload.displayName(), safePayload.description(), optionsJson,
                     safePayload.sortOrder(), enabled);
         }
@@ -223,6 +228,16 @@ public class JdbcRetrievalStrategyTemplateRepositoryAdapter implements Retrieval
             return objectMapper.writeValueAsString(Objects.requireNonNull(value, "value must not be null"));
         } catch (JsonProcessingException ex) {
             throw new IllegalArgumentException("serialize retrieval strategy template failed", ex);
+        }
+    }
+
+    private boolean isPostgres(DataSource dataSource) {
+        try (Connection connection = dataSource.getConnection()) {
+            DatabaseMetaData metaData = connection.getMetaData();
+            String productName = metaData == null ? "" : metaData.getDatabaseProductName();
+            return productName != null && productName.toLowerCase().contains("postgresql");
+        } catch (SQLException ex) {
+            return false;
         }
     }
 }

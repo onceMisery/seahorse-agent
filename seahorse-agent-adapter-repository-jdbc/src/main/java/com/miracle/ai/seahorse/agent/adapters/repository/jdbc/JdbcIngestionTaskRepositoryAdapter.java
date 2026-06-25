@@ -56,12 +56,12 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
             (id, pipeline_id, pipeline_version, pipeline_snapshot_json, source_type, source_location,
              source_file_name, status, chunk_count, error_message, logs_json, metadata_json, started_at,
              completed_at, created_by, updated_by, create_time, update_time, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, CURRENT_TIMESTAMP, NULL, ?, ?,
+            VALUES (?, ?, ?, CAST(? AS JSONB), ?, ?, ?, ?, 0, NULL, NULL, NULL, CURRENT_TIMESTAMP, NULL, ?, ?,
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
             """;
     private static final String SQL_UPDATE_TASK = """
             UPDATE t_ingestion_task
-            SET status = ?, chunk_count = ?, error_message = ?, logs_json = ?, metadata_json = ?,
+            SET status = ?, chunk_count = ?, error_message = ?, logs_json = CAST(? AS JSONB), metadata_json = CAST(? AS JSONB),
                 completed_at = CURRENT_TIMESTAMP, updated_by = ?, update_time = CURRENT_TIMESTAMP
             WHERE id = ? AND deleted = 0
             """;
@@ -125,15 +125,15 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
         String operator = Objects.requireNonNullElse(safeValues.operator(), "");
         jdbcTemplate.update(SQL_INSERT_TASK,
                 toLong(taskId),
-                requireText(safeValues.pipelineId(), "pipelineId"),
+                toLong(requireText(safeValues.pipelineId(), "pipelineId")),
                 safeValues.pipelineVersion(),
                 toJson(safeValues.pipelineSnapshot()),
                 blankToNull(safeValues.sourceType()),
                 blankToNull(safeValues.sourceLocation()),
                 blankToNull(safeValues.sourceFileName()),
                 STATUS_RUNNING,
-                operator,
-                operator);
+                operatorId(operator),
+                operatorId(operator));
         return taskId;
     }
 
@@ -146,7 +146,7 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
                 blankToNull(safeValues.errorMessage()),
                 toJson(safeValues.logs()),
                 toJson(safeValues.metadata()),
-                Objects.requireNonNullElse(safeValues.operator(), ""),
+                operatorId(safeValues.operator()),
                 toLong(requireText(taskId, "taskId")));
     }
 
@@ -208,8 +208,8 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
         jdbcTemplate.update(SQL_INSERT_NODE,
                 toLong(SnowflakeIds.nextIdString()),
                 toLong(requireText(safeNode.getTaskId(), "taskId")),
-                requireText(safeNode.getPipelineId(), "pipelineId"),
-                blankToNull(safeNode.getNodeId()),
+                toLong(requireText(safeNode.getPipelineId(), "pipelineId")),
+                toLong(requireText(safeNode.getNodeId(), "nodeId")),
                 blankToNull(safeNode.getNodeType()),
                 safeNode.getNodeOrder(),
                 blankToNull(safeNode.getStatus()),
@@ -238,6 +238,14 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
             throw new IllegalArgumentException("numeric id is required");
         }
         return parsed;
+    }
+
+    private long operatorId(String operator) {
+        if (operator == null || operator.isBlank()) {
+            return 0L;
+        }
+        Long parsed = parseLong(operator);
+        return parsed == null ? 0L : parsed;
     }
 
     private IngestionTaskRecord toTaskRecord(ResultSet resultSet, int rowNumber) throws SQLException {
@@ -298,7 +306,7 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
             return List.of();
         }
         try {
-            return objectMapper.readValue(json, NODE_LOG_LIST_TYPE);
+            return objectMapper.readValue(normalizeJsonText(json), NODE_LOG_LIST_TYPE);
         } catch (Exception ex) {
             return List.of();
         }
@@ -309,9 +317,18 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
             return Map.of();
         }
         try {
-            return objectMapper.readValue(json, MAP_TYPE);
+            return objectMapper.readValue(normalizeJsonText(json), MAP_TYPE);
         } catch (Exception ex) {
             return Map.of();
+        }
+    }
+
+    private String normalizeJsonText(String json) {
+        try {
+            var node = objectMapper.readTree(json);
+            return node != null && node.isTextual() ? node.asText() : json;
+        } catch (Exception ignored) {
+            return json;
         }
     }
 

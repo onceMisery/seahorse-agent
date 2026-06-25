@@ -62,14 +62,16 @@ public class SeahorseToolCatalogController {
     }
 
     @GetMapping({"/tools", "/api/tools"})
-    public ApiResponse<Object> page(@RequestParam(required = false) String resourceType,
+    public ApiResponse<Object> page(@RequestParam(required = false) String provider,
+                                    @RequestParam(required = false) String resourceType,
+                                    @RequestParam(required = false) String riskLevel,
                                     @RequestParam(required = false) String keyword,
                                     @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,
                                     @RequestParam(required = false, defaultValue = DEFAULT_SIZE) long size,
                                     @RequestParam(required = false) Boolean enabled) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.TOOL_CATALOG_MANAGEMENT);
         return ApiResponses.requireService(toolCatalogPortProvider,
-                port -> port.page(resourceType, keyword, current, size, enabled));
+                port -> port.page(provider, resourceType, riskLevel, keyword, current, size, enabled));
     }
 
     @GetMapping({"/tools/{toolId}", "/api/tools/{toolId}"})

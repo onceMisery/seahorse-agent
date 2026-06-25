@@ -129,6 +129,40 @@ class SeahorseRunProfileControllerTests {
     }
 
     @Test
+    void shouldRouteSystemRunProfileNegativeIds() throws Exception {
+        RunProfileInboundPort port = mock(RunProfileInboundPort.class);
+        when(port.resolvePreview("100", -9105L)).thenReturn(Optional.of(RunProfileResolvedPreview.builder()
+                .runProfileId(-9105L)
+                .roleCardId(-9004L)
+                .executorEngine("kernel")
+                .explicitToolAllowlist(false)
+                .toolIds(List.of())
+                .mcpToolIds(List.of())
+                .a2aAgentIds(List.of())
+                .build()));
+        when(port.applyToConversation("100", "101", -9105L)).thenReturn(RunProfileResolvedPreview.builder()
+                .runProfileId(-9105L)
+                .roleCardId(-9004L)
+                .executorEngine("kernel")
+                .explicitToolAllowlist(false)
+                .toolIds(List.of())
+                .mcpToolIds(List.of())
+                .a2aAgentIds(List.of())
+                .build());
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseRunProfileController(provider(port))).build();
+
+        mvc.perform(post("/api/run-profiles/-9105/resolve-preview").param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.runProfileId").value(-9105));
+        mvc.perform(post("/api/conversations/101/run-profile/-9105/apply").param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.runProfileId").value(-9105));
+
+        verify(port).resolvePreview("100", -9105L);
+        verify(port).applyToConversation("100", "101", -9105L);
+    }
+
+    @Test
     void shouldListGetActivateUpdateAndDeleteRunProfiles() throws Exception {
         RunProfileInboundPort port = mock(RunProfileInboundPort.class);
         RunProfileRecord profile = profile(12L);

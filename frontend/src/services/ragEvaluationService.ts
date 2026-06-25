@@ -40,9 +40,14 @@ export interface EvaluationRun {
 
 export interface EvaluationComparison {
   comparisonId?: string;
+  knowledgeBaseId?: string;
   datasetId?: string;
   baseStrategyKey?: string;
   candidateStrategyKey?: string;
+  baselineStrategyName?: string;
+  winnerStrategyName?: string;
+  strategyCount?: number;
+  caseCount?: number;
   status?: string;
   baseHitRate?: number;
   candidateHitRate?: number;
@@ -67,8 +72,11 @@ export interface RetrievalStrategyTemplate {
   templateKey?: string;
   kbId?: string;
   name?: string;
+  displayName?: string;
   topK?: number;
   rerank?: boolean;
+  recommended?: boolean;
+  description?: string;
   metadataFilter?: Record<string, unknown>;
   options?: Record<string, unknown>;
   createTime?: string;
@@ -275,7 +283,16 @@ export function promoteStrategyFromComparison(
   kbId: string,
   datasetId: string,
   comparisonId: string,
-  payload: { strategyKey: string; templateKey?: string }
+  payload: {
+    strategyKey?: string;
+    templateKey?: string;
+    displayName?: string;
+    description?: string;
+    options?: Record<string, unknown>;
+    sortOrder?: number;
+    enabled?: boolean;
+    comment?: string;
+  }
 ) {
   return api.post<RetrievalStrategyTemplate, RetrievalStrategyTemplate>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-evaluation-datasets/${encodeURIComponent(datasetId)}/comparisons/${encodeURIComponent(comparisonId)}/promote`,

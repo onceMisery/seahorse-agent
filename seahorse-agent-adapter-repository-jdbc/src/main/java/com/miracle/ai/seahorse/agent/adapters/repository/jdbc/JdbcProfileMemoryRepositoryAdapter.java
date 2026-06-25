@@ -185,6 +185,7 @@ public class JdbcProfileMemoryRepositoryAdapter implements ProfileMemoryPort {
                 rs.getString("value_text"),
                 rs.getDouble("confidence_level"),
                 rs.getString("source_type"),
+                parseSourceIds(rs.getString("source_ids")),
                 rs.getString("generation_id"),
                 rs.getString("status"),
                 JdbcMemorySupport.instant(rs.getTimestamp("update_time")),
@@ -198,6 +199,28 @@ public class JdbcProfileMemoryRepositoryAdapter implements ProfileMemoryPort {
             return objectMapper.writeValueAsString(Objects.requireNonNullElse(sourceIds, List.of()));
         } catch (Exception ex) {
             throw new IllegalArgumentException("profile source ids json serialization failed", ex);
+        }
+    }
+
+    private List<String> parseSourceIds(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            Object parsed = objectMapper.readValue(json, Object.class);
+            if (parsed instanceof String text && !text.equals(json)) {
+                return parseSourceIds(text);
+            }
+            if (!(parsed instanceof List<?> values)) {
+                return List.of();
+            }
+            return values.stream()
+                    .filter(Objects::nonNull)
+                    .map(String::valueOf)
+                    .filter(value -> !value.isBlank())
+                    .toList();
+        } catch (Exception ex) {
+            return List.of();
         }
     }
 

@@ -71,7 +71,10 @@ public class SeahorseAgentRolloutController {
                 : advancedFeatureGate;
     }
 
-    @PostMapping("/api/agents/{agentId}/versions/{versionId}/rollouts/canary")
+    @PostMapping({
+            "/api/agents/{agentId}/versions/{versionId}/rollouts/canary",
+            "/agents/{agentId}/versions/{versionId}/rollouts/canary"
+    })
     public ApiResponse<Object> createCanary(@PathVariable String agentId,
                                             @PathVariable String versionId,
                                             @RequestBody AgentRolloutCreateRequest request) {
@@ -87,7 +90,10 @@ public class SeahorseAgentRolloutController {
                         safeRequest.operator())));
     }
 
-    @GetMapping("/api/agents/{agentId}/versions/{versionId}/rollouts/latest")
+    @GetMapping({
+            "/api/agents/{agentId}/versions/{versionId}/rollouts/latest",
+            "/agents/{agentId}/versions/{versionId}/rollouts/latest"
+    })
     public ApiResponse<Object> latest(@PathVariable String agentId,
                                       @PathVariable String versionId,
                                       @RequestParam String tenantId) {
@@ -97,7 +103,10 @@ public class SeahorseAgentRolloutController {
                         .orElseThrow(() -> new ResourceNotFoundException("Agent rollout not found")));
     }
 
-    @GetMapping("/api/agents/{agentId}/rollouts/{rolloutId}/cost-summary")
+    @GetMapping({
+            "/api/agents/{agentId}/rollouts/{rolloutId}/cost-summary",
+            "/agents/{agentId}/rollouts/{rolloutId}/cost-summary"
+    })
     public ApiResponse<Object> costSummary(@PathVariable String agentId,
                                            @PathVariable String rolloutId,
                                            @RequestParam String tenantId) {
@@ -106,7 +115,10 @@ public class SeahorseAgentRolloutController {
                 port -> port.getCostSummary(tenantId, agentId, rolloutId));
     }
 
-    @PostMapping("/api/agents/{agentId}/rollouts/{rolloutId}/pause")
+    @PostMapping({
+            "/api/agents/{agentId}/rollouts/{rolloutId}/pause",
+            "/agents/{agentId}/rollouts/{rolloutId}/pause"
+    })
     public ApiResponse<Object> pause(@PathVariable String agentId,
                                      @PathVariable String rolloutId,
                                      @RequestBody AgentRolloutActionRequest request) {
@@ -122,7 +134,10 @@ public class SeahorseAgentRolloutController {
                         safeRequest.comment())));
     }
 
-    @PostMapping("/api/agents/{agentId}/rollouts/{rolloutId}/promote")
+    @PostMapping({
+            "/api/agents/{agentId}/rollouts/{rolloutId}/promote",
+            "/agents/{agentId}/rollouts/{rolloutId}/promote"
+    })
     public ApiResponse<Object> promote(@PathVariable String agentId,
                                        @PathVariable String rolloutId,
                                        @RequestBody AgentRolloutActionRequest request) {
@@ -138,7 +153,10 @@ public class SeahorseAgentRolloutController {
                         safeRequest.comment())));
     }
 
-    @PostMapping("/api/agents/{agentId}/rollouts/{rolloutId}/rollback")
+    @PostMapping({
+            "/api/agents/{agentId}/rollouts/{rolloutId}/rollback",
+            "/agents/{agentId}/rollouts/{rolloutId}/rollback"
+    })
     public ApiResponse<Object> rollback(@PathVariable String agentId,
                                         @PathVariable String rolloutId,
                                         @RequestBody AgentRolloutRollbackRequest request) {

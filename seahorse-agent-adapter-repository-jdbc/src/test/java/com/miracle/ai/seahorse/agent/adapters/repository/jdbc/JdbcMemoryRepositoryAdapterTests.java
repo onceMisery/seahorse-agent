@@ -370,6 +370,7 @@ class JdbcMemoryRepositoryAdapterTests {
                 .hasValueSatisfying(fact -> {
                     assertThat(fact.valueText()).isEqualTo("老师");
                     assertThat(fact.sourceType()).isEqualTo("explicit_user_correction");
+                    assertThat(fact.sourceIds()).containsExactly("msg-2");
                     assertThat(fact.generationId()).isEqualTo("identity.occupation:g2");
                     assertThat(fact.version()).isEqualTo(2L);
                 });

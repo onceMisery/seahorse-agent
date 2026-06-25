@@ -45,12 +45,15 @@ class JdbcToolCatalogRepositoryAdapterTests {
                 "MEMORY", true, false, now));
         adapter.save(tool("knowledge-search", "Knowledge Search", ToolRiskLevel.LOW, ToolActionType.READ,
                 "KNOWLEDGE_BASE", true, false, now.plusSeconds(60)));
+        adapter.save(tool("echo", ToolProvider.MCP, "Echo", ToolRiskLevel.MEDIUM, ToolActionType.EXECUTE,
+                "MCP", true, false, now.plusSeconds(90)));
         adapter.save(tool("memory-read", "Memory Read Updated", ToolRiskLevel.HIGH, ToolActionType.WRITE,
                 "MEMORY", true, true, now.plusSeconds(120)));
         adapter.setEnabled("memory-read", false);
 
         ToolCatalogEntry found = adapter.findById("memory-read").orElseThrow();
         ToolCatalogPage page = adapter.page(new ToolCatalogQuery("MEMORY", "read", 1, 10, null));
+        ToolCatalogPage mcpPage = adapter.page(new ToolCatalogQuery("MCP", null, "MEDIUM", "echo", 1, 10, true));
 
         assertThat(found.name()).isEqualTo("Memory Read Updated");
         assertThat(found.riskLevel()).isEqualTo(ToolRiskLevel.HIGH);
@@ -59,6 +62,8 @@ class JdbcToolCatalogRepositoryAdapterTests {
         assertThat(found.requiresApproval()).isTrue();
         assertThat(page.total()).isEqualTo(1);
         assertThat(page.records()).extracting(ToolCatalogEntry::toolId).containsExactly("memory-read");
+        assertThat(mcpPage.total()).isEqualTo(1);
+        assertThat(mcpPage.records()).extracting(ToolCatalogEntry::toolId).containsExactly("echo");
     }
 
     private static ToolCatalogEntry tool(String toolId,
@@ -72,6 +77,32 @@ class JdbcToolCatalogRepositoryAdapterTests {
         return new ToolCatalogEntry(
                 toolId,
                 ToolProvider.BUILTIN,
+                name,
+                name + " description",
+                "{\"type\":\"object\"}",
+                null,
+                riskLevel,
+                actionType,
+                resourceType,
+                "platform",
+                enabled,
+                requiresApproval,
+                Instant.parse("2026-05-23T00:00:00Z"),
+                updatedAt);
+    }
+
+    private static ToolCatalogEntry tool(String toolId,
+                                         ToolProvider provider,
+                                         String name,
+                                         ToolRiskLevel riskLevel,
+                                         ToolActionType actionType,
+                                         String resourceType,
+                                         boolean enabled,
+                                         boolean requiresApproval,
+                                         Instant updatedAt) {
+        return new ToolCatalogEntry(
+                toolId,
+                provider,
                 name,
                 name + " description",
                 "{\"type\":\"object\"}",

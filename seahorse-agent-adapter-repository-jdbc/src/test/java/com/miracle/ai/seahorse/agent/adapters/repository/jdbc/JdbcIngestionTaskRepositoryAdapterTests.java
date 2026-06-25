@@ -53,13 +53,13 @@ class JdbcIngestionTaskRepositoryAdapterTests {
     @Test
     void shouldCreateUpdatePageAndListNodeLogs() {
         String taskId = adapter.createRunningTask(new IngestionTaskCreateValues(
-                "pipeline-1",
+                "1",
                 "file",
                 "guide.pdf",
                 "guide.pdf",
                 3,
-                Map.of("id", "pipeline-1", "version", 3, "nodes", List.of(Map.of("nodeId", "parser"))),
-                "tester"));
+                Map.of("id", "1", "version", 3, "nodes", List.of(Map.of("nodeId", "1"))),
+                "1001"));
         NodeLog log = NodeLog.builder()
                 .nodeId("parser")
                 .nodeType("parser")
@@ -69,8 +69,8 @@ class JdbcIngestionTaskRepositoryAdapterTests {
                 .build();
         IngestionTaskNodeValues node = new IngestionTaskNodeValues();
         node.setTaskId(taskId);
-        node.setPipelineId("pipeline-1");
-        node.setNodeId("parser");
+        node.setPipelineId("1");
+        node.setNodeId("1");
         node.setNodeType("parser");
         node.setNodeOrder(1);
         node.setStatus("success");
@@ -79,7 +79,7 @@ class JdbcIngestionTaskRepositoryAdapterTests {
         node.setOutput(Map.of("length", 10));
 
         adapter.updateTask(taskId, new IngestionTaskUpdateValues(
-                "completed", 2, null, List.of(log), Map.of("fileName", "guide.pdf"), "tester"));
+                "completed", 2, null, List.of(log), Map.of("fileName", "guide.pdf"), "1001"));
         adapter.replaceNodeLogs(taskId, List.of(node));
 
         IngestionTaskRecord record = adapter.findById(taskId).orElseThrow();
@@ -88,7 +88,7 @@ class JdbcIngestionTaskRepositoryAdapterTests {
 
         assertThat(record.getStatus()).isEqualTo("completed");
         assertThat(record.getPipelineVersion()).isEqualTo(3);
-        assertThat(record.getPipelineSnapshot()).containsEntry("id", "pipeline-1");
+        assertThat(record.getPipelineSnapshot()).containsEntry("id", "1");
         assertThat(record.getChunkCount()).isEqualTo(2);
         assertThat(record.getLogs()).hasSize(1);
         assertThat(record.getMetadata()).containsEntry("fileName", "guide.pdf");
@@ -100,11 +100,11 @@ class JdbcIngestionTaskRepositoryAdapterTests {
     @Test
     void shouldPersistNodeGovernanceEvidence() {
         String taskId = adapter.createRunningTask(new IngestionTaskCreateValues(
-                "pipeline-1", "file", "broken.pdf", "broken.pdf", "tester"));
+                "1", "file", "broken.pdf", "broken.pdf", "1001"));
         IngestionTaskNodeValues node = new IngestionTaskNodeValues();
         node.setTaskId(taskId);
-        node.setPipelineId("pipeline-1");
-        node.setNodeId("parse");
+        node.setPipelineId("1");
+        node.setNodeId("2");
         node.setNodeType("parse");
         node.setNodeOrder(2);
         node.setStatus("failed");
@@ -133,7 +133,7 @@ class JdbcIngestionTaskRepositoryAdapterTests {
     @Test
     void shouldAttachUnresolvedQuarantineCountToTaskRecords() {
         String taskId = adapter.createRunningTask(new IngestionTaskCreateValues(
-                "pipeline-1", "file", "quarantine.pdf", "quarantine.pdf", "tester"));
+                "1", "file", "quarantine.pdf", "quarantine.pdf", "1001"));
         insertQuarantineItem("q-open-1", taskId, 0);
         insertQuarantineItem("q-open-2", taskId, 0);
         insertQuarantineItem("q-resolved", taskId, 1);
@@ -155,7 +155,7 @@ class JdbcIngestionTaskRepositoryAdapterTests {
     @Test
     void shouldIgnoreDeletedRows() {
         String taskId = adapter.createRunningTask(new IngestionTaskCreateValues(
-                "pipeline-1", "file", "deleted.pdf", "deleted.pdf", "tester"));
+                "1", "file", "deleted.pdf", "deleted.pdf", "1001"));
         jdbcTemplate.update("UPDATE t_ingestion_task SET deleted = 1 WHERE id = ?", taskId);
 
         assertThat(adapter.findById(taskId)).isEmpty();
@@ -168,22 +168,22 @@ class JdbcIngestionTaskRepositoryAdapterTests {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_ingestion_task");
         jdbcTemplate.execute("""
                 CREATE TABLE t_ingestion_task (
-                    id VARCHAR(64) PRIMARY KEY,
-                    pipeline_id VARCHAR(64),
+                    id BIGINT PRIMARY KEY,
+                    pipeline_id BIGINT,
                     pipeline_version INTEGER NOT NULL DEFAULT 0,
-                    pipeline_snapshot_json VARCHAR(4096),
+                    pipeline_snapshot_json JSONB,
                     source_type VARCHAR(32),
                     source_location VARCHAR(512),
                     source_file_name VARCHAR(256),
                     status VARCHAR(32),
                     chunk_count INTEGER,
                     error_message VARCHAR(512),
-                    logs_json VARCHAR(2048),
-                    metadata_json VARCHAR(2048),
+                    logs_json JSONB,
+                    metadata_json JSONB,
                     started_at TIMESTAMP,
                     completed_at TIMESTAMP,
-                    created_by VARCHAR(64),
-                    updated_by VARCHAR(64),
+                    created_by BIGINT,
+                    updated_by BIGINT,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0
@@ -191,10 +191,10 @@ class JdbcIngestionTaskRepositoryAdapterTests {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE t_ingestion_task_node (
-                    id VARCHAR(64) PRIMARY KEY,
-                    task_id VARCHAR(64),
-                    pipeline_id VARCHAR(64),
-                    node_id VARCHAR(64),
+                    id BIGINT PRIMARY KEY,
+                    task_id BIGINT,
+                    pipeline_id BIGINT,
+                    node_id BIGINT,
                     node_type VARCHAR(64),
                     node_order INTEGER,
                     status VARCHAR(32),

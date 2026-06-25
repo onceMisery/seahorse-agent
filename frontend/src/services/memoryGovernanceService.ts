@@ -18,25 +18,23 @@ export interface MemoryItem {
 }
 
 export interface MemoryQualitySnapshot {
-  snapshotId?: string;
-  kbId?: string;
-  tenantId?: string;
-  totalMemories?: number;
-  highQualityCount?: number;
-  lowQualityCount?: number;
-  averageQuality?: number;
-  governanceSuggestions?: string[];
-  snapshotTime?: string;
+  id?: string;
+  userId?: string;
+  snapshot?: Record<string, unknown>;
+  createTime?: string;
 }
 
 export interface MemoryConflict {
-  conflictId?: string;
-  memoryIdA?: string;
-  memoryIdB?: string;
-  contentA?: string;
-  contentB?: string;
-  layer?: string;
-  status?: string;
+  id?: string;
+  userId?: string;
+  memoryId1?: string;
+  memoryId2?: string;
+  conflictType?: string;
+  severity?: string;
+  resolutionStatus?: string;
+  resolutionAction?: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
   createTime?: string;
 }
 
@@ -102,20 +100,20 @@ export function deleteMemory(layer: string, memoryId: string) {
 
 // ── 质量快照 ──
 
-export function getMemoryQualitySnapshots(params?: { tenantId?: string; kbId?: string }) {
+export function getMemoryQualitySnapshots(params?: { userId?: string; limit?: number }) {
   return api.get<MemoryQualitySnapshot[]>("/memories/quality-snapshots", { params });
 }
 
 // ── 冲突处理 ──
 
-export function listMemoryConflicts(params?: { status?: string; layer?: string }) {
+export function listMemoryConflicts(params?: { userId?: string; status?: string; limit?: number }) {
   return api.get<MemoryConflict[]>("/memories/conflicts", { params });
 }
 
 export function resolveMemoryConflict(conflictId: string, resolution: string, mergedContent?: string) {
   return api.post<Record<string, unknown>, Record<string, unknown>>(
     `/memories/conflicts/${encodeURIComponent(conflictId)}/resolve`,
-    { resolution, mergedContent }
+    { action: resolution, mergedContent }
   );
 }
 
@@ -159,8 +157,8 @@ export function updateMemoryPolicyConfig(config: MemoryPolicyConfig) {
 
 // ── 治理操作 ──
 
-export function runMemoryGovernance(type: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>("/memories/governance/run", { type });
+export function runMemoryGovernance(params?: { userId?: string; reason?: string; assessQuality?: boolean }) {
+  return api.post<Record<string, unknown>, Record<string, unknown>>("/memories/governance/run", undefined, { params });
 }
 
 // ── Recall 评测 ──
@@ -177,8 +175,8 @@ export function runMemoryDecay() {
   return api.post<Record<string, unknown>, Record<string, unknown>>("/memories/governance/decay");
 }
 
-export function runMemoryQuality() {
-  return api.post<Record<string, unknown>, Record<string, unknown>>("/memories/governance/quality");
+export function runMemoryQuality(params?: { userId?: string }) {
+  return api.post<Record<string, unknown>, Record<string, unknown>>("/memories/governance/quality", undefined, { params });
 }
 
 // ── 维护任务 ──

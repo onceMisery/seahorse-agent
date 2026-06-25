@@ -184,7 +184,7 @@ class AdvancedFeatureControllerGateTests {
         mvc.perform(get("/api/tools"))
                 .andExpect(status().isOk());
 
-        verify(port).page(null, null, 1, 10, null);
+        verify(port).page(null, null, null, null, 1, 10, null);
     }
 
     @Test
