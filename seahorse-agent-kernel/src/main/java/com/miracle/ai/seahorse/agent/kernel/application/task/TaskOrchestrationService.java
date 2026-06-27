@@ -8,6 +8,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatTokenUsage;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.task.Task;
 import com.miracle.ai.seahorse.agent.kernel.domain.task.TaskEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.task.TaskStatus;
@@ -16,9 +19,11 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.task.CreateTaskCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.task.TaskInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.task.TaskEventPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.task.TaskRepositoryPort;
 import org.slf4j.Logger;
@@ -105,7 +110,7 @@ public class TaskOrchestrationService implements TaskInboundPort {
                     Map.of("conversationId", conversationId, "status", "running"));
             LOG.info("Task {} is {}, frontend will initiate chat stream", task.getTaskId(), task.getType());
         } else if (task.getType() == TaskType.AGENT_RUN) {
-            startAgentRunAsync(task, command);
+            task = startAgentRunTask(task, command);
         }
 
         return task;
@@ -205,6 +210,50 @@ public class TaskOrchestrationService implements TaskInboundPort {
         return taskRepository.findRunningByConversationId(conversationId).orElse(null);
     }
 
+    private Task startAgentRunTask(Task task, CreateTaskCommand command) {
+        if (chatPort != null) {
+            return startAgentRunViaChat(task, command);
+        }
+        startAgentRunAsync(task, command);
+        return task;
+    }
+
+    private Task startAgentRunViaChat(Task task, CreateTaskCommand command) {
+        String taskId = task.getTaskId();
+        taskRepository.updateStatus(taskId, TaskStatus.RUNNING);
+        Task running = task.transitionTo(TaskStatus.RUNNING);
+        eventPort.publish(taskId, TaskEvent.STARTED, "Agent run started",
+                Map.of("conversationId", task.getConversationId(), "status", "running"));
+
+        try {
+            chatPort.streamChat(new StreamChatCommand(
+                    command.question(),
+                    task.getConversationId(),
+                    taskId,
+                    command.userId(),
+                    false,
+                    ChatMode.AGENT,
+                    command.agentId(),
+                    null,
+                    null,
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    null,
+                    null,
+                    null
+            ), new TaskAgentStreamCallback(taskId, command.agentId()));
+            return running;
+        } catch (Exception e) {
+            LOG.error("Failed to start agent chat for task {}", taskId, e);
+            taskRepository.updateStatus(taskId, TaskStatus.FAILED);
+            eventPort.publish(taskId, TaskEvent.FAILED, "Agent start failed: " + e.getMessage(),
+                    Map.of("error", String.valueOf(e.getMessage())));
+            eventPort.complete(taskId);
+            return running.transitionTo(TaskStatus.FAILED);
+        }
+    }
+
     private void startAgentRunAsync(Task task, CreateTaskCommand command) {
         if (agentRunPort == null) {
             LOG.warn("AgentRunInboundPort not available, cannot start agent run for task {}", task.getTaskId());
@@ -217,6 +266,7 @@ public class TaskOrchestrationService implements TaskInboundPort {
 
         CompletableFuture.runAsync(() -> {
             String taskId = task.getTaskId();
+            CurrentUser taskUser = taskUser(command);
             try {
                 taskRepository.updateStatus(taskId, TaskStatus.RUNNING);
                 eventPort.publish(taskId, TaskEvent.STARTED, "Agent 运行已启动", Map.of());
@@ -224,11 +274,17 @@ public class TaskOrchestrationService implements TaskInboundPort {
                 AgentRunStartCommand runCommand = new AgentRunStartCommand(
                         command.agentId(),
                         null,
+                        null,
                         "default",
                         task.getConversationId(),
                         AgentRunTriggerType.API,
                         command.question(),
-                        null
+                        null,
+                        null,
+                        null,
+                        null,
+                        Map.of(),
+                        taskUser
                 );
 
                 AgentRun run = agentRunPort.startRun(runCommand);
@@ -237,9 +293,7 @@ public class TaskOrchestrationService implements TaskInboundPort {
                 eventPort.publish(taskId, TaskEvent.MODEL_SELECTED, "Agent 已分配运行 ID",
                         Map.of("runId", runId, "agentId", command.agentId()));
                 LOG.info("Started agent run {} for task {}", runId, taskId);
-
-                // 轮询 AgentRun 终态并回写 Task 状态
-                pollAgentRunToTerminal(taskId, runId);
+                pollAgentRunToTerminal(taskId, runId, taskUser);
             } catch (Exception e) {
                 LOG.error("Failed to start agent run for task {}", taskId, e);
                 taskRepository.updateStatus(taskId, TaskStatus.FAILED);
@@ -253,7 +307,7 @@ public class TaskOrchestrationService implements TaskInboundPort {
     /**
      * 轮询 AgentRun 状态直至终态，再把结果映射回 Task 并发布产物/完成事件。
      */
-    private void pollAgentRunToTerminal(String taskId, String runId) {
+    private void pollAgentRunToTerminal(String taskId, String runId, CurrentUser taskUser) {
         for (int i = 0; i < MAX_POLLS; i++) {
             try {
                 Thread.sleep(POLL_INTERVAL_MS);
@@ -262,7 +316,7 @@ public class TaskOrchestrationService implements TaskInboundPort {
                 return;
             }
 
-            Optional<AgentRun> maybeRun = agentRunPort.findRunById(runId);
+            Optional<AgentRun> maybeRun = agentRunPort.findRunById(runId, taskUser);
             if (maybeRun.isEmpty()) {
                 continue;
             }
@@ -298,6 +352,19 @@ public class TaskOrchestrationService implements TaskInboundPort {
                 Map.of("runId", runId));
     }
 
+    private CurrentUser taskUser(CreateTaskCommand command) {
+        if (command.currentUser() != null) {
+            return command.currentUser();
+        }
+        Long userId = null;
+        try {
+            userId = Long.valueOf(command.userId());
+        } catch (NumberFormatException ignored) {
+            // Keep string user IDs as operator names for non-web tests and integrations.
+        }
+        return new CurrentUser(userId, command.userId(), null, null, "default");
+    }
+
     private void publishArtifactEvents(String taskId, String runId) {
         if (artifactQueryPort == null) {
             return;
@@ -312,6 +379,90 @@ public class TaskOrchestrationService implements TaskInboundPort {
             }
         } catch (Exception e) {
             LOG.debug("Failed to publish artifact events for run {}: {}", runId, e.toString());
+        }
+    }
+
+    private final class TaskAgentStreamCallback implements StreamCallback {
+        private final String taskId;
+        private final String agentId;
+        private final StringBuilder answer = new StringBuilder();
+        private String runId;
+
+        private TaskAgentStreamCallback(String taskId, String agentId) {
+            this.taskId = Objects.requireNonNull(taskId, "taskId");
+            this.agentId = agentId;
+        }
+
+        @Override
+        public void onContent(String content) {
+            if (content != null) {
+                answer.append(content);
+            }
+        }
+
+        @Override
+        public void onThinking(String content) {
+            if (content != null && !content.isBlank()) {
+                eventPort.publish(taskId, TaskEvent.MODEL_SELECTED, "Agent reasoning",
+                        Map.of("preview", trimPreview(content)));
+            }
+        }
+
+        @Override
+        public void onRunStarted(String runId) {
+            this.runId = runId;
+            taskRepository.updateRunId(taskId, runId);
+            eventPort.publish(taskId, TaskEvent.MODEL_SELECTED, "Agent run allocated",
+                    Map.of("runId", runId, "agentId", agentId));
+            LOG.info("Started agent run {} for task {}", runId, taskId);
+        }
+
+        @Override
+        public void onEvent(String eventName, Object payload) {
+            if ("tool.started".equals(eventName)) {
+                eventPort.publish(taskId, TaskEvent.TOOL_STARTED, "Tool started",
+                        Map.of("payload", payload == null ? "" : payload));
+            } else if ("tool.completed".equals(eventName)) {
+                eventPort.publish(taskId, TaskEvent.TOOL_COMPLETED, "Tool completed",
+                        Map.of("payload", payload == null ? "" : payload));
+            } else if ("artifact.created".equals(eventName)) {
+                eventPort.publish(taskId, TaskEvent.ARTIFACT_CREATED, "Artifact created",
+                        Map.of("payload", payload == null ? "" : payload));
+            }
+        }
+
+        @Override
+        public void onUsage(ChatTokenUsage usage) {
+            if (usage != null) {
+                eventPort.publish(taskId, TaskEvent.MODEL_SELECTED, "Agent usage updated",
+                        Map.of("totalTokens", usage.totalTokens()));
+            }
+        }
+
+        @Override
+        public void onComplete() {
+            publishArtifactEvents(taskId, runId);
+            taskRepository.updateStatus(taskId, TaskStatus.SUCCEEDED);
+            eventPort.publish(taskId, TaskEvent.COMPLETED, "Task completed",
+                    Map.of("runId", runId == null ? "" : runId, "preview", trimPreview(answer.toString())));
+            eventPort.complete(taskId);
+        }
+
+        @Override
+        public void onError(Throwable error) {
+            String message = error == null ? "unknown error" : Objects.toString(error.getMessage(), error.toString());
+            taskRepository.updateStatus(taskId, TaskStatus.FAILED);
+            eventPort.publish(taskId, TaskEvent.FAILED, "Task failed: " + message,
+                    Map.of("runId", runId == null ? "" : runId, "error", message));
+            eventPort.complete(taskId);
+        }
+
+        private String trimPreview(String value) {
+            if (value == null || value.isBlank()) {
+                return "";
+            }
+            String trimmed = value.trim();
+            return trimmed.length() <= 500 ? trimmed : trimmed.substring(0, 500);
         }
     }
 }

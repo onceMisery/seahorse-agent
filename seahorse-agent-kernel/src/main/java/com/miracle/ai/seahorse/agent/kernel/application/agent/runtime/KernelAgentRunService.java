@@ -124,7 +124,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     @Override
     public AgentRun startRun(AgentRunStartCommand command) {
         AgentRunStartCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
-        CurrentUser currentUser = currentUserPort.requireCurrentUser();
+        CurrentUser currentUser = currentUser(safeCommand.currentUser());
         AgentDefinition definition = loadDefinition(safeCommand.agentId());
         if (definition != null && definition.disabled()) {
             throw new IllegalStateException("DISABLED Agent cannot start a new run");
@@ -370,6 +370,16 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     @Override
     public Optional<AgentRun> findRunById(String runId) {
         currentUserPort.requireCurrentUser();
+        return findRunByIdInternal(runId);
+    }
+
+    @Override
+    public Optional<AgentRun> findRunById(String runId, CurrentUser currentUser) {
+        currentUser(currentUser);
+        return findRunByIdInternal(runId);
+    }
+
+    private Optional<AgentRun> findRunByIdInternal(String runId) {
         return runRepository.findRunById(requireText(runId, "runId must not be blank"));
     }
 
@@ -496,6 +506,10 @@ public class KernelAgentRunService implements AgentRunInboundPort {
             case "PAUSED", "SUSPENDED" -> AgentRunStatus.RETRYING.name();
             default -> trimmed.toUpperCase();
         };
+    }
+
+    private CurrentUser currentUser(CurrentUser suppliedUser) {
+        return suppliedUser == null ? currentUserPort.requireCurrentUser() : suppliedUser;
     }
 
     private record EffectiveRunProfileContext(

@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 
 import java.util.Map;
 
@@ -44,7 +45,8 @@ public record AgentRunStartCommand(String agentId,
                                    String metadataJson,
                                    Long runProfileId,
                                    String executorEngine,
-                                   Map<String, Object> executorConfig) {
+                                   Map<String, Object> executorConfig,
+                                   CurrentUser currentUser) {
 
     public AgentRunStartCommand {
         executorConfig = executorConfig == null ? Map.of() : Map.copyOf(executorConfig);
@@ -57,9 +59,25 @@ public record AgentRunStartCommand(String agentId,
                                 String conversationId,
                                 AgentRunTriggerType triggerType,
                                 String inputSummary,
+                                String traceId,
+                                String metadataJson,
+                                Long runProfileId,
+                                String executorEngine,
+                                Map<String, Object> executorConfig) {
+        this(agentId, versionId, rolloutId, tenantId, conversationId, triggerType, inputSummary, traceId, metadataJson,
+                runProfileId, executorEngine, executorConfig, null);
+    }
+
+    public AgentRunStartCommand(String agentId,
+                                String versionId,
+                                String rolloutId,
+                                String tenantId,
+                                String conversationId,
+                                AgentRunTriggerType triggerType,
+                                String inputSummary,
                                 String traceId) {
         this(agentId, versionId, rolloutId, tenantId, conversationId, triggerType, inputSummary, traceId, null, null,
-                null, Map.of());
+                null, Map.of(), null);
     }
 
     public AgentRunStartCommand(String agentId,
@@ -70,7 +88,7 @@ public record AgentRunStartCommand(String agentId,
                                 String inputSummary,
                                 String traceId) {
         this(agentId, versionId, null, tenantId, conversationId, triggerType, inputSummary, traceId, null, null, null,
-                Map.of());
+                Map.of(), null);
     }
 
     public AgentRunStartCommand(String agentId,
@@ -83,6 +101,6 @@ public record AgentRunStartCommand(String agentId,
                                 String traceId,
                                 String metadataJson) {
         this(agentId, versionId, rolloutId, tenantId, conversationId, triggerType, inputSummary, traceId, metadataJson,
-                null, null, Map.of());
+                null, null, Map.of(), null);
     }
 }

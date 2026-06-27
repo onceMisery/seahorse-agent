@@ -69,7 +69,8 @@ public class SeahorseTaskController {
                     request.title(),
                     request.knowledgeBaseId(),
                     request.attachmentIds(),
-                    request.mode()
+                    request.mode(),
+                    currentUser
             );
             Task task = port.createTask(command);
             return TaskResponse.from(task);

@@ -5,6 +5,7 @@
 package com.miracle.ai.seahorse.agent.ports.inbound.task;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.task.TaskType;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 
 import java.util.List;
 
@@ -30,7 +31,8 @@ public record CreateTaskCommand(
         String title,
         String knowledgeBaseId,
         List<String> attachmentIds,
-        String mode
+        String mode,
+        CurrentUser currentUser
 ) {
     public CreateTaskCommand {
         if (type == null) {
@@ -45,9 +47,21 @@ public record CreateTaskCommand(
         attachmentIds = attachmentIds == null ? List.of() : List.copyOf(attachmentIds);
     }
 
+    public CreateTaskCommand(TaskType type,
+                             String userId,
+                             String question,
+                             String conversationId,
+                             String agentId,
+                             String title,
+                             String knowledgeBaseId,
+                             List<String> attachmentIds,
+                             String mode) {
+        this(type, userId, question, conversationId, agentId, title, knowledgeBaseId, attachmentIds, mode, null);
+    }
+
     /** 兼容旧的 6 参构造（无 KB/附件/mode）。 */
     public CreateTaskCommand(TaskType type, String userId, String question,
                              String conversationId, String agentId, String title) {
-        this(type, userId, question, conversationId, agentId, title, null, null, null);
+        this(type, userId, question, conversationId, agentId, title, null, null, null, null);
     }
 }
