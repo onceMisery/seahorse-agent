@@ -88,6 +88,7 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
         if (!configuredProtocols.isEmpty()) {
             builder.protocols(configuredProtocols);
         }
+        HttpProxySupport.proxySelectorFromEnvironment().ifPresent(builder::proxySelector);
         return builder.build();
     }
 

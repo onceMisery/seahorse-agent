@@ -48,7 +48,6 @@ public class JdkHttpWebFetchPortAdapter implements WebFetchPort {
     private static final String REASON_WEB_FETCH_REJECTED = "WEB_FETCH_REJECTED";
     private static final String REASON_HTTP_STATUS_PREFIX = "HTTP_STATUS_";
     private static final String REASON_UNSUPPORTED_MIME_TYPE = "UNSUPPORTED_MIME_TYPE";
-    private static final String REASON_RESPONSE_TOO_LARGE = "RESPONSE_TOO_LARGE";
     private static final String REASON_WEB_FETCH_FAILED = "WEB_FETCH_FAILED";
     private static final List<String> TEXT_MIME_PREFIXES = List.of("text/", "application/xhtml+xml");
     private static final Pattern SCRIPT_BLOCK = Pattern.compile("(?is)<script\\b[^>]*>.*?</script>");
@@ -102,8 +101,9 @@ public class JdkHttpWebFetchPortAdapter implements WebFetchPort {
                 return WebFetchResult.failed(request.url(), REASON_HTTP_STATUS_PREFIX + statusCode);
             }
             byte[] body = response.body() == null ? new byte[0] : response.body();
-            if (body.length > maxBytes) {
-                return WebFetchResult.failed(request.url(), REASON_RESPONSE_TOO_LARGE);
+            boolean byteTruncated = body.length > maxBytes;
+            if (byteTruncated) {
+                body = java.util.Arrays.copyOf(body, maxBytes);
             }
             String contentType = response.headers()
                     .firstValue(HEADER_CONTENT_TYPE)
@@ -114,8 +114,8 @@ public class JdkHttpWebFetchPortAdapter implements WebFetchPort {
             String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);
             String normalized = normalizeText(contentType, text);
             int maxChars = request.maxChars() <= 0 ? DEFAULT_MAX_CHARS : request.maxChars();
-            boolean truncated = normalized.length() > maxChars;
-            String content = truncated ? normalized.substring(0, maxChars) : normalized;
+            boolean truncated = byteTruncated || normalized.length() > maxChars;
+            String content = truncated ? normalized.substring(0, Math.min(maxChars, normalized.length())) : normalized;
             return WebFetchResult.fetched(request.url(), titleFromText(content), content, contentType, truncated);
         } catch (IOException | InterruptedException ex) {
             if (ex instanceof InterruptedException) {
@@ -129,10 +129,11 @@ public class JdkHttpWebFetchPortAdapter implements WebFetchPort {
     }
 
     private HttpClient defaultHttpClient() {
-        return HttpClient.newBuilder()
+        HttpClient.Builder builder = HttpClient.newBuilder()
                 .connectTimeout(timeout == null ? Duration.ofSeconds(10) : timeout)
-                .followRedirects(HttpClient.Redirect.NEVER)
-                .build();
+                .followRedirects(HttpClient.Redirect.NEVER);
+        HttpProxySupport.proxySelectorFromEnvironment().ifPresent(builder::proxy);
+        return builder.build();
     }
 
     private boolean resolvesToPrivateNetwork(URI uri) {

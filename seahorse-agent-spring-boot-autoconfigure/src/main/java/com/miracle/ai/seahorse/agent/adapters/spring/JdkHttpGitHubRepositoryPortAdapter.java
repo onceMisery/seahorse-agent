@@ -91,7 +91,7 @@ public class JdkHttpGitHubRepositoryPortAdapter implements GitHubRepositoryPort 
     @Override
     public GitHubRepositorySnapshot read(GitHubRepositoryRequest request) {
         RepositoryRef ref = parseRepositoryUrl(request.repositoryUrl());
-        JsonNode metadata = getJson("https://api.github.com/repos/" + path(ref.owner()) + "/" + path(ref.repo()));
+        JsonNode metadata = repositoryMetadata(ref);
         String defaultBranch = firstText(metadata, "default_branch");
         if (request.branch() != null && !request.branch().isBlank()) {
             defaultBranch = request.branch();
@@ -208,6 +208,14 @@ public class JdkHttpGitHubRepositoryPortAdapter implements GitHubRepositoryPort 
         }
     }
 
+    private JsonNode repositoryMetadata(RepositoryRef ref) {
+        try {
+            return getJson("https://api.github.com/repos/" + path(ref.owner()) + "/" + path(ref.repo()));
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
     private String getText(String url) {
         try {
             HttpResponse<String> response = httpClient.send(HttpRequest.newBuilder(URI.create(url))
@@ -259,10 +267,11 @@ public class JdkHttpGitHubRepositoryPortAdapter implements GitHubRepositoryPort 
     }
 
     private HttpClient defaultHttpClient() {
-        return HttpClient.newBuilder()
+        HttpClient.Builder builder = HttpClient.newBuilder()
                 .connectTimeout(timeout)
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .build();
+                .followRedirects(HttpClient.Redirect.NORMAL);
+        HttpProxySupport.proxySelectorFromEnvironment().ifPresent(builder::proxy);
+        return builder.build();
     }
 
     private String firstText(JsonNode node, String fieldName) {

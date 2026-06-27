@@ -148,6 +148,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     private static final String PROP_WEB_TASK_AGENT_ENABLED = "seahorse-agent.chat.web-task-agent-enabled";
     private static final String PROP_MAX_STEPS = "seahorse-agent.chat.agent.max-steps";
     private static final String PROP_PER_TOOL_TIMEOUT = "seahorse-agent.chat.agent.per-tool-timeout";
+    private static final String PROP_MODEL_TURN_TIMEOUT = "seahorse-agent.chat.agent.model-turn-timeout";
     private static final String PROP_MAX_PARALLEL_TOOLS = "seahorse-agent.chat.agent.max-parallel-tools";
     private static final String PROP_MCP_INCLUDE = "seahorse-agent.chat.agent.tools.mcp.include";
     private static final String PROP_DEFERRED_TOOL_SEARCH_ENABLED =
@@ -162,6 +163,12 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             "seahorse-agent.chat.agent.tools.web-research.fetch-max-bytes";
     private static final String PROP_WEB_FETCH_USER_AGENT =
             "seahorse-agent.chat.agent.tools.web-research.user-agent";
+    private static final String PROP_WEB_SEARCH_ENDPOINT =
+            "seahorse-agent.chat.agent.tools.web-research.search-endpoint";
+    private static final String PROP_WEB_SEARCH_TIMEOUT =
+            "seahorse-agent.chat.agent.tools.web-research.search-timeout";
+    private static final String PROP_WEB_SEARCH_USER_AGENT =
+            "seahorse-agent.chat.agent.tools.web-research.search-user-agent";
     private static final String PROP_GITHUB_FETCH_TIMEOUT =
             "seahorse-agent.chat.agent.tools.github.fetch-timeout";
     private static final String PROP_GITHUB_USER_AGENT =
@@ -189,6 +196,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
         return KernelAgentLoopOptions.builder()
                 .maxSteps(environment.getProperty(PROP_MAX_STEPS, Integer.class, 6))
                 .perToolTimeout(parseDuration(environment.getProperty(PROP_PER_TOOL_TIMEOUT), Duration.ofSeconds(30)))
+                .modelTurnTimeout(parseDuration(
+                        environment.getProperty(PROP_MODEL_TURN_TIMEOUT), Duration.ofMinutes(3)))
                 .maxParallelTools(environment.getProperty(PROP_MAX_PARALLEL_TOOLS, Integer.class, 1))
                 .build();
     }
@@ -540,6 +549,19 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                                                                    WebFetchSafetyPolicy safetyPolicy,
                                                                    AgentToolJsonSupport jsonSupport) {
         return new WebFetchToolPortAdapter(webFetchPort, safetyPolicy, jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean(WebSearchPort.class)
+    public JdkHttpWebSearchPortAdapter seahorseWebSearchPort(ObjectProvider<HttpClient> httpClient,
+                                                             Environment environment) {
+        return new JdkHttpWebSearchPortAdapter(
+                httpClient.getIfAvailable(),
+                environment.getProperty(PROP_WEB_SEARCH_ENDPOINT),
+                parseDuration(environment.getProperty(PROP_WEB_SEARCH_TIMEOUT), Duration.ofSeconds(10)),
+                environment.getProperty(PROP_WEB_SEARCH_USER_AGENT));
     }
 
     @Bean

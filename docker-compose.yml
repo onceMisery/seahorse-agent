@@ -132,6 +132,10 @@ services:
       SEAHORSE_AGENT_CHAT_AGENT_MAX_STEPS: ${SEAHORSE_AGENT_CHAT_AGENT_MAX_STEPS:-12}
       SEAHORSE_AGENT_WEB_SSE_TIMEOUT_MS: ${SEAHORSE_AGENT_WEB_SSE_TIMEOUT_MS:-900000}
       SPRING_MVC_ASYNC_REQUEST_TIMEOUT: ${SPRING_MVC_ASYNC_REQUEST_TIMEOUT:-900000}
+      # Optional outbound proxy for GitHub/model gateways from Docker. The default matches local Clash/V2Ray setups.
+      HTTP_PROXY: ${HTTP_PROXY:-http://host.docker.internal:7890}
+      HTTPS_PROXY: ${HTTPS_PROXY:-http://host.docker.internal:7890}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,postgres,redis,milvus-standalone,nacos,pulsar-broker,pulsar-zookeeper,pulsar-bookie,ollama,backend,seahorse-backend}
       # Product mode / feature capabilities
       SEAHORSE_AGENT_PRODUCT_MODE: ${SEAHORSE_AGENT_PRODUCT_MODE:-enterprise}
       SEAHORSE_AGENT_ADVANCED_SANDBOX_ENABLED: ${SEAHORSE_AGENT_ADVANCED_SANDBOX_ENABLED:-true}
