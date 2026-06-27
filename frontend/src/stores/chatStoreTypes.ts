@@ -35,6 +35,7 @@ export interface ChatState {
   streamingMessageId: string | null;
   cancelRequested: boolean;
   selectedTaskTemplateId: TaskTemplateId | string | null;
+  selectedRunProfileId: string | null;
   fetchSessions: () => Promise<void>;
   createSession: () => Promise<string>;
   startNewSessionDraft: () => void;
@@ -44,6 +45,7 @@ export interface ChatState {
   updateSessionTitle: (sessionId: string, title: string) => void;
   setDeepThinkingEnabled: (enabled: boolean) => void;
   setSelectedTaskTemplateId: (templateId: TaskTemplateId | string | null) => void;
+  setSelectedRunProfileId: (runProfileId: string | null) => void;
   switchMessageBranch: (messageId: string, targetMessageId: string) => Promise<void>;
   editUserMessageBranch: (messageId: string, content: string) => Promise<void>;
   regenerateAssistantMessageBranch: (messageId: string) => Promise<void>;

@@ -110,6 +110,7 @@ export const useChatStore = create<ChatState>()(
     cancelRequested: false,
     inputFocusKey: Date.now(),
     selectedTaskTemplateId: DEFAULT_TASK_TEMPLATE_ID,
+    selectedRunProfileId: null,
     sessionsLoaded: false,
 
     fetchSessions: async () => {
@@ -455,6 +456,10 @@ export const useChatStore = create<ChatState>()(
       set((s) => { s.selectedTaskTemplateId = taskTemplateId; });
     },
 
+    setSelectedRunProfileId: (runProfileId) => {
+      set((s) => { s.selectedRunProfileId = runProfileId; });
+    },
+
     switchMessageBranch: async (_messageId, targetMessageId) => {
       const sessionId = get().currentSessionId;
       if (!sessionId || !targetMessageId || get().isStreaming) {
@@ -519,6 +524,7 @@ export const useChatStore = create<ChatState>()(
         await get().sendMessage(parent.content, {
           branchLeafMessageId: parentMessageId,
           assistantParentMessageId: parentMessageId,
+          runProfileId: get().selectedRunProfileId,
           reuseUserMessage: true
         });
         const nodes = await listMessageTree(sessionId);

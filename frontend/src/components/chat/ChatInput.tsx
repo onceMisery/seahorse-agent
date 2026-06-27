@@ -277,8 +277,13 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
     setDeepThinkingEnabled,
     selectedTaskTemplateId,
     setSelectedTaskTemplateId,
+    setSelectedRunProfileId: setActiveRunProfileId,
     inputFocusKey
   } = useChatStore();
+
+  React.useEffect(() => {
+    setActiveRunProfileId(selectedRunProfileId);
+  }, [selectedRunProfileId, setActiveRunProfileId]);
 
   React.useEffect(() => {
     if (currentSessionId) {
