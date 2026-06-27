@@ -23,7 +23,11 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.output.OutputGover
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitCommand;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualizationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.NewsletterGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.PptGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
@@ -77,6 +81,7 @@ public class KernelAgentLoop implements ReActExecutorPort {
 
     private static final String TRUNCATED_MESSAGE =
             "Task step limit reached. Narrow the question or check tool configuration.";
+    private static final String MODEL_TURN_TIMEOUT_PREFIX = "Model streaming call timed out after ";
     private static final String WAITING_APPROVAL_MESSAGE = "Waiting for tool approval.";
     private static final String TRACE_TYPE_AGENT_STEP = "AGENT_STEP";
     private static final String MODEL_STEP_ID_PREFIX = "model-turn-";
@@ -105,6 +110,12 @@ public class KernelAgentLoop implements ReActExecutorPort {
     private static final String ARTIFACT_TYPE_FIELD = "artifactType";
     private static final String MARKDOWN_ARTIFACT_TYPE = "MARKDOWN";
     private static final ToolRiskLevel DEFAULT_TOOL_RISK_LEVEL = ToolRiskLevel.HIGH;
+    private static final int TOOL_OBSERVATION_CONTEXT_PREVIEW_LIMIT = 800;
+    private static final Set<String> LARGE_ARTIFACT_TOOL_IDS = Set.of(
+            ChartVisualizationToolPortAdapter.TOOL_ID,
+            NewsletterGenerationToolPortAdapter.TOOL_ID,
+            PptGenerationToolPortAdapter.TOOL_ID,
+            FrontendDesignToolPortAdapter.TOOL_ID);
     private static final String TRACE_CLASS_NAME =
             "com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -136,7 +147,7 @@ public class KernelAgentLoop implements ReActExecutorPort {
         this.streamEmitter = deps.streamEmitter();
         this.streamEvents = new AgentLoopStreamEvents(streamEmitter);
         this.modelTurns = new AgentLoopModelTurns(modelPort, deps.toolRegistry(), deps.contextWeaver(),
-                deps.toolCallParser());
+                deps.toolCallParser(), this.options.modelTurnTimeout());
         this.toolExecutor = new AgentLoopToolExecutor(options, toolGateway, traceRecorder, runStepRecorder,
                 modelTurns);
     }
@@ -259,7 +270,8 @@ public class KernelAgentLoop implements ReActExecutorPort {
                 steps.add(AgentStep.thought(turn.thought(), turn.toolCalls(), observations));
                 messages.add(ChatMessage.assistantToolCalls(turn.content(), turn.toolCalls()));
                 for (AgentObservation observation : observations) {
-                    messages.add(ChatMessage.tool(observation.toolCallId(), observationText(observation)));
+                    messages.add(ChatMessage.tool(observation.toolCallId(),
+                            observationText(observation, toolIdForObservation(turn.toolCalls(), observation))));
                 }
                 streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
                         null, null);
@@ -272,6 +284,9 @@ public class KernelAgentLoop implements ReActExecutorPort {
                 streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
                         ex, null);
                 traceRecorder.finishNode(stepScope, ex);
+                if (hasToolObservations && isModelTurnTimeout(ex)) {
+                    return completeWithDegradedFinalAnswer(request, steps, callback, ex);
+                }
                 throw ex;
             }
         }
@@ -324,12 +339,63 @@ public class KernelAgentLoop implements ReActExecutorPort {
             streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
                     ex, null);
             traceRecorder.finishNode(stepScope, ex);
+            if (isModelTurnTimeout(ex)) {
+                return completeWithDegradedFinalAnswer(request, steps, callback, ex);
+            }
             throw ex;
         }
     }
 
     private boolean requiresApproval(List<AgentObservation> observations) {
         return observations.stream().anyMatch(this::isApprovalRequired);
+    }
+
+    private boolean isModelTurnTimeout(RuntimeException ex) {
+        String message = ex == null ? "" : Objects.requireNonNullElse(ex.getMessage(), "");
+        return message.startsWith(MODEL_TURN_TIMEOUT_PREFIX);
+    }
+
+    private AgentLoopResult completeWithDegradedFinalAnswer(AgentLoopRequest request,
+                                                            List<AgentStep> steps,
+                                                            StreamCallback callback,
+                                                            RuntimeException timeout) {
+        String finalContent = degradedFinalAnswer(steps, timeout);
+        streamEvents.emitContent(callback, finalContent);
+        streamEvents.emitFinalArtifact(callback, request, finalContent);
+        steps.add(AgentStep.finalAnswer(finalContent));
+        streamEvents.emitComplete(callback);
+        return new AgentLoopResult(finalContent, steps, true);
+    }
+
+    private String degradedFinalAnswer(List<AgentStep> steps, RuntimeException timeout) {
+        StringBuilder markdown = new StringBuilder();
+        markdown.append("# Agent Run Result\n\n");
+        markdown.append("The model timed out while preparing the next turn, ");
+        markdown.append("so Seahorse returned the completed tool results instead of leaving the task running.\n\n");
+        markdown.append("Timeout: ").append(Objects.requireNonNullElse(timeout.getMessage(), "unknown")).append("\n\n");
+        markdown.append("## Completed Tool Results\n\n");
+        int count = 0;
+        for (AgentStep step : steps) {
+            for (int i = 0; i < step.observations().size(); i++) {
+                AgentObservation observation = step.observations().get(i);
+                if (observation == null || !observation.success()) {
+                    continue;
+                }
+                String toolId = i < step.toolCalls().size() ? step.toolCalls().get(i).toolId() : observation.toolCallId();
+                markdown.append("### ").append(++count).append(". ").append(toolId).append("\n\n");
+                markdown.append(trimForDegradedAnswer(observation.content())).append("\n\n");
+            }
+        }
+        if (count == 0) {
+            markdown.append("No successful tool observations were available.\n");
+        }
+        return markdown.toString().trim();
+    }
+
+    private String trimForDegradedAnswer(String value) {
+        String safe = Objects.requireNonNullElse(value, "").trim();
+        int limit = 1200;
+        return safe.length() <= limit ? safe : safe.substring(0, limit) + "\n\n...(truncated)";
     }
 
     private boolean isApprovalRequired(AgentObservation observation) {
@@ -382,8 +448,48 @@ public class KernelAgentLoop implements ReActExecutorPort {
         }
     }
 
-    private String observationText(AgentObservation observation) {
-        return observation.success() ? observation.content() : observation.error();
+    private String observationText(AgentObservation observation, String toolId) {
+        if (!observation.success()) {
+            return observation.error();
+        }
+        String content = observation.content();
+        if (!LARGE_ARTIFACT_TOOL_IDS.contains(toolId) || content == null || content.isBlank()) {
+            return content;
+        }
+        try {
+            JsonNode root = OBJECT_MAPPER.readTree(content);
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("status", "ARTIFACT_GENERATED");
+            summary.put("toolId", toolId);
+            summary.put("artifactType", root.path("artifactType").asText(""));
+            summary.put("format", root.path("format").asText(""));
+            String artifactContent = root.path("content").asText("");
+            summary.put("contentPreview", trimForToolContext(artifactContent));
+            summary.put("contentChars", artifactContent.length());
+            summary.put("truncatedForModelContext", artifactContent.length() > TOOL_OBSERVATION_CONTEXT_PREVIEW_LIMIT);
+            return OBJECT_MAPPER.writeValueAsString(summary);
+        } catch (Exception ignored) {
+            return trimForToolContext(content);
+        }
+    }
+
+    private String toolIdForObservation(List<AgentToolCall> toolCalls, AgentObservation observation) {
+        if (toolCalls == null || observation == null) {
+            return "";
+        }
+        for (AgentToolCall toolCall : toolCalls) {
+            if (toolCall != null && observation.toolCallId().equals(toolCall.id())) {
+                return toolCall.toolId();
+            }
+        }
+        return "";
+    }
+
+    private String trimForToolContext(String value) {
+        String safe = Objects.requireNonNullElse(value, "");
+        return safe.length() <= TOOL_OBSERVATION_CONTEXT_PREVIEW_LIMIT
+                ? safe
+                : safe.substring(0, TOOL_OBSERVATION_CONTEXT_PREVIEW_LIMIT);
     }
 
     private AgentLoopToolExecutor.ToolEvents toolEvents(StreamCallback callback) {

@@ -60,6 +60,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -638,6 +639,94 @@ class KernelAgentLoopToolGatewayTests {
         assertEquals("Redis", request.arguments().get("topic"));
         assertEquals("architects", request.arguments().get("audience"));
         assertFalse(model.requests.get(1).getMessages().get(1).getContent().contains("<tool_call>"));
+    }
+
+    @Test
+    void shouldCompressLargeGeneratedArtifactObservationBeforeFinalModelTurn() {
+        String largeArtifactBody = "A".repeat(3_000);
+        AgentToolCall toolCall = AgentToolCall.of("call-newsletter", "newsletter_generation",
+                Map.of("topic", "Seahorse"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need generated article", List.of(toolCall)),
+                Turn.finalAnswer("final answer")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("""
+                {"artifactType":"newsletter","format":"markdown","content":"%s"}
+                """.formatted(largeArtifactBody)));
+        KernelAgentLoop loop = kernelLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("write article")
+                .allowedToolIds(List.of("newsletter_generation"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-large-artifact")
+                .build());
+
+        assertEquals("final answer", result.finalAnswer());
+        assertTrue(result.steps().get(0).observations().get(0).content().contains(largeArtifactBody));
+        String finalTurnContext = model.requests.get(1).getMessages().stream()
+                .filter(message -> message.getContent() != null
+                        && message.getContent().contains("truncatedForModelContext"))
+                .findFirst()
+                .orElseThrow()
+                .getContent();
+        assertTrue(finalTurnContext.contains("\"truncatedForModelContext\":true"), finalTurnContext);
+        assertTrue(finalTurnContext.contains("\"contentChars\":3000"), finalTurnContext);
+        assertFalse(finalTurnContext.contains(largeArtifactBody));
+    }
+
+    @Test
+    void shouldDegradeToCompletedToolResultsWhenModelTurnTimesOutAfterTools() {
+        AgentToolCall toolCall = AgentToolCall.of("call-newsletter", "newsletter_generation",
+                Map.of("topic", "Seahorse"));
+        java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
+        StreamingChatModelPort hangingModel = new StreamingChatModelPort() {
+            private int calls;
+
+            @Override
+            public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public StreamCancellationHandle streamChatWithTools(
+                    ChatRequest request,
+                    StreamCallback callback,
+                    ToolCallCollector toolCallCollector) {
+                calls++;
+                if (calls == 1) {
+                    callback.onContent("need generated article");
+                    toolCallCollector.onToolCalls(List.of(toolCall));
+                    callback.onComplete();
+                }
+                return () -> cancelled.set(true);
+            }
+        };
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("""
+                {"artifactType":"newsletter","format":"markdown","content":"# Seahorse article"}
+                """));
+        KernelAgentLoop loop = kernelLoop(
+                hangingModel,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.builder()
+                        .modelTurnTimeout(Duration.ofMillis(50))
+                        .build());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("write article")
+                .allowedToolIds(List.of("newsletter_generation"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-timeout-after-tool")
+                .build());
+
+        assertTrue(result.truncated());
+        assertTrue(result.finalAnswer().contains("Completed Tool Results"), result.finalAnswer());
+        assertTrue(result.finalAnswer().contains("Seahorse article"), result.finalAnswer());
+        assertTrue(cancelled.get());
     }
 
     @Test

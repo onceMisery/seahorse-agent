@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -72,11 +73,16 @@ final class TurnBuffer implements StreamCallback {
         return completed;
     }
 
-    void awaitCompletion(AgentRunControl control) {
+    void awaitCompletion(AgentRunControl control, Duration timeout) {
+        long deadlineNanos = System.nanoTime() + timeout.toNanos();
         while (true) {
             control.checkCancelled();
+            long remainingNanos = deadlineNanos - System.nanoTime();
+            if (remainingNanos <= 0L) {
+                throw new AgentLoopException("Model streaming call timed out after " + timeout);
+            }
             try {
-                if (done.await(100, TimeUnit.MILLISECONDS)) {
+                if (done.await(Math.min(TimeUnit.MILLISECONDS.toNanos(100), remainingNanos), TimeUnit.NANOSECONDS)) {
                     return;
                 }
             } catch (InterruptedException ex) {

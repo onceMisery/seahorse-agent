@@ -27,10 +27,12 @@ public final class KernelAgentLoopOptions {
 
     private static final int DEFAULT_MAX_STEPS = 6;
     private static final Duration DEFAULT_PER_TOOL_TIMEOUT = Duration.ofSeconds(30);
+    private static final Duration DEFAULT_MODEL_TURN_TIMEOUT = Duration.ofMinutes(3);
     private static final int DEFAULT_MAX_PARALLEL_TOOLS = 1;
 
     private final int maxSteps;
     private final Duration perToolTimeout;
+    private final Duration modelTurnTimeout;
     private final int maxParallelTools;
 
     private KernelAgentLoopOptions(Builder b) {
@@ -44,8 +46,13 @@ public final class KernelAgentLoopOptions {
         if (b.perToolTimeout.isZero() || b.perToolTimeout.isNegative()) {
             throw new IllegalArgumentException("perToolTimeout 必须 > 0");
         }
+        Objects.requireNonNull(b.modelTurnTimeout, "modelTurnTimeout must not be null");
+        if (b.modelTurnTimeout.isZero() || b.modelTurnTimeout.isNegative()) {
+            throw new IllegalArgumentException("modelTurnTimeout must be > 0");
+        }
         this.maxSteps = b.maxSteps;
         this.perToolTimeout = b.perToolTimeout;
+        this.modelTurnTimeout = b.modelTurnTimeout;
         this.maxParallelTools = b.maxParallelTools;
     }
 
@@ -55,6 +62,10 @@ public final class KernelAgentLoopOptions {
 
     public Duration perToolTimeout() {
         return perToolTimeout;
+    }
+
+    public Duration modelTurnTimeout() {
+        return modelTurnTimeout;
     }
 
     public int maxParallelTools() {
@@ -72,6 +83,7 @@ public final class KernelAgentLoopOptions {
     public static final class Builder {
         private int maxSteps = DEFAULT_MAX_STEPS;
         private Duration perToolTimeout = DEFAULT_PER_TOOL_TIMEOUT;
+        private Duration modelTurnTimeout = DEFAULT_MODEL_TURN_TIMEOUT;
         private int maxParallelTools = DEFAULT_MAX_PARALLEL_TOOLS;
 
         public Builder maxSteps(int maxSteps) {
@@ -81,6 +93,11 @@ public final class KernelAgentLoopOptions {
 
         public Builder perToolTimeout(Duration perToolTimeout) {
             this.perToolTimeout = perToolTimeout;
+            return this;
+        }
+
+        public Builder modelTurnTimeout(Duration modelTurnTimeout) {
+            this.modelTurnTimeout = modelTurnTimeout;
             return this;
         }
 

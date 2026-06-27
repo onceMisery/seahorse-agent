@@ -35,6 +35,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -58,16 +59,19 @@ final class AgentLoopModelTurns {
     private final ToolRegistryPort toolRegistry;
     private final ContextWeaverPort contextWeaver;
     private final ToolCallParser toolCallParser;
+    private final Duration modelTurnTimeout;
 
     AgentLoopModelTurns(
             StreamingChatModelPort modelPort,
             ToolRegistryPort toolRegistry,
             ContextWeaverPort contextWeaver,
-            ToolCallParser toolCallParser) {
+            ToolCallParser toolCallParser,
+            Duration modelTurnTimeout) {
         this.modelPort = Objects.requireNonNull(modelPort, "modelPort must not be null");
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry must not be null");
         this.contextWeaver = Objects.requireNonNull(contextWeaver, "contextWeaver must not be null");
         this.toolCallParser = Objects.requireNonNull(toolCallParser, "toolCallParser must not be null");
+        this.modelTurnTimeout = Objects.requireNonNull(modelTurnTimeout, "modelTurnTimeout must not be null");
     }
 
     void installRuntimeContext(
@@ -202,7 +206,12 @@ final class AgentLoopModelTurns {
                 });
         control.bindModelHandle(handle);
         try {
-            callback.awaitCompletion(control);
+            callback.awaitCompletion(control, modelTurnTimeout);
+        } catch (RuntimeException ex) {
+            if (handle != null) {
+                handle.cancel();
+            }
+            throw ex;
         } finally {
             control.clearModelHandle(handle);
         }
