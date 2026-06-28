@@ -183,11 +183,11 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                 .intentChunks(Map.of())
                                 .build()),
                 memoryConflictLogRepositoryPort.getIfAvailable(MemoryConflictLogRepositoryPort::empty),
-                List.of(
+                java.util.stream.Stream.of(
                         workingMemoryPort.getIfAvailable(),
                         shortTermMemoryPort.getIfAvailable(),
                         longTermMemoryPort.getIfAvailable(),
-                        semanticMemoryPort.getIfAvailable()).stream()
+                        semanticMemoryPort.getIfAvailable())
                         .filter(java.util.Objects::nonNull)
                         .map(port -> (com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort) port)
                         .toList(),

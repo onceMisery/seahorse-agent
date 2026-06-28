@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.DefaultMeshPolicyPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.KernelAgentHandoffService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.LocalAgentAsToolPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
@@ -545,14 +547,15 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
     }
 
     @Test
-    void shouldWireControlledWebFetchToolButNotWebSearchWithoutProvider() {
+    void shouldWireControlledWebFetchAndDefaultWebSearchTools() {
         contextRunner.withUserConfiguration(TestNoRunStoreConfiguration.class)
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(WebFetchSafetyPolicy.class);
                     assertThat(context).hasSingleBean(WebFetchPort.class);
                     assertThat(context).hasSingleBean(WebFetchToolPortAdapter.class);
-                    assertThat(context).doesNotHaveBean(WebSearchToolPortAdapter.class);
+                    assertThat(context).hasSingleBean(WebSearchPort.class);
+                    assertThat(context).hasSingleBean(WebSearchToolPortAdapter.class);
                 });
     }
 
@@ -1291,6 +1294,16 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
             features.put(AdvancedFeature.AGENT_HANDOFF, true);
             features.put(AdvancedFeature.LOCAL_AGENT, true);
             return AdvancedFeatureGate.configured(ProductMode.ENTERPRISE, features);
+        }
+
+        @Bean
+        KernelAgentHandoffService kernelAgentHandoffService(AgentHandoffRepositoryPort handoffRepositoryPort,
+                                                            AgentRunInboundPort agentRunInboundPort) {
+            return new KernelAgentHandoffService(
+                    handoffRepositoryPort,
+                    agentRunInboundPort,
+                    new DefaultMeshPolicyPort(),
+                    FIXED_CLOCK);
         }
     }
 
