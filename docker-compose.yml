@@ -87,6 +87,7 @@ services:
       SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION: ${SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION:-}
       SEAHORSE_AGENT_ADAPTERS_CACHE_TYPE: local
       SEAHORSE_AGENT_ADAPTERS_STORAGE_TYPE: local
+      SEAHORSE_AGENT_ADAPTERS_STORAGE_LOCAL_ROOT: ${SEAHORSE_AGENT_ADAPTERS_STORAGE_LOCAL_ROOT:-/app/seahorse-agent-storage}
       SEAHORSE_AGENT_ADAPTERS_MQ_TYPE: direct
       SEAHORSE_AGENT_ADAPTERS_OBSERVATION_TYPE: noop
       SEAHORSE_AGENT_ADAPTERS_REPOSITORY_TYPE: jdbc
@@ -135,7 +136,7 @@ services:
       # Optional outbound proxy for GitHub/model gateways from Docker. The default matches local Clash/V2Ray setups.
       HTTP_PROXY: ${HTTP_PROXY:-http://host.docker.internal:7890}
       HTTPS_PROXY: ${HTTPS_PROXY:-http://host.docker.internal:7890}
-      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,postgres,redis,milvus-standalone,nacos,pulsar-broker,pulsar-zookeeper,pulsar-bookie,ollama,backend,seahorse-backend}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,postgres,redis,milvus-standalone,nacos,pulsar-broker,pulsar-zookeeper,pulsar-bookie,ollama,elasticsearch,seahorse-elasticsearch,backend,seahorse-backend}
       # Product mode / feature capabilities
       SEAHORSE_AGENT_PRODUCT_MODE: ${SEAHORSE_AGENT_PRODUCT_MODE:-enterprise}
       SEAHORSE_AGENT_ADVANCED_SANDBOX_ENABLED: ${SEAHORSE_AGENT_ADVANCED_SANDBOX_ENABLED:-true}
