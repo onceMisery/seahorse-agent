@@ -255,6 +255,34 @@ describe("chatStore snapshot hydration", () => {
     expect(url.searchParams.has("agentId")).toBe(false);
   });
 
+  it("keeps a local execution timeline for plain chat streams", async () => {
+    vi.mocked(createStreamResponse).mockImplementationOnce(({ url, headers }, handlers) => {
+      streamStarts.push(url);
+      streamRequests.push({ url, headers });
+      return {
+        cancel: vi.fn(),
+        start: vi.fn().mockImplementation(async () => {
+          handlers.onMeta?.({ conversationId: "conversation-1", taskId: "task-1" });
+          handlers.onMessage?.({ type: "response", delta: "hello" });
+          handlers.onDone?.();
+        })
+      };
+    });
+    useChatStore.setState({
+      currentSessionId: "conversation-1",
+      selectedTaskTemplateId: null
+    });
+
+    await useChatStore.getState().sendMessage("Hello");
+
+    const assistant = useChatStore.getState().messages.find((message) => message.role === "assistant");
+    expect(assistant?.content).toBe("hello");
+    expect(assistant?.timeline?.map((item) => [item.id, item.status])).toEqual([
+      ["local-stream-accepted", "DONE"],
+      ["local-stream-generating", "DONE"]
+    ]);
+  });
+
   it("passes the selected role card to the chat stream request", async () => {
     useChatStore.setState({
       currentSessionId: "conversation-1",

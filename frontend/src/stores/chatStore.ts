@@ -4,10 +4,12 @@ import { nanoid } from "nanoid";
 import { toast } from "sonner";
 
 import {
+  type AgentTimelineItem,
   type MemoryConflictPrompt,
   type MemoryConflictPromptOption,
   type Message,
   type Role,
+  type StreamEventEnvelope,
   type TaskTemplateId
 } from "@/types";
 import {
@@ -43,7 +45,6 @@ import {
   applyAgentStreamEventToMessage
 } from "@/stores/chatStreamHandlers";
 import { RenderBuffer } from "@/lib/stream/renderBuffer";
-import type { StreamEventEnvelope } from "@/types";
 
 const CONTROLLED_WEB_AGENT_CHAT_MODE = "agent";
 const CONTROLLED_WEB_AGENT_TEMPLATE_IDS = new Set<TaskTemplateId>([
@@ -369,6 +370,7 @@ export const useChatStore = create<ChatState>()(
             msg.status = "done";
             msg.isThinking = false;
             msg.thinkingDuration = computeThinkingDuration(msg.thinkingStartAt);
+            completeLocalStreamTimeline(msg, "DONE");
           }
         });
       };
@@ -382,17 +384,32 @@ export const useChatStore = create<ChatState>()(
             msg.isThinking = false;
             msg.thinkingDuration = computeThinkingDuration(msg.thinkingStartAt);
             if (!msg.content) msg.content = errorText;
+            completeLocalStreamTimeline(msg, "ERROR");
           }
         });
       };
 
+      let responseTimelineStarted = false;
       const handlers: StreamHandlers = {
         onMeta: (payload) => {
           if (payload?.taskId) {
             set((s) => { s.streamTaskId = payload.taskId!; });
           }
+          set((state) => {
+            const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
+            if (!msg) return;
+            ensureLocalStreamAccepted(msg, payload?.taskId, payload?.runId);
+          });
         },
         onMessage: (payload) => {
+          if (!responseTimelineStarted) {
+            responseTimelineStarted = true;
+            set((state) => {
+              const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
+              if (!msg) return;
+              ensureLocalStreamGenerating(msg);
+            });
+          }
           buffer.push(payload?.delta || "");
         },
         onThinking: (payload) => {
@@ -641,6 +658,54 @@ export const useChatStore = create<ChatState>()(
 
 function currentAssistantMessage(messages: Message[], currentId: string, originalId: string): Message | undefined {
   return messages.find((m) => m.id === currentId || m.id === originalId);
+}
+
+function ensureLocalStreamAccepted(message: Message, taskId?: string | null, runId?: string | null) {
+  if (runId) {
+    message.agentRunId = message.agentRunId ?? runId;
+  }
+  upsertLocalTimelineItem(message, {
+    id: "local-stream-accepted",
+    title: "Request accepted",
+    status: "RUNNING",
+    detail: taskId ? `Task ${taskId}` : undefined,
+    timestamp: new Date().toISOString()
+  });
+  message.currentStepId = "local-stream-accepted";
+}
+
+function ensureLocalStreamGenerating(message: Message) {
+  upsertLocalTimelineItem(message, {
+    id: "local-stream-generating",
+    title: "Generating response",
+    status: "RUNNING",
+    timestamp: new Date().toISOString()
+  });
+  message.currentStepId = "local-stream-generating";
+}
+
+function completeLocalStreamTimeline(message: Message, status: "DONE" | "ERROR" | "CANCELLED") {
+  const timeline = message.timeline ?? [];
+  if (timeline.length === 0) {
+    return;
+  }
+  message.timeline = timeline.map((item) =>
+    item.id === "local-stream-accepted" || item.id === "local-stream-generating"
+      ? { ...item, status, timestamp: item.timestamp ?? new Date().toISOString() }
+      : item
+  );
+  message.currentStepId = undefined;
+}
+
+function upsertLocalTimelineItem(message: Message, item: AgentTimelineItem) {
+  const timeline = message.timeline ?? [];
+  const index = timeline.findIndex((existing) => existing.id === item.id);
+  if (index >= 0) {
+    timeline[index] = { ...timeline[index], ...item };
+  } else {
+    timeline.push(item);
+  }
+  message.timeline = timeline;
 }
 
 function normalizeMemoryConflictPrompt(payload: unknown): MemoryConflictPrompt | null {

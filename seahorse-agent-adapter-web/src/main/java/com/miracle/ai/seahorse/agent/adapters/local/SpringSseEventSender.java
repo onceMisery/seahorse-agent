@@ -27,6 +27,10 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -35,15 +39,29 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class SpringSseEventSender implements StreamEventSender {
 
     private static final Logger log = LoggerFactory.getLogger(SpringSseEventSender.class);
+    private static final long HEARTBEAT_INTERVAL_MS = 15_000L;
+    private static final ScheduledExecutorService HEARTBEAT_EXECUTOR =
+            Executors.newSingleThreadScheduledExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "seahorse-sse-heartbeat");
+                thread.setDaemon(true);
+                return thread;
+            });
 
     private final SseEmitter emitter;
     private final AtomicBoolean closed = new AtomicBoolean(false);
+    private final Object sendLock = new Object();
+    private final ScheduledFuture<?> heartbeatTask;
 
     public SpringSseEventSender(SseEmitter emitter) {
         this.emitter = Objects.requireNonNull(emitter, "SSE emitter must not be null");
-        this.emitter.onCompletion(() -> closed.set(true));
-        this.emitter.onTimeout(() -> closed.set(true));
-        this.emitter.onError(error -> closed.set(true));
+        this.heartbeatTask = HEARTBEAT_EXECUTOR.scheduleAtFixedRate(
+                this::sendHeartbeat,
+                HEARTBEAT_INTERVAL_MS,
+                HEARTBEAT_INTERVAL_MS,
+                TimeUnit.MILLISECONDS);
+        this.emitter.onCompletion(this::markClosed);
+        this.emitter.onTimeout(this::markClosed);
+        this.emitter.onError(error -> markClosed());
     }
 
     @Override
@@ -90,20 +108,24 @@ public class SpringSseEventSender implements StreamEventSender {
     }
 
     private void sendPayload(String eventName, Object payload) throws java.io.IOException {
-        if (eventName == null) {
-            emitter.send(payload);
-            return;
+        synchronized (sendLock) {
+            if (eventName == null) {
+                emitter.send(payload);
+                return;
+            }
+            emitter.send(SseEmitter.event().name(eventName).data(payload));
         }
-        emitter.send(SseEmitter.event().name(eventName).data(payload));
     }
 
     private void sendError(Throwable error) {
         try {
-            emitter.send(SseEmitter.event()
-                    .name("error")
-                    .data(Map.of("error", Objects.requireNonNullElse(error.getMessage(),
-                            error.getClass().getSimpleName()))));
-            emitter.send(SseEmitter.event().name(StreamEventType.DONE.value()).data("[DONE]"));
+            synchronized (sendLock) {
+                emitter.send(SseEmitter.event()
+                        .name("error")
+                        .data(Map.of("error", Objects.requireNonNullElse(error.getMessage(),
+                                error.getClass().getSimpleName()))));
+                emitter.send(SseEmitter.event().name(StreamEventType.DONE.value()).data("[DONE]"));
+            }
         } catch (Exception sendException) {
             log.debug("Failed to send SSE error payload", sendException);
         }
@@ -111,10 +133,40 @@ public class SpringSseEventSender implements StreamEventSender {
 
     private void completeQuietly() {
         try {
+            cancelHeartbeat();
             emitter.complete();
         } catch (Exception completeException) {
             log.debug("Failed to complete SSE emitter", completeException);
         }
+    }
+
+    private void sendHeartbeat() {
+        if (closed.get()) {
+            cancelHeartbeat();
+            return;
+        }
+        try {
+            synchronized (sendLock) {
+                if (!closed.get()) {
+                    emitter.send(SseEmitter.event().comment("heartbeat"));
+                }
+            }
+        } catch (Exception ex) {
+            if (isClientDisconnect(ex)) {
+                closeAfterClientDisconnect(ex);
+                return;
+            }
+            fail(ex);
+        }
+    }
+
+    private void markClosed() {
+        closed.set(true);
+        cancelHeartbeat();
+    }
+
+    private void cancelHeartbeat() {
+        heartbeatTask.cancel(false);
     }
 
     private boolean isClientDisconnect(Throwable error) {
