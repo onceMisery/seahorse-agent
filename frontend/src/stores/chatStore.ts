@@ -811,7 +811,7 @@ function messagesFromTree(nodes: MessageTreeNodeVO[] | null | undefined): Messag
 
 function messageFromRecord(record: ConversationMessageVO, node?: MessageTreeNodeVO): Message {
   const id = String(record.id);
-  return {
+  return withPersistedLocalTimeline({
     id,
     role: record.role as Role,
     content: record.content,
@@ -831,6 +831,35 @@ function messageFromRecord(record: ConversationMessageVO, node?: MessageTreeNode
     branchTotal: node?.branchTotal,
     preSiblings: node ? siblingIds(node.preSiblings) : undefined,
     nextSiblings: node ? siblingIds(node.nextSiblings) : undefined
+  });
+}
+
+function withPersistedLocalTimeline(message: Message): Message {
+  if (
+    message.role !== "assistant" ||
+    message.agentRunId ||
+    (message.timeline?.length ?? 0) > 0 ||
+    !message.content.trim()
+  ) {
+    return message;
+  }
+  return {
+    ...message,
+    timeline: [
+      {
+        id: "local-stream-accepted",
+        title: "Request accepted",
+        status: "DONE",
+        detail: "Loaded from conversation history",
+        timestamp: message.createdAt
+      },
+      {
+        id: "local-stream-generating",
+        title: "Generating response",
+        status: "DONE",
+        timestamp: message.createdAt
+      }
+    ]
   };
 }
 

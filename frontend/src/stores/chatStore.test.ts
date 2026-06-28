@@ -283,6 +283,33 @@ describe("chatStore snapshot hydration", () => {
     ]);
   });
 
+  it("restores a local execution timeline for historical plain chat answers", async () => {
+    vi.mocked(listMessages).mockResolvedValue([{
+      id: "user-history-1",
+      conversationId: "conversation-history",
+      role: "user",
+      content: "Hello",
+      vote: null,
+      createTime: "2026-06-09T00:00:00Z"
+    }, {
+      id: "assistant-history-1",
+      conversationId: "conversation-history",
+      role: "assistant",
+      content: "Historical answer",
+      vote: null,
+      createTime: "2026-06-09T00:00:01Z"
+    }]);
+
+    await useChatStore.getState().selectSession("conversation-history");
+
+    const assistant = useChatStore.getState().messages.find((message) => message.role === "assistant");
+    expect(assistant?.timeline?.map((item) => [item.id, item.status])).toEqual([
+      ["local-stream-accepted", "DONE"],
+      ["local-stream-generating", "DONE"]
+    ]);
+    expect(getAgentRunSnapshot).not.toHaveBeenCalled();
+  });
+
   it("passes the selected role card to the chat stream request", async () => {
     useChatStore.setState({
       currentSessionId: "conversation-1",

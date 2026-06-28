@@ -1,7 +1,12 @@
 import * as React from "react";
+import rehypeKatex from "rehype-katex";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import { ImageIcon } from "lucide-react";
+import "katex/dist/katex.min.css";
 
 import { CodeBlock } from "@/components/ai-elements/renderer/CodeBlock";
 import { CitationBadge } from "@/components/chat/CitationBadge";
@@ -15,9 +20,12 @@ interface MarkdownRendererProps {
 }
 
 export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
+  const normalizedContent = React.useMemo(() => normalizeAssistantMarkdown(content), [content]);
+
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeRaw, rehypeSanitize, rehypeKatex]}
       components={{
         h1({ children, ...props }) {
           return (
@@ -204,9 +212,27 @@ export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
         "--tw-prose-li": "var(--theme-text-primary)"
       }}
     >
-      {content}
+      {normalizedContent}
     </ReactMarkdown>
   );
+}
+
+export function normalizeAssistantMarkdown(content: string): string {
+  if (!content) {
+    return "";
+  }
+
+  return content
+    .replace(/\r\n?/g, "\n")
+    .replace(/\s*\$\$([\s\S]*?)\$\$\s*/g, (_match, expression: string) => {
+      const trimmed = expression.trim();
+      return trimmed ? `\n\n$$\n${trimmed}\n$$\n\n` : "\n\n";
+    })
+    .replace(/([。！？；：.!?;:）)\]}])\s*(#{1,6})(?!#)(?=[^\n])/g, "$1\n\n$2")
+    .replace(/([^\S\n]+)(#{1,6})(?!#)(?=\S)/g, "\n\n$2")
+    .replace(/^(#{1,6})(?!#)(?=\S)/gm, "$1 ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function renderWithCitations(children: React.ReactNode, sources?: AgentSource[]): React.ReactNode {
