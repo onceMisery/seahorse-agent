@@ -31,6 +31,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +40,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 
 import static com.miracle.ai.seahorse.agent.kernel.domain.retrieval.KernelRagDefaults.DEFAULT_TOP_K;
 
@@ -51,8 +54,6 @@ final class KernelChatPreparationSupport {
     private static final Logger LOG = LoggerFactory.getLogger(KernelChatPreparationSupport.class);
     private static final String MEMORY_CONFLICT_PROMPT_EVENT = "memory.conflict.prompt";
     private static final String PENDING_STATUS = "PENDING";
-    private static final int CONFLICT_SCAN_LIMIT = 20;
-    private static final int MAX_INTERACTIVE_CONFLICTS = 3;
 
     private final ChatPreparationPorts preparationPorts;
 
@@ -114,22 +115,29 @@ final class KernelChatPreparationSupport {
         if (callback == null || isBlank(context.getUserId())) {
             return;
         }
+        InteractiveMemoryConflictPromptPolicy policy = preparationPorts.interactiveMemoryConflictPromptPolicy();
+        if (!policy.enabled()) {
+            context.setInteractiveMemoryConflictPrompts(List.of());
+            return;
+        }
         try {
             var repository = preparationPorts.memoryConflictLogRepositoryPort();
             List<MemoryConflictRecord> records = repository.listByUser(
-                    context.getUserId(), PENDING_STATUS, CONFLICT_SCAN_LIMIT);
+                    context.getUserId(), PENDING_STATUS, policy.scanLimit());
             List<InteractiveMemoryConflictPrompt> prompts = records.stream()
                     .filter(Objects::nonNull)
                     .filter(this::isInteractiveCandidate)
+                    .filter(record -> policy.shouldPrompt(context.getUserId(), record.id()))
                     .sorted(Comparator
                             .comparingInt(this::severityRank)
                             .thenComparing(MemoryConflictRecord::createTime, Comparator.reverseOrder()))
-                    .limit(MAX_INTERACTIVE_CONFLICTS)
+                    .limit(policy.maxPromptsPerTurn())
                     .map(this::toPrompt)
                     .toList();
             context.setInteractiveMemoryConflictPrompts(prompts);
             for (InteractiveMemoryConflictPrompt prompt : prompts) {
                 callback.onEvent(MEMORY_CONFLICT_PROMPT_EVENT, prompt.toEventPayload());
+                policy.markPrompted(context.getUserId(), prompt.conflictId());
             }
         } catch (Exception ex) {
             LOG.warn("交互式记忆冲突提示加载失败，按普通聊天降级: userId={}", context.getUserId(), ex);
@@ -248,12 +256,35 @@ final class KernelChatPreparationSupport {
                 record.id(),
                 record.memoryId1(),
                 record.memoryId2(),
-                "",
-                "",
+                memoryContent(record.memoryId1()),
+                memoryContent(record.memoryId2()),
                 record.conflictType(),
                 record.severity(),
                 "我发现两条记忆可能不一致，请确认应保留哪一条。",
                 InteractiveMemoryConflictPrompt.DEFAULT_OPTIONS);
+    }
+
+    private String memoryContent(String memoryId) {
+        if (isBlank(memoryId)) {
+            return "";
+        }
+        return preparationPorts.memoryStorePorts().stream()
+                .filter(Objects::nonNull)
+                .map(store -> findMemory(store, memoryId))
+                .flatMap(Optional::stream)
+                .map(MemoryRecord::content)
+                .filter(content -> !isBlank(content))
+                .findFirst()
+                .orElse("");
+    }
+
+    private Optional<MemoryRecord> findMemory(MemoryStorePort store, String memoryId) {
+        try {
+            return store.findById(memoryId);
+        } catch (Exception ex) {
+            LOG.debug("Memory content lookup failed, trying other memory layers: memoryId={}", memoryId, ex);
+            return Optional.empty();
+        }
     }
 
     private String normalize(String value) {

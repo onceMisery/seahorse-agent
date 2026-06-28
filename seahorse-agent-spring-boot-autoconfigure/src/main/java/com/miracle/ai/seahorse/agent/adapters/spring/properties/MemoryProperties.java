@@ -45,6 +45,7 @@ public class MemoryProperties {
     private final Outbox outbox = new Outbox();
     private final Maintenance maintenance = new Maintenance();
     private final Refiner refiner = new Refiner();
+    private final InteractiveConflictPrompt interactiveConflictPrompt = new InteractiveConflictPrompt();
     private final AliasResolution aliasResolution = new AliasResolution();
     private final Trace trace = new Trace();
     private final DerivedIndex derivedIndex = new DerivedIndex();
@@ -79,6 +80,10 @@ public class MemoryProperties {
 
     public Refiner getRefiner() {
         return refiner;
+    }
+
+    public InteractiveConflictPrompt getInteractiveConflictPrompt() {
+        return interactiveConflictPrompt;
     }
 
     public AliasResolution getAliasResolution() {
@@ -786,6 +791,58 @@ public class MemoryProperties {
 
         public void setMaxRefinementDepth(int maxRefinementDepth) {
             this.maxRefinementDepth = maxRefinementDepth;
+        }
+    }
+
+    /**
+     * Interactive chat prompt controls for memory conflicts.
+     */
+    public static class InteractiveConflictPrompt {
+
+        private boolean enabled = true;
+        private int scanLimit = 20;
+        private int maxPromptsPerTurn = 3;
+        private long cooldownMillis = 600000L;
+        private int maxRepeatPrompts = 2;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getScanLimit() {
+            return scanLimit;
+        }
+
+        public void setScanLimit(int scanLimit) {
+            this.scanLimit = scanLimit;
+        }
+
+        public int getMaxPromptsPerTurn() {
+            return maxPromptsPerTurn;
+        }
+
+        public void setMaxPromptsPerTurn(int maxPromptsPerTurn) {
+            this.maxPromptsPerTurn = maxPromptsPerTurn;
+        }
+
+        public long getCooldownMillis() {
+            return cooldownMillis;
+        }
+
+        public void setCooldownMillis(long cooldownMillis) {
+            this.cooldownMillis = cooldownMillis;
+        }
+
+        public int getMaxRepeatPrompts() {
+            return maxRepeatPrompts;
+        }
+
+        public void setMaxRepeatPrompts(int maxRepeatPrompts) {
+            this.maxRepeatPrompts = maxRepeatPrompts;
         }
     }
 

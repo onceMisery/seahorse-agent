@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDataset;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetPayload;
@@ -31,6 +32,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyPr
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplate;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryConflictResolutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityComparisonInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
@@ -48,6 +50,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTracePage;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRun;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceDetail;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.http.MediaType;
@@ -61,6 +64,7 @@ import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -389,8 +393,7 @@ class SeahorseRetrievalAndMemoryControllerTests {
     void shouldResolveMemoryConflictFromChatInteraction() throws Exception {
         String userId = "2001523723396308993";
         MemoryManagementInboundPort port = mock(MemoryManagementInboundPort.class);
-        when(port.resolveConflict("mem-conflict-1", "keep_a", "interactive:" + userId))
-                .thenReturn(true);
+        when(port.resolveConflict(any(MemoryConflictResolutionCommand.class))).thenReturn(true);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseMemoryController(
                         provider(MemoryManagementInboundPort.class, port),
@@ -411,7 +414,45 @@ class SeahorseRetrievalAndMemoryControllerTests {
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.resolved").value(true));
 
-        verify(port).resolveConflict("mem-conflict-1", "keep_a", "interactive:" + userId);
+        var captor = forClass(MemoryConflictResolutionCommand.class);
+        verify(port).resolveConflict(captor.capture());
+        assertThat(captor.getValue().conflictId()).isEqualTo("mem-conflict-1");
+        assertThat(captor.getValue().action()).isEqualTo("keep_a");
+        assertThat(captor.getValue().resolvedBy()).isEqualTo("interactive:" + userId);
+        assertThat(captor.getValue().source()).isEqualTo("chat-ui");
+    }
+
+    @Test
+    void shouldResolveInteractiveMemoryConflictOperatorFromLoginStateWhenHeaderIsMissing() throws Exception {
+        MemoryManagementInboundPort port = mock(MemoryManagementInboundPort.class);
+        when(port.resolveConflict(any(MemoryConflictResolutionCommand.class))).thenReturn(true);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMemoryController(
+                        provider(MemoryManagementInboundPort.class, port),
+                        provider(MemoryGovernanceInboundPort.class, mock(MemoryGovernanceInboundPort.class))))
+                .build();
+
+        try (MockedStatic<StpUtil> stp = mockStatic(StpUtil.class)) {
+            stp.when(StpUtil::isLogin).thenReturn(true);
+            stp.when(StpUtil::getLoginIdAsString).thenReturn("login-user-1");
+
+            mvc.perform(post("/memories/conflicts/interactive-resolve")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {
+                                      "conflictId": "mem-conflict-1",
+                                      "action": "keep_a",
+                                      "source": "chat-ui"
+                                    }
+                                    """))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("0"))
+                    .andExpect(jsonPath("$.data.resolved").value(true));
+        }
+
+        var captor = forClass(MemoryConflictResolutionCommand.class);
+        verify(port).resolveConflict(captor.capture());
+        assertThat(captor.getValue().resolvedBy()).isEqualTo("interactive:login-user-1");
     }
 
     // --- RagTrace ---

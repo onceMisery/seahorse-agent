@@ -18,8 +18,13 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface MemoryConflictLogRepositoryPort {
+
+    default Optional<MemoryConflictRecord> findById(String conflictId) {
+        return Optional.empty();
+    }
 
     List<MemoryConflictRecord> listByUser(String userId, String status, int limit);
 
@@ -29,6 +34,11 @@ public interface MemoryConflictLogRepositoryPort {
 
     static MemoryConflictLogRepositoryPort empty() {
         return new MemoryConflictLogRepositoryPort() {
+            @Override
+            public Optional<MemoryConflictRecord> findById(String conflictId) {
+                return Optional.empty();
+            }
+
             @Override
             public List<MemoryConflictRecord> listByUser(String userId, String status, int limit) {
                 return List.of();

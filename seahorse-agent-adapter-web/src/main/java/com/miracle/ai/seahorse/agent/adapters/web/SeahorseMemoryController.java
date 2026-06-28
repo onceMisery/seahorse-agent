@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryConflictResolutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
 import org.springframework.beans.factory.ObjectProvider;
@@ -155,8 +156,16 @@ public class SeahorseMemoryController {
                                                @RequestBody(required = false) MemoryConflictResolveRequest request,
                                                @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         String action = request == null ? "manual-resolve" : request.action();
+        MemoryConflictResolutionCommand command = new MemoryConflictResolutionCommand(
+                conflictId,
+                action,
+                operator(userId),
+                source(request, "memory-admin"),
+                request == null ? "" : request.mergedContent(),
+                request == null ? "" : request.updatedContent(),
+                "default");
         return ApiResponses.requireServiceOrError(managementPortProvider,
-                port -> Map.of("resolved", port.resolveConflict(conflictId, action, operator(userId))));
+                port -> Map.of("resolved", port.resolveConflict(command)));
     }
 
     @PostMapping("/memories/conflicts/interactive-resolve")
@@ -166,8 +175,16 @@ public class SeahorseMemoryController {
         String conflictId = request == null ? "" : request.conflictId();
         String action = request == null ? "manual-resolve" : request.action();
         String resolvedBy = interactiveOperator(userId);
+        MemoryConflictResolutionCommand command = new MemoryConflictResolutionCommand(
+                conflictId,
+                action,
+                resolvedBy,
+                source(request, "chat-ui"),
+                request == null ? "" : request.mergedContent(),
+                request == null ? "" : request.updatedContent(),
+                "default");
         return ApiResponses.requireServiceOrError(managementPortProvider,
-                port -> Map.of("resolved", port.resolveConflict(conflictId, action, resolvedBy)));
+                port -> Map.of("resolved", port.resolveConflict(command)));
     }
 
     @PostMapping("/memories/governance/run")
@@ -193,7 +210,8 @@ public class SeahorseMemoryController {
     }
 
     private String operator(String userId) {
-        return userId == null || userId.isBlank() ? DEFAULT_OPERATOR : userId.trim();
+        String resolved = WebUserIdResolver.resolve(null, userId);
+        return WebUserIdResolver.DEFAULT_USER_ID.equals(resolved) ? DEFAULT_OPERATOR : resolved;
     }
 
     private String interactiveOperator(String userId) {
@@ -203,5 +221,12 @@ public class SeahorseMemoryController {
             operator = operator.substring(operator.length() - maxOperatorLength);
         }
         return INTERACTIVE_OPERATOR_PREFIX + operator;
+    }
+
+    private String source(MemoryConflictResolveRequest request, String fallback) {
+        if (request == null || request.source() == null || request.source().isBlank()) {
+            return fallback;
+        }
+        return request.source().trim();
     }
 }

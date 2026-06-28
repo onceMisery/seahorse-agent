@@ -26,6 +26,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 public class JdbcMemoryConflictLogRepositoryAdapter implements MemoryConflictLogRepositoryPort {
 
@@ -57,6 +58,18 @@ public class JdbcMemoryConflictLogRepositoryAdapter implements MemoryConflictLog
                 record.resolvedAt().equals(Instant.EPOCH) ? null : JdbcMemorySupport.timestamp(record.resolvedAt()),
                 JdbcMemorySupport.timestamp(record.createTime().equals(Instant.EPOCH) ? now : record.createTime()),
                 JdbcMemorySupport.timestamp(now));
+    }
+
+    @Override
+    public Optional<MemoryConflictRecord> findById(String conflictId) {
+        if (!JdbcMemorySupport.hasText(conflictId)) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query("""
+                SELECT * FROM t_memory_conflict_log
+                WHERE id = ? AND deleted = 0
+                LIMIT 1
+                """, this::mapRecord, conflictId.trim()).stream().findFirst();
     }
 
     @Override

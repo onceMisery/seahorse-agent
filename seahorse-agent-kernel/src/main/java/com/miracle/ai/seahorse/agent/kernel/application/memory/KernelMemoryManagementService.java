@@ -17,6 +17,12 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditActorType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEventType;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryConflictResolutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
@@ -44,10 +50,17 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.time.Instant;
+import java.util.UUID;
 
 public class KernelMemoryManagementService implements MemoryManagementInboundPort {
 
     private static final int DEFAULT_LIMIT = 20;
+    private static final ObjectMapper AUDIT_OBJECT_MAPPER = new ObjectMapper();
+    private static final String STATUS_RESOLVED = "RESOLVED";
+    private static final String ACTION_KEEP_A = "keep_a";
+    private static final String ACTION_KEEP_B = "keep_b";
+    private static final String ACTION_MERGE = "merge";
+    private static final String ACTION_DISCARD = "discard";
 
     private final MemoryManagementServicePorts ports;
 
@@ -89,9 +102,34 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
 
     @Override
     public boolean resolveConflict(String conflictId, String action, String resolvedBy) {
-        return ports.conflictLogRepositoryPort()
-                .resolve(requireText(conflictId, "conflictId"), requireText(action, "action"),
-                        Objects.requireNonNullElse(resolvedBy, "").trim());
+        return resolveConflict(MemoryConflictResolutionCommand.manual(conflictId, action, resolvedBy));
+    }
+
+    @Override
+    public boolean resolveConflict(MemoryConflictResolutionCommand command) {
+        MemoryConflictResolutionCommand safeCommand = Objects.requireNonNullElseGet(command,
+                () -> MemoryConflictResolutionCommand.manual("", "", ""));
+        String conflictId = requireText(safeCommand.conflictId(), "conflictId");
+        String action = requireText(safeCommand.action(), "action");
+        String resolvedBy = Objects.requireNonNullElse(safeCommand.resolvedBy(), "").trim();
+        Optional<MemoryConflictRecord> conflict = ports.conflictLogRepositoryPort().findById(conflictId);
+        if (conflict.isEmpty()) {
+            recordConflictTrace(safeCommand, null, MemoryTraceEvent.STATUS_FAILED,
+                    Map.of("reason", "conflict_not_found"));
+            return false;
+        }
+
+        ConflictResolutionOutcome outcome = applyConflictAction(conflict.get(), safeCommand);
+        boolean resolved = ports.conflictLogRepositoryPort()
+                .resolve(conflictId, normalizedResolvedAction(action), resolvedBy);
+        Map<String, Object> details = conflictDetails(safeCommand, conflict.get(), outcome, resolved);
+        recordConflictTrace(safeCommand, conflict.get(),
+                resolved ? MemoryTraceEvent.STATUS_SUCCESS : MemoryTraceEvent.STATUS_FAILED,
+                details);
+        if (resolved) {
+            recordConflictAudit(safeCommand, conflict.get(), details);
+        }
+        return resolved;
     }
 
     @Override
@@ -238,6 +276,250 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
     @Override
     public MemoryPolicyConfig updatePolicyConfig(MemoryPolicyConfig config) {
         return ports.policyConfigPort().update(config);
+    }
+
+    private ConflictResolutionOutcome applyConflictAction(MemoryConflictRecord conflict,
+                                                          MemoryConflictResolutionCommand command) {
+        String action = normalizeAction(command.action());
+        ResolvedMemory memoryA = findMemoryInAnyLayer(conflict.memoryId1()).orElse(null);
+        ResolvedMemory memoryB = findMemoryInAnyLayer(conflict.memoryId2()).orElse(null);
+        List<String> retiredMemoryIds = new ArrayList<>();
+        String mergedMemoryId = "";
+        String underlyingAction = "log_only";
+
+        switch (action) {
+            case ACTION_KEEP_A -> {
+                if (deleteResolvedMemory(memoryB)) {
+                    retiredMemoryIds.add(memoryB.record().id());
+                }
+                underlyingAction = "retired_memory_b";
+            }
+            case ACTION_KEEP_B -> {
+                if (deleteResolvedMemory(memoryA)) {
+                    retiredMemoryIds.add(memoryA.record().id());
+                }
+                underlyingAction = "retired_memory_a";
+            }
+            case ACTION_DISCARD -> {
+                if (deleteResolvedMemory(memoryA)) {
+                    retiredMemoryIds.add(memoryA.record().id());
+                }
+                if (deleteResolvedMemory(memoryB)) {
+                    retiredMemoryIds.add(memoryB.record().id());
+                }
+                underlyingAction = "retired_both";
+            }
+            case ACTION_MERGE -> {
+                mergedMemoryId = saveMergedMemory(conflict, command, memoryA, memoryB);
+                if (deleteResolvedMemory(memoryA)) {
+                    retiredMemoryIds.add(memoryA.record().id());
+                }
+                if (deleteResolvedMemory(memoryB)) {
+                    retiredMemoryIds.add(memoryB.record().id());
+                }
+                underlyingAction = "merged_and_retired_originals";
+            }
+            default -> {
+                underlyingAction = "unsupported_action_log_only";
+            }
+        }
+        return new ConflictResolutionOutcome(underlyingAction, retiredMemoryIds, mergedMemoryId);
+    }
+
+    private String saveMergedMemory(MemoryConflictRecord conflict,
+                                    MemoryConflictResolutionCommand command,
+                                    ResolvedMemory memoryA,
+                                    ResolvedMemory memoryB) {
+        ResolvedMemory target = memoryA != null ? memoryA : memoryB;
+        if (target == null) {
+            return "";
+        }
+        String mergedContent = firstText(
+                command.mergedContent(),
+                command.updatedContent(),
+                mergedContent(memoryA == null ? null : memoryA.record(), memoryB == null ? null : memoryB.record()));
+        String mergedMemoryId = "merged-" + conflict.id();
+        Map<String, Object> metadata = new LinkedHashMap<>(target.record().metadata());
+        metadata.put("conflictId", conflict.id());
+        metadata.put("conflictResolutionAction", ACTION_MERGE);
+        metadata.put("sourceMemoryIds", List.of(conflict.memoryId1(), conflict.memoryId2()));
+        metadata.put("tenantId", firstText(command.tenantId(), string(metadata.get("tenantId")), "default"));
+        if (hasText(string(metadata.get("semanticKey")))) {
+            metadata.put("semanticKey", string(metadata.get("semanticKey")) + ":merged:" + conflict.id());
+        }
+        target.store().save(new MemoryRecord(
+                mergedMemoryId,
+                target.record().layer(),
+                target.record().type(),
+                mergedContent,
+                metadata,
+                Instant.now()));
+        return mergedMemoryId;
+    }
+
+    private String mergedContent(MemoryRecord memoryA, MemoryRecord memoryB) {
+        String contentA = memoryA == null ? "" : memoryA.content();
+        String contentB = memoryB == null ? "" : memoryB.content();
+        if (!hasText(contentA)) {
+            return contentB;
+        }
+        if (!hasText(contentB) || contentA.equals(contentB)) {
+            return contentA;
+        }
+        return contentA + "\n" + contentB;
+    }
+
+    private Optional<ResolvedMemory> findMemoryInAnyLayer(String memoryId) {
+        if (!hasText(memoryId)) {
+            return Optional.empty();
+        }
+        for (MemoryStorePort memoryStorePort : List.of(
+                ports.workingMemoryPort(),
+                ports.shortTermMemoryPort(),
+                ports.longTermMemoryPort(),
+                ports.semanticMemoryPort())) {
+            try {
+                Optional<MemoryRecord> record = memoryStorePort.findById(memoryId);
+                if (record.isPresent()) {
+                    return Optional.of(new ResolvedMemory(memoryStorePort, record.get()));
+                }
+            } catch (RuntimeException ignored) {
+                // Keep conflict resolution fail-open across independent memory layers.
+            }
+        }
+        return Optional.empty();
+    }
+
+    private boolean deleteResolvedMemory(ResolvedMemory resolvedMemory) {
+        if (resolvedMemory == null) {
+            return false;
+        }
+        return resolvedMemory.store().deleteById(resolvedMemory.record().id());
+    }
+
+    private Map<String, Object> conflictDetails(MemoryConflictResolutionCommand command,
+                                                MemoryConflictRecord conflict,
+                                                ConflictResolutionOutcome outcome,
+                                                boolean resolved) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("source", command.source());
+        details.put("operator", command.resolvedBy());
+        details.put("action", normalizedResolvedAction(command.action()));
+        details.put("conflictId", conflict.id());
+        details.put("memoryId1", conflict.memoryId1());
+        details.put("memoryId2", conflict.memoryId2());
+        details.put("retiredMemoryIds", outcome.retiredMemoryIds());
+        details.put("mergedMemoryId", outcome.mergedMemoryId());
+        details.put("underlyingAction", outcome.underlyingAction());
+        details.put("resolved", resolved);
+        return details;
+    }
+
+    private void recordConflictTrace(MemoryConflictResolutionCommand command,
+                                     MemoryConflictRecord conflict,
+                                     String status,
+                                     Map<String, Object> details) {
+        try {
+            ports.traceRecorder().record(new MemoryTraceEvent(
+                    "",
+                    command.tenantId(),
+                    conflict == null ? "" : conflict.userId(),
+                    "",
+                    "",
+                    "memory-conflict",
+                    interactiveResolve(command) ? "interactive-resolve" : "resolve",
+                    status,
+                    conflict == null ? command.conflictId() : conflict.id(),
+                    "memory_conflict",
+                    details,
+                    Instant.now()));
+        } catch (RuntimeException ignored) {
+            // Trace must not block the user's conflict-resolution action.
+        }
+    }
+
+    private void recordConflictAudit(MemoryConflictResolutionCommand command,
+                                     MemoryConflictRecord conflict,
+                                     Map<String, Object> details) {
+        if (ports.auditLedgerService() == null) {
+            return;
+        }
+        try {
+            ports.auditLedgerService().append(new AuditEvent(
+                    UUID.randomUUID().toString(),
+                    command.tenantId(),
+                    AuditEventType.MEMORY_CONFLICT_RESOLVED,
+                    actorType(command.resolvedBy()),
+                    firstText(command.resolvedBy(), "system"),
+                    null,
+                    null,
+                    "memory_conflict",
+                    conflict.id(),
+                    auditPayload(details),
+                    Instant.now()));
+        } catch (RuntimeException ignored) {
+            // Audit is best-effort for chat-side conflict resolution.
+        }
+    }
+
+    private AuditActorType actorType(String resolvedBy) {
+        String actor = Objects.requireNonNullElse(resolvedBy, "").trim();
+        return actor.isBlank() || "system".equalsIgnoreCase(actor) ? AuditActorType.SYSTEM : AuditActorType.USER;
+    }
+
+    private String auditPayload(Map<String, Object> details) {
+        try {
+            return AUDIT_OBJECT_MAPPER.writeValueAsString(details);
+        } catch (JsonProcessingException ex) {
+            return AuditEvent.EMPTY_PAYLOAD;
+        }
+    }
+
+    private boolean interactiveResolve(MemoryConflictResolutionCommand command) {
+        return "chat-ui".equalsIgnoreCase(command.source())
+                || command.resolvedBy().toLowerCase(Locale.ROOT).startsWith("interactive:");
+    }
+
+    private String normalizedResolvedAction(String action) {
+        String normalized = normalizeAction(action);
+        return normalized.isBlank() ? action.trim() : normalized;
+    }
+
+    private String normalizeAction(String action) {
+        String normalized = Objects.requireNonNullElse(action, "").trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case ACTION_KEEP_A, ACTION_KEEP_B, ACTION_MERGE, ACTION_DISCARD -> normalized;
+            default -> "";
+        };
+    }
+
+    private String firstText(String... values) {
+        if (values == null) {
+            return "";
+        }
+        for (String value : values) {
+            if (hasText(value)) {
+                return value.trim();
+            }
+        }
+        return "";
+    }
+
+    private String string(Object value) {
+        return value == null ? "" : value.toString();
+    }
+
+    private record ResolvedMemory(MemoryStorePort store, MemoryRecord record) {
+    }
+
+    private record ConflictResolutionOutcome(String underlyingAction,
+                                             List<String> retiredMemoryIds,
+                                             String mergedMemoryId) {
+
+        private ConflictResolutionOutcome {
+            retiredMemoryIds = List.copyOf(Objects.requireNonNullElse(retiredMemoryIds, List.of()));
+            mergedMemoryId = Objects.requireNonNullElse(mergedMemoryId, "");
+        }
     }
 
     private MemoryStorePort store(String layer) {

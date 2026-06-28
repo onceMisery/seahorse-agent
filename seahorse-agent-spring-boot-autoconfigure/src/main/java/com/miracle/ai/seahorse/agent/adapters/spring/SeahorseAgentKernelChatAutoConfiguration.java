@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.adapters.ai.openai.LlmQueryOptimizerAdapter
 import com.miracle.ai.seahorse.agent.adapters.local.LocalChatStreamCallbackFactory;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalStreamTaskPort;
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentKernelProperties;
+import com.miracle.ai.seahorse.agent.adapters.spring.properties.MemoryProperties;
 import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
@@ -30,6 +31,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.chat.AgentRunMetadataCon
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatPreparationPorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatResponsePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ConversationAttachmentContextAssembler;
+import com.miracle.ai.seahorse.agent.kernel.application.chat.InteractiveMemoryConflictPromptPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.RuleBasedQueryOptimizerPort;
@@ -65,11 +67,17 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
+import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -150,7 +158,15 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                                              ObjectProvider<IntentGuidancePort> intentGuidancePort,
                                                              ObjectProvider<RetrievalContextPort> retrievalContextPort,
                                                              ObjectProvider<MemoryConflictLogRepositoryPort>
-                                                                     memoryConflictLogRepositoryPort) {
+                                                                     memoryConflictLogRepositoryPort,
+                                                             ObjectProvider<WorkingMemoryPort> workingMemoryPort,
+                                                             ObjectProvider<ShortTermMemoryPort> shortTermMemoryPort,
+                                                             ObjectProvider<LongTermMemoryPort> longTermMemoryPort,
+                                                             ObjectProvider<SemanticMemoryPort> semanticMemoryPort,
+                                                             ObjectProvider<MemoryProperties> memoryProperties) {
+        MemoryProperties.InteractiveConflictPrompt prompt = memoryProperties
+                .getIfAvailable(MemoryProperties::new)
+                .getInteractiveConflictPrompt();
         return new ChatPreparationPorts(
                 memoryPort.getIfAvailable(ConversationMemoryPort::noop),
                 memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
@@ -166,7 +182,22 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                         RetrievalContext.builder()
                                 .intentChunks(Map.of())
                                 .build()),
-                memoryConflictLogRepositoryPort.getIfAvailable(MemoryConflictLogRepositoryPort::empty));
+                memoryConflictLogRepositoryPort.getIfAvailable(MemoryConflictLogRepositoryPort::empty),
+                List.of(
+                        workingMemoryPort.getIfAvailable(),
+                        shortTermMemoryPort.getIfAvailable(),
+                        longTermMemoryPort.getIfAvailable(),
+                        semanticMemoryPort.getIfAvailable()).stream()
+                        .filter(java.util.Objects::nonNull)
+                        .map(port -> (com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort) port)
+                        .toList(),
+                new InteractiveMemoryConflictPromptPolicy(
+                        prompt.isEnabled(),
+                        prompt.getScanLimit(),
+                        prompt.getMaxPromptsPerTurn(),
+                        Duration.ofMillis(prompt.getCooldownMillis()),
+                        prompt.getMaxRepeatPrompts(),
+                        Clock.systemUTC()));
     }
 
     @Bean

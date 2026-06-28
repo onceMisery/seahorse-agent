@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
@@ -46,7 +47,8 @@ public record MemoryManagementServicePorts(
         MemoryOutboxPort outboxPort,
         MemoryReviewManagementRepositoryPort reviewRepositoryPort,
         MemoryPolicyConfigPort policyConfigPort,
-        MemoryTraceRecorder traceRecorder
+        MemoryTraceRecorder traceRecorder,
+        KernelAuditLedgerService auditLedgerService
 ) {
 
     public MemoryManagementServicePorts(WorkingMemoryPort workingMemoryPort,
@@ -67,7 +69,8 @@ public record MemoryManagementServicePorts(
                 MemoryOutboxPort.noop(),
                 MemoryReviewManagementRepositoryPort.empty(),
                 MemoryPolicyConfigPort.defaults(),
-                MemoryTraceRecorder.noop());
+                MemoryTraceRecorder.noop(),
+                null);
     }
 
     public MemoryManagementServicePorts(WorkingMemoryPort workingMemoryPort,
@@ -93,7 +96,8 @@ public record MemoryManagementServicePorts(
                 outboxPort,
                 MemoryReviewManagementRepositoryPort.empty(),
                 MemoryPolicyConfigPort.defaults(),
-                traceRecorder);
+                traceRecorder,
+                null);
     }
 
     public MemoryManagementServicePorts(WorkingMemoryPort workingMemoryPort,
@@ -120,7 +124,37 @@ public record MemoryManagementServicePorts(
                 outboxPort,
                 reviewRepositoryPort,
                 policyConfigPort,
-                MemoryTraceRecorder.noop());
+                MemoryTraceRecorder.noop(),
+                null);
+    }
+
+    public MemoryManagementServicePorts(WorkingMemoryPort workingMemoryPort,
+                                        ShortTermMemoryPort shortTermMemoryPort,
+                                        LongTermMemoryPort longTermMemoryPort,
+                                        SemanticMemoryPort semanticMemoryPort,
+                                        MemoryQualitySnapshotRepositoryPort qualitySnapshotRepositoryPort,
+                                        MemoryConflictLogRepositoryPort conflictLogRepositoryPort,
+                                        ProfileMemoryPort profileMemoryPort,
+                                        CorrectionLedgerPort correctionLedgerPort,
+                                        MemoryOperationLogPort operationLogPort,
+                                        MemoryOutboxPort outboxPort,
+                                        MemoryReviewManagementRepositoryPort reviewRepositoryPort,
+                                        MemoryPolicyConfigPort policyConfigPort,
+                                        MemoryTraceRecorder traceRecorder) {
+        this(workingMemoryPort,
+                shortTermMemoryPort,
+                longTermMemoryPort,
+                semanticMemoryPort,
+                qualitySnapshotRepositoryPort,
+                conflictLogRepositoryPort,
+                profileMemoryPort,
+                correctionLedgerPort,
+                operationLogPort,
+                outboxPort,
+                reviewRepositoryPort,
+                policyConfigPort,
+                traceRecorder,
+                null);
     }
 
     public MemoryManagementServicePorts {

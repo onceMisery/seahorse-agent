@@ -45,6 +45,13 @@ public interface MemoryManagementInboundPort {
 
     boolean resolveConflict(String conflictId, String action, String resolvedBy);
 
+    default boolean resolveConflict(MemoryConflictResolutionCommand command) {
+        MemoryConflictResolutionCommand safeCommand = command == null
+                ? MemoryConflictResolutionCommand.manual("", "", "")
+                : command;
+        return resolveConflict(safeCommand.conflictId(), safeCommand.action(), safeCommand.resolvedBy());
+    }
+
     default List<ProfileFact> listProfileFacts(String userId, String tenantId, int limit) {
         return List.of();
     }

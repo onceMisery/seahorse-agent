@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryEnginePort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryRetrievalPipeline;
@@ -334,7 +335,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryOutboxPort> outboxPort,
             ObjectProvider<MemoryReviewManagementRepositoryPort> reviewRepositoryPort,
             ObjectProvider<MemoryPolicyConfigPort> policyConfigPort,
-            ObjectProvider<MemoryTraceRecorder> traceRecorder) {
+            ObjectProvider<MemoryTraceRecorder> traceRecorder,
+            ObjectProvider<KernelAuditLedgerService> auditLedgerService) {
         return new MemoryManagementServicePorts(
                 workingMemoryPort,
                 shortTermMemoryPort,
@@ -348,7 +350,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 outboxPort.getIfAvailable(MemoryOutboxPort::noop),
                 reviewRepositoryPort.getIfAvailable(MemoryReviewManagementRepositoryPort::empty),
                 policyConfigPort.getIfAvailable(MemoryPolicyConfigPort::defaults),
-                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop));
+                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
+                auditLedgerService.getIfAvailable());
     }
 
     @Bean

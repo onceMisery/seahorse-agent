@@ -135,6 +135,8 @@ function seedInteractiveConflict(userId, marker) {
   const memoryIdB = `codxicB${suffix}`;
   const conflictId = `codxic-conflict-${suffix}`;
   const semanticKey = `profile:interactive-conflict:${marker}`;
+  const contentA = `Interactive conflict smoke memory A ${marker} says the preferred workspace is quiet mode`;
+  const contentB = `Interactive conflict smoke memory B ${marker} says the preferred workspace is collaboration mode`;
   const metadataA = {
     marker,
     semanticKey,
@@ -158,10 +160,10 @@ insert into t_short_term_memory
    source_message_ids, importance_score, status, create_time, update_time, deleted)
 values
   ('${memoryIdA}', ${userId}, 'default', null, 'PROFILE',
-   'Interactive conflict smoke memory A ${sqlLiteral(marker)} says the preferred workspace is quiet mode',
+   '${sqlLiteral(contentA)}',
    $json$${JSON.stringify(metadataA)}$json$::jsonb, '[]'::jsonb, 0.960, 'ACTIVE', now(), now(), 0),
   ('${memoryIdB}', ${userId}, 'default', null, 'PROFILE',
-   'Interactive conflict smoke memory B ${sqlLiteral(marker)} says the preferred workspace is collaboration mode',
+   '${sqlLiteral(contentB)}',
    $json$${JSON.stringify(metadataB)}$json$::jsonb, '[]'::jsonb, 0.950, 'ACTIVE', now(), now(), 0);
 
 insert into t_memory_conflict_log
@@ -172,7 +174,7 @@ values
    null, null, null, now(), now(), 0);
 `);
 
-  return { memoryIdA, memoryIdB, conflictId };
+  return { memoryIdA, memoryIdB, conflictId, contentA, contentB };
 }
 
 async function verifyPendingConflict(auth, userId, conflictId) {
@@ -220,16 +222,16 @@ async function sendChatAndResolve(page, seeded, marker) {
   }
 
   await page.waitForFunction(
-    ({ memoryIdA, memoryIdB }) =>
-      document.body.innerText.includes(memoryIdA) && document.body.innerText.includes(memoryIdB),
-    { memoryIdA: seeded.memoryIdA, memoryIdB: seeded.memoryIdB },
+    ({ contentA, contentB }) =>
+      document.body.innerText.includes(contentA) && document.body.innerText.includes(contentB),
+    { contentA: seeded.contentA, contentB: seeded.contentB },
     { timeout: 60000 }
   );
 
   const card = page
     .locator(".rounded-lg.border.p-3.text-sm")
-    .filter({ hasText: seeded.memoryIdA })
-    .filter({ hasText: seeded.memoryIdB })
+    .filter({ hasText: seeded.contentA })
+    .filter({ hasText: seeded.contentB })
     .first();
   await card.waitFor({ state: "visible", timeout: 10000 });
 
@@ -281,6 +283,62 @@ limit 1;
   return row;
 }
 
+function verifyMemoryStateInDb(seeded) {
+  const rows = psql(`
+select id, deleted
+from t_short_term_memory
+where id in ('${sqlLiteral(seeded.memoryIdA)}', '${sqlLiteral(seeded.memoryIdB)}')
+order by id;
+`);
+  const expected = [
+    `${seeded.memoryIdA}|0`,
+    `${seeded.memoryIdB}|1`
+  ].sort().join("\n");
+  const actual = rows.sort().join("\n");
+  if (actual !== expected) {
+    throw new Error(`underlying memory state mismatch:\nactual:\n${actual}\nexpected:\n${expected}`);
+  }
+  return actual;
+}
+
+function verifyObservabilityInDb(conflictId, userId) {
+  const operator = expectedInteractiveOperator(userId);
+  const traceRows = psql(`
+select status,
+       details_json ->> 'source',
+       details_json ->> 'operator',
+       details_json ->> 'action'
+from t_memory_trace_event
+where component = 'memory-conflict'
+  and event_type = 'interactive-resolve'
+  and subject_id = '${sqlLiteral(conflictId)}'
+order by occurred_at desc, create_time desc
+limit 1;
+`);
+  const expectedTrace = `SUCCESS|chat-ui|${operator}|keep_a`;
+  if ((traceRows[0] || "") !== expectedTrace) {
+    throw new Error(`memory conflict trace mismatch: got "${traceRows[0] || ""}", expected "${expectedTrace}"`);
+  }
+
+  const auditRows = psql(`
+select event_type,
+       actor_id,
+       resource_id,
+       redacted_payload::jsonb ->> 'source',
+       redacted_payload::jsonb ->> 'action'
+from sa_audit_event
+where event_type = 'MEMORY_CONFLICT_RESOLVED'
+  and resource_id = '${sqlLiteral(conflictId)}'
+order by occurred_at desc
+limit 1;
+`);
+  const expectedAudit = `MEMORY_CONFLICT_RESOLVED|${operator}|${conflictId}|chat-ui|keep_a`;
+  if ((auditRows[0] || "") !== expectedAudit) {
+    throw new Error(`memory conflict audit mismatch: got "${auditRows[0] || ""}", expected "${expectedAudit}"`);
+  }
+  return { traceRow: traceRows[0], auditRow: auditRows[0] };
+}
+
 const marker = `CODX_INTERACTIVE_MEMORY_CONFLICT_${Date.now()}`;
 const login = await loginApi();
 const auth = { Authorization: `Bearer ${login.token}` };
@@ -301,15 +359,21 @@ try {
   const screenshot = path.join(artifactDir, `interactive-memory-conflict-${marker}.png`);
   await page.screenshot({ path: screenshot, fullPage: true });
   const resolvedRow = verifyResolvedInDb(seeded.conflictId, login.userId);
+  const memoryState = verifyMemoryStateInDb(seeded);
+  const observability = verifyObservabilityInDb(seeded.conflictId, login.userId);
   console.log(JSON.stringify({
     ok: true,
     marker,
     userId: String(login.userId),
     memoryIdA: seeded.memoryIdA,
     memoryIdB: seeded.memoryIdB,
+    contentA: seeded.contentA,
+    contentB: seeded.contentB,
     conflictId: seeded.conflictId,
     conflictStatusBeforeResolve: pendingConflict.resolutionStatus,
     resolvedRow,
+    memoryState,
+    observability,
     screenshot
   }, null, 2));
 } finally {
