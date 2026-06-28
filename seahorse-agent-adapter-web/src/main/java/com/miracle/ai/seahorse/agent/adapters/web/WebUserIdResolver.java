@@ -43,6 +43,18 @@ final class WebUserIdResolver {
         return DEFAULT_USER_ID;
     }
 
+    static String resolveOperator(String headerUserId) {
+        String loginUserId = currentLoginId();
+        if (loginUserId != null) {
+            return truncate(loginUserId);
+        }
+        String explicitHeaderUserId = trimToNull(headerUserId);
+        if (explicitHeaderUserId != null) {
+            return truncate(explicitHeaderUserId);
+        }
+        return DEFAULT_USER_ID;
+    }
+
     private static String currentLoginId() {
         try {
             if (!StpUtil.isLogin()) {

@@ -455,6 +455,40 @@ class SeahorseRetrievalAndMemoryControllerTests {
         assertThat(captor.getValue().resolvedBy()).isEqualTo("interactive:login-user-1");
     }
 
+    @Test
+    void shouldPreferLoginStateOverHeaderForInteractiveMemoryConflictOperator() throws Exception {
+        MemoryManagementInboundPort port = mock(MemoryManagementInboundPort.class);
+        when(port.resolveConflict(any(MemoryConflictResolutionCommand.class))).thenReturn(true);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMemoryController(
+                        provider(MemoryManagementInboundPort.class, port),
+                        provider(MemoryGovernanceInboundPort.class, mock(MemoryGovernanceInboundPort.class))))
+                .build();
+
+        try (MockedStatic<StpUtil> stp = mockStatic(StpUtil.class)) {
+            stp.when(StpUtil::isLogin).thenReturn(true);
+            stp.when(StpUtil::getLoginIdAsString).thenReturn("login-user-1");
+
+            mvc.perform(post("/memories/conflicts/interactive-resolve")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .header("X-User-Id", "spoofed-header-user")
+                            .content("""
+                                    {
+                                      "conflictId": "mem-conflict-1",
+                                      "action": "keep_a",
+                                      "source": "chat-ui"
+                                    }
+                                    """))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("0"))
+                    .andExpect(jsonPath("$.data.resolved").value(true));
+        }
+
+        var captor = forClass(MemoryConflictResolutionCommand.class);
+        verify(port).resolveConflict(captor.capture());
+        assertThat(captor.getValue().resolvedBy()).isEqualTo("interactive:login-user-1");
+    }
+
     // --- RagTrace ---
 
     @Test

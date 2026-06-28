@@ -210,7 +210,7 @@ public class SeahorseMemoryController {
     }
 
     private String operator(String userId) {
-        String resolved = WebUserIdResolver.resolve(null, userId);
+        String resolved = WebUserIdResolver.resolveOperator(userId);
         return WebUserIdResolver.DEFAULT_USER_ID.equals(resolved) ? DEFAULT_OPERATOR : resolved;
     }
 
