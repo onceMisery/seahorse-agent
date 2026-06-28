@@ -4,6 +4,8 @@ import { nanoid } from "nanoid";
 import { toast } from "sonner";
 
 import {
+  type MemoryConflictPrompt,
+  type MemoryConflictPromptOption,
   type Message,
   type Role,
   type TaskTemplateId
@@ -415,6 +417,16 @@ export const useChatStore = create<ChatState>()(
             currentAssistantMessageId = msg.id;
           });
         },
+        onEvent: (eventName, payload) => {
+          if (eventName !== "memory.conflict.prompt") return;
+          const prompt = normalizeMemoryConflictPrompt(payload);
+          if (!prompt) return;
+          set((state) => {
+            const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
+            if (!msg) return;
+            msg.memoryConflictPrompts = upsertMemoryConflictPrompt(msg.memoryConflictPrompts, prompt);
+          });
+        },
         onError: (error) => { markError(error.message || "对话失败"); }
       };
 
@@ -613,12 +625,75 @@ export const useChatStore = create<ChatState>()(
           if (!msg.thinkingStartAt) msg.thinkingStartAt = Date.now();
         }
       });
+    },
+
+    markMemoryConflictPromptResolved: (messageId, conflictId, action) => {
+      set((state) => {
+        const message = state.messages.find((item) => item.id === messageId);
+        const prompt = message?.memoryConflictPrompts?.find((item) => item.conflictId === conflictId);
+        if (!prompt) return;
+        prompt.status = "resolved";
+        prompt.selectedAction = action;
+      });
     }
   }))
 );
 
 function currentAssistantMessage(messages: Message[], currentId: string, originalId: string): Message | undefined {
   return messages.find((m) => m.id === currentId || m.id === originalId);
+}
+
+function normalizeMemoryConflictPrompt(payload: unknown): MemoryConflictPrompt | null {
+  if (!payload || typeof payload !== "object") return null;
+  const source = payload as Record<string, unknown>;
+  const conflictId = optionalNonEmptyString(source.conflictId);
+  if (!conflictId) return null;
+  const options = Array.isArray(source.options)
+    ? source.options
+        .map(normalizeMemoryConflictPromptOption)
+        .filter((option): option is MemoryConflictPromptOption => Boolean(option))
+    : [];
+  return {
+    conflictId,
+    memoryId1: optionalStringValue(source.memoryId1),
+    memoryId2: optionalStringValue(source.memoryId2),
+    contentA: optionalStringValue(source.contentA),
+    contentB: optionalStringValue(source.contentB),
+    conflictType: optionalStringValue(source.conflictType),
+    severity: optionalStringValue(source.severity),
+    question: optionalStringValue(source.question),
+    options,
+    status: "pending"
+  };
+}
+
+function normalizeMemoryConflictPromptOption(payload: unknown): MemoryConflictPromptOption | null {
+  if (!payload || typeof payload !== "object") return null;
+  const source = payload as Record<string, unknown>;
+  const value = optionalNonEmptyString(source.value);
+  const label = optionalNonEmptyString(source.label);
+  if (!value || !label) return null;
+  return { value, label };
+}
+
+function upsertMemoryConflictPrompt(
+  current: Message["memoryConflictPrompts"],
+  incoming: MemoryConflictPrompt
+): MemoryConflictPrompt[] {
+  const prompts = current ?? [];
+  if (prompts.some((prompt) => prompt.conflictId === incoming.conflictId)) {
+    return prompts;
+  }
+  return [...prompts, incoming];
+}
+
+function optionalStringValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function optionalNonEmptyString(value: unknown): string | null {
+  const text = optionalStringValue(value)?.trim();
+  return text ? text : null;
 }
 
 function mergeArtifactsById(current: Message["artifacts"], incoming: Message["artifacts"]): NonNullable<Message["artifacts"]> {

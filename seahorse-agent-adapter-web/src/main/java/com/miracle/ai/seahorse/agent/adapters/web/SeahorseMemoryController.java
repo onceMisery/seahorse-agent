@@ -37,6 +37,8 @@ public class SeahorseMemoryController {
 
     private static final String HEADER_USER_ID = "X-User-Id";
     private static final String DEFAULT_OPERATOR = "system";
+    private static final String INTERACTIVE_OPERATOR_PREFIX = "interactive:";
+    private static final int CONFLICT_RESOLVED_BY_MAX_LENGTH = 32;
 
     private final ObjectProvider<MemoryManagementInboundPort> managementPortProvider;
     private final ObjectProvider<MemoryGovernanceInboundPort> governancePortProvider;
@@ -157,6 +159,17 @@ public class SeahorseMemoryController {
                 port -> Map.of("resolved", port.resolveConflict(conflictId, action, operator(userId))));
     }
 
+    @PostMapping("/memories/conflicts/interactive-resolve")
+    public ApiResponse<Object> resolveConflictInteractively(
+            @RequestBody(required = false) MemoryConflictResolveRequest request,
+            @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
+        String conflictId = request == null ? "" : request.conflictId();
+        String action = request == null ? "manual-resolve" : request.action();
+        String resolvedBy = interactiveOperator(userId);
+        return ApiResponses.requireServiceOrError(managementPortProvider,
+                port -> Map.of("resolved", port.resolveConflict(conflictId, action, resolvedBy)));
+    }
+
     @PostMapping("/memories/governance/run")
     public ApiResponse<Object> runGovernance(@RequestParam(required = false) String userId,
                                              @RequestParam(defaultValue = "manual") String reason,
@@ -181,5 +194,14 @@ public class SeahorseMemoryController {
 
     private String operator(String userId) {
         return userId == null || userId.isBlank() ? DEFAULT_OPERATOR : userId.trim();
+    }
+
+    private String interactiveOperator(String userId) {
+        String operator = operator(userId);
+        int maxOperatorLength = CONFLICT_RESOLVED_BY_MAX_LENGTH - INTERACTIVE_OPERATOR_PREFIX.length();
+        if (operator.length() > maxOperatorLength) {
+            operator = operator.substring(operator.length() - maxOperatorLength);
+        }
+        return INTERACTIVE_OPERATOR_PREFIX + operator;
     }
 }

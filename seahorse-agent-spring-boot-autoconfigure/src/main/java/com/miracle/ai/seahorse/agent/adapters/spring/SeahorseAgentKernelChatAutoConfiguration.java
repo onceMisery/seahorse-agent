@@ -61,6 +61,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParserPort
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermExpansionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationServicePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
@@ -90,8 +91,9 @@ import org.springframework.core.env.Environment;
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(AgentKernelProperties.class)
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKernelMemoryAutoConfiguration.class,
-        SeahorseAgentAiAdapterAutoConfiguration.class, SeahorseAgentKernelRegistryAutoConfiguration.class,
-        SeahorseAgentKernelAgentAutoConfiguration.class, SeahorseAgentS3StorageAutoConfiguration.class})
+        SeahorseAgentMemoryRepositoryAutoConfiguration.class, SeahorseAgentAiAdapterAutoConfiguration.class,
+        SeahorseAgentKernelRegistryAutoConfiguration.class, SeahorseAgentKernelAgentAutoConfiguration.class,
+        SeahorseAgentS3StorageAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelChatAutoConfiguration {
 
@@ -146,7 +148,9 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                                              ObjectProvider<QueryRewritePort> queryRewritePort,
                                                              ObjectProvider<IntentResolutionPort> intentResolutionPort,
                                                              ObjectProvider<IntentGuidancePort> intentGuidancePort,
-                                                             ObjectProvider<RetrievalContextPort> retrievalContextPort) {
+                                                             ObjectProvider<RetrievalContextPort> retrievalContextPort,
+                                                             ObjectProvider<MemoryConflictLogRepositoryPort>
+                                                                     memoryConflictLogRepositoryPort) {
         return new ChatPreparationPorts(
                 memoryPort.getIfAvailable(ConversationMemoryPort::noop),
                 memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
@@ -161,7 +165,8 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                 retrievalContextPort.getIfAvailable(() -> (subIntents, topK) ->
                         RetrievalContext.builder()
                                 .intentChunks(Map.of())
-                                .build()));
+                                .build()),
+                memoryConflictLogRepositoryPort.getIfAvailable(MemoryConflictLogRepositoryPort::empty));
     }
 
     @Bean

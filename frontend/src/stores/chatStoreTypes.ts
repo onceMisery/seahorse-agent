@@ -54,5 +54,6 @@ export interface ChatState {
   cancelGeneration: () => void;
   appendStreamContent: (delta: string) => void;
   appendThinkingContent: (delta: string) => void;
+  markMemoryConflictPromptResolved: (messageId: string, conflictId: string, action: string) => void;
   submitFeedback: (messageId: string, feedback: FeedbackValue, options?: SubmitFeedbackOptions) => Promise<void>;
 }

@@ -1,5 +1,6 @@
 import { api } from "@/services/api";
 import type { PageResult } from "@/services/metadataGovernanceService";
+import { storage } from "@/utils/storage";
 
 // ── 类型定义 ──
 
@@ -36,6 +37,14 @@ export interface MemoryConflict {
   resolvedBy?: string;
   resolvedAt?: string;
   createTime?: string;
+}
+
+export interface InteractiveMemoryConflictResolveRequest {
+  conflictId: string;
+  action: string;
+  mergedContent?: string;
+  updatedContent?: string;
+  source?: string;
 }
 
 export interface MemoryMaintenanceRun {
@@ -114,6 +123,15 @@ export function resolveMemoryConflict(conflictId: string, resolution: string, me
   return api.post<Record<string, unknown>, Record<string, unknown>>(
     `/memories/conflicts/${encodeURIComponent(conflictId)}/resolve`,
     { action: resolution, mergedContent }
+  );
+}
+
+export function resolveMemoryConflictInteractive(request: InteractiveMemoryConflictResolveRequest) {
+  const userId = storage.getUser()?.userId;
+  return api.post<{ resolved?: boolean }, InteractiveMemoryConflictResolveRequest>(
+    "/memories/conflicts/interactive-resolve",
+    request,
+    userId ? { headers: { "X-User-Id": String(userId) } } : undefined
   );
 }
 

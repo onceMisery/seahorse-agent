@@ -24,15 +24,19 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.RewriteResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamChatContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.InteractiveMemoryConflictPrompt;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 import static com.miracle.ai.seahorse.agent.kernel.domain.retrieval.KernelRagDefaults.DEFAULT_TOP_K;
@@ -45,6 +49,10 @@ import static com.miracle.ai.seahorse.agent.kernel.domain.retrieval.KernelRagDef
 final class KernelChatPreparationSupport {
 
     private static final Logger LOG = LoggerFactory.getLogger(KernelChatPreparationSupport.class);
+    private static final String MEMORY_CONFLICT_PROMPT_EVENT = "memory.conflict.prompt";
+    private static final String PENDING_STATUS = "PENDING";
+    private static final int CONFLICT_SCAN_LIMIT = 20;
+    private static final int MAX_INTERACTIVE_CONFLICTS = 3;
 
     private final ChatPreparationPorts preparationPorts;
 
@@ -98,6 +106,33 @@ final class KernelChatPreparationSupport {
             context.setMemoryContext(memoryContext);
         } catch (Exception ex) {
             LOG.warn("记忆激活失败，降级为无记忆模式: userId={}", context.getUserId(), ex);
+        }
+    }
+
+    void emitInteractiveMemoryConflicts(StreamChatContext context) {
+        StreamCallback callback = context.getCallback();
+        if (callback == null || isBlank(context.getUserId())) {
+            return;
+        }
+        try {
+            var repository = preparationPorts.memoryConflictLogRepositoryPort();
+            List<MemoryConflictRecord> records = repository.listByUser(
+                    context.getUserId(), PENDING_STATUS, CONFLICT_SCAN_LIMIT);
+            List<InteractiveMemoryConflictPrompt> prompts = records.stream()
+                    .filter(Objects::nonNull)
+                    .filter(this::isInteractiveCandidate)
+                    .sorted(Comparator
+                            .comparingInt(this::severityRank)
+                            .thenComparing(MemoryConflictRecord::createTime, Comparator.reverseOrder()))
+                    .limit(MAX_INTERACTIVE_CONFLICTS)
+                    .map(this::toPrompt)
+                    .toList();
+            context.setInteractiveMemoryConflictPrompts(prompts);
+            for (InteractiveMemoryConflictPrompt prompt : prompts) {
+                callback.onEvent(MEMORY_CONFLICT_PROMPT_EVENT, prompt.toEventPayload());
+            }
+        } catch (Exception ex) {
+            LOG.warn("交互式记忆冲突提示加载失败，按普通聊天降级: userId={}", context.getUserId(), ex);
         }
     }
 
@@ -185,6 +220,48 @@ final class KernelChatPreparationSupport {
             return optimizationResult.optimizedQuestion();
         }
         return context.getOriginalQuestion();
+    }
+
+    private boolean isInteractiveCandidate(MemoryConflictRecord record) {
+        if (record == null) {
+            return false;
+        }
+        String status = normalize(record.resolutionStatus());
+        String type = normalize(record.conflictType());
+        int severity = severityRank(record);
+        return PENDING_STATUS.equals(status)
+                && !"DUPLICATE_NEAR".equals(type)
+                && severity < 2;
+    }
+
+    private int severityRank(MemoryConflictRecord record) {
+        String severity = normalize(record == null ? null : record.severity());
+        return switch (severity) {
+            case "HIGH" -> 0;
+            case "MEDIUM" -> 1;
+            default -> 2;
+        };
+    }
+
+    private InteractiveMemoryConflictPrompt toPrompt(MemoryConflictRecord record) {
+        return new InteractiveMemoryConflictPrompt(
+                record.id(),
+                record.memoryId1(),
+                record.memoryId2(),
+                "",
+                "",
+                record.conflictType(),
+                record.severity(),
+                "我发现两条记忆可能不一致，请确认应保留哪一条。",
+                InteractiveMemoryConflictPrompt.DEFAULT_OPTIONS);
+    }
+
+    private String normalize(String value) {
+        return Objects.requireNonNullElse(value, "").trim().toUpperCase(Locale.ROOT);
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private StreamCallback requireCallback(StreamChatContext context) {

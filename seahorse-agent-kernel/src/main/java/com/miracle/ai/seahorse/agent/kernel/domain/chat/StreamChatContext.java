@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.domain.chat;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.InteractiveMemoryConflictPrompt;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
@@ -54,6 +55,8 @@ public class StreamChatContext {
     private List<SubQuestionIntent> subIntents;
 
     private MemoryContext memoryContext;
+
+    private List<InteractiveMemoryConflictPrompt> interactiveMemoryConflictPrompts;
 
     private ContextPack contextPack;
 

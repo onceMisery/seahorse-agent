@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryRewritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RetrievalContextPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationServicePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 
@@ -40,7 +41,8 @@ public record ChatPreparationPorts(ConversationMemoryPort memoryPort,
                                    QueryRewritePort queryRewritePort,
                                    IntentResolutionPort intentResolutionPort,
                                    IntentGuidancePort intentGuidancePort,
-                                   RetrievalContextPort retrievalContextPort) {
+                                   RetrievalContextPort retrievalContextPort,
+                                   MemoryConflictLogRepositoryPort memoryConflictLogRepositoryPort) {
 
     public ChatPreparationPorts(ConversationMemoryPort memoryPort,
                                 QueryRewritePort queryRewritePort,
@@ -50,7 +52,8 @@ public record ChatPreparationPorts(ConversationMemoryPort memoryPort,
         this(memoryPort, MemoryEnginePort.noop(), command -> MemoryIngestionResult.ignored("noop"),
                 MemoryAggregationServicePort.noop(), MemoryAggregationPolicy.defaults(),
                 QueryOptimizerPort.passthrough(),
-                queryRewritePort, intentResolutionPort, intentGuidancePort, retrievalContextPort);
+                queryRewritePort, intentResolutionPort, intentGuidancePort, retrievalContextPort,
+                MemoryConflictLogRepositoryPort.empty());
     }
 
     public ChatPreparationPorts(ConversationMemoryPort memoryPort,
@@ -64,7 +67,8 @@ public record ChatPreparationPorts(ConversationMemoryPort memoryPort,
             memoryEnginePort.writeMemory(command == null ? null : command.writeRequest());
             return MemoryIngestionResult.ignored("delegated_to_memory_engine");
         }, MemoryAggregationServicePort.noop(), MemoryAggregationPolicy.defaults(),
-                queryOptimizerPort, queryRewritePort, intentResolutionPort, intentGuidancePort, retrievalContextPort);
+                queryOptimizerPort, queryRewritePort, intentResolutionPort, intentGuidancePort, retrievalContextPort,
+                MemoryConflictLogRepositoryPort.empty());
     }
 
     public ChatPreparationPorts(ConversationMemoryPort memoryPort,
@@ -77,7 +81,24 @@ public record ChatPreparationPorts(ConversationMemoryPort memoryPort,
                                 RetrievalContextPort retrievalContextPort) {
         this(memoryPort, memoryEnginePort, memoryIngestionWorkflowPort,
                 MemoryAggregationServicePort.noop(), MemoryAggregationPolicy.defaults(),
-                queryOptimizerPort, queryRewritePort, intentResolutionPort, intentGuidancePort, retrievalContextPort);
+                queryOptimizerPort, queryRewritePort, intentResolutionPort, intentGuidancePort, retrievalContextPort,
+                MemoryConflictLogRepositoryPort.empty());
+    }
+
+    public ChatPreparationPorts(ConversationMemoryPort memoryPort,
+                                MemoryEnginePort memoryEnginePort,
+                                MemoryIngestionWorkflowPort memoryIngestionWorkflowPort,
+                                MemoryAggregationServicePort memoryAggregationServicePort,
+                                MemoryAggregationPolicy memoryAggregationPolicy,
+                                QueryOptimizerPort queryOptimizerPort,
+                                QueryRewritePort queryRewritePort,
+                                IntentResolutionPort intentResolutionPort,
+                                IntentGuidancePort intentGuidancePort,
+                                RetrievalContextPort retrievalContextPort) {
+        this(memoryPort, memoryEnginePort, memoryIngestionWorkflowPort,
+                memoryAggregationServicePort, memoryAggregationPolicy,
+                queryOptimizerPort, queryRewritePort, intentResolutionPort, intentGuidancePort, retrievalContextPort,
+                MemoryConflictLogRepositoryPort.empty());
     }
 
     public ChatPreparationPorts {
@@ -93,5 +114,7 @@ public record ChatPreparationPorts(ConversationMemoryPort memoryPort,
         Objects.requireNonNull(intentResolutionPort, "intentResolutionPort must not be null");
         Objects.requireNonNull(intentGuidancePort, "intentGuidancePort must not be null");
         Objects.requireNonNull(retrievalContextPort, "retrievalContextPort must not be null");
+        memoryConflictLogRepositoryPort = Objects.requireNonNullElseGet(memoryConflictLogRepositoryPort,
+                MemoryConflictLogRepositoryPort::empty);
     }
 }

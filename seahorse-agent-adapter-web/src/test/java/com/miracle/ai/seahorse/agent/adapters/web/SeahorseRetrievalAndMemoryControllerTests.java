@@ -385,6 +385,35 @@ class SeahorseRetrievalAndMemoryControllerTests {
         verify(port).disableProfileFact("user-1", "default", "preferences.response_style", "admin-1");
     }
 
+    @Test
+    void shouldResolveMemoryConflictFromChatInteraction() throws Exception {
+        String userId = "2001523723396308993";
+        MemoryManagementInboundPort port = mock(MemoryManagementInboundPort.class);
+        when(port.resolveConflict("mem-conflict-1", "keep_a", "interactive:" + userId))
+                .thenReturn(true);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMemoryController(
+                        provider(MemoryManagementInboundPort.class, port),
+                        provider(MemoryGovernanceInboundPort.class, mock(MemoryGovernanceInboundPort.class))))
+                .build();
+
+        mvc.perform(post("/memories/conflicts/interactive-resolve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-User-Id", userId)
+                        .content("""
+                                {
+                                  "conflictId": "mem-conflict-1",
+                                  "action": "keep_a",
+                                  "source": "chat-ui"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.resolved").value(true));
+
+        verify(port).resolveConflict("mem-conflict-1", "keep_a", "interactive:" + userId);
+    }
+
     // --- RagTrace ---
 
     @Test

@@ -113,6 +113,8 @@ public class KernelChatPipeline {
                 () -> preparationSupport.loadMemory(safeContext));
         traceRecorder.recordNode(traceRunScope, stage("activate-memory", "activateMemory"),
                 () -> preparationSupport.activateMemory(safeContext));
+        traceRecorder.recordNode(traceRunScope, stage("memory-conflicts", "emitInteractiveMemoryConflicts"),
+                () -> preparationSupport.emitInteractiveMemoryConflicts(safeContext));
         traceRecorder.recordNode(traceRunScope, stage("optimize-query", "optimizeQuery"),
                 () -> preparationSupport.optimizeQuery(safeContext));
         traceRecorder.recordNode(traceRunScope, stage("query-rewrite", "rewriteQuery"),

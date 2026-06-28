@@ -308,6 +308,27 @@ export interface AgentMemory {
   action?: string;
 }
 
+export interface MemoryConflictPromptOption {
+  value: string;
+  label: string;
+}
+
+export type MemoryConflictPromptStatus = "pending" | "resolved" | "failed";
+
+export interface MemoryConflictPrompt {
+  conflictId: string;
+  memoryId1?: string;
+  memoryId2?: string;
+  contentA?: string;
+  contentB?: string;
+  conflictType?: string;
+  severity?: string;
+  question?: string;
+  options: MemoryConflictPromptOption[];
+  status?: MemoryConflictPromptStatus;
+  selectedAction?: string;
+}
+
 export interface AgentSkillRuntimeView {
   id: string;
   name: string;
@@ -362,6 +383,7 @@ export interface Message {
   toolCalls?: AgentToolCallView[];
   quota?: AgentQuota[];
   memories?: AgentMemory[];
+  memoryConflictPrompts?: MemoryConflictPrompt[];
   skills?: AgentSkillRuntimeView[];
   costSummary?: AgentRunCostSummary;
 }

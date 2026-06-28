@@ -17,5 +17,10 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
-public record MemoryConflictResolveRequest(String action) {
+public record MemoryConflictResolveRequest(
+        String conflictId,
+        String action,
+        String mergedContent,
+        String updatedContent,
+        String source) {
 }

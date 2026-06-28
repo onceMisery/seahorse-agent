@@ -101,6 +101,26 @@ class LocalChatStreamCallbackFactoryTests {
     }
 
     @Test
+    void shouldFlushEarlyCustomEventsBeforeFirstContent() {
+        LocalChatStreamCallbackFactory factory = new LocalChatStreamCallbackFactory(
+                new LocalStreamTaskPort(),
+                ConversationMemoryPort.noop(),
+                AgentRunEventBufferPort.noop());
+        RecordingSseEmitter emitter = new RecordingSseEmitter();
+        StreamCallback callback = factory.create(emitter, "conversation-1", "task-1", "user-1");
+
+        callback.onEvent("memory.conflict.prompt", Map.of("conflictId", "conflict-1"));
+        assertThat(emitter.events).noneSatisfy(event -> assertThat(event).contains("memory.conflict.prompt"));
+
+        callback.onContent("hello");
+
+        int promptIndex = indexOfEventContaining(emitter.events, "memory.conflict.prompt");
+        int messageIndex = indexOfEventContaining(emitter.events, "type=response");
+        assertThat(promptIndex).isPositive();
+        assertThat(messageIndex).isGreaterThan(promptIndex);
+    }
+
+    @Test
     void shouldFlushExternallyBufferedArtifactEventsBeforeCompletion() {
         RecordingEventBuffer eventBuffer = new RecordingEventBuffer();
         LocalChatStreamCallbackFactory factory = new LocalChatStreamCallbackFactory(
@@ -170,6 +190,15 @@ class LocalChatStreamCallbackFactoryTests {
                         .contains("stream_event")
                         .contains("eventSeq=3")
                         .contains("TOOL_CALL_FINISHED"));
+    }
+
+    private static int indexOfEventContaining(List<String> events, String fragment) {
+        for (int i = 0; i < events.size(); i++) {
+            if (events.get(i).contains(fragment)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private static class RecordingEventBuffer implements AgentRunEventBufferPort {

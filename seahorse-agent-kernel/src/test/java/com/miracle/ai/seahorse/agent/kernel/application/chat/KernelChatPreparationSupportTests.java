@@ -17,11 +17,17 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryOptimizerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryRewritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationServicePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -60,6 +66,71 @@ class KernelChatPreparationSupportTests {
     }
 
     @Test
+    void shouldEmitInteractiveMemoryConflictPromptForPendingHighSeverityConflict() {
+        RecordingMemoryPort memoryPort = new RecordingMemoryPort();
+        RecordingConflictLogRepository conflicts = new RecordingConflictLogRepository(List.of(
+                new MemoryConflictRecord(
+                        "mem-conflict-1",
+                        "user-1",
+                        "memory-a",
+                        "memory-b",
+                        "CONTRADICTION",
+                        "HIGH",
+                        "PENDING",
+                        "",
+                        "",
+                        Instant.EPOCH,
+                        Instant.parse("2026-06-27T00:00:00Z"))));
+        KernelChatPreparationSupport support = new KernelChatPreparationSupport(new ChatPreparationPorts(
+                memoryPort,
+                MemoryEnginePort.noop(),
+                command -> MemoryIngestionResult.ignored("noop"),
+                MemoryAggregationServicePort.noop(),
+                com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy.defaults(),
+                QueryOptimizerPort.passthrough(),
+                QueryRewritePort.passthrough(),
+                IntentResolutionPort.empty(),
+                IntentGuidancePort.none(),
+                (subIntents, topK) -> RetrievalContext.builder().intentChunks(Map.of()).build(),
+                conflicts));
+        RecordingCallback callback = new RecordingCallback();
+        StreamChatContext context = StreamChatContext.builder()
+                .question("hello")
+                .conversationId("conversation-1")
+                .userId("user-1")
+                .callback(callback)
+                .build();
+
+        support.emitInteractiveMemoryConflicts(context);
+
+        assertEquals("user-1", conflicts.lastUserId);
+        assertEquals("PENDING", conflicts.lastStatus);
+        assertEquals(1, callback.events.size());
+        RecordedEvent event = callback.events.get(0);
+        assertEquals("memory.conflict.prompt", event.name());
+        Map<?, ?> payload = (Map<?, ?>) event.payload();
+        assertEquals("mem-conflict-1", payload.get("conflictId"));
+        assertEquals("memory-a", payload.get("memoryId1"));
+        assertEquals("memory-b", payload.get("memoryId2"));
+        assertEquals("HIGH", payload.get("severity"));
+    }
+
+    @Test
+    void shouldForwardInteractiveMemoryConflictPromptThroughAggregationCapture() {
+        assertConflictPromptForwardedThroughCapture(
+                com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy
+                        .defaults()
+                        .withEnabled(true));
+    }
+
+    @Test
+    void shouldForwardInteractiveMemoryConflictPromptThroughDirectCapture() {
+        assertConflictPromptForwardedThroughCapture(
+                com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy
+                        .defaults());
+    }
+
+    @Test
     void shouldLoadAgentBranchPathWithoutAppendingUserMessageWhenRegeneratingAssistant() throws Exception {
         RecordingMemoryPort memoryPort = new RecordingMemoryPort();
         KernelChatInboundService service = new KernelChatInboundService(
@@ -79,6 +150,48 @@ class KernelChatPreparationSupportTests {
         assertFalse(memoryPort.loadAndAppendCalled);
         assertEquals(123L, memoryPort.branchLeafMessageId);
         assertEquals(List.of("hello"), history.stream().map(ChatMessage::getContent).toList());
+    }
+
+    private void assertConflictPromptForwardedThroughCapture(
+            com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy policy) {
+        RecordingConflictLogRepository conflicts = new RecordingConflictLogRepository(List.of(
+                new MemoryConflictRecord(
+                        "mem-conflict-1",
+                        "user-1",
+                        "memory-a",
+                        "memory-b",
+                        "CONTRADICTION",
+                        "HIGH",
+                        "PENDING",
+                        "",
+                        "",
+                        Instant.EPOCH,
+                        Instant.parse("2026-06-27T00:00:00Z"))));
+        KernelChatPreparationSupport support = new KernelChatPreparationSupport(new ChatPreparationPorts(
+                ConversationMemoryPort.noop(),
+                MemoryEnginePort.noop(),
+                command -> MemoryIngestionResult.ignored("noop"),
+                MemoryAggregationServicePort.noop(),
+                policy,
+                QueryOptimizerPort.passthrough(),
+                QueryRewritePort.passthrough(),
+                IntentResolutionPort.empty(),
+                IntentGuidancePort.none(),
+                (subIntents, topK) -> RetrievalContext.builder().intentChunks(Map.of()).build(),
+                conflicts));
+        RecordingCallback callback = new RecordingCallback();
+        StreamChatContext context = StreamChatContext.builder()
+                .question("hello")
+                .conversationId("conversation-1")
+                .userId("user-1")
+                .callback(callback)
+                .build();
+
+        support.installMemoryCapture(context);
+        support.emitInteractiveMemoryConflicts(context);
+
+        assertEquals(1, callback.events.size());
+        assertEquals("memory.conflict.prompt", callback.events.get(0).name());
     }
 
     @SuppressWarnings("unchecked")
@@ -144,6 +257,58 @@ class KernelChatPreparationSupportTests {
             loadBranchPathCalled = true;
             this.branchLeafMessageId = branchLeafMessageId;
             return List.of(ChatMessage.user("hello"));
+        }
+    }
+
+    private static final class RecordingCallback implements StreamCallback {
+
+        private final List<RecordedEvent> events = new ArrayList<>();
+
+        @Override
+        public void onContent(String content) {
+        }
+
+        @Override
+        public void onEvent(String eventName, Object payload) {
+            events.add(new RecordedEvent(eventName, payload));
+        }
+
+        @Override
+        public void onComplete() {
+        }
+
+        @Override
+        public void onError(Throwable error) {
+        }
+    }
+
+    private record RecordedEvent(String name, Object payload) {
+    }
+
+    private static final class RecordingConflictLogRepository implements MemoryConflictLogRepositoryPort {
+
+        private final List<MemoryConflictRecord> records;
+        private String lastUserId;
+        private String lastStatus;
+
+        private RecordingConflictLogRepository(List<MemoryConflictRecord> records) {
+            this.records = records;
+        }
+
+        @Override
+        public List<MemoryConflictRecord> listByUser(String userId, String status, int limit) {
+            lastUserId = userId;
+            lastStatus = status;
+            return records.stream().limit(limit).toList();
+        }
+
+        @Override
+        public void save(MemoryConflictRecord record) {
+        }
+
+        @Override
+        public boolean resolve(String conflictId, String action, String resolvedBy) {
+            return false;
         }
     }
 }

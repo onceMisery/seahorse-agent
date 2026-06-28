@@ -5,6 +5,7 @@ import { Brain, Check, ChevronDown, ChevronLeft, ChevronRight, Pencil, RotateCcw
 import { AgentLiveStatus } from "@/components/chat/AgentLiveStatus";
 import { AgentTracePanel } from "@/components/chat/AgentTracePanel";
 import { FeedbackButtons } from "@/components/chat/FeedbackButtons";
+import { MemoryConflictInteractiveCard } from "@/components/chat/MemoryConflictInteractiveCard";
 import { MessageContent } from "@/components/chat/MessageContent";
 import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
 import { cn } from "@/lib/utils";
@@ -53,6 +54,7 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
   const showEmptyResult = !hasContent && message.status === "done";
   const editUserMessageBranch = useChatStore((state) => state.editUserMessageBranch);
   const regenerateAssistantMessageBranch = useChatStore((state) => state.regenerateAssistantMessageBranch);
+  const markMemoryConflictPromptResolved = useChatStore((state) => state.markMemoryConflictPromptResolved);
   const [editingUserMessage, setEditingUserMessage] = React.useState(false);
   const [editedUserContent, setEditedUserContent] = React.useState(message.content);
 
@@ -242,6 +244,15 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
             ) : null}
             {hasContent ? <MessageContent blocks={message.blocks ?? []} rawText={message.content} sources={message.sources} /> : null}
             {!isUser ? <AgentTracePanel message={message} /> : null}
+            {message.memoryConflictPrompts?.map((prompt) => (
+              <MemoryConflictInteractiveCard
+                key={prompt.conflictId}
+                prompt={prompt}
+                onResolved={(conflictId, action) =>
+                  markMemoryConflictPromptResolved(message.id, conflictId, action)
+                }
+              />
+            ))}
             <AnimatePresence>
               {!isUser && hasRunData(message) && message.status !== "streaming" ? (
                 <motion.button

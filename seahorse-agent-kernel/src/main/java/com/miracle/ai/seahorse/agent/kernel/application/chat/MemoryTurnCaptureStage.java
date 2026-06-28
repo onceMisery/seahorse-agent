@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatTokenUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamChatContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationServicePort;
@@ -84,6 +85,21 @@ final class MemoryTurnCaptureStage {
         @Override
         public void onThinking(String content) {
             delegate.onThinking(content);
+        }
+
+        @Override
+        public void onRunStarted(String runId) {
+            delegate.onRunStarted(runId);
+        }
+
+        @Override
+        public void onEvent(String eventName, Object payload) {
+            delegate.onEvent(eventName, payload);
+        }
+
+        @Override
+        public void onUsage(ChatTokenUsage usage) {
+            delegate.onUsage(usage);
         }
 
         @Override

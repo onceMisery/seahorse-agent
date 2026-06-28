@@ -317,6 +317,50 @@ describe("chatStore snapshot hydration", () => {
     expect(streamRequests[0].headers?.Authorization).toBe("Bearer stream-token");
   });
 
+  it("attaches memory conflict prompts from custom stream events to the assistant message", async () => {
+    vi.mocked(createStreamResponse).mockImplementationOnce(({ url, headers }, handlers) => {
+      streamStarts.push(url);
+      streamRequests.push({ url, headers });
+      return {
+        cancel: vi.fn(),
+        start: vi.fn().mockImplementation(async () => {
+          handlers.onEvent?.("memory.conflict.prompt", {
+            conflictId: "mem-conflict-1",
+            memoryId1: "memory-a",
+            memoryId2: "memory-b",
+            conflictType: "CONTRADICTION",
+            severity: "HIGH",
+            question: "请选择正确的记忆",
+            options: [
+              { value: "keep_a", label: "保留记忆 A" },
+              { value: "keep_b", label: "保留记忆 B" }
+            ]
+          });
+          handlers.onDone?.();
+        })
+      };
+    });
+    useChatStore.setState({
+      currentSessionId: "conversation-1"
+    });
+
+    await useChatStore.getState().sendMessage("Hello");
+
+    const assistant = useChatStore.getState().messages.find((message) => message.role === "assistant");
+    expect(assistant?.memoryConflictPrompts).toEqual([
+      expect.objectContaining({
+        conflictId: "mem-conflict-1",
+        memoryId1: "memory-a",
+        memoryId2: "memory-b",
+        status: "pending",
+        options: [
+          { value: "keep_a", label: "保留记忆 A" },
+          { value: "keep_b", label: "保留记忆 B" }
+        ]
+      })
+    ]);
+  });
+
   it("treats aborted chat streams as cancellation without console errors", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(createStreamResponse).mockImplementationOnce(({ url, headers }) => {

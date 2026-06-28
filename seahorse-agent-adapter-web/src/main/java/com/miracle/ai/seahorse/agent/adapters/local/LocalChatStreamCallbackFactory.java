@@ -36,6 +36,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
@@ -129,10 +130,12 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
         private final ObjectProvider<TaskInboundPort> taskPortProvider;
         private final StringBuilder answer = new StringBuilder();
         private final StringBuilder thinking = new StringBuilder();
+        private final List<PendingCustomEvent> pendingCustomEvents = new ArrayList<>();
         private final AtomicLong seqCounter = new AtomicLong(0);
         private long sentEventSeq;
         private String currentRunId;
         private long runStartedAtMs;
+        private boolean responseStarted;
     
         private LocalChatStreamCallback(SseEmitter emitter,
                                         String conversationId,
@@ -161,6 +164,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
                 return;
             }
             answer.append(content);
+            markResponseStarted();
             sendChunked(TYPE_RESPONSE, content);
         }
 
@@ -170,6 +174,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
                 return;
             }
             thinking.append(content);
+            markResponseStarted();
             sendChunked(TYPE_THINK, content);
         }
 
@@ -196,6 +201,8 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             StreamEventType eventType = resolveEventType(eventName);
             if (eventType != null && currentRunId != null) {
                 emitEnveloped(eventType, payload);
+            } else if (eventType == null && !responseStarted) {
+                pendingCustomEvents.add(new PendingCustomEvent(eventName, payload));
             } else {
                 sender.sendEvent(eventName, payload);
             }
@@ -206,6 +213,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             if (streamTaskPort.isCancelled(taskId)) {
                 return;
             }
+            markResponseStarted();
             flushBufferedEvents();
             sendRunCompletedEvent();
             appendAssistantMessage();
@@ -221,6 +229,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             if (streamTaskPort.isCancelled(taskId)) {
                 return;
             }
+            markResponseStarted();
             streamTaskPort.unregister(taskId);
             sender.fail(error);
             completeFacadeTask();
@@ -248,6 +257,24 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
         private void initialize() {
             sender.sendEvent(StreamEventType.META.value(), new StreamMetaPayload(conversationId, taskId));
             streamTaskPort.register(taskId, sender, () -> new StreamCompletionPayload(null, null));
+        }
+
+        private void markResponseStarted() {
+            if (responseStarted) {
+                return;
+            }
+            responseStarted = true;
+            flushPendingCustomEvents();
+        }
+
+        private void flushPendingCustomEvents() {
+            if (pendingCustomEvents.isEmpty()) {
+                return;
+            }
+            for (PendingCustomEvent event : pendingCustomEvents) {
+                sender.sendEvent(event.eventName(), event.payload());
+            }
+            pendingCustomEvents.clear();
         }
 
         private void emitEnveloped(StreamEventType eventType, Object payload) {
@@ -380,6 +407,9 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
 
         private boolean isBlank(String content) {
             return content == null || content.isBlank();
+        }
+
+        private record PendingCustomEvent(String eventName, Object payload) {
         }
     }
 }
