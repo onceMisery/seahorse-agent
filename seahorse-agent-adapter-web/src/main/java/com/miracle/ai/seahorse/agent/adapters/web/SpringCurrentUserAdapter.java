@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRecord;
@@ -49,11 +50,36 @@ public class SpringCurrentUserAdapter implements CurrentUserPort {
         if (userId == null) {
             return Optional.empty();
         }
-        return userRepositoryPort.findById(Long.parseLong(userId)).map(this::toCurrentUser);
+        return parseUserId(userId)
+                .flatMap(userRepositoryPort::findById)
+                .map(this::toCurrentUser);
     }
 
     private String resolveUserId(HttpServletRequest request) {
+        String loginUserId = currentLoginId();
+        if (loginUserId != null) {
+            return loginUserId;
+        }
         return trimToNull(request.getHeader(HEADER_USER_ID));
+    }
+
+    private String currentLoginId() {
+        try {
+            if (!StpUtil.isLogin()) {
+                return null;
+            }
+            return trimToNull(StpUtil.getLoginIdAsString());
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
+    private Optional<Long> parseUserId(String userId) {
+        try {
+            return Optional.of(Long.parseLong(userId));
+        } catch (NumberFormatException ex) {
+            return Optional.empty();
+        }
     }
 
     private CurrentUser toCurrentUser(UserRecord record) {

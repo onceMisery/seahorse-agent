@@ -17,10 +17,13 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import cn.dev33.satoken.stp.StpUtil;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -39,10 +42,33 @@ class SpringCurrentUserAdapterTests {
     }
 
     @Test
-    void currentUserShouldUseHeaderWhenQueryUserIdIsAlsoPresent() {
+    void currentUserShouldUseLoginStateBeforeHeader() {
         UserRepositoryPort repository = mock(UserRepositoryPort.class);
         when(repository.findById(1L)).thenReturn(Optional.of(user(1L)));
         when(repository.findById(2L)).thenReturn(Optional.of(user(2L)));
+        SpringCurrentUserAdapter adapter = new SpringCurrentUserAdapter(repository);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-User-Id", "1");
+        request.addParameter("userId", "2");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+
+        Optional<CurrentUser> currentUser;
+        try (MockedStatic<StpUtil> stp = mockStatic(StpUtil.class)) {
+            stp.when(StpUtil::isLogin).thenReturn(true);
+            stp.when(StpUtil::getLoginIdAsString).thenReturn("2");
+            currentUser = adapter.currentUser();
+        }
+
+        assertThat(currentUser).isPresent();
+        assertThat(currentUser.orElseThrow().userId()).isEqualTo(2L);
+        verify(repository).findById(2L);
+        verify(repository, never()).findById(1L);
+    }
+
+    @Test
+    void currentUserShouldUseHeaderWhenLoginStateIsMissing() {
+        UserRepositoryPort repository = mock(UserRepositoryPort.class);
+        when(repository.findById(1L)).thenReturn(Optional.of(user(1L)));
         SpringCurrentUserAdapter adapter = new SpringCurrentUserAdapter(repository);
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("X-User-Id", "1");
@@ -54,7 +80,6 @@ class SpringCurrentUserAdapterTests {
         assertThat(currentUser).isPresent();
         assertThat(currentUser.orElseThrow().userId()).isEqualTo(1L);
         verify(repository).findById(1L);
-        verify(repository, never()).findById(2L);
     }
 
     @Test
