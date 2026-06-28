@@ -202,13 +202,13 @@ async function loginBrowser(page, login) {
   }, login);
 }
 
-async function sendChatAndResolve(page, seeded, marker) {
+async function sendChatAndResolve(page, seeded) {
   await page.goto(`${baseUrl}/chat`, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
 
   const input = page.locator("textarea").last();
   await input.waitFor({ state: "visible", timeout: 20000 });
-  await input.fill(`Interactive memory conflict smoke ${marker}`);
+  await input.fill("Please continue this conversation.");
 
   const chatResponsePromise = page.waitForResponse(
     (response) => response.url().includes("/api/rag/v3/chat") && response.status() === 200,
@@ -234,6 +234,8 @@ async function sendChatAndResolve(page, seeded, marker) {
     .filter({ hasText: seeded.contentB })
     .first();
   await card.waitFor({ state: "visible", timeout: 10000 });
+
+  verifySeededMemoriesActive(seeded);
 
   await card.locator("button").nth(0).click();
   const resolveResponsePromise = page.waitForResponse(
@@ -301,6 +303,24 @@ order by id;
   return actual;
 }
 
+function verifySeededMemoriesActive(seeded) {
+  const rows = psql(`
+select id, deleted
+from t_short_term_memory
+where id in ('${sqlLiteral(seeded.memoryIdA)}', '${sqlLiteral(seeded.memoryIdB)}')
+order by id;
+`);
+  const expected = [
+    `${seeded.memoryIdA}|0`,
+    `${seeded.memoryIdB}|0`
+  ].sort().join("\n");
+  const actual = rows.sort().join("\n");
+  if (actual !== expected) {
+    throw new Error(`seeded memories became inactive before interactive resolve:\nactual:\n${actual}\nexpected:\n${expected}`);
+  }
+  return actual;
+}
+
 function verifyObservabilityInDb(conflictId, userId) {
   const operator = expectedInteractiveOperator(userId);
   const traceRows = psql(`
@@ -355,7 +375,7 @@ const page = await context.newPage();
 
 try {
   await loginBrowser(page, login);
-  await sendChatAndResolve(page, seeded, marker);
+  await sendChatAndResolve(page, seeded);
   const screenshot = path.join(artifactDir, `interactive-memory-conflict-${marker}.png`);
   await page.screenshot({ path: screenshot, fullPage: true });
   const resolvedRow = verifyResolvedInDb(seeded.conflictId, login.userId);
