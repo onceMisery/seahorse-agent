@@ -53,6 +53,11 @@
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-vector-pgvector</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-cache-redis</artifactId>
             <version>${project.version}</version>
         </dependency>

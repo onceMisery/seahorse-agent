@@ -19,12 +19,20 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.adapters.vector.milvus.MilvusVectorAdapter;
 import com.miracle.ai.seahorse.agent.adapters.vector.milvus.MilvusVectorProperties;
+import com.miracle.ai.seahorse.agent.adapters.vector.pgvector.PgVectorAdapter;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import io.milvus.v2.client.MilvusClientV2;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.core.env.SystemEnvironmentPropertySource;
 
+import javax.sql.DataSource;
 import java.lang.reflect.Field;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -59,6 +67,40 @@ class SeahorseAgentVectorAdapterAutoConfigurationTests {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(MilvusVectorAdapter.class);
                     assertThat(dimension(context.getBean(MilvusVectorAdapter.class))).isEqualTo(768);
+                });
+    }
+
+    @Test
+    void shouldExposePgVectorPortsFromCanonicalAdapterProperties() {
+        contextRunner.withBean(DataSource.class, () -> mock(DataSource.class))
+                .withBean(ObjectMapper.class, ObjectMapper::new)
+                .withPropertyValues(
+                        "seahorse.agent.adapters.vector.type=noop",
+                        "seahorse-agent.adapters.vector.type=pgvector",
+                        "seahorse-agent.adapters.ai.embedding-model=nomic-embed-text")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(PgVectorAdapter.class);
+                    assertThat(context).hasSingleBean(VectorSearchPort.class);
+                    assertThat(context).hasSingleBean(VectorIndexPort.class);
+                    assertThat(context).hasSingleBean(VectorCollectionAdminPort.class);
+                });
+    }
+
+    @Test
+    void shouldExposePgVectorPortsFromDockerEnvironmentVariables() {
+        contextRunner.withInitializer(context -> context.getEnvironment().getPropertySources().addFirst(
+                        new SystemEnvironmentPropertySource("docker-vector-env", Map.of(
+                                "SEAHORSE_AGENT_ADAPTERS_VECTOR_TYPE", "pgvector",
+                                "SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL", "nomic-embed-text"))))
+                .withBean(DataSource.class, () -> mock(DataSource.class))
+                .withBean(ObjectMapper.class, ObjectMapper::new)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(PgVectorAdapter.class);
+                    assertThat(context).hasSingleBean(VectorSearchPort.class);
+                    assertThat(context).hasSingleBean(VectorIndexPort.class);
+                    assertThat(context).hasSingleBean(VectorCollectionAdminPort.class);
                 });
     }
 

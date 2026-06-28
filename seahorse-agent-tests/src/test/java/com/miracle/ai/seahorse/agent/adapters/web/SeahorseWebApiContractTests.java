@@ -738,7 +738,9 @@ class SeahorseWebApiContractTests {
 
         mvc.perform(get("/rag/settings"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.rag.defaultConfig.dimension").value(1024));
+                .andExpect(jsonPath("$.data.rag.defaultConfig.dimension").value(1024))
+                .andExpect(jsonPath("$.data.ai.embedding.defaultModel").value("acme-embed-v2"))
+                .andExpect(jsonPath("$.data.ai.embedding.candidates[0].id").value("acme-embed-v2"));
     }
 
     @Test

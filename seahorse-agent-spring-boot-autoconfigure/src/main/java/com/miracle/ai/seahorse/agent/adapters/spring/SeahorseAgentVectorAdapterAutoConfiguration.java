@@ -148,7 +148,6 @@ public class SeahorseAgentVectorAdapterAutoConfiguration {
     static class PgVectorAutoConfiguration {
 
         @Bean
-        @ConditionalOnBean(DataSource.class)
         @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.vector", name = "type",
                 havingValue = "pgvector")
         @ConditionalOnMissingBean(PgVectorAdapter.class)

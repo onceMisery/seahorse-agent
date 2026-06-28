@@ -82,7 +82,7 @@ services:
       SPRING_DATA_REDIS_HOST: seahorse-redis
       SPRING_DATA_REDIS_PORT: "6379"
       # Adapters
-      SEAHORSE_AGENT_ADAPTERS_VECTOR_TYPE: noop
+      SEAHORSE_AGENT_ADAPTERS_VECTOR_TYPE: ${SEAHORSE_AGENT_ADAPTERS_VECTOR_TYPE:-pgvector}
       # Optional override. Leave blank to derive dimension from the embedding model.
       SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION: ${SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION:-}
       SEAHORSE_AGENT_ADAPTERS_CACHE_TYPE: local

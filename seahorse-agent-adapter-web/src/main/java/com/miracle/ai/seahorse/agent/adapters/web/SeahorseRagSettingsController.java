@@ -118,7 +118,35 @@ public class SeahorseRagSettingsController {
             stream.setMessageChunkSize(20);
             settings.setStream(stream);
         }
+        applyNativeModelFallback(settings.getChat(), "seahorse.agent.adapters.ai.chat-model");
+        applyNativeModelFallback(settings.getEmbedding(), "seahorse.agent.adapters.ai.embedding-model");
+        applyNativeModelFallback(settings.getRerank(), "seahorse.agent.adapters.ai.rerank-model");
         return settings;
+    }
+
+    private void applyNativeModelFallback(ModelGroup group, String propertyKey) {
+        if (group == null) {
+            return;
+        }
+        String model = bindString(propertyKey).trim();
+        if (model.isBlank()) {
+            return;
+        }
+        if (group.getDefaultModel() == null || group.getDefaultModel().isBlank()) {
+            group.setDefaultModel(model);
+        }
+        boolean exists = group.getCandidates().stream().anyMatch(candidate ->
+                model.equals(candidate.getId()) || model.equals(candidate.getModel()));
+        if (exists) {
+            return;
+        }
+        ModelCandidate candidate = new ModelCandidate();
+        candidate.setId(model);
+        candidate.setModel(model);
+        candidate.setEnabled(true);
+        java.util.List<ModelCandidate> candidates = new java.util.ArrayList<>(group.getCandidates());
+        candidates.add(candidate);
+        group.setCandidates(candidates);
     }
 
     private long dataSizeBytes(String key, String defaultValue) {
