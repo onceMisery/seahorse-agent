@@ -41,7 +41,7 @@ public class SeahorseMemoryMaintenanceController {
     @PostMapping("/memories/maintenance/run")
     public ApiResponse<Object> runMaintenance(
             @RequestParam(defaultValue = MemoryMaintenanceRunCommand.DEFAULT_REASON) String reason,
-            @RequestParam(defaultValue = "false") boolean compaction,
+            @RequestParam(defaultValue = "true") boolean compaction,
             @RequestParam(defaultValue = "false") boolean alias,
             @RequestParam(defaultValue = "true") boolean gc) {
         return ApiResponses.requireServiceOrError(maintenancePortProvider,

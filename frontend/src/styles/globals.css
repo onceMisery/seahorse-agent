@@ -2790,6 +2790,17 @@ textarea {
   white-space: pre-wrap;
 }
 
+.user-message .prose {
+  color: var(--theme-text-primary);
+  font-size: 15px;
+  line-height: 1.6;
+  white-space: normal;
+}
+
+.user-message .prose p {
+  color: var(--theme-text-primary);
+}
+
 .agent-trace-list {
   position: relative;
 }

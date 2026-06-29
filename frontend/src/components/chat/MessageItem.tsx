@@ -128,7 +128,11 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
                 </div>
               </div>
             ) : (
-              <p className="whitespace-pre-wrap break-words">{message.content}</p>
+              <MessageContent
+                blocks={message.blocks ?? []}
+                rawText={message.content}
+                sources={message.sources}
+              />
             )}
           </div>
         </div>

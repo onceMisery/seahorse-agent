@@ -96,6 +96,18 @@ public interface KnowledgeDocumentRepositoryPort {
     void markSuccess(Long docId, int chunkCount, String operator);
 
     /**
+     * 将文档置为成功（含耗时统计）。
+     *
+     * @param docId              文档 ID
+     * @param chunkCount         分片数量
+     * @param operator           操作人
+     * @param totalDurationMillis 总耗时（毫秒），小于 0 表示未知
+     */
+    default void markSuccess(Long docId, int chunkCount, String operator, long totalDurationMillis) {
+        markSuccess(docId, chunkCount, operator);
+    }
+
+    /**
      * 将文档置为失败。
      *
      * @param docId        文档 ID

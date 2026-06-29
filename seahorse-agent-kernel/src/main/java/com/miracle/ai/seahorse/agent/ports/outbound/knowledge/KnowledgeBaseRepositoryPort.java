@@ -34,6 +34,13 @@ public interface KnowledgeBaseRepositoryPort {
 
     boolean hasDocuments(Long kbId);
 
+    /**
+     * 查询知识库下所有文档 ID。
+     */
+    default java.util.List<Long> listDocumentIds(Long kbId) {
+        return java.util.List.of();
+    }
+
     boolean hasVectorizedDocuments(Long kbId);
 
     boolean update(Long kbId, KnowledgeBaseUpdateValues values);

@@ -499,7 +499,7 @@ public class MemoryProperties {
         private final Compaction compaction = new Compaction();
         private final Gc gc = new Gc();
 
-        private boolean compactionEnabled = false;
+        private boolean compactionEnabled = true;
         private boolean aliasEnabled = false;
         private boolean gcEnabled = true;
 

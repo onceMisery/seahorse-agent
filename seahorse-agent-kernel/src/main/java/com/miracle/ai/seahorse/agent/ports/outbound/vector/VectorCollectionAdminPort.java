@@ -38,4 +38,13 @@ public interface VectorCollectionAdminPort {
      * @param collectionName 集合名称
      */
     void ensureCollection(String collectionName);
+
+    /**
+     * 删除集合及其所有数据。默认空实现。
+     *
+     * @param collectionName 集合名称
+     */
+    default void deleteCollection(String collectionName) {
+        // no-op by default
+    }
 }

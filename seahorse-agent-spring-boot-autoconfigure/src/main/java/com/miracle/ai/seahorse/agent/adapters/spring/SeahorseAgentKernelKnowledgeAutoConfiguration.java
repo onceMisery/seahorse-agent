@@ -87,9 +87,11 @@ public class SeahorseAgentKernelKnowledgeAutoConfiguration {
     public KernelKnowledgeBaseService seahorseKnowledgeBaseInboundPort(
             KnowledgeBaseRepositoryPort knowledgeBaseRepositoryPort,
             VectorCollectionAdminPort vectorCollectionAdminPort,
-            ObjectStoragePort objectStoragePort) {
+            ObjectStoragePort objectStoragePort,
+            ObjectProvider<KnowledgeDocumentInboundPort> documentPort) {
         return new KernelKnowledgeBaseService(
-                knowledgeBaseRepositoryPort, vectorCollectionAdminPort, objectStoragePort);
+                knowledgeBaseRepositoryPort, vectorCollectionAdminPort, objectStoragePort,
+                documentPort.getIfAvailable());
     }
 
     @Bean

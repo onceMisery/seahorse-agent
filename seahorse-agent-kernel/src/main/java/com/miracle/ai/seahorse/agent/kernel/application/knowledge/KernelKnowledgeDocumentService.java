@@ -156,13 +156,15 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
     @Override
     public void executeChunk(Long docId, PipelineDefinition pipeline, String operator) {
         KnowledgeDocumentRecord document = requireDocument(docId);
+        long startTimeMs = System.currentTimeMillis();
         try (InputStream inputStream = objectStoragePort.openStream(document.file().fileUrl())) {
             IngestionContext result = executePipeline(document, pipeline, inputStream.readAllBytes());
             if (result.getError() != null) {
                 throw new IllegalStateException(result.getError());
             }
             int chunkCount = result.getChunks() == null ? 0 : result.getChunks().size();
-            documentRepositoryPort.markSuccess(docId, chunkCount, operator);
+            long totalDurationMs = System.currentTimeMillis() - startTimeMs;
+            documentRepositoryPort.markSuccess(docId, chunkCount, operator, totalDurationMs);
         } catch (Exception ex) {
             documentRepositoryPort.markFailed(docId, operator, ex.getMessage());
             throw new IllegalStateException("文档入库失败：" + docId, ex);
@@ -229,10 +231,23 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
         if (!documentRepositoryPort.delete(current.getId(), operator)) {
             throw new IllegalArgumentException("文档不存在：" + docId);
         }
-        vectorPorts.vectorIndexPort().deleteDocumentVectors(current.getCollectionName(), String.valueOf(current.getId()));
-        vectorPorts.keywordIndexPort().deleteDocumentChunks(String.valueOf(current.getKbId()), String.valueOf(current.getId()));
+        // Best-effort cleanup: each external call is independent and should not block others
+        try {
+            vectorPorts.vectorIndexPort().deleteDocumentVectors(current.getCollectionName(), String.valueOf(current.getId()));
+        } catch (Exception ignored) {
+            // Vector cleanup failure should not block document deletion
+        }
+        try {
+            vectorPorts.keywordIndexPort().deleteDocumentChunks(String.valueOf(current.getKbId()), String.valueOf(current.getId()));
+        } catch (Exception ignored) {
+            // Keyword index cleanup failure should not block document deletion
+        }
         if (hasText(current.getFileUrl())) {
-            objectStoragePort.deleteByUrl(current.getFileUrl());
+            try {
+                objectStoragePort.deleteByUrl(current.getFileUrl());
+            } catch (Exception ignored) {
+                // Storage cleanup failure should not block document deletion
+            }
         }
     }
 

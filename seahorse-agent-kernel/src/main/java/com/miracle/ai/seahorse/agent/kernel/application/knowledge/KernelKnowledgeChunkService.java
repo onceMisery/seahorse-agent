@@ -127,7 +127,14 @@ public class KernelKnowledgeChunkService implements KnowledgeChunkInboundPort {
                 .filter(Objects::nonNull)
                 .toList();
         if (safeChunkIds.isEmpty()) {
-            throw new IllegalArgumentException("请指定需要操作的 Chunk");
+            // When no chunk IDs specified, apply to all chunks of the document
+            var allChunks = chunkRepositoryPort.page(docId, 1, MAX_BATCH_SIZE, null);
+            safeChunkIds = allChunks.records().stream()
+                    .map(KnowledgeChunkRecord::getId)
+                    .toList();
+            if (safeChunkIds.isEmpty()) {
+                return; // no chunks to operate on
+            }
         }
         if (safeChunkIds.size() > MAX_BATCH_SIZE) {
             throw new IllegalArgumentException("单次批量操作 Chunk 数量不能超过 " + MAX_BATCH_SIZE);

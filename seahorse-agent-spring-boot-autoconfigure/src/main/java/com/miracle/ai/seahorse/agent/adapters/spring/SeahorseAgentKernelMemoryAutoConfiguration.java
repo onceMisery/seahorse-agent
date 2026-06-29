@@ -169,6 +169,7 @@ import java.util.concurrent.Executor;
 public class SeahorseAgentKernelMemoryAutoConfiguration {
 
     private static final String MEMORY_REFINER_ENABLED_PROPERTY = "seahorse.agent.memory.refiner.enabled";
+    private static final String LEGACY_MEMORY_REFINER_ENABLED_PROPERTY = "seahorse-agent.memory.refiner.enabled";
 
     @Bean
     @ConditionalOnMissingBean(UserMemoryPrivacySettingPort.class)
@@ -299,6 +300,9 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     private boolean memoryRefinerEnabled(Environment environment, boolean refinerAvailable) {
         if (environment.containsProperty(MEMORY_REFINER_ENABLED_PROPERTY)) {
             return environment.getProperty(MEMORY_REFINER_ENABLED_PROPERTY, Boolean.class, false);
+        }
+        if (environment.containsProperty(LEGACY_MEMORY_REFINER_ENABLED_PROPERTY)) {
+            return environment.getProperty(LEGACY_MEMORY_REFINER_ENABLED_PROPERTY, Boolean.class, false);
         }
         return refinerAvailable;
     }

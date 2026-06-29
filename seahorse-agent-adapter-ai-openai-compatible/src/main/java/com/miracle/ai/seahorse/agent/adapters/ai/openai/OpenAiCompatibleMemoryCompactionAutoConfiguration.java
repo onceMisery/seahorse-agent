@@ -25,15 +25,13 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 
 @AutoConfiguration
-@ConditionalOnProperty(
-        prefix = "seahorse-agent.memory.compaction",
-        name = "llm-summarizer-enabled",
-        havingValue = "true")
+@ConditionalOnExpression("${seahorse.agent.memory.compaction.llm-summarizer-enabled:false}"
+        + " || ${seahorse-agent.memory.compaction.llm-summarizer-enabled:false}")
 public class OpenAiCompatibleMemoryCompactionAutoConfiguration {
 
     @Bean

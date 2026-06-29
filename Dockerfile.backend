@@ -49,7 +49,19 @@ RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && ./mvnw dependency:go-offline -B -p
 COPY . .
 
 # Fix line endings for full source copy and build
-RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && ./mvnw package -B -pl seahorse-agent-bootstrap -am -DskipTests -Dmaven.test.skip=true -Dspotless.check.skip=true
+RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && \
+    MAVEN_VERSION=3.9.11 && \
+    MAVEN_DIST_DIR=$(find "${HOME}/.m2/wrapper/dists" -name "apache-maven-${MAVEN_VERSION}" -type d 2>/dev/null | head -1) && \
+    if [ -z "${MAVEN_DIST_DIR}" ] || [ ! -f "${MAVEN_DIST_DIR}/bin/mvn" ]; then \
+      echo "Pre-downloading Maven ${MAVEN_VERSION}..." && \
+      curl -fsSL --proxy "${HTTPS_PROXY}" -o /tmp/maven.tar.gz "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${MAVEN_VERSION}/apache-maven-${MAVEN_VERSION}-bin.tar.gz" && \
+      MAVEN_DIST_DIR="${HOME}/.m2/wrapper/dists/apache-maven-${MAVEN_VERSION}" && \
+      mkdir -p "${MAVEN_DIST_DIR}" && \
+      tar xzf /tmp/maven.tar.gz -C "${MAVEN_DIST_DIR}" --strip-components=1 && \
+      rm -f /tmp/maven.tar.gz && \
+      echo "Maven pre-downloaded to ${MAVEN_DIST_DIR}"; \
+    fi && \
+    ./mvnw package -B -pl seahorse-agent-bootstrap -am -DskipTests -Dmaven.test.skip=true -Dspotless.check.skip=true
 
 # Stage 2: Node runtime for stdio MCP servers
 FROM node:20-alpine AS node-runtime

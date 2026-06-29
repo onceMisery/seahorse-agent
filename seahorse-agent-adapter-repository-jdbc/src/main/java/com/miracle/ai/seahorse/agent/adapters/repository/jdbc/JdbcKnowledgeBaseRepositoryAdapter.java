@@ -157,6 +157,15 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
     }
 
     @Override
+    public List<Long> listDocumentIds(Long kbId) {
+        if (kbId == null) {
+            return List.of();
+        }
+        String sql = "SELECT id FROM t_knowledge_document WHERE kb_id = ? AND deleted = 0 AND tenant_id = ?";
+        return jdbcTemplate.queryForList(sql, Long.class, kbId, JdbcTenantSupport.resolveTenantId());
+    }
+
+    @Override
     public boolean hasVectorizedDocuments(Long kbId) {
         if (kbId == null) {
             return false;

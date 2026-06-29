@@ -27,12 +27,15 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 
 @AutoConfiguration
-@ConditionalOnProperty(prefix = "seahorse-agent.memory.refiner", name = "llm-enabled", havingValue = "true")
+@ConditionalOnExpression("${seahorse.agent.memory.refiner.enabled:false}"
+        + " || ${seahorse-agent.memory.refiner.enabled:false}"
+        + " || ${seahorse.agent.memory.refiner.llm-enabled:false}"
+        + " || ${seahorse-agent.memory.refiner.llm-enabled:false}")
 public class OpenAiCompatibleMemoryRefinerAutoConfiguration {
 
     @Bean

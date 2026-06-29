@@ -54,6 +54,17 @@ class OpenAiCompatibleMemoryRefinerAutoConfigurationTests {
     }
 
     @Test
+    void shouldRegisterLlmMemoryRefinerWhenMemoryRefinerIsEnabledWithCanonicalPrefix() {
+        contextRunner.withUserConfiguration(ChatModelConfiguration.class)
+                .withPropertyValues("seahorse.agent.memory.refiner.enabled=true")
+                .run(context -> {
+                    assertThat(context).hasSingleBean(MemoryRefinerPort.class);
+                    assertThat(context.getBean(MemoryRefinerPort.class))
+                            .isInstanceOf(LlmMemoryRefinerAdapter.class);
+                });
+    }
+
+    @Test
     void shouldNotRegisterLlmMemoryRefinerWithoutChatModel() {
         contextRunner.withPropertyValues("seahorse-agent.memory.refiner.llm-enabled=true")
                 .run(context -> assertThat(context).doesNotHaveBean(MemoryRefinerPort.class));

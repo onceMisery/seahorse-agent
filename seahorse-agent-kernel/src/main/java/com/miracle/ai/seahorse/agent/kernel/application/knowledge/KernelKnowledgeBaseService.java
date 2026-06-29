@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.knowledge;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.CreateKnowledgeBaseCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeBaseInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeBasePageCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeDocumentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.UpdateKnowledgeBaseCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.ChunkStrategy;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.CreateKnowledgeBaseValues;
@@ -33,6 +34,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdmin
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 /**
@@ -46,14 +48,23 @@ public class KernelKnowledgeBaseService implements KnowledgeBaseInboundPort {
     private final KnowledgeBaseRepositoryPort repositoryPort;
     private final VectorCollectionAdminPort vectorCollectionAdminPort;
     private final ObjectStoragePort objectStoragePort;
+    private final KnowledgeDocumentInboundPort documentPort;
 
     public KernelKnowledgeBaseService(KnowledgeBaseRepositoryPort repositoryPort,
                                       VectorCollectionAdminPort vectorCollectionAdminPort,
                                       ObjectStoragePort objectStoragePort) {
+        this(repositoryPort, vectorCollectionAdminPort, objectStoragePort, null);
+    }
+
+    public KernelKnowledgeBaseService(KnowledgeBaseRepositoryPort repositoryPort,
+                                      VectorCollectionAdminPort vectorCollectionAdminPort,
+                                      ObjectStoragePort objectStoragePort,
+                                      KnowledgeDocumentInboundPort documentPort) {
         this.repositoryPort = Objects.requireNonNull(repositoryPort, "repositoryPort must not be null");
         this.vectorCollectionAdminPort = Objects.requireNonNull(vectorCollectionAdminPort,
                 "vectorCollectionAdminPort must not be null");
         this.objectStoragePort = Objects.requireNonNull(objectStoragePort, "objectStoragePort must not be null");
+        this.documentPort = documentPort;
     }
 
     @Override
@@ -97,9 +108,27 @@ public class KernelKnowledgeBaseService implements KnowledgeBaseInboundPort {
         if (kbId == null) {
             throw new IllegalArgumentException("kbId must not be null");
         }
-        queryById(kbId);
+        KnowledgeBaseRecord kb = queryById(kbId);
         if (repositoryPort.hasDocuments(kbId)) {
-            throw new IllegalStateException("当前知识库下还有文档，请删除文档");
+            if (documentPort == null) {
+                throw new IllegalStateException("当前知识库下还有文档，请先删除文档");
+            }
+            // Cascade delete all documents
+            List<Long> docIds = repositoryPort.listDocumentIds(kbId);
+            String safeOperator = operator(operator);
+            for (Long docId : docIds) {
+                try {
+                    documentPort.delete(docId, safeOperator);
+                } catch (Exception ex) {
+                    // Log and continue - best effort cascade delete
+                }
+            }
+            // Clean up vector collection
+            try {
+                vectorCollectionAdminPort.deleteCollection(kb.getCollectionName());
+            } catch (Exception ignored) {
+                // Collection may not exist
+            }
         }
         if (!repositoryPort.delete(kbId, operator(operator))) {
             throw new IllegalArgumentException("知识库不存在：" + kbId);

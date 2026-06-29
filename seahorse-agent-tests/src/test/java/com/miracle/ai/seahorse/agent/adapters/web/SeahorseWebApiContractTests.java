@@ -527,6 +527,7 @@ class SeahorseWebApiContractTests {
                 ArgumentCaptor.forClass(MemoryMaintenanceRunCommand.class);
         verify(maintenancePort).runMaintenance(maintenanceCaptor.capture());
         assertThat(maintenanceCaptor.getValue().reason()).isEqualTo("manual-maintenance");
+        assertThat(maintenanceCaptor.getValue().compactionEnabled()).isTrue();
         assertThat(maintenanceCaptor.getValue().garbageCollectionEnabled()).isTrue();
         mvc.perform(get("/memories/maintenance-runs")
                         .param("status", "SUCCEEDED")

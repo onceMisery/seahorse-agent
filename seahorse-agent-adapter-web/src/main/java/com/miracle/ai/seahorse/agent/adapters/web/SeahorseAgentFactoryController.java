@@ -61,14 +61,14 @@ public class SeahorseAgentFactoryController {
                 : advancedFeatureGate;
     }
 
-    @GetMapping("/api/agent-templates")
+    @GetMapping({"/api/agent-templates", "/agent-templates"})
     public ApiResponse<Object> listTemplates(
             @RequestParam(required = false, defaultValue = "false") boolean includeDisabled) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_FACTORY_MANAGEMENT);
         return ApiResponses.requireService(agentFactoryPortProvider, port -> port.listTemplates(includeDisabled));
     }
 
-    @PostMapping("/api/agents/from-template")
+    @PostMapping({"/api/agents/from-template", "/agents/from-template"})
     public ApiResponse<Object> createFromTemplate(@RequestBody AgentFactoryCreateRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_FACTORY_MANAGEMENT);
         AgentFactoryCreateRequest safeRequest = request == null
@@ -88,7 +88,7 @@ public class SeahorseAgentFactoryController {
                         safeRequest.instructionsOverlay())));
     }
 
-    @PostMapping("/api/agents/{agentId}/validate")
+    @PostMapping({"/api/agents/{agentId}/validate", "/agents/{agentId}/validate"})
     public ApiResponse<Object> validatePublish(@PathVariable String agentId,
                                                @RequestBody AgentPublishValidationRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_FACTORY_MANAGEMENT);
@@ -106,14 +106,14 @@ public class SeahorseAgentFactoryController {
                         safeRequest.changeSummary())));
     }
 
-    @GetMapping("/api/agents/{agentId}/publish-checks/latest")
+    @GetMapping({"/api/agents/{agentId}/publish-checks/latest", "/agents/{agentId}/publish-checks/latest"})
     public ApiResponse<Object> latestPublishCheck(@PathVariable String agentId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_FACTORY_MANAGEMENT);
         return ApiResponses.requireService(agentFactoryPortProvider,
                 port -> port.latestPublishCheck(agentId).orElse(null));
     }
 
-    @PostMapping("/api/agents/{agentId}/versions/{versionId}/rollback")
+    @PostMapping({"/api/agents/{agentId}/versions/{versionId}/rollback", "/agents/{agentId}/versions/{versionId}/rollback"})
     public ApiResponse<Object> rollback(@PathVariable String agentId,
                                         @PathVariable String versionId,
                                         @RequestBody AgentVersionRollbackRequest request) {
@@ -131,7 +131,7 @@ public class SeahorseAgentFactoryController {
                         safeRequest.comment())));
     }
 
-    @GetMapping("/api/agent-catalog")
+    @GetMapping({"/api/agent-catalog", "/agent-catalog"})
     public ApiResponse<Object> catalog(@RequestParam(required = false) String tenantId,
                                        @RequestParam(required = false) String keyword,
                                        @RequestParam(required = false, defaultValue = "1") long current,

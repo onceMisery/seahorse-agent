@@ -1,5 +1,5 @@
 import * as React from "react";
-import { CheckCircle2, Eye, Gauge, Lightbulb, Loader2, Mic, Paperclip, Send, Sparkles, Square, UserRound, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, Eye, Gauge, Lightbulb, Loader2, Mic, Paperclip, Send, Sparkles, Square, UserRound, X } from "lucide-react";
 import { PromptEnhancerButton } from "@/components/chat/prompt/PromptEnhancerButton";
 import { PromptEnhancerDialog } from "@/components/chat/prompt/PromptEnhancerDialog";
 import { SkillTrigger, type SkillTriggerHandle } from "@/components/chat/SkillTrigger";
@@ -263,6 +263,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [listening, setListening] = React.useState(false);
   const [selectedSkills, setSelectedSkills] = React.useState<AgentSkill[]>([]);
+  const [toolbarExpanded, setToolbarExpanded] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const isComposingRef = React.useRef(false);
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
@@ -812,7 +813,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
               className="mt-2 flex items-center justify-between gap-3 pt-4"
               style={{ borderTop: "1px solid var(--theme-accent-alpha-10)" }}
             >
-              <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <div className="flex min-w-0 flex-nowrap items-center gap-2">
                 <Select
                   value={selectedTaskTemplateId ?? undefined}
                   onValueChange={(next) => setSelectedTaskTemplateId(next as TaskTemplateId)}
@@ -820,7 +821,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                 >
                   <SelectTrigger
                     aria-label="任务类型"
-                    className="h-9 w-[164px] rounded-xl border text-xs shadow-none focus:ring-1 focus:ring-offset-0"
+                    className="h-8 w-[130px] rounded-xl border text-xs shadow-none focus:ring-1 focus:ring-offset-0"
                     style={{
                       backgroundColor: "var(--theme-bg-elevated)",
                       borderColor: "var(--theme-accent-alpha-20)",
@@ -844,7 +845,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                 >
                   <SelectTrigger
                     aria-label="Agent"
-                    className="h-9 max-w-[180px] shrink rounded-xl border text-xs shadow-none focus:ring-1 focus:ring-offset-0"
+                    className="h-8 w-[140px] shrink rounded-xl border text-xs shadow-none focus:ring-1 focus:ring-offset-0"
                     style={{
                       backgroundColor: "var(--theme-bg-elevated)",
                       borderColor: "var(--theme-accent-alpha-20)",
@@ -872,7 +873,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                 >
                   <SelectTrigger
                     aria-label="Role card"
-                    className="h-9 max-w-[180px] shrink rounded-xl border text-xs shadow-none focus:ring-1 focus:ring-offset-0"
+                    className="h-8 w-[130px] shrink rounded-xl border text-xs shadow-none focus:ring-1 focus:ring-offset-0"
                     style={{
                       backgroundColor: "var(--theme-bg-elevated)",
                       borderColor: "var(--theme-accent-alpha-20)",
@@ -898,6 +899,23 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                     ))}
                   </SelectContent>
                 </Select>
+                <button
+                  type="button"
+                  onClick={() => setToolbarExpanded((v) => !v)}
+                  aria-label={toolbarExpanded ? "收起工具栏" : "展开工具栏"}
+                  aria-expanded={toolbarExpanded}
+                  className="flex h-8 w-8 items-center justify-center rounded-xl transition-colors"
+                  style={{
+                    backgroundColor: toolbarExpanded ? "var(--theme-accent-alpha-20)" : "var(--theme-bg-elevated)",
+                    border: "1px solid var(--theme-accent-alpha-10)",
+                    color: toolbarExpanded ? "var(--theme-accent)" : "var(--theme-text-secondary)"
+                  }}
+                >
+                  <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", toolbarExpanded && "rotate-180")} />
+                </button>
+              </div>
+              {toolbarExpanded && (
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
                 <Select
                   value={selectedRunProfileId ?? DEFAULT_RUN_PROFILE_VALUE}
                   onValueChange={(next) => setSelectedRunProfileId(next === DEFAULT_RUN_PROFILE_VALUE ? null : next)}
@@ -1068,6 +1086,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                   </button>
                 </div>
               </div>
+              )}
               <button
                 type="button"
                 onClick={handleSubmit}

@@ -54,6 +54,17 @@ class OpenAiCompatibleMemoryCompactionAutoConfigurationTests {
     }
 
     @Test
+    void shouldRegisterLlmCompactionSummarizerWhenCanonicalPrefixIsEnabled() {
+        contextRunner.withUserConfiguration(ChatModelConfiguration.class)
+                .withPropertyValues("seahorse.agent.memory.compaction.llm-summarizer-enabled=true")
+                .run(context -> {
+                    assertThat(context).hasSingleBean(MemoryCompactionSummarizerPort.class);
+                    assertThat(context.getBean(MemoryCompactionSummarizerPort.class))
+                            .isInstanceOf(LlmMemoryCompactionSummarizerAdapter.class);
+                });
+    }
+
+    @Test
     void shouldNotRegisterLlmCompactionSummarizerWithoutChatModel() {
         contextRunner.withPropertyValues("seahorse-agent.memory.compaction.llm-summarizer-enabled=true")
                 .run(context -> assertThat(context).doesNotHaveBean(MemoryCompactionSummarizerPort.class));

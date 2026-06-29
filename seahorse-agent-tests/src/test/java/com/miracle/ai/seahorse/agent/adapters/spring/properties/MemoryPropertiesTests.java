@@ -427,10 +427,10 @@ class MemoryPropertiesTests {
     }
 
     @Test
-    void maintenanceEnabledFlagsMatchHistoricalAtValueDefaults() {
+    void maintenanceEnabledFlagsMatchCurrentDefaults() {
         contextRunner.run(context -> {
             MemoryProperties.Maintenance maintenance = context.getBean(MemoryProperties.class).getMaintenance();
-            assertThat(maintenance.isCompactionEnabled()).isFalse();
+            assertThat(maintenance.isCompactionEnabled()).isTrue();
             assertThat(maintenance.isAliasEnabled()).isFalse();
             assertThat(maintenance.isGcEnabled()).isTrue();
         });
