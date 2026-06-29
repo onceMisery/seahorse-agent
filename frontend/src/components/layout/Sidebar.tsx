@@ -14,6 +14,7 @@ import {
   Plus,
   Search,
   Settings,
+  Store,
   Trash2
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -300,6 +301,22 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <span className="flex-1 min-w-0">
                     <span className="block text-xs font-semibold" style={{ color: "var(--theme-text-primary)" }}>记忆中心</span>
                     <span className="block text-[11px]" style={{ color: "var(--theme-text-muted)" }}>管理记忆</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left glass-hover transition-all hover:-translate-y-[1px]"
+                  onClick={() => {
+                    navigate("/marketplace");
+                    onClose();
+                  }}
+                >
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl text-white shadow-md" style={{ background: "var(--theme-gradient)", boxShadow: "0 4px 10px var(--theme-accent-alpha-30)" }}>
+                    <Store className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-xs font-semibold" style={{ color: "var(--theme-text-primary)" }}>应用市场</span>
+                    <span className="block text-[11px]" style={{ color: "var(--theme-text-muted)" }}>探索 Agent</span>
                   </span>
                 </button>
                 </div>
