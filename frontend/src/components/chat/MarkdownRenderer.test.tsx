@@ -27,4 +27,38 @@ describe("MarkdownRenderer", () => {
   it("keeps normalized content stable for empty text", () => {
     expect(normalizeAssistantMarkdown("")).toBe("");
   });
+
+  it("renders inline HTML mixed with markdown correctly", () => {
+    const { container } = render(
+      <MarkdownRenderer content={"这是 **Markdown加粗** 和 <em>HTML斜体</em> 的混合"} />
+    );
+
+    // Markdown bold should render
+    expect(container.querySelector("strong")).toBeInTheDocument();
+    // HTML em should render
+    expect(container.querySelector("em")).toBeInTheDocument();
+    expect(screen.getByText("HTML斜体")).toBeInTheDocument();
+  });
+
+  it("renders markdown inside block-level HTML elements", () => {
+    const { container } = render(
+      <MarkdownRenderer content={"<div>\n\n**bold inside div**\n\n*italic inside div*\n\n</div>"} />
+    );
+
+    // Check if markdown inside div is parsed
+    const strong = container.querySelector("div strong");
+    const em = container.querySelector("div em");
+    expect(strong).toBeInTheDocument();
+    expect(em).toBeInTheDocument();
+  });
+
+  it("preserves class attributes on HTML elements through sanitize", () => {
+    const { container } = render(
+      <MarkdownRenderer content={'<span class="custom-class">styled text</span>'} />
+    );
+
+    const span = container.querySelector(".custom-class");
+    expect(span).toBeInTheDocument();
+    expect(span?.textContent).toBe("styled text");
+  });
 });

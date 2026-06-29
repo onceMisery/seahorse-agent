@@ -1,7 +1,7 @@
 import * as React from "react";
 import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
-import rehypeSanitize from "rehype-sanitize";
+import rehypeSanitize, { defaultSchema, type Options as SanitizeOptions } from "rehype-sanitize";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -14,6 +14,46 @@ import { MermaidDiagram } from "@/components/chat/MermaidDiagram";
 import { cn } from "@/lib/utils";
 import type { AgentSource } from "@/types";
 
+/**
+ * Custom sanitize schema that preserves class/style attributes needed by
+ * KaTeX, code-block syntax highlighting, and Mermaid diagrams while
+ * still stripping dangerous elements like <script>.
+ */
+const sanitizeSchema: SanitizeOptions = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    // Allow class + style on every element (KaTeX, code-highlight, Mermaid)
+    "*": [
+      ...(defaultSchema.attributes?.["*"] ?? []),
+      "className",
+      "class",
+      "style"
+    ],
+    // Allow data-* attributes used by custom components
+    code: [...(defaultSchema.attributes?.code ?? []), "className", "data-language"],
+    // Allow span/div attributes needed by KaTeX
+    span: [...(defaultSchema.attributes?.span ?? []), "className", "style", "aria-hidden"],
+    div: [...(defaultSchema.attributes?.div ?? []), "className", "style"],
+    // Allow id on headings for anchor links
+    h1: [...(defaultSchema.attributes?.h1 ?? []), "id"],
+    h2: [...(defaultSchema.attributes?.h2 ?? []), "id"],
+    h3: [...(defaultSchema.attributes?.h3 ?? []), "id"],
+    h4: [...(defaultSchema.attributes?.h4 ?? []), "id"],
+    h5: [...(defaultSchema.attributes?.h5 ?? []), "id"],
+    h6: [...(defaultSchema.attributes?.h6 ?? []), "id"]
+  },
+  tagNames: [
+    ...(defaultSchema.tagNames ?? []),
+    // Allow MathML elements used by KaTeX
+    "math", "mrow", "mi", "mo", "mn", "msup", "msub", "mfrac",
+    "munder", "mover", "munderover", "msqrt", "mroot", "mtable",
+    "mtr", "mtd", "mtext", "mspace", "annotation", "semantics",
+    // Allow details/summary for collapsible sections
+    "details", "summary"
+  ]
+};
+
 interface MarkdownRendererProps {
   content: string;
   sources?: AgentSource[];
@@ -25,7 +65,7 @@ export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeRaw, rehypeSanitize, rehypeKatex]}
+      rehypePlugins={[[rehypeRaw], [rehypeSanitize, sanitizeSchema], [rehypeKatex]]}
       components={{
         h1({ children, ...props }) {
           return (
@@ -72,10 +112,10 @@ export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
           );
         },
         p({ children, ...props }) {
-          return <p {...props}>{renderWithCitations(children, sources)}</p>;
+          return <p className="my-2.5 text-sm leading-[1.8]" style={{ color: "var(--theme-text-primary)" }} {...props}>{renderWithCitations(children, sources)}</p>;
         },
         li({ children, ...props }) {
-          return <li {...props}>{renderWithCitations(children, sources)}</li>;
+          return <li className="text-sm leading-[1.8]" style={{ color: "var(--theme-text-primary)" }} {...props}>{renderWithCitations(children, sources)}</li>;
         },
         hr(props) {
           return <hr className="my-6" style={{ borderColor: "var(--theme-glass-border)" }} {...props} />;
@@ -223,14 +263,26 @@ export function normalizeAssistantMarkdown(content: string): string {
   }
 
   return content
+    // Normalize line endings
     .replace(/\r\n?/g, "\n")
+    // Protect $$...$$ math blocks: ensure blank lines around them for remark-math
     .replace(/\s*\$\$([\s\S]*?)\$\$\s*/g, (_match, expression: string) => {
       const trimmed = expression.trim();
       return trimmed ? `\n\n$$\n${trimmed}\n$$\n\n` : "\n\n";
     })
+    // Heading after CJK/sentence-ending punctuation: "前言。###标题" → "前言。\n\n###标题"
     .replace(/([。！？；：.!?;:）)\]}])\s*(#{1,6})(?!#)(?=[^\n])/g, "$1\n\n$2")
+    // Heading preceded by horizontal whitespace (not at line start): insert blank line
     .replace(/([^\S\n]+)(#{1,6})(?!#)(?=\S)/g, "\n\n$2")
+    // Heading without space after #: "###标题" → "### 标题" (line-start only)
     .replace(/^(#{1,6})(?!#)(?=\S)/gm, "$1 ")
+    // Protect inline code spans from being broken by other regexes
+    // (no-op here; we only normalize structural issues)
+    // Ensure blank line before list items that follow a paragraph
+    .replace(/([^\n])\n(\s*[-*+])\s/g, "$1\n\n$2 ")
+    .replace(/([^\n])\n(\s*\d+\.)\s/g, "$1\n\n$2 ")
+    
+    // Collapse excessive blank lines
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
