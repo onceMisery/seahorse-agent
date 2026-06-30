@@ -30,6 +30,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.A2AAgentConnectorPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentExternalInvocationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNode;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNodeFinish;
@@ -51,6 +52,7 @@ import io.agentscope.core.nacos.skill.NacosSkillRepository;
 import io.agentscope.core.skill.repository.AgentSkillRepository;
 import io.agentscope.core.studio.StudioMessageHook;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
@@ -136,6 +138,44 @@ class AgentScopeReActAutoConfigurationTests {
     }
 
     @Test
+    void coreOnlyExecutorDoesNotCreateOptionalIntegrationBeans() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        AgentScopeObservationAutoConfiguration.class,
+                        AgentScopeCoreAutoConfiguration.class,
+                        AgentScopeNacosAutoConfiguration.class,
+                        AgentScopeA2aAutoConfiguration.class,
+                        AgentScopeConfigCenterAutoConfiguration.class,
+                        AgentScopeStudioAutoConfiguration.class))
+                .withUserConfiguration(StreamingModelConfiguration.class)
+                .withPropertyValues(
+                        "seahorse.agentscope.executor.enabled=true",
+                        "seahorse.agentscope.a2a.enabled=false",
+                        "seahorse.agentscope.config-center.enabled=false",
+                        "seahorse.agentscope.studio.enabled=false")
+                .run(context -> {
+                    assertThat(context).hasSingleBean(AgentScopeReActExecutor.class);
+                    assertThat(context).doesNotHaveBean(NacosPropertiesFactory.class);
+                    assertThat(context).doesNotHaveBean(AgentScopeAgentCardFactory.class);
+                    assertThat(context).doesNotHaveBean(AgentScopeA2aServerRunner.class);
+                    assertThat(context).doesNotHaveBean(AgentScopeA2aServerController.class);
+                    assertThat(context).doesNotHaveBean(AgentScopePromptConfigCenter.class);
+                    assertThat(context).doesNotHaveBean(AgentScopeRunMetadataContributor.class);
+                    assertThat(context).doesNotHaveBean(AgentScopeStudioLifecycle.class);
+                    assertThat(context).doesNotHaveBean(StudioMessageHook.class);
+                });
+    }
+
+    @Test
+    void a2aAutoConfigurationRunsAfterKernelChatAutoConfiguration() {
+        AutoConfigureAfter configureAfter = AgentScopeA2aAutoConfiguration.class.getAnnotation(AutoConfigureAfter.class);
+
+        assertThat(configureAfter).isNotNull();
+        assertThat(configureAfter.name())
+                .contains("com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelChatAutoConfiguration");
+    }
+
+    @Test
     void agentscopeEngineCreatesReActExecutorFromClientBean() {
         contextRunner
                 .withUserConfiguration(ClientConfiguration.class)
@@ -212,6 +252,7 @@ class AgentScopeReActAutoConfigurationTests {
                 .run(context -> {
                     assertThat(context).hasSingleBean(AgentScopeA2aServerRunner.class);
                     assertThat(context).hasSingleBean(AgentScopeA2aServerController.class);
+                    assertThat(context).hasBean("seahorseAgentScopeA2aRouterFunction");
                     AgentScopeA2aServer server = context.getBean(AgentScopeA2aServer.class);
                     assertThat(server.getTransportWrapper(TransportProtocol.JSONRPC.asString())).isNotNull();
                 });
@@ -367,19 +408,11 @@ class AgentScopeReActAutoConfigurationTests {
     @Configuration(proxyBeanMethods = false)
     static class A2aServerConfiguration {
         @Bean
-        ReActExecutorPort reActExecutorPort() {
-            return new ReActExecutorPort() {
-                @Override
-                public AgentLoopResult execute(AgentLoopRequest request) {
-                    return new AgentLoopResult("ok", List.of(), false);
-                }
-
-                @Override
-                public StreamCancellationHandle streamExecute(AgentLoopRequest request, StreamCallback callback) {
-                    callback.onContent("ok");
-                    callback.onComplete();
-                    return () -> { };
-                }
+        AgentExternalInvocationInboundPort agentExternalInvocationInboundPort() {
+            return (command, callback) -> {
+                callback.onContent("ok");
+                callback.onComplete();
+                return () -> { };
             };
         }
     }

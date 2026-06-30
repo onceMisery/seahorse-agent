@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-06-30-agentscope-core-boundary-implementation",
+  "currentTodo": "Completion candidate after verification.",
+  "completedTodos": [
+    "Added Kernel-owned governed tool facade.",
+    "Registered governed facade in Spring Kernel agent autoconfiguration.",
+    "Refactored AgentScope tool bridge to depend on GovernedToolExecutionPort.",
+    "Split AgentScope autoconfiguration logically and retained compatibility aggregate.",
+    "Updated Boot autoconfiguration imports.",
+    "Added Kernel-owned external invocation inbound contract.",
+    "Refactored AgentScope A2A server runner to call the Kernel inbound port.",
+    "Extended StreamChatCommand for supplied history, preferred executor engine, and tenant ID.",
+    "Updated KernelChatInboundService propagation for history, tenant, run/snapshot, and executor preference.",
+    "Preserved A2A rollback behavior by not forcing preferredExecutorEngine=agentscope.",
+    "Added focused tests and ran broader verification."
+  ],
+  "activeSlice": "boundary implementation and release-gate verification",
+  "evidenceRefs": [
+    "docs/aegis/work/2026-06-30-agentscope-core-boundary-implementation/90-evidence.md",
+    "scripts/agentscope-release-gate.ps1 reported AGENTSCOPE_RELEASE_GATE=PASS"
+  ],
+  "blockedOn": null,
+  "nextStep": "User review, optional staging/commit, and future M4 physical Maven module split if dependency-level separation is required.",
+  "updatedAt": "2026-06-30"
+}

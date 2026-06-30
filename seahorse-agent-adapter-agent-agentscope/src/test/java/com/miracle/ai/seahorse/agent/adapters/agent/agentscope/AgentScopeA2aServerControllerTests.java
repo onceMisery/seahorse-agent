@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -45,6 +46,15 @@ import static org.mockito.Mockito.when;
 class AgentScopeA2aServerControllerTests {
 
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-06-20T12:00:00Z"), ZoneOffset.UTC);
+
+    @Test
+    void controllerKeepsExplicitComponentScanGuard() {
+        ConditionalOnProperty condition = AgentScopeA2aServerController.class.getAnnotation(ConditionalOnProperty.class);
+
+        assertThat(condition).isNotNull();
+        assertThat(condition.name()).containsExactly("seahorse.agentscope.a2a.controller-component-scan-enabled");
+        assertThat(condition.havingValue()).isEqualTo("true");
+    }
 
     @Test
     void rejectsPostWhenSharedSecretIsMissing() {

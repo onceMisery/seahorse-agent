@@ -32,6 +32,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatPreparationPort
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatResponsePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ConversationAttachmentContextAssembler;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.InteractiveMemoryConflictPromptPolicy;
+import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelAgentExternalInvocationInboundService;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.RuleBasedQueryOptimizerPort;
@@ -39,6 +40,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWea
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentExternalInvocationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.TaskTemplateQueryInboundPort;
@@ -253,8 +255,8 @@ public class SeahorseAgentKernelChatAutoConfiguration {
     @ConditionalOnBean({KernelChatPipeline.class, StreamTaskPort.class})
     @ConditionalOnMissingBean
     public ChatInboundPort seahorseChatInboundPort(KernelChatPipeline chatPipeline,
-                                                   StreamTaskPort streamTaskPort,
-                                                   ObjectProvider<ReActExecutorPort> agentLoop,
+                                                    StreamTaskPort streamTaskPort,
+                                                    ObjectProvider<ReActExecutorPort> agentLoop,
                                                    ObjectProvider<KernelRagTraceRecorder> traceRecorder,
                                                    ObjectProvider<ConversationMemoryPort> memoryPort,
                                                    ObjectProvider<MemoryEnginePort> memoryEnginePort,
@@ -292,6 +294,14 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                 Optional.ofNullable(runContextSnapshotRepository.getIfAvailable()),
                 Optional.ofNullable(runProfilePort.getIfAvailable()),
                 agentRunMetadataContributors.orderedStream().toList());
+    }
+
+    @Bean
+    @ConditionalOnBean(ChatInboundPort.class)
+    @ConditionalOnMissingBean
+    public AgentExternalInvocationInboundPort seahorseAgentExternalInvocationInboundPort(
+            ChatInboundPort chatInboundPort) {
+        return new KernelAgentExternalInvocationInboundService(chatInboundPort);
     }
 
     private Optional<ReActExecutorPort> resolveReActExecutor(

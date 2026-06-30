@@ -17,23 +17,22 @@
 
 package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolExecutionPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import io.agentscope.core.ReActAgent;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.context.annotation.Bean;
 
-/**
- * Compatibility type for existing AgentScope client wiring.
- */
-public class AgentScopeToolFactory extends AgentScopeToolBridge {
+@AutoConfiguration
+@ConditionalOnClass(ReActAgent.class)
+public class AgentScopeObservationAutoConfiguration {
 
-    public AgentScopeToolFactory(ToolRegistryPort toolRegistry, GovernedToolExecutionPort toolExecution) {
-        super(toolRegistry, toolExecution);
-    }
-
-    public AgentScopeToolFactory(
-            ToolRegistryPort toolRegistry,
-            GovernedToolExecutionPort toolExecution,
-            ObjectMapper objectMapper) {
-        super(toolRegistry, toolExecution, objectMapper);
+    @Bean
+    @ConditionalOnMissingBean
+    public AgentScopeObservationSupport seahorseAgentScopeObservationSupport(
+            ObjectProvider<ObservationPort> observationPortProvider) {
+        return new AgentScopeObservationSupport(observationPortProvider.getIfAvailable(ObservationPort::noop));
     }
 }

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-06-30-agentscope-core-boundary-implementation",
+  "requestedOutcome": "Implement docs/aegis/specs/2026-06-30-agentscope-core-boundary-design.md with focused tests on high-risk boundary points.",
+  "goal": "Make AgentScope a focused execution backend while Seahorse Kernel remains the owner of product governance.",
+  "successEvidence": [
+    "Core-only AgentScope startup registers the executor without optional integration beans.",
+    "AgentScope tool execution routes through GovernedToolExecutionPort.",
+    "AgentScope adapter has no direct tool policy, approval repository/query, or tool gateway dependency.",
+    "A2A inbound requests enter through AgentExternalInvocationInboundPort.",
+    "engine=kernel remains the default rollback path and engine=agentscope route smoke passes.",
+    "Targeted tests, broader regressions, boundary scans, and release gate pass."
+  ],
+  "stopCondition": "Stop after logical split, governed facade, A2A inbound boundary, compatibility aggregate, and verification evidence are complete; defer physical Maven module split to M4.",
+  "nonGoals": [
+    "Remove AgentScope support",
+    "Remove A2A, Nacos, Config Center, or Studio",
+    "Make AgentScope the default executor",
+    "Replace Seahorse governance, memory, RAG, model routing, approval, quota, audit, or billing",
+    "Perform physical Maven module split in this slice"
+  ],
+  "scope": "AgentScope adapter autoconfiguration, governed tool facade, A2A inbound boundary, Kernel chat command propagation, focused tests, and release-gate evidence",
+  "changeKinds": [
+    "architecture",
+    "contract",
+    "refactor",
+    "test"
+  ],
+  "riskHints": [
+    "Autoconfiguration bean ordering",
+    "Tool approval behavior drift",
+    "A2A bypassing Kernel run preparation",
+    "Deferred physical module split"
+  ],
+  "updatedAt": "2026-06-30"
+}

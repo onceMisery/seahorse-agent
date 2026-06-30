@@ -15,22 +15,14 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
+package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
-import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.context.annotation.Import;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 
-/**
- * Compatibility aggregate for the split AgentScope auto-configurations.
- */
-@AutoConfiguration
-@Import({
-        AgentScopeObservationAutoConfiguration.class,
-        AgentScopeCoreAutoConfiguration.class,
-        AgentScopeNacosAutoConfiguration.class,
-        AgentScopeA2aAutoConfiguration.class,
-        AgentScopeConfigCenterAutoConfiguration.class,
-        AgentScopeStudioAutoConfiguration.class
-})
-public class AgentScopeReActAutoConfiguration {
+public interface AgentExternalInvocationInboundPort {
+
+    StreamCancellationHandle streamInvoke(
+            AgentExternalInvocationCommand command,
+            StreamCallback callback);
 }

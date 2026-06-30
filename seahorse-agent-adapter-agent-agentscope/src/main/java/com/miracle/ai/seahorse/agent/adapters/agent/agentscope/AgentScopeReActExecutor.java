@@ -19,13 +19,14 @@ package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolApproval;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolExecutionPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopExitReason;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentStep;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
@@ -38,7 +39,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamApprovalRequiredEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import io.agentscope.core.event.AgentEndEvent;
 import io.agentscope.core.event.AgentEvent;
@@ -94,7 +94,7 @@ public class AgentScopeReActExecutor implements ReActExecutorPort {
 
     private final AgentScopeAgentClient client;
     private final Executor asyncExecutor;
-    private final ApprovalRequestQueryPort approvalQueryPort;
+    private final GovernedToolExecutionPort toolExecutionPort;
     private final AgentScopeObservationSupport observationSupport;
     private final KernelRagTraceRecorder traceRecorder;
 
@@ -103,33 +103,33 @@ public class AgentScopeReActExecutor implements ReActExecutorPort {
     }
 
     public AgentScopeReActExecutor(AgentScopeAgentClient client, Executor asyncExecutor) {
-        this(client, asyncExecutor, ApprovalRequestQueryPort.empty());
+        this(client, asyncExecutor, null);
     }
 
     public AgentScopeReActExecutor(
             AgentScopeAgentClient client,
             Executor asyncExecutor,
-            ApprovalRequestQueryPort approvalQueryPort) {
-        this(client, asyncExecutor, approvalQueryPort, AgentScopeObservationSupport.noop());
+            GovernedToolExecutionPort toolExecutionPort) {
+        this(client, asyncExecutor, toolExecutionPort, AgentScopeObservationSupport.noop());
     }
 
     public AgentScopeReActExecutor(
             AgentScopeAgentClient client,
             Executor asyncExecutor,
-            ApprovalRequestQueryPort approvalQueryPort,
+            GovernedToolExecutionPort toolExecutionPort,
             AgentScopeObservationSupport observationSupport) {
-        this(client, asyncExecutor, approvalQueryPort, observationSupport, KernelRagTraceRecorder.noop());
+        this(client, asyncExecutor, toolExecutionPort, observationSupport, KernelRagTraceRecorder.noop());
     }
 
     public AgentScopeReActExecutor(
             AgentScopeAgentClient client,
             Executor asyncExecutor,
-            ApprovalRequestQueryPort approvalQueryPort,
+            GovernedToolExecutionPort toolExecutionPort,
             AgentScopeObservationSupport observationSupport,
             KernelRagTraceRecorder traceRecorder) {
         this.client = Objects.requireNonNull(client, "client must not be null");
         this.asyncExecutor = Objects.requireNonNull(asyncExecutor, "asyncExecutor must not be null");
-        this.approvalQueryPort = Objects.requireNonNullElseGet(approvalQueryPort, ApprovalRequestQueryPort::empty);
+        this.toolExecutionPort = toolExecutionPort;
         this.observationSupport = Objects.requireNonNullElseGet(observationSupport, AgentScopeObservationSupport::noop);
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
     }
@@ -488,29 +488,32 @@ public class AgentScopeReActExecutor implements ReActExecutorPort {
         ToolUseBlock toolCall = confirmation.getToolCalls().isEmpty()
                 ? null
                 : confirmation.getToolCalls().get(0);
-        Optional<ApprovalRequest> approval = latestApproval(request);
-        String approvalId = approval.map(ApprovalRequest::approvalId)
+        Optional<GovernedToolApproval> approval = latestApproval(request);
+        String approvalId = approval.map(GovernedToolApproval::approvalId)
                 .orElseGet(() -> toolCall == null ? "" : Objects.requireNonNullElse(toolCall.getId(), ""));
         String toolInvocationId = toolCall == null ? "" : Objects.requireNonNullElse(toolCall.getId(), "");
         String toolId = toolCall == null ? "" : Objects.requireNonNullElse(toolCall.getName(), "");
+        Map<String, Object> arguments = approval.map(GovernedToolApproval::arguments)
+                .filter(items -> !items.isEmpty())
+                .orElseGet(() -> toolCall == null ? Map.of() : Map.copyOf(toolCall.getInput()));
         callback.onEvent(StreamEventType.TOOL_CALL_WAITING_USER.value(), new StreamApprovalRequiredEvent(
                 request.runId(),
                 AGENTSCOPE_STEP_ID,
                 approvalId,
                 toolInvocationId,
                 toolId,
-                approval.map(ApprovalRequest::riskLevel).orElse(ToolRiskLevel.MEDIUM),
-                approval.map(ApprovalRequest::summary).orElse(TOOL_CALL_APPROVAL_SUMMARY),
-                toolCall == null ? Map.of() : Map.copyOf(toolCall.getInput()),
-                approval.map(ApprovalRequest::requestedAt).orElseGet(Instant::now)));
+                approval.map(GovernedToolApproval::riskLevel).orElse(ToolRiskLevel.MEDIUM),
+                approval.map(GovernedToolApproval::summary).orElse(TOOL_CALL_APPROVAL_SUMMARY),
+                arguments,
+                approval.map(GovernedToolApproval::requestedAt).orElseGet(Instant::now)));
         callback.onContent(WAITING_APPROVAL_MESSAGE);
     }
 
-    private Optional<ApprovalRequest> latestApproval(AgentLoopRequest request) {
-        if (request == null || request.runId() == null || request.runId().isBlank()) {
+    private Optional<GovernedToolApproval> latestApproval(AgentLoopRequest request) {
+        if (toolExecutionPort == null || request == null || request.runId() == null || request.runId().isBlank()) {
             return Optional.empty();
         }
-        return approvalQueryPort.findLatestByRunIdAndStepId(request.runId(), AGENTSCOPE_STEP_ID);
+        return toolExecutionPort.findLatestApproval(request.runId(), AGENTSCOPE_STEP_ID);
     }
 
     private AgentScopeToolApprovalRequiredException approvalRequired(Throwable error) {

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-06-30-agentscope-core-boundary-implementation",
+  "baselineRefs": [
+    "docs/aegis/specs/2026-06-30-agentscope-core-boundary-design.md",
+    "docs/design/agentscope-integration-and-loop-refactor.md",
+    "docs/design/agentscope-production-integration-plan.md",
+    "docs/ops/agentscope-release-gates.md",
+    "seahorse-agent-adapter-agent-agentscope/src/main/java/com/miracle/ai/seahorse/agent/adapters/agent/agentscope",
+    "seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/agent",
+    "seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/chat",
+    "seahorse-agent-spring-boot-autoconfigure/src/main/java/com/miracle/ai/seahorse/agent/adapters/spring"
+  ],
+  "updatedAt": "2026-06-30"
+}

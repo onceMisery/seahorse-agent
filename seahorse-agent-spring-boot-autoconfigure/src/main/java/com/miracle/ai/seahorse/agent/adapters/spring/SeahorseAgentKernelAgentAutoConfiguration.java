@@ -23,9 +23,11 @@ import com.miracle.ai.seahorse.agent.adapters.web.ProductMode;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopDependencies;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentStreamEmitter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.CatalogBackedToolPolicyPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolExecutionPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegistry;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.LocalGovernedToolExecutionPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.LocalToolGatewayPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.MarkdownNormalizer;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
@@ -359,6 +361,28 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 approvalRequestQueryPort.getIfAvailable(ApprovalRequestQueryPort::empty),
                 toolOutputRedactionPort.getIfAvailable(ToolOutputRedactionPort::noop),
                 toolArtifactPublicationPort.getIfAvailable(ToolArtifactPublicationPort::noop),
+                clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean({ToolRegistryPort.class, ToolGatewayPort.class})
+    @ConditionalOnMissingBean
+    public GovernedToolExecutionPort seahorseGovernedToolExecutionPort(
+            ToolRegistryPort toolRegistry,
+            ToolGatewayPort toolGateway,
+            ObjectProvider<ToolPolicyPort> toolPolicyPort,
+            ObjectProvider<ToolApprovalRequestRepositoryPort> toolApprovalRequestRepositoryPort,
+            ObjectProvider<ApprovalRequestQueryPort> approvalRequestQueryPort,
+            ObjectProvider<ObjectMapper> objectMapper,
+            ObjectProvider<Clock> clockProvider) {
+        return new LocalGovernedToolExecutionPort(
+                toolRegistry,
+                toolGateway,
+                toolPolicyPort.getIfAvailable(ToolPolicyPort::defaults),
+                toolApprovalRequestRepositoryPort.getIfAvailable(ToolApprovalRequestRepositoryPort::noop),
+                approvalRequestQueryPort.getIfAvailable(ApprovalRequestQueryPort::empty),
+                objectMapper.getIfAvailable(ObjectMapper::new),
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 

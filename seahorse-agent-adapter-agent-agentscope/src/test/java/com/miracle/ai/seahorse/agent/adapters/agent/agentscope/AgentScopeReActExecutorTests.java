@@ -17,12 +17,13 @@
 
 package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolApproval;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolExecutionPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolPermission;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopExitReason;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
@@ -32,9 +33,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQuery;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
@@ -173,7 +172,7 @@ class AgentScopeReActExecutorTests {
         AgentScopeReActExecutor executor = new AgentScopeReActExecutor(
                 client,
                 Runnable::run,
-                ApprovalRequestQueryPort.empty(),
+                null,
                 new AgentScopeObservationSupport(observationPort));
         RecordingCallback callback = new RecordingCallback();
         AgentLoopRequest request = AgentLoopRequest.builder()
@@ -203,7 +202,7 @@ class AgentScopeReActExecutorTests {
         AgentScopeReActExecutor executor = new AgentScopeReActExecutor(
                 client,
                 Runnable::run,
-                ApprovalRequestQueryPort.empty(),
+                null,
                 AgentScopeObservationSupport.noop(),
                 new KernelRagTraceRecorder(traceRepository));
         RecordingCallback callback = new RecordingCallback();
@@ -244,7 +243,7 @@ class AgentScopeReActExecutorTests {
         AgentScopeReActExecutor executor = new AgentScopeReActExecutor(
                 client,
                 Runnable::run,
-                ApprovalRequestQueryPort.empty(),
+                null,
                 AgentScopeObservationSupport.noop(),
                 new KernelRagTraceRecorder(traceRepository));
         RecordingCallback callback = new RecordingCallback();
@@ -289,7 +288,7 @@ class AgentScopeReActExecutorTests {
         AgentScopeReActExecutor executor = new AgentScopeReActExecutor(
                 client,
                 Runnable::run,
-                ApprovalRequestQueryPort.empty(),
+                null,
                 AgentScopeObservationSupport.noop(),
                 new KernelRagTraceRecorder(traceRepository));
         RecordingCallback callback = new RecordingCallback();
@@ -400,7 +399,7 @@ class AgentScopeReActExecutorTests {
         AgentScopeReActExecutor executor = new AgentScopeReActExecutor(
                 client,
                 Runnable::run,
-                approvalQuery("approval-1", "run-1", "agentscope-step", "call-1", "weather"));
+                approvalLookup("approval-1", "run-1", "agentscope-step", "call-1", "weather"));
         AgentLoopRequest request = AgentLoopRequest.builder()
                 .question("plan")
                 .samplingOptions(ChatSamplingOptions.builder().build())
@@ -447,7 +446,7 @@ class AgentScopeReActExecutorTests {
         AgentScopeReActExecutor executor = new AgentScopeReActExecutor(
                 client,
                 Runnable::run,
-                approvalQuery("approval-1", "run-1", "agentscope-step", "call-1", "weather"));
+                approvalLookup("approval-1", "run-1", "agentscope-step", "call-1", "weather"));
         RecordingCallback callback = new RecordingCallback();
         AgentLoopRequest request = AgentLoopRequest.builder()
                 .question("plan")
@@ -609,48 +608,37 @@ class AgentScopeReActExecutorTests {
                 .orElseThrow();
     }
 
-    private static ApprovalRequestQueryPort approvalQuery(
+    private static GovernedToolExecutionPort approvalLookup(
             String approvalId,
             String runId,
             String stepId,
             String toolInvocationId,
             String toolId) {
-        ApprovalRequest approval = new ApprovalRequest(
+        GovernedToolApproval approval = new GovernedToolApproval(
                 approvalId,
-                runId,
-                stepId,
                 toolInvocationId,
-                "tenant-a",
-                "user-1",
-                "agent-1",
-                null,
                 toolId,
-                ApprovalType.TOOL_EXECUTION,
                 ToolRiskLevel.HIGH,
                 "Tool requires approval",
-                "{}",
-                ApprovalRequestStatus.PENDING,
-                Instant.parse("2026-06-20T00:00:00Z"),
-                null,
-                null,
-                null,
-                null);
-        return new ApprovalRequestQueryPort() {
+                Map.of(),
+                Instant.parse("2026-06-20T00:00:00Z"));
+        return new GovernedToolExecutionPort() {
             @Override
-            public Optional<ApprovalRequest> findById(String approvalId) {
-                return Optional.of(approval);
+            public GovernedToolPermission preflight(ToolInvocationRequest request) {
+                return GovernedToolPermission.approvalRequired(approvalId, "TOOL_APPROVAL_REQUIRED",
+                        "approval required");
             }
 
             @Override
-            public Optional<ApprovalRequest> findLatestByRunIdAndStepId(String requestedRunId, String requestedStepId) {
+            public ToolInvocationResult invoke(ToolInvocationRequest request) {
+                return ToolInvocationResult.failed("unsupported");
+            }
+
+            @Override
+            public Optional<GovernedToolApproval> findLatestApproval(String requestedRunId, String requestedStepId) {
                 return runId.equals(requestedRunId) && stepId.equals(requestedStepId)
                         ? Optional.of(approval)
                         : Optional.empty();
-            }
-
-            @Override
-            public ApprovalRequestPage page(ApprovalRequestQuery query) {
-                return new ApprovalRequestPage(List.of(approval), 1L, 1L, 1L, 1L);
             }
         };
     }

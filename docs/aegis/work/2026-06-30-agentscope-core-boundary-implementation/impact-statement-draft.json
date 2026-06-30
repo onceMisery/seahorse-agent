@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-06-30-agentscope-core-boundary-implementation",
+  "compatibilityBoundary": "Existing API/SSE contracts, ReActExecutorPort, StreamCallback, tool approval behavior, AgentScope configuration keys, and engine=kernel rollback behavior remain compatible.",
+  "affectedLayers": [
+    "AgentScope adapter autoconfiguration and bridges",
+    "Kernel governed tool execution facade",
+    "Kernel chat inbound command and external invocation entry point",
+    "Spring Boot autoconfiguration",
+    "Focused tests and release gate evidence"
+  ],
+  "owners": [
+    "Seahorse Kernel owns tenant, run profile, model routing, tool governance, approval, quota, audit, memory, snapshots, and external invocation preparation.",
+    "AgentScope Core owns AgentScope ReAct execution, client invocation, event mapping, cancellation, and protocol conversion.",
+    "Optional AgentScope integrations own A2A, Nacos/config-center, Studio, and observation export surfaces."
+  ],
+  "invariants": [
+    "AgentScope is not a second product control plane.",
+    "AgentScope tool calls cannot bypass Seahorse governed tool execution.",
+    "A2A does not construct final AgentLoopRequest directly.",
+    "Physical Maven module split remains a future M4 packaging migration."
+  ],
+  "updatedAt": "2026-06-30"
+}

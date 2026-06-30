@@ -594,7 +594,7 @@ public class KernelChatInboundService implements ChatInboundPort {
             agentId = selectedAgentId(command);
             versionId = selectedVersion(agentId, versionId).map(AgentVersion::versionId).orElse(versionId);
         }
-        String tenantId = run == null ? null : run.tenantId();
+        String tenantId = run == null ? command.tenantId() : run.tenantId();
         Optional<AgentVersion> selectedVersion = selectedVersion(agentId, versionId);
         AgentModelExecutionConfig modelConfig = effectiveModelExecutionConfig(command, agentId, versionId);
         ContextPack contextPack = contextPackAssembler.assembleForAgent(
@@ -652,7 +652,7 @@ public class KernelChatInboundService implements ChatInboundPort {
     }
 
     private List<ChatMessage> agentHistory(StreamChatCommand command, ResolvedRoleCard roleCard) {
-        List<ChatMessage> history = loadAgentHistory(command);
+        List<ChatMessage> history = command.history().isEmpty() ? loadAgentHistory(command) : command.history();
         if (roleCard == null || roleCard.higherPerm()) {
             return history;
         }
@@ -811,7 +811,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                 selectedAgentId(command),
                 command.versionId(),
                 null,
-                null,
+                command.tenantId(),
                 command.conversationId(),
                 AgentRunTriggerType.CHAT,
                 inputSummary(command.question()),
@@ -819,7 +819,8 @@ public class KernelChatInboundService implements ChatInboundPort {
                 metadataJson,
                 effectiveRunProfileId(command),
                 effectiveExecutorEngine(command),
-                effectiveExecutorConfig(command)));
+                effectiveExecutorConfig(command),
+                command.currentUser()));
     }
 
     private void saveRunContextSnapshot(StreamChatCommand command, AgentRun run, TraceRunScope traceRunScope) {
@@ -851,7 +852,7 @@ public class KernelChatInboundService implements ChatInboundPort {
         }
         try {
             RunContextSnapshotRecord record = new RunContextSnapshotRecord();
-            record.setTenantId(AgentDefinition.DEFAULT_TENANT_ID);
+            record.setTenantId(hasText(command.tenantId()) ? command.tenantId() : AgentDefinition.DEFAULT_TENANT_ID);
             record.setRunId(command.taskId());
             record.setConversationId(parseLong(command.conversationId()));
             record.setBranchLeafMessageId(command.branchLeafMessageId());
@@ -926,9 +927,11 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .map(RunProfileDetails::getProfile)
                 .map(RunProfileRecord::getExecutorEngine)
                 .filter(this::hasText)
-                .orElseGet(() -> command.chatMode() == ChatMode.AGENT
-                        ? agentLoop.map(ReActExecutorPort::engineId).orElse("kernel")
-                        : "kernel");
+                .orElseGet(() -> hasText(command.preferredExecutorEngine())
+                        ? command.preferredExecutorEngine()
+                        : command.chatMode() == ChatMode.AGENT
+                                ? agentLoop.map(ReActExecutorPort::engineId).orElse("kernel")
+                                : "kernel");
     }
 
     private Long effectiveRunProfileId(StreamChatCommand command) {

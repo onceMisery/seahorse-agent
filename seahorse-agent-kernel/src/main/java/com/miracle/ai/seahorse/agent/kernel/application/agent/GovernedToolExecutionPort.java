@@ -15,25 +15,23 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
+package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolExecutionPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
+
+import java.util.Optional;
 
 /**
- * Compatibility type for existing AgentScope client wiring.
+ * Seahorse-owned facade for policy, approval and governed tool invocation.
  */
-public class AgentScopeToolFactory extends AgentScopeToolBridge {
+public interface GovernedToolExecutionPort {
 
-    public AgentScopeToolFactory(ToolRegistryPort toolRegistry, GovernedToolExecutionPort toolExecution) {
-        super(toolRegistry, toolExecution);
-    }
+    GovernedToolPermission preflight(ToolInvocationRequest request);
 
-    public AgentScopeToolFactory(
-            ToolRegistryPort toolRegistry,
-            GovernedToolExecutionPort toolExecution,
-            ObjectMapper objectMapper) {
-        super(toolRegistry, toolExecution, objectMapper);
+    ToolInvocationResult invoke(ToolInvocationRequest request);
+
+    default Optional<GovernedToolApproval> findLatestApproval(String runId, String stepId) {
+        return Optional.empty();
     }
 }

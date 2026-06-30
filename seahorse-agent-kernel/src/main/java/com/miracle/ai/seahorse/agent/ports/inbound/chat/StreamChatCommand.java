@@ -18,6 +18,8 @@
 package com.miracle.ai.seahorse.agent.ports.inbound.chat;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 
 import java.util.List;
 import java.util.Objects;
@@ -41,7 +43,11 @@ public record StreamChatCommand(
         Long roleCardId,
         Long branchLeafMessageId,
         Long assistantParentMessageId,
-        Long runProfileId) {
+        Long runProfileId,
+        List<ChatMessage> history,
+        String preferredExecutorEngine,
+        String tenantId,
+        CurrentUser currentUser) {
 
     public StreamChatCommand {
         question = requireText(question, "question");
@@ -59,6 +65,54 @@ public record StreamChatCommand(
         branchLeafMessageId = normalizePositiveId(branchLeafMessageId);
         assistantParentMessageId = normalizePositiveId(assistantParentMessageId);
         runProfileId = normalizePositiveId(runProfileId);
+        history = normalizeHistory(history);
+        preferredExecutorEngine = trimToNull(preferredExecutorEngine);
+        tenantId = trimToNull(tenantId);
+    }
+
+    public StreamChatCommand(String question,
+                             String conversationId,
+                             String taskId,
+                             String userId,
+                             boolean deepThinking,
+                             ChatMode chatMode,
+                             String agentId,
+                             String versionId,
+                             String taskTemplateId,
+                             List<String> attachmentIds,
+                             List<String> selectedSkillNames,
+                             List<String> knowledgeBaseIds,
+                             Long roleCardId,
+                             Long branchLeafMessageId,
+                             Long assistantParentMessageId,
+                             Long runProfileId,
+                             List<ChatMessage> history,
+                             String preferredExecutorEngine,
+                             String tenantId) {
+        this(question, conversationId, taskId, userId, deepThinking, chatMode, agentId, versionId, taskTemplateId,
+                attachmentIds, selectedSkillNames, knowledgeBaseIds, roleCardId, branchLeafMessageId,
+                assistantParentMessageId, runProfileId, history, preferredExecutorEngine, tenantId, null);
+    }
+
+    public StreamChatCommand(String question,
+                             String conversationId,
+                             String taskId,
+                             String userId,
+                             boolean deepThinking,
+                             ChatMode chatMode,
+                             String agentId,
+                             String versionId,
+                             String taskTemplateId,
+                             List<String> attachmentIds,
+                             List<String> selectedSkillNames,
+                             List<String> knowledgeBaseIds,
+                             Long roleCardId,
+                             Long branchLeafMessageId,
+                             Long assistantParentMessageId,
+                             Long runProfileId) {
+        this(question, conversationId, taskId, userId, deepThinking, chatMode, agentId, versionId, taskTemplateId,
+                attachmentIds, selectedSkillNames, knowledgeBaseIds, roleCardId, branchLeafMessageId,
+                assistantParentMessageId, runProfileId, List.of(), null, null);
     }
 
     public StreamChatCommand(String question,
@@ -247,5 +301,14 @@ public record StreamChatCommand(
 
     private static Long normalizePositiveId(Long value) {
         return value == null || value <= 0 ? null : value;
+    }
+
+    private static List<ChatMessage> normalizeHistory(List<ChatMessage> values) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        return values.stream()
+                .filter(Objects::nonNull)
+                .toList();
     }
 }
