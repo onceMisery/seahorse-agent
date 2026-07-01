@@ -44,6 +44,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.Repository
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.KernelAgentHandoffService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.LocalAgentAsToolPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.connector.OpenApiAwareToolRegistryPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.connector.OpenApiToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.AgentToolJsonSupport;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualizationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
@@ -81,6 +83,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositor
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ConnectorCredentialBindingRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ConnectorRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputRepairModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputValidationRecordPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputValidatorPort;
@@ -104,6 +108,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialMaterial;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialProviderPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.source.GitHubRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebFetchPort;
@@ -120,6 +126,7 @@ import org.springframework.context.annotation.Condition;
 import org.springframework.context.annotation.ConditionContext;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.core.env.Environment;
+import org.springframework.context.annotation.Primary;
 import org.springframework.core.type.AnnotatedTypeMetadata;
 
 import java.lang.annotation.ElementType;
@@ -175,6 +182,10 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             "seahorse-agent.chat.agent.tools.github.fetch-timeout";
     private static final String PROP_GITHUB_USER_AGENT =
             "seahorse-agent.chat.agent.tools.github.user-agent";
+    private static final String PROP_OPENAPI_TOOL_TIMEOUT =
+            "seahorse-agent.chat.agent.tools.openapi.timeout";
+    private static final String PROP_OPENAPI_TOOL_MAX_RESPONSE_BYTES =
+            "seahorse-agent.chat.agent.tools.openapi.max-response-bytes";
     private static final String PROP_IMAGE_MODEL =
             "seahorse-agent.adapters.ai.image-model";
     private static final String PROP_CHAT_MODEL =
@@ -189,6 +200,38 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @ConditionalOnMissingBean(ToolRegistryPort.class)
     public InMemoryToolRegistry seahorseAgentToolRegistryPort() {
         return new InMemoryToolRegistry();
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean(ConnectorRepositoryPort.class)
+    @ConditionalOnMissingBean
+    public OpenApiToolPortAdapter seahorseOpenApiToolPortAdapter(
+            ConnectorRepositoryPort connectorRepositoryPort,
+            ObjectProvider<ConnectorCredentialBindingRepositoryPort> credentialBindingRepositoryPort,
+            ObjectProvider<CredentialProviderPort> credentialProviderPort,
+            ObjectProvider<HttpClient> httpClient,
+            ObjectProvider<ObjectMapper> objectMapper,
+            Environment environment) {
+        return new OpenApiToolPortAdapter(
+                connectorRepositoryPort,
+                credentialBindingRepositoryPort.getIfAvailable(ConnectorCredentialBindingRepositoryPort::empty),
+                credentialProviderPort.getIfAvailable(() -> request -> CredentialMaterial.none()),
+                httpClient.getIfAvailable(),
+                objectMapper.getIfAvailable(ObjectMapper::new),
+                parseDuration(environment.getProperty(PROP_OPENAPI_TOOL_TIMEOUT), Duration.ofSeconds(15)),
+                environment.getProperty(PROP_OPENAPI_TOOL_MAX_RESPONSE_BYTES, Integer.class, 256 * 1024));
+    }
+
+    @Bean
+    @Primary
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean({InMemoryToolRegistry.class, OpenApiToolPortAdapter.class})
+    @ConditionalOnMissingBean(OpenApiAwareToolRegistryPort.class)
+    public OpenApiAwareToolRegistryPort seahorseOpenApiAwareToolRegistryPort(
+            InMemoryToolRegistry inMemoryToolRegistry,
+            OpenApiToolPortAdapter openApiToolPortAdapter) {
+        return new OpenApiAwareToolRegistryPort(inMemoryToolRegistry, openApiToolPortAdapter);
     }
 
     @Bean

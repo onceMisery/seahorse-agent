@@ -1,0 +1,1 @@
+ALTER TABLE sa_connector ADD COLUMN IF NOT EXISTS base_url VARCHAR(1024);

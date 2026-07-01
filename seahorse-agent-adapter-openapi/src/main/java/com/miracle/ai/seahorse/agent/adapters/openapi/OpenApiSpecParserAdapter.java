@@ -56,6 +56,7 @@ public class OpenApiSpecParserAdapter implements OpenApiSpecParserPort {
             return new OpenApiSpecDocument(
                     textOrNull(info.path("title")),
                     textOrNull(info.path("description")),
+                    firstServerUrl(root.path("servers")),
                     operations(root.path("paths")));
         } catch (JsonProcessingException ex) {
             throw new IllegalArgumentException("Invalid OpenAPI JSON", ex);
@@ -91,6 +92,13 @@ public class OpenApiSpecParserAdapter implements OpenApiSpecParserPort {
             }
         }
         return operations;
+    }
+
+    private String firstServerUrl(JsonNode servers) {
+        if (!servers.isArray() || servers.isEmpty()) {
+            return null;
+        }
+        return textOrNull(servers.get(0).path("url"));
     }
 
     private OpenApiSpecOperation operation(String path,

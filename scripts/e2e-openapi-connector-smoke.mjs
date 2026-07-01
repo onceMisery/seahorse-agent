@@ -98,6 +98,7 @@ function requireOk(result, label) {
 }
 
 const marker = `CODX_OPENAPI_${Date.now()}`;
+const serverUrl = `https://api.example.test/${marker}`;
 const login = requireOk(await api("/auth/login", {
   method: "POST",
   body: JSON.stringify({ username, password })
@@ -107,6 +108,7 @@ const auth = { Authorization: `Bearer ${login.token}` };
 const spec = {
   openapi: "3.0.3",
   info: { title: `Codex OpenAPI Smoke ${marker}`, version: "1.0.0" },
+  servers: [{ url: serverUrl }],
   paths: {
     "/pets": {
       get: {
@@ -182,19 +184,42 @@ const connectorTool = toolRecords.find((tool) =>
 if (!connectorTool) {
   throw new Error(`enabled OpenAPI tool was not returned: ${JSON.stringify(tools)}`);
 }
+const openApiToolId = connectorTool.toolId || enabledGet.toolId || enabledGet.toolCatalogId || enabledGet.operationId;
+if (!openApiToolId) {
+  throw new Error(`enabled OpenAPI tool id was not available: ${JSON.stringify({ connectorTool, enabledGet })}`);
+}
+
+const preflight = requireOk(await api(`/tools/${encodeURIComponent(openApiToolId)}/preflight`, {
+  method: "POST",
+  headers: auth,
+  body: JSON.stringify({
+    runId: `openapi-smoke-run-${marker}`,
+    stepId: `openapi-smoke-step-${marker}`,
+    toolCallId: `openapi-smoke-call-${marker}`,
+    tenantId: "default",
+    userId: String(login.userId || "1"),
+    arguments: { status: "available" },
+    idempotencyKey: `openapi-smoke-run-${marker}:openapi-smoke-call-${marker}`,
+    allowedToolIds: [openApiToolId]
+  })
+}), "preflight enabled OpenAPI tool through Tool Gateway");
+if (preflight.effect !== "ALLOW") {
+  throw new Error(`enabled OpenAPI tool preflight should ALLOW, got ${JSON.stringify(preflight)}`);
+}
 
 const dbRow = psql(`
 select c.connector_id,
        c.name,
+       c.base_url,
        c.status,
        count(o.operation_id),
        string_agg(o.method || ':' || o.risk_level || ':' || o.status, ', ' order by o.method)
 from sa_connector c
 join sa_connector_operation o on o.connector_id = c.connector_id
 where c.connector_id = '${sqlLiteral(connectorId)}'
-group by c.connector_id, c.name, c.status;
+group by c.connector_id, c.name, c.base_url, c.status;
 `)[0] || "";
-if (!dbRow.includes(`${connectorId}|`) || !dbRow.includes("GET:LOW:ENABLED") || !dbRow.includes("DELETE:HIGH:DISABLED")) {
+if (!dbRow.includes(`${connectorId}|`) || !dbRow.includes(serverUrl) || !dbRow.includes("GET:LOW:ENABLED") || !dbRow.includes("DELETE:HIGH:DISABLED")) {
   throw new Error(`database row did not confirm expected operation state: ${dbRow}`);
 }
 
@@ -231,7 +256,8 @@ console.log(JSON.stringify({
   marker,
   connectorId,
   operations: operations.map((operation) => `${operation.method}:${operation.riskLevel}:${operation.status}`),
-  enabledGet: enabledGet.toolId || enabledGet.toolCatalogId || connectorTool.toolId || enabledGet.operationId || null,
+  enabledGet: openApiToolId,
+  preflightEffect: preflight.effect,
   highRiskStatus: highRiskResult.status,
   toolCount: toolRecords.length,
   dbRow,

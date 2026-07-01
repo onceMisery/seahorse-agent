@@ -1355,6 +1355,7 @@ CREATE TABLE IF NOT EXISTS sa_connector (
   provider VARCHAR(32) NOT NULL,
   name VARCHAR(128) NOT NULL,
   description VARCHAR(1000),
+  base_url VARCHAR(1024),
   status VARCHAR(32) NOT NULL,
   created_by VARCHAR(64) NOT NULL,
   created_at TIMESTAMP NOT NULL,
@@ -1363,6 +1364,8 @@ CREATE TABLE IF NOT EXISTS sa_connector (
 
 CREATE INDEX IF NOT EXISTS idx_sa_connector_tenant_status
   ON sa_connector(tenant_id, status);
+
+ALTER TABLE sa_connector ADD COLUMN IF NOT EXISTS base_url VARCHAR(1024);
 
 CREATE TABLE IF NOT EXISTS sa_connector_version (
   pk_id BIGSERIAL PRIMARY KEY,

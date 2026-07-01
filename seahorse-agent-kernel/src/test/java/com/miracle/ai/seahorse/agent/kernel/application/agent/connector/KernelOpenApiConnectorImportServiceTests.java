@@ -95,6 +95,8 @@ class KernelOpenApiConnectorImportServiceTests {
         assertEquals(2, result.disabledOperationCount());
         assertEquals(1, result.highRiskOperationCount());
         assertEquals(2, operations.size());
+        assertEquals("https://crm.example.test/api",
+                connectorRepository.findConnectorById(result.connectorId()).orElseThrow().baseUrl());
         assertTrue(operations.stream().allMatch(operation -> operation.status() == ConnectorOperationStatus.DISABLED));
         assertTrue(toolCatalogRepository.entries.isEmpty());
     }
@@ -413,6 +415,7 @@ class KernelOpenApiConnectorImportServiceTests {
             return new OpenApiSpecDocument(
                     "CRM API",
                     "Customer relationship API",
+                    "https://crm.example.test/api",
                     List.of(
                             new OpenApiSpecOperation(
                                     "listCustomers",
@@ -479,6 +482,13 @@ class KernelOpenApiConnectorImportServiceTests {
                 return Optional.empty();
             }
             return Optional.of(operation);
+        }
+
+        @Override
+        public Optional<ConnectorOperation> findOperationByToolId(String toolId) {
+            return operations.values().stream()
+                    .filter(operation -> operation.toolId().equals(toolId))
+                    .findFirst();
         }
 
         @Override

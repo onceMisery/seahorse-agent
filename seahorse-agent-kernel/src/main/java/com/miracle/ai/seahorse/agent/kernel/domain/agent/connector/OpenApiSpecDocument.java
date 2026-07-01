@@ -21,11 +21,19 @@ import java.util.List;
 
 public record OpenApiSpecDocument(String title,
                                   String description,
+                                  String baseUrl,
                                   List<OpenApiSpecOperation> operations) {
 
     public OpenApiSpecDocument {
         title = Connector.trimToNull(title);
         description = Connector.trimToNull(description);
+        baseUrl = Connector.trimToNull(baseUrl);
         operations = operations == null ? List.of() : List.copyOf(operations);
+    }
+
+    public OpenApiSpecDocument(String title,
+                               String description,
+                               List<OpenApiSpecOperation> operations) {
+        this(title, description, null, operations);
     }
 }

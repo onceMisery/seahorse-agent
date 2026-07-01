@@ -38,6 +38,9 @@ class OpenApiSpecParserAdapterTests {
                     "title": "CRM API",
                     "description": "Customer API"
                   },
+                  "servers": [
+                    {"url": "https://crm.example.test/api"}
+                  ],
                   "paths": {
                     "/customers": {
                       "get": {
@@ -86,6 +89,7 @@ class OpenApiSpecParserAdapterTests {
 
         assertThat(document.title()).isEqualTo("CRM API");
         assertThat(document.description()).isEqualTo("Customer API");
+        assertThat(document.baseUrl()).isEqualTo("https://crm.example.test/api");
         assertThat(document.operations()).hasSize(2);
         assertThat(document.operations().get(0).operationId()).isEqualTo("listCustomers");
         assertThat(document.operations().get(0).method()).isEqualTo(OpenApiHttpMethod.GET);

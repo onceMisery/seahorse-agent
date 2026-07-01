@@ -142,11 +142,16 @@ public class KernelOpenApiConnectorImportService implements OpenApiConnectorInbo
                         ConnectorProvider.OPENAPI,
                         name,
                         document.description(),
+                        document.baseUrl(),
                         ConnectorStatus.IMPORTED,
                         importedBy,
                         now,
                         now));
-        connectorRepository.saveConnector(connector.withStatus(ConnectorStatus.IMPORTED, now));
+        connectorRepository.saveConnector(connector.withImportMetadata(
+                document.description(),
+                document.baseUrl(),
+                ConnectorStatus.IMPORTED,
+                now));
 
         ConnectorVersion version = connectorRepository.findVersionByConnectorIdAndSpecHash(connectorId, specHash)
                 .orElse(null);

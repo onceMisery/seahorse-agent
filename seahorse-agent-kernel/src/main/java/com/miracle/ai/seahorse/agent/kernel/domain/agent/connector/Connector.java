@@ -25,6 +25,7 @@ public record Connector(String connectorId,
                         ConnectorProvider provider,
                         String name,
                         String description,
+                        String baseUrl,
                         ConnectorStatus status,
                         String createdBy,
                         Instant createdAt,
@@ -36,19 +37,40 @@ public record Connector(String connectorId,
         provider = Objects.requireNonNull(provider, "provider must not be null");
         name = requireText(name, "name must not be blank");
         description = trimToNull(description);
+        baseUrl = trimToNull(baseUrl);
         status = Objects.requireNonNull(status, "status must not be null");
         createdBy = requireText(createdBy, "createdBy must not be blank");
         createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
         updatedAt = Objects.requireNonNull(updatedAt, "updatedAt must not be null");
     }
 
+    public Connector(String connectorId,
+                     String tenantId,
+                     ConnectorProvider provider,
+                     String name,
+                     String description,
+                     ConnectorStatus status,
+                     String createdBy,
+                     Instant createdAt,
+                     Instant updatedAt) {
+        this(connectorId, tenantId, provider, name, description, null, status, createdBy, createdAt, updatedAt);
+    }
+
     public Connector withStatus(ConnectorStatus status, Instant updatedAt) {
+        return withImportMetadata(description, baseUrl, status, updatedAt);
+    }
+
+    public Connector withImportMetadata(String description,
+                                        String baseUrl,
+                                        ConnectorStatus status,
+                                        Instant updatedAt) {
         return new Connector(
                 connectorId,
                 tenantId,
                 provider,
                 name,
                 description,
+                baseUrl,
                 status,
                 createdBy,
                 createdAt,

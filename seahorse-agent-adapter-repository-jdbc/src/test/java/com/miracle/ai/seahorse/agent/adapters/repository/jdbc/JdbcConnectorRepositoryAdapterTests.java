@@ -63,6 +63,7 @@ class JdbcConnectorRepositoryAdapterTests {
         assertThat(adapter.findConnectorById("conn-1")).contains(connector);
         assertThat(adapter.findVersionByConnectorIdAndSpecHash("conn-1", "hash-1")).contains(version);
         assertThat(adapter.findOperation("conn-1", "op-2")).contains(enabled);
+        assertThat(adapter.findOperationByToolId(enabled.toolId())).contains(enabled);
         assertThat(page.records()).extracting(Connector::connectorId).containsExactly("conn-1");
         assertThat(operations).extracting(ConnectorOperation::operationId).containsExactly("op-1", "op-2");
     }
@@ -169,6 +170,7 @@ class JdbcConnectorRepositoryAdapterTests {
                     provider VARCHAR(32) NOT NULL,
                     name VARCHAR(128) NOT NULL,
                     description VARCHAR(1000),
+                    base_url VARCHAR(1024),
                     status VARCHAR(32) NOT NULL,
                     created_by VARCHAR(64) NOT NULL,
                     created_at TIMESTAMP NOT NULL,

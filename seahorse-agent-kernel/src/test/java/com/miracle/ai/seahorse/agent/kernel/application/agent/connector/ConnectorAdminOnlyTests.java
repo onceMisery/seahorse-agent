@@ -160,6 +160,13 @@ class ConnectorAdminOnlyTests {
         }
 
         @Override
+        public Optional<ConnectorOperation> findOperationByToolId(String toolId) {
+            return operations.values().stream()
+                    .filter(operation -> operation.toolId().equals(toolId))
+                    .findFirst();
+        }
+
+        @Override
         public List<ConnectorOperation> listOperations(String connectorId) {
             return operations.values().stream()
                     .filter(operation -> operation.connectorId().equals(connectorId))

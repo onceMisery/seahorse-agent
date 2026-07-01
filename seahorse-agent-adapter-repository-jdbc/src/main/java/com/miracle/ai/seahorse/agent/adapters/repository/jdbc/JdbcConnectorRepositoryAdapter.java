@@ -47,7 +47,7 @@ public class JdbcConnectorRepositoryAdapter implements ConnectorRepositoryPort {
     private static final long MAX_PAGE_SIZE = 100L;
 
     private static final String CONNECTOR_COLUMNS = """
-            connector_id, tenant_id, provider, name, description, status, created_by, created_at, updated_at
+            connector_id, tenant_id, provider, name, description, base_url, status, created_by, created_at, updated_at
             """;
     private static final String VERSION_COLUMNS = """
             connector_version_id, connector_id, spec_hash, spec_json, imported_by, imported_at
@@ -60,8 +60,8 @@ public class JdbcConnectorRepositoryAdapter implements ConnectorRepositoryPort {
 
     private static final String SQL_INSERT_CONNECTOR = """
             INSERT INTO sa_connector
-            (connector_id, tenant_id, provider, name, description, status, created_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (connector_id, tenant_id, provider, name, description, base_url, status, created_by, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String SQL_UPDATE_CONNECTOR = """
             UPDATE sa_connector
@@ -69,6 +69,7 @@ public class JdbcConnectorRepositoryAdapter implements ConnectorRepositoryPort {
                 provider = ?,
                 name = ?,
                 description = ?,
+                base_url = ?,
                 status = ?,
                 created_by = ?,
                 created_at = ?,
@@ -141,6 +142,11 @@ public class JdbcConnectorRepositoryAdapter implements ConnectorRepositoryPort {
             SELECT %s
             FROM sa_connector_operation
             WHERE connector_id = ? AND operation_id = ?
+            """.formatted(OPERATION_COLUMNS);
+    private static final String SQL_FIND_OPERATION_BY_TOOL_ID = """
+            SELECT %s
+            FROM sa_connector_operation
+            WHERE tool_id = ?
             """.formatted(OPERATION_COLUMNS);
     private static final String SQL_LIST_OPERATIONS = """
             SELECT %s
@@ -220,6 +226,15 @@ public class JdbcConnectorRepositoryAdapter implements ConnectorRepositoryPort {
     }
 
     @Override
+    public Optional<ConnectorOperation> findOperationByToolId(String toolId) {
+        if (!hasText(toolId)) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query(SQL_FIND_OPERATION_BY_TOOL_ID, this::mapOperation,
+                toolId.trim()).stream().findFirst();
+    }
+
+    @Override
     public List<ConnectorOperation> listOperations(String connectorId) {
         if (!hasText(connectorId)) {
             return List.of();
@@ -258,6 +273,7 @@ public class JdbcConnectorRepositoryAdapter implements ConnectorRepositoryPort {
                 connector.provider().name(),
                 connector.name(),
                 connector.description(),
+                connector.baseUrl(),
                 connector.status().name(),
                 connector.createdBy(),
                 toTimestamp(connector.createdAt()),
@@ -270,6 +286,7 @@ public class JdbcConnectorRepositoryAdapter implements ConnectorRepositoryPort {
                 connector.provider().name(),
                 connector.name(),
                 connector.description(),
+                connector.baseUrl(),
                 connector.status().name(),
                 connector.createdBy(),
                 toTimestamp(connector.createdAt()),
@@ -340,6 +357,7 @@ public class JdbcConnectorRepositoryAdapter implements ConnectorRepositoryPort {
                 ConnectorProvider.valueOf(resultSet.getString("provider")),
                 resultSet.getString("name"),
                 resultSet.getString("description"),
+                resultSet.getString("base_url"),
                 ConnectorStatus.valueOf(resultSet.getString("status")),
                 resultSet.getString("created_by"),
                 toInstant(resultSet.getTimestamp("created_at")),

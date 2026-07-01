@@ -38,6 +38,8 @@ public interface ConnectorRepositoryPort {
 
     Optional<ConnectorOperation> findOperation(String connectorId, String operationId);
 
+    Optional<ConnectorOperation> findOperationByToolId(String toolId);
+
     List<ConnectorOperation> listOperations(String connectorId);
 
     ConnectorPage page(ConnectorQuery query);
