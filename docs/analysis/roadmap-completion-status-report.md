@@ -14,6 +14,7 @@
 | 轻量/全量 Docker 部署路径 | `docker-compose.yml`、`docker-compose.full.yml`、readiness 诊断 | 回归验证基线 |
 | RAG 检索与 Trace | `SeahorseRagTraceController`、`t_rag_trace_run/node`、Milvus/Elasticsearch/Ollama 链路 | 质量回归基线 |
 | 记忆、用户画像、outbox、maintenance、quality/conflict 基座 | `SeahorseMemory*Controller`、`t_user_profile_fact`、`t_memory_*` 表 | 记忆治理基线 |
+| 交互式记忆冲突聊天闭环 | `KernelChatPreparationSupport`、`InteractiveMemoryConflictPromptPolicy`、`POST /memories/conflicts/interactive-resolve`、`MemoryConflictInteractiveCard`、`scripts/e2e-interactive-memory-conflict-smoke.ps1` | 记忆质量交互基线 |
 | Agent、Tool、Skill、审批、配额、资源 ACL、审计、成本接口与页面 | `SeahorseAgent*Controller`、`sa_agent_*`、`sa_audit_event`、`sa_cost_usage_record` | 企业治理基线 |
 | 消息树与分支游标 | `t_conversation_branch_cursor`、`ConversationBranchInboundPort`、`SeahorseConversationController`、前端 `sessionService` | 真实测试门禁 |
 | 角色卡 | `RoleCardPage`、`SeahorseRoleCardController`、`sa_role_card` 相关表/仓储 | 真实测试门禁 |
@@ -190,7 +191,7 @@
 | 切片 | 描述 | 状态 | 说明 |
 |---|---|---|---|
 | 1. 画像详情页 | 来源/置信度/冲突/版本/引用次数 | **已完成并有真实验证** | `scripts/e2e-memory-profile-facts-smoke.ps1` 已在 full Docker 中验证 `t_user_profile_fact.source_ids`、API `sourceIds`、置信度、版本、引用次数和治理页展开详情展示 |
-| 2. 冲突工作台 | conflict_log + 候选 + 画像 + ledger 关联视图 | **已完成并有真实验证** | `scripts/e2e-memory-governance-smoke.ps1` 已在 full Docker 前端/API/PostgreSQL 中验证 PENDING 冲突展示、页面 resolve 和 `t_memory_conflict_log` 变为 RESOLVED |
+| 2. 冲突工作台 | conflict_log + 候选 + 画像 + ledger 关联视图 | **已完成并有真实验证** | `scripts/e2e-memory-governance-smoke.ps1` 已在 full Docker 前端/API/PostgreSQL 中验证 PENDING 冲突展示、页面 resolve 和 `t_memory_conflict_log` 变为 RESOLVED；`scripts/e2e-interactive-memory-conflict-smoke.ps1` 已验证 `/chat` 内冲突卡片交互 resolve |
 | 3. 召回评测 | golden cases 覆盖 | **已完成** | `MemoryRecallEvaluationService` + `MemoryRecallGoldenCase` + `MemoryRecallGoldenHarnessInboundPort` |
 | 4. 低价值清理 | quality snapshot + accessCount 清理建议 | **已完成** | `t_memory_quality_snapshot` 表 + maintenance run 产出快照 |
 | 5. 隐私闭环 | 记忆删除 → profile fact + 索引同步失效 | **已完成** | `KernelMemoryReviewService` 含 forget 操作 + 级联失效逻辑 |
@@ -290,7 +291,7 @@
 |---|---|---|---|
 | M1 RAG 评测 | evaluation API 产出可对比报告 | ✅ API/表/前端完整 | ✅ RAG evaluation strict smoke 与策略 promotion 页面/API/DB/audit smoke 已覆盖 |
 | M2 入库治理 | 任务节点可追踪 + 失败可重放 | ✅ retry/rollback API 完整 | ✅ 单元测试覆盖 |
-| M3 记忆治理 | conflicts/quality-snapshots 可解释 | ✅ 表和 API 完整 | ✅ MemoryGovernancePage 已用 full Docker 页面/API/PostgreSQL 验证冲突展示、resolve 和质量快照 |
+| M3 记忆治理 | conflicts/quality-snapshots 可解释 | ✅ 表和 API 完整 | ✅ MemoryGovernancePage 已用 full Docker 页面/API/PostgreSQL 验证冲突展示、resolve 和质量快照；聊天内交互式冲突卡片已用 full Docker Playwright/API/DB/trace/audit 验证 |
 | M4 Agent 生产 | run 可追踪步骤/审批/产物/成本 | ✅ 全部 9 Controller + 11 表 | ✅ Agent rollout 页面/API/DB/audit 真实烟测已覆盖灰度发布主链路 |
 | M5 starter-all | full compose smoke suite 通过 | ✅ 脚本/测试/文档完整 | ✅ full Docker backend/page/RAG eval/S3/Pulsar 真实验证已补齐当前 smoke baseline |
 
@@ -313,7 +314,7 @@
 | — | 当前近期已开发能力无剩余 P0/P1/P2 真实验证项 | 近期稳定基线 | — |
 ### 结论
 
-架构路线图中近期和中期设计的**代码基础设施已基本全部就位**。当前状态是"近期已开发能力的真实运行验证已补齐到当前基线"——Agent 控制面、RAG 评测/策略推广、记忆画像来源追溯、记忆冲突治理、S3 和 Pulsar 等近期已开发能力已经有 full Docker 证据；后续主要转向尚未产品化或仍需生产联调的 AgentScope/OTEL、统一 GateResult/Tool Gateway 等中长期能力。
+架构路线图中近期和中期设计的**代码基础设施已基本全部就位**。当前状态是"近期已开发能力的真实运行验证已补齐到当前基线"——Agent 控制面、RAG 评测/策略推广、记忆画像来源追溯、记忆冲突治理、交互式记忆冲突聊天闭环、S3 和 Pulsar 等近期已开发能力已经有 full Docker 证据；后续主要转向尚未产品化或仍需生产联调的 AgentScope/OTEL、统一 GateResult/Tool Gateway 等中长期能力。
 
 ### 2026-06-25 Runtime Evidence Update
 
@@ -326,3 +327,7 @@ M3 profile detail/source-tracing evidence now includes `scripts/e2e-memory-profi
 ### 2026-06-25 Completion Audit Evidence Update
 
 The real-verification work now has an explicit completion audit in `docs/aegis/work/2026-06-23-roadmap-real-verification/92-completion-audit.md`. Fresh full-Docker reruns covered backend smoke, page smoke, role cards, message tree, run profiles, run experiments, AgentScope, temporary A2A/Nacos live path, MCP stdio/HTTP, OpenAPI connector, governance page/error states, ingestion, RAG evaluation/strategy promotion, memory governance/profile source tracing, agent rollout, S3 switching, and Pulsar consume loop. Added `scripts/e2e-openapi-connector-smoke.ps1` as the repeatable OpenAPI connector smoke, and stabilized governance/memory page smokes for repeat runs.
+
+### 2026-07-01 Interactive Memory Conflict Evidence Update
+
+Interactive memory conflict handling now has full Docker chat-flow evidence through `scripts/e2e-interactive-memory-conflict-smoke.ps1 -BaseUrl http://127.0.0.1`. The smoke seeds two active short-term memories and a `PENDING` conflict, opens `/chat`, receives the `memory.conflict.prompt` card, resolves `keep_a` through `POST /api/memories/conflicts/interactive-resolve`, and verifies PostgreSQL/trace/audit results. Fresh run evidence: `codxic-conflict-1782865959770|RESOLVED|keep_a|interactive:2001523723396308993`, memory state `codxicA1782865959770|0` and `codxicB1782865959770|1`, trace `SUCCESS|chat-ui|interactive:2001523723396308993|keep_a`, audit `MEMORY_CONFLICT_RESOLVED|interactive:2001523723396308993|codxic-conflict-1782865959770|chat-ui|keep_a`, screenshot `output/playwright/artifacts/interactive-memory-conflict-CODX_INTERACTIVE_MEMORY_CONFLICT_1782865955904.png`.
