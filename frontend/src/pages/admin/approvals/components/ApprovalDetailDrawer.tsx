@@ -18,6 +18,10 @@ interface ApprovalDetailDrawerProps {
   onDecisionComplete: () => void;
 }
 
+function normalizedStatus(status?: string) {
+  return (status || "").toUpperCase();
+}
+
 export function ApprovalDetailDrawer({ open, onOpenChange, approval, onDecisionComplete }: ApprovalDetailDrawerProps) {
   const [decisionDialogState, setDecisionDialogState] = useState<{ open: boolean; action: "approve" | "reject" | "modify" }>({
     open: false,
@@ -26,17 +30,17 @@ export function ApprovalDetailDrawer({ open, onOpenChange, approval, onDecisionC
 
   if (!approval) return null;
 
-  const isPending = approval.status === "pending";
+  const isPending = normalizedStatus(approval.status) === "PENDING";
 
   const getStatusBadge = (status?: string) => {
-    switch (status) {
-      case "pending":
+    switch (normalizedStatus(status)) {
+      case "PENDING":
         return <Badge className="bg-amber-100 text-amber-700">待审批</Badge>;
-      case "approved":
+      case "APPROVED":
         return <Badge className="bg-green-100 text-green-700">已通过</Badge>;
-      case "rejected":
+      case "REJECTED":
         return <Badge variant="destructive">已拒绝</Badge>;
-      case "modified":
+      case "MODIFIED":
         return <Badge className="bg-blue-100 text-blue-700">已修改</Badge>;
       default:
         return <Badge variant="outline">{status || "-"}</Badge>;

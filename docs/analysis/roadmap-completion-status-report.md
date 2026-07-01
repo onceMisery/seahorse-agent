@@ -390,3 +390,11 @@ The next P1 MCP stdio security slice adds near-term `ProcessBuilder` runner isol
 Fresh Docker evidence: `scripts/e2e-mcp-stdio-smoke.ps1 -BaseUrl http://127.0.0.1:9093 -BackendImage seahorse-agent-backend:mcp-stdio-allowlist -HostPort 9093` passed 11/11 against a temporary MCP-enabled backend image built from the freshly packaged jar. The run verified isolated `node` stdio echo startup, blocked `pwsh` startup, blocked `workingDir=/tmp` with registry status `FAILED` and reason `stdio workingDir not allowlisted`, approval-gated diagnostic calls, approved call audit, and redacted stderr diagnostics that did not expose the raw secret or parent-only environment marker.
 
 Remaining roadmap work is narrowed to full independent/container sandbox runner productionization, product approval/UI hardening, unified Tool Gateway execution enforcement, and any deeper audit/desensitization requirements beyond the current stderr-tail and MCP tool-call coverage.
+
+### 2026-07-02 MCP Diagnostic Approval Entry P1 Evidence Update
+
+The MCP stdio diagnostic approval entry is now productized in the admin UI. `ToolCatalogPage` treats `APPROVAL_REQUIRED` diagnostic test results as a submitted approval rather than a generic failure, surfaces the returned `approvalId`, and links directly to `ApprovalCenterPage` with `?approvalId=...`. `ApprovalCenterPage` now opens that approval drawer directly from the query parameter and handles backend enum statuses such as `PENDING`/`APPROVED` in the list and drawer.
+
+Fresh evidence: focused frontend tests passed 14/14 via `npm run test -- src/pages/admin/tools/ToolCatalogPage.test.tsx src/pages/admin/approvals/ApprovalCenterPage.test.tsx src/services/mcpServerService.test.ts`, and `npm run build` completed successfully. Fresh Docker evidence: `scripts/e2e-mcp-stdio-smoke.ps1 -BaseUrl http://127.0.0.1:9093 -BackendImage seahorse-agent-backend:mcp-stdio-allowlist -HostPort 9093` passed 11/11, including `APPROVAL_REQUIRED`, returned `approvalId`, `GET /api/approvals/{approvalId}` status `PENDING`, approval, approved diagnostic execution, and tool audit.
+
+Remaining roadmap work is narrowed to unified Tool Gateway execution enforcement, full independent/container sandbox runner productionization, and any deeper audit/desensitization requirements beyond the current stderr-tail, approval, and MCP tool-call coverage.

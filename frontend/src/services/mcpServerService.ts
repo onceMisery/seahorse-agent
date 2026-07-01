@@ -25,6 +25,8 @@ export interface McpServerTestResult {
   status?: string;
   content?: string;
   message?: string;
+  approvalId?: string;
+  reasonCode?: string;
   testedAt?: string | null;
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
@@ -11,14 +12,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { PageResult } from "@/services/metadataGovernanceService";
 import { getAdvancedFeatureState, ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
-import { listApprovals, type ApprovalItem } from "@/services/approvalService";
+import { getApproval, listApprovals, type ApprovalItem } from "@/services/approvalService";
 import { ApprovalDetailDrawer } from "./components/ApprovalDetailDrawer";
 import { getErrorMessage } from "@/utils/error";
 
 const PAGE_SIZE = 10;
 
+function normalizedStatus(status?: string) {
+  return (status || "").toUpperCase();
+}
+
 export function ApprovalCenterPage() {
   const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const directApprovalId = searchParams.get("approvalId")?.trim() || "";
 
   const [pageData, setPageData] = useState<PageResult<ApprovalItem> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,6 +63,25 @@ export function ApprovalCenterPage() {
     loadApprovals();
   }, [pageNo, keyword, statusFilter, riskFilter]);
 
+  useEffect(() => {
+    if (!featureState.enabled || !directApprovalId) return;
+    let active = true;
+    getApproval(directApprovalId)
+      .then((approval) => {
+        if (!active) return;
+        setSelectedApproval(approval);
+        setDrawerOpen(true);
+      })
+      .catch((error) => {
+        if (!active) return;
+        toast.error(getErrorMessage(error, "加载审批详情失败"));
+        console.error(error);
+      });
+    return () => {
+      active = false;
+    };
+  }, [featureState.enabled, directApprovalId]);
+
   const handleSearch = () => {
     setPageNo(1);
     setKeyword(searchInput.trim());
@@ -72,9 +98,20 @@ export function ApprovalCenterPage() {
   };
 
   const handleDecisionComplete = () => {
-    setDrawerOpen(false);
-    setSelectedApproval(null);
+    handleDrawerOpenChange(false);
     loadApprovals(pageNo, keyword);
+  };
+
+  const handleDrawerOpenChange = (open: boolean) => {
+    setDrawerOpen(open);
+    if (!open) {
+      setSelectedApproval(null);
+      if (directApprovalId) {
+        const next = new URLSearchParams(searchParams);
+        next.delete("approvalId");
+        setSearchParams(next, { replace: true });
+      }
+    }
   };
 
   const formatTime = (dateStr?: string | null) => {
@@ -83,14 +120,14 @@ export function ApprovalCenterPage() {
   };
 
   const getStatusBadge = (status?: string) => {
-    switch (status) {
-      case "pending":
+    switch (normalizedStatus(status)) {
+      case "PENDING":
         return <Badge className="bg-amber-100 text-amber-700">待审批</Badge>;
-      case "approved":
+      case "APPROVED":
         return <Badge className="bg-green-100 text-green-700">已通过</Badge>;
-      case "rejected":
+      case "REJECTED":
         return <Badge variant="destructive">已拒绝</Badge>;
-      case "modified":
+      case "MODIFIED":
         return <Badge className="bg-blue-100 text-blue-700">已修改</Badge>;
       default:
         return <Badge variant="outline">{status || "-"}</Badge>;
@@ -137,10 +174,10 @@ export function ApprovalCenterPage() {
             <SelectTrigger className="w-[120px]"><SelectValue placeholder="状态" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部</SelectItem>
-              <SelectItem value="pending">待审批</SelectItem>
-              <SelectItem value="approved">已通过</SelectItem>
-              <SelectItem value="rejected">已拒绝</SelectItem>
-              <SelectItem value="modified">已修改</SelectItem>
+              <SelectItem value="PENDING">待审批</SelectItem>
+              <SelectItem value="APPROVED">已通过</SelectItem>
+              <SelectItem value="REJECTED">已拒绝</SelectItem>
+              <SelectItem value="MODIFIED">已修改</SelectItem>
             </SelectContent>
           </Select>
           <Select value={riskFilter} onValueChange={(v) => { setRiskFilter(v); setPageNo(1); }}>
@@ -209,7 +246,7 @@ export function ApprovalCenterPage() {
 
       <ApprovalDetailDrawer
         open={drawerOpen}
-        onOpenChange={setDrawerOpen}
+        onOpenChange={handleDrawerOpenChange}
         approval={selectedApproval}
         onDecisionComplete={handleDecisionComplete}
       />

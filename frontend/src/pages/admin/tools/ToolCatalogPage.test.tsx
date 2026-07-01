@@ -200,6 +200,52 @@ describe("ToolCatalogPage", () => {
     expect(screen.getByText("echo seahorse mcp health check")).toBeInTheDocument();
   });
 
+  it("surfaces MCP server test approval entry when the diagnostic call is gated", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listTools).mockResolvedValue({
+      records: [],
+      total: 0,
+      current: 1,
+      pages: 1
+    });
+    vi.mocked(listMcpServers).mockResolvedValue([
+      {
+        name: "local-echo",
+        transport: "STDIO",
+        enabled: true,
+        status: "READY",
+        toolCount: 1,
+        tools: [{ toolId: "echo", provider: "MCP", enabled: true }]
+      }
+    ]);
+    vi.mocked(testMcpServer).mockResolvedValueOnce({
+      serverName: "local-echo",
+      toolId: "echo",
+      success: false,
+      status: "APPROVAL_REQUIRED",
+      message: "Tool requires approval",
+      approvalId: "approval:mcp-diagnostic"
+    });
+
+    render(
+      <MemoryRouter>
+        <ToolCatalogPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("local-echo")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "测试" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("APPROVAL_REQUIRED")).toBeInTheDocument();
+    });
+    expect(screen.getByText("approval:mcp-diagnostic")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /打开审批/ })).toBeInTheDocument();
+  });
+
   it("restarts MCP server from the server panel and reloads statuses", async () => {
     const user = userEvent.setup();
     vi.mocked(listTools).mockResolvedValue({

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { RefreshCw, RotateCcw, Search, Wrench } from "lucide-react";
+import { ExternalLink, RefreshCw, RotateCcw, Search, ShieldCheck, Wrench } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +43,10 @@ function mcpStatusLabel(status?: string) {
   if (status === "FAILED") return "失败";
   if (status === "DISABLED") return "已禁用";
   return status || "-";
+}
+
+function isApprovalRequiredTestResult(result?: McpServerTestResult) {
+  return result?.status === "APPROVAL_REQUIRED" || Boolean(result?.approvalId);
 }
 
 export function ToolCatalogPage() {
@@ -128,7 +132,9 @@ export function ToolCatalogPage() {
       setMcpTestingName(serverName);
       const result = await testMcpServer(serverName);
       setMcpTestResults((prev) => ({ ...prev, [serverName]: result }));
-      if (result.success) {
+      if (isApprovalRequiredTestResult(result)) {
+        toast.success("MCP 测试已提交审批");
+      } else if (result.success) {
         toast.success("MCP 服务测试成功");
       } else {
         toast.error(result.message || "MCP 服务测试失败");
@@ -267,70 +273,102 @@ export function ToolCatalogPage() {
             <div className="text-sm text-muted-foreground">暂无 MCP 服务</div>
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
-              {mcpServers.map((server) => (
-                <div key={server.name} className="rounded-md border border-border p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <div className="font-medium text-slate-900">{server.name}</div>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <span>{server.transport || "-"}</span>
-                        <span>{server.toolCount ?? server.tools?.length ?? 0} 个工具</span>
-                        <span>{server.enabled ? "已启用" : "已禁用"}</span>
+              {mcpServers.map((server) => {
+                const testResult = mcpTestResults[server.name];
+                const approvalRequired = isApprovalRequiredTestResult(testResult);
+                return (
+                  <div key={server.name} className="rounded-md border border-border p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <div className="font-medium text-slate-900">{server.name}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <span>{server.transport || "-"}</span>
+                          <span>{server.toolCount ?? server.tools?.length ?? 0} 个工具</span>
+                          <span>{server.enabled ? "已启用" : "已禁用"}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={mcpTestingName === server.name}
+                          onClick={() => handleMcpTest(server.name)}
+                        >
+                          测试
+                        </Button>
+                        <Button
+                          aria-label={`restart-${server.name}`}
+                          variant="outline"
+                          size="sm"
+                          disabled={mcpActionName === `restart:${server.name}`}
+                          onClick={() => handleMcpRestart(server.name)}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          重启
+                        </Button>
+                        <Button
+                          aria-label={`refresh-tools-${server.name}`}
+                          variant="outline"
+                          size="sm"
+                          disabled={mcpActionName === `refresh:${server.name}`}
+                          onClick={() => handleMcpRefreshTools(server.name)}
+                        >
+                          <Wrench className="h-3.5 w-3.5" />
+                          刷新工具
+                        </Button>
+                        <Badge variant={mcpStatusVariant(server.status)}>{mcpStatusLabel(server.status)}</Badge>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={mcpTestingName === server.name}
-                        onClick={() => handleMcpTest(server.name)}
-                      >
-                        测试
-                      </Button>
-                      <Button
-                        aria-label={`restart-${server.name}`}
-                        variant="outline"
-                        size="sm"
-                        disabled={mcpActionName === `restart:${server.name}`}
-                        onClick={() => handleMcpRestart(server.name)}
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                        重启
-                      </Button>
-                      <Button
-                        aria-label={`refresh-tools-${server.name}`}
-                        variant="outline"
-                        size="sm"
-                        disabled={mcpActionName === `refresh:${server.name}`}
-                        onClick={() => handleMcpRefreshTools(server.name)}
-                      >
-                        <Wrench className="h-3.5 w-3.5" />
-                        刷新工具
-                      </Button>
-                      <Badge variant={mcpStatusVariant(server.status)}>{mcpStatusLabel(server.status)}</Badge>
-                    </div>
+                    {server.tools && server.tools.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-1">
+                        {server.tools.map((tool, index) => (
+                          <Badge key={`${tool.toolId ?? "tool"}-${index}`} variant="outline">
+                            {tool.toolId}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : null}
+                    {server.stderrTail ? (
+                      <pre className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-2 text-xs text-muted-foreground">
+                        {server.stderrTail}
+                      </pre>
+                    ) : null}
+                    {testResult ? (
+                      <div className="mt-3 rounded-md border border-border bg-background p-3 text-xs text-muted-foreground">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <Badge variant={approvalRequired ? "destructive" : testResult.success ? "default" : "secondary"}>
+                              {testResult.status || (testResult.success ? "SUCCESS" : "FAILED")}
+                            </Badge>
+                            <span className="break-words">{testResult.message || "-"}</span>
+                          </div>
+                          {testResult.approvalId ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => navigate(`/admin/approvals?approvalId=${encodeURIComponent(testResult.approvalId || "")}`)}
+                            >
+                              <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                              打开审批
+                            </Button>
+                          ) : null}
+                        </div>
+                        {testResult.approvalId ? (
+                          <div className="mt-2 flex items-center gap-1 break-all font-mono text-[11px] text-slate-500">
+                            <ShieldCheck className="h-3.5 w-3.5 flex-none" />
+                            {testResult.approvalId}
+                          </div>
+                        ) : null}
+                        {testResult.content ? (
+                          <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-2">
+                            {testResult.content}
+                          </pre>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
-                  {server.tools && server.tools.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-1">
-                      {server.tools.map((tool, index) => (
-                        <Badge key={`${tool.toolId ?? "tool"}-${index}`} variant="outline">
-                          {tool.toolId}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : null}
-                  {server.stderrTail ? (
-                    <pre className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-2 text-xs text-muted-foreground">
-                      {server.stderrTail}
-                    </pre>
-                  ) : null}
-                  {mcpTestResults[server.name] ? (
-                    <pre className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-background p-2 text-xs text-muted-foreground">
-                      {mcpTestResults[server.name].content || mcpTestResults[server.name].message || "-"}
-                    </pre>
-                  ) : null}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
