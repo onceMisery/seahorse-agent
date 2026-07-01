@@ -505,6 +505,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/run-experiments/{}/report"
+  },
+  {
+    "method": "GET",
     "path": "/api/run-profiles"
   },
   {
@@ -562,6 +566,14 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/api/tools/{}"
+  },
+  {
+    "method": "POST",
+    "path": "/api/tools/{}/preflight"
+  },
+  {
+    "method": "POST",
+    "path": "/api/tools/{}/invoke"
   },
   {
     "method": "GET",
@@ -1534,6 +1546,10 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/memories/conflicts/{}/resolve"
+  },
+  {
+    "method": "POST",
+    "path": "/memories/conflicts/interactive-resolve"
   },
   {
     "method": "POST",

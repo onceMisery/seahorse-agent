@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import http from "node:http";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -97,8 +98,49 @@ function requireOk(result, label) {
   return result.data;
 }
 
+function startOpenApiTarget(marker) {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const requestUrl = new URL(request.url || "/", "http://openapi-smoke-target");
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      requests.push({
+        method: request.method,
+        path: requestUrl.pathname,
+        query: Object.fromEntries(requestUrl.searchParams.entries()),
+        headers: request.headers,
+        body: Buffer.concat(chunks).toString("utf8")
+      });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        marker,
+        path: requestUrl.pathname,
+        status: requestUrl.searchParams.get("status"),
+        token: `${marker}-raw-token`,
+        nested: { secret: `${marker}-raw-secret` }
+      }));
+    });
+  });
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "0.0.0.0", () => {
+      const address = server.address();
+      resolve({ server, requests, port: address.port });
+    });
+  });
+}
+
+async function closeServer(server) {
+  await new Promise((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
+  });
+}
+
 const marker = `CODX_OPENAPI_${Date.now()}`;
-const serverUrl = `https://api.example.test/${marker}`;
+const openApiTarget = await startOpenApiTarget(marker);
+const serverUrlOverride = readArg("--openapi-server-url", process.env.E2E_OPENAPI_SERVER_URL || "");
+const serverUrl = (serverUrlOverride || `http://host.docker.internal:${openApiTarget.port}/${marker}`).replace(/\/$/, "");
 const login = requireOk(await api("/auth/login", {
   method: "POST",
   body: JSON.stringify({ username, password })
@@ -114,6 +156,7 @@ const spec = {
       get: {
         operationId: `listPets_${marker}`,
         summary: "List pets",
+        parameters: [{ name: "status", in: "query", required: false, schema: { type: "string" } }],
         responses: { 200: { description: "ok" } }
       }
     },
@@ -207,6 +250,60 @@ if (preflight.effect !== "ALLOW") {
   throw new Error(`enabled OpenAPI tool preflight should ALLOW, got ${JSON.stringify(preflight)}`);
 }
 
+const invokeRunId = `openapi-smoke-invoke-run-${marker}`;
+const invokeToolCallId = `openapi-smoke-invoke-call-${marker}`;
+const invocation = requireOk(await api(`/tools/${encodeURIComponent(openApiToolId)}/invoke`, {
+  method: "POST",
+  headers: auth,
+  body: JSON.stringify({
+    runId: invokeRunId,
+    stepId: `openapi-smoke-invoke-step-${marker}`,
+    toolCallId: invokeToolCallId,
+    tenantId: "default",
+    userId: String(login.userId || "1"),
+    arguments: { status: "available" },
+    idempotencyKey: `${invokeRunId}:${invokeToolCallId}`,
+    allowedToolIds: [openApiToolId]
+  })
+}), "invoke enabled OpenAPI tool through Tool Gateway");
+if (invocation.success !== true) {
+  throw new Error(`enabled OpenAPI tool invocation should succeed, got ${JSON.stringify(invocation)}`);
+}
+if (String(invocation.content || "").includes(`${marker}-raw-token`) ||
+    String(invocation.content || "").includes(`${marker}-raw-secret`)) {
+  throw new Error(`OpenAPI invocation content leaked sensitive response fields: ${invocation.content}`);
+}
+const invocationPayload = JSON.parse(invocation.content || "{}");
+if (invocationPayload.statusCode !== 200 ||
+    invocationPayload.body?.marker !== marker ||
+    invocationPayload.body?.status !== "available" ||
+    invocationPayload.body?.token !== "[REDACTED]" ||
+    invocationPayload.body?.nested?.secret !== "[REDACTED]") {
+  throw new Error(`OpenAPI invocation returned unexpected payload: ${invocation.content}`);
+}
+const observedTargetRequest = openApiTarget.requests.find((request) =>
+  request.method === "GET" &&
+  request.path === `/${marker}/pets` &&
+  request.query?.status === "available"
+);
+if (!observedTargetRequest) {
+  throw new Error(`OpenAPI target did not observe expected GET request: ${JSON.stringify(openApiTarget.requests)}`);
+}
+
+const audit = requireOk(await api(
+  `/tool-invocations?current=1&size=20&runId=${encodeURIComponent(invokeRunId)}&toolId=${encodeURIComponent(openApiToolId)}`,
+  { headers: auth }
+), "query OpenAPI invocation audit");
+const auditRecords = Array.isArray(audit?.records) ? audit.records : [];
+const succeededAudit = auditRecords.find((record) =>
+  record.status === "SUCCEEDED" &&
+  record.toolId === openApiToolId &&
+  record.runId === invokeRunId
+);
+if (!succeededAudit) {
+  throw new Error(`OpenAPI invocation did not create SUCCEEDED audit: ${JSON.stringify(audit)}`);
+}
+
 const dbRow = psql(`
 select c.connector_id,
        c.name,
@@ -250,6 +347,7 @@ try {
 } finally {
   await browser.close();
 }
+await closeServer(openApiTarget.server);
 
 console.log(JSON.stringify({
   ok: true,
@@ -258,6 +356,9 @@ console.log(JSON.stringify({
   operations: operations.map((operation) => `${operation.method}:${operation.riskLevel}:${operation.status}`),
   enabledGet: openApiToolId,
   preflightEffect: preflight.effect,
+  invocationSuccess: invocation.success,
+  invocationStatusCode: invocationPayload.statusCode,
+  auditStatus: succeededAudit.status,
   highRiskStatus: highRiskResult.status,
   toolCount: toolRecords.length,
   dbRow,

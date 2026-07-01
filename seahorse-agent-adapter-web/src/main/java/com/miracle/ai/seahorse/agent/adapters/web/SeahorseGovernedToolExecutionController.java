@@ -67,6 +67,16 @@ public class SeahorseGovernedToolExecutionController {
                 port -> port.preflight(safeRequest.toInvocationRequest(toolId)));
     }
 
+    @PostMapping({"/tools/{toolId}/invoke", "/api/tools/{toolId}/invoke"})
+    public ApiResponse<Object> invoke(@PathVariable String toolId,
+                                      @RequestBody(required = false) ToolPreflightRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
+        advancedFeatureGate.requireEnabled(AdvancedFeature.TOOL_CATALOG_MANAGEMENT);
+        ToolPreflightRequest safeRequest = request == null ? ToolPreflightRequest.empty() : request;
+        return ApiResponses.requireService(governedToolExecutionPortProvider,
+                port -> port.invoke(safeRequest.toInvocationRequest(toolId)));
+    }
+
     public record ToolPreflightRequest(
             String runId,
             String stepId,

@@ -4,17 +4,24 @@ param(
     [string]$Password = "admin123",
     [string]$PostgresContainer = "seahorse-postgres",
     [string]$PostgresUser = "seahorse",
-    [string]$PostgresDatabase = "seahorse"
+    [string]$PostgresDatabase = "seahorse",
+    [string]$OpenApiServerUrl = ""
 )
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $NodeScript = Join-Path $ScriptDir "e2e-openapi-connector-smoke.mjs"
+$Args = @(
+    $NodeScript,
+    "--base-url", $BaseUrl,
+    "--username", $Username,
+    "--password", $Password,
+    "--postgres-container", $PostgresContainer,
+    "--postgres-user", $PostgresUser,
+    "--postgres-database", $PostgresDatabase
+)
+if (-not [string]::IsNullOrWhiteSpace($OpenApiServerUrl)) {
+    $Args += @("--openapi-server-url", $OpenApiServerUrl)
+}
 
-node $NodeScript `
-  --base-url $BaseUrl `
-  --username $Username `
-  --password $Password `
-  --postgres-container $PostgresContainer `
-  --postgres-user $PostgresUser `
-  --postgres-database $PostgresDatabase
+node @Args
