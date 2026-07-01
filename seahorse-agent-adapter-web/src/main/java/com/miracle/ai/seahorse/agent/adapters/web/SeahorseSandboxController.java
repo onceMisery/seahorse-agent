@@ -95,6 +95,12 @@ public class SeahorseSandboxController {
         return ApiResponses.requireService(sandboxRuntimePortProvider, port -> port.close(sessionId));
     }
 
+    @GetMapping("/api/sandbox/sessions/{sessionId}/executions")
+    public ApiResponse<Object> listExecutions(@PathVariable String sessionId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        return ApiResponses.requireService(sandboxRuntimePortProvider, port -> port.listExecutions(sessionId));
+    }
+
     @GetMapping("/api/sandbox/sessions/{sessionId}/artifacts")
     public ApiResponse<Object> listArtifacts(@PathVariable String sessionId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);

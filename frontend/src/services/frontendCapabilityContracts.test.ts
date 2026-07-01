@@ -24,7 +24,8 @@ import {
 } from "@/services/securityGovernanceService";
 import {
   createSandboxSession,
-  executeInSandbox
+  executeInSandbox,
+  listSandboxExecutions
 } from "@/services/sandboxService";
 
 const mockedApi = vi.mocked(api);
@@ -69,6 +70,7 @@ describe("frontend capability service contracts", () => {
     expect(backendEndpoints).toContain("GET /admin/dashboard/overview");
     expect(backendEndpoints).toContain("GET /admin/dashboard/performance");
     expect(backendEndpoints).toContain("GET /admin/dashboard/trends");
+    expect(backendEndpoints).toContain("GET /api/sandbox/sessions/{}/executions");
   });
 
   it("publishes agents with the backend publish payload", async () => {
@@ -283,6 +285,7 @@ describe("frontend capability service contracts", () => {
     await executeInSandbox("session-1", {
       input: "{\"hello\":\"world\"}"
     });
+    await listSandboxExecutions("session-1");
 
     expect(mockedApi.post).toHaveBeenNthCalledWith(1, "/api/sandbox/sessions", {
       tenantId: "default",
@@ -296,5 +299,6 @@ describe("frontend capability service contracts", () => {
       networkRequested: false,
       requestedHosts: []
     });
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/sandbox/sessions/session-1/executions");
   });
 });

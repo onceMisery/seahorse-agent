@@ -166,6 +166,37 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldListPersistedExecutionsForSession() {
+        MemorySandboxExecutionRepository executionRepository = new MemorySandboxExecutionRepository();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                new MemorySandboxSessionRepository(),
+                executionRepository,
+                new EmptySandboxArtifactQueryPort(),
+                CLOCK);
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        SandboxExecutionResult result = service.execute(new SandboxExecutionCommand(
+                session.sessionId(),
+                "print('hello')",
+                false,
+                List.of()));
+
+        List<SandboxExecution> executions = service.listExecutions(session.sessionId());
+
+        assertEquals(1, executions.size());
+        assertEquals(result.execution(), executions.get(0));
+        assertEquals(result.execution(), executionRepository.findExecutionById("exec-1").orElseThrow());
+    }
+
+    @Test
     void shouldDelegateCloseToRuntimeAndPersistClosedSession() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
         MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();

@@ -193,6 +193,13 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     }
 
     @Override
+    public List<SandboxExecution> listExecutions(String sessionId) {
+        String safeSessionId = requireText(sessionId, "sessionId must not be blank");
+        findSessionOrThrow(safeSessionId);
+        return executionRepositoryPort.listExecutionsBySession(safeSessionId);
+    }
+
+    @Override
     public List<SandboxArtifact> listArtifacts(String sessionId) {
         String safeSessionId = requireText(sessionId, "sessionId must not be blank");
         findSessionOrThrow(safeSessionId);

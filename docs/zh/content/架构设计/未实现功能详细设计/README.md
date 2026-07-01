@@ -227,7 +227,7 @@
 
 2. **Sandbox Runtime 真实隔离执行**
    - 实现容器化 runtime adapter
-   - 补齐 session close、execution history、artifact scan
+   - 补齐 artifact scan、runtime profile 和 session TTL/cleanup metadata
    - 接入 sandbox-backed tools
 
 ### 中期优先 (2-4 周)
@@ -306,7 +306,7 @@
 | --- | --- |
 | Agent Factory | 创建向导、结构化策略编辑、test run panel、publish gate dashboard、version diff |
 | OpenAPI Connector | spec diff、operation review、dry-run、secret picker、调用审计摘要 |
-| Sandbox Runtime | session 列表、execution history、artifact scan/preview、policy preview |
+| Sandbox Runtime | session 列表、artifact scan/preview、policy preview |
 | Multi-Agent/A2A | handoff tree、collaboration policy、team builder、remote agent registry、mesh health |
 | MCP 管理 | MCP Server OAuth 配置、scope challenge、token 状态、凭据轮换 |
 | 记忆系统 | 记忆质量仪表板、冲突检测与修复、时间线和关系图 |

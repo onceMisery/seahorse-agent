@@ -6,33 +6,47 @@ const DEFAULT_RUNTIME_TYPE = "CODE_INTERPRETER";
 
 export interface SandboxSession {
   sessionId?: string;
+  tenantId?: string;
+  runId?: string;
+  runtimeType?: string;
   status?: string;
+  reasonCode?: string;
   agentId?: string;
   createTime?: string;
   closeTime?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SandboxExecution {
+  executionId?: string;
+  sessionId?: string;
+  runtimeType?: string;
+  status?: string;
+  resultSummary?: string;
+  reasonCode?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SandboxExecutionResult {
-  executionId?: string;
-  sessionId?: string;
-  status?: string;
-  output?: string;
-  error?: string;
-  durationMs?: number;
-  artifacts?: Array<{
-    artifactId?: string;
-    name?: string;
-    mimeType?: string;
-    sizeBytes?: number;
-  }>;
+  execution?: SandboxExecution;
+  artifacts?: SandboxArtifact[];
+  reasonCode?: string;
 }
 
 export interface SandboxArtifact {
   artifactId?: string;
+  sessionId?: string;
+  executionId?: string;
   name?: string;
   mimeType?: string;
+  mediaType?: string;
   sizeBytes?: number;
   content?: string;
+  scanStatus?: string;
+  sensitivity?: string;
+  createdAt?: string;
 }
 
 export interface SandboxSessionCreatePayload {
@@ -83,8 +97,14 @@ export function executeInSandbox(sessionId: string, payload: SandboxExecutePaylo
 }
 
 export function closeSandboxSession(sessionId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<SandboxSession, SandboxSession>(
     `/api/sandbox/sessions/${encodeURIComponent(sessionId)}/close`
+  );
+}
+
+export function listSandboxExecutions(sessionId: string) {
+  return api.get<SandboxExecution[]>(
+    `/api/sandbox/sessions/${encodeURIComponent(sessionId)}/executions`
   );
 }
 

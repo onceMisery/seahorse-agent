@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 
@@ -30,6 +31,8 @@ public interface SandboxRuntimeInboundPort {
     SandboxExecutionResult execute(SandboxExecutionCommand command);
 
     SandboxSession close(String sessionId);
+
+    List<SandboxExecution> listExecutions(String sessionId);
 
     List<SandboxArtifact> listArtifacts(String sessionId);
 }

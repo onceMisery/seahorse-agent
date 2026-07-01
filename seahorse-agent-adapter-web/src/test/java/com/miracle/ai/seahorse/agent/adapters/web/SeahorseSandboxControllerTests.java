@@ -71,6 +71,12 @@ class SeahorseSandboxControllerTests {
                         SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED),
                 SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED));
         when(port.close("session-1")).thenReturn(session(SandboxExecutionStatus.CANCELLED));
+        when(port.listExecutions("session-1")).thenReturn(List.of(SandboxExecution.failed(
+                "exec-1",
+                "session-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW.plusSeconds(1),
+                SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED)));
         when(port.listArtifacts("session-1")).thenReturn(List.of(artifact()));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseSandboxController(
@@ -116,6 +122,13 @@ class SeahorseSandboxControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("CANCELLED"));
         verify(port).close("session-1");
+
+        mvc.perform(get("/api/sandbox/sessions/session-1/executions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].executionId").value("exec-1"))
+                .andExpect(jsonPath("$.data[0].status").value("FAILED"))
+                .andExpect(jsonPath("$.data[0].reasonCode").value("RUNTIME_UNSUPPORTED"));
+        verify(port).listExecutions("session-1");
 
         mvc.perform(get("/api/sandbox/sessions/session-1/artifacts"))
                 .andExpect(status().isOk())
