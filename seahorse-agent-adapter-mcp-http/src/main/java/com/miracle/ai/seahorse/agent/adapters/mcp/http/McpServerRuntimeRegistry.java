@@ -17,11 +17,15 @@
 
 package com.miracle.ai.seahorse.agent.adapters.mcp.http;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolExecutionPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolPermission;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerStatusView;
 import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerTestResultView;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionRequest;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolExecutorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
@@ -33,18 +37,38 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 public class McpServerRuntimeRegistry implements McpServerManagementInboundPort {
 
     public static final String STATUS_DISABLED = "DISABLED";
     public static final String STATUS_READY = "READY";
     public static final String STATUS_FAILED = "FAILED";
+    private static final String STATUS_APPROVAL_REQUIRED = "APPROVAL_REQUIRED";
+    private static final String STATUS_DENIED = "DENIED";
+    private static final String STATUS_EXECUTION_FAILED = "EXECUTION_FAILED";
+    private static final String STATUS_SUCCESS = "SUCCESS";
     private static final String ECHO_TOOL_ID = "echo";
     private static final String TEST_TEXT = "seahorse mcp health check";
+    private static final String TEST_RUN_PREFIX = "mcp-server-test:";
+    private static final String TEST_STEP_PREFIX = "mcp-server-test-step:";
+    private static final String TEST_CALL_PREFIX = "mcp-server-test-call:";
+    private static final String TEST_AGENT_ID = "legacy-react-agent";
+    private static final String TEST_TENANT_ID = "default";
+    private static final String TEST_USER_ID = "mcp-server-test";
 
     private final Map<String, McpServerStatusView> servers = new LinkedHashMap<>();
+    private final Supplier<GovernedToolExecutionPort> governedToolExecutionPort;
     private McpToolRegistryPort toolRegistry = McpToolRegistryPort.empty();
     private LifecycleActions lifecycleActions = LifecycleActions.unsupported();
+
+    public McpServerRuntimeRegistry() {
+        this(() -> null);
+    }
+
+    public McpServerRuntimeRegistry(Supplier<GovernedToolExecutionPort> governedToolExecutionPort) {
+        this.governedToolExecutionPort = Objects.requireNonNullElse(governedToolExecutionPort, () -> null);
+    }
 
     public interface LifecycleActions {
 
@@ -115,6 +139,10 @@ public class McpServerRuntimeRegistry implements McpServerManagementInboundPort 
         if (echoToolId.isEmpty()) {
             return testResult(server.get().getName(), "", false, "TOOL_NOT_FOUND", "", "safe echo tool not found");
         }
+        GovernedToolExecutionPort governedToolExecution = governedToolExecutionPort.get();
+        if (governedToolExecution != null) {
+            return testServerThroughGovernedGateway(governedToolExecution, server.get(), echoToolId.get());
+        }
         Optional<McpToolExecutorPort> executor = toolRegistry.findExecutor(echoToolId.get());
         if (executor.isEmpty()) {
             return testResult(server.get().getName(), echoToolId.get(), false,
@@ -132,8 +160,68 @@ public class McpServerRuntimeRegistry implements McpServerManagementInboundPort 
                     result.message());
         } catch (RuntimeException ex) {
             return testResult(server.get().getName(), echoToolId.get(), false,
-                    "EXECUTION_FAILED", "", Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    STATUS_EXECUTION_FAILED, "", Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
         }
+    }
+
+    private McpServerTestResultView testServerThroughGovernedGateway(
+            GovernedToolExecutionPort governedToolExecution,
+            McpServerStatusView server,
+            String toolId) {
+        ToolInvocationRequest request = testInvocationRequest(server.getName(), toolId);
+        GovernedToolPermission permission = Objects.requireNonNullElseGet(
+                governedToolExecution.preflight(request),
+                () -> GovernedToolPermission.deny("POLICY_DECISION_MISSING", "Tool governance did not return a decision"));
+        if (permission.effect() == GovernedToolPermission.Effect.APPROVAL_REQUIRED) {
+            return testResult(
+                    server.getName(),
+                    toolId,
+                    false,
+                    STATUS_APPROVAL_REQUIRED,
+                    "",
+                    permission.reasonMessage(),
+                    permission.approvalId(),
+                    permission.reasonCode());
+        }
+        if (permission.effect() != GovernedToolPermission.Effect.ALLOW) {
+            return testResult(
+                    server.getName(),
+                    toolId,
+                    false,
+                    STATUS_DENIED,
+                    "",
+                    permission.reasonMessage(),
+                    null,
+                    permission.reasonCode());
+        }
+        ToolInvocationResult result = governedToolExecution.invoke(request);
+        return testResult(
+                server.getName(),
+                toolId,
+                result.success(),
+                result.success() ? STATUS_SUCCESS : STATUS_EXECUTION_FAILED,
+                result.content(),
+                result.success() ? STATUS_SUCCESS : result.error(),
+                result.approvalId(),
+                result.error());
+    }
+
+    private ToolInvocationRequest testInvocationRequest(String serverName, String toolId) {
+        String safeServerName = Objects.requireNonNullElse(serverName, "default");
+        return new ToolInvocationRequest(
+                TEST_RUN_PREFIX + safeServerName,
+                TEST_STEP_PREFIX + toolId,
+                TEST_CALL_PREFIX + safeServerName + ":" + toolId,
+                TEST_AGENT_ID,
+                null,
+                TEST_TENANT_ID,
+                TEST_USER_ID,
+                TEST_USER_ID,
+                toolId,
+                Map.of("text", TEST_TEXT),
+                Map.of(),
+                TEST_RUN_PREFIX + safeServerName + ":" + toolId,
+                List.of(toolId));
     }
 
     @Override
@@ -209,6 +297,18 @@ public class McpServerRuntimeRegistry implements McpServerManagementInboundPort 
             String status,
             String content,
             String message) {
+        return testResult(serverName, toolId, success, status, content, message, null, null);
+    }
+
+    private McpServerTestResultView testResult(
+            String serverName,
+            String toolId,
+            boolean success,
+            String status,
+            String content,
+            String message,
+            String approvalId,
+            String reasonCode) {
         return McpServerTestResultView.builder()
                 .serverName(Objects.requireNonNullElse(serverName, ""))
                 .toolId(Objects.requireNonNullElse(toolId, ""))
@@ -216,6 +316,8 @@ public class McpServerRuntimeRegistry implements McpServerManagementInboundPort 
                 .status(Objects.requireNonNullElse(status, ""))
                 .content(Objects.requireNonNullElse(content, ""))
                 .message(Objects.requireNonNullElse(message, ""))
+                .approvalId(Objects.requireNonNullElse(approvalId, ""))
+                .reasonCode(Objects.requireNonNullElse(reasonCode, ""))
                 .testedAt(Instant.now())
                 .build();
     }

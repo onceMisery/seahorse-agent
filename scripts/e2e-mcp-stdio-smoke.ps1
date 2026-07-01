@@ -205,6 +205,7 @@ try {
     }
     if (-not $login) { exit 1 }
     $headers = @{ Authorization = "Bearer $($login.data.token)" }
+    $McpDiagnosticRunId = "mcp-server-test:local-echo"
 
     $server = Test-Step "List MCP stdio servers" {
         $response = Invoke-Json -Method GET -Path "/api/mcp/servers" -Headers $headers
@@ -234,16 +235,73 @@ try {
     }
     if (-not $server) { exit 1 }
 
-    Test-Step "Run MCP safe echo test call" {
+    Test-Step "MCP safe echo test call requires approval" {
         $response = Invoke-Json -Method POST -Path "/api/mcp/servers/local-echo/test" -Headers $headers
         Assert-ApiOk $response "Test MCP server"
-        if ($response.data.success -ne $true) {
-            throw "MCP test did not succeed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        if ($response.data.success -ne $false) {
+            throw "MCP test should be gated before approval: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
-        if ("$($response.data.content)" -notlike "*stdio:seahorse mcp health check*") {
-            throw "Unexpected MCP echo content: $($response.data.content)"
+        if ("$($response.data.status)" -ne "APPROVAL_REQUIRED") {
+            throw "MCP test status was not APPROVAL_REQUIRED: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($response.data.reasonCode)" -ne "TOOL_APPROVAL_REQUIRED") {
+            throw "MCP test reason was not TOOL_APPROVAL_REQUIRED: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if (-not $response.data.approvalId) {
+            throw "MCP test did not return approvalId"
+        }
+        $approval = Invoke-Json -Method GET -Path "/api/approvals/$($response.data.approvalId)" -Headers $headers
+        Assert-ApiOk $approval "Read MCP test approval"
+        if ("$($approval.data.runId)" -ne $McpDiagnosticRunId) {
+            throw "MCP test approval runId mismatch: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($approval.data.status)" -ne "PENDING") {
+            throw "MCP test approval was not pending: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $response.data | ConvertTo-Json -Compress | Write-Host
+        $response.data.approvalId
+    } | Out-Null
+
+    $diagnosticApproval = Test-Step "Approve and run MCP safe echo test call" {
+        $response = Invoke-Json -Method POST -Path "/api/mcp/servers/local-echo/test" -Headers $headers
+        Assert-ApiOk $response "Read MCP diagnostic approval"
+        if (-not $response.data.approvalId) {
+            throw "MCP diagnostic approval id missing before approve"
+        }
+        $approvalId = "$($response.data.approvalId)"
+        $approved = Invoke-Json -Method POST -Path "/api/approvals/$approvalId/approve" -Headers $headers -Body @{
+            decisionComment = "Allow MCP diagnostic smoke test"
+        }
+        Assert-ApiOk $approved "Approve MCP diagnostic test"
+        if ("$($approved.data.status)" -ne "APPROVED") {
+            throw "MCP diagnostic approval was not approved: $($approved.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+
+        $result = Invoke-Json -Method POST -Path "/api/mcp/servers/local-echo/test" -Headers $headers
+        Assert-ApiOk $result "Run approved MCP server test"
+        if ($result.data.success -ne $true) {
+            throw "Approved MCP test did not succeed: $($result.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($result.data.status)" -ne "SUCCESS") {
+            throw "Approved MCP test status was not SUCCESS: $($result.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($result.data.content)" -notlike "*stdio:seahorse mcp health check*") {
+            throw "Unexpected MCP echo content: $($result.data.content)"
+        }
+        $result.data | ConvertTo-Json -Compress | Write-Host
+        $approved.data
+    }
+    if (-not $diagnosticApproval) { exit 1 }
+
+    Test-Step "Verify MCP diagnostic tool audit" {
+        $response = Invoke-Json -Method GET -Path "/api/tool-invocations?current=1&size=20&runId=$McpDiagnosticRunId&toolId=echo" -Headers $headers
+        Assert-ApiOk $response "Read MCP diagnostic tool audit"
+        $records = @($response.data.records)
+        $succeeded = @($records | Where-Object { $_.status -eq "SUCCEEDED" -and $_.toolId -eq "echo" })[0]
+        if (-not $succeeded) {
+            throw "MCP diagnostic test did not create SUCCEEDED tool audit: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $succeeded | ConvertTo-Json -Compress | Write-Host
     } | Out-Null
 
     Test-Step "Verify MCP tool catalog entry" {

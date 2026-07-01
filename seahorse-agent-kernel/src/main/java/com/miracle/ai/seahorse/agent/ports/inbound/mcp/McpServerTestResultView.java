@@ -36,5 +36,7 @@ public class McpServerTestResultView {
     private String status;
     private String content;
     private String message;
+    private String approvalId;
+    private String reasonCode;
     private Instant testedAt;
 }

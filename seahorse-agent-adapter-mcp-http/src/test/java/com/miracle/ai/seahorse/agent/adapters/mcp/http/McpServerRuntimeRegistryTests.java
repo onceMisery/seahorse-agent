@@ -17,10 +17,15 @@
 
 package com.miracle.ai.seahorse.agent.adapters.mcp.http;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolApproval;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolExecutionPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolPermission;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerStatusView;
 import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerTestResultView;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionRequest;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolExecutorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
@@ -29,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -69,7 +75,7 @@ class McpServerRuntimeRegistryTests {
     }
 
     @Test
-    void shouldRunSafeEchoTestCallThroughRegisteredExecutor() {
+    void shouldRunSafeEchoTestCallThroughRegisteredExecutorWhenGatewayUnavailable() {
         McpServerRuntimeRegistry registry = new McpServerRuntimeRegistry();
         registry.recordReady(server("local-echo", McpHttpAdapterProperties.Transport.STDIO, true),
                 List.of(new McpToolDescriptor("echo", "Echo text", Map.of())),
@@ -85,6 +91,55 @@ class McpServerRuntimeRegistryTests {
         assertThat(result.getContent()).isEqualTo("echo seahorse mcp health check");
         assertThat(executor.lastRequest.toolId()).isEqualTo("echo");
         assertThat(executor.lastRequest.arguments()).containsEntry("text", "seahorse mcp health check");
+    }
+
+    @Test
+    void shouldRequireApprovalThroughGovernedGatewayBeforeSafeTestCall() {
+        CapturingGovernedToolExecution governed = new CapturingGovernedToolExecution(
+                GovernedToolPermission.approvalRequired(
+                        "approval:diagnostic",
+                        "TOOL_APPROVAL_REQUIRED",
+                        "Tool requires approval"));
+        McpServerRuntimeRegistry registry = new McpServerRuntimeRegistry(() -> governed);
+        registry.recordReady(server("local-echo", McpHttpAdapterProperties.Transport.STDIO, true),
+                List.of(new McpToolDescriptor("echo", "Echo text", Map.of())),
+                "");
+        CapturingExecutor executor = new CapturingExecutor();
+        registry.setToolRegistry(new SingleToolRegistry("echo", executor));
+
+        McpServerTestResultView result = registry.testServer("local-echo");
+
+        assertThat(result.getSuccess()).isFalse();
+        assertThat(result.getStatus()).isEqualTo("APPROVAL_REQUIRED");
+        assertThat(result.getApprovalId()).isEqualTo("approval:diagnostic");
+        assertThat(result.getReasonCode()).isEqualTo("TOOL_APPROVAL_REQUIRED");
+        assertThat(governed.preflightRequest.toolId()).isEqualTo("echo");
+        assertThat(governed.preflightRequest.allowedToolIds()).containsExactly("echo");
+        assertThat(governed.preflightRequest.arguments()).containsEntry("text", "seahorse mcp health check");
+        assertThat(governed.invokeCalls.get()).isZero();
+        assertThat(executor.lastRequest).isNull();
+    }
+
+    @Test
+    void shouldRunSafeEchoTestCallThroughGovernedGatewayAfterApprovalSatisfied() {
+        CapturingGovernedToolExecution governed = new CapturingGovernedToolExecution(
+                GovernedToolPermission.allow("APPROVAL_SATISFIED", "approval satisfied"));
+        governed.invokeResult = ToolInvocationResult.ok("stdio:seahorse mcp health check");
+        McpServerRuntimeRegistry registry = new McpServerRuntimeRegistry(() -> governed);
+        registry.recordReady(server("local-echo", McpHttpAdapterProperties.Transport.STDIO, true),
+                List.of(new McpToolDescriptor("echo", "Echo text", Map.of())),
+                "");
+
+        McpServerTestResultView result = registry.testServer("local-echo");
+
+        assertThat(result.getServerName()).isEqualTo("local-echo");
+        assertThat(result.getToolId()).isEqualTo("echo");
+        assertThat(result.getSuccess()).isTrue();
+        assertThat(result.getStatus()).isEqualTo("SUCCESS");
+        assertThat(result.getContent()).isEqualTo("stdio:seahorse mcp health check");
+        assertThat(governed.invokeCalls.get()).isEqualTo(1);
+        assertThat(governed.invokeRequest.runId()).isEqualTo("mcp-server-test:local-echo");
+        assertThat(governed.invokeRequest.stepId()).isEqualTo("mcp-server-test-step:echo");
     }
 
     @Test
@@ -168,6 +223,36 @@ class McpServerRuntimeRegistryTests {
         public McpToolExecutionResult execute(McpToolExecutionRequest request) {
             lastRequest = request;
             return McpToolExecutionResult.success(request.toolId(), "echo " + request.arguments().get("text"));
+        }
+    }
+
+    private static final class CapturingGovernedToolExecution implements GovernedToolExecutionPort {
+        private final GovernedToolPermission permission;
+        private ToolInvocationResult invokeResult = ToolInvocationResult.failed("not configured");
+        private ToolInvocationRequest preflightRequest;
+        private ToolInvocationRequest invokeRequest;
+        private final AtomicInteger invokeCalls = new AtomicInteger();
+
+        private CapturingGovernedToolExecution(GovernedToolPermission permission) {
+            this.permission = permission;
+        }
+
+        @Override
+        public GovernedToolPermission preflight(ToolInvocationRequest request) {
+            this.preflightRequest = request;
+            return permission;
+        }
+
+        @Override
+        public ToolInvocationResult invoke(ToolInvocationRequest request) {
+            this.invokeRequest = request;
+            this.invokeCalls.incrementAndGet();
+            return invokeResult;
+        }
+
+        @Override
+        public Optional<GovernedToolApproval> findLatestApproval(String runId, String stepId) {
+            return Optional.empty();
         }
     }
 

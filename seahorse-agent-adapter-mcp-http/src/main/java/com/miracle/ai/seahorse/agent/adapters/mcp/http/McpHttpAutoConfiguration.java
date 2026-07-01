@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.mcp.http;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolExecutionPort;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolFeature;
 import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialAuthType;
@@ -79,8 +80,9 @@ public class McpHttpAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(McpServerManagementInboundPort.class)
-    public McpServerRuntimeRegistry seahorseMcpServerRuntimeRegistry() {
-        return new McpServerRuntimeRegistry();
+    public McpServerRuntimeRegistry seahorseMcpServerRuntimeRegistry(
+            ObjectProvider<GovernedToolExecutionPort> governedToolExecutionPort) {
+        return new McpServerRuntimeRegistry(governedToolExecutionPort::getIfAvailable);
     }
 
     @Bean
