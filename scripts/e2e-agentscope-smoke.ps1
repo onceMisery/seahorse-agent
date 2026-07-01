@@ -14,6 +14,7 @@ $ErrorActionPreference = "Stop"
 $passed = 0
 $failed = 0
 $total = 0
+$a2aEnabled = $false
 
 function Test-Step {
     param([string]$Name, [scriptblock]$Action)
@@ -129,8 +130,12 @@ Test-Step "Verify AgentScope runtime flags" {
     if (-not ($envLines | Where-Object { $_ -eq "SEAHORSE_AGENTSCOPE_EXECUTOR_ENABLED=true" })) {
         throw "SEAHORSE_AGENTSCOPE_EXECUTOR_ENABLED=true was not found on $BackendContainer"
     }
-    if (-not ($envLines | Where-Object { $_ -eq "SEAHORSE_AGENTSCOPE_A2A_ENABLED=false" })) {
-        throw "SEAHORSE_AGENTSCOPE_A2A_ENABLED=false was not found on $BackendContainer"
+    if ($envLines | Where-Object { $_ -eq "SEAHORSE_AGENTSCOPE_A2A_ENABLED=true" }) {
+        $script:a2aEnabled = $true
+    } elseif ($envLines | Where-Object { $_ -eq "SEAHORSE_AGENTSCOPE_A2A_ENABLED=false" }) {
+        $script:a2aEnabled = $false
+    } else {
+        throw "SEAHORSE_AGENTSCOPE_A2A_ENABLED was not found on $BackendContainer"
     }
 }
 
@@ -189,9 +194,29 @@ $agentScopeSnapshot = Test-Step "Verify AgentScope run context snapshot" {
     $snapshot
 }
 
-Test-Step "Verify A2A endpoints are disabled" {
-    Assert-Equal (Invoke-HttpStatus "/a2a") 404 "A2A endpoint status"
-    Assert-Equal (Invoke-HttpStatus "/a2a/.well-known/agent-card.json") 404 "A2A agent card status"
+Test-Step "Verify A2A endpoint boundary" {
+    if ($script:a2aEnabled) {
+        Assert-Equal (Invoke-HttpStatus "/a2a") 200 "A2A agent card status"
+        Assert-Equal (Invoke-HttpStatus "/a2a/.well-known/agent-card.json") 404 "A2A legacy well-known status"
+
+        $card = Invoke-RestMethod -Uri "$BaseUrl/a2a" -Method Get
+        if ([string]::IsNullOrWhiteSpace("$($card.name)") -or "$($card.url)" -notlike "*/a2a") {
+            throw "A2A agent card is missing name or endpoint url: $($card | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $tags = @($card.skills | ForEach-Object { @($_.tags) })
+        if (-not ($tags | Where-Object { "$_" -like "seahorse:a2a:authMode=*" })) {
+            throw "A2A agent card did not expose auth mode metadata"
+        }
+        $status = & curl.exe -sS -o NUL -w "%{http_code}" -X POST "$BaseUrl/a2a" `
+            -H "Content-Type: application/json" --data "{}"
+        if ($LASTEXITCODE -ne 0) {
+            throw "curl failed for unauthorized A2A POST"
+        }
+        Assert-Equal ([int]$status) 401 "A2A unauthenticated POST status"
+    } else {
+        Assert-Equal (Invoke-HttpStatus "/a2a") 404 "A2A endpoint status"
+        Assert-Equal (Invoke-HttpStatus "/a2a/.well-known/agent-card.json") 404 "A2A legacy well-known status"
+    }
 }
 
 $kernelConversationId = Test-Step "Create kernel conversation and apply profile" {

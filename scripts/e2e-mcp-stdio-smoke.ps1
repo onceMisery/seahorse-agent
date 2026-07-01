@@ -134,6 +134,7 @@ try {
             "-p", "${HostPort}:9090",
             "-e", "SERVER_PORT=9090",
             "-e", "SEAHORSE_AGENT_PRODUCT_MODE=enterprise",
+            "-e", "SEAHORSE_AGENT_ADVANCED_MCP_TOOL_ENABLED=true",
             "-e", "SEAHORSE_AGENT_ADVANCED_TOOL_CATALOG_MANAGEMENT_ENABLED=true",
             "-e", "SPRING_DATASOURCE_URL=jdbc:postgresql://${PostgresHost}:5432/${PostgresDatabase}",
             "-e", "SPRING_DATASOURCE_USERNAME=$PostgresUsername",
