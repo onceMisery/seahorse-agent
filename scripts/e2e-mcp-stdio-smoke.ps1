@@ -10,6 +10,7 @@ param(
     [string]$PostgresDatabase = "seahorse",
     [string]$PostgresUsername = "seahorse",
     [string]$PostgresPassword = "seahorse",
+    [string]$BackendJarPath = "",
     [switch]$KeepContainer
 )
 
@@ -17,6 +18,11 @@ $ErrorActionPreference = "Stop"
 $passed = 0
 $failed = 0
 $total = 0
+
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($BackendJarPath)) {
+    $BackendJarPath = Join-Path $RepoRoot "seahorse-agent-bootstrap\target\seahorse-agent-bootstrap-0.0.1-SNAPSHOT-exec.jar"
+}
 
 function Test-Step {
     param([string]$Name, [scriptblock]$Action)
@@ -136,6 +142,7 @@ try {
             "-e", "SEAHORSE_AGENT_PRODUCT_MODE=enterprise",
             "-e", "SEAHORSE_AGENT_ADVANCED_MCP_TOOL_ENABLED=true",
             "-e", "SEAHORSE_AGENT_ADVANCED_TOOL_CATALOG_MANAGEMENT_ENABLED=true",
+            "-e", "SEAHORSE_AGENT_ADVANCED_AGENT_RUN_MANAGEMENT_ENABLED=true",
             "-e", "SPRING_DATASOURCE_URL=jdbc:postgresql://${PostgresHost}:5432/${PostgresDatabase}",
             "-e", "SPRING_DATASOURCE_USERNAME=$PostgresUsername",
             "-e", "SPRING_DATASOURCE_PASSWORD=$PostgresPassword",
@@ -166,6 +173,10 @@ try {
             "-e", "SEAHORSE_AGENT_CHAT_AGENT_TOOLS_MCP_INCLUDE=echo",
             $BackendImage
         )
+        if (Test-Path -LiteralPath $BackendJarPath) {
+            $jarMount = "$($BackendJarPath):/app/app.jar:ro"
+            $args = $args[0..($args.Count - 2)] + @("-v", $jarMount) + $args[-1]
+        }
         $output = & docker.exe @args
         if ($LASTEXITCODE -ne 0) {
             throw "docker run failed: $output"
@@ -246,6 +257,47 @@ try {
             throw "MCP echo tool does not require approval: $($echo | ConvertTo-Json -Depth 20 -Compress)"
         }
         $echo | ConvertTo-Json -Compress | Write-Host
+    } | Out-Null
+
+    Test-Step "Preflight MCP echo tool requires approval" {
+        $runId = "mcp-stdio-smoke-run"
+        $stepId = "mcp-stdio-preflight-step"
+        $toolCallId = "mcp-stdio-preflight-call"
+        $response = Invoke-Json -Method POST -Path "/api/tools/echo/preflight" -Headers $headers -Body @{
+            runId = $runId
+            stepId = $stepId
+            toolCallId = $toolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = $Username
+            agentIdentityId = $Username
+            arguments = @{ text = "seahorse mcp governed preflight" }
+            resourceRefs = @{}
+            idempotencyKey = "${runId}:${toolCallId}"
+            allowedToolIds = @("echo")
+        }
+        Assert-ApiOk $response "Preflight MCP echo tool"
+        if ("$($response.data.effect)" -ne "APPROVAL_REQUIRED") {
+            throw "MCP echo preflight did not require approval: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($response.data.reasonCode)" -ne "TOOL_APPROVAL_REQUIRED") {
+            throw "MCP echo preflight reason was not TOOL_APPROVAL_REQUIRED: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if (-not $response.data.approvalId) {
+            throw "MCP echo preflight did not return approvalId"
+        }
+        $approval = Invoke-Json -Method GET -Path "/api/approvals/$($response.data.approvalId)" -Headers $headers
+        Assert-ApiOk $approval "Read MCP echo approval"
+        if ("$($approval.data.toolId)" -ne "echo") {
+            throw "Approval toolId was not echo: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($approval.data.approvalType)" -ne "TOOL_EXECUTION") {
+            throw "Approval type was not TOOL_EXECUTION: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($approval.data.status)" -ne "PENDING") {
+            throw "Approval status was not PENDING: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $approval.data | ConvertTo-Json -Compress | Write-Host
     } | Out-Null
 
     Test-Step "Refresh and restart MCP server" {
