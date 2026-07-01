@@ -34,6 +34,7 @@ class SeahorseAgentStarterAllSmokeTests {
             "com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelAdapter",
             "com.miracle.ai.seahorse.agent.adapters.mcp.http.StreamableHttpMcpClient",
             "com.miracle.ai.seahorse.agent.adapters.openapi.OpenApiSpecParserAdapter",
+            "com.miracle.ai.seahorse.agent.adapters.sandbox.container.ContainerSandboxRuntimeAdapter",
             "com.miracle.ai.seahorse.agent.adapters.parser.tika.TikaDocumentParserAdapter",
             "com.miracle.ai.seahorse.agent.adapters.source.feishu.FeishuDocumentFetcherAdapter",
             "com.miracle.ai.seahorse.agent.adapters.vector.milvus.MilvusVectorAdapter",

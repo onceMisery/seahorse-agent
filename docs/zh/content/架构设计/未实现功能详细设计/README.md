@@ -80,7 +80,7 @@
 
 ### 3. Sandbox Runtime ⚠️ 部分实现
 
-**当前状态**: 端口定义存在，但无实际隔离实现
+**当前状态**: 默认 runtime 仍 fail closed；显式配置 `seahorse-agent.adapters.sandbox.runtime=container` 后，Code Interpreter 已有 Docker/Podman Python 容器最小闭环，生产级 profile/配额、artifact、Agent 工具化和强隔离仍待补齐
 
 **功能描述**:
 - Code Interpreter 沙箱

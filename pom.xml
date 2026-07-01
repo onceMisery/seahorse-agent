@@ -50,6 +50,7 @@
         <module>seahorse-agent-adapter-agent-agentscope</module>
         <module>seahorse-agent-adapter-mcp-http</module>
         <module>seahorse-agent-adapter-openapi</module>
+        <module>seahorse-agent-adapter-sandbox-container</module>
         <module>seahorse-agent-adapter-vector-milvus</module>
         <module>seahorse-agent-adapter-vector-pgvector</module>
         <module>seahorse-agent-adapter-vector-noop</module>

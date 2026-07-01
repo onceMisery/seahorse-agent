@@ -15,15 +15,11 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox;
+package com.miracle.ai.seahorse.agent.adapters.sandbox.container;
 
-public enum SandboxPolicyReasonCode {
-    VALID_REQUEST,
-    DEFAULT_DENY,
-    NETWORK_DENIED_BY_DEFAULT,
-    NETWORK_HOST_NOT_ALLOWLISTED,
-    RUNTIME_UNSUPPORTED,
-    RUNTIME_EXECUTION_FAILED,
-    RUNTIME_TIMED_OUT,
-    SESSION_NOT_FOUND
+import java.io.IOException;
+
+interface ContainerCommandRunner {
+
+    ContainerCommandResult run(ContainerCommand command) throws IOException, InterruptedException;
 }

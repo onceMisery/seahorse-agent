@@ -71,6 +71,19 @@ public final class StarterAllAdapterAcceptanceMatrix {
                     "parse a minimal OpenAPI document and expose operations",
                     List.of("com.miracle.ai.seahorse.agent.ports.outbound.agent.OpenApiSpecParserPort")),
             entry(
+                    "sandbox-container",
+                    "seahorse-agent-adapter-sandbox-container",
+                    "com.miracle.ai.seahorse.agent.adapters.sandbox.container.ContainerSandboxRuntimeAdapter",
+                    "com.miracle.ai.seahorse.agent.adapters.sandbox.container.ContainerSandboxAutoConfiguration",
+                    List.of(
+                            "seahorse-agent.adapters.sandbox.runtime=container",
+                            "seahorse-agent.adapters.sandbox.container.engine=docker",
+                            "seahorse-agent.adapters.sandbox.container.python-image=python:3.11-alpine"),
+                    List.of("Docker or Podman CLI reachable from the backend host"),
+                    "SandboxRuntimePort resolves to the container adapter when explicitly enabled",
+                    "create a CODE_INTERPRETER session and execute a small Python script in a no-network container",
+                    List.of("com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort")),
+            entry(
                     "parser-tika",
                     "seahorse-agent-adapter-parser-tika",
                     "com.miracle.ai.seahorse.agent.adapters.parser.tika.TikaDocumentParserAdapter",
