@@ -256,6 +256,10 @@ $report = Test-Step "Export run experiment report" {
     $markdown = "$($response.data.markdown)"
     foreach ($expected in @(
             "Run Experiment Report",
+            "Template Version: run-experiment-report-v1",
+            "Executive Summary",
+            "Recommended trial",
+            "Evidence Index",
             "$($scored.experiment.id)",
             "$($fork.TrialId)",
             "$($fork.OutputMessageId)",
@@ -267,7 +271,8 @@ $report = Test-Step "Export run experiment report" {
             "sa_cost_usage_record",
             "cost=$($reportEvidence.Cost)",
             "tokens=$($reportEvidence.Tokens)",
-            "Fork Target"
+            "Fork Target",
+            "Reproduction Appendix"
         )) {
         if ($markdown -notlike "*$expected*") {
             throw "Report markdown did not include '$expected': $markdown"

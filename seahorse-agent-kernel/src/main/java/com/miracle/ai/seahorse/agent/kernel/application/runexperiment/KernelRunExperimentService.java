@@ -208,12 +208,69 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         Map<String, RunContextSnapshotRecord> snapshots = loadRunSnapshots(trials);
         StringBuilder report = new StringBuilder();
         report.append("# Run Experiment Report: ").append(markdownText(experiment.getName())).append("\n\n");
+        report.append("- Template Version: run-experiment-report-v1\n");
         report.append("- Experiment ID: ").append(valueOrDash(experiment.getId())).append("\n");
         report.append("- Conversation ID: ").append(valueOrDash(experiment.getConversationId())).append("\n");
         report.append("- Base leaf message ID: ").append(valueOrDash(experiment.getBaseLeafMessageId())).append("\n");
         report.append("- Status: ").append(valueOrDash(experiment.getStatus())).append("\n");
         report.append("- Generated at: ").append(Instant.now()).append("\n\n");
 
+        appendExecutiveSummary(report, trials, outputMessages);
+        appendEvidenceIndex(report, trials, snapshots);
+        appendTrialExport(report, trials, snapshots);
+        appendOutputComparison(report, trials, outputMessages);
+        appendFailures(report, trials);
+        appendReproductionAppendix(report, experiment, trials);
+        return report.toString();
+    }
+
+    private void appendExecutiveSummary(
+            StringBuilder report,
+            List<RunExperimentTrialRecord> trials,
+            Map<Long, ConversationMessageRecord> outputMessages) {
+        long succeeded = trials.stream().filter(trial -> "SUCCEEDED".equalsIgnoreCase(trial.getStatus())).count();
+        long failed = trials.stream().filter(trial -> "FAILED".equalsIgnoreCase(trial.getStatus())).count();
+        long scored = trials.stream().filter(trial -> scoreValue(trial).isPresent()).count();
+        long outputCount = trials.stream()
+                .filter(trial -> trial.getOutputMessageId() != null && outputMessages.containsKey(trial.getOutputMessageId()))
+                .count();
+        report.append("## Executive Summary\n\n");
+        report.append("- Total trials: ").append(trials.size()).append("\n");
+        report.append("- Succeeded: ").append(succeeded).append("\n");
+        report.append("- Failed: ").append(failed).append("\n");
+        report.append("- Scored trials: ").append(scored).append("\n");
+        report.append("- Output messages resolved: ").append(outputCount).append("\n");
+        report.append("- Recommended trial: ").append(recommendedTrial(trials)).append("\n\n");
+    }
+
+    private void appendEvidenceIndex(
+            StringBuilder report,
+            List<RunExperimentTrialRecord> trials,
+            Map<String, RunContextSnapshotRecord> snapshots) {
+        report.append("## Evidence Index\n\n");
+        report.append("| Trial | Run ID | Studio Trace | Cost Source | Fork Target |\n");
+        report.append("|---|---|---|---|---|\n");
+        for (RunExperimentTrialRecord trial : trials) {
+            RunContextSnapshotRecord snapshot = snapshots.get(trial.getRunId());
+            report.append("| ")
+                    .append(tableCell(trial.getId()))
+                    .append(" | ")
+                    .append(tableCell(trial.getRunId()))
+                    .append(" | ")
+                    .append(tableCell(traceEvidence(trial, snapshot)))
+                    .append(" | ")
+                    .append(tableCell(costEvidence(trial, snapshot)))
+                    .append(" | ")
+                    .append(tableCell(forkTarget(trial)))
+                    .append(" |\n");
+        }
+        report.append("\n");
+    }
+
+    private void appendTrialExport(
+            StringBuilder report,
+            List<RunExperimentTrialRecord> trials,
+            Map<String, RunContextSnapshotRecord> snapshots) {
         report.append("## Trial Export\n\n");
         report.append("| Trial | Run Profile | Status | Run ID | Output Message | Score | Metrics | Studio Trace | Cost Source | Fork Target |\n");
         report.append("|---|---|---|---|---|---|---|---|---|---|\n");
@@ -242,8 +299,14 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                     .append(tableCell(forkTarget(trial)))
                     .append(" |\n");
         }
+        report.append("\n");
+    }
 
-        report.append("\n## Output Comparison\n\n");
+    private void appendOutputComparison(
+            StringBuilder report,
+            List<RunExperimentTrialRecord> trials,
+            Map<Long, ConversationMessageRecord> outputMessages) {
+        report.append("## Output Comparison\n\n");
         String baseline = firstOutputContent(trials, outputMessages);
         for (RunExperimentTrialRecord trial : trials) {
             ConversationMessageRecord message = outputMessages.get(trial.getOutputMessageId());
@@ -260,7 +323,9 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
             report.append(codeBlockText(truncate(content, 1200)));
             report.append("\n```\n\n");
         }
+    }
 
+    private void appendFailures(StringBuilder report, List<RunExperimentTrialRecord> trials) {
         report.append("## Failures\n\n");
         List<RunExperimentTrialRecord> failedTrials = trials.stream()
                 .filter(trial -> trial.getErrorMessage() != null && !trial.getErrorMessage().isBlank())
@@ -276,7 +341,23 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                         .append("\n");
             }
         }
-        return report.toString();
+        report.append("\n");
+    }
+
+    private void appendReproductionAppendix(
+            StringBuilder report,
+            RunExperimentRecord experiment,
+            List<RunExperimentTrialRecord> trials) {
+        report.append("## Reproduction Appendix\n\n");
+        report.append("- Experiment ID: ").append(valueOrDash(experiment.getId())).append("\n");
+        report.append("- Conversation ID: ").append(valueOrDash(experiment.getConversationId())).append("\n");
+        report.append("- Base leaf message ID: ").append(valueOrDash(experiment.getBaseLeafMessageId())).append("\n");
+        report.append("- Trial run IDs: ");
+        List<String> runIds = trials.stream()
+                .map(RunExperimentTrialRecord::getRunId)
+                .filter(value -> value != null && !value.isBlank())
+                .toList();
+        report.append(runIds.isEmpty() ? "-" : String.join(", ", runIds)).append("\n");
     }
 
     private Map<Long, ConversationMessageRecord> loadOutputMessages(String userId, RunExperimentRecord experiment) {
@@ -297,6 +378,42 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
             return Map.of();
         }
         return messages;
+    }
+
+    private String recommendedTrial(List<RunExperimentTrialRecord> trials) {
+        RunExperimentTrialRecord best = null;
+        Double bestScore = null;
+        for (RunExperimentTrialRecord trial : Objects.requireNonNullElse(trials, List.<RunExperimentTrialRecord>of())) {
+            Optional<Double> score = scoreValue(trial);
+            if (score.isEmpty()) {
+                continue;
+            }
+            if (best == null || bestScore == null || score.get() > bestScore) {
+                best = trial;
+                bestScore = score.get();
+            }
+        }
+        if (best == null) {
+            return "not available";
+        }
+        return "trial " + valueOrDash(best.getId()) + " score=" + decimalText(bestScore);
+    }
+
+    private Optional<Double> scoreValue(RunExperimentTrialRecord trial) {
+        if (trial == null || trial.getScoreJson() == null || trial.getScoreJson().isBlank()) {
+            return Optional.empty();
+        }
+        for (String key : List.of("rating", "score", "totalScore", "overallScore")) {
+            String value = jsonScalar(trial.getScoreJson(), key);
+            if (value == null || value.isBlank()) {
+                continue;
+            }
+            try {
+                return Optional.of(Double.parseDouble(value.trim()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return Optional.empty();
     }
 
     private Map<String, RunContextSnapshotRecord> loadRunSnapshots(List<RunExperimentTrialRecord> trials) {

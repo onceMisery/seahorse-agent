@@ -245,6 +245,11 @@ class KernelRunExperimentServiceTests {
         assertEquals("profile-compare-1.md", report.fileName());
         assertEquals("text/markdown; charset=UTF-8", report.contentType());
         assertTrue(report.markdown().contains("# Run Experiment Report: Profile compare"));
+        assertTrue(report.markdown().contains("Template Version: run-experiment-report-v1"));
+        assertTrue(report.markdown().contains("## Executive Summary"));
+        assertTrue(report.markdown().contains("Recommended trial: trial 10 score=4"));
+        assertTrue(report.markdown().contains("## Evidence Index"));
+        assertTrue(report.markdown().contains("## Reproduction Appendix"));
         assertTrue(report.markdown().contains("run-exp-1-trial-10"));
         assertTrue(report.markdown().contains("message:301"));
         assertTrue(report.markdown().contains("smoke-pass"));

@@ -365,7 +365,15 @@ The second P1 report slice now resolves Studio trace and cost evidence from thei
 
 Fresh full-Docker evidence: after rebuilding `seahorse-agent-bootstrap` and hot-deploying the jar to `seahorse-backend`, `scripts/e2e-run-experiment-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 11/11. The run generated `e2e-run-experiment-20260701223554-330718162879971328.md` for experiment `330718162879971328`, and verified report columns `Studio Trace`/`Cost Source`, Studio URL `http://studio.local/traces/studio-330718162888359936`, authoritative `sa_cost_usage_record`, `cost=0.42`, and `tokens=123`.
 
-Remaining roadmap work is narrowed to richer productized report templates.
+That slice left richer productized report templates as follow-up work.
+
+### 2026-07-01 Run Experiment Report P1 Template Evidence Update
+
+The P1 run experiment report template is now productized as `run-experiment-report-v1` while preserving the existing `RunExperimentReport` API and Markdown download contract. The report now includes an `Executive Summary`, recommended trial selection from numeric score fields, an `Evidence Index`, the existing full trial export, output comparison, failure notes, and a `Reproduction Appendix` with experiment/conversation/base leaf IDs and trial run IDs.
+
+Fresh full-Docker evidence: after rebuilding `seahorse-agent-bootstrap` and hot-deploying the jar to `seahorse-backend`, `scripts/e2e-run-experiment-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 11/11. The run generated `e2e-run-experiment-20260701224608-330720737293434880.md` for experiment `330720737293434880`, and verified `Template Version: run-experiment-report-v1`, `Executive Summary`, `Recommended trial`, `Evidence Index`, authoritative Studio trace/cost evidence, `Output Comparison`, `Fork Target`, and `Reproduction Appendix`.
+
+The run experiment report P1 item is complete for the current roadmap acceptance scope and has been removed from the roadmap planning table. Future work in this area should enter a new roadmap item only if it adds a new product surface beyond the current Markdown report export.
 
 ### 2026-07-01 MCP Stdio Security P1 Evidence Update
 
