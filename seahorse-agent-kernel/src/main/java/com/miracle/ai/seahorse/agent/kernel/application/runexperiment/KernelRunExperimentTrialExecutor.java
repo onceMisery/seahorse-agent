@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.runexperiment;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
@@ -231,17 +232,48 @@ public class KernelRunExperimentTrialExecutor implements RunExperimentTrialExecu
         snapshot.setRunProfileId(profile.getId());
         snapshot.setExecutorEngine(blankToDefault(profile.getExecutorEngine(), "kernel"));
         snapshot.setExecutorConfigJson(blankToNull(profile.getExecutorConfigJson()));
-        snapshot.setTraceContextJson(traceContextJson(request));
+        snapshot.setTraceContextJson(traceContextJson(request, profile, runId));
         snapshot.setSnapshotJson(snapshotJson(profile, request.getBaseLeafMessageId(), enabledTools, allowedToolIds));
         snapshot.setDeleted(0);
         runContextSnapshotRepositoryPort.save(snapshot);
     }
 
-    private String traceContextJson(RunExperimentTrialExecutionRequest request) {
-        return "{\"experimentId\":%d,\"trialId\":%d,\"experimentName\":\"%s\"}".formatted(
-                request.getExperimentId(),
-                request.getTrialId(),
-                escapeJson(Objects.requireNonNullElse(request.getExperimentName(), "")));
+    private String traceContextJson(RunExperimentTrialExecutionRequest request, RunProfileRecord profile, String runId) {
+        Map<String, Object> traceContext = new LinkedHashMap<>();
+        traceContext.put("runId", runId);
+        traceContext.put("traceId", runId);
+        traceContext.put("studioTraceId", runId);
+        traceContext.put("experimentId", request.getExperimentId());
+        traceContext.put("trialId", request.getTrialId());
+        traceContext.put("experimentName", Objects.requireNonNullElse(request.getExperimentName(), ""));
+        putJsonScalar(traceContext, "studioTraceEnabled", profile.getExecutorConfigJson());
+        putJsonScalar(traceContext, "studioUrl", profile.getExecutorConfigJson());
+        putJsonScalar(traceContext, "tracingUrl", profile.getExecutorConfigJson());
+        try {
+            return OBJECT_MAPPER.writeValueAsString(traceContext);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize run experiment trace context", ex);
+        }
+    }
+
+    private void putJsonScalar(Map<String, Object> target, String key, String json) {
+        if (json == null || json.isBlank()) {
+            return;
+        }
+        try {
+            JsonNode value = OBJECT_MAPPER.readTree(json).findValue(key);
+            if (value == null || value.isMissingNode() || value.isNull() || value.isContainerNode()) {
+                return;
+            }
+            if (value.isBoolean()) {
+                target.put(key, value.booleanValue());
+            } else if (value.isNumber()) {
+                target.put(key, value.numberValue());
+            } else {
+                target.put(key, value.asText());
+            }
+        } catch (JsonProcessingException ignored) {
+        }
     }
 
     private String snapshotJson(

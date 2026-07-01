@@ -48,6 +48,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentIn
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationBranchRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationAttachmentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRepositoryPort;
@@ -165,11 +166,15 @@ public class SeahorseAgentKernelOpsAutoConfiguration {
     public KernelRunExperimentService seahorseRunExperimentInboundPort(
             RunExperimentRepositoryPort repositoryPort,
             ObjectProvider<RunExperimentTrialExecutorPort> trialExecutorPortProvider,
-            ObjectProvider<ConversationBranchRepositoryPort> conversationBranchRepositoryPortProvider) {
+            ObjectProvider<ConversationBranchRepositoryPort> conversationBranchRepositoryPortProvider,
+            ObjectProvider<RunContextSnapshotRepositoryPort> runContextSnapshotRepositoryPortProvider,
+            ObjectProvider<CostUsageRepositoryPort> costUsageRepositoryPortProvider) {
         return new KernelRunExperimentService(
                 repositoryPort,
                 () -> trialExecutorPortProvider.getIfAvailable(RunExperimentTrialExecutorPort::noop),
-                conversationBranchRepositoryPortProvider.getIfAvailable());
+                conversationBranchRepositoryPortProvider.getIfAvailable(),
+                runContextSnapshotRepositoryPortProvider.getIfAvailable(),
+                costUsageRepositoryPortProvider.getIfAvailable());
     }
 
     @Bean

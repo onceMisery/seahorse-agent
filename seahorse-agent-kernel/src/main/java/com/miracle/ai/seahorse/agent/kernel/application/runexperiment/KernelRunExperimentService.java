@@ -20,11 +20,16 @@ package com.miracle.ai.seahorse.agent.kernel.application.runexperiment;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageAggregate;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentReport;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationBranchRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationMessageRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentDetails;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentRepositoryPort;
@@ -34,9 +39,13 @@ import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentT
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentTrialRecord;
 import lombok.NonNull;
 
+import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -57,6 +66,8 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
     @NonNull
     private final Supplier<RunExperimentTrialExecutorPort> trialExecutorPortSupplier;
     private final ConversationBranchRepositoryPort branchRepositoryPort;
+    private final RunContextSnapshotRepositoryPort runContextSnapshotRepositoryPort;
+    private final CostUsageRepositoryPort costUsageRepositoryPort;
 
     public KernelRunExperimentService(RunExperimentRepositoryPort repositoryPort) {
         this(repositoryPort, RunExperimentTrialExecutorPort.noop());
@@ -78,11 +89,22 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
             RunExperimentRepositoryPort repositoryPort,
             Supplier<RunExperimentTrialExecutorPort> trialExecutorPortSupplier,
             ConversationBranchRepositoryPort branchRepositoryPort) {
+        this(repositoryPort, trialExecutorPortSupplier, branchRepositoryPort, null, null);
+    }
+
+    public KernelRunExperimentService(
+            RunExperimentRepositoryPort repositoryPort,
+            Supplier<RunExperimentTrialExecutorPort> trialExecutorPortSupplier,
+            ConversationBranchRepositoryPort branchRepositoryPort,
+            RunContextSnapshotRepositoryPort runContextSnapshotRepositoryPort,
+            CostUsageRepositoryPort costUsageRepositoryPort) {
         this.repositoryPort = Objects.requireNonNull(repositoryPort, "repositoryPort must not be null");
         this.trialExecutorPortSupplier = Objects.requireNonNullElseGet(
                 trialExecutorPortSupplier,
                 () -> RunExperimentTrialExecutorPort::noop);
         this.branchRepositoryPort = branchRepositoryPort;
+        this.runContextSnapshotRepositoryPort = runContextSnapshotRepositoryPort;
+        this.costUsageRepositoryPort = costUsageRepositoryPort;
     }
 
     @Override
@@ -183,6 +205,7 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         RunExperimentRecord experiment = Objects.requireNonNull(details.getExperiment(), "experiment must not be null");
         List<RunExperimentTrialRecord> trials = Objects.requireNonNullElse(details.getTrials(), List.of());
         Map<Long, ConversationMessageRecord> outputMessages = loadOutputMessages(userId, experiment);
+        Map<String, RunContextSnapshotRecord> snapshots = loadRunSnapshots(trials);
         StringBuilder report = new StringBuilder();
         report.append("# Run Experiment Report: ").append(markdownText(experiment.getName())).append("\n\n");
         report.append("- Experiment ID: ").append(valueOrDash(experiment.getId())).append("\n");
@@ -192,9 +215,10 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         report.append("- Generated at: ").append(Instant.now()).append("\n\n");
 
         report.append("## Trial Export\n\n");
-        report.append("| Trial | Run Profile | Status | Run ID | Output Message | Score | Metrics | Trace | Cost | Fork Target |\n");
+        report.append("| Trial | Run Profile | Status | Run ID | Output Message | Score | Metrics | Studio Trace | Cost Source | Fork Target |\n");
         report.append("|---|---|---|---|---|---|---|---|---|---|\n");
         for (RunExperimentTrialRecord trial : trials) {
+            RunContextSnapshotRecord snapshot = snapshots.get(trial.getRunId());
             String metrics = valueOrDash(trial.getMetricJson());
             report.append("| ")
                     .append(tableCell(trial.getId()))
@@ -211,9 +235,9 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                     .append(" | ")
                     .append(tableCell(metrics))
                     .append(" | ")
-                    .append(tableCell(traceEvidence(trial)))
+                    .append(tableCell(traceEvidence(trial, snapshot)))
                     .append(" | ")
-                    .append(tableCell(costEvidence(trial)))
+                    .append(tableCell(costEvidence(trial, snapshot)))
                     .append(" | ")
                     .append(tableCell(forkTarget(trial)))
                     .append(" |\n");
@@ -275,6 +299,25 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         return messages;
     }
 
+    private Map<String, RunContextSnapshotRecord> loadRunSnapshots(List<RunExperimentTrialRecord> trials) {
+        if (runContextSnapshotRepositoryPort == null) {
+            return Map.of();
+        }
+        Map<String, RunContextSnapshotRecord> snapshots = new LinkedHashMap<>();
+        for (RunExperimentTrialRecord trial : Objects.requireNonNullElse(trials, List.<RunExperimentTrialRecord>of())) {
+            if (trial == null || trial.getRunId() == null || trial.getRunId().isBlank()) {
+                continue;
+            }
+            try {
+                runContextSnapshotRepositoryPort.findByRunId(trial.getRunId().trim())
+                        .ifPresent(snapshot -> snapshots.put(trial.getRunId().trim(), snapshot));
+            } catch (RuntimeException ignored) {
+                return Map.of();
+            }
+        }
+        return snapshots;
+    }
+
     private String firstOutputContent(List<RunExperimentTrialRecord> trials,
                                       Map<Long, ConversationMessageRecord> outputMessages) {
         for (RunExperimentTrialRecord trial : trials) {
@@ -298,8 +341,24 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                 : "differs from first trial";
     }
 
-    private String traceEvidence(RunExperimentTrialRecord trial) {
-        String traceId = jsonScalar(trial.getMetricJson(), "traceId");
+    private String traceEvidence(RunExperimentTrialRecord trial, RunContextSnapshotRecord snapshot) {
+        String directUrl = firstJsonScalar(
+                snapshot == null ? null : snapshot.getTraceContextJson(),
+                "studioTraceUrl",
+                "traceUrl");
+        String traceId = firstNonBlank(
+                firstJsonScalar(snapshot == null ? null : snapshot.getTraceContextJson(), "studioTraceId"),
+                firstJsonScalar(snapshot == null ? null : snapshot.getTraceContextJson(), "traceId"),
+                jsonScalar(trial.getMetricJson(), "traceId"));
+        if (directUrl != null && traceId != null) {
+            return "studio=[" + traceId + "](" + directUrl + ")";
+        }
+        String studioUrl = firstNonBlank(
+                firstJsonScalar(snapshot == null ? null : snapshot.getTraceContextJson(), "studioUrl", "tracingUrl"),
+                firstJsonScalar(snapshot == null ? null : snapshot.getExecutorConfigJson(), "studioUrl", "tracingUrl"));
+        if (studioUrl != null && traceId != null) {
+            return "studio=[" + traceId + "](" + studioTraceUrl(studioUrl, traceId) + ")";
+        }
         if (traceId != null) {
             return "traceId=" + traceId;
         }
@@ -309,7 +368,15 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         return "not recorded";
     }
 
-    private String costEvidence(RunExperimentTrialRecord trial) {
+    private String costEvidence(RunExperimentTrialRecord trial, RunContextSnapshotRecord snapshot) {
+        Optional<CostUsageAggregate> aggregate = aggregateCost(trial, snapshot);
+        if (aggregate.isPresent() && aggregate.get().recordCount() > 0) {
+            CostUsageAggregate value = aggregate.get();
+            return "sa_cost_usage_record cost=" + decimalText(value.totalCost())
+                    + " tokens=" + value.totalTokens()
+                    + " calls=" + value.totalCalls()
+                    + " records=" + value.recordCount();
+        }
         for (String key : List.of("cost", "totalCost", "estimatedCost")) {
             String value = jsonScalar(trial.getMetricJson(), key);
             if (value != null) {
@@ -319,30 +386,84 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         return "not recorded";
     }
 
+    private Optional<CostUsageAggregate> aggregateCost(RunExperimentTrialRecord trial, RunContextSnapshotRecord snapshot) {
+        if (costUsageRepositoryPort == null || trial == null || trial.getRunId() == null || trial.getRunId().isBlank()) {
+            return Optional.empty();
+        }
+        String tenantId = firstNonBlank(
+                trial.getTenantId(),
+                snapshot == null ? null : snapshot.getTenantId(),
+                "default");
+        try {
+            return Optional.ofNullable(costUsageRepositoryPort.aggregate(new CostUsageQuery(
+                    tenantId,
+                    null,
+                    trial.getRunId().trim(),
+                    null,
+                    null,
+                    null)));
+        } catch (RuntimeException ex) {
+            return Optional.empty();
+        }
+    }
+
     private String forkTarget(RunExperimentTrialRecord trial) {
         return trial.getOutputMessageId() == null ? "not available" : "message:" + trial.getOutputMessageId();
     }
 
     private String jsonScalar(String json, String key) {
-        if (json == null || json.isBlank() || key == null || key.isBlank()) {
+        return firstJsonScalar(json, key);
+    }
+
+    private String firstJsonScalar(String json, String... keys) {
+        if (json == null || json.isBlank() || keys == null || keys.length == 0) {
             return null;
         }
         try {
-            JsonNode value = OBJECT_MAPPER.readTree(json).path(key);
-            if (value.isMissingNode() || value.isNull() || value.isContainerNode()) {
-                return null;
+            JsonNode root = OBJECT_MAPPER.readTree(json);
+            for (String key : Objects.requireNonNullElse(keys, new String[0])) {
+                if (key == null || key.isBlank()) {
+                    continue;
+                }
+                JsonNode value = root.findValue(key);
+                if (value == null || value.isMissingNode() || value.isNull() || value.isContainerNode()) {
+                    continue;
+                }
+                return value.isTextual() ? value.asText() : value.toString();
             }
-            return value.isTextual() ? value.asText() : value.toString();
         } catch (JsonProcessingException ex) {
             return null;
         }
+        return null;
+    }
+
+    private String studioTraceUrl(String studioUrl, String traceId) {
+        String safeUrl = studioUrl == null ? "" : studioUrl.trim();
+        String encodedTraceId = URLEncoder.encode(Objects.requireNonNullElse(traceId, ""), StandardCharsets.UTF_8);
+        if (safeUrl.contains("{traceId}")) {
+            return safeUrl.replace("{traceId}", encodedTraceId);
+        }
+        return safeUrl.replaceAll("/+$", "") + "/traces/" + encodedTraceId;
+    }
+
+    private String decimalText(double value) {
+        return BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : Objects.requireNonNullElse(values, new String[0])) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return null;
     }
 
     private String reportFileName(RunExperimentRecord experiment) {
         String name = experiment == null ? "run-experiment" : Objects.requireNonNullElse(
                 experiment.getName(),
                 "run-experiment");
-        String slug = name.toLowerCase()
+        String slug = name.toLowerCase(Locale.ROOT)
                 .replaceAll("[^a-z0-9\\u4e00-\\u9fa5]+", "-")
                 .replaceAll("^-+|-+$", "");
         if (slug.isBlank()) {

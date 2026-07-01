@@ -357,7 +357,15 @@ The first P1 run experiment report slice is now covered by `GET /api/run-experim
 
 Fresh full-Docker evidence: after hot-deploying the rebuilt backend jar to `seahorse-backend`, `scripts/e2e-run-experiment-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 10/10. The run verified the report endpoint and generated `e2e-run-experiment-20260701103802-330537506476589056.md` for experiment `330537506476589056`, including scored marker `smoke-pass`, fork output message `330537506971516928`, per-trial run IDs/output message IDs, output comparison, and fork target content.
 
-Remaining roadmap work is narrowed to Studio trace deep links, standardized cost records as the authoritative report cost source, and richer productized report templates.
+That slice left Studio trace deep links, standardized cost records as the authoritative report cost source, and richer productized report templates as follow-up work.
+
+### 2026-07-01 Run Experiment Report P1 Studio Trace/Cost Evidence Update
+
+The second P1 report slice now resolves Studio trace and cost evidence from their authoritative runtime sources. `KernelRunExperimentService` loads `t_run_context_snapshot` by trial `runId` and renders Studio trace Markdown links from `studioTraceUrl`/`traceUrl`, or from `studioUrl`/`tracingUrl` plus `studioTraceId`/`traceId`. Cost evidence now prefers `sa_cost_usage_record` aggregation by `runId`, with the previous metric JSON keys kept only as compatibility fallback.
+
+Fresh full-Docker evidence: after rebuilding `seahorse-agent-bootstrap` and hot-deploying the jar to `seahorse-backend`, `scripts/e2e-run-experiment-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 11/11. The run generated `e2e-run-experiment-20260701223554-330718162879971328.md` for experiment `330718162879971328`, and verified report columns `Studio Trace`/`Cost Source`, Studio URL `http://studio.local/traces/studio-330718162888359936`, authoritative `sa_cost_usage_record`, `cost=0.42`, and `tokens=123`.
+
+Remaining roadmap work is narrowed to richer productized report templates.
 
 ### 2026-07-01 MCP Stdio Security P1 Evidence Update
 

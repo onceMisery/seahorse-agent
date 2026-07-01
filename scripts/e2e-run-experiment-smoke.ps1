@@ -61,7 +61,23 @@ function Invoke-DbRows {
 
 function Sql-Quote {
     param([string]$Value)
-    return "'" + ($Value -replace "'", "''") + "'"
+    $escaped = $Value -replace "'", "''"
+    $escaped = $escaped -replace '"', '\"'
+    return "'" + $escaped + "'"
+}
+
+function New-ReportTraceContextJson {
+    param(
+        [string]$RunId,
+        [string]$TraceId,
+        [string]$StudioUrl
+    )
+    return @{
+        runId = $RunId
+        traceId = $TraceId
+        studioTraceId = $TraceId
+        studioUrl = $StudioUrl
+    } | ConvertTo-Json -Compress
 }
 
 if ($RunProfileIds.Count -lt 2) {
@@ -186,6 +202,34 @@ $scored = Test-Step "Score first trial" {
 }
 if (-not $scored) { exit 1 }
 
+$reportEvidence = Test-Step "Seed report trace and cost evidence" {
+    $studioUrl = "http://studio.local"
+    $first = $null
+    $index = 0
+    foreach ($trial in @($scored.trials)) {
+        $traceId = "studio-$($trial.id)"
+        $traceJson = New-ReportTraceContextJson -RunId "$($trial.runId)" -TraceId $traceId -StudioUrl $studioUrl
+        $tokens = 123 + $index
+        $calls = 2 + $index
+        $cost = [decimal]0.42 + ([decimal]$index / [decimal]100)
+        $costText = $cost.ToString("0.##", [System.Globalization.CultureInfo]::InvariantCulture)
+        $usageId = "runexp-$($trial.id)-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+        Invoke-DbRows "update t_run_context_snapshot set trace_context_json = $(Sql-Quote $traceJson) where run_id = $(Sql-Quote "$($trial.runId)") and deleted = 0;" | Out-Null
+        Invoke-DbRows "insert into sa_cost_usage_record (usage_id, tenant_id, run_id, user_id, model_id, source, tokens, calls, cost, created_at) values ($(Sql-Quote $usageId), 'default', $(Sql-Quote "$($trial.runId)"), $(Sql-Quote $Username), 'mock', 'MODEL', $tokens, $calls, $costText, now()) on conflict (usage_id) do nothing;" | Out-Null
+        if ($null -eq $first) {
+            $first = @{
+                TraceId = $traceId
+                TraceUrl = "$studioUrl/traces/$traceId"
+                Cost = $costText
+                Tokens = "$tokens"
+            }
+        }
+        $index++
+    }
+    $first
+}
+if (-not $reportEvidence) { exit 1 }
+
 $fork = Test-Step "Fork scored trial to branch" {
     $firstTrial = @($scored.trials)[0]
     $response = Invoke-RestMethod -Uri "$BaseUrl/api/run-experiments/$($scored.experiment.id)/trials/$($firstTrial.id)/fork-to-branch" `
@@ -217,6 +261,12 @@ $report = Test-Step "Export run experiment report" {
             "$($fork.OutputMessageId)",
             "smoke-pass",
             "Output Comparison",
+            "Studio Trace",
+            "Cost Source",
+            "$($reportEvidence.TraceUrl)",
+            "sa_cost_usage_record",
+            "cost=$($reportEvidence.Cost)",
+            "tokens=$($reportEvidence.Tokens)",
             "Fork Target"
         )) {
         if ($markdown -notlike "*$expected*") {

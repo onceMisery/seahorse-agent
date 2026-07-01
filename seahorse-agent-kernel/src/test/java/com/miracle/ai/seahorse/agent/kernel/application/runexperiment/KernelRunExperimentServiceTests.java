@@ -17,11 +17,17 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.runexperiment;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageAggregate;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationBranchCursor;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationBranchRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationMessageRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentDetails;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentRepositoryPort;
@@ -41,6 +47,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KernelRunExperimentServiceTests {
@@ -206,7 +213,14 @@ class KernelRunExperimentServiceTests {
             }
             throw new IllegalStateException("AgentScope timeout");
         };
-        KernelRunExperimentService service = new KernelRunExperimentService(repository, () -> executor, branchRepository);
+        InMemoryRunContextSnapshotRepository snapshotRepository = new InMemoryRunContextSnapshotRepository();
+        FixedCostUsageRepository costRepository = new FixedCostUsageRepository();
+        KernelRunExperimentService service = new KernelRunExperimentService(
+                repository,
+                () -> executor,
+                branchRepository,
+                snapshotRepository,
+                costRepository);
 
         RunExperimentDetails details = service.create(RunExperimentCommand.builder()
                 .userId("100")
@@ -215,6 +229,13 @@ class KernelRunExperimentServiceTests {
                 .name("Profile compare")
                 .runProfileIds(List.of(12L, 13L))
                 .build());
+        RunContextSnapshotRecord snapshot = new RunContextSnapshotRecord();
+        snapshot.setTenantId("default");
+        snapshot.setRunId("run-exp-1-trial-10");
+        snapshot.setTraceContextJson("""
+                {"traceId":"trace-success","studioTraceId":"studio-success","studioUrl":"http://studio.local"}
+                """);
+        snapshotRepository.snapshots.put("run-exp-1-trial-10", snapshot);
         branchRepository.add(message("301", "101", "100", "assistant", "Kernel output with audit trail"));
         service.scoreTrial("100", details.getExperiment().getId(), details.getTrials().get(0).getId(),
                 "{\"rating\":4,\"verdict\":\"smoke-pass\"}");
@@ -227,10 +248,13 @@ class KernelRunExperimentServiceTests {
         assertTrue(report.markdown().contains("run-exp-1-trial-10"));
         assertTrue(report.markdown().contains("message:301"));
         assertTrue(report.markdown().contains("smoke-pass"));
-        assertTrue(report.markdown().contains("trace-success"));
-        assertTrue(report.markdown().contains("cost=0.11"));
+        assertTrue(report.markdown().contains("studio=[studio-success](http://studio.local/traces/studio-success)"));
+        assertTrue(report.markdown().contains("sa_cost_usage_record cost=0.42 tokens=123 calls=2 records=1"));
         assertTrue(report.markdown().contains("Kernel output with audit trail"));
         assertTrue(report.markdown().contains("AgentScope timeout"));
+        assertNotNull(costRepository.query);
+        assertEquals("default", costRepository.query.tenantId());
+        assertEquals("run-exp-1-trial-10", costRepository.query.runId());
     }
 
     private static final class InMemoryRunExperimentRepository implements RunExperimentRepositoryPort {
@@ -353,6 +377,41 @@ class KernelRunExperimentServiceTests {
         @Override
         public Optional<ConversationBranchCursor> findCursor(String conversationId, String userId) {
             return Optional.empty();
+        }
+    }
+
+    private static final class InMemoryRunContextSnapshotRepository implements RunContextSnapshotRepositoryPort {
+
+        private final Map<String, RunContextSnapshotRecord> snapshots = new LinkedHashMap<>();
+
+        @Override
+        public Long save(RunContextSnapshotRecord record) {
+            snapshots.put(record.getRunId(), record);
+            return 1L;
+        }
+
+        @Override
+        public Optional<RunContextSnapshotRecord> findByRunId(String runId) {
+            return Optional.ofNullable(snapshots.get(runId));
+        }
+    }
+
+    private static final class FixedCostUsageRepository implements CostUsageRepositoryPort {
+
+        private CostUsageQuery query;
+
+        @Override
+        public CostUsageRecord append(CostUsageRecord record) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CostUsageAggregate aggregate(CostUsageQuery query) {
+            this.query = query;
+            if (!"run-exp-1-trial-10".equals(query.runId())) {
+                return new CostUsageAggregate(query.tenantId(), query.agentId(), query.runId(), 0, 0, 0, 0);
+            }
+            return new CostUsageAggregate(query.tenantId(), query.agentId(), query.runId(), 123, 2, 0.42, 1);
         }
     }
 

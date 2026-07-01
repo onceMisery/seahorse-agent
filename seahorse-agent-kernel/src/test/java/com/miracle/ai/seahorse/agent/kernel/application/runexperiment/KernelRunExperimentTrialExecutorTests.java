@@ -91,7 +91,10 @@ class KernelRunExperimentTrialExecutorTests {
         assertEquals(12L, snapshotRepository.saved.getRunProfileId());
         assertEquals("agentscope", snapshotRepository.saved.getExecutorEngine());
         assertEquals("{\"studio\":true}", snapshotRepository.saved.getExecutorConfigJson());
-        assertEquals("{\"experimentId\":1,\"trialId\":10,\"experimentName\":\"Profile compare\"}",
+        assertEquals(
+                "{\"runId\":\"run-exp-1-trial-10\",\"traceId\":\"run-exp-1-trial-10\","
+                        + "\"studioTraceId\":\"run-exp-1-trial-10\",\"experimentId\":1,\"trialId\":10,"
+                        + "\"experimentName\":\"Profile compare\"}",
                 snapshotRepository.saved.getTraceContextJson());
         assertEquals("""
                 {"runProfileId":12,"executorEngine":"agentscope","roleCardId":99,"runProfile":{"id":12,"name":"AgentScope experiment profile","roleCardId":99,"executorEngine":"agentscope"},"executorConfig":{"studio":true},"modelConfig":{"temperature":0.2},"memoryScope":{"longTerm":true},"guardrailConfig":{"highRiskToolApproval":true},"toolIds":[],"mcpToolIds":["filesystem.read_file"],"a2aAgentIds":["seahorse-researcher"],"allowedToolIds":["filesystem.read_file","seahorse-researcher"],"baseLeafMessageId":202}
