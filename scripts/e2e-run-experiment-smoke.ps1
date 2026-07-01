@@ -202,6 +202,39 @@ $fork = Test-Step "Fork scored trial to branch" {
 }
 if (-not $fork) { exit 1 }
 
+$report = Test-Step "Export run experiment report" {
+    $response = Invoke-RestMethod -Uri "$BaseUrl/api/run-experiments/$($scored.experiment.id)/report" `
+        -Headers $headers
+    Assert-ApiOk $response "Export run experiment report"
+    if ([string]::IsNullOrWhiteSpace("$($response.data.fileName)") -or "$($response.data.fileName)" -notlike "*.md") {
+        throw "Report fileName was not markdown: $($response.data.fileName)"
+    }
+    $markdown = "$($response.data.markdown)"
+    foreach ($expected in @(
+            "Run Experiment Report",
+            "$($scored.experiment.id)",
+            "$($fork.TrialId)",
+            "$($fork.OutputMessageId)",
+            "smoke-pass",
+            "Output Comparison",
+            "Fork Target"
+        )) {
+        if ($markdown -notlike "*$expected*") {
+            throw "Report markdown did not include '$expected': $markdown"
+        }
+    }
+    foreach ($trial in @($scored.trials)) {
+        if ($markdown -notlike "*$($trial.runId)*") {
+            throw "Report markdown did not include trial runId $($trial.runId)"
+        }
+        if ($markdown -notlike "*$($trial.outputMessageId)*") {
+            throw "Report markdown did not include trial outputMessageId $($trial.outputMessageId)"
+        }
+    }
+    $response.data
+}
+if (-not $report) { exit 1 }
+
 Test-Step "Verify database experiment state" {
     $experimentRows = @(Invoke-DbRows "select status, conversation_id, base_leaf_message_id from sa_run_experiment where id = $($experiment.experiment.id) and deleted = 0;")
     if ($experimentRows.Count -ne 1) {
@@ -255,6 +288,7 @@ Write-Host "Base assistant message ID: $($baseMessages.Assistant.id)"
 Write-Host "Experiment ID: $($experiment.experiment.id)"
 Write-Host "Forked trial ID: $($fork.TrialId)"
 Write-Host "Forked output message ID: $($fork.OutputMessageId)"
+Write-Host "Report file: $($report.fileName)"
 
 if ($failed -gt 0) {
     exit 1

@@ -18,6 +18,10 @@
 package com.miracle.ai.seahorse.agent.kernel.application.runexperiment;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentReport;
+import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationBranchCursor;
+import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationBranchRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationMessageRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentDetails;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentRepositoryPort;
@@ -28,12 +32,16 @@ import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentT
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KernelRunExperimentServiceTests {
 
@@ -183,6 +191,48 @@ class KernelRunExperimentServiceTests {
         assertEquals("AgentScope timeout", failed.getErrorMessage());
     }
 
+    @Test
+    void shouldExportMarkdownReportWithTrialOutputsScoresAndFailureEvidence() {
+        InMemoryRunExperimentRepository repository = new InMemoryRunExperimentRepository();
+        InMemoryBranchRepository branchRepository = new InMemoryBranchRepository();
+        RunExperimentTrialExecutorPort executor = request -> {
+            if (Long.valueOf(12L).equals(request.getRunProfileId())) {
+                return RunExperimentTrialExecutionResult.builder()
+                        .status("SUCCEEDED")
+                        .runId("run-exp-1-trial-10")
+                        .outputMessageId(301L)
+                        .metricJson("{\"cost\":0.11,\"traceId\":\"trace-success\"}")
+                        .build();
+            }
+            throw new IllegalStateException("AgentScope timeout");
+        };
+        KernelRunExperimentService service = new KernelRunExperimentService(repository, () -> executor, branchRepository);
+
+        RunExperimentDetails details = service.create(RunExperimentCommand.builder()
+                .userId("100")
+                .conversationId(101L)
+                .baseLeafMessageId(202L)
+                .name("Profile compare")
+                .runProfileIds(List.of(12L, 13L))
+                .build());
+        branchRepository.add(message("301", "101", "100", "assistant", "Kernel output with audit trail"));
+        service.scoreTrial("100", details.getExperiment().getId(), details.getTrials().get(0).getId(),
+                "{\"rating\":4,\"verdict\":\"smoke-pass\"}");
+
+        RunExperimentReport report = service.exportReport("100", details.getExperiment().getId());
+
+        assertEquals("profile-compare-1.md", report.fileName());
+        assertEquals("text/markdown; charset=UTF-8", report.contentType());
+        assertTrue(report.markdown().contains("# Run Experiment Report: Profile compare"));
+        assertTrue(report.markdown().contains("run-exp-1-trial-10"));
+        assertTrue(report.markdown().contains("message:301"));
+        assertTrue(report.markdown().contains("smoke-pass"));
+        assertTrue(report.markdown().contains("trace-success"));
+        assertTrue(report.markdown().contains("cost=0.11"));
+        assertTrue(report.markdown().contains("Kernel output with audit trail"));
+        assertTrue(report.markdown().contains("AgentScope timeout"));
+    }
+
     private static final class InMemoryRunExperimentRepository implements RunExperimentRepositoryPort {
 
         private RunExperimentDetails details;
@@ -257,5 +307,63 @@ class KernelRunExperimentServiceTests {
             trial.setErrorMessage(errorMessage);
             return Optional.of(details);
         }
+    }
+
+    private static final class InMemoryBranchRepository implements ConversationBranchRepositoryPort {
+
+        private final Map<Long, ConversationMessageRecord> messages = new LinkedHashMap<>();
+
+        void add(ConversationMessageRecord record) {
+            messages.put(Long.parseLong(record.getId()), record);
+        }
+
+        @Override
+        public Long appendMessage(ConversationMessageRecord record) {
+            Long id = Long.parseLong(record.getId());
+            messages.put(id, record);
+            return id;
+        }
+
+        @Override
+        public List<ConversationMessageRecord> listSiblings(String conversationId, String userId, Long parentId) {
+            return List.of();
+        }
+
+        @Override
+        public List<ConversationMessageRecord> listTree(String conversationId, String userId) {
+            return messages.values().stream()
+                    .filter(message -> conversationId.equals(message.getConversationId()))
+                    .filter(message -> userId.equals(message.getUserId()))
+                    .toList();
+        }
+
+        @Override
+        public void setActivePath(String conversationId, String userId, Set<Long> activeIds) {
+        }
+
+        @Override
+        public ConversationBranchCursor upsertCursor(String conversationId, String userId, Long leafMessageId) {
+            return ConversationBranchCursor.builder()
+                    .conversationId(conversationId)
+                    .userId(userId)
+                    .leafMessageId(leafMessageId)
+                    .build();
+        }
+
+        @Override
+        public Optional<ConversationBranchCursor> findCursor(String conversationId, String userId) {
+            return Optional.empty();
+        }
+    }
+
+    private static ConversationMessageRecord message(String id, String conversationId, String userId,
+                                                     String role, String content) {
+        ConversationMessageRecord record = new ConversationMessageRecord();
+        record.setId(id);
+        record.setConversationId(conversationId);
+        record.setUserId(userId);
+        record.setRole(role);
+        record.setContent(content);
+        return record;
     }
 }

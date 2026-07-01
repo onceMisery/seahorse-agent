@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationBranchInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentDetails;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentTrialRecord;
 import lombok.NonNull;
@@ -92,6 +93,15 @@ public class SeahorseRunExperimentController {
                 .findById(resolveUserId(userId, headerUserId), id)
                 .<Map<String, Object>>map(details -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, details))
                 .orElseGet(() -> Map.of(KEY_CODE, SUCCESS_CODE));
+    }
+
+    @GetMapping({"/run-experiments/{id}/report", "/api/run-experiments/{id}/report"})
+    public Map<String, Object> report(@PathVariable Long id,
+                                      @RequestParam(required = false) String userId,
+                                      @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
+                                      String headerUserId) {
+        RunExperimentReport report = runExperimentPort().exportReport(resolveUserId(userId, headerUserId), id);
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, report);
     }
 
     @PostMapping({"/run-experiments/{id}/cancel", "/api/run-experiments/{id}/cancel"})

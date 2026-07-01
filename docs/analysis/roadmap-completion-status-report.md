@@ -341,7 +341,7 @@ The original P0 "已合入 Agent 控制面真实 test case" gate has fresh full-
 | Message tree / branch cursor | `scripts/e2e-message-tree-branch-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 7/7, including fork, branch switch, cursor reload, and PostgreSQL branch state checks. |
 | Role card chat context | `scripts/e2e-role-card-chat-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 5/5, including role card application to chat and `t_run_context_snapshot` verification. |
 | Run profile inheritance | `scripts/e2e-run-profile-inheritance-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 7/7, including conversation profile binding and snapshot `runProfileId` / role card / tool allowlist checks. |
-| Run experiment | `scripts/e2e-run-experiment-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 9/9, including trial execution, scoring, branch fork, DB state, snapshots, and output messages. |
+| Run experiment | `scripts/e2e-run-experiment-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 10/10, including trial execution, scoring, branch fork, Markdown report export, DB state, snapshots, and output messages. |
 | AgentScope / A2A boundary | `scripts/e2e-agentscope-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 10/10. The script now verifies both the AgentScope run profile path and the kernel fallback path, and handles the current A2A-enabled endpoint boundary. |
 | MCP stdio | `scripts/e2e-mcp-stdio-smoke.ps1 -BaseUrl http://127.0.0.1:9093` passed 8/8 against a temporary MCP-enabled backend, including stdio server discovery, echo call, MCP tool catalog entry, restart, and stderr tail. |
 | MCP HTTP | `scripts/e2e-mcp-http-smoke.ps1 -BaseUrl http://127.0.0.1:9096` passed 12/12 against temporary HTTP MCP server/backend containers, including direct JSON-RPC echo, catalog entry, restart, failed-server containment, and stderr tail. |
@@ -350,3 +350,11 @@ The original P0 "已合入 Agent 控制面真实 test case" gate has fresh full-
 | Governance page states | `scripts/e2e-governance-page-states-smoke.ps1 -BaseUrl http://127.0.0.1` passed 5/5 scenarios, covering admin data state, admin empty state, normal-user admin route guard, permission-denied API state, and backend-unavailable API state with screenshots in `output/playwright/artifacts`. |
 
 Script stability fixes in this slice: governance page/error smokes now share `scripts/e2e-governance-user-seed.ps1` so fresh full-Docker databases no longer depend on a pre-existing normal user; AgentScope and MCP stdio smoke drift were stabilized in the preceding commit by aligning with the current A2A-enabled backend and enabling the MCP tool feature in the temporary stdio backend.
+
+### 2026-07-01 Run Experiment Report P1 Evidence Update
+
+The first P1 run experiment report slice is now covered by `GET /api/run-experiments/{id}/report` and the `RunExperimentPage` export action. The Markdown report includes trial export rows, run IDs, output message IDs, score JSON, metric JSON, trace/cost evidence, fork targets, output comparison, and failure notes. Output text is resolved through the conversation branch tree instead of being duplicated into a new table.
+
+Fresh full-Docker evidence: after hot-deploying the rebuilt backend jar to `seahorse-backend`, `scripts/e2e-run-experiment-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 10/10. The run verified the report endpoint and generated `e2e-run-experiment-20260701103802-330537506476589056.md` for experiment `330537506476589056`, including scored marker `smoke-pass`, fork output message `330537506971516928`, per-trial run IDs/output message IDs, output comparison, and fork target content.
+
+Remaining roadmap work is narrowed to Studio trace deep links, standardized cost records as the authoritative report cost source, and richer productized report templates.

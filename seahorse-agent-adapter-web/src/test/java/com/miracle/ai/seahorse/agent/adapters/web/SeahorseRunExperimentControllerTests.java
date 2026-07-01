@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationBranchInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentDetails;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentRecord;
@@ -91,6 +92,25 @@ class SeahorseRunExperimentControllerTests {
                 .andExpect(jsonPath("$.data.trials[1].runProfileId").value(13));
 
         verify(port).findById("100", 1L);
+    }
+
+    @Test
+    void shouldExportRunExperimentReport() throws Exception {
+        RunExperimentInboundPort port = mock(RunExperimentInboundPort.class);
+        when(port.exportReport("100", 1L)).thenReturn(new RunExperimentReport(
+                "profile-compare-1.md",
+                "text/markdown; charset=UTF-8",
+                "# Run Experiment Report\n\nTrial 10"));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseRunExperimentController(provider(port))).build();
+
+        mvc.perform(get("/api/run-experiments/1/report").param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.fileName").value("profile-compare-1.md"))
+                .andExpect(jsonPath("$.data.contentType").value("text/markdown; charset=UTF-8"))
+                .andExpect(jsonPath("$.data.markdown").value("# Run Experiment Report\n\nTrial 10"));
+
+        verify(port).exportReport("100", 1L);
     }
 
     @Test

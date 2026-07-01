@@ -164,10 +164,12 @@ public class SeahorseAgentKernelOpsAutoConfiguration {
     @ConditionalOnMissingBean(RunExperimentInboundPort.class)
     public KernelRunExperimentService seahorseRunExperimentInboundPort(
             RunExperimentRepositoryPort repositoryPort,
-            ObjectProvider<RunExperimentTrialExecutorPort> trialExecutorPortProvider) {
+            ObjectProvider<RunExperimentTrialExecutorPort> trialExecutorPortProvider,
+            ObjectProvider<ConversationBranchRepositoryPort> conversationBranchRepositoryPortProvider) {
         return new KernelRunExperimentService(
                 repositoryPort,
-                () -> trialExecutorPortProvider.getIfAvailable(RunExperimentTrialExecutorPort::noop));
+                () -> trialExecutorPortProvider.getIfAvailable(RunExperimentTrialExecutorPort::noop),
+                conversationBranchRepositoryPortProvider.getIfAvailable());
     }
 
     @Bean

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, GitBranch, Play, RefreshCw, Save, Square, Star } from "lucide-react";
+import { Download, ExternalLink, GitBranch, Play, RefreshCw, Save, Square, Star } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import {
   cancelRunExperiment,
   createRunExperiment,
   forkRunExperimentTrialToBranch,
+  getRunExperimentReport,
   scoreRunExperimentTrial,
   type RunExperimentDetails,
   type RunExperimentTrialVO
@@ -229,6 +230,29 @@ export function RunExperimentPage() {
     }
   };
 
+  const handleExportReport = async () => {
+    if (!experiment) return;
+    try {
+      setOperating(true);
+      const report = await getRunExperimentReport(experiment.experiment.id);
+      const blob = new Blob([report.markdown], {
+        type: report.contentType || "text/markdown;charset=utf-8"
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = report.fileName || `run-experiment-${experiment.experiment.id}.md`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      toast.success("实验报告已导出");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "导出实验报告失败"));
+      console.error(error);
+    } finally {
+      setOperating(false);
+    }
+  };
+
   const selectedTrial = experiment?.trials.find((trial) => String(trial.id) === String(scoreTrialId));
 
   return (
@@ -356,6 +380,10 @@ export function RunExperimentPage() {
                     <Button variant="outline" size="sm" onClick={handleCancel} disabled={operating}>
                       <Square className="mr-1 h-4 w-4" />
                       取消实验
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleExportReport} disabled={operating}>
+                      <Download className="mr-1 h-4 w-4" />
+                      导出报告
                     </Button>
                   </div>
                 </div>

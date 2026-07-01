@@ -17,19 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.runexperiment;
 
-import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentDetails;
-
-import java.util.Optional;
-
-public interface RunExperimentInboundPort {
-
-    RunExperimentDetails create(RunExperimentCommand command);
-
-    Optional<RunExperimentDetails> findById(String userId, Long id);
-
-    RunExperimentDetails cancel(String userId, Long id);
-
-    RunExperimentDetails scoreTrial(String userId, Long experimentId, Long trialId, String scoreJson);
-
-    RunExperimentReport exportReport(String userId, Long id);
+public record RunExperimentReport(
+        String fileName,
+        String contentType,
+        String markdown) {
 }

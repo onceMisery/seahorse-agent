@@ -7,6 +7,7 @@ const experimentMocks = vi.hoisted(() => ({
   cancelRunExperiment: vi.fn(),
   createRunExperiment: vi.fn(),
   forkRunExperimentTrialToBranch: vi.fn(),
+  getRunExperimentReport: vi.fn(),
   scoreRunExperimentTrial: vi.fn()
 }));
 
@@ -18,6 +19,7 @@ vi.mock("@/services/runExperimentService", () => ({
   cancelRunExperiment: experimentMocks.cancelRunExperiment,
   createRunExperiment: experimentMocks.createRunExperiment,
   forkRunExperimentTrialToBranch: experimentMocks.forkRunExperimentTrialToBranch,
+  getRunExperimentReport: experimentMocks.getRunExperimentReport,
   scoreRunExperimentTrial: experimentMocks.scoreRunExperimentTrial
 }));
 
@@ -41,11 +43,24 @@ describe("RunExperimentPage", () => {
     ]);
     experimentMocks.createRunExperiment.mockResolvedValue(details("PENDING"));
     experimentMocks.cancelRunExperiment.mockResolvedValue(details("CANCELLED"));
+    experimentMocks.getRunExperimentReport.mockResolvedValue({
+      fileName: "profile-compare-1.md",
+      contentType: "text/markdown; charset=UTF-8",
+      markdown: "# Run Experiment Report"
+    });
     experimentMocks.scoreRunExperimentTrial.mockResolvedValue(scoredDetails());
     experimentMocks.forkRunExperimentTrialToBranch.mockResolvedValue({
       trialId: 10,
       outputMessageId: 301,
       branch: []
+    });
+    Object.defineProperty(window.URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:run-experiment-report")
+    });
+    Object.defineProperty(window.URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn()
     });
   });
 
@@ -109,6 +124,24 @@ describe("RunExperimentPage", () => {
     await waitFor(() => {
       expect(experimentMocks.cancelRunExperiment).toHaveBeenCalledWith(1);
     });
+  });
+
+  it("exports a markdown report for the current experiment", async () => {
+    render(<RunExperimentPage />);
+
+    await screen.findByText("AgentScope Research");
+    fireEvent.change(screen.getByLabelText("会话 ID"), { target: { value: "101" } });
+    fireEvent.click(screen.getByLabelText("AgentScope Research"));
+    fireEvent.click(screen.getByRole("button", { name: "发起实验" }));
+
+    await screen.findByText("实验 #1");
+    fireEvent.click(screen.getByRole("button", { name: "导出报告" }));
+
+    await waitFor(() => {
+      expect(experimentMocks.getRunExperimentReport).toHaveBeenCalledWith(1);
+    });
+    expect(window.URL.createObjectURL).toHaveBeenCalled();
+    expect(window.URL.revokeObjectURL).toHaveBeenCalledWith("blob:run-experiment-report");
   });
 });
 

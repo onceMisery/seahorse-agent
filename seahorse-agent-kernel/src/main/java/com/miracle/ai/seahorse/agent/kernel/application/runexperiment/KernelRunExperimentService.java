@@ -17,8 +17,14 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.runexperiment;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentReport;
+import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationBranchRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationMessageRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentDetails;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentRepositoryPort;
@@ -28,12 +34,17 @@ import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentT
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentTrialRecord;
 import lombok.NonNull;
 
+import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 
 public class KernelRunExperimentService implements RunExperimentInboundPort {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private static final String STATUS_PENDING = "PENDING";
     private static final String STATUS_RUNNING = "RUNNING";
@@ -45,6 +56,7 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
     private final RunExperimentRepositoryPort repositoryPort;
     @NonNull
     private final Supplier<RunExperimentTrialExecutorPort> trialExecutorPortSupplier;
+    private final ConversationBranchRepositoryPort branchRepositoryPort;
 
     public KernelRunExperimentService(RunExperimentRepositoryPort repositoryPort) {
         this(repositoryPort, RunExperimentTrialExecutorPort.noop());
@@ -59,10 +71,18 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
     public KernelRunExperimentService(
             RunExperimentRepositoryPort repositoryPort,
             Supplier<RunExperimentTrialExecutorPort> trialExecutorPortSupplier) {
+        this(repositoryPort, trialExecutorPortSupplier, null);
+    }
+
+    public KernelRunExperimentService(
+            RunExperimentRepositoryPort repositoryPort,
+            Supplier<RunExperimentTrialExecutorPort> trialExecutorPortSupplier,
+            ConversationBranchRepositoryPort branchRepositoryPort) {
         this.repositoryPort = Objects.requireNonNull(repositoryPort, "repositoryPort must not be null");
         this.trialExecutorPortSupplier = Objects.requireNonNullElseGet(
                 trialExecutorPortSupplier,
                 () -> RunExperimentTrialExecutorPort::noop);
+        this.branchRepositoryPort = branchRepositoryPort;
     }
 
     @Override
@@ -140,11 +160,238 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                 .orElseThrow(() -> new IllegalArgumentException("run experiment trial not found"));
     }
 
+    @Override
+    public RunExperimentReport exportReport(String userId, Long id) {
+        String safeUserId = requireText(userId, "userId must not be blank");
+        RunExperimentDetails details = findById(safeUserId, id)
+                .orElseThrow(() -> new IllegalArgumentException("run experiment not found"));
+        String markdown = renderReport(safeUserId, details);
+        return new RunExperimentReport(
+                reportFileName(details.getExperiment()),
+                "text/markdown; charset=UTF-8",
+                markdown);
+    }
+
     private String requireText(String value, String message) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(message);
         }
         return value.trim();
+    }
+
+    private String renderReport(String userId, RunExperimentDetails details) {
+        RunExperimentRecord experiment = Objects.requireNonNull(details.getExperiment(), "experiment must not be null");
+        List<RunExperimentTrialRecord> trials = Objects.requireNonNullElse(details.getTrials(), List.of());
+        Map<Long, ConversationMessageRecord> outputMessages = loadOutputMessages(userId, experiment);
+        StringBuilder report = new StringBuilder();
+        report.append("# Run Experiment Report: ").append(markdownText(experiment.getName())).append("\n\n");
+        report.append("- Experiment ID: ").append(valueOrDash(experiment.getId())).append("\n");
+        report.append("- Conversation ID: ").append(valueOrDash(experiment.getConversationId())).append("\n");
+        report.append("- Base leaf message ID: ").append(valueOrDash(experiment.getBaseLeafMessageId())).append("\n");
+        report.append("- Status: ").append(valueOrDash(experiment.getStatus())).append("\n");
+        report.append("- Generated at: ").append(Instant.now()).append("\n\n");
+
+        report.append("## Trial Export\n\n");
+        report.append("| Trial | Run Profile | Status | Run ID | Output Message | Score | Metrics | Trace | Cost | Fork Target |\n");
+        report.append("|---|---|---|---|---|---|---|---|---|---|\n");
+        for (RunExperimentTrialRecord trial : trials) {
+            String metrics = valueOrDash(trial.getMetricJson());
+            report.append("| ")
+                    .append(tableCell(trial.getId()))
+                    .append(" | ")
+                    .append(tableCell(trial.getRunProfileId()))
+                    .append(" | ")
+                    .append(tableCell(trial.getStatus()))
+                    .append(" | ")
+                    .append(tableCell(trial.getRunId()))
+                    .append(" | ")
+                    .append(tableCell(trial.getOutputMessageId()))
+                    .append(" | ")
+                    .append(tableCell(trial.getScoreJson()))
+                    .append(" | ")
+                    .append(tableCell(metrics))
+                    .append(" | ")
+                    .append(tableCell(traceEvidence(trial)))
+                    .append(" | ")
+                    .append(tableCell(costEvidence(trial)))
+                    .append(" | ")
+                    .append(tableCell(forkTarget(trial)))
+                    .append(" |\n");
+        }
+
+        report.append("\n## Output Comparison\n\n");
+        String baseline = firstOutputContent(trials, outputMessages);
+        for (RunExperimentTrialRecord trial : trials) {
+            ConversationMessageRecord message = outputMessages.get(trial.getOutputMessageId());
+            String content = message == null ? "" : Objects.requireNonNullElse(message.getContent(), "");
+            report.append("### Trial ").append(valueOrDash(trial.getId())).append("\n\n");
+            report.append("- Run profile: ").append(valueOrDash(trial.getRunProfileId())).append("\n");
+            report.append("- Run ID: ").append(valueOrDash(trial.getRunId())).append("\n");
+            report.append("- Output message ID: ").append(valueOrDash(trial.getOutputMessageId())).append("\n");
+            report.append("- Diff vs first trial: ").append(diffAgainstBaseline(baseline, content)).append("\n");
+            if (trial.getErrorMessage() != null && !trial.getErrorMessage().isBlank()) {
+                report.append("- Failure: ").append(markdownText(trial.getErrorMessage())).append("\n");
+            }
+            report.append("\n```text\n");
+            report.append(codeBlockText(truncate(content, 1200)));
+            report.append("\n```\n\n");
+        }
+
+        report.append("## Failures\n\n");
+        List<RunExperimentTrialRecord> failedTrials = trials.stream()
+                .filter(trial -> trial.getErrorMessage() != null && !trial.getErrorMessage().isBlank())
+                .toList();
+        if (failedTrials.isEmpty()) {
+            report.append("- None recorded.\n");
+        } else {
+            for (RunExperimentTrialRecord trial : failedTrials) {
+                report.append("- Trial ")
+                        .append(valueOrDash(trial.getId()))
+                        .append(": ")
+                        .append(markdownText(trial.getErrorMessage()))
+                        .append("\n");
+            }
+        }
+        return report.toString();
+    }
+
+    private Map<Long, ConversationMessageRecord> loadOutputMessages(String userId, RunExperimentRecord experiment) {
+        if (branchRepositoryPort == null || experiment.getConversationId() == null) {
+            return Map.of();
+        }
+        Map<Long, ConversationMessageRecord> messages = new LinkedHashMap<>();
+        try {
+            for (ConversationMessageRecord record : branchRepositoryPort.listTree(
+                    String.valueOf(experiment.getConversationId()),
+                    userId)) {
+                Long id = parseLong(record.getId());
+                if (id != null) {
+                    messages.put(id, record);
+                }
+            }
+        } catch (RuntimeException ignored) {
+            return Map.of();
+        }
+        return messages;
+    }
+
+    private String firstOutputContent(List<RunExperimentTrialRecord> trials,
+                                      Map<Long, ConversationMessageRecord> outputMessages) {
+        for (RunExperimentTrialRecord trial : trials) {
+            ConversationMessageRecord message = outputMessages.get(trial.getOutputMessageId());
+            if (message != null) {
+                return Objects.requireNonNullElse(message.getContent(), "");
+            }
+        }
+        return "";
+    }
+
+    private String diffAgainstBaseline(String baseline, String content) {
+        if (baseline == null || baseline.isBlank()) {
+            return "baseline output not available";
+        }
+        if (content == null || content.isBlank()) {
+            return "output not available";
+        }
+        return Objects.equals(normalizeWhitespace(baseline), normalizeWhitespace(content))
+                ? "same as first trial"
+                : "differs from first trial";
+    }
+
+    private String traceEvidence(RunExperimentTrialRecord trial) {
+        String traceId = jsonScalar(trial.getMetricJson(), "traceId");
+        if (traceId != null) {
+            return "traceId=" + traceId;
+        }
+        if (trial.getRunId() != null && !trial.getRunId().isBlank()) {
+            return "runId=" + trial.getRunId();
+        }
+        return "not recorded";
+    }
+
+    private String costEvidence(RunExperimentTrialRecord trial) {
+        for (String key : List.of("cost", "totalCost", "estimatedCost")) {
+            String value = jsonScalar(trial.getMetricJson(), key);
+            if (value != null) {
+                return key + "=" + value;
+            }
+        }
+        return "not recorded";
+    }
+
+    private String forkTarget(RunExperimentTrialRecord trial) {
+        return trial.getOutputMessageId() == null ? "not available" : "message:" + trial.getOutputMessageId();
+    }
+
+    private String jsonScalar(String json, String key) {
+        if (json == null || json.isBlank() || key == null || key.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode value = OBJECT_MAPPER.readTree(json).path(key);
+            if (value.isMissingNode() || value.isNull() || value.isContainerNode()) {
+                return null;
+            }
+            return value.isTextual() ? value.asText() : value.toString();
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+
+    private String reportFileName(RunExperimentRecord experiment) {
+        String name = experiment == null ? "run-experiment" : Objects.requireNonNullElse(
+                experiment.getName(),
+                "run-experiment");
+        String slug = name.toLowerCase()
+                .replaceAll("[^a-z0-9\\u4e00-\\u9fa5]+", "-")
+                .replaceAll("^-+|-+$", "");
+        if (slug.isBlank()) {
+            slug = "run-experiment";
+        }
+        return slug + "-" + valueOrDash(experiment == null ? null : experiment.getId()) + ".md";
+    }
+
+    private String valueOrDash(Object value) {
+        return value == null || value.toString().isBlank() ? "-" : value.toString();
+    }
+
+    private String tableCell(Object value) {
+        return truncate(valueOrDash(value), 180)
+                .replace("\r", " ")
+                .replace("\n", " ")
+                .replace("|", "\\|");
+    }
+
+    private String markdownText(String value) {
+        return Objects.requireNonNullElse(value, "").replace("\r\n", "\n").replace("\r", "\n");
+    }
+
+    private String codeBlockText(String value) {
+        String safe = Objects.requireNonNullElse(value, "");
+        return safe.replace("```", "` ` `");
+    }
+
+    private String truncate(String value, int maxLength) {
+        String safe = Objects.requireNonNullElse(value, "");
+        if (safe.length() <= maxLength) {
+            return safe;
+        }
+        return safe.substring(0, maxLength) + "...";
+    }
+
+    private String normalizeWhitespace(String value) {
+        return Objects.requireNonNullElse(value, "").trim().replaceAll("\\s+", " ");
+    }
+
+    private Long parseLong(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private RunExperimentTrialExecutorPort resolveTrialExecutor() {

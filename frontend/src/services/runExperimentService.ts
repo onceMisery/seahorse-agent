@@ -33,6 +33,12 @@ export interface RunExperimentDetails {
   trials: RunExperimentTrialVO[];
 }
 
+export interface RunExperimentReport {
+  fileName: string;
+  contentType: string;
+  markdown: string;
+}
+
 export interface RunExperimentForkResult {
   trialId: number | string;
   outputMessageId: number | string;
@@ -53,6 +59,12 @@ export async function createRunExperiment(request: RunExperimentRequest): Promis
 export async function getRunExperiment(id: number | string): Promise<RunExperimentDetails> {
   return api.get<RunExperimentDetails, RunExperimentDetails>(
     `/api/run-experiments/${encodeURIComponent(String(id))}`
+  );
+}
+
+export async function getRunExperimentReport(id: number | string): Promise<RunExperimentReport> {
+  return api.get<RunExperimentReport, RunExperimentReport>(
+    `/api/run-experiments/${encodeURIComponent(String(id))}/report`
   );
 }
 
