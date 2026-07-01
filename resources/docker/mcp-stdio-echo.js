@@ -15,6 +15,9 @@ function send(message) {
 function resultFor(request) {
   switch (request.method) {
     case "initialize":
+      if (process.env.MCP_STDIO_E2E_SECRET) {
+        process.stderr.write(`MCP_STDIO_E2E_SECRET=${process.env.MCP_STDIO_E2E_SECRET}\n`);
+      }
       return {
         protocolVersion: "2026-02-28",
         capabilities: {},

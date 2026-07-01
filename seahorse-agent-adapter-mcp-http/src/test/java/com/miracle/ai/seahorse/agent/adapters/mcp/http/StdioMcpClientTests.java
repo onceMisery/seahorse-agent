@@ -31,6 +31,8 @@ import java.util.Map;
 
 class StdioMcpClientTests {
 
+    private static final String RAW_SECRET = "sk-live-secret-123456";
+
     @Test
     void shouldInitializeListToolsAndCallToolOverStdio() {
         try (StdioMcpClient client = new StdioMcpClient(
@@ -74,6 +76,62 @@ class StdioMcpClientTests {
             Assertions.assertFalse(result.success());
             Assertions.assertTrue(result.message().contains("boom from stderr"), result.message());
         }
+    }
+
+    @Test
+    void shouldRedactSensitiveStderrDiagnostics() {
+        try (StdioMcpClient client = new StdioMcpClient(
+                new ObjectMapper(),
+                "fake-failing",
+                javaCommand(),
+                List.of("-cp", testClasspath(), FakeFailingStdioMcpServer.class.getName()),
+                Map.of("FAKE_MCP_SECRET", RAW_SECRET),
+                "",
+                Duration.ofSeconds(5))) {
+
+            McpToolExecutionResult result = client.call(new McpToolExecutionRequest("echo", Map.of()));
+
+            Assertions.assertFalse(result.success());
+            Assertions.assertFalse(result.message().contains(RAW_SECRET), result.message());
+            Assertions.assertTrue(result.message().contains(McpDiagnosticRedactor.REDACTED), result.message());
+            Assertions.assertFalse(client.stderrTail().contains(RAW_SECRET), client.stderrTail());
+            Assertions.assertTrue(client.stderrTail().contains(McpDiagnosticRedactor.REDACTED), client.stderrTail());
+        }
+    }
+
+    @Test
+    void shouldRedactSensitiveToolOutput() {
+        try (StdioMcpClient client = new StdioMcpClient(
+                new ObjectMapper(),
+                "fake",
+                javaCommand(),
+                List.of("-cp", testClasspath(), FakeStdioMcpServer.class.getName()),
+                Map.of("FAKE_MCP_PREFIX", "token=" + RAW_SECRET),
+                "",
+                Duration.ofSeconds(20))) {
+
+            McpToolExecutionResult result = client.call(new McpToolExecutionRequest(
+                    "echo",
+                    Map.of("text", "world")));
+
+            Assertions.assertTrue(result.success());
+            Assertions.assertFalse(result.content().contains(RAW_SECRET), result.content());
+            Assertions.assertTrue(result.content().contains("token=" + McpDiagnosticRedactor.REDACTED),
+                    result.content());
+        }
+    }
+
+    @Test
+    void shouldRedactCommonSensitiveDiagnosticShapes() {
+        Assertions.assertEquals(
+                "Authorization: " + McpDiagnosticRedactor.REDACTED,
+                McpDiagnosticRedactor.redact("Authorization: Bearer plain-secret-123456"));
+        Assertions.assertEquals(
+                "\"access_token\":\"" + McpDiagnosticRedactor.REDACTED + "\"",
+                McpDiagnosticRedactor.redact("\"access_token\":\"plain-secret-123456\""));
+        Assertions.assertEquals(
+                "FAKE_MCP_SECRET=" + McpDiagnosticRedactor.REDACTED,
+                McpDiagnosticRedactor.redact("FAKE_MCP_SECRET=plain-secret-123456"));
     }
 
     private static String javaCommand() {

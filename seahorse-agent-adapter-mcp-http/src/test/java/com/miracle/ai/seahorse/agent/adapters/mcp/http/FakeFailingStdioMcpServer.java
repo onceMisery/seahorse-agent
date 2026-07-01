@@ -24,5 +24,9 @@ public final class FakeFailingStdioMcpServer {
 
     public static void main(String[] args) {
         System.err.println("boom from stderr");
+        String secret = System.getenv("FAKE_MCP_SECRET");
+        if (secret != null && !secret.isBlank()) {
+            System.err.println("FAKE_MCP_SECRET=" + secret);
+        }
     }
 }

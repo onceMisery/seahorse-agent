@@ -20,6 +20,8 @@ $failed = 0
 $total = 0
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
+$McpServerScript = Join-Path $RepoRoot "resources\docker\mcp-stdio-echo.js"
+$LeakSecret = "sk-stdio-secret-123456"
 if ([string]::IsNullOrWhiteSpace($BackendJarPath)) {
     $BackendJarPath = Join-Path $RepoRoot "seahorse-agent-bootstrap\target\seahorse-agent-bootstrap-0.0.1-SNAPSHOT-exec.jar"
 }
@@ -154,6 +156,7 @@ try {
             "-e", "SEAHORSE_AGENT_ADAPTERS_CACHE_REDIS_PORT=6379",
             "-e", "SPRING_DATA_REDIS_HOST=redis",
             "-e", "SPRING_DATA_REDIS_PORT=6379",
+            "-e", "MCP_STDIO_E2E_SECRET=$LeakSecret",
             "-e", "SEAHORSE_AGENT_ADAPTERS_STORAGE_TYPE=local",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MQ_TYPE=direct",
             "-e", "SEAHORSE_AGENT_ADAPTERS_OBSERVATION_TYPE=noop",
@@ -176,6 +179,10 @@ try {
         if (Test-Path -LiteralPath $BackendJarPath) {
             $jarMount = "$($BackendJarPath):/app/app.jar:ro"
             $args = $args[0..($args.Count - 2)] + @("-v", $jarMount) + $args[-1]
+        }
+        if (Test-Path -LiteralPath $McpServerScript) {
+            $scriptMount = "$($McpServerScript):/app/mcp-stdio-echo.js:ro"
+            $args = $args[0..($args.Count - 2)] + @("-v", $scriptMount) + $args[-1]
         }
         $output = & docker.exe @args
         if ($LASTEXITCODE -ne 0) {
@@ -316,6 +323,13 @@ try {
     Test-Step "Read MCP stderr tail" {
         $response = Invoke-Json -Method GET -Path "/api/mcp/servers/local-echo/stderr-tail" -Headers $headers
         Assert-ApiOk $response "Read MCP stderr tail"
+        $stderrTail = "$($response.data)"
+        if ($stderrTail.Contains($LeakSecret)) {
+            throw "MCP stderr tail leaked raw secret: $stderrTail"
+        }
+        if (-not $stderrTail.Contains("[REDACTED]")) {
+            throw "MCP stderr tail did not include redaction marker: $stderrTail"
+        }
     } | Out-Null
 
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan

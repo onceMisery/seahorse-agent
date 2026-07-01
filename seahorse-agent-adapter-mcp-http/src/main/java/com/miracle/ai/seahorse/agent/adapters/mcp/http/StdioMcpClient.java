@@ -66,6 +66,8 @@ public class StdioMcpClient implements McpClientPort, AutoCloseable {
     private static final String FIELD_CONTENT = "content";
     private static final String FIELD_TEXT = "text";
     private static final int STDERR_TAIL_LIMIT = 4096;
+    private static final int DIAGNOSTIC_MESSAGE_LIMIT = 4096;
+    private static final int TOOL_RESULT_LIMIT = 8192;
 
     private final ObjectMapper objectMapper;
     private final String serverName;
@@ -153,7 +155,9 @@ public class StdioMcpClient implements McpClientPort, AutoCloseable {
         try {
             return await(session.submit(() -> callOnSession(request)), "tools/call");
         } catch (RuntimeException ex) {
-            return McpToolExecutionResult.failed(request.toolId(), ex.getMessage());
+            return McpToolExecutionResult.failed(
+                    request.toolId(),
+                    McpDiagnosticRedactor.redactAndTruncate(ex.getMessage(), DIAGNOSTIC_MESSAGE_LIMIT));
         }
     }
 
@@ -297,11 +301,12 @@ public class StdioMcpClient implements McpClientPort, AutoCloseable {
     }
 
     private void appendStderr(String line) {
+        String safeLine = McpDiagnosticRedactor.redactAndTruncate(line, STDERR_TAIL_LIMIT);
         synchronized (stderrLock) {
             if (!stderrTail.isEmpty()) {
                 stderrTail.append(System.lineSeparator());
             }
-            stderrTail.append(line);
+            stderrTail.append(safeLine);
             if (stderrTail.length() > STDERR_TAIL_LIMIT) {
                 stderrTail.delete(0, stderrTail.length() - STDERR_TAIL_LIMIT);
             }
@@ -310,7 +315,8 @@ public class StdioMcpClient implements McpClientPort, AutoCloseable {
 
     private String withProcessDiagnostics(String message) {
         waitForProcessExitBriefly();
-        String safeMessage = Objects.requireNonNullElse(message, "").trim();
+        String safeMessage = McpDiagnosticRedactor
+                .redactAndTruncate(Objects.requireNonNullElse(message, "").trim(), DIAGNOSTIC_MESSAGE_LIMIT);
         String stderrText = stderrSnapshot();
         if (stderrText.isBlank()) {
             return safeMessage;
@@ -390,9 +396,13 @@ public class StdioMcpClient implements McpClientPort, AutoCloseable {
             return McpToolExecutionResult.failed(toolId, "stdio tool returned empty result");
         }
         if (result.has("isError") && result.get("isError").asBoolean(false)) {
-            return McpToolExecutionResult.failed(toolId, extractTextContent(result));
+            return McpToolExecutionResult.failed(
+                    toolId,
+                    McpDiagnosticRedactor.redactAndTruncate(extractTextContent(result), DIAGNOSTIC_MESSAGE_LIMIT));
         }
-        return McpToolExecutionResult.success(toolId, extractTextContent(result));
+        return McpToolExecutionResult.success(
+                toolId,
+                McpDiagnosticRedactor.redactAndTruncate(extractTextContent(result), TOOL_RESULT_LIMIT));
     }
 
     private String extractTextContent(JsonNode result) {
@@ -412,7 +422,9 @@ public class StdioMcpClient implements McpClientPort, AutoCloseable {
     private String errorMessage(String method, JsonNode error) {
         JsonNode message = error.get("message");
         if (message != null && !message.isNull()) {
-            return method + " failed: " + message.asText();
+            return McpDiagnosticRedactor.redactAndTruncate(
+                    method + " failed: " + message.asText(),
+                    DIAGNOSTIC_MESSAGE_LIMIT);
         }
         return method + " failed";
     }
