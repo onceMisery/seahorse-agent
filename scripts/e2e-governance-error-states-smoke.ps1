@@ -4,13 +4,20 @@ param(
     [string]$AdminPassword = "admin123",
     [string]$UserUsername = "demo_user_001",
     [string]$UserPassword = "demo123",
-    [string]$BackendContainer = "seahorse-backend"
+    [string]$BackendContainer = "seahorse-backend",
+    [string]$PostgresContainer = "seahorse-postgres",
+    [string]$PostgresUsername = "seahorse",
+    [string]$PostgresDatabase = "seahorse",
+    [string]$TenantId = "default",
+    [switch]$SkipUserSeed
 )
 
 $ErrorActionPreference = "Stop"
 $passed = 0
 $failed = 0
 $total = 0
+
+. (Join-Path $PSScriptRoot "e2e-governance-user-seed.ps1")
 
 function Test-Step {
     param([string]$Name, [scriptblock]$Action)
@@ -120,6 +127,18 @@ $admin = Test-Step "Admin login" {
 }
 if (-not $admin) { exit 1 }
 $adminHeaders = @{ Authorization = "Bearer $($admin.token)"; "X-User-Id" = "$($admin.userId)" }
+
+if (-not $SkipUserSeed) {
+    Test-Step "Ensure normal user seed" {
+        Ensure-SeahorseGovernanceNormalUser `
+            -Username $UserUsername `
+            -Password $UserPassword `
+            -TenantId $TenantId `
+            -PostgresContainer $PostgresContainer `
+            -PostgresUsername $PostgresUsername `
+            -PostgresDatabase $PostgresDatabase
+    }
+}
 
 $user = Test-Step "Normal user login" {
     Login -Username $UserUsername -Password $UserPassword

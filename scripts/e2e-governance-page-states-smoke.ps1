@@ -5,6 +5,11 @@ param(
     [string]$UserUsername = "demo_user_001",
     [string]$UserPassword = "demo123",
     [string]$ArtifactDir = "output/playwright/artifacts",
+    [string]$PostgresContainer = "seahorse-postgres",
+    [string]$PostgresUsername = "seahorse",
+    [string]$PostgresDatabase = "seahorse",
+    [string]$TenantId = "default",
+    [switch]$SkipUserSeed,
     [switch]$Headed
 )
 
@@ -15,6 +20,18 @@ $repoRoot = Split-Path -Parent $scriptDir
 $runtimeDir = Join-Path $repoRoot "output/playwright"
 $runtimePackage = Join-Path $runtimeDir "package.json"
 $playwrightPackage = Join-Path $runtimeDir "node_modules/playwright/package.json"
+
+. (Join-Path $scriptDir "e2e-governance-user-seed.ps1")
+
+if (-not $SkipUserSeed) {
+    Ensure-SeahorseGovernanceNormalUser `
+        -Username $UserUsername `
+        -Password $UserPassword `
+        -TenantId $TenantId `
+        -PostgresContainer $PostgresContainer `
+        -PostgresUsername $PostgresUsername `
+        -PostgresDatabase $PostgresDatabase
+}
 
 New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
 

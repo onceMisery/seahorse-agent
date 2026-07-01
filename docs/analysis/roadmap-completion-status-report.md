@@ -30,7 +30,7 @@
 | 分类 | 当前状态 | 后续去向 |
 |---|---|---|
 | 近期/中期历史切片 | 作为已完成基线归档 | 仅保留持续回归，不再写入路线图规划主体 |
-| 6/22 合入的 Agent 控制面能力 | 已合入 main，需补真实 test case | 路线图“真实 Test Case 门禁” |
+| 6/22 合入的 Agent 控制面能力 | 已通过 full Docker/API/Playwright smoke 重新验证 | 近期稳定基线与持续回归 |
 | AgentScope / Nacos A2A | 基座已合入，需生产硬化和真实长链路验证 | 路线图近期/中期 |
 | MCP stdio / HTTP | 基座已合入，需安全治理与 Tool Gateway 收敛 | 路线图近期/中期 |
 | Marketplace / Sandbox / Context Pack 等远期基座 | 多数已有代码基座，但仍需产品化、联动和真实验收 | 路线图中期/远期 |
@@ -331,3 +331,22 @@ The real-verification work now has an explicit completion audit in `docs/aegis/w
 ### 2026-07-01 Interactive Memory Conflict Evidence Update
 
 Interactive memory conflict handling now has full Docker chat-flow evidence through `scripts/e2e-interactive-memory-conflict-smoke.ps1 -BaseUrl http://127.0.0.1`. The smoke seeds two active short-term memories and a `PENDING` conflict, opens `/chat`, receives the `memory.conflict.prompt` card, resolves `keep_a` through `POST /api/memories/conflicts/interactive-resolve`, and verifies PostgreSQL/trace/audit results. Fresh run evidence: `codxic-conflict-1782865959770|RESOLVED|keep_a|interactive:2001523723396308993`, memory state `codxicA1782865959770|0` and `codxicB1782865959770|1`, trace `SUCCESS|chat-ui|interactive:2001523723396308993|keep_a`, audit `MEMORY_CONFLICT_RESOLVED|interactive:2001523723396308993|codxic-conflict-1782865959770|chat-ui|keep_a`, screenshot `output/playwright/artifacts/interactive-memory-conflict-CODX_INTERACTIVE_MEMORY_CONFLICT_1782865955904.png`.
+
+### 2026-07-01 Agent Control Plane P0 Gate Evidence Update
+
+The original P0 "已合入 Agent 控制面真实 test case" gate has fresh full-Docker evidence and is archived out of the roadmap planning body. Fresh reruns covered the control-plane normal paths, regression/error paths, and UI state paths:
+
+| Scope | Fresh evidence |
+|---|---|
+| Message tree / branch cursor | `scripts/e2e-message-tree-branch-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 7/7, including fork, branch switch, cursor reload, and PostgreSQL branch state checks. |
+| Role card chat context | `scripts/e2e-role-card-chat-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 5/5, including role card application to chat and `t_run_context_snapshot` verification. |
+| Run profile inheritance | `scripts/e2e-run-profile-inheritance-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 7/7, including conversation profile binding and snapshot `runProfileId` / role card / tool allowlist checks. |
+| Run experiment | `scripts/e2e-run-experiment-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 9/9, including trial execution, scoring, branch fork, DB state, snapshots, and output messages. |
+| AgentScope / A2A boundary | `scripts/e2e-agentscope-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 10/10. The script now verifies both the AgentScope run profile path and the kernel fallback path, and handles the current A2A-enabled endpoint boundary. |
+| MCP stdio | `scripts/e2e-mcp-stdio-smoke.ps1 -BaseUrl http://127.0.0.1:9093` passed 8/8 against a temporary MCP-enabled backend, including stdio server discovery, echo call, MCP tool catalog entry, restart, and stderr tail. |
+| MCP HTTP | `scripts/e2e-mcp-http-smoke.ps1 -BaseUrl http://127.0.0.1:9096` passed 12/12 against temporary HTTP MCP server/backend containers, including direct JSON-RPC echo, catalog entry, restart, failed-server containment, and stderr tail. |
+| OpenAPI connector / tool catalog | `scripts/e2e-openapi-connector-smoke.ps1 -BaseUrl http://127.0.0.1` passed with marker `CODX_OPENAPI_1782869430449`, imported 2 operations, enabled the low-risk GET tool, verified high-risk DELETE stayed blocked with HTTP 409, checked DB row state, and captured a Playwright screenshot. |
+| Governance API error states | `scripts/e2e-governance-error-states-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 9/9, covering structured bad login, admin data envelopes, empty search, not-found, normal-user permission errors, and MCP-disabled service-unavailable envelope. The script now idempotently seeds/fixes `demo_user_001` in the full Docker PostgreSQL DB before testing normal-user access. |
+| Governance page states | `scripts/e2e-governance-page-states-smoke.ps1 -BaseUrl http://127.0.0.1` passed 5/5 scenarios, covering admin data state, admin empty state, normal-user admin route guard, permission-denied API state, and backend-unavailable API state with screenshots in `output/playwright/artifacts`. |
+
+Script stability fixes in this slice: governance page/error smokes now share `scripts/e2e-governance-user-seed.ps1` so fresh full-Docker databases no longer depend on a pre-existing normal user; AgentScope and MCP stdio smoke drift were stabilized in the preceding commit by aligning with the current A2A-enabled backend and enabling the MCP tool feature in the temporary stdio backend.
