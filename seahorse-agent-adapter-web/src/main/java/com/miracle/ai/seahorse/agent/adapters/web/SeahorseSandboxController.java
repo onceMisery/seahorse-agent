@@ -126,6 +126,7 @@ public class SeahorseSandboxController {
                 artifact.mediaType(),
                 artifact.scanStatus(),
                 artifact.sensitivity(),
+                artifact.promptVisible(),
                 artifact.createdAt());
     }
 
@@ -165,6 +166,7 @@ public class SeahorseSandboxController {
                                           String mediaType,
                                           SandboxArtifactScanStatus scanStatus,
                                           ContextSensitivity sensitivity,
+                                          boolean promptVisible,
                                           Instant createdAt) {
     }
 }

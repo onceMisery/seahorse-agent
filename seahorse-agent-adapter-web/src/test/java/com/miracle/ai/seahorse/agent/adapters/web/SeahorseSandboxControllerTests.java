@@ -134,7 +134,8 @@ class SeahorseSandboxControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].artifactId").value("artifact-clean"))
                 .andExpect(jsonPath("$.data[0].scanStatus").value("CLEAN"))
-                .andExpect(jsonPath("$.data[0].sensitivity").value("INTERNAL"));
+                .andExpect(jsonPath("$.data[0].sensitivity").value("INTERNAL"))
+                .andExpect(jsonPath("$.data[0].promptVisible").value(true));
         verify(port).listArtifacts("session-1");
     }
 

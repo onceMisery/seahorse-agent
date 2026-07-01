@@ -19,11 +19,13 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSandboxRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.KernelSandboxRuntimeService;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
@@ -56,6 +58,9 @@ class SeahorseAgentSandboxAutoConfigurationTests {
                     assertThat(context).hasSingleBean(SandboxExecutionRepositoryPort.class);
                     assertThat(context).hasSingleBean(SandboxArtifactPort.class);
                     assertThat(context).hasSingleBean(SandboxArtifactQueryPort.class);
+                    assertThat(context).hasSingleBean(SandboxArtifactScannerPort.class);
+                    assertThat(context.getBean(SandboxArtifactScannerPort.class))
+                            .isInstanceOf(DefaultSandboxArtifactScannerPort.class);
                     assertThat(context).hasSingleBean(SandboxPolicyPort.class);
                     assertThat(context.getBean(SandboxPolicyPort.class)).isInstanceOf(DefaultSandboxPolicyPort.class);
                     assertThat(context).hasSingleBean(SandboxRuntimePort.class);
@@ -64,6 +69,8 @@ class SeahorseAgentSandboxAutoConfigurationTests {
                     assertThat(context).hasSingleBean(KernelAuditLedgerService.class);
                     assertThat(field(context.getBean(KernelSandboxRuntimeService.class), "auditLedger"))
                             .isSameAs(context.getBean(KernelAuditLedgerService.class));
+                    assertThat(field(context.getBean(KernelSandboxRuntimeService.class), "artifactScannerPort"))
+                            .isSameAs(context.getBean(SandboxArtifactScannerPort.class));
                 });
     }
 

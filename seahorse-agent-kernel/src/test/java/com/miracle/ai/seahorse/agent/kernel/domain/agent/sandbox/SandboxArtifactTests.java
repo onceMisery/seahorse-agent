@@ -32,8 +32,12 @@ class SandboxArtifactTests {
         SandboxArtifact publicArtifact = artifact("artifact-1", SandboxArtifactScanStatus.CLEAN, ContextSensitivity.INTERNAL);
         SandboxArtifact unscannedArtifact = artifact("artifact-2", SandboxArtifactScanStatus.PENDING, ContextSensitivity.INTERNAL);
         SandboxArtifact secretArtifact = artifact("artifact-3", SandboxArtifactScanStatus.CLEAN, ContextSensitivity.SECRET);
+        SandboxArtifact redactedArtifact = artifact("artifact-4",
+                SandboxArtifactScanStatus.REDACTED,
+                ContextSensitivity.CONFIDENTIAL);
 
         assertTrue(publicArtifact.promptVisible());
+        assertTrue(redactedArtifact.promptVisible());
         assertFalse(unscannedArtifact.promptVisible());
         assertFalse(secretArtifact.promptVisible());
     }

@@ -227,7 +227,7 @@
 
 2. **Sandbox Runtime 真实隔离执行**
    - 实现容器化 runtime adapter
-   - 补齐 artifact scan、runtime profile 和 session TTL/cleanup metadata
+   - 补齐 runtime profile、session TTL/cleanup metadata 和内容级 artifact 扫描
    - 接入 sandbox-backed tools
 
 ### 中期优先 (2-4 周)
@@ -282,7 +282,7 @@
 | --- | --- | --- |
 | MCP OAuth2 | `sa_mcp_credential`、token cache 表或 Redis schema | 仍需 OAuth token、scope challenge、refresh/revoke 生命周期 |
 | OpenAPI Connector | `sa_connector_dry_run`、operation review 字段、version diff 字段 | 详见 [OpenAPI Connector 详细设计](./02-OpenAPI-Connector-设计.md) |
-| Sandbox Runtime | runtime profile、artifact scan record、session TTL/close metadata | 详见 [Sandbox Runtime 详细设计](./03-Sandbox-Runtime-设计.md) |
+| Sandbox Runtime | runtime profile、内容级 artifact scan record、session TTL/close metadata | 详见 [Sandbox Runtime 详细设计](./03-Sandbox-Runtime-设计.md) |
 | Agent Factory UI | 完整 version history/diff 查询所需索引或视图 | 详见 [Agent Factory UI 详细设计](./04-Agent-Factory-UI-设计.md) |
 | Multi-Agent/A2A | `sa_agent_collaboration_policy`、`sa_remote_agent`、`sa_agent_team` | 详见 [Multi-Agent / A2A 详细设计](./05-Multi-Agent-A2A-设计.md) |
 | 记忆质量治理 | `t_memory_conflict_log`、`t_memory_quality_snapshot` | 用于衰减、质量评估、冲突治理和报表 |
@@ -306,7 +306,7 @@
 | --- | --- |
 | Agent Factory | 创建向导、结构化策略编辑、test run panel、publish gate dashboard、version diff |
 | OpenAPI Connector | spec diff、operation review、dry-run、secret picker、调用审计摘要 |
-| Sandbox Runtime | session 列表、artifact scan/preview、policy preview |
+| Sandbox Runtime | session 列表、artifact detail/preview、policy preview |
 | Multi-Agent/A2A | handoff tree、collaboration policy、team builder、remote agent registry、mesh health |
 | MCP 管理 | MCP Server OAuth 配置、scope challenge、token 状态、凭据轮换 |
 | 记忆系统 | 记忆质量仪表板、冲突检测与修复、时间线和关系图 |

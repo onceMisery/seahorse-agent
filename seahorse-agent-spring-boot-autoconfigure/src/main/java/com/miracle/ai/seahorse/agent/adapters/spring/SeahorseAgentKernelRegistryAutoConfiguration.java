@@ -48,6 +48,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.quota.KernelQuotaS
 import com.miracle.ai.seahorse.agent.kernel.application.agent.readiness.KernelEnterprisePilotReadinessService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.rollout.KernelAgentRolloutCostSummaryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.rollout.KernelAgentRolloutService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.KernelSandboxRuntimeService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sre.KernelSreHealthQueryService;
@@ -132,6 +133,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAccessPolicyPo
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAclRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
@@ -762,13 +764,20 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(SandboxArtifactScannerPort.class)
+    public SandboxArtifactScannerPort seahorseSandboxArtifactScannerPort() {
+        return new DefaultSandboxArtifactScannerPort();
+    }
+
+    @Bean
     @ConditionalOnBean({
             SandboxPolicyPort.class,
             SandboxRuntimePort.class,
             SandboxArtifactPort.class,
             SandboxSessionRepositoryPort.class,
             SandboxExecutionRepositoryPort.class,
-            SandboxArtifactQueryPort.class
+            SandboxArtifactQueryPort.class,
+            SandboxArtifactScannerPort.class
     })
     @ConditionalOnMissingBean(SandboxRuntimeInboundPort.class)
     public KernelSandboxRuntimeService seahorseSandboxRuntimeInboundPort(
@@ -778,6 +787,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             SandboxSessionRepositoryPort sandboxSessionRepositoryPort,
             SandboxExecutionRepositoryPort sandboxExecutionRepositoryPort,
             SandboxArtifactQueryPort sandboxArtifactQueryPort,
+            SandboxArtifactScannerPort sandboxArtifactScannerPort,
             ObjectProvider<KernelAuditLedgerService> auditLedgerService,
             ObjectProvider<Clock> clockProvider) {
         return new KernelSandboxRuntimeService(
@@ -787,6 +797,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 sandboxSessionRepositoryPort,
                 sandboxExecutionRepositoryPort,
                 sandboxArtifactQueryPort,
+                sandboxArtifactScannerPort,
                 auditLedgerService.getIfAvailable(),
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }

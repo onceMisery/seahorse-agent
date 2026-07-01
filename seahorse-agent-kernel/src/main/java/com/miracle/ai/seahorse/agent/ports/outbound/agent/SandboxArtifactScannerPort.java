@@ -15,11 +15,9 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox;
+package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
-public enum SandboxArtifactScanStatus {
-    PENDING,
-    CLEAN,
-    REDACTED,
-    BLOCKED
+public interface SandboxArtifactScannerPort {
+
+    SandboxArtifactScanResult scan(SandboxArtifactScanRequest request);
 }

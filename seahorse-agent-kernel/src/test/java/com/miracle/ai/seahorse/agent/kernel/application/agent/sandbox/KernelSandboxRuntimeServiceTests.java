@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditRedactionPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditWriteFailurePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
@@ -37,6 +38,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyRequest;
@@ -139,7 +142,7 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
-    void shouldSaveOnlyPromptVisibleArtifactsReturnedByRuntime() {
+    void shouldScanAndSaveAllArtifactsButReturnOnlyPromptVisibleArtifacts() {
         MemoryArtifactPort artifactPort = new MemoryArtifactPort();
         KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
                 request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
@@ -161,8 +164,43 @@ class KernelSandboxRuntimeServiceTests {
 
         assertEquals(SandboxExecutionStatus.SUCCEEDED, result.execution().status());
         assertEquals(1, result.artifacts().size());
-        assertEquals(1, artifactPort.saved.size());
+        assertEquals(2, artifactPort.saved.size());
         assertEquals("artifact-clean", artifactPort.saved.get(0).artifactId());
+        assertEquals("artifact-secret", artifactPort.saved.get(1).artifactId());
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, artifactPort.saved.get(1).scanStatus());
+    }
+
+    @Test
+    void shouldFailClosedWhenArtifactScannerFails() {
+        MemoryArtifactPort artifactPort = new MemoryArtifactPort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                artifactPort,
+                new MemorySandboxSessionRepository(),
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                KernelSandboxRuntimeServiceTests::throwScannerFailure,
+                null,
+                CLOCK);
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.FILE_CONVERSION,
+                false,
+                List.of()));
+
+        SandboxExecutionResult result = service.execute(new SandboxExecutionCommand(
+                session.sessionId(),
+                "convert",
+                false,
+                List.of()));
+
+        assertEquals(SandboxExecutionStatus.SUCCEEDED, result.execution().status());
+        assertEquals(0, result.artifacts().size());
+        assertEquals(2, artifactPort.saved.size());
+        assertTrue(artifactPort.saved.stream()
+                .allMatch(artifact -> artifact.scanStatus() == SandboxArtifactScanStatus.BLOCKED));
     }
 
     @Test
@@ -386,6 +424,10 @@ class KernelSandboxRuntimeServiceTests {
         public AuditEventPage page(AuditEventQuery query) {
             return new AuditEventPage(events, events.size(), query.size(), query.current(), events.isEmpty() ? 0 : 1);
         }
+    }
+
+    private static SandboxArtifactScanResult throwScannerFailure(SandboxArtifactScanRequest request) {
+        throw new IllegalStateException("scanner unavailable");
     }
 
     private static final class MemorySandboxSessionRepository implements SandboxSessionRepositoryPort {

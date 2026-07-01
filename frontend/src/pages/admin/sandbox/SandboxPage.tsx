@@ -32,6 +32,12 @@ function executionBadgeVariant(status?: string): "default" | "secondary" | "dest
   return "secondary";
 }
 
+function artifactBadgeVariant(status?: string): "default" | "secondary" | "destructive" {
+  if (status === "CLEAN" || status === "REDACTED") return "default";
+  if (status === "BLOCKED") return "destructive";
+  return "secondary";
+}
+
 function formatTimestamp(value?: string) {
   if (!value) return "-";
   const date = new Date(value);
@@ -248,8 +254,13 @@ export function SandboxPage() {
                 <div className="space-y-2">
                   {artifacts.map((art) => (
                     <div key={art.artifactId} className="p-2 bg-slate-50 rounded text-sm">
-                      <div className="font-medium">{art.name || art.artifactId}</div>
-                      <div className="text-muted-foreground">{art.mediaType || art.mimeType || "unknown"} · {art.scanStatus || "UNKNOWN"}</div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 truncate font-medium">{art.name || art.artifactId}</div>
+                        <Badge variant={artifactBadgeVariant(art.scanStatus)}>{art.scanStatus || "UNKNOWN"}</Badge>
+                      </div>
+                      <div className="mt-1 text-muted-foreground">
+                        {art.mediaType || art.mimeType || "unknown"} · {art.sensitivity || "UNKNOWN"} · {art.promptVisible ? "PROMPT_VISIBLE" : "PROMPT_BLOCKED"}
+                      </div>
                     </div>
                   ))}
                 </div>

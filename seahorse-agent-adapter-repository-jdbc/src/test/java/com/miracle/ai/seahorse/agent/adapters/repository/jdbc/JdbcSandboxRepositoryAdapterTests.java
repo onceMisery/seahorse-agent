@@ -88,6 +88,11 @@ class JdbcSandboxRepositoryAdapterTests {
                 execution.executionId(),
                 SandboxArtifactScanStatus.PENDING,
                 ContextSensitivity.INTERNAL));
+        SandboxArtifact redacted = adapter.save(artifact(
+                "artifact-redacted",
+                execution.executionId(),
+                SandboxArtifactScanStatus.REDACTED,
+                ContextSensitivity.CONFIDENTIAL));
         adapter.saveSession(closed);
 
         assertThat(adapter.findSessionById("session-1")).contains(closed);
@@ -97,8 +102,8 @@ class JdbcSandboxRepositoryAdapterTests {
                 .containsExactly("exec-1", "exec-2");
         assertThat(adapter.listArtifactsBySession("session-1"))
                 .extracting(SandboxArtifact::artifactId)
-                .containsExactly("artifact-clean", "artifact-secret", "artifact-pending");
-        assertThat(adapter.listPromptVisibleBySession("session-1")).containsExactly(clean);
+                .containsExactly("artifact-clean", "artifact-pending", "artifact-redacted", "artifact-secret");
+        assertThat(adapter.listPromptVisibleBySession("session-1")).containsExactly(clean, redacted);
     }
 
     private static SandboxArtifact artifact(String artifactId,

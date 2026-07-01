@@ -43,7 +43,21 @@ public record SandboxArtifact(String artifactId,
     }
 
     public boolean promptVisible() {
-        return scanStatus == SandboxArtifactScanStatus.CLEAN && sensitivity != ContextSensitivity.SECRET;
+        return (scanStatus == SandboxArtifactScanStatus.CLEAN
+                || scanStatus == SandboxArtifactScanStatus.REDACTED)
+                && sensitivity != ContextSensitivity.SECRET;
+    }
+
+    public SandboxArtifact withScanDecision(SandboxArtifactScanStatus scanStatus, ContextSensitivity sensitivity) {
+        return new SandboxArtifact(
+                artifactId,
+                sessionId,
+                executionId,
+                objectUri,
+                mediaType,
+                scanStatus,
+                sensitivity,
+                createdAt);
     }
 
     private static String requireText(String value, String message) {

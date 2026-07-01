@@ -22,7 +22,9 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditL
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditActorType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEventType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
@@ -33,6 +35,9 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRequest;
@@ -64,6 +69,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private final SandboxPolicyPort policyPort;
     private final SandboxRuntimePort runtimePort;
     private final SandboxArtifactPort artifactPort;
+    private final SandboxArtifactScannerPort artifactScannerPort;
     private final SandboxSessionRepositoryPort sessionRepositoryPort;
     private final SandboxExecutionRepositoryPort executionRepositoryPort;
     private final SandboxArtifactQueryPort artifactQueryPort;
@@ -81,6 +87,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 new InMemorySandboxSessionRepository(),
                 new InMemorySandboxExecutionRepository(),
                 new EmptySandboxArtifactQueryPort(),
+                new DefaultSandboxArtifactScannerPort(),
                 null,
                 clock);
     }
@@ -98,6 +105,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 sessionRepositoryPort,
                 executionRepositoryPort,
                 artifactQueryPort,
+                new DefaultSandboxArtifactScannerPort(),
                 null,
                 clock);
     }
@@ -110,9 +118,31 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                                        SandboxArtifactQueryPort artifactQueryPort,
                                        KernelAuditLedgerService auditLedger,
                                        Clock clock) {
+        this(policyPort,
+                runtimePort,
+                artifactPort,
+                sessionRepositoryPort,
+                executionRepositoryPort,
+                artifactQueryPort,
+                new DefaultSandboxArtifactScannerPort(),
+                auditLedger,
+                clock);
+    }
+
+    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
+                                       SandboxRuntimePort runtimePort,
+                                       SandboxArtifactPort artifactPort,
+                                       SandboxSessionRepositoryPort sessionRepositoryPort,
+                                       SandboxExecutionRepositoryPort executionRepositoryPort,
+                                       SandboxArtifactQueryPort artifactQueryPort,
+                                       SandboxArtifactScannerPort artifactScannerPort,
+                                       KernelAuditLedgerService auditLedger,
+                                       Clock clock) {
         this.policyPort = Objects.requireNonNull(policyPort, "policyPort must not be null");
         this.runtimePort = Objects.requireNonNull(runtimePort, "runtimePort must not be null");
         this.artifactPort = Objects.requireNonNull(artifactPort, "artifactPort must not be null");
+        this.artifactScannerPort = Objects.requireNonNull(artifactScannerPort,
+                "artifactScannerPort must not be null");
         this.sessionRepositoryPort = Objects.requireNonNull(sessionRepositoryPort,
                 "sessionRepositoryPort must not be null");
         this.executionRepositoryPort = Objects.requireNonNull(executionRepositoryPort,
@@ -172,11 +202,18 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 safeCommand.networkRequested(),
                 safeCommand.requestedHosts()));
         SandboxExecution savedExecution = executionRepositoryPort.saveExecution(result.execution());
-        List<SandboxArtifact> visibleArtifacts = result.artifacts().stream()
-                .filter(SandboxArtifact::promptVisible)
+        List<SandboxArtifact> savedArtifacts = result.artifacts().stream()
+                .map(this::scanArtifact)
                 .map(artifactPort::save)
                 .toList();
-        appendExecutionAudit(session, savedExecution, visibleArtifacts.size(), result.reasonCode());
+        List<SandboxArtifact> visibleArtifacts = savedArtifacts.stream()
+                .filter(SandboxArtifact::promptVisible)
+                .toList();
+        appendExecutionAudit(session,
+                savedExecution,
+                savedArtifacts.size(),
+                visibleArtifacts.size(),
+                result.reasonCode());
         return new SandboxExecutionResult(savedExecution, visibleArtifacts, result.reasonCode());
     }
 
@@ -203,12 +240,12 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     public List<SandboxArtifact> listArtifacts(String sessionId) {
         String safeSessionId = requireText(sessionId, "sessionId must not be blank");
         findSessionOrThrow(safeSessionId);
-        return artifactQueryPort.listPromptVisibleBySession(safeSessionId);
+        return artifactQueryPort.listArtifactsBySession(safeSessionId);
     }
 
     private SandboxExecutionResult failedResult(SandboxSession session, SandboxPolicyReasonCode reasonCode) {
         SandboxExecution execution = executionRepositoryPort.saveExecution(failedExecution(session, reasonCode));
-        appendExecutionAudit(session, execution, 0, reasonCode);
+        appendExecutionAudit(session, execution, 0, 0, reasonCode);
         return SandboxExecutionResult.failed(execution, reasonCode);
     }
 
@@ -240,6 +277,17 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private SandboxExecution failedExecution(SandboxSession session, SandboxPolicyReasonCode reasonCode) {
         Instant now = clock.instant();
         return SandboxExecution.failed(executionId(), session.sessionId(), session.runtimeType(), now, reasonCode);
+    }
+
+    private SandboxArtifact scanArtifact(SandboxArtifact artifact) {
+        try {
+            SandboxArtifactScanResult result = Objects.requireNonNull(
+                    artifactScannerPort.scan(new SandboxArtifactScanRequest(artifact)),
+                    "artifact scan result must not be null");
+            return artifact.withScanDecision(result.scanStatus(), result.sensitivity());
+        } catch (RuntimeException ex) {
+            return artifact.withScanDecision(SandboxArtifactScanStatus.BLOCKED, ContextSensitivity.SECRET);
+        }
     }
 
     private String sessionId() {
@@ -281,6 +329,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private void appendExecutionAudit(SandboxSession session,
                                       SandboxExecution execution,
                                       int artifactCount,
+                                      int promptVisibleArtifactCount,
                                       SandboxPolicyReasonCode reasonCode) {
         if (auditLedger == null) {
             return;
@@ -297,13 +346,14 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 RESOURCE_TYPE_SANDBOX_EXECUTION,
                 execution.executionId(),
                 """
-                        {"sessionId":"%s","executionId":"%s","runtimeType":"%s","status":"%s","reasonCode":"%s","artifactCount":%d}
+                        {"sessionId":"%s","executionId":"%s","runtimeType":"%s","status":"%s","reasonCode":"%s","artifactCount":%d,"promptVisibleArtifactCount":%d}
                         """.formatted(session.sessionId(),
                         execution.executionId(),
                         execution.runtimeType().name(),
                         execution.status().name(),
                         reasonCode.name(),
-                        artifactCount),
+                        artifactCount,
+                        promptVisibleArtifactCount),
                 now));
     }
 

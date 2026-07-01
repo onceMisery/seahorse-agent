@@ -46,6 +46,7 @@ export interface SandboxArtifact {
   content?: string;
   scanStatus?: string;
   sensitivity?: string;
+  promptVisible?: boolean;
   createdAt?: string;
 }
 

@@ -130,15 +130,15 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
             SELECT %s
             FROM sa_sandbox_artifact
             WHERE session_id = ?
-            ORDER BY created_at ASC
+            ORDER BY created_at ASC, artifact_id ASC
             """.formatted(ARTIFACT_COLUMNS);
     private static final String SQL_LIST_PROMPT_VISIBLE_BY_SESSION = """
             SELECT %s
             FROM sa_sandbox_artifact
             WHERE session_id = ?
-              AND scan_status = ?
+              AND scan_status IN (?, ?)
               AND sensitivity <> ?
-            ORDER BY created_at ASC
+            ORDER BY created_at ASC, artifact_id ASC
             """.formatted(ARTIFACT_COLUMNS);
 
     private final JdbcTemplate jdbcTemplate;
@@ -221,6 +221,7 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 this::mapArtifact,
                 sessionId.trim(),
                 SandboxArtifactScanStatus.CLEAN.name(),
+                SandboxArtifactScanStatus.REDACTED.name(),
                 ContextSensitivity.SECRET.name());
     }
 

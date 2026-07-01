@@ -15,11 +15,15 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox;
+package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
-public enum SandboxArtifactScanStatus {
-    PENDING,
-    CLEAN,
-    REDACTED,
-    BLOCKED
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
+
+import java.util.Objects;
+
+public record SandboxArtifactScanRequest(SandboxArtifact artifact) {
+
+    public SandboxArtifactScanRequest {
+        artifact = Objects.requireNonNull(artifact, "artifact must not be null");
+    }
 }
