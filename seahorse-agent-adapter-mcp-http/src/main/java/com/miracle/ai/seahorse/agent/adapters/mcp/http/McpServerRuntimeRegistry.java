@@ -20,15 +20,11 @@ package com.miracle.ai.seahorse.agent.adapters.mcp.http;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolExecutionPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolPermission;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerStatusView;
 import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerTestResultView;
-import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionRequest;
-import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionResult;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolDescriptor;
-import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolExecutorPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 
 import java.time.Instant;
 import java.util.Comparator;
@@ -47,6 +43,7 @@ public class McpServerRuntimeRegistry implements McpServerManagementInboundPort 
     private static final String STATUS_APPROVAL_REQUIRED = "APPROVAL_REQUIRED";
     private static final String STATUS_DENIED = "DENIED";
     private static final String STATUS_EXECUTION_FAILED = "EXECUTION_FAILED";
+    private static final String STATUS_TOOL_GATEWAY_UNAVAILABLE = "TOOL_GATEWAY_UNAVAILABLE";
     private static final String STATUS_SUCCESS = "SUCCESS";
     private static final String ECHO_TOOL_ID = "echo";
     private static final String TEST_TEXT = "seahorse mcp health check";
@@ -59,7 +56,6 @@ public class McpServerRuntimeRegistry implements McpServerManagementInboundPort 
 
     private final Map<String, McpServerStatusView> servers = new LinkedHashMap<>();
     private final Supplier<GovernedToolExecutionPort> governedToolExecutionPort;
-    private McpToolRegistryPort toolRegistry = McpToolRegistryPort.empty();
     private LifecycleActions lifecycleActions = LifecycleActions.unsupported();
 
     public McpServerRuntimeRegistry() {
@@ -89,10 +85,6 @@ public class McpServerRuntimeRegistry implements McpServerManagementInboundPort 
                 }
             };
         }
-    }
-
-    public synchronized void setToolRegistry(McpToolRegistryPort toolRegistry) {
-        this.toolRegistry = Objects.requireNonNullElseGet(toolRegistry, McpToolRegistryPort::empty);
     }
 
     public synchronized void setLifecycleActions(LifecycleActions lifecycleActions) {
@@ -143,25 +135,15 @@ public class McpServerRuntimeRegistry implements McpServerManagementInboundPort 
         if (governedToolExecution != null) {
             return testServerThroughGovernedGateway(governedToolExecution, server.get(), echoToolId.get());
         }
-        Optional<McpToolExecutorPort> executor = toolRegistry.findExecutor(echoToolId.get());
-        if (executor.isEmpty()) {
-            return testResult(server.get().getName(), echoToolId.get(), false,
-                    "TOOL_NOT_FOUND", "", "MCP tool executor not found");
-        }
-        try {
-            McpToolExecutionResult result = executor.get().execute(
-                    new McpToolExecutionRequest(echoToolId.get(), Map.of("text", TEST_TEXT)));
-            return testResult(
-                    server.get().getName(),
-                    result.toolId(),
-                    result.success(),
-                    result.status().name(),
-                    result.content(),
-                    result.message());
-        } catch (RuntimeException ex) {
-            return testResult(server.get().getName(), echoToolId.get(), false,
-                    STATUS_EXECUTION_FAILED, "", Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
-        }
+        return testResult(
+                server.get().getName(),
+                echoToolId.get(),
+                false,
+                STATUS_TOOL_GATEWAY_UNAVAILABLE,
+                "",
+                "MCP diagnostic execution requires the governed Tool Gateway",
+                null,
+                STATUS_TOOL_GATEWAY_UNAVAILABLE);
     }
 
     private McpServerTestResultView testServerThroughGovernedGateway(

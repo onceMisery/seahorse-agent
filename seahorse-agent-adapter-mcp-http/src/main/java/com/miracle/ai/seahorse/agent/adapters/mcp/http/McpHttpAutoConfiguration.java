@@ -109,7 +109,6 @@ public class McpHttpAutoConfiguration {
                 credentialProvider,
                 mcpServerRuntimeRegistry));
         NativeMcpToolRegistry registry = new NativeMcpToolRegistry(features);
-        mcpServerRuntimeRegistry.setToolRegistry(registry);
         mcpServerRuntimeRegistry.setLifecycleActions(new McpServerRuntimeRegistry.LifecycleActions() {
             @Override
             public void restart(String serverName) {
@@ -130,7 +129,6 @@ public class McpHttpAutoConfiguration {
                         credentialProvider,
                         mcpServerRuntimeRegistry));
                 registry.replaceAll(refreshedFeatures);
-                mcpServerRuntimeRegistry.setToolRegistry(registry);
             }
         });
         return registry;

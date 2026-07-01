@@ -23,12 +23,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolPermis
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerStatusView;
 import com.miracle.ai.seahorse.agent.ports.inbound.mcp.McpServerTestResultView;
-import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionRequest;
-import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolDescriptor;
-import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolExecutorPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -75,22 +71,20 @@ class McpServerRuntimeRegistryTests {
     }
 
     @Test
-    void shouldRunSafeEchoTestCallThroughRegisteredExecutorWhenGatewayUnavailable() {
+    void shouldFailClosedWhenGovernedGatewayUnavailable() {
         McpServerRuntimeRegistry registry = new McpServerRuntimeRegistry();
         registry.recordReady(server("local-echo", McpHttpAdapterProperties.Transport.STDIO, true),
                 List.of(new McpToolDescriptor("echo", "Echo text", Map.of())),
                 "");
-        CapturingExecutor executor = new CapturingExecutor();
-        registry.setToolRegistry(new SingleToolRegistry("echo", executor));
 
         McpServerTestResultView result = registry.testServer("local-echo");
 
         assertThat(result.getServerName()).isEqualTo("local-echo");
         assertThat(result.getToolId()).isEqualTo("echo");
-        assertThat(result.getSuccess()).isTrue();
-        assertThat(result.getContent()).isEqualTo("echo seahorse mcp health check");
-        assertThat(executor.lastRequest.toolId()).isEqualTo("echo");
-        assertThat(executor.lastRequest.arguments()).containsEntry("text", "seahorse mcp health check");
+        assertThat(result.getSuccess()).isFalse();
+        assertThat(result.getStatus()).isEqualTo("TOOL_GATEWAY_UNAVAILABLE");
+        assertThat(result.getReasonCode()).isEqualTo("TOOL_GATEWAY_UNAVAILABLE");
+        assertThat(result.getMessage()).isEqualTo("MCP diagnostic execution requires the governed Tool Gateway");
     }
 
     @Test
@@ -104,8 +98,6 @@ class McpServerRuntimeRegistryTests {
         registry.recordReady(server("local-echo", McpHttpAdapterProperties.Transport.STDIO, true),
                 List.of(new McpToolDescriptor("echo", "Echo text", Map.of())),
                 "");
-        CapturingExecutor executor = new CapturingExecutor();
-        registry.setToolRegistry(new SingleToolRegistry("echo", executor));
 
         McpServerTestResultView result = registry.testServer("local-echo");
 
@@ -117,7 +109,6 @@ class McpServerRuntimeRegistryTests {
         assertThat(governed.preflightRequest.allowedToolIds()).containsExactly("echo");
         assertThat(governed.preflightRequest.arguments()).containsEntry("text", "seahorse mcp health check");
         assertThat(governed.invokeCalls.get()).isZero();
-        assertThat(executor.lastRequest).isNull();
     }
 
     @Test
@@ -157,14 +148,14 @@ class McpServerRuntimeRegistryTests {
     }
 
     @Test
-    void shouldReportExecutorFailureWithoutThrowingDuringSafeTestCall() {
-        McpServerRuntimeRegistry registry = new McpServerRuntimeRegistry();
+    void shouldReportGovernedGatewayFailureWithoutThrowingDuringSafeTestCall() {
+        CapturingGovernedToolExecution governed = new CapturingGovernedToolExecution(
+                GovernedToolPermission.allow("APPROVAL_SATISFIED", "approval satisfied"));
+        governed.invokeResult = ToolInvocationResult.failed("stdio process stopped");
+        McpServerRuntimeRegistry registry = new McpServerRuntimeRegistry(() -> governed);
         registry.recordReady(server("local-echo", McpHttpAdapterProperties.Transport.STDIO, true),
                 List.of(new McpToolDescriptor("echo", "Echo text", Map.of())),
                 "");
-        registry.setToolRegistry(new SingleToolRegistry("echo", request -> {
-            throw new IllegalStateException("stdio process stopped");
-        }));
 
         McpServerTestResultView result = registry.testServer("local-echo");
 
@@ -173,6 +164,7 @@ class McpServerRuntimeRegistryTests {
         assertThat(result.getSuccess()).isFalse();
         assertThat(result.getStatus()).isEqualTo("EXECUTION_FAILED");
         assertThat(result.getMessage()).isEqualTo("stdio process stopped");
+        assertThat(governed.invokeCalls.get()).isEqualTo(1);
     }
 
     @Test
@@ -216,16 +208,6 @@ class McpServerRuntimeRegistryTests {
         return server;
     }
 
-    private static final class CapturingExecutor implements McpToolExecutorPort {
-        private McpToolExecutionRequest lastRequest;
-
-        @Override
-        public McpToolExecutionResult execute(McpToolExecutionRequest request) {
-            lastRequest = request;
-            return McpToolExecutionResult.success(request.toolId(), "echo " + request.arguments().get("text"));
-        }
-    }
-
     private static final class CapturingGovernedToolExecution implements GovernedToolExecutionPort {
         private final GovernedToolPermission permission;
         private ToolInvocationResult invokeResult = ToolInvocationResult.failed("not configured");
@@ -253,13 +235,6 @@ class McpServerRuntimeRegistryTests {
         @Override
         public Optional<GovernedToolApproval> findLatestApproval(String runId, String stepId) {
             return Optional.empty();
-        }
-    }
-
-    private record SingleToolRegistry(String toolId, McpToolExecutorPort executor) implements McpToolRegistryPort {
-        @Override
-        public Optional<McpToolExecutorPort> findExecutor(String requestedToolId) {
-            return toolId.equals(requestedToolId) ? Optional.of(executor) : Optional.empty();
         }
     }
 
