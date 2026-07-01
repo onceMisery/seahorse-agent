@@ -139,7 +139,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                     safeCommand.runtimeType(),
                     decision.reasonCode(),
                     clock.instant());
-            return saveSession(denied);
+            return saveSession(denied, AuditEventType.SANDBOX_SESSION_CREATED);
         }
         SandboxSession session = runtimePort.createSession(new SandboxSessionRequest(
                 safeCommand.tenantId(),
@@ -147,7 +147,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 safeCommand.runtimeType(),
                 safeCommand.networkRequested(),
                 safeCommand.requestedHosts()));
-        return saveSession(session);
+        return saveSession(session, AuditEventType.SANDBOX_SESSION_CREATED);
     }
 
     @Override
@@ -186,16 +186,10 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         if (session.status().isTerminal()) {
             return session;
         }
-        SandboxSession closed = new SandboxSession(
-                session.sessionId(),
-                session.tenantId(),
-                session.runId(),
-                session.runtimeType(),
-                SandboxExecutionStatus.CANCELLED,
-                session.reasonCode(),
-                session.createdAt(),
-                clock.instant());
-        return saveSession(closed);
+        SandboxSession closed = Objects.requireNonNull(
+                runtimePort.closeSession(session),
+                "runtime closeSession result must not be null");
+        return saveSession(closed, AuditEventType.SANDBOX_SESSION_CLOSED);
     }
 
     @Override
@@ -211,10 +205,10 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         return SandboxExecutionResult.failed(execution, reasonCode);
     }
 
-    private SandboxSession saveSession(SandboxSession session) {
+    private SandboxSession saveSession(SandboxSession session, AuditEventType auditEventType) {
         SandboxSession saved = sessionRepositoryPort.saveSession(session);
         sessions.put(saved.sessionId(), saved);
-        appendSessionAudit(saved);
+        appendSessionAudit(saved, auditEventType);
         return saved;
     }
 
@@ -253,7 +247,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         return SnowflakeIds.nextIdString();
     }
 
-    private void appendSessionAudit(SandboxSession session) {
+    private void appendSessionAudit(SandboxSession session, AuditEventType auditEventType) {
         if (auditLedger == null) {
             return;
         }
@@ -261,7 +255,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         auditLedger.append(new AuditEvent(
                 auditId(),
                 session.tenantId(),
-                AuditEventType.SANDBOX_SESSION_CREATED,
+                auditEventType,
                 AuditActorType.SYSTEM,
                 AUDIT_ACTOR_ID,
                 session.runId(),

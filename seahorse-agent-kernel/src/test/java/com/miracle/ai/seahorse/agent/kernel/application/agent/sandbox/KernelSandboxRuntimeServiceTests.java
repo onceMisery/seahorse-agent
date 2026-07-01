@@ -166,6 +166,54 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldDelegateCloseToRuntimeAndPersistClosedSession() {
+        RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                runtime,
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                CLOCK);
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        SandboxSession closed = service.close(session.sessionId());
+
+        assertTrue(runtime.closeSessionCalled);
+        assertEquals(SandboxExecutionStatus.CANCELLED, closed.status());
+        assertEquals(NOW.plusSeconds(5), closed.updatedAt());
+        assertEquals(closed, sessionRepository.findSessionById(session.sessionId()).orElseThrow());
+    }
+
+    @Test
+    void shouldNotDelegateCloseForTerminalSession() {
+        RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.deny(SandboxPolicyReasonCode.NETWORK_DENIED_BY_DEFAULT),
+                runtime,
+                new MemoryArtifactPort(),
+                CLOCK);
+        SandboxSession failedSession = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                true,
+                List.of("api.example.com")));
+
+        SandboxSession closed = service.close(failedSession.sessionId());
+
+        assertFalse(runtime.closeSessionCalled);
+        assertEquals(SandboxExecutionStatus.FAILED, closed.status());
+    }
+
+    @Test
     void shouldWriteRedactedAuditEventsForSessionAndTerminalExecution() {
         RecordingAuditEventRepository auditRepository = new RecordingAuditEventRepository();
         KernelAuditLedgerService auditLedger = new KernelAuditLedgerService(
@@ -204,10 +252,43 @@ class KernelSandboxRuntimeServiceTests {
                 .noneMatch(payload -> payload.contains("secret-token")));
     }
 
+    @Test
+    void shouldWriteSessionClosedAuditEventWhenClosingRuntimeSession() {
+        RecordingAuditEventRepository auditRepository = new RecordingAuditEventRepository();
+        KernelAuditLedgerService auditLedger = new KernelAuditLedgerService(
+                auditRepository,
+                new AuditRedactionPolicy(),
+                AuditWriteFailurePolicy.FAIL_CLOSED);
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                new MemorySandboxSessionRepository(),
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                auditLedger,
+                CLOCK);
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        service.close(session.sessionId());
+
+        List<AuditEventType> eventTypes = auditRepository.events.stream()
+                .map(AuditEvent::eventType)
+                .toList();
+        assertTrue(eventTypes.contains(AuditEventType.SANDBOX_SESSION_CREATED));
+        assertTrue(eventTypes.contains(AuditEventType.SANDBOX_SESSION_CLOSED));
+    }
+
     private static final class RecordingSandboxRuntimePort implements SandboxRuntimePort {
 
         private boolean createSessionCalled;
         private boolean executeCalled;
+        private boolean closeSessionCalled;
 
         @Override
         public SandboxSession createSession(SandboxSessionRequest request) {
@@ -233,6 +314,12 @@ class KernelSandboxRuntimeServiceTests {
             return SandboxExecutionResult.succeeded(
                     execution,
                     List.of(SandboxTestArtifacts.clean("artifact-clean"), SandboxTestArtifacts.secret("artifact-secret")));
+        }
+
+        @Override
+        public SandboxSession closeSession(SandboxSession session) {
+            closeSessionCalled = true;
+            return session.closed(NOW.plusSeconds(5));
         }
     }
 

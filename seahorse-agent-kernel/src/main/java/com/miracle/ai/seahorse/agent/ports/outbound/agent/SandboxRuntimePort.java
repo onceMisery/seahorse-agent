@@ -30,6 +30,10 @@ public interface SandboxRuntimePort {
 
     SandboxExecutionResult execute(SandboxExecutionRequest request);
 
+    default SandboxSession closeSession(SandboxSession session) {
+        return session.closed(Instant.now());
+    }
+
     static SandboxRuntimePort unsupported() {
         return new SandboxRuntimePort() {
             @Override

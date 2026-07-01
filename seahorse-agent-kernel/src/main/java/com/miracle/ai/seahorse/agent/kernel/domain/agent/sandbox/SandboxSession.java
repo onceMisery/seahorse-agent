@@ -59,6 +59,18 @@ public record SandboxSession(String sessionId,
                 SandboxExecutionStatus.FAILED, reasonCode, createdAt, createdAt);
     }
 
+    public SandboxSession closed(Instant closedAt) {
+        return new SandboxSession(
+                sessionId,
+                tenantId,
+                runId,
+                runtimeType,
+                SandboxExecutionStatus.CANCELLED,
+                reasonCode,
+                createdAt,
+                Objects.requireNonNullElse(closedAt, updatedAt));
+    }
+
     private static String requireText(String value, String message) {
         if (value == null || value.trim().isEmpty()) {
             throw new IllegalArgumentException(message);
