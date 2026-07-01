@@ -35,6 +35,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationRequestAwarePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolOutputRedactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
@@ -86,6 +87,27 @@ class LocalToolGatewayPortAuditTests {
         assertEquals(ToolInvocationStatus.SUCCEEDED, audit.completed.get(0).status());
         assertTrue(audit.completed.get(0).resultSummary().contains("length"));
         assertEquals(FIXED_CLOCK.instant(), audit.completed.get(0).finishedAt());
+    }
+
+    @Test
+    void shouldPassFullInvocationRequestToRequestAwareTool() {
+        RequestAwareCountingToolPort tool = new RequestAwareCountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                ToolInvocationAuditPort.noop(),
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("sandbox_python"));
+
+        assertTrue(result.success());
+        assertEquals(1, tool.requestAwareCalls.get());
+        assertEquals(0, tool.legacyCalls.get());
+        assertEquals("run-1", tool.lastRequest.runId());
+        assertEquals("tenant-1", tool.lastRequest.tenantId());
+        assertEquals("user-1", tool.lastRequest.userId());
+        assertEquals("sandbox_python", tool.lastRequest.toolId());
+        assertEquals(Map.of("input", "value"), tool.lastRequest.arguments());
     }
 
     @Test
@@ -548,6 +570,30 @@ class LocalToolGatewayPortAuditTests {
         @Override
         public ToolInvocationResult invoke(String toolCallId, String toolId, Map<String, Object> arguments) {
             calls.incrementAndGet();
+            return result;
+        }
+    }
+
+    private static final class RequestAwareCountingToolPort implements ToolPort, ToolInvocationRequestAwarePort {
+        private final AtomicInteger legacyCalls = new AtomicInteger();
+        private final AtomicInteger requestAwareCalls = new AtomicInteger();
+        private final ToolInvocationResult result;
+        private ToolInvocationRequest lastRequest;
+
+        private RequestAwareCountingToolPort(ToolInvocationResult result) {
+            this.result = result;
+        }
+
+        @Override
+        public ToolInvocationResult invoke(String toolCallId, String toolId, Map<String, Object> arguments) {
+            legacyCalls.incrementAndGet();
+            return result;
+        }
+
+        @Override
+        public ToolInvocationResult invoke(ToolInvocationRequest request) {
+            requestAwareCalls.incrementAndGet();
+            lastRequest = request;
             return result;
         }
     }

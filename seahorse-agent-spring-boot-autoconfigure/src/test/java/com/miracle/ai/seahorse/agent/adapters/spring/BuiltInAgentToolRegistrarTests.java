@@ -27,10 +27,19 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerati
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.NewsletterGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.PptGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxPythonToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationResult;
@@ -79,6 +88,8 @@ class BuiltInAgentToolRegistrarTests {
                 () -> new LoadSkillResourceToolPortAdapter(jsonSupport));
         context.registerBean(ToolSearchToolPortAdapter.class,
                 () -> new ToolSearchToolPortAdapter(registry, jsonSupport));
+        context.registerBean(SandboxPythonToolPortAdapter.class,
+                () -> new SandboxPythonToolPortAdapter(new NoopSandboxRuntime(), jsonSupport));
         context.refresh();
 
         BuiltInAgentToolRegistrar registrar = new BuiltInAgentToolRegistrar(
@@ -96,7 +107,8 @@ class BuiltInAgentToolRegistrarTests {
         assertThat(registry.find(FrontendDesignToolPortAdapter.TOOL_ID)).isPresent();
         assertThat(registry.find(LoadSkillResourceToolPortAdapter.TOOL_ID)).isPresent();
         assertThat(registry.find(ToolSearchToolPortAdapter.TOOL_ID)).isPresent();
-        assertThat(catalog.savedEntries()).hasSize(8);
+        assertThat(registry.find(SandboxPythonToolPortAdapter.TOOL_ID)).isPresent();
+        assertThat(catalog.savedEntries()).hasSize(9);
         assertThat(catalog.findById(GitHubRepositoryReaderToolPortAdapter.TOOL_ID)).hasValueSatisfying(entry -> {
             assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
             assertThat(entry.actionType()).isEqualTo(ToolActionType.READ);
@@ -125,6 +137,14 @@ class BuiltInAgentToolRegistrarTests {
             assertThat(entry.actionType()).isEqualTo(ToolActionType.READ);
             assertThat(entry.resourceType()).isEqualTo("TOOL");
         });
+        assertThat(catalog.findById(SandboxPythonToolPortAdapter.TOOL_ID)).hasValueSatisfying(entry -> {
+            assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
+            assertThat(entry.actionType()).isEqualTo(ToolActionType.EXECUTE);
+            assertThat(entry.resourceType()).isEqualTo("SANDBOX");
+            assertThat(entry.riskLevel()).isEqualTo(ToolRiskLevel.HIGH);
+            assertThat(entry.enabled()).isTrue();
+            assertThat(entry.requiresApproval()).isFalse();
+        });
 
         context.close();
     }
@@ -149,6 +169,34 @@ class BuiltInAgentToolRegistrarTests {
 
         List<ToolCatalogEntry> savedEntries() {
             return List.copyOf(entries.values());
+        }
+    }
+
+    private static final class NoopSandboxRuntime implements SandboxRuntimeInboundPort {
+
+        @Override
+        public SandboxSession createSession(SandboxSessionCreateCommand command) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public SandboxExecutionResult execute(SandboxExecutionCommand command) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public SandboxSession close(String sessionId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<SandboxExecution> listExecutions(String sessionId) {
+            return List.of();
+        }
+
+        @Override
+        public List<SandboxArtifact> listArtifacts(String sessionId) {
+            return List.of();
         }
     }
 }

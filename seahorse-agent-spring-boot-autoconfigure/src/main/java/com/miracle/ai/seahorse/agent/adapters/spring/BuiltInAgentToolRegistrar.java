@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualiz
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.NewsletterGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.PptGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxPythonToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
@@ -113,6 +114,9 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
     }
 
     private ToolRiskLevel riskLevel(String toolId) {
+        if (SandboxPythonToolPortAdapter.TOOL_ID.equals(toolId)) {
+            return ToolRiskLevel.HIGH;
+        }
         if (isModelGenerationTool(toolId)) {
             return ToolRiskLevel.MEDIUM;
         }
@@ -120,7 +124,7 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
     }
 
     private ToolActionType actionType(String toolId) {
-        if (isModelGenerationTool(toolId)) {
+        if (isModelGenerationTool(toolId) || SandboxPythonToolPortAdapter.TOOL_ID.equals(toolId)) {
             return ToolActionType.EXECUTE;
         }
         return ToolActionType.READ;
@@ -132,6 +136,7 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
             case GitHubRepositoryReaderToolPortAdapter.TOOL_ID -> "GITHUB";
             case LoadSkillResourceToolPortAdapter.TOOL_ID -> "SKILL";
             case ToolSearchToolPortAdapter.TOOL_ID -> "TOOL";
+            case SandboxPythonToolPortAdapter.TOOL_ID -> "SANDBOX";
             case ImageGenerationToolPortAdapter.TOOL_ID,
                     NewsletterGenerationToolPortAdapter.TOOL_ID,
                     PptGenerationToolPortAdapter.TOOL_ID,

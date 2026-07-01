@@ -38,6 +38,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRep
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationRequestAwarePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolOutputRedactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
@@ -222,8 +223,9 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         try {
             ToolPort executableTool = toolPort
                     .orElseGet(() -> ToolPort.notFound(safeRequest.toolId()));
-            ToolInvocationResult rawResult = executableTool.invoke(
-                    safeRequest.toolCallId(), safeRequest.toolId(), safeRequest.arguments());
+            ToolInvocationResult rawResult = executableTool instanceof ToolInvocationRequestAwarePort awareTool
+                    ? awareTool.invoke(safeRequest)
+                    : executableTool.invoke(safeRequest.toolCallId(), safeRequest.toolId(), safeRequest.arguments());
             if (rawResult.success()) {
                 publishArtifacts(safeRequest, rawResult);
             }

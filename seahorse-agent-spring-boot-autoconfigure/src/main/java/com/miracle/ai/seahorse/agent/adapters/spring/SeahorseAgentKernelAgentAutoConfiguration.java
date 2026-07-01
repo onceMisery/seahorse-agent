@@ -61,6 +61,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryWriteTo
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.NewsletterGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.PptGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.QueryMetadataToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxPythonToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
@@ -74,6 +75,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceReco
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
@@ -164,6 +166,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             "seahorse-agent.chat.agent.tools.deferred-search.enabled";
     private static final String PROP_SEARCH_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.search.enabled";
     private static final String PROP_MEMORY_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.memory.enabled";
+    private static final String PROP_SANDBOX_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.sandbox.enabled";
     private static final String PROP_WEB_RESEARCH_TOOLS_ENABLED =
             "seahorse-agent.chat.agent.tools.web-research.enabled";
     private static final String PROP_WEB_FETCH_TIMEOUT =
@@ -582,6 +585,17 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @ConditionalOnMissingBean
     public GetDateTimeToolPortAdapter seahorseGetDateTimeToolPortAdapter() {
         return new GetDateTimeToolPortAdapter();
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean(SandboxRuntimeInboundPort.class)
+    @ConditionalOnProperty(name = PROP_SANDBOX_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public SandboxPythonToolPortAdapter seahorseSandboxPythonToolPortAdapter(
+            SandboxRuntimeInboundPort sandboxRuntimeInboundPort,
+            AgentToolJsonSupport jsonSupport) {
+        return new SandboxPythonToolPortAdapter(sandboxRuntimeInboundPort, jsonSupport);
     }
 
     @Bean
