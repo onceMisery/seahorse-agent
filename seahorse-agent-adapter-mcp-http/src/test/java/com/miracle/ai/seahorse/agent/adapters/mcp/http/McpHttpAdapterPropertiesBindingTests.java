@@ -41,7 +41,12 @@ class McpHttpAdapterPropertiesBindingTests {
                         "seahorse-agent.adapters.mcp.servers[1].command=node",
                         "seahorse-agent.adapters.mcp.servers[1].args[0]=server.js",
                         "seahorse-agent.adapters.mcp.stdio-command-allowlist[0]=node",
-                        "seahorse-agent.adapters.mcp.stdio-command-allowlist[1]=python");
+                        "seahorse-agent.adapters.mcp.stdio-command-allowlist[1]=python",
+                        "seahorse-agent.adapters.mcp.stdio-runner-isolation.enabled=true",
+                        "seahorse-agent.adapters.mcp.stdio-runner-isolation.inherit-environment=false",
+                        "seahorse-agent.adapters.mcp.stdio-runner-isolation.environment-allowlist[0]=PATH",
+                        "seahorse-agent.adapters.mcp.stdio-runner-isolation.environment-allowlist[1]=LANG",
+                        "seahorse-agent.adapters.mcp.stdio-runner-isolation.working-dir-allowlist[0]=/opt/mcp");
 
         contextRunner.run(context -> {
             assertThat(context).hasSingleBean(McpHttpAdapterProperties.class);
@@ -54,6 +59,10 @@ class McpHttpAdapterPropertiesBindingTests {
                     .isEqualTo(McpHttpAdapterProperties.Transport.STDIO);
             assertThat(properties.getServers().get(1).getArgs()).containsExactly("server.js");
             assertThat(properties.getStdioCommandAllowlist()).containsExactly("node", "python");
+            assertThat(properties.getStdioRunnerIsolation().isEnabled()).isTrue();
+            assertThat(properties.getStdioRunnerIsolation().isInheritEnvironment()).isFalse();
+            assertThat(properties.getStdioRunnerIsolation().getEnvironmentAllowlist()).containsExactly("PATH", "LANG");
+            assertThat(properties.getStdioRunnerIsolation().getWorkingDirAllowlist()).containsExactly("/opt/mcp");
         });
     }
 }

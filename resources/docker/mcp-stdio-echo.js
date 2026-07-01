@@ -15,8 +15,16 @@ function send(message) {
 function resultFor(request) {
   switch (request.method) {
     case "initialize":
+      for (const arg of process.argv.slice(2)) {
+        if (arg.startsWith("--stderr-secret=")) {
+          process.stderr.write(`MCP_STDIO_E2E_SECRET=${arg.slice("--stderr-secret=".length)}\n`);
+        }
+      }
       if (process.env.MCP_STDIO_E2E_SECRET) {
         process.stderr.write(`MCP_STDIO_E2E_SECRET=${process.env.MCP_STDIO_E2E_SECRET}\n`);
+      }
+      if (process.env.MCP_STDIO_PARENT_ONLY_MARKER) {
+        process.stderr.write(`MCP_STDIO_PARENT_ONLY_MARKER=${process.env.MCP_STDIO_PARENT_ONLY_MARKER}\n`);
       }
       return {
         protocolVersion: "2026-02-28",

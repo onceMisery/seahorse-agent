@@ -382,3 +382,11 @@ The first P1 MCP stdio security slice now defaults stdio startup to deny unless 
 Fresh Docker evidence: `scripts/e2e-mcp-stdio-smoke.ps1 -BaseUrl http://127.0.0.1:9093 -BackendImage seahorse-agent-backend:mcp-stdio-allowlist -HostPort 9093` passed 8/8 against a temporary MCP-enabled backend image built from the freshly packaged jar. The run verified allowed `node` stdio echo, blocked `pwsh` startup, `/api/mcp/servers` failure diagnostics, MCP tool catalog HIGH/approval flags, refresh/restart, and stderr-tail endpoints.
 
 Remaining roadmap work is narrowed to the product approval entry, unified Tool Gateway execution enforcement, runner isolation/sandbox policy, and deeper audit/desensitization for MCP stderr and tool calls.
+
+### 2026-07-02 MCP Stdio Runner Isolation P1 Evidence Update
+
+The next P1 MCP stdio security slice adds near-term `ProcessBuilder` runner isolation before a separate sandbox runtime exists. Isolation now defaults on, clears the inherited backend environment unless inheritance is explicitly enabled, keeps only allowlisted parent environment keys, still passes explicit per-server `env`, and fail-closes non-empty `workingDir` values unless they are under `stdio-runner-isolation.working-dir-allowlist`.
+
+Fresh Docker evidence: `scripts/e2e-mcp-stdio-smoke.ps1 -BaseUrl http://127.0.0.1:9093 -BackendImage seahorse-agent-backend:mcp-stdio-allowlist -HostPort 9093` passed 11/11 against a temporary MCP-enabled backend image built from the freshly packaged jar. The run verified isolated `node` stdio echo startup, blocked `pwsh` startup, blocked `workingDir=/tmp` with registry status `FAILED` and reason `stdio workingDir not allowlisted`, approval-gated diagnostic calls, approved call audit, and redacted stderr diagnostics that did not expose the raw secret or parent-only environment marker.
+
+Remaining roadmap work is narrowed to full independent/container sandbox runner productionization, product approval/UI hardening, unified Tool Gateway execution enforcement, and any deeper audit/desensitization requirements beyond the current stderr-tail and MCP tool-call coverage.

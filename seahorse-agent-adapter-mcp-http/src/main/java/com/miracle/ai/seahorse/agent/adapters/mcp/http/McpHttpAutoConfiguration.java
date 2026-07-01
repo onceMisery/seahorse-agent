@@ -158,6 +158,7 @@ public class McpHttpAutoConfiguration {
                     credentialProvider,
                     properties.getCallTimeout(),
                     properties.getStdioCommandAllowlist(),
+                    StdioMcpRunnerPolicy.from(properties.getStdioRunnerIsolation()),
                     mcpServerRuntimeRegistry));
         }
         return features;
@@ -169,6 +170,7 @@ public class McpHttpAutoConfiguration {
                                                         ObjectProvider<CredentialProviderPort> credentialProvider,
                                                         Duration callTimeout,
                                                         List<String> stdioCommandAllowlist,
+                                                        StdioMcpRunnerPolicy stdioRunnerPolicy,
                                                         McpServerRuntimeRegistry mcpServerRuntimeRegistry) {
         if (!server.isEnabled()) {
             mcpServerRuntimeRegistry.recordDisabled(server);
@@ -180,6 +182,7 @@ public class McpHttpAutoConfiguration {
                     server,
                     callTimeout,
                     stdioCommandAllowlist,
+                    stdioRunnerPolicy,
                     mcpServerRuntimeRegistry);
             case STREAMABLE_HTTP -> discoverHttpServerFeatures(
                     httpClient,
@@ -229,6 +232,7 @@ public class McpHttpAutoConfiguration {
                                                              McpHttpAdapterProperties.Server server,
                                                              Duration callTimeout,
                                                              List<String> stdioCommandAllowlist,
+                                                             StdioMcpRunnerPolicy stdioRunnerPolicy,
                                                              McpServerRuntimeRegistry mcpServerRuntimeRegistry) {
         if (server.getCommand().isBlank()) {
             mcpServerRuntimeRegistry.recordFailed(server, "command missing");
@@ -241,6 +245,13 @@ public class McpHttpAutoConfiguration {
             LOG.warn("MCP stdio Server skipped, server={}, reason={}", server.getName(), reason);
             return List.of();
         }
+        Optional<String> runnerPolicyViolation = stdioRunnerPolicy.validateWorkingDir(server.getWorkingDir());
+        if (runnerPolicyViolation.isPresent()) {
+            String reason = runnerPolicyViolation.orElseThrow();
+            mcpServerRuntimeRegistry.recordFailed(server, reason);
+            LOG.warn("MCP stdio Server skipped, server={}, reason={}", server.getName(), reason);
+            return List.of();
+        }
         StdioMcpClient client = new StdioMcpClient(
                 objectMapper,
                 server.getName(),
@@ -248,7 +259,8 @@ public class McpHttpAutoConfiguration {
                 server.getArgs(),
                 server.getEnv(),
                 server.getWorkingDir(),
-                callTimeout);
+                callTimeout,
+                stdioRunnerPolicy);
         try {
             if (!client.initialize()) {
                 mcpServerRuntimeRegistry.recordFailed(server, client.stderrTail());

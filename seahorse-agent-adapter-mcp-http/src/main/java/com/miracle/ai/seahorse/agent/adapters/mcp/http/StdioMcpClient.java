@@ -30,7 +30,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
@@ -76,6 +75,7 @@ public class StdioMcpClient implements McpClientPort, AutoCloseable {
     private final Map<String, String> env;
     private final String workingDir;
     private final Duration callTimeout;
+    private final StdioMcpRunnerPolicy runnerPolicy;
     private final ExecutorService session;
     private final AtomicLong requestId = new AtomicLong(1);
     private final AtomicBoolean closed = new AtomicBoolean(false);
@@ -97,6 +97,24 @@ public class StdioMcpClient implements McpClientPort, AutoCloseable {
                           Map<String, String> env,
                           String workingDir,
                           Duration callTimeout) {
+        this(objectMapper,
+                serverName,
+                command,
+                args,
+                env,
+                workingDir,
+                callTimeout,
+                StdioMcpRunnerPolicy.defaultPolicy());
+    }
+
+    public StdioMcpClient(ObjectMapper objectMapper,
+                          String serverName,
+                          String command,
+                          List<String> args,
+                          Map<String, String> env,
+                          String workingDir,
+                          Duration callTimeout,
+                          StdioMcpRunnerPolicy runnerPolicy) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.serverName = Objects.requireNonNullElse(serverName, "");
         this.command = Objects.requireNonNullElse(command, "").trim();
@@ -104,6 +122,7 @@ public class StdioMcpClient implements McpClientPort, AutoCloseable {
         this.env = Map.copyOf(Objects.requireNonNullElse(env, Map.of()));
         this.workingDir = Objects.requireNonNullElse(workingDir, "").trim();
         this.callTimeout = Objects.requireNonNullElse(callTimeout, Duration.ofSeconds(30));
+        this.runnerPolicy = Objects.requireNonNullElseGet(runnerPolicy, StdioMcpRunnerPolicy::defaultPolicy);
         this.session = Executors.newSingleThreadExecutor(r -> {
             Thread thread = new Thread(r, "mcp-stdio-" + safeThreadName(this.serverName));
             thread.setDaemon(true);
@@ -191,11 +210,9 @@ public class StdioMcpClient implements McpClientPort, AutoCloseable {
         commandLine.addAll(args);
         ProcessBuilder processBuilder = new ProcessBuilder(commandLine)
                 .redirectError(ProcessBuilder.Redirect.PIPE);
-        if (!env.isEmpty()) {
-            processBuilder.environment().putAll(env);
-        }
+        runnerPolicy.applyEnvironment(processBuilder, env);
         if (!workingDir.isBlank()) {
-            processBuilder.directory(new File(workingDir));
+            processBuilder.directory(runnerPolicy.workingDirectory(workingDir));
         }
         process = processBuilder.start();
         stdin = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));

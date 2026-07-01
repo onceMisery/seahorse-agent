@@ -114,6 +114,29 @@ class McpHttpAutoConfigurationCredentialTests {
                 });
     }
 
+    @Test
+    void shouldBlockStdioServerWhenWorkingDirIsNotAllowlisted() {
+        contextRunner
+                .withBean(OkHttpClient.class, OkHttpClient::new)
+                .withPropertyValues(
+                        "seahorse-agent.adapters.mcp.servers[0].name=blocked-working-dir",
+                        "seahorse-agent.adapters.mcp.servers[0].transport=stdio",
+                        "seahorse-agent.adapters.mcp.servers[0].command=node",
+                        "seahorse-agent.adapters.mcp.servers[0].working-dir=.",
+                        "seahorse-agent.adapters.mcp.stdio-command-allowlist[0]=node")
+                .run(context -> {
+                    assertThat(context).hasSingleBean(McpServerRuntimeRegistry.class);
+                    McpServerRuntimeRegistry registry = context.getBean(McpServerRuntimeRegistry.class);
+
+                    assertThat(registry.listServers()).hasSize(1);
+                    assertThat(registry.findServer("blocked-working-dir")).hasValueSatisfying(status -> {
+                        assertThat(status.getStatus()).isEqualTo(McpServerRuntimeRegistry.STATUS_FAILED);
+                        assertThat(status.getToolCount()).isZero();
+                        assertThat(status.getStderrTail()).contains("stdio workingDir not allowlisted");
+                    });
+                });
+    }
+
     @Configuration(proxyBeanMethods = false)
     static class SecretStoreConfiguration {
 

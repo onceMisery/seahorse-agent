@@ -22,6 +22,9 @@ $total = 0
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $McpServerScript = Join-Path $RepoRoot "resources\docker\mcp-stdio-echo.js"
 $LeakSecret = "sk-stdio-secret-123456"
+$ParentOnlyMarker = "parent-only-marker-stdio-9381"
+$McpRunSuffix = ([guid]::NewGuid().ToString('N')).Substring(0, 8)
+$McpServerName = "local-echo-$McpRunSuffix"
 if ([string]::IsNullOrWhiteSpace($BackendJarPath)) {
     $BackendJarPath = Join-Path $RepoRoot "seahorse-agent-bootstrap\target\seahorse-agent-bootstrap-0.0.1-SNAPSHOT-exec.jar"
 }
@@ -115,7 +118,7 @@ function Assert-ApiOk {
 }
 
 function Wait-ForHealth {
-    param([int]$Attempts = 90)
+    param([int]$Attempts = 150)
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
         try {
             $health = Invoke-Json -Method GET -Path "/actuator/health"
@@ -157,22 +160,32 @@ try {
             "-e", "SPRING_DATA_REDIS_HOST=redis",
             "-e", "SPRING_DATA_REDIS_PORT=6379",
             "-e", "MCP_STDIO_E2E_SECRET=$LeakSecret",
+            "-e", "MCP_STDIO_PARENT_ONLY_MARKER=$ParentOnlyMarker",
             "-e", "SEAHORSE_AGENT_ADAPTERS_STORAGE_TYPE=local",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MQ_TYPE=direct",
             "-e", "SEAHORSE_AGENT_ADAPTERS_OBSERVATION_TYPE=noop",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_ENABLED=true",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_CALL_TIMEOUT=30s",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_STDIO_RUNNER_ISOLATION_ENABLED=true",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_STDIO_RUNNER_ISOLATION_INHERIT_ENVIRONMENT=false",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_STDIO_COMMAND_ALLOWLIST_0=node",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_0_ENABLED=true",
-            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_0_NAME=local-echo",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_0_NAME=$McpServerName",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_0_TRANSPORT=stdio",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_0_COMMAND=node",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_0_ARGS_0=/app/mcp-stdio-echo.js",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_0_ARGS_1=--stderr-secret=$LeakSecret",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_1_ENABLED=true",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_1_NAME=blocked-shell",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_1_TRANSPORT=stdio",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_1_COMMAND=pwsh",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_1_ARGS_0=-NoLogo",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_2_ENABLED=true",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_2_NAME=blocked-working-dir",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_2_TRANSPORT=stdio",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_2_COMMAND=node",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_2_ARGS_0=/app/mcp-stdio-echo.js",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_2_WORKING_DIR=/tmp",
             "-e", "SEAHORSE_AGENT_CHAT_AGENT_TOOLS_MCP_INCLUDE=echo",
             $BackendImage
         )
@@ -205,18 +218,18 @@ try {
     }
     if (-not $login) { exit 1 }
     $headers = @{ Authorization = "Bearer $($login.data.token)" }
-    $McpDiagnosticRunId = "mcp-server-test:local-echo"
+    $McpDiagnosticRunId = "mcp-server-test:$McpServerName"
 
     $server = Test-Step "List MCP stdio servers" {
         $response = Invoke-Json -Method GET -Path "/api/mcp/servers" -Headers $headers
         Assert-ApiOk $response "List MCP servers"
         $servers = @($response.data)
-        $found = @($servers | Where-Object { $_.name -eq "local-echo" })[0]
+        $found = @($servers | Where-Object { $_.name -eq $McpServerName })[0]
         if (-not $found) {
-            throw "local-echo was not returned by /api/mcp/servers"
+            throw "$McpServerName was not returned by /api/mcp/servers"
         }
         if (-not @($found.tools | Where-Object { $_.toolId -eq "echo" })) {
-            throw "local-echo did not expose echo tool"
+            throw "$McpServerName did not expose echo tool"
         }
         $blocked = @($servers | Where-Object { $_.name -eq "blocked-shell" })[0]
         if (-not $blocked) {
@@ -231,12 +244,25 @@ try {
         if (@($blocked.tools).Count -ne 0) {
             throw "blocked-shell should not expose tools: $($blocked.tools | ConvertTo-Json -Depth 20 -Compress)"
         }
+        $blockedWorkingDir = @($servers | Where-Object { $_.name -eq "blocked-working-dir" })[0]
+        if (-not $blockedWorkingDir) {
+            throw "blocked-working-dir was not returned by /api/mcp/servers"
+        }
+        if ("$($blockedWorkingDir.status)" -ne "FAILED") {
+            throw "blocked-working-dir status was not FAILED: $($blockedWorkingDir | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($blockedWorkingDir.stderrTail)" -notlike "*stdio workingDir not allowlisted*") {
+            throw "blocked-working-dir did not expose runner policy diagnostic: $($blockedWorkingDir.stderrTail)"
+        }
+        if (@($blockedWorkingDir.tools).Count -ne 0) {
+            throw "blocked-working-dir should not expose tools: $($blockedWorkingDir.tools | ConvertTo-Json -Depth 20 -Compress)"
+        }
         $found
     }
     if (-not $server) { exit 1 }
 
     Test-Step "MCP safe echo test call requires approval" {
-        $response = Invoke-Json -Method POST -Path "/api/mcp/servers/local-echo/test" -Headers $headers
+        $response = Invoke-Json -Method POST -Path "/api/mcp/servers/$McpServerName/test" -Headers $headers
         Assert-ApiOk $response "Test MCP server"
         if ($response.data.success -ne $false) {
             throw "MCP test should be gated before approval: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
@@ -263,7 +289,7 @@ try {
     } | Out-Null
 
     $diagnosticApproval = Test-Step "Approve and run MCP safe echo test call" {
-        $response = Invoke-Json -Method POST -Path "/api/mcp/servers/local-echo/test" -Headers $headers
+        $response = Invoke-Json -Method POST -Path "/api/mcp/servers/$McpServerName/test" -Headers $headers
         Assert-ApiOk $response "Read MCP diagnostic approval"
         if (-not $response.data.approvalId) {
             throw "MCP diagnostic approval id missing before approve"
@@ -277,7 +303,7 @@ try {
             throw "MCP diagnostic approval was not approved: $($approved.data | ConvertTo-Json -Depth 20 -Compress)"
         }
 
-        $result = Invoke-Json -Method POST -Path "/api/mcp/servers/local-echo/test" -Headers $headers
+        $result = Invoke-Json -Method POST -Path "/api/mcp/servers/$McpServerName/test" -Headers $headers
         Assert-ApiOk $result "Run approved MCP server test"
         if ($result.data.success -ne $true) {
             throw "Approved MCP test did not succeed: $($result.data | ConvertTo-Json -Depth 20 -Compress)"
@@ -325,9 +351,9 @@ try {
     } | Out-Null
 
     Test-Step "Preflight MCP echo tool requires approval" {
-        $runId = "mcp-stdio-smoke-run"
-        $stepId = "mcp-stdio-preflight-step"
-        $toolCallId = "mcp-stdio-preflight-call"
+        $runId = "mcp-stdio-smoke-run-$McpRunSuffix"
+        $stepId = "mcp-stdio-preflight-step-$McpRunSuffix"
+        $toolCallId = "mcp-stdio-preflight-call-$McpRunSuffix"
         $response = Invoke-Json -Method POST -Path "/api/tools/echo/preflight" -Headers $headers -Body @{
             runId = $runId
             stepId = $stepId
@@ -366,12 +392,12 @@ try {
     } | Out-Null
 
     Test-Step "Refresh and restart MCP server" {
-        $refresh = Invoke-Json -Method POST -Path "/api/mcp/servers/local-echo/refresh-tools" -Headers $headers
+        $refresh = Invoke-Json -Method POST -Path "/api/mcp/servers/$McpServerName/refresh-tools" -Headers $headers
         Assert-ApiOk $refresh "Refresh MCP tools"
         if (-not @($refresh.data.tools | Where-Object { $_.toolId -eq "echo" })) {
             throw "Refresh result did not include echo tool"
         }
-        $restart = Invoke-Json -Method POST -Path "/api/mcp/servers/local-echo/restart" -Headers $headers
+        $restart = Invoke-Json -Method POST -Path "/api/mcp/servers/$McpServerName/restart" -Headers $headers
         Assert-ApiOk $restart "Restart MCP server"
         if (-not @($restart.data.tools | Where-Object { $_.toolId -eq "echo" })) {
             throw "Restart result did not include echo tool"
@@ -379,11 +405,14 @@ try {
     } | Out-Null
 
     Test-Step "Read MCP stderr tail" {
-        $response = Invoke-Json -Method GET -Path "/api/mcp/servers/local-echo/stderr-tail" -Headers $headers
+        $response = Invoke-Json -Method GET -Path "/api/mcp/servers/$McpServerName/stderr-tail" -Headers $headers
         Assert-ApiOk $response "Read MCP stderr tail"
         $stderrTail = "$($response.data)"
         if ($stderrTail.Contains($LeakSecret)) {
             throw "MCP stderr tail leaked raw secret: $stderrTail"
+        }
+        if ($stderrTail.Contains($ParentOnlyMarker) -or $stderrTail.Contains("MCP_STDIO_PARENT_ONLY_MARKER")) {
+            throw "MCP stderr tail inherited parent-only environment: $stderrTail"
         }
         if (-not $stderrTail.Contains("[REDACTED]")) {
             throw "MCP stderr tail did not include redaction marker: $stderrTail"
@@ -392,7 +421,7 @@ try {
 
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Host "Smoke backend: $BaseUrl"
-    Write-Host "MCP server: local-echo"
+    Write-Host "MCP server: $McpServerName"
     Write-Host "MCP tool: echo"
 } catch {
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan

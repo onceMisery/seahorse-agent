@@ -44,6 +44,8 @@ public class McpHttpAdapterProperties {
 
     private List<String> stdioCommandAllowlist = new ArrayList<>();
 
+    private StdioRunnerIsolation stdioRunnerIsolation = new StdioRunnerIsolation();
+
     private List<Server> servers = new ArrayList<>();
 
     public boolean isEnabled() {
@@ -70,8 +72,16 @@ public class McpHttpAdapterProperties {
         return stdioCommandAllowlist;
     }
 
+    public StdioRunnerIsolation getStdioRunnerIsolation() {
+        return stdioRunnerIsolation;
+    }
+
     public void setStdioCommandAllowlist(List<String> stdioCommandAllowlist) {
         this.stdioCommandAllowlist = new ArrayList<>(Objects.requireNonNullElse(stdioCommandAllowlist, List.of()));
+    }
+
+    public void setStdioRunnerIsolation(StdioRunnerIsolation stdioRunnerIsolation) {
+        this.stdioRunnerIsolation = Objects.requireNonNullElseGet(stdioRunnerIsolation, StdioRunnerIsolation::new);
     }
 
     public void setServers(List<Server> servers) {
@@ -235,5 +245,51 @@ public class McpHttpAdapterProperties {
     public enum Transport {
         STREAMABLE_HTTP,
         STDIO
+    }
+
+    public static class StdioRunnerIsolation {
+
+        private boolean enabled = true;
+
+        private boolean inheritEnvironment;
+
+        private List<String> environmentAllowlist = new ArrayList<>(
+                StdioMcpRunnerPolicy.defaultEnvironmentAllowlist());
+
+        private List<String> workingDirAllowlist = new ArrayList<>();
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public boolean isInheritEnvironment() {
+            return inheritEnvironment;
+        }
+
+        public void setInheritEnvironment(boolean inheritEnvironment) {
+            this.inheritEnvironment = inheritEnvironment;
+        }
+
+        public List<String> getEnvironmentAllowlist() {
+            return environmentAllowlist;
+        }
+
+        public void setEnvironmentAllowlist(List<String> environmentAllowlist) {
+            this.environmentAllowlist = new ArrayList<>(
+                    Objects.requireNonNullElse(environmentAllowlist, List.of()));
+        }
+
+        public List<String> getWorkingDirAllowlist() {
+            return workingDirAllowlist;
+        }
+
+        public void setWorkingDirAllowlist(List<String> workingDirAllowlist) {
+            this.workingDirAllowlist = new ArrayList<>(
+                    Objects.requireNonNullElse(workingDirAllowlist, List.of()));
+        }
     }
 }
