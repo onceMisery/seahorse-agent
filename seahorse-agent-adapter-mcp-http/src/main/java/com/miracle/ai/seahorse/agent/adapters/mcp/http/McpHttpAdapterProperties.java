@@ -42,6 +42,8 @@ public class McpHttpAdapterProperties {
 
     private Duration callTimeout = Duration.ofSeconds(30);
 
+    private List<String> stdioCommandAllowlist = new ArrayList<>();
+
     private List<Server> servers = new ArrayList<>();
 
     public boolean isEnabled() {
@@ -62,6 +64,14 @@ public class McpHttpAdapterProperties {
 
     public List<Server> getServers() {
         return servers;
+    }
+
+    public List<String> getStdioCommandAllowlist() {
+        return stdioCommandAllowlist;
+    }
+
+    public void setStdioCommandAllowlist(List<String> stdioCommandAllowlist) {
+        this.stdioCommandAllowlist = new ArrayList<>(Objects.requireNonNullElse(stdioCommandAllowlist, List.of()));
     }
 
     public void setServers(List<Server> servers) {

@@ -39,7 +39,9 @@ class McpHttpAdapterPropertiesBindingTests {
                         "seahorse-agent.adapters.mcp.servers[1].name=stdio-server",
                         "seahorse-agent.adapters.mcp.servers[1].transport=stdio",
                         "seahorse-agent.adapters.mcp.servers[1].command=node",
-                        "seahorse-agent.adapters.mcp.servers[1].args[0]=server.js");
+                        "seahorse-agent.adapters.mcp.servers[1].args[0]=server.js",
+                        "seahorse-agent.adapters.mcp.stdio-command-allowlist[0]=node",
+                        "seahorse-agent.adapters.mcp.stdio-command-allowlist[1]=python");
 
         contextRunner.run(context -> {
             assertThat(context).hasSingleBean(McpHttpAdapterProperties.class);
@@ -51,6 +53,7 @@ class McpHttpAdapterPropertiesBindingTests {
             assertThat(properties.getServers().get(1).getTransport())
                     .isEqualTo(McpHttpAdapterProperties.Transport.STDIO);
             assertThat(properties.getServers().get(1).getArgs()).containsExactly("server.js");
+            assertThat(properties.getStdioCommandAllowlist()).containsExactly("node", "python");
         });
     }
 }

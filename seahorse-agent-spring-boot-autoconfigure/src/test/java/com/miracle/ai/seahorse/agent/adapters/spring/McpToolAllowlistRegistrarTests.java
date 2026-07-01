@@ -83,12 +83,12 @@ class McpToolAllowlistRegistrarTests {
                         assertThat(entry.name()).isEqualTo(WEATHER_TOOL_ID);
                         assertThat(entry.description()).isEqualTo("查询天气");
                         assertThat(entry.schemaJson()).contains("\"city\"", "\"required\":[\"city\"]");
-                        assertThat(entry.riskLevel()).isEqualTo(ToolRiskLevel.MEDIUM);
+                        assertThat(entry.riskLevel()).isEqualTo(ToolRiskLevel.HIGH);
                         assertThat(entry.actionType()).isEqualTo(ToolActionType.EXECUTE);
                         assertThat(entry.resourceType()).isEqualTo("MCP");
                         assertThat(entry.ownerTeam()).isEqualTo("mcp");
                         assertThat(entry.enabled()).isTrue();
-                        assertThat(entry.requiresApproval()).isFalse();
+                        assertThat(entry.requiresApproval()).isTrue();
                         assertThat(entry.createdAt()).isEqualTo(FIXED_NOW);
                         assertThat(entry.updatedAt()).isEqualTo(FIXED_NOW);
                     });

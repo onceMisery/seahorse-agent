@@ -66,6 +66,7 @@ public class McpHttpAutoConfiguration {
     private static final String MSG_CLIENT_SECRET_REF_MISSING = "clientSecretRef missing";
     private static final String MSG_CLIENT_ID_MISSING = "clientId missing";
     private static final String MSG_SERVER_NAME_MISSING = "server name missing";
+    private static final String MSG_STDIO_COMMAND_NOT_ALLOWED = "stdio command not allowed";
     private static final String MSG_USER_DELEGATED_UNSUPPORTED = "user delegated credentials unsupported";
     private static final String MSG_CREDENTIAL_RESOLUTION_FAILED = "credential resolution failed";
 
@@ -154,6 +155,7 @@ public class McpHttpAutoConfiguration {
                     server,
                     credentialProvider,
                     properties.getCallTimeout(),
+                    properties.getStdioCommandAllowlist(),
                     mcpServerRuntimeRegistry));
         }
         return features;
@@ -164,13 +166,19 @@ public class McpHttpAutoConfiguration {
                                                         McpHttpAdapterProperties.Server server,
                                                         ObjectProvider<CredentialProviderPort> credentialProvider,
                                                         Duration callTimeout,
+                                                        List<String> stdioCommandAllowlist,
                                                         McpServerRuntimeRegistry mcpServerRuntimeRegistry) {
         if (!server.isEnabled()) {
             mcpServerRuntimeRegistry.recordDisabled(server);
             return List.of();
         }
         return switch (server.getTransport()) {
-            case STDIO -> discoverStdioServerFeatures(objectMapper, server, callTimeout, mcpServerRuntimeRegistry);
+            case STDIO -> discoverStdioServerFeatures(
+                    objectMapper,
+                    server,
+                    callTimeout,
+                    stdioCommandAllowlist,
+                    mcpServerRuntimeRegistry);
             case STREAMABLE_HTTP -> discoverHttpServerFeatures(
                     httpClient,
                     objectMapper,
@@ -218,10 +226,17 @@ public class McpHttpAutoConfiguration {
     private List<McpToolFeature> discoverStdioServerFeatures(ObjectMapper objectMapper,
                                                              McpHttpAdapterProperties.Server server,
                                                              Duration callTimeout,
+                                                             List<String> stdioCommandAllowlist,
                                                              McpServerRuntimeRegistry mcpServerRuntimeRegistry) {
         if (server.getCommand().isBlank()) {
             mcpServerRuntimeRegistry.recordFailed(server, "command missing");
             LOG.warn("MCP stdio Server skipped, server={}, reason=command missing", server.getName());
+            return List.of();
+        }
+        if (!isStdioCommandAllowed(server.getCommand(), stdioCommandAllowlist)) {
+            String reason = MSG_STDIO_COMMAND_NOT_ALLOWED + ": " + server.getCommand();
+            mcpServerRuntimeRegistry.recordFailed(server, reason);
+            LOG.warn("MCP stdio Server skipped, server={}, reason={}", server.getName(), reason);
             return List.of();
         }
         StdioMcpClient client = new StdioMcpClient(
@@ -256,6 +271,17 @@ public class McpHttpAutoConfiguration {
             LOG.warn("MCP stdio Server 宸ュ叿鍙戠幇澶辫触, server={}, reason={}", server.getName(), ex.getMessage());
             return List.of();
         }
+    }
+
+    private boolean isStdioCommandAllowed(String command, List<String> stdioCommandAllowlist) {
+        String safeCommand = command == null ? "" : command.trim();
+        if (safeCommand.isBlank()) {
+            return false;
+        }
+        return stdioCommandAllowlist != null && stdioCommandAllowlist.stream()
+                .filter(item -> item != null && !item.isBlank())
+                .map(String::trim)
+                .anyMatch(safeCommand::equals);
     }
 
     private Optional<CredentialMaterial> resolveCredentialMaterial(

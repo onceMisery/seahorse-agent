@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialRequest
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretStoreCredentialProvider;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretStorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretValue;
+import okhttp3.OkHttpClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -89,6 +90,28 @@ class McpHttpAutoConfigurationCredentialTests {
                     }
                 })
                 .run(context -> assertThat(context).doesNotHaveBean(McpServerRuntimeRegistry.class));
+    }
+
+    @Test
+    void shouldBlockStdioServerWhenCommandIsNotAllowlisted() {
+        contextRunner
+                .withBean(OkHttpClient.class, OkHttpClient::new)
+                .withPropertyValues(
+                        "seahorse-agent.adapters.mcp.servers[0].name=blocked-shell",
+                        "seahorse-agent.adapters.mcp.servers[0].transport=stdio",
+                        "seahorse-agent.adapters.mcp.servers[0].command=pwsh",
+                        "seahorse-agent.adapters.mcp.stdio-command-allowlist[0]=node")
+                .run(context -> {
+                    assertThat(context).hasSingleBean(McpServerRuntimeRegistry.class);
+                    McpServerRuntimeRegistry registry = context.getBean(McpServerRuntimeRegistry.class);
+
+                    assertThat(registry.listServers()).hasSize(1);
+                    assertThat(registry.findServer("blocked-shell")).hasValueSatisfying(status -> {
+                        assertThat(status.getStatus()).isEqualTo(McpServerRuntimeRegistry.STATUS_FAILED);
+                        assertThat(status.getToolCount()).isZero();
+                        assertThat(status.getStderrTail()).isEqualTo("stdio command not allowed: pwsh");
+                    });
+                });
     }
 
     @Configuration(proxyBeanMethods = false)

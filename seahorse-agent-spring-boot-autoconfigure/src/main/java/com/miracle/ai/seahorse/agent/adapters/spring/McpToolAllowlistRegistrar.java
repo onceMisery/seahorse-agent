@@ -154,12 +154,12 @@ public class McpToolAllowlistRegistrar implements ApplicationRunner {
                 descriptor.description(),
                 toJsonSchema(descriptor),
                 null,
-                ToolRiskLevel.MEDIUM,
+                ToolRiskLevel.HIGH,
                 ToolActionType.EXECUTE,
                 MCP_RESOURCE_TYPE,
                 MCP_OWNER_TEAM,
                 true,
-                false,
+                true,
                 now,
                 now);
     }

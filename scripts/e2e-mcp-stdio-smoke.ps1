@@ -152,11 +152,17 @@ try {
             "-e", "SEAHORSE_AGENT_ADAPTERS_OBSERVATION_TYPE=noop",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_ENABLED=true",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_CALL_TIMEOUT=30s",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_STDIO_COMMAND_ALLOWLIST_0=node",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_0_ENABLED=true",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_0_NAME=local-echo",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_0_TRANSPORT=stdio",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_0_COMMAND=node",
             "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_0_ARGS_0=/app/mcp-stdio-echo.js",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_1_ENABLED=true",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_1_NAME=blocked-shell",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_1_TRANSPORT=stdio",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_1_COMMAND=pwsh",
+            "-e", "SEAHORSE_AGENT_ADAPTERS_MCP_SERVERS_1_ARGS_0=-NoLogo",
             "-e", "SEAHORSE_AGENT_CHAT_AGENT_TOOLS_MCP_INCLUDE=echo",
             $BackendImage
         )
@@ -193,6 +199,19 @@ try {
         if (-not @($found.tools | Where-Object { $_.toolId -eq "echo" })) {
             throw "local-echo did not expose echo tool"
         }
+        $blocked = @($servers | Where-Object { $_.name -eq "blocked-shell" })[0]
+        if (-not $blocked) {
+            throw "blocked-shell was not returned by /api/mcp/servers"
+        }
+        if ("$($blocked.status)" -ne "FAILED") {
+            throw "blocked-shell status was not FAILED: $($blocked | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($blocked.stderrTail)" -notlike "*stdio command not allowed: pwsh*") {
+            throw "blocked-shell did not expose allowlist diagnostic: $($blocked.stderrTail)"
+        }
+        if (@($blocked.tools).Count -ne 0) {
+            throw "blocked-shell should not expose tools: $($blocked.tools | ConvertTo-Json -Depth 20 -Compress)"
+        }
         $found
     }
     if (-not $server) { exit 1 }
@@ -219,6 +238,12 @@ try {
         }
         if ($echo.enabled -ne $true) {
             throw "MCP echo tool is not enabled"
+        }
+        if ("$($echo.riskLevel)" -ne "HIGH") {
+            throw "MCP echo tool was not marked HIGH risk: $($echo | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($echo.requiresApproval -ne $true) {
+            throw "MCP echo tool does not require approval: $($echo | ConvertTo-Json -Depth 20 -Compress)"
         }
         $echo | ConvertTo-Json -Compress | Write-Host
     } | Out-Null

@@ -358,3 +358,11 @@ The first P1 run experiment report slice is now covered by `GET /api/run-experim
 Fresh full-Docker evidence: after hot-deploying the rebuilt backend jar to `seahorse-backend`, `scripts/e2e-run-experiment-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 10/10. The run verified the report endpoint and generated `e2e-run-experiment-20260701103802-330537506476589056.md` for experiment `330537506476589056`, including scored marker `smoke-pass`, fork output message `330537506971516928`, per-trial run IDs/output message IDs, output comparison, and fork target content.
 
 Remaining roadmap work is narrowed to Studio trace deep links, standardized cost records as the authoritative report cost source, and richer productized report templates.
+
+### 2026-07-01 MCP Stdio Security P1 Evidence Update
+
+The first P1 MCP stdio security slice now defaults stdio startup to deny unless `seahorse-agent.adapters.mcp.stdio-command-allowlist` explicitly contains the command. Blocked stdio servers are recorded as `FAILED` in `McpServerRuntimeRegistry` with a diagnostic stderr tail such as `stdio command not allowed: pwsh`, and MCP catalog registrations now default to `riskLevel=HIGH` and `requiresApproval=true`.
+
+Fresh Docker evidence: `scripts/e2e-mcp-stdio-smoke.ps1 -BaseUrl http://127.0.0.1:9093 -BackendImage seahorse-agent-backend:mcp-stdio-allowlist -HostPort 9093` passed 8/8 against a temporary MCP-enabled backend image built from the freshly packaged jar. The run verified allowed `node` stdio echo, blocked `pwsh` startup, `/api/mcp/servers` failure diagnostics, MCP tool catalog HIGH/approval flags, refresh/restart, and stderr-tail endpoints.
+
+Remaining roadmap work is narrowed to the product approval entry, unified Tool Gateway execution enforcement, runner isolation/sandbox policy, and deeper audit/desensitization for MCP stderr and tool calls.
