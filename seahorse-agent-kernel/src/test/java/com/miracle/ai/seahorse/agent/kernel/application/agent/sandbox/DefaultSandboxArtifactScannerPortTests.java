@@ -46,6 +46,7 @@ class DefaultSandboxArtifactScannerPortTests {
 
         assertEquals(SandboxArtifactScanStatus.CLEAN, result.scanStatus());
         assertEquals(ContextSensitivity.INTERNAL, result.sensitivity());
+        assertEquals("metadata scan passed", result.summary());
     }
 
     @Test
@@ -57,6 +58,7 @@ class DefaultSandboxArtifactScannerPortTests {
 
         assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
         assertEquals(ContextSensitivity.SECRET, result.sensitivity());
+        assertEquals("sensitive artifact content", result.summary());
     }
 
     @Test
@@ -68,6 +70,7 @@ class DefaultSandboxArtifactScannerPortTests {
 
         assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
         assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("personal data artifact content", result.summary());
     }
 
     @Test
@@ -78,6 +81,7 @@ class DefaultSandboxArtifactScannerPortTests {
 
         assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
         assertEquals(ContextSensitivity.SECRET, result.sensitivity());
+        assertEquals("artifact content unavailable", result.summary());
     }
 
     private static SandboxArtifact fileArtifact(Path path) {

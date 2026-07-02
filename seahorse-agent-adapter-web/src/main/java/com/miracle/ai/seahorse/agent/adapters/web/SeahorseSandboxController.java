@@ -225,6 +225,7 @@ public class SeahorseSandboxController {
                 artifact.mediaType(),
                 artifact.scanStatus(),
                 artifact.sensitivity(),
+                artifact.scanSummary(),
                 artifact.promptVisible(),
                 artifact.createdAt());
     }
@@ -240,6 +241,7 @@ public class SeahorseSandboxController {
                 decision.filename(),
                 artifact.scanStatus(),
                 artifact.sensitivity(),
+                artifact.scanSummary(),
                 artifact.promptVisible(),
                 decision.downloadable(),
                 decision.downloadBlockedReason(),
@@ -285,6 +287,7 @@ public class SeahorseSandboxController {
                                           String mediaType,
                                           SandboxArtifactScanStatus scanStatus,
                                           ContextSensitivity sensitivity,
+                                          String scanSummary,
                                           boolean promptVisible,
                                           Instant createdAt) {
     }
@@ -297,6 +300,7 @@ public class SeahorseSandboxController {
                                                 String filename,
                                                 SandboxArtifactScanStatus scanStatus,
                                                 ContextSensitivity sensitivity,
+                                                String scanSummary,
                                                 boolean promptVisible,
                                                 boolean downloadable,
                                                 String downloadBlockedReason,

@@ -81,6 +81,9 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private static final String RESOURCE_TYPE_SANDBOX_SESSION = "SANDBOX_SESSION";
     private static final String RESOURCE_TYPE_SANDBOX_EXECUTION = "SANDBOX_EXECUTION";
     private static final String SANDBOX_ARTIFACT_BUCKET = "sandbox-artifacts";
+    private static final String ARTIFACT_SCAN_FAILED_SUMMARY = "artifact scanner failed";
+    private static final String ARTIFACT_FILE_UNAVAILABLE_SUMMARY = "artifact file unavailable before storage copy";
+    private static final String ARTIFACT_STORAGE_COPY_FAILED_SUMMARY = "artifact storage copy failed";
     private static final int DEFAULT_SESSION_LIST_LIMIT = 20;
     private static final int MAX_SESSION_LIST_LIMIT = 100;
     private static final String DOWNLOAD_BLOCKED = "Sandbox artifact is not available for download";
@@ -477,9 +480,12 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             SandboxArtifactScanResult result = Objects.requireNonNull(
                     artifactScannerPort.scan(new SandboxArtifactScanRequest(artifact)),
                     "artifact scan result must not be null");
-            return artifact.withScanDecision(result.scanStatus(), result.sensitivity());
+            return artifact.withScanDecision(result.scanStatus(), result.sensitivity(), result.summary());
         } catch (RuntimeException ex) {
-            return artifact.withScanDecision(SandboxArtifactScanStatus.BLOCKED, ContextSensitivity.SECRET);
+            return artifact.withScanDecision(
+                    SandboxArtifactScanStatus.BLOCKED,
+                    ContextSensitivity.SECRET,
+                    ARTIFACT_SCAN_FAILED_SUMMARY);
         }
     }
 
@@ -501,7 +507,10 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         try {
             Path path = Path.of(URI.create(artifact.objectUri())).toAbsolutePath().normalize();
             if (!Files.isRegularFile(path)) {
-                return artifact.withScanDecision(SandboxArtifactScanStatus.BLOCKED, ContextSensitivity.SECRET);
+                return artifact.withScanDecision(
+                        SandboxArtifactScanStatus.BLOCKED,
+                        ContextSensitivity.SECRET,
+                        ARTIFACT_FILE_UNAVAILABLE_SUMMARY);
             }
             long size = Files.size(path);
             artifactStoragePort.ensureBucket(SANDBOX_ARTIFACT_BUCKET);
@@ -515,7 +524,10 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 return artifact.withObjectUri(stored.url());
             }
         } catch (IOException | RuntimeException ex) {
-            return artifact.withScanDecision(SandboxArtifactScanStatus.BLOCKED, ContextSensitivity.SECRET);
+            return artifact.withScanDecision(
+                    SandboxArtifactScanStatus.BLOCKED,
+                    ContextSensitivity.SECRET,
+                    ARTIFACT_STORAGE_COPY_FAILED_SUMMARY);
         }
     }
 

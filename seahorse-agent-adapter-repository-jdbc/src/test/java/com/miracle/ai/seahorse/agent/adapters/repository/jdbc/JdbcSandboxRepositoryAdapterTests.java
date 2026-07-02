@@ -125,6 +125,8 @@ class JdbcSandboxRepositoryAdapterTests {
                 .containsExactly("artifact-clean", "artifact-pending", "artifact-redacted", "artifact-secret");
         assertThat(adapter.listPromptVisibleBySession("session-1")).containsExactly(clean, redacted);
         assertThat(adapter.findArtifactById("artifact-clean")).contains(clean);
+        assertThat(adapter.findArtifactById("artifact-clean").orElseThrow().scanSummary())
+                .isEqualTo("scan summary for artifact-clean");
         assertThat(adapter.findArtifactById(" ")).isEmpty();
     }
 
@@ -187,6 +189,7 @@ class JdbcSandboxRepositoryAdapterTests {
                 "text/plain",
                 scanStatus,
                 sensitivity,
+                "scan summary for " + artifactId,
                 NOW.plusSeconds(5));
     }
 
@@ -251,6 +254,7 @@ class JdbcSandboxRepositoryAdapterTests {
                     media_type VARCHAR(128) NOT NULL,
                     scan_status VARCHAR(32) NOT NULL,
                     sensitivity VARCHAR(32) NOT NULL,
+                    scan_summary VARCHAR(256),
                     created_at TIMESTAMP NOT NULL
                 )
                 """);

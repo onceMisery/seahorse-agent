@@ -80,6 +80,35 @@ class JdbcTenantSchemaUpgradeTests {
                 .isEqualTo(LocalDateTime.parse("2026-05-26T01:00:00"));
     }
 
+    @Test
+    void shouldAddSandboxArtifactScanSummaryForExistingTable() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:tenant-schema-upgrade-sandbox-artifact-" + System.nanoTime()
+                        + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+                "sa",
+                "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.execute("""
+                CREATE TABLE sa_sandbox_artifact (
+                    artifact_id VARCHAR(64) PRIMARY KEY,
+                    session_id VARCHAR(64) NOT NULL,
+                    execution_id VARCHAR(64) NOT NULL,
+                    object_uri VARCHAR(1000) NOT NULL,
+                    media_type VARCHAR(128) NOT NULL,
+                    scan_status VARCHAR(32) NOT NULL,
+                    sensitivity VARCHAR(32) NOT NULL,
+                    created_at TIMESTAMP NOT NULL
+                )
+                """);
+
+        JdbcTenantSchemaUpgrade upgrade = new JdbcTenantSchemaUpgrade(dataSource);
+        upgrade.upgrade();
+        upgrade.upgrade();
+
+        assertThat(columnExists(jdbcTemplate, "sa_sandbox_artifact", "scan_summary")).isTrue();
+        assertThat(isNullable(jdbcTemplate, "sa_sandbox_artifact", "scan_summary")).isEqualTo("YES");
+    }
+
     private static boolean columnExists(JdbcTemplate jdbcTemplate, String tableName, String columnName) {
         Integer count = jdbcTemplate.queryForObject(
                 """

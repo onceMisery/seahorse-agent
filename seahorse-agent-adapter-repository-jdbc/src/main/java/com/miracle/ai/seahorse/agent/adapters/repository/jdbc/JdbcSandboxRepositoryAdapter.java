@@ -54,7 +54,7 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
             execution_id, session_id, runtime_type, status, result_summary, reason_code, created_at, updated_at
             """;
     private static final String ARTIFACT_COLUMNS = """
-            artifact_id, session_id, execution_id, object_uri, media_type, scan_status, sensitivity, created_at
+            artifact_id, session_id, execution_id, object_uri, media_type, scan_status, sensitivity, scan_summary, created_at
             """;
 
     private static final String SQL_INSERT_SESSION = """
@@ -132,8 +132,8 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
 
     private static final String SQL_INSERT_ARTIFACT = """
             INSERT INTO sa_sandbox_artifact
-            (artifact_id, session_id, execution_id, object_uri, media_type, scan_status, sensitivity, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (artifact_id, session_id, execution_id, object_uri, media_type, scan_status, sensitivity, scan_summary, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String SQL_UPDATE_ARTIFACT = """
             UPDATE sa_sandbox_artifact
@@ -143,6 +143,7 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 media_type = ?,
                 scan_status = ?,
                 sensitivity = ?,
+                scan_summary = ?,
                 created_at = ?
             WHERE artifact_id = ?
             """;
@@ -357,6 +358,7 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 artifact.mediaType(),
                 artifact.scanStatus().name(),
                 artifact.sensitivity().name(),
+                artifact.scanSummary(),
                 toTimestamp(artifact.createdAt()));
     }
 
@@ -368,6 +370,7 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 artifact.mediaType(),
                 artifact.scanStatus().name(),
                 artifact.sensitivity().name(),
+                artifact.scanSummary(),
                 toTimestamp(artifact.createdAt()),
                 artifact.artifactId());
     }
@@ -407,6 +410,7 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 resultSet.getString("media_type"),
                 SandboxArtifactScanStatus.valueOf(resultSet.getString("scan_status")),
                 ContextSensitivity.valueOf(resultSet.getString("sensitivity")),
+                resultSet.getString("scan_summary"),
                 toInstant(resultSet.getTimestamp("created_at")));
     }
 

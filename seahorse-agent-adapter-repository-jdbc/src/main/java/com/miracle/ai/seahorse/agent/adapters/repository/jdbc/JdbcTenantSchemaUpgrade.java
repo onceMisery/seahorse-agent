@@ -99,6 +99,7 @@ public class JdbcTenantSchemaUpgrade {
         addTenantIdColumns();
         upgradeAuthRefreshTokenColumns();
         upgradeSandboxSessionRuntimeGovernance();
+        upgradeSandboxArtifactScanSummary();
         upgradeAiModelConfigUniqueness();
         enableRowLevelSecurity();
         log.info("[TenantSchema] 多租户 schema 升级完成");
@@ -184,6 +185,13 @@ public class JdbcTenantSchemaUpgrade {
         } catch (Exception e) {
             log.warn("[TenantSchema] 创建 sa_sandbox_session expires 索引失败: {}", e.getMessage());
         }
+    }
+
+    private void upgradeSandboxArtifactScanSummary() {
+        if (!tableExists("sa_sandbox_artifact")) {
+            return;
+        }
+        addColumnIfMissing("sa_sandbox_artifact", "scan_summary", "VARCHAR(256)");
     }
 
     private void backfillSandboxSessionExpiresAt() {

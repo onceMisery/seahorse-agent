@@ -1737,6 +1737,7 @@ CREATE TABLE IF NOT EXISTS sa_sandbox_artifact (
   media_type VARCHAR(128) NOT NULL,
   scan_status VARCHAR(32) NOT NULL,
   sensitivity VARCHAR(32) NOT NULL,
+  scan_summary VARCHAR(256),
   created_at TIMESTAMP NOT NULL
 );
 

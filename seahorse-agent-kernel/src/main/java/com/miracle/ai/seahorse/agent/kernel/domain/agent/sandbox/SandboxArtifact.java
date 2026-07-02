@@ -29,7 +29,10 @@ public record SandboxArtifact(String artifactId,
                               String mediaType,
                               SandboxArtifactScanStatus scanStatus,
                               ContextSensitivity sensitivity,
+                              String scanSummary,
                               Instant createdAt) {
+
+    private static final int MAX_SCAN_SUMMARY_LENGTH = 256;
 
     public SandboxArtifact {
         artifactId = requireText(artifactId, "artifactId must not be blank");
@@ -39,7 +42,27 @@ public record SandboxArtifact(String artifactId,
         mediaType = requireText(mediaType, "mediaType must not be blank");
         scanStatus = Objects.requireNonNullElse(scanStatus, SandboxArtifactScanStatus.PENDING);
         sensitivity = Objects.requireNonNullElse(sensitivity, ContextSensitivity.SECRET);
+        scanSummary = normalizeScanSummary(scanSummary, scanStatus);
         createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
+    }
+
+    public SandboxArtifact(String artifactId,
+                           String sessionId,
+                           String executionId,
+                           String objectUri,
+                           String mediaType,
+                           SandboxArtifactScanStatus scanStatus,
+                           ContextSensitivity sensitivity,
+                           Instant createdAt) {
+        this(artifactId,
+                sessionId,
+                executionId,
+                objectUri,
+                mediaType,
+                scanStatus,
+                sensitivity,
+                null,
+                createdAt);
     }
 
     public boolean promptVisible() {
@@ -49,6 +72,12 @@ public record SandboxArtifact(String artifactId,
     }
 
     public SandboxArtifact withScanDecision(SandboxArtifactScanStatus scanStatus, ContextSensitivity sensitivity) {
+        return withScanDecision(scanStatus, sensitivity, null);
+    }
+
+    public SandboxArtifact withScanDecision(SandboxArtifactScanStatus scanStatus,
+                                            ContextSensitivity sensitivity,
+                                            String scanSummary) {
         return new SandboxArtifact(
                 artifactId,
                 sessionId,
@@ -57,6 +86,7 @@ public record SandboxArtifact(String artifactId,
                 mediaType,
                 scanStatus,
                 sensitivity,
+                scanSummary,
                 createdAt);
     }
 
@@ -69,7 +99,16 @@ public record SandboxArtifact(String artifactId,
                 mediaType,
                 scanStatus,
                 sensitivity,
+                scanSummary,
                 createdAt);
+    }
+
+    private static String normalizeScanSummary(String value, SandboxArtifactScanStatus scanStatus) {
+        String normalized = hasText(value) ? value.trim() : scanStatus.name();
+        if (normalized.length() <= MAX_SCAN_SUMMARY_LENGTH) {
+            return normalized;
+        }
+        return normalized.substring(0, MAX_SCAN_SUMMARY_LENGTH);
     }
 
     private static String requireText(String value, String message) {
@@ -77,5 +116,9 @@ public record SandboxArtifact(String artifactId,
             throw new IllegalArgumentException(message);
         }
         return value.trim();
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

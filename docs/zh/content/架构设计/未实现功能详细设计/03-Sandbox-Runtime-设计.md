@@ -387,6 +387,14 @@ Sandbox Runtime session creation now uses the capacity signal as a conservative 
 
 The default `max-active-sessions=0` remains unbounded, and the unsupported runtime keeps its existing fail-closed execution behavior because its health reports unbounded capacity. This is still a single-node preflight, not a tenant/agent quota model or runtime pool scheduler; those remain follow-up production hardening work.
 
+### 2026-07-02 Update: artifact scan summary auditability
+
+Sandbox artifacts now preserve the scanner-owned decision summary across the runtime boundary. `SandboxArtifact` carries a bounded `scanSummary`, `KernelSandboxRuntimeService` persists `SandboxArtifactScanResult.summary()` for clean/redacted/blocked scanner decisions, and fail-closed scanner/storage-copy branches use fixed safe summaries that do not include exception messages, local paths, secrets, or storage references.
+
+`sa_sandbox_artifact.scan_summary` is present in the init schema, migration `V47__sandbox_artifact_scan_summary.sql`, and the startup `JdbcTenantSchemaUpgrade` repair path for existing volumes. The sandbox artifact list/detail API and admin Sandbox page expose this summary while still omitting `objectUri` and `storageRef`.
+
+This closes the immediate auditability gap for the existing metadata/text scanner. Virus scanning, binary/PDF deep scanning, and structured redaction-summary payloads remain follow-up hardening work.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

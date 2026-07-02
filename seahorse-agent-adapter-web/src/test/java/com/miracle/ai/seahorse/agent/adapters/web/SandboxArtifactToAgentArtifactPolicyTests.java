@@ -61,6 +61,7 @@ class SandboxArtifactToAgentArtifactPolicyTests {
                 .andExpect(jsonPath("$.data[0].artifactId").value("artifact-clean"))
                 .andExpect(jsonPath("$.data[0].scanStatus").value("CLEAN"))
                 .andExpect(jsonPath("$.data[0].sensitivity").value("INTERNAL"))
+                .andExpect(jsonPath("$.data[0].scanSummary").value("metadata scan passed"))
                 .andExpect(jsonPath("$.data[0].promptVisible").value(true))
                 .andExpect(jsonPath("$.data[0].objectUri").doesNotExist());
     }
@@ -93,6 +94,7 @@ class SandboxArtifactToAgentArtifactPolicyTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.execution.executionId").value("exec-1"))
                 .andExpect(jsonPath("$.data.artifacts[0].artifactId").value("artifact-clean"))
+                .andExpect(jsonPath("$.data.artifacts[0].scanSummary").value("metadata scan passed"))
                 .andExpect(jsonPath("$.data.artifacts[0].promptVisible").value(true))
                 .andExpect(jsonPath("$.data.artifacts[0].objectUri").doesNotExist());
     }
@@ -106,6 +108,7 @@ class SandboxArtifactToAgentArtifactPolicyTests {
                 "text/plain",
                 SandboxArtifactScanStatus.CLEAN,
                 ContextSensitivity.INTERNAL,
+                "metadata scan passed",
                 Instant.parse("2026-05-26T00:00:00Z"));
     }
 

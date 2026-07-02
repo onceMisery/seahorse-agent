@@ -271,9 +271,9 @@ try {
     $sessionId = "$($observation.sessionId)"
     $objectUri = Test-Step "Verify persisted sandbox artifact uses object storage URI" {
         $safeArtifactId = $artifactId.Replace("'", "''")
-        $row = Invoke-PostgresScalar "SELECT object_uri, scan_status, sensitivity FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
+        $row = Invoke-PostgresScalar "SELECT object_uri, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
         $parts = $row -split "`t"
-        if ($parts.Count -ne 3) {
+        if ($parts.Count -ne 4) {
             throw "Unexpected sa_sandbox_artifact row: $row"
         }
         if ($parts[0] -like "file:*") {
@@ -287,6 +287,9 @@ try {
         }
         if ($parts[2] -ne "INTERNAL") {
             throw "Expected INTERNAL sensitivity but got '$($parts[2])'"
+        }
+        if ($parts[3] -ne "metadata scan passed") {
+            throw "Expected metadata scan summary but got '$($parts[3])'"
         }
         $parts[0]
     }
@@ -564,6 +567,9 @@ try {
         if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
             throw "Sandbox artifact API leaked storage URI fields: $artifactJson"
         }
+        if ("$($matched[0].scanSummary)" -ne "metadata scan passed") {
+            throw "Expected sandbox artifact API scanSummary=metadata scan passed: $artifactJson"
+        }
     } | Out-Null
 
     Test-Step "Verify sandbox artifact detail exposes download policy without storage URI" {
@@ -583,6 +589,9 @@ try {
         }
         if (-not "$($response.data.filename)") {
             throw "Artifact detail did not include filename: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($response.data.scanSummary)" -ne "metadata scan passed") {
+            throw "Expected artifact detail scanSummary=metadata scan passed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $detailJson = $response.data | ConvertTo-Json -Depth 20 -Compress
         if ($detailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
@@ -616,7 +625,7 @@ try {
 
     $secretToken = "sk-seahorse-secret-$suffix-1234567890"
     $secretMarker = "$Marker-secret-scan"
-    $secretCode = "from pathlib import Path`nPath('answer-secret-content.txt').write_text('api_key = `"$secretToken`"', encoding='utf-8')`nprint('$secretMarker')"
+    $secretCode = "from pathlib import Path`nPath('answer-content-scan.txt').write_text('api_key = `"$secretToken`"', encoding='utf-8')`nprint('$secretMarker')"
     $secretObservation = Test-Step "Invoke sandbox_python with content-sensitive artifact" {
         $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $headers -Body @{
             runId = "sandbox-artifact-secret-run-$suffix"
@@ -656,9 +665,9 @@ try {
     $secretSessionId = "$($secretObservation.sessionId)"
     $secretArtifactId = Test-Step "Verify content-sensitive sandbox artifact is blocked before object storage" {
         $safeSecretSessionId = $secretSessionId.Replace("'", "''")
-        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, scan_status, sensitivity FROM sa_sandbox_artifact WHERE session_id = '$safeSecretSessionId' ORDER BY created_at DESC LIMIT 1;"
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE session_id = '$safeSecretSessionId' ORDER BY created_at DESC LIMIT 1;"
         $parts = $row -split "`t"
-        if ($parts.Count -ne 4) {
+        if ($parts.Count -ne 5) {
             throw "Unexpected secret artifact row: $row"
         }
         if ($parts[1] -like "$ExpectedObjectUriPrefix*") {
@@ -669,6 +678,9 @@ try {
         }
         if ($parts[3] -ne "SECRET") {
             throw "Expected SECRET sensitivity for content-sensitive artifact but got '$($parts[3])'"
+        }
+        if ($parts[4] -ne "sensitive artifact content") {
+            throw "Expected sensitive artifact scan summary but got '$($parts[4])'"
         }
         $parts[0]
     }
@@ -687,6 +699,9 @@ try {
         if ("$($matched[0].scanStatus)" -ne "BLOCKED") {
             throw "Expected content-sensitive artifact scanStatus=BLOCKED: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
         }
+        if ("$($matched[0].scanSummary)" -ne "sensitive artifact content") {
+            throw "Expected content-sensitive artifact scanSummary=sensitive artifact content: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
+        }
         $artifactJson = $matched[0] | ConvertTo-Json -Depth 20 -Compress
         if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|$secretToken") {
             throw "Content-sensitive artifact API leaked storage or secret content: $artifactJson"
@@ -696,6 +711,9 @@ try {
         Assert-ApiOk $detail "Get content-sensitive sandbox artifact detail"
         if ($detail.data.downloadable -ne $false) {
             throw "Expected content-sensitive artifact downloadable=false: $($detail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($detail.data.scanSummary)" -ne "sensitive artifact content") {
+            throw "Expected content-sensitive artifact detail scanSummary=sensitive artifact content: $($detail.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $detailJson = $detail.data | ConvertTo-Json -Depth 20 -Compress
         if ($detailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|$secretToken") {

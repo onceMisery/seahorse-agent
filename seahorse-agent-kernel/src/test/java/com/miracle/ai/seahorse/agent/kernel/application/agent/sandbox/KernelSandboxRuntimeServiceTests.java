@@ -259,7 +259,9 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals(2, artifactPort.saved.size());
         assertEquals("artifact-clean", artifactPort.saved.get(0).artifactId());
         assertEquals("artifact-secret", artifactPort.saved.get(1).artifactId());
+        assertEquals("metadata scan passed", artifactPort.saved.get(0).scanSummary());
         assertEquals(SandboxArtifactScanStatus.BLOCKED, artifactPort.saved.get(1).scanStatus());
+        assertEquals("sensitive artifact metadata", artifactPort.saved.get(1).scanSummary());
     }
 
     @Test
@@ -293,6 +295,8 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals(2, artifactPort.saved.size());
         assertTrue(artifactPort.saved.stream()
                 .allMatch(artifact -> artifact.scanStatus() == SandboxArtifactScanStatus.BLOCKED));
+        assertTrue(artifactPort.saved.stream()
+                .allMatch(artifact -> "artifact scanner failed".equals(artifact.scanSummary())));
     }
 
     @Test
@@ -330,6 +334,7 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals("sandbox-artifacts", objectStorage.buckets.get(0));
         assertEquals("artifact marker", new String(objectStorage.uploadedBytes, StandardCharsets.UTF_8));
         assertEquals("local://sandbox-artifacts/answer.txt", artifactPort.saved.get(0).objectUri());
+        assertEquals("metadata scan passed", artifactPort.saved.get(0).scanSummary());
         assertEquals("local://sandbox-artifacts/answer.txt", result.artifacts().get(0).objectUri());
     }
 
@@ -368,6 +373,7 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals(1, artifactPort.saved.size());
         assertEquals(SandboxArtifactScanStatus.BLOCKED, artifactPort.saved.get(0).scanStatus());
         assertEquals(ContextSensitivity.SECRET, artifactPort.saved.get(0).sensitivity());
+        assertEquals("artifact storage copy failed", artifactPort.saved.get(0).scanSummary());
     }
 
     @Test
@@ -405,6 +411,7 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals(0, objectStorage.uploadCount);
         assertEquals(SandboxArtifactScanStatus.BLOCKED, artifactPort.saved.get(0).scanStatus());
         assertEquals(ContextSensitivity.SECRET, artifactPort.saved.get(0).sensitivity());
+        assertEquals("sensitive artifact content", artifactPort.saved.get(0).scanSummary());
     }
 
     @Test

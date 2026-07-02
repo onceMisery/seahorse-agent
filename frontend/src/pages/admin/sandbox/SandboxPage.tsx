@@ -658,6 +658,11 @@ export function SandboxPage() {
                         <div className="mt-1 truncate text-muted-foreground">
                           {art.mediaType || art.mimeType || "unknown"} · {art.sensitivity || "UNKNOWN"} · {art.promptVisible ? "PROMPT_VISIBLE" : "PROMPT_BLOCKED"}
                         </div>
+                        {art.scanSummary && (
+                          <div className="mt-1 truncate text-xs text-muted-foreground">
+                            {art.scanSummary}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -697,6 +702,10 @@ export function SandboxPage() {
                       <div>
                         <div className="text-xs uppercase text-muted-foreground">Sensitivity</div>
                         <div>{selectedArtifact.sensitivity || "UNKNOWN"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase text-muted-foreground">Scan Summary</div>
+                        <div className="truncate">{selectedArtifact.scanSummary || selectedArtifact.scanStatus || "UNKNOWN"}</div>
                       </div>
                       <div>
                         <div className="text-xs uppercase text-muted-foreground">Filename</div>

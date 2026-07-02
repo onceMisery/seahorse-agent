@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -40,6 +41,21 @@ class SandboxArtifactTests {
         assertTrue(redactedArtifact.promptVisible());
         assertFalse(unscannedArtifact.promptVisible());
         assertFalse(secretArtifact.promptVisible());
+    }
+
+    @Test
+    void shouldNormalizeScanSummaryForAudit() {
+        SandboxArtifact defaultSummary = artifact(
+                "artifact-default-summary",
+                SandboxArtifactScanStatus.CLEAN,
+                ContextSensitivity.INTERNAL);
+        SandboxArtifact explicitSummary = defaultSummary.withScanDecision(
+                SandboxArtifactScanStatus.BLOCKED,
+                ContextSensitivity.SECRET,
+                "  sensitive artifact content  ");
+
+        assertEquals("CLEAN", defaultSummary.scanSummary());
+        assertEquals("sensitive artifact content", explicitSummary.scanSummary());
     }
 
     private static SandboxArtifact artifact(String artifactId,

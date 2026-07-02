@@ -285,6 +285,7 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data[0].artifactId").value("artifact-clean"))
                 .andExpect(jsonPath("$.data[0].scanStatus").value("CLEAN"))
                 .andExpect(jsonPath("$.data[0].sensitivity").value("INTERNAL"))
+                .andExpect(jsonPath("$.data[0].scanSummary").value("metadata scan passed"))
                 .andExpect(jsonPath("$.data[0].promptVisible").value(true));
         verify(port).listArtifacts("session-1");
 
@@ -294,6 +295,7 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data.artifactId").value("artifact-clean"))
                 .andExpect(jsonPath("$.data.contentType").value("text/plain"))
                 .andExpect(jsonPath("$.data.filename").value("artifact-clean.txt"))
+                .andExpect(jsonPath("$.data.scanSummary").value("metadata scan passed"))
                 .andExpect(jsonPath("$.data.downloadable").value(true))
                 .andExpect(jsonPath("$.data.objectUri").doesNotExist())
                 .andExpect(jsonPath("$.data.storageRef").doesNotExist());
@@ -333,6 +335,7 @@ class SeahorseSandboxControllerTests {
                 "text/plain",
                 SandboxArtifactScanStatus.CLEAN,
                 ContextSensitivity.INTERNAL,
+                "metadata scan passed",
                 NOW);
     }
 
