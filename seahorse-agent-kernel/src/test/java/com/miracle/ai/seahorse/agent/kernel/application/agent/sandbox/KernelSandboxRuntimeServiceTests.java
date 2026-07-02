@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditRedactionPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditWriteFailurePolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
@@ -46,8 +47,16 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -204,6 +213,118 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldCopyPromptVisibleFileArtifactToObjectStorageBeforeSaving(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("answer.txt");
+        Files.writeString(output, "artifact marker", StandardCharsets.UTF_8);
+        MemoryArtifactPort artifactPort = new MemoryArtifactPort();
+        RecordingObjectStoragePort objectStorage = new RecordingObjectStoragePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(List.of(fileArtifact("artifact-file", output))),
+                artifactPort,
+                new MemorySandboxSessionRepository(),
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                new DefaultSandboxArtifactScannerPort(),
+                objectStorage,
+                null,
+                CLOCK);
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        SandboxExecutionResult result = service.execute(new SandboxExecutionCommand(
+                session.sessionId(),
+                "print('hello')",
+                false,
+                List.of()));
+
+        assertEquals(1, result.artifacts().size());
+        assertEquals(1, artifactPort.saved.size());
+        assertEquals("sandbox-artifacts", objectStorage.buckets.get(0));
+        assertEquals("artifact marker", new String(objectStorage.uploadedBytes, StandardCharsets.UTF_8));
+        assertEquals("local://sandbox-artifacts/answer.txt", artifactPort.saved.get(0).objectUri());
+        assertEquals("local://sandbox-artifacts/answer.txt", result.artifacts().get(0).objectUri());
+    }
+
+    @Test
+    void shouldFailClosedWhenPromptVisibleFileArtifactCannotBeCopied(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("answer.txt");
+        Files.writeString(output, "artifact marker", StandardCharsets.UTF_8);
+        MemoryArtifactPort artifactPort = new MemoryArtifactPort();
+        RecordingObjectStoragePort objectStorage = new RecordingObjectStoragePort();
+        objectStorage.failUpload = true;
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(List.of(fileArtifact("artifact-file", output))),
+                artifactPort,
+                new MemorySandboxSessionRepository(),
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                new DefaultSandboxArtifactScannerPort(),
+                objectStorage,
+                null,
+                CLOCK);
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        SandboxExecutionResult result = service.execute(new SandboxExecutionCommand(
+                session.sessionId(),
+                "print('hello')",
+                false,
+                List.of()));
+
+        assertEquals(0, result.artifacts().size());
+        assertEquals(1, artifactPort.saved.size());
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, artifactPort.saved.get(0).scanStatus());
+        assertEquals(ContextSensitivity.SECRET, artifactPort.saved.get(0).sensitivity());
+    }
+
+    @Test
+    void shouldNotCopyScannerBlockedFileArtifacts(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("secret-token.txt");
+        Files.writeString(output, "secret marker", StandardCharsets.UTF_8);
+        MemoryArtifactPort artifactPort = new MemoryArtifactPort();
+        RecordingObjectStoragePort objectStorage = new RecordingObjectStoragePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(List.of(fileArtifact("artifact-secret-file", output))),
+                artifactPort,
+                new MemorySandboxSessionRepository(),
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                new DefaultSandboxArtifactScannerPort(),
+                objectStorage,
+                null,
+                CLOCK);
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        SandboxExecutionResult result = service.execute(new SandboxExecutionCommand(
+                session.sessionId(),
+                "print('hello')",
+                false,
+                List.of()));
+
+        assertEquals(0, result.artifacts().size());
+        assertEquals(1, artifactPort.saved.size());
+        assertEquals(0, objectStorage.uploadCount);
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, artifactPort.saved.get(0).scanStatus());
+        assertEquals(ContextSensitivity.SECRET, artifactPort.saved.get(0).sensitivity());
+    }
+
+    @Test
     void shouldListPersistedExecutionsForSession() {
         MemorySandboxExecutionRepository executionRepository = new MemorySandboxExecutionRepository();
         KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
@@ -355,9 +476,20 @@ class KernelSandboxRuntimeServiceTests {
 
     private static final class RecordingSandboxRuntimePort implements SandboxRuntimePort {
 
+        private final List<SandboxArtifact> artifacts;
         private boolean createSessionCalled;
         private boolean executeCalled;
         private boolean closeSessionCalled;
+
+        private RecordingSandboxRuntimePort() {
+            this(List.of(
+                    SandboxTestArtifacts.clean("artifact-clean"),
+                    SandboxTestArtifacts.secret("artifact-secret")));
+        }
+
+        private RecordingSandboxRuntimePort(List<SandboxArtifact> artifacts) {
+            this.artifacts = artifacts == null ? List.of() : List.copyOf(artifacts);
+        }
 
         @Override
         public SandboxSession createSession(SandboxSessionRequest request) {
@@ -382,7 +514,7 @@ class KernelSandboxRuntimeServiceTests {
                     .markSucceeded(NOW, "converted");
             return SandboxExecutionResult.succeeded(
                     execution,
-                    List.of(SandboxTestArtifacts.clean("artifact-clean"), SandboxTestArtifacts.secret("artifact-secret")));
+                    artifacts);
         }
 
         @Override
@@ -390,6 +522,18 @@ class KernelSandboxRuntimeServiceTests {
             closeSessionCalled = true;
             return session.closed(NOW.plusSeconds(5));
         }
+    }
+
+    private static SandboxArtifact fileArtifact(String artifactId, Path path) {
+        return new SandboxArtifact(
+                artifactId,
+                "session-1",
+                "exec-1",
+                path.toUri().toString(),
+                "text/plain",
+                SandboxArtifactScanStatus.PENDING,
+                ContextSensitivity.INTERNAL,
+                NOW);
     }
 
     private static final class MemoryArtifactPort implements SandboxArtifactPort {
@@ -400,6 +544,50 @@ class KernelSandboxRuntimeServiceTests {
         public SandboxArtifact save(SandboxArtifact artifact) {
             saved.add(artifact);
             return artifact;
+        }
+    }
+
+    private static final class RecordingObjectStoragePort implements ObjectStoragePort {
+
+        private final List<String> buckets = new ArrayList<>();
+        private byte[] uploadedBytes = new byte[0];
+        private int uploadCount;
+        private boolean failUpload;
+
+        @Override
+        public void ensureBucket(String bucketName) {
+            buckets.add(bucketName);
+        }
+
+        @Override
+        public StoredObject upload(String bucketName,
+                                   InputStream content,
+                                   long size,
+                                   String originalFilename,
+                                   String contentType) {
+            if (failUpload) {
+                throw new IllegalStateException("object storage unavailable");
+            }
+            try {
+                uploadCount++;
+                uploadedBytes = content.readAllBytes();
+                return new StoredObject(
+                        "local://" + bucketName + "/" + originalFilename,
+                        contentType,
+                        size,
+                        originalFilename);
+            } catch (Exception ex) {
+                throw new IllegalStateException("read upload content failed", ex);
+            }
+        }
+
+        @Override
+        public InputStream openStream(String url) {
+            return new ByteArrayInputStream(uploadedBytes);
+        }
+
+        @Override
+        public void deleteByUrl(String url) {
         }
     }
 

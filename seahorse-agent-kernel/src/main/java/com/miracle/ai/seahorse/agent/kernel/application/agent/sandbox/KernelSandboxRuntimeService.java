@@ -46,7 +46,14 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -65,11 +72,13 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private static final String AUDIT_ACTOR_ID = "sandbox-runtime";
     private static final String RESOURCE_TYPE_SANDBOX_SESSION = "SANDBOX_SESSION";
     private static final String RESOURCE_TYPE_SANDBOX_EXECUTION = "SANDBOX_EXECUTION";
+    private static final String SANDBOX_ARTIFACT_BUCKET = "sandbox-artifacts";
 
     private final SandboxPolicyPort policyPort;
     private final SandboxRuntimePort runtimePort;
     private final SandboxArtifactPort artifactPort;
     private final SandboxArtifactScannerPort artifactScannerPort;
+    private final ObjectStoragePort artifactStoragePort;
     private final SandboxSessionRepositoryPort sessionRepositoryPort;
     private final SandboxExecutionRepositoryPort executionRepositoryPort;
     private final SandboxArtifactQueryPort artifactQueryPort;
@@ -107,6 +116,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 artifactQueryPort,
                 new DefaultSandboxArtifactScannerPort(),
                 null,
+                null,
                 clock);
     }
 
@@ -125,6 +135,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 executionRepositoryPort,
                 artifactQueryPort,
                 new DefaultSandboxArtifactScannerPort(),
+                null,
                 auditLedger,
                 clock);
     }
@@ -138,11 +149,34 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                                        SandboxArtifactScannerPort artifactScannerPort,
                                        KernelAuditLedgerService auditLedger,
                                        Clock clock) {
+        this(policyPort,
+                runtimePort,
+                artifactPort,
+                sessionRepositoryPort,
+                executionRepositoryPort,
+                artifactQueryPort,
+                artifactScannerPort,
+                null,
+                auditLedger,
+                clock);
+    }
+
+    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
+                                       SandboxRuntimePort runtimePort,
+                                       SandboxArtifactPort artifactPort,
+                                       SandboxSessionRepositoryPort sessionRepositoryPort,
+                                       SandboxExecutionRepositoryPort executionRepositoryPort,
+                                       SandboxArtifactQueryPort artifactQueryPort,
+                                       SandboxArtifactScannerPort artifactScannerPort,
+                                       ObjectStoragePort artifactStoragePort,
+                                       KernelAuditLedgerService auditLedger,
+                                       Clock clock) {
         this.policyPort = Objects.requireNonNull(policyPort, "policyPort must not be null");
         this.runtimePort = Objects.requireNonNull(runtimePort, "runtimePort must not be null");
         this.artifactPort = Objects.requireNonNull(artifactPort, "artifactPort must not be null");
         this.artifactScannerPort = Objects.requireNonNull(artifactScannerPort,
                 "artifactScannerPort must not be null");
+        this.artifactStoragePort = artifactStoragePort;
         this.sessionRepositoryPort = Objects.requireNonNull(sessionRepositoryPort,
                 "sessionRepositoryPort must not be null");
         this.executionRepositoryPort = Objects.requireNonNull(executionRepositoryPort,
@@ -203,8 +237,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 safeCommand.requestedHosts()));
         SandboxExecution savedExecution = executionRepositoryPort.saveExecution(result.execution());
         List<SandboxArtifact> savedArtifacts = result.artifacts().stream()
-                .map(this::scanArtifact)
-                .map(artifactPort::save)
+                .map(this::persistArtifact)
                 .toList();
         List<SandboxArtifact> visibleArtifacts = savedArtifacts.stream()
                 .filter(SandboxArtifact::promptVisible)
@@ -287,6 +320,69 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             return artifact.withScanDecision(result.scanStatus(), result.sensitivity());
         } catch (RuntimeException ex) {
             return artifact.withScanDecision(SandboxArtifactScanStatus.BLOCKED, ContextSensitivity.SECRET);
+        }
+    }
+
+    private SandboxArtifact persistArtifact(SandboxArtifact artifact) {
+        SandboxArtifact scanned = scanArtifact(artifact);
+        SandboxArtifact prepared = copyPromptVisibleFileArtifact(scanned);
+        try {
+            return artifactPort.save(prepared);
+        } catch (RuntimeException ex) {
+            cleanupCopiedArtifact(scanned, prepared);
+            throw ex;
+        }
+    }
+
+    private SandboxArtifact copyPromptVisibleFileArtifact(SandboxArtifact artifact) {
+        if (artifactStoragePort == null || !artifact.promptVisible() || !isFileUri(artifact.objectUri())) {
+            return artifact;
+        }
+        try {
+            Path path = Path.of(URI.create(artifact.objectUri())).toAbsolutePath().normalize();
+            if (!Files.isRegularFile(path)) {
+                return artifact.withScanDecision(SandboxArtifactScanStatus.BLOCKED, ContextSensitivity.SECRET);
+            }
+            long size = Files.size(path);
+            artifactStoragePort.ensureBucket(SANDBOX_ARTIFACT_BUCKET);
+            try (InputStream input = Files.newInputStream(path)) {
+                StoredObject stored = artifactStoragePort.reliableUpload(
+                        SANDBOX_ARTIFACT_BUCKET,
+                        input,
+                        size,
+                        artifactFilename(artifact, path),
+                        artifact.mediaType());
+                return artifact.withObjectUri(stored.url());
+            }
+        } catch (IOException | RuntimeException ex) {
+            return artifact.withScanDecision(SandboxArtifactScanStatus.BLOCKED, ContextSensitivity.SECRET);
+        }
+    }
+
+    private void cleanupCopiedArtifact(SandboxArtifact scanned, SandboxArtifact prepared) {
+        if (artifactStoragePort == null || Objects.equals(scanned.objectUri(), prepared.objectUri())) {
+            return;
+        }
+        try {
+            artifactStoragePort.deleteByUrl(prepared.objectUri());
+        } catch (RuntimeException ignored) {
+            // Preserve the original persistence failure.
+        }
+    }
+
+    private String artifactFilename(SandboxArtifact artifact, Path path) {
+        Path filename = path.getFileName();
+        if (filename != null && hasText(filename.toString())) {
+            return filename.toString();
+        }
+        return artifact.artifactId() + ".bin";
+    }
+
+    private boolean isFileUri(String objectUri) {
+        try {
+            return "file".equalsIgnoreCase(URI.create(objectUri).getScheme());
+        } catch (RuntimeException ex) {
+            return false;
         }
     }
 

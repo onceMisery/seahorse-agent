@@ -788,6 +788,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             SandboxExecutionRepositoryPort sandboxExecutionRepositoryPort,
             SandboxArtifactQueryPort sandboxArtifactQueryPort,
             SandboxArtifactScannerPort sandboxArtifactScannerPort,
+            ObjectProvider<ObjectStoragePort> objectStoragePort,
             ObjectProvider<KernelAuditLedgerService> auditLedgerService,
             ObjectProvider<Clock> clockProvider) {
         return new KernelSandboxRuntimeService(
@@ -798,6 +799,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 sandboxExecutionRepositoryPort,
                 sandboxArtifactQueryPort,
                 sandboxArtifactScannerPort,
+                objectStoragePort.getIfAvailable(),
                 auditLedgerService.getIfAvailable(),
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }

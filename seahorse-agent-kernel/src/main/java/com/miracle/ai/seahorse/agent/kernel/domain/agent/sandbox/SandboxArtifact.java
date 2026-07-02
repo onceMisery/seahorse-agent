@@ -60,6 +60,18 @@ public record SandboxArtifact(String artifactId,
                 createdAt);
     }
 
+    public SandboxArtifact withObjectUri(String objectUri) {
+        return new SandboxArtifact(
+                artifactId,
+                sessionId,
+                executionId,
+                objectUri,
+                mediaType,
+                scanStatus,
+                sensitivity,
+                createdAt);
+    }
+
     private static String requireText(String value, String message) {
         if (value == null || value.trim().isEmpty()) {
             throw new IllegalArgumentException(message);

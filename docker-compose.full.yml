@@ -390,7 +390,7 @@ services:
       SEAHORSE_AGENT_ADAPTERS_CACHE_REDIS_PORT: "6379"
       # 存储 → Local (临时降级,避免S3配置问题)
       SEAHORSE_AGENT_ADAPTERS_STORAGE_TYPE: local
-      SEAHORSE_AGENT_ADAPTERS_STORAGE_LOCAL_ROOT: /tmp/seahorse-storage
+      SEAHORSE_AGENT_ADAPTERS_STORAGE_LOCAL_ROOT: /app/seahorse-agent-storage
       # 消息队列 → Pulsar
       SEAHORSE_AGENT_ADAPTERS_MQ_TYPE: pulsar
       SEAHORSE_AGENT_ADAPTERS_MQ_PULSAR_SERVICE_URL: pulsar://pulsar-broker:6650

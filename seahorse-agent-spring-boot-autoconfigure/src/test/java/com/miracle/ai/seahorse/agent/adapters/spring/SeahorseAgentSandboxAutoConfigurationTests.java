@@ -30,6 +30,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionReposi
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -45,6 +46,7 @@ class SeahorseAgentSandboxAutoConfigurationTests {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(
+                    SeahorseAgentStorageAdapterAutoConfiguration.class,
                     SeahorseAgentRegistryRepositoryAutoConfiguration.class,
                     SeahorseAgentKernelRegistryAutoConfiguration.class));
 
@@ -67,10 +69,13 @@ class SeahorseAgentSandboxAutoConfigurationTests {
                     assertThat(context).hasSingleBean(SandboxRuntimeInboundPort.class);
                     assertThat(context).hasSingleBean(KernelSandboxRuntimeService.class);
                     assertThat(context).hasSingleBean(KernelAuditLedgerService.class);
+                    assertThat(context).hasSingleBean(ObjectStoragePort.class);
                     assertThat(field(context.getBean(KernelSandboxRuntimeService.class), "auditLedger"))
                             .isSameAs(context.getBean(KernelAuditLedgerService.class));
                     assertThat(field(context.getBean(KernelSandboxRuntimeService.class), "artifactScannerPort"))
                             .isSameAs(context.getBean(SandboxArtifactScannerPort.class));
+                    assertThat(field(context.getBean(KernelSandboxRuntimeService.class), "artifactStoragePort"))
+                            .isSameAs(context.getBean(ObjectStoragePort.class));
                 });
     }
 
