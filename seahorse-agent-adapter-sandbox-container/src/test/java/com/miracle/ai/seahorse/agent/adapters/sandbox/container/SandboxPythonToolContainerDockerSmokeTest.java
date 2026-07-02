@@ -75,12 +75,17 @@ class SandboxPythonToolContainerDockerSmokeTest {
                 "user-1",
                 "agent-identity-1",
                 SandboxPythonToolPortAdapter.TOOL_ID,
-                Map.of("code", "print('sandbox tool smoke')"),
+                Map.of("code",
+                        "from pathlib import Path\nPath('answer.txt').write_text('tool artifact smoke', encoding='utf-8')\nprint('sandbox tool smoke')"),
                 Map.of(),
                 "run-docker-smoke:call-1",
                 List.of(SandboxPythonToolPortAdapter.TOOL_ID)));
 
         assertThat(result.success()).isTrue();
-        assertThat(result.content()).contains("SUCCEEDED", "sandbox tool smoke");
+        assertThat(result.content())
+                .contains("SUCCEEDED", "sandbox tool smoke")
+                .contains("\"mediaType\":\"text/plain\"")
+                .contains("\"scanStatus\":\"CLEAN\"")
+                .contains("\"promptVisible\":true");
     }
 }

@@ -128,7 +128,8 @@ try {
     $suffix = ([guid]::NewGuid().ToString('N')).Substring(0, 8)
     $runId = "sandbox-python-smoke-run-$suffix"
     $toolCallId = "sandbox-python-smoke-call-$suffix"
-    $code = "print('$Marker')"
+    $escapedMarker = $Marker.Replace("\", "\\").Replace("'", "\'")
+    $code = "from pathlib import Path`nPath('answer.txt').write_text('artifact $escapedMarker', encoding='utf-8')`nprint('$escapedMarker')"
 
     Test-Step "Invoke sandbox_python through Tool Gateway" {
         $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $headers -Body @{
@@ -154,6 +155,15 @@ try {
         }
         if ($content -notlike "*`"executionStatus`":`"SUCCEEDED`"*") {
             throw "sandbox_python content did not report SUCCEEDED: $content"
+        }
+        if ($content -notlike "*`"mediaType`":`"text/plain`"*") {
+            throw "sandbox_python content did not include text artifact metadata: $content"
+        }
+        if ($content -notlike "*`"scanStatus`":`"CLEAN`"*") {
+            throw "sandbox_python content did not include CLEAN artifact scan status: $content"
+        }
+        if ($content -notlike "*`"promptVisible`":true*") {
+            throw "sandbox_python content did not include prompt-visible artifact: $content"
         }
         $response.data | ConvertTo-Json -Compress | Write-Host
     } | Out-Null

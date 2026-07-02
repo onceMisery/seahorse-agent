@@ -20,6 +20,9 @@ package com.miracle.ai.seahorse.agent.adapters.sandbox.container;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
@@ -31,6 +34,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
@@ -44,6 +48,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
     private static final String SESSION_ID_PREFIX = "sandbox_container_";
     private static final String EXECUTION_ID_PREFIX = "sandbox_exec_container_";
+    private static final String ARTIFACT_ID_PREFIX = "sandbox_artifact_container_";
     private static final String SCRIPT_NAME = "main.py";
     private static final String CONTAINER_WORKSPACE = "/workspace";
 
@@ -129,7 +134,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         SandboxPolicyReasonCode.VALID_REQUEST,
                         startedAt,
                         finishedAt);
-                return SandboxExecutionResult.succeeded(execution, List.of());
+                return SandboxExecutionResult.succeeded(
+                        execution,
+                        collectArtifacts(session, execution.executionId(), workspace, finishedAt));
             }
             return failedResult(
                     executionId,
@@ -197,6 +204,79 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 properties.getExecutionTimeout(),
                 properties.getStdoutLimitBytes(),
                 properties.getStderrLimitBytes());
+    }
+
+    private List<SandboxArtifact> collectArtifacts(SandboxSession session,
+                                                   String executionId,
+                                                   Path workspace,
+                                                   Instant createdAt) throws IOException {
+        if (!Files.exists(workspace)) {
+            return List.of();
+        }
+        Path safeWorkspace = workspace.toAbsolutePath().normalize();
+        try (var paths = Files.walk(safeWorkspace)) {
+            return paths
+                    .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+                    .map(path -> path.toAbsolutePath().normalize())
+                    .filter(path -> path.startsWith(safeWorkspace))
+                    .filter(path -> !path.equals(safeWorkspace.resolve(SCRIPT_NAME)))
+                    .sorted(Comparator.comparing(path -> safeWorkspace.relativize(path).toString()))
+                    .map(path -> artifact(session, executionId, path, createdAt))
+                    .toList();
+        }
+    }
+
+    private SandboxArtifact artifact(SandboxSession session, String executionId, Path path, Instant createdAt) {
+        return new SandboxArtifact(
+                ARTIFACT_ID_PREFIX + SnowflakeIds.nextIdString(),
+                session.sessionId(),
+                executionId,
+                path.toUri().toString(),
+                mediaType(path),
+                SandboxArtifactScanStatus.PENDING,
+                ContextSensitivity.INTERNAL,
+                createdAt);
+    }
+
+    private String mediaType(Path path) {
+        String known = knownMediaType(path);
+        if (known != null) {
+            return known;
+        }
+        try {
+            String probed = Files.probeContentType(path);
+            if (hasText(probed)) {
+                return probed.trim();
+            }
+        } catch (IOException ignored) {
+            // Fall through to a conservative binary type.
+        }
+        return "application/octet-stream";
+    }
+
+    private String knownMediaType(Path path) {
+        String name = path.getFileName() == null
+                ? ""
+                : path.getFileName().toString().toLowerCase(Locale.ROOT);
+        int dot = name.lastIndexOf('.');
+        String extension = dot >= 0 ? name.substring(dot + 1) : "";
+        return switch (extension) {
+            case "txt", "log" -> "text/plain";
+            case "md", "markdown" -> "text/markdown";
+            case "csv" -> "text/csv";
+            case "tsv" -> "text/tab-separated-values";
+            case "html", "htm" -> "text/html";
+            case "py" -> "text/x-python";
+            case "yaml", "yml" -> "text/yaml";
+            case "json" -> "application/json";
+            case "xml" -> "application/xml";
+            case "pdf" -> "application/pdf";
+            case "gif" -> "image/gif";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "png" -> "image/png";
+            case "webp" -> "image/webp";
+            default -> null;
+        };
     }
 
     private SandboxExecutionResult failedResult(String executionId,

@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.adapters.sandbox.container;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
@@ -74,6 +76,49 @@ class ContainerSandboxRuntimeAdapterTests {
                 .anySatisfy(argument -> assertThat(argument).endsWith(":/workspace:rw"));
         assertThat(Files.readString(runner.lastCommand.workingDirectory().resolve("main.py")))
                 .isEqualTo("print('hello from sandbox')");
+    }
+
+    @Test
+    void shouldCollectArtifactsCreatedBySuccessfulExecution() throws Exception {
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("created artifacts\n", Duration.ofMillis(180)),
+                command -> {
+                    Files.writeString(command.workingDirectory().resolve("answer.txt"), "artifact text");
+                    Path nested = command.workingDirectory().resolve("reports");
+                    Files.createDirectories(nested);
+                    Files.writeString(nested.resolve("summary.md"), "# Sandbox artifact");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.CODE_INTERPRETER));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                "print('created artifacts')",
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.artifacts()).hasSize(2);
+        assertThat(result.artifacts())
+                .allSatisfy(artifact -> {
+                    assertThat(artifact.artifactId()).startsWith("sandbox_artifact_container_");
+                    assertThat(artifact.sessionId()).isEqualTo(session.sessionId());
+                    assertThat(artifact.executionId()).isEqualTo(result.execution().executionId());
+                    assertThat(artifact.objectUri()).startsWith("file:");
+                    assertThat(artifact.scanStatus()).isEqualTo(SandboxArtifactScanStatus.PENDING);
+                    assertThat(artifact.sensitivity()).isEqualTo(ContextSensitivity.INTERNAL);
+                    assertThat(artifact.createdAt()).isEqualTo(CLOCK.instant());
+                });
+        assertThat(result.artifacts())
+                .anySatisfy(artifact -> {
+                    assertThat(artifact.objectUri()).contains("answer.txt");
+                    assertThat(artifact.mediaType()).isEqualTo("text/plain");
+                })
+                .anySatisfy(artifact -> {
+                    assertThat(artifact.objectUri()).contains("summary.md");
+                    assertThat(artifact.mediaType()).isEqualTo("text/markdown");
+                })
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"));
     }
 
     @Test
@@ -194,16 +239,25 @@ class ContainerSandboxRuntimeAdapterTests {
 
         private final ContainerCommandResult result;
         private final IOException exception;
+        private final OnRun onRun;
         private ContainerCommand lastCommand;
 
         private RecordingRunner(ContainerCommandResult result) {
             this.result = result;
             this.exception = null;
+            this.onRun = null;
+        }
+
+        private RecordingRunner(ContainerCommandResult result, OnRun onRun) {
+            this.result = result;
+            this.exception = null;
+            this.onRun = onRun;
         }
 
         private RecordingRunner(IOException exception) {
             this.result = null;
             this.exception = exception;
+            this.onRun = null;
         }
 
         @Override
@@ -212,7 +266,15 @@ class ContainerSandboxRuntimeAdapterTests {
             if (exception != null) {
                 throw exception;
             }
+            if (onRun != null) {
+                onRun.accept(command);
+            }
             return result;
         }
+    }
+
+    private interface OnRun {
+
+        void accept(ContainerCommand command) throws IOException;
     }
 }

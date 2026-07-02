@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.adapters.sandbox.container;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRequest;
@@ -62,13 +64,21 @@ class ContainerSandboxRuntimeAdapterDockerSmokeTest {
 
         SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
                 session,
-                "print('seahorse sandbox docker smoke')",
+                "from pathlib import Path\nPath('answer.txt').write_text('artifact smoke', encoding='utf-8')\nprint('seahorse sandbox docker smoke')",
                 false,
                 List.of()));
         SandboxSession closed = adapter.closeSession(session);
 
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
         assertThat(result.execution().resultSummary()).contains("seahorse sandbox docker smoke");
+        assertThat(result.artifacts())
+                .singleElement()
+                .satisfies(artifact -> {
+                    assertThat(artifact.objectUri()).contains("answer.txt");
+                    assertThat(artifact.mediaType()).isEqualTo("text/plain");
+                    assertThat(artifact.scanStatus()).isEqualTo(SandboxArtifactScanStatus.PENDING);
+                    assertThat(artifact.sensitivity()).isEqualTo(ContextSensitivity.INTERNAL);
+                });
         assertThat(closed.status()).isEqualTo(SandboxExecutionStatus.CANCELLED);
         assertThat(tempDir.resolve(session.sessionId())).doesNotExist();
     }
