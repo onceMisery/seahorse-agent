@@ -108,6 +108,8 @@ class JdbcSandboxRepositoryAdapterTests {
         adapter.saveSession(closed);
 
         assertThat(adapter.findSessionById("session-1")).contains(closed);
+        assertThat(adapter.findSessionById("session-1").orElseThrow().profileId()).isEqualTo("python-small");
+        assertThat(adapter.findSessionById("session-1").orElseThrow().expiresAt()).isEqualTo(NOW.plusSeconds(3600));
         assertThat(adapter.listSessionsByTenant("tenant-a", 2)).containsExactly(newerSession, closed);
         assertThat(adapter.listSessionsByTenant("tenant-b", 10))
                 .extracting(SandboxSession::sessionId)
@@ -155,6 +157,8 @@ class JdbcSandboxRepositoryAdapterTests {
                     runtime_type VARCHAR(32) NOT NULL,
                     status VARCHAR(32) NOT NULL,
                     reason_code VARCHAR(64) NOT NULL,
+                    profile_id VARCHAR(64) NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
                     created_at TIMESTAMP NOT NULL,
                     updated_at TIMESTAMP NOT NULL
                 )
@@ -185,6 +189,7 @@ class JdbcSandboxRepositoryAdapterTests {
                 """);
         jdbcTemplate.execute("CREATE INDEX idx_sa_sandbox_execution_session ON sa_sandbox_execution(session_id, created_at)");
         jdbcTemplate.execute("CREATE INDEX idx_sa_sandbox_session_tenant_updated ON sa_sandbox_session(tenant_id, updated_at, created_at)");
+        jdbcTemplate.execute("CREATE INDEX idx_sa_sandbox_session_expires ON sa_sandbox_session(tenant_id, expires_at)");
         jdbcTemplate.execute("CREATE INDEX idx_sa_sandbox_artifact_session ON sa_sandbox_artifact(session_id, created_at)");
     }
 }

@@ -34,8 +34,8 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 | 缺口 | 影响 | 设计处理 |
 | --- | --- | --- |
 | 真实隔离 runtime 覆盖仍窄 | Code Interpreter Python 最小容器闭环与 full-compose backend Docker host-socket opt-in 接入已落地；Browser Automation、Shell、File Conversion 仍未完成 | 扩展 Docker/Podman adapter 的 profile 覆盖，P1/P2 可替换为 gVisor 或 Firecracker |
-| 真实 runtime 清理仍需生产化 | 当前 adapter 使用 `--rm` 并在 close 时删除 per-session workspace；仍缺 TTL、孤儿容器巡检、runtime pool 清理 | 接入 session TTL、后台清理任务和 runtime 节点健康检查 |
-| 资源配额仍不完整 | 当前 adapter 有固定 CPU、内存、pids、timeout、stdout/stderr limit；仍缺磁盘配额、按 tenant/agent/tool 的 profile 和持久化记录 | 新增 `SandboxResourcePolicy` 和 runtime profile |
+| 真实 runtime 清理仍需生产化 | 当前 adapter 使用 `--rm` 并在 close 时删除 per-session workspace；session TTL metadata 已持久化，仍缺 TTL 到期后台清理、孤儿容器巡检、runtime pool 清理 | 接入后台清理任务、孤儿容器巡检和 runtime 节点健康检查 |
+| 资源配额仍不完整 | 当前 adapter 有固定 CPU、内存、pids、timeout、stdout/stderr limit，session `profileId`/`expiresAt` 已持久化；仍缺磁盘配额和按 tenant/agent/tool 的资源策略联动 | 新增 `SandboxResourcePolicy` 和更完整 runtime profile policy |
 | 真实 artifact 产物已进入最小闭环 | Code Interpreter adapter 已收集 workspace 文件，kernel 已将 prompt-visible file:// artifact 写入 object storage，并通过治理 API 下载/查看详情 | 后续补齐 preview、生命周期和更广运行时产物 |
 | 内容级 artifact 扫描仍需加固 | 基础 metadata scanner、file:// 文本类 secret/PII 内容阻断和 prompt visibility gate 已落地；仍缺病毒扫描、二进制/PDF 深度扫描、redaction summary | 后续接入专业扫描引擎和可审计 redaction summary |
 | 网络策略只有默认 deny 与 allowlist 基础 | 当前容器 adapter 强制 `--network none`；仍缺按 tenant/agent/tool 的网络 profile、DNS/IP 限制、egress proxy 和审计可视化 | 引入 policy profile、egress proxy 和 network decision log |
@@ -213,7 +213,7 @@ P0 profile：
 
 | Profile | Runtime | Network | Command | 状态 |
 | --- | --- | --- | --- | --- |
-| `python-small` | Python 3 | deny | `python /workspace/main.py` | 已有最小闭环，当前由 adapter 固定配置表达，未持久化 profile |
+| `python-small` | Python 3 | deny | `python /workspace/main.py` | 已有最小闭环，session profile/TTL metadata 已持久化并通过 API/UI 展示 |
 | `node-small` | Node.js | deny | `node /workspace/main.js` | 后续 |
 | `browser-readonly` | Playwright | allowlist only | `node /workspace/browser-task.js` | 后续 |
 | `file-conversion` | LibreOffice/Tika helper | deny | allowlisted converter | 后续 |
@@ -287,7 +287,7 @@ P0 profile：
 
 1. 扩展 `SandboxRuntimePort` lifecycle。（已补齐 `closeSession` hook）
 2. 新增 Docker/Podman runtime adapter。（已补齐 `CODE_INTERPRETER` Python 最小闭环）
-3. 新增 runtime profile 配置。（当前 adapter 有固定配置项；持久化 profile 和策略联动仍后续）
+3. 新增 runtime profile 配置。（已补齐 session profile/TTL metadata 持久化、旧库 startup upgrade、API/UI 展示；资源策略联动仍后续）
 4. 增加 execution history API。（已补齐 `GET /api/sandbox/sessions/{sessionId}/executions`）
 5. 增加 container adapter 单元测试和本地集成测试。（已补齐 mock runner 单测、auto-config 测试和 Docker CLI gated smoke）
 6. full-compose backend 容器内接入 Docker/Podman CLI/socket。（已补齐 Docker host-socket opt-in overlay；Podman 可通过自定义镜像/engine 配置继续扩展）

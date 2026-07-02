@@ -82,7 +82,7 @@ public class SeahorseSandboxController {
     public ApiResponse<Object> createSession(@RequestBody SandboxSessionCreateRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
         SandboxSessionCreateRequest safeRequest = request == null
-                ? new SandboxSessionCreateRequest(null, null, null, false, List.of())
+                ? new SandboxSessionCreateRequest(null, null, null, false, List.of(), null, null)
                 : request;
         return ApiResponses.requireService(sandboxRuntimePortProvider,
                 port -> port.createSession(new SandboxSessionCreateCommand(
@@ -90,7 +90,9 @@ public class SeahorseSandboxController {
                         safeRequest.runId(),
                         safeRequest.runtimeType(),
                         safeRequest.networkRequested(),
-                        safeRequest.requestedHosts())));
+                        safeRequest.requestedHosts(),
+                        safeRequest.profileId(),
+                        safeRequest.expiresAt())));
     }
 
     @PostMapping("/api/sandbox/sessions/{sessionId}/execute")
@@ -218,10 +220,13 @@ public class SeahorseSandboxController {
                                               String runId,
                                               SandboxRuntimeType runtimeType,
                                               boolean networkRequested,
-                                              List<String> requestedHosts) {
+                                              List<String> requestedHosts,
+                                              String profileId,
+                                              Instant expiresAt) {
 
         public SandboxSessionCreateRequest {
             requestedHosts = requestedHosts == null ? List.of() : List.copyOf(requestedHosts);
+            profileId = profileId == null || profileId.trim().isEmpty() ? null : profileId.trim();
         }
     }
 

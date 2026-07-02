@@ -18,6 +18,8 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
@@ -39,6 +41,8 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.ResourceHttpMessageConverter;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -64,7 +68,9 @@ class SeahorseSandboxControllerTests {
 
     private static final Instant NOW = Instant.parse("2026-05-26T00:00:00Z");
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     @Test
     void shouldExposeSandboxRuntimeApis() throws Exception {
@@ -106,7 +112,11 @@ class SeahorseSandboxControllerTests {
                 new SeahorseSandboxController(
                         provider(SandboxRuntimeInboundPort.class, port),
                         AdvancedFeatureGate.allEnabledForTests(),
-                        provider(ObjectStoragePort.class, storagePort))).build();
+                        provider(ObjectStoragePort.class, storagePort)))
+                .setMessageConverters(
+                        new MappingJackson2HttpMessageConverter(objectMapper),
+                        new ResourceHttpMessageConverter())
+                .build();
 
         mvc.perform(post("/api/sandbox/sessions")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -119,7 +129,9 @@ class SeahorseSandboxControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.sessionId").value("session-1"))
-                .andExpect(jsonPath("$.data.status").value("CREATED"));
+                .andExpect(jsonPath("$.data.status").value("CREATED"))
+                .andExpect(jsonPath("$.data.profileId").value("python-small"))
+                .andExpect(jsonPath("$.data.expiresAt").value("2026-05-26T01:00:00Z"));
 
         ArgumentCaptor<SandboxSessionCreateCommand> createCaptor =
                 ArgumentCaptor.forClass(SandboxSessionCreateCommand.class);
@@ -154,7 +166,9 @@ class SeahorseSandboxControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].sessionId").value("session-1"))
                 .andExpect(jsonPath("$.data[0].tenantId").value("tenant-a"))
-                .andExpect(jsonPath("$.data[0].runtimeType").value("CODE_INTERPRETER"));
+                .andExpect(jsonPath("$.data[0].runtimeType").value("CODE_INTERPRETER"))
+                .andExpect(jsonPath("$.data[0].profileId").value("python-small"))
+                .andExpect(jsonPath("$.data[0].expiresAt").value("2026-05-26T01:00:00Z"));
         verify(port).listSessions("tenant-a", 20);
 
         mvc.perform(get("/api/sandbox/sessions/session-1/executions"))

@@ -80,6 +80,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     safeRequest.tenantId(),
                     safeRequest.runId(),
                     safeRequest.runtimeType(),
+                    safeRequest.profileId(),
+                    safeRequest.expiresAt(),
                     now);
         } catch (IOException ex) {
             return SandboxSession.failed(
@@ -88,6 +90,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     safeRequest.runId(),
                     safeRequest.runtimeType(),
                     SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED,
+                    safeRequest.profileId(),
+                    safeRequest.expiresAt(),
                     now);
         }
     }

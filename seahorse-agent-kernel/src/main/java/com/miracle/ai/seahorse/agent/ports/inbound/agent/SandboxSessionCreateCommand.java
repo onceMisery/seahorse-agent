@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
@@ -26,13 +27,24 @@ public record SandboxSessionCreateCommand(String tenantId,
                                           String runId,
                                           SandboxRuntimeType runtimeType,
                                           boolean networkRequested,
-                                          List<String> requestedHosts) {
+                                          List<String> requestedHosts,
+                                          String profileId,
+                                          Instant expiresAt) {
+
+    public SandboxSessionCreateCommand(String tenantId,
+                                       String runId,
+                                       SandboxRuntimeType runtimeType,
+                                       boolean networkRequested,
+                                       List<String> requestedHosts) {
+        this(tenantId, runId, runtimeType, networkRequested, requestedHosts, null, null);
+    }
 
     public SandboxSessionCreateCommand {
         tenantId = requireText(tenantId, "tenantId must not be blank");
         runId = requireText(runId, "runId must not be blank");
         runtimeType = Objects.requireNonNull(runtimeType, "runtimeType must not be null");
         requestedHosts = requestedHosts == null ? List.of() : List.copyOf(requestedHosts);
+        profileId = profileId == null || profileId.trim().isEmpty() ? null : profileId.trim();
     }
 
     private static String requireText(String value, String message) {

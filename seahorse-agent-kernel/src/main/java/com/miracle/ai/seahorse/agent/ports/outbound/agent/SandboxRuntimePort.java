@@ -43,6 +43,8 @@ public interface SandboxRuntimePort {
                         request.tenantId(),
                         request.runId(),
                         request.runtimeType(),
+                        request.profileId(),
+                        request.expiresAt(),
                         Instant.now());
             }
 

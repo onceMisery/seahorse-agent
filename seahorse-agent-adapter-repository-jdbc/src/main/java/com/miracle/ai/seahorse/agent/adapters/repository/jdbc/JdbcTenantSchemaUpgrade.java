@@ -98,6 +98,7 @@ public class JdbcTenantSchemaUpgrade {
         log.info("[TenantSchema] 开始多租户 schema 升级...");
         addTenantIdColumns();
         upgradeAuthRefreshTokenColumns();
+        upgradeSandboxSessionRuntimeGovernance();
         upgradeAiModelConfigUniqueness();
         enableRowLevelSecurity();
         log.info("[TenantSchema] 多租户 schema 升级完成");
@@ -157,6 +158,50 @@ public class JdbcTenantSchemaUpgrade {
         }
     }
 
+    private void upgradeSandboxSessionRuntimeGovernance() {
+        if (!tableExists("sa_sandbox_session")) {
+            return;
+        }
+        addColumnIfMissing("sa_sandbox_session", "profile_id", "VARCHAR(64)");
+        addColumnIfMissing("sa_sandbox_session", "expires_at", "TIMESTAMP");
+        jdbcTemplate.update("""
+                UPDATE sa_sandbox_session
+                SET profile_id = CASE runtime_type
+                    WHEN 'CODE_INTERPRETER' THEN 'python-small'
+                    WHEN 'BROWSER_AUTOMATION' THEN 'browser-readonly'
+                    WHEN 'FILE_CONVERSION' THEN 'file-conversion'
+                    WHEN 'SHELL' THEN 'shell-restricted'
+                    ELSE 'shell-restricted'
+                END
+                WHERE profile_id IS NULL OR TRIM(profile_id) = ''
+                """);
+        backfillSandboxSessionExpiresAt();
+        setColumnNotNull("sa_sandbox_session", "profile_id");
+        setColumnNotNull("sa_sandbox_session", "expires_at");
+        try {
+            jdbcTemplate.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_sa_sandbox_session_expires ON sa_sandbox_session(tenant_id, expires_at)");
+        } catch (Exception e) {
+            log.warn("[TenantSchema] 创建 sa_sandbox_session expires 索引失败: {}", e.getMessage());
+        }
+    }
+
+    private void backfillSandboxSessionExpiresAt() {
+        try {
+            jdbcTemplate.update("""
+                    UPDATE sa_sandbox_session
+                    SET expires_at = created_at + INTERVAL '1 hour'
+                    WHERE expires_at IS NULL
+                    """);
+        } catch (Exception ex) {
+            jdbcTemplate.update("""
+                    UPDATE sa_sandbox_session
+                    SET expires_at = DATEADD('HOUR', 1, created_at)
+                    WHERE expires_at IS NULL
+                    """);
+        }
+    }
+
     private void enableRls(String table) {
         try {
             // ENABLE ROW LEVEL SECURITY 是幂等的（PostgreSQL 不会报错）
@@ -180,18 +225,31 @@ public class JdbcTenantSchemaUpgrade {
 
     private boolean tableExists(String tableName) {
         Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = ?",
+                "SELECT COUNT(*) FROM information_schema.tables WHERE lower(table_name) = lower(?)",
                 Integer.class, tableName);
         return count != null && count > 0;
     }
 
     private void addColumnIfMissing(String table, String column, String definition) {
+        if (columnExists(table, column)) {
+            return;
+        }
+        jdbcTemplate.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
+        log.info("[TenantSchema] 为表 {} 添加列 {}", table, column);
+    }
+
+    private boolean columnExists(String table, String column) {
         Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = ? AND column_name = ?",
+                "SELECT COUNT(*) FROM information_schema.columns WHERE lower(table_name) = lower(?) AND lower(column_name) = lower(?)",
                 Integer.class, table, column);
-        if (count == null || count == 0) {
-            jdbcTemplate.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
-            log.info("[TenantSchema] 为表 {} 添加列 {}", table, column);
+        return count != null && count > 0;
+    }
+
+    private void setColumnNotNull(String table, String column) {
+        try {
+            jdbcTemplate.execute("ALTER TABLE " + table + " ALTER COLUMN " + column + " SET NOT NULL");
+        } catch (Exception e) {
+            log.warn("[TenantSchema] 设置 {}.{} NOT NULL 失败: {}", table, column, e.getMessage());
         }
     }
 }

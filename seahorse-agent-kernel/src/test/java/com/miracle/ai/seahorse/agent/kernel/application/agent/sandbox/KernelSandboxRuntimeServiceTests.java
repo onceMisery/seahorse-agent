@@ -102,6 +102,28 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldApplyRuntimeProfileAndTtlWhenCreatingSession() {
+        RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                runtime,
+                new MemoryArtifactPort(),
+                CLOCK);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        assertEquals("python-small", session.profileId());
+        assertEquals(NOW.plusSeconds(3600), session.expiresAt());
+        assertEquals("python-small", runtime.createSessionRequest.profileId());
+        assertEquals(NOW.plusSeconds(3600), runtime.createSessionRequest.expiresAt());
+    }
+
+    @Test
     void shouldFailClosedWhenExecutingDeniedSession() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
         KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
@@ -697,6 +719,7 @@ class KernelSandboxRuntimeServiceTests {
         private boolean createSessionCalled;
         private boolean executeCalled;
         private boolean closeSessionCalled;
+        private SandboxSessionRequest createSessionRequest;
 
         private RecordingSandboxRuntimePort() {
             this(List.of(
@@ -711,11 +734,14 @@ class KernelSandboxRuntimeServiceTests {
         @Override
         public SandboxSession createSession(SandboxSessionRequest request) {
             createSessionCalled = true;
+            createSessionRequest = request;
             return SandboxSession.created(
                     "session-1",
                     request.tenantId(),
                     request.runId(),
                     request.runtimeType(),
+                    request.profileId(),
+                    request.expiresAt(),
                     NOW);
         }
 

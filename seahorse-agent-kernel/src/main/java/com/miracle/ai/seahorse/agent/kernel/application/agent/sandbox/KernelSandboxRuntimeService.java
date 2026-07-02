@@ -213,14 +213,21 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 safeCommand.runtimeType(),
                 safeCommand.networkRequested(),
                 safeCommand.requestedHosts()));
+        String profileId = SandboxSession.profileIdOrDefault(safeCommand.profileId(), safeCommand.runtimeType());
+        Instant expiresAt = safeCommand.expiresAt() == null
+                ? SandboxSession.defaultExpiresAt(clock.instant())
+                : safeCommand.expiresAt();
         if (!decision.allowsExecution()) {
+            Instant now = clock.instant();
             SandboxSession denied = SandboxSession.failed(
                     sessionId(),
                     safeCommand.tenantId(),
                     safeCommand.runId(),
                     safeCommand.runtimeType(),
                     decision.reasonCode(),
-                    clock.instant());
+                    profileId,
+                    expiresAt,
+                    now);
             return saveSession(denied, AuditEventType.SANDBOX_SESSION_CREATED);
         }
         SandboxSession session = runtimePort.createSession(new SandboxSessionRequest(
@@ -228,8 +235,13 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 safeCommand.runId(),
                 safeCommand.runtimeType(),
                 safeCommand.networkRequested(),
-                safeCommand.requestedHosts()));
-        return saveSession(session, AuditEventType.SANDBOX_SESSION_CREATED);
+                safeCommand.requestedHosts(),
+                profileId,
+                expiresAt));
+        SandboxSession governed = session.withRuntimeGovernance(
+                profileId,
+                expiresAt);
+        return saveSession(governed, AuditEventType.SANDBOX_SESSION_CREATED);
     }
 
     @Override
@@ -513,9 +525,11 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 RESOURCE_TYPE_SANDBOX_SESSION,
                 session.sessionId(),
                 """
-                        {"sessionId":"%s","runtimeType":"%s","status":"%s","reasonCode":"%s"}
+                        {"sessionId":"%s","runtimeType":"%s","profileId":"%s","expiresAt":"%s","status":"%s","reasonCode":"%s"}
                         """.formatted(session.sessionId(),
                         session.runtimeType().name(),
+                        session.profileId(),
+                        session.expiresAt(),
                         session.status().name(),
                         session.reasonCode().name()),
                 now));

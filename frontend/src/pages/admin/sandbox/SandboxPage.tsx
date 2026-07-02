@@ -297,6 +297,16 @@ export function SandboxPage() {
                 <div className="text-sm">
                   <span className="text-slate-500">会话 ID：</span> {session.sessionId}
                 </div>
+                <div className="grid gap-2 rounded border border-slate-100 bg-slate-50 p-3 text-xs text-muted-foreground sm:grid-cols-2">
+                  <div>
+                    <div className="uppercase">Profile</div>
+                    <div className="font-mono text-slate-700">{session.profileId || "-"}</div>
+                  </div>
+                  <div>
+                    <div className="uppercase">Expires</div>
+                    <div className="text-slate-700">{formatTimestamp(session.expiresAt)}</div>
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">工具 ID（可选）</label>
                   <Input value={toolId} onChange={(e) => setToolId(e.target.value)} placeholder="tool-id" />
@@ -371,6 +381,8 @@ export function SandboxPage() {
                         <div className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
                           <div className="truncate">{item.runtimeType || "CODE_INTERPRETER"}</div>
                           <div className="truncate sm:text-right">{formatTimestamp(item.updatedAt || item.createdAt)}</div>
+                          <div className="truncate">Profile: {item.profileId || "-"}</div>
+                          <div className="truncate sm:text-right">Expires: {formatTimestamp(item.expiresAt)}</div>
                         </div>
                         {item.runId && (
                           <div className="mt-1 truncate text-xs text-muted-foreground">

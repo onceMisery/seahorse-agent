@@ -46,7 +46,7 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
         SandboxArtifactQueryPort {
 
     private static final String SESSION_COLUMNS = """
-            session_id, tenant_id, run_id, runtime_type, status, reason_code, created_at, updated_at
+            session_id, tenant_id, run_id, runtime_type, status, reason_code, profile_id, expires_at, created_at, updated_at
             """;
     private static final String EXECUTION_COLUMNS = """
             execution_id, session_id, runtime_type, status, result_summary, reason_code, created_at, updated_at
@@ -57,8 +57,8 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
 
     private static final String SQL_INSERT_SESSION = """
             INSERT INTO sa_sandbox_session
-            (session_id, tenant_id, run_id, runtime_type, status, reason_code, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (session_id, tenant_id, run_id, runtime_type, status, reason_code, profile_id, expires_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String SQL_UPDATE_SESSION = """
             UPDATE sa_sandbox_session
@@ -67,6 +67,8 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 runtime_type = ?,
                 status = ?,
                 reason_code = ?,
+                profile_id = ?,
+                expires_at = ?,
                 created_at = ?,
                 updated_at = ?
             WHERE session_id = ?
@@ -248,6 +250,8 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 session.runtimeType().name(),
                 session.status().name(),
                 session.reasonCode().name(),
+                session.profileId(),
+                toTimestamp(session.expiresAt()),
                 toTimestamp(session.createdAt()),
                 toTimestamp(session.updatedAt()));
     }
@@ -259,6 +263,8 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 session.runtimeType().name(),
                 session.status().name(),
                 session.reasonCode().name(),
+                session.profileId(),
+                toTimestamp(session.expiresAt()),
                 toTimestamp(session.createdAt()),
                 toTimestamp(session.updatedAt()),
                 session.sessionId());
@@ -328,6 +334,8 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 SandboxRuntimeType.valueOf(resultSet.getString("runtime_type")),
                 SandboxExecutionStatus.valueOf(resultSet.getString("status")),
                 SandboxPolicyReasonCode.valueOf(resultSet.getString("reason_code")),
+                resultSet.getString("profile_id"),
+                toInstant(resultSet.getTimestamp("expires_at")),
                 toInstant(resultSet.getTimestamp("created_at")),
                 toInstant(resultSet.getTimestamp("updated_at")));
     }

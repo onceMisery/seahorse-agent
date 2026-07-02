@@ -1698,6 +1698,8 @@ CREATE TABLE IF NOT EXISTS sa_sandbox_session (
   runtime_type VARCHAR(32) NOT NULL,
   status VARCHAR(32) NOT NULL,
   reason_code VARCHAR(64) NOT NULL,
+  profile_id VARCHAR(64) NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
   created_at TIMESTAMP NOT NULL,
   updated_at TIMESTAMP NOT NULL
 );
@@ -1707,6 +1709,9 @@ CREATE INDEX IF NOT EXISTS idx_sa_sandbox_session_run
 
 CREATE INDEX IF NOT EXISTS idx_sa_sandbox_session_tenant_updated
   ON sa_sandbox_session(tenant_id, updated_at DESC, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_sa_sandbox_session_expires
+  ON sa_sandbox_session(tenant_id, expires_at);
 
 CREATE TABLE IF NOT EXISTS sa_sandbox_execution (
   pk_id BIGSERIAL PRIMARY KEY,

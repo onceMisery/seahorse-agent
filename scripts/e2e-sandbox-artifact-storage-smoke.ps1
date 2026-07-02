@@ -240,12 +240,33 @@ try {
     }
     if (-not $objectUri) { exit 1 }
 
+    Test-Step "Verify persisted sandbox session profile and TTL metadata" {
+        $safeSessionId = $sessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT profile_id, (expires_at > created_at) FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 2) {
+            throw "Unexpected sa_sandbox_session row: $row"
+        }
+        if ($parts[0] -ne "python-small") {
+            throw "Expected python-small profile but got '$($parts[0])'"
+        }
+        if ($parts[1] -ne "t") {
+            throw "Expected expires_at to be after created_at but got '$($parts[1])'"
+        }
+    } | Out-Null
+
     Test-Step "Verify sandbox session list includes session without storage URI" {
         $response = Invoke-Json -Method GET -Path "/api/sandbox/sessions?tenantId=default&limit=20" -Headers $headers
         Assert-ApiOk $response "List sandbox sessions"
         $matched = @($response.data | Where-Object { "$($_.sessionId)" -eq $sessionId })
         if ($matched.Count -ne 1) {
             throw "Session $sessionId not found in sandbox session API response"
+        }
+        if ("$($matched[0].profileId)" -ne "python-small") {
+            throw "Expected sandbox session API profileId=python-small: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if (-not "$($matched[0].expiresAt)") {
+            throw "Sandbox session API did not include expiresAt: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
         }
         $sessionJson = $matched[0] | ConvertTo-Json -Depth 20 -Compress
         if ($sessionJson -match "objectUri|object_uri|storageRef|file:|local://|s3://") {

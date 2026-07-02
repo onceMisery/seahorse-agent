@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 
@@ -26,8 +27,23 @@ public record SandboxSession(String sessionId,
                              SandboxRuntimeType runtimeType,
                              SandboxExecutionStatus status,
                              SandboxPolicyReasonCode reasonCode,
+                             String profileId,
+                             Instant expiresAt,
                              Instant createdAt,
                              Instant updatedAt) {
+
+    public static final Duration DEFAULT_SESSION_TTL = Duration.ofHours(1);
+
+    public SandboxSession(String sessionId,
+                          String tenantId,
+                          String runId,
+                          SandboxRuntimeType runtimeType,
+                          SandboxExecutionStatus status,
+                          SandboxPolicyReasonCode reasonCode,
+                          Instant createdAt,
+                          Instant updatedAt) {
+        this(sessionId, tenantId, runId, runtimeType, status, reasonCode, null, null, createdAt, updatedAt);
+    }
 
     public SandboxSession {
         sessionId = requireText(sessionId, "sessionId must not be blank");
@@ -36,7 +52,9 @@ public record SandboxSession(String sessionId,
         runtimeType = Objects.requireNonNull(runtimeType, "runtimeType must not be null");
         status = Objects.requireNonNullElse(status, SandboxExecutionStatus.CREATED);
         reasonCode = Objects.requireNonNullElse(reasonCode, SandboxPolicyReasonCode.VALID_REQUEST);
+        profileId = profileIdOrDefault(profileId, runtimeType);
         createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
+        expiresAt = normalizeExpiresAt(expiresAt, createdAt);
         updatedAt = Objects.requireNonNullElse(updatedAt, createdAt);
     }
 
@@ -49,6 +67,18 @@ public record SandboxSession(String sessionId,
                 SandboxExecutionStatus.CREATED, SandboxPolicyReasonCode.VALID_REQUEST, createdAt, createdAt);
     }
 
+    public static SandboxSession created(String sessionId,
+                                         String tenantId,
+                                         String runId,
+                                         SandboxRuntimeType runtimeType,
+                                         String profileId,
+                                         Instant expiresAt,
+                                         Instant createdAt) {
+        return new SandboxSession(sessionId, tenantId, runId, runtimeType,
+                SandboxExecutionStatus.CREATED, SandboxPolicyReasonCode.VALID_REQUEST,
+                profileId, expiresAt, createdAt, createdAt);
+    }
+
     public static SandboxSession failed(String sessionId,
                                         String tenantId,
                                         String runId,
@@ -59,6 +89,18 @@ public record SandboxSession(String sessionId,
                 SandboxExecutionStatus.FAILED, reasonCode, createdAt, createdAt);
     }
 
+    public static SandboxSession failed(String sessionId,
+                                        String tenantId,
+                                        String runId,
+                                        SandboxRuntimeType runtimeType,
+                                        SandboxPolicyReasonCode reasonCode,
+                                        String profileId,
+                                        Instant expiresAt,
+                                        Instant createdAt) {
+        return new SandboxSession(sessionId, tenantId, runId, runtimeType,
+                SandboxExecutionStatus.FAILED, reasonCode, profileId, expiresAt, createdAt, createdAt);
+    }
+
     public SandboxSession closed(Instant closedAt) {
         return new SandboxSession(
                 sessionId,
@@ -67,8 +109,47 @@ public record SandboxSession(String sessionId,
                 runtimeType,
                 SandboxExecutionStatus.CANCELLED,
                 reasonCode,
+                profileId,
+                expiresAt,
                 createdAt,
                 Objects.requireNonNullElse(closedAt, updatedAt));
+    }
+
+    public SandboxSession withRuntimeGovernance(String profileId, Instant expiresAt) {
+        return new SandboxSession(
+                sessionId,
+                tenantId,
+                runId,
+                runtimeType,
+                status,
+                reasonCode,
+                profileId,
+                expiresAt,
+                createdAt,
+                updatedAt);
+    }
+
+    public static String profileIdOrDefault(String profileId, SandboxRuntimeType runtimeType) {
+        if (profileId != null && !profileId.trim().isEmpty()) {
+            return profileId.trim();
+        }
+        return switch (Objects.requireNonNull(runtimeType, "runtimeType must not be null")) {
+            case CODE_INTERPRETER -> "python-small";
+            case BROWSER_AUTOMATION -> "browser-readonly";
+            case FILE_CONVERSION -> "file-conversion";
+            case SHELL -> "shell-restricted";
+        };
+    }
+
+    public static Instant defaultExpiresAt(Instant createdAt) {
+        return Objects.requireNonNull(createdAt, "createdAt must not be null").plus(DEFAULT_SESSION_TTL);
+    }
+
+    private static Instant normalizeExpiresAt(Instant expiresAt, Instant createdAt) {
+        if (expiresAt == null || expiresAt.isBefore(createdAt)) {
+            return defaultExpiresAt(createdAt);
+        }
+        return expiresAt;
     }
 
     private static String requireText(String value, String message) {

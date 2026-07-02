@@ -11,6 +11,8 @@ export interface SandboxSession {
   runtimeType?: string;
   status?: string;
   reasonCode?: string;
+  profileId?: string;
+  expiresAt?: string;
   agentId?: string;
   createTime?: string;
   closeTime?: string;
@@ -62,6 +64,8 @@ export interface SandboxSessionCreatePayload {
   runtimeType?: "CODE_INTERPRETER" | "BROWSER_AUTOMATION" | "SHELL" | "FILE_CONVERSION";
   networkRequested?: boolean;
   requestedHosts?: string[];
+  profileId?: string;
+  expiresAt?: string;
 }
 
 export interface SandboxExecutePayload {
@@ -82,13 +86,20 @@ function createRunId() {
 }
 
 export function createSandboxSession(payload: SandboxSessionCreatePayload = {}) {
-  return api.post<SandboxSession, SandboxSession>("/api/sandbox/sessions", {
+  const request: SandboxSessionCreatePayload = {
     tenantId: payload.tenantId?.trim() || currentTenantId(),
     runId: payload.runId?.trim() || createRunId(),
     runtimeType: payload.runtimeType || DEFAULT_RUNTIME_TYPE,
     networkRequested: payload.networkRequested ?? false,
     requestedHosts: payload.requestedHosts || []
-  });
+  };
+  if (payload.profileId?.trim()) {
+    request.profileId = payload.profileId.trim();
+  }
+  if (payload.expiresAt?.trim()) {
+    request.expiresAt = payload.expiresAt.trim();
+  }
+  return api.post<SandboxSession, SandboxSession>("/api/sandbox/sessions", request);
 }
 
 export function listSandboxSessions(tenantId = currentTenantId(), limit = 20) {
