@@ -34,7 +34,7 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 | 缺口 | 影响 | 设计处理 |
 | --- | --- | --- |
 | 真实隔离 runtime 覆盖仍窄 | Code Interpreter Python 最小容器闭环与 full-compose backend Docker host-socket opt-in 接入已落地；Browser Automation、Shell、File Conversion 仍未完成 | 扩展 Docker/Podman adapter 的 profile 覆盖，P1/P2 可替换为 gVisor 或 Firecracker |
-| 真实 runtime 清理仍需生产化 | 当前 adapter 使用 `--rm` 并在 close 时删除 per-session workspace；session TTL metadata 已持久化，仍缺 TTL 到期后台清理、孤儿容器巡检、runtime pool 清理 | 接入后台清理任务、孤儿容器巡检和 runtime 节点健康检查 |
+| 真实 runtime 清理仍需生产化 | 当前 adapter 使用 `--rm` 并在 close 时删除 per-session workspace；session TTL metadata 已持久化，管理员手动 expired session sweep 已可将过期未终态 session 释放并标记为 `TIMED_OUT`；仍缺 TTL 到期后台定时清理、孤儿容器巡检、runtime pool 清理 | 接入后台清理任务、孤儿容器巡检和 runtime 节点健康检查 |
 | 资源配额仍不完整 | 当前 adapter 有固定 CPU、内存、pids、timeout、stdout/stderr limit，session `profileId`/`expiresAt` 已持久化；仍缺磁盘配额和按 tenant/agent/tool 的资源策略联动 | 新增 `SandboxResourcePolicy` 和更完整 runtime profile policy |
 | 真实 artifact 产物已进入最小闭环 | Code Interpreter adapter 已收集 workspace 文件，kernel 已将 prompt-visible file:// artifact 写入 object storage，并通过治理 API 下载/查看详情 | 后续补齐 preview、生命周期和更广运行时产物 |
 | 内容级 artifact 扫描仍需加固 | 基础 metadata scanner、file:// 文本类 secret/PII 内容阻断和 prompt visibility gate 已落地；仍缺病毒扫描、二进制/PDF 深度扫描、redaction summary | 后续接入专业扫描引擎和可审计 redaction summary |
@@ -234,6 +234,7 @@ P0 profile：
 | `POST` | `/api/sandbox/sessions` | 创建 session |
 | `POST` | `/api/sandbox/sessions/{sessionId}/execute` | 执行输入 |
 | `POST` | `/api/sandbox/sessions/{sessionId}/close` | 关闭并释放 runtime |
+| `POST` | `/api/sandbox/sessions/expired:sweep` | 手动 sweep 过期未终态 session，释放 runtime 并标记为 `TIMED_OUT` |
 | `GET` | `/api/sandbox/sessions/{sessionId}/executions` | 执行历史 |
 | `GET` | `/api/sandbox/sessions/{sessionId}/artifacts` | artifact 列表 |
 | `GET` | `/api/sandbox/artifacts/{artifactId}` | artifact 元数据 |
@@ -245,7 +246,7 @@ P0 profile：
 
 | 区域 | 内容 |
 | --- | --- |
-| Session 列表 | runtimeType、status、runId、profile、createdAt、expiresAt |
+| Session 列表 | runtimeType、status、runId、profile、createdAt、expiresAt、手动 expired sweep |
 | Policy Preview | network、host、quota、profile 的 allow/deny 解释 |
 | Execution Console | 输入、执行、stdout/stderr、reasonCode、duration |
 | Artifact Browser | scan status、promptVisible、mimeType、download、preview |
@@ -278,7 +279,7 @@ P0 profile：
 4. 禁止把平台 secret 注入 sandbox；需要外部凭据时通过受控 proxy。
 5. stdout/stderr/output artifact 都做 size limit。
 6. artifact scan 失败时不可 prompt visible。
-7. session TTL 到期必须 close 并清理资源。
+7. session TTL 到期必须 close 并清理资源；当前已提供管理员手动 expired sweep，后台定时清理和孤儿 runtime 巡检仍需后续补齐。
 8. audit payload 只保存摘要、状态和引用，不保存完整敏感输入。
 
 ## 10. 分阶段落地
@@ -311,7 +312,7 @@ P0 profile：
 1. 引入 egress proxy、runtime pool health、镜像签名。
 2. 增加 gVisor/Firecracker profile。
 3. 加入 tenant/agent 级 sandbox quota。
-4. 增加自动清理与孤儿容器巡检。
+4. 增加自动清理与孤儿容器巡检。（管理员手动 expired session sweep 已补齐，后台定时化和孤儿 runtime 巡检仍后续）
 
 ## 11. 验收标准
 
@@ -319,7 +320,7 @@ P0 profile：
 2. 配置 Docker/Podman adapter 后，Python profile 可在隔离容器内执行简单脚本。（已由 host JVM + Docker CLI smoke 覆盖）
 3. 默认网络 deny 时，请求外部 host 会被 policy 或 runtime 拦截。（当前 adapter 使用 `--network none`；allowlist/egress proxy 后续）
 4. allowlisted host 可访问，非 allowlisted host 被拒绝并写 audit。
-5. session close 会释放容器和 workspace。（当前 adapter 使用 `--rm` 并删除 workspace；TTL/孤儿容器巡检后续）
+5. session close 会释放容器和 workspace。（当前 adapter 使用 `--rm` 并删除 workspace；管理员手动 TTL sweep 已验证 `TIMED_OUT` 持久化；后台定时 TTL/孤儿容器巡检后续）
 6. artifact 未扫描通过前不会出现在 prompt-visible artifact 列表中。
 7. execution history 可按 session 查询。
 8. Agent tool 调用 sandbox 时，Tool Gateway、Policy、Audit 均生效。（`sandbox_python` 已有单测与 Docker smoke 证据；更广工具后续）

@@ -85,6 +85,15 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
             ORDER BY updated_at DESC, created_at DESC, session_id DESC
             LIMIT ?
             """.formatted(SESSION_COLUMNS);
+    private static final String SQL_LIST_EXPIRED_ACTIVE_SESSIONS = """
+            SELECT %s
+            FROM sa_sandbox_session
+            WHERE tenant_id = ?
+              AND expires_at <= ?
+              AND status NOT IN (?, ?, ?, ?)
+            ORDER BY expires_at ASC, created_at ASC, session_id ASC
+            LIMIT ?
+            """.formatted(SESSION_COLUMNS);
 
     private static final String SQL_INSERT_EXECUTION = """
             INSERT INTO sa_sandbox_execution
@@ -181,6 +190,22 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
             return List.of();
         }
         return jdbcTemplate.query(SQL_LIST_SESSIONS_BY_TENANT, this::mapSession, tenantId.trim(), limit);
+    }
+
+    @Override
+    public List<SandboxSession> listExpiredActiveSessions(String tenantId, Instant now, int limit) {
+        if (!hasText(tenantId) || now == null || limit <= 0) {
+            return List.of();
+        }
+        return jdbcTemplate.query(SQL_LIST_EXPIRED_ACTIVE_SESSIONS,
+                this::mapSession,
+                tenantId.trim(),
+                toTimestamp(now),
+                SandboxExecutionStatus.SUCCEEDED.name(),
+                SandboxExecutionStatus.FAILED.name(),
+                SandboxExecutionStatus.TIMED_OUT.name(),
+                SandboxExecutionStatus.CANCELLED.name(),
+                limit);
     }
 
     @Override

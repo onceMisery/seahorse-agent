@@ -34,6 +34,8 @@ public interface SandboxRuntimeInboundPort {
 
     List<SandboxSession> listSessions(String tenantId, int limit);
 
+    SandboxSessionSweepResult sweepExpiredSessions(String tenantId, int limit);
+
     List<SandboxExecution> listExecutions(String sessionId);
 
     List<SandboxArtifact> listArtifacts(String sessionId);

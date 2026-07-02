@@ -115,6 +115,20 @@ public record SandboxSession(String sessionId,
                 Objects.requireNonNullElse(closedAt, updatedAt));
     }
 
+    public SandboxSession timedOut(Instant timedOutAt) {
+        return new SandboxSession(
+                sessionId,
+                tenantId,
+                runId,
+                runtimeType,
+                SandboxExecutionStatus.TIMED_OUT,
+                SandboxPolicyReasonCode.RUNTIME_TIMED_OUT,
+                profileId,
+                expiresAt,
+                createdAt,
+                Objects.requireNonNullElse(timedOutAt, updatedAt));
+    }
+
     public SandboxSession withRuntimeGovernance(String profileId, Instant expiresAt) {
         return new SandboxSession(
                 sessionId,

@@ -20,6 +20,15 @@ export interface SandboxSession {
   updatedAt?: string;
 }
 
+export interface SandboxSessionSweepResult {
+  tenantId?: string;
+  sweptAt?: string;
+  matchedCount?: number;
+  closedCount?: number;
+  failedCount?: number;
+  closedSessions?: SandboxSession[];
+}
+
 export interface SandboxExecution {
   executionId?: string;
   sessionId?: string;
@@ -109,6 +118,19 @@ export function listSandboxSessions(tenantId = currentTenantId(), limit = 20) {
       limit
     }
   });
+}
+
+export function sweepExpiredSandboxSessions(tenantId = currentTenantId(), limit = 20) {
+  return api.post<SandboxSessionSweepResult, SandboxSessionSweepResult>(
+    "/api/sandbox/sessions/expired:sweep",
+    undefined,
+    {
+      params: {
+        tenantId,
+        limit
+      }
+    }
+  );
 }
 
 export function executeInSandbox(sessionId: string, payload: SandboxExecutePayload) {

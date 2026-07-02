@@ -1345,6 +1345,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/api/sandbox/sessions/expired:sweep"
+  },
+  {
+    "method": "POST",
     "path": "/api/sandbox/sessions/{}/close"
   },
   {

@@ -154,6 +154,14 @@ function Invoke-PostgresScalar {
     return $rows[0]
 }
 
+function Invoke-PostgresNonQuery {
+    param([string]$Sql)
+    & docker exec $PostgresContainer psql -U $PostgresUser -d $PostgresDatabase -q -c $Sql | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "psql exited with $LASTEXITCODE for SQL: $Sql"
+    }
+}
+
 try {
     if (-not $SkipHealth) {
         Test-Step "Wait for backend health" {
@@ -271,6 +279,51 @@ try {
         $sessionJson = $matched[0] | ConvertTo-Json -Depth 20 -Compress
         if ($sessionJson -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
             throw "Sandbox session API leaked storage URI fields: $sessionJson"
+        }
+    } | Out-Null
+
+    Test-Step "Sweep expired sandbox session as TIMED_OUT" {
+        $expiredRunId = "sandbox-expired-sweep-run-$suffix"
+        $create = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
+            tenantId = "default"
+            runId = $expiredRunId
+            runtimeType = "CODE_INTERPRETER"
+            networkRequested = $false
+            requestedHosts = @()
+        }
+        Assert-ApiOk $create "Create expired sweep sandbox session"
+        $expiredSessionId = "$($create.data.sessionId)"
+        if (-not $expiredSessionId) {
+            throw "Create sandbox session response did not include sessionId"
+        }
+        $safeExpiredSessionId = $expiredSessionId.Replace("'", "''")
+        Invoke-PostgresNonQuery "UPDATE sa_sandbox_session SET created_at = now() - interval '2 hours', expires_at = now() - interval '1 hour', updated_at = now() - interval '2 hours' WHERE session_id = '$safeExpiredSessionId';"
+
+        $sweep = Invoke-Json -Method POST -Path "/api/sandbox/sessions/expired:sweep?tenantId=default&limit=20" -Headers $headers
+        Assert-ApiOk $sweep "Sweep expired sandbox sessions"
+        if ([int]$sweep.data.closedCount -lt 1) {
+            throw "Expected sweep closedCount >= 1: $($sweep.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ([int]$sweep.data.failedCount -ne 0) {
+            throw "Expected sweep failedCount=0: $($sweep.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $closed = @($sweep.data.closedSessions | Where-Object { "$($_.sessionId)" -eq $expiredSessionId })
+        if ($closed.Count -ne 1) {
+            throw "Expired session $expiredSessionId not found in sweep closedSessions: $($sweep.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($closed[0].status)" -ne "TIMED_OUT") {
+            throw "Expected sweep closed session status TIMED_OUT: $($closed[0] | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $row = Invoke-PostgresScalar "SELECT status, reason_code FROM sa_sandbox_session WHERE session_id = '$safeExpiredSessionId';"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 2) {
+            throw "Unexpected expired session DB row: $row"
+        }
+        if ($parts[0] -ne "TIMED_OUT") {
+            throw "Expected DB status TIMED_OUT after sweep but got '$($parts[0])'"
+        }
+        if ($parts[1] -ne "RUNTIME_TIMED_OUT") {
+            throw "Expected DB reason_code RUNTIME_TIMED_OUT after sweep but got '$($parts[1])'"
         }
     } | Out-Null
 

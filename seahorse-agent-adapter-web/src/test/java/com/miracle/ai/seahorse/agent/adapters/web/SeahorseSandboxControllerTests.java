@@ -34,6 +34,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownload
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionSweepResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -86,6 +87,13 @@ class SeahorseSandboxControllerTests {
                 SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED));
         when(port.close("session-1")).thenReturn(session(SandboxExecutionStatus.CANCELLED));
         when(port.listSessions("tenant-a", 20)).thenReturn(List.of(session(SandboxExecutionStatus.CREATED)));
+        when(port.sweepExpiredSessions("tenant-a", 20)).thenReturn(new SandboxSessionSweepResult(
+                "tenant-a",
+                NOW,
+                1,
+                1,
+                0,
+                List.of(session(SandboxExecutionStatus.TIMED_OUT))));
         when(port.listExecutions("session-1")).thenReturn(List.of(SandboxExecution.failed(
                 "exec-1",
                 "session-1",
@@ -170,6 +178,17 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data[0].profileId").value("python-small"))
                 .andExpect(jsonPath("$.data[0].expiresAt").value("2026-05-26T01:00:00Z"));
         verify(port).listSessions("tenant-a", 20);
+
+        mvc.perform(post("/api/sandbox/sessions/expired:sweep")
+                        .param("tenantId", "tenant-a")
+                        .param("limit", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tenantId").value("tenant-a"))
+                .andExpect(jsonPath("$.data.matchedCount").value(1))
+                .andExpect(jsonPath("$.data.closedCount").value(1))
+                .andExpect(jsonPath("$.data.failedCount").value(0))
+                .andExpect(jsonPath("$.data.closedSessions[0].status").value("TIMED_OUT"));
+        verify(port).sweepExpiredSessions("tenant-a", 20);
 
         mvc.perform(get("/api/sandbox/sessions/session-1/executions"))
                 .andExpect(status().isOk())

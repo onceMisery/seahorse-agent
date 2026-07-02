@@ -126,6 +126,53 @@ class JdbcSandboxRepositoryAdapterTests {
         assertThat(adapter.findArtifactById(" ")).isEmpty();
     }
 
+    @Test
+    void shouldListExpiredActiveSandboxSessionsByTenantAndExpirationOrder() {
+        DriverManagerDataSource dataSource = dataSource("sandbox-repository-expired");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createSandboxSchema(jdbcTemplate);
+        JdbcSandboxRepositoryAdapter adapter = new JdbcSandboxRepositoryAdapter(dataSource);
+
+        SandboxSession laterExpired = adapter.saveSession(session(
+                "session-expired-later",
+                "tenant-a",
+                SandboxExecutionStatus.CREATED,
+                NOW.minusSeconds(60),
+                NOW.minusSeconds(3600)));
+        SandboxSession earlierExpired = adapter.saveSession(session(
+                "session-expired-earlier",
+                "tenant-a",
+                SandboxExecutionStatus.RUNNING,
+                NOW.minusSeconds(120),
+                NOW.minusSeconds(3600)));
+        adapter.saveSession(session(
+                "session-not-expired",
+                "tenant-a",
+                SandboxExecutionStatus.CREATED,
+                NOW.plusSeconds(60),
+                NOW.minusSeconds(60)));
+        adapter.saveSession(session(
+                "session-terminal",
+                "tenant-a",
+                SandboxExecutionStatus.TIMED_OUT,
+                NOW.minusSeconds(180),
+                NOW.minusSeconds(3600)));
+        adapter.saveSession(session(
+                "session-other-tenant",
+                "tenant-b",
+                SandboxExecutionStatus.CREATED,
+                NOW.minusSeconds(180),
+                NOW.minusSeconds(3600)));
+
+        assertThat(adapter.listExpiredActiveSessions("tenant-a", NOW, 10))
+                .containsExactly(earlierExpired, laterExpired);
+        assertThat(adapter.listExpiredActiveSessions("tenant-a", NOW, 1))
+                .containsExactly(earlierExpired);
+        assertThat(adapter.listExpiredActiveSessions("tenant-b", NOW, 10))
+                .extracting(SandboxSession::sessionId)
+                .containsExactly("session-other-tenant");
+    }
+
     private static SandboxArtifact artifact(String artifactId,
                                             String executionId,
                                             SandboxArtifactScanStatus scanStatus,
@@ -139,6 +186,24 @@ class JdbcSandboxRepositoryAdapterTests {
                 scanStatus,
                 sensitivity,
                 NOW.plusSeconds(5));
+    }
+
+    private static SandboxSession session(String sessionId,
+                                          String tenantId,
+                                          SandboxExecutionStatus status,
+                                          Instant expiresAt,
+                                          Instant createdAt) {
+        return new SandboxSession(
+                sessionId,
+                tenantId,
+                "run-" + sessionId,
+                SandboxRuntimeType.CODE_INTERPRETER,
+                status,
+                SandboxPolicyReasonCode.VALID_REQUEST,
+                "python-small",
+                expiresAt,
+                createdAt,
+                createdAt);
     }
 
     private static DriverManagerDataSource dataSource(String name) {

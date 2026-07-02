@@ -36,6 +36,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownload
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionSweepResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventQuery;
@@ -418,6 +419,84 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldSweepExpiredActiveSessionsAsTimedOut() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        SandboxSession expired = new SandboxSession(
+                "session-expired",
+                "tenant-1",
+                "run-expired",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                SandboxExecutionStatus.CREATED,
+                SandboxPolicyReasonCode.VALID_REQUEST,
+                "python-small",
+                NOW.minusSeconds(60),
+                NOW.minusSeconds(3600),
+                NOW.minusSeconds(3600));
+        sessionRepository.saveSession(expired);
+        sessionRepository.saveSession(new SandboxSession(
+                "session-active",
+                "tenant-1",
+                "run-active",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                SandboxExecutionStatus.CREATED,
+                SandboxPolicyReasonCode.VALID_REQUEST,
+                "python-small",
+                NOW.plusSeconds(60),
+                NOW.minusSeconds(60),
+                NOW.minusSeconds(60)));
+        sessionRepository.saveSession(new SandboxSession(
+                "session-terminal",
+                "tenant-1",
+                "run-terminal",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                SandboxExecutionStatus.CANCELLED,
+                SandboxPolicyReasonCode.VALID_REQUEST,
+                "python-small",
+                NOW.minusSeconds(30),
+                NOW.minusSeconds(3600),
+                NOW.minusSeconds(30)));
+        sessionRepository.saveSession(new SandboxSession(
+                "session-other-tenant",
+                "tenant-2",
+                "run-other",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                SandboxExecutionStatus.CREATED,
+                SandboxPolicyReasonCode.VALID_REQUEST,
+                "python-small",
+                NOW.minusSeconds(30),
+                NOW.minusSeconds(3600),
+                NOW.minusSeconds(3600)));
+        RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                runtime,
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                CLOCK);
+
+        SandboxSessionSweepResult result = service.sweepExpiredSessions("tenant-1", 20);
+
+        assertEquals("tenant-1", result.tenantId());
+        assertEquals(NOW, result.sweptAt());
+        assertEquals(1, result.matchedCount());
+        assertEquals(1, result.closedCount());
+        assertEquals(0, result.failedCount());
+        assertEquals(List.of("session-expired"), runtime.closedSessionIds);
+        SandboxSession saved = sessionRepository.findSessionById("session-expired").orElseThrow();
+        assertEquals(SandboxExecutionStatus.TIMED_OUT, saved.status());
+        assertEquals(SandboxPolicyReasonCode.RUNTIME_TIMED_OUT, saved.reasonCode());
+        assertEquals(expired.expiresAt(), saved.expiresAt());
+        assertEquals(NOW, saved.updatedAt());
+        assertEquals(saved, result.closedSessions().get(0));
+        assertEquals(SandboxExecutionStatus.CREATED,
+                sessionRepository.findSessionById("session-active").orElseThrow().status());
+        assertEquals(SandboxExecutionStatus.CANCELLED,
+                sessionRepository.findSessionById("session-terminal").orElseThrow().status());
+    }
+
+    @Test
     void shouldAllowPromptVisibleObjectArtifactDownloadDecision() {
         MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
         SandboxSession session = sessionRepository.saveSession(SandboxSession.created(
@@ -720,6 +799,7 @@ class KernelSandboxRuntimeServiceTests {
         private boolean executeCalled;
         private boolean closeSessionCalled;
         private SandboxSessionRequest createSessionRequest;
+        private final List<String> closedSessionIds = new ArrayList<>();
 
         private RecordingSandboxRuntimePort() {
             this(List.of(
@@ -763,6 +843,7 @@ class KernelSandboxRuntimeServiceTests {
         @Override
         public SandboxSession closeSession(SandboxSession session) {
             closeSessionCalled = true;
+            closedSessionIds.add(session.sessionId());
             return session.closed(NOW.plusSeconds(5));
         }
     }
@@ -896,6 +977,19 @@ class KernelSandboxRuntimeServiceTests {
                             .thenComparing(SandboxSession::createdAt)
                             .thenComparing(SandboxSession::sessionId)
                             .reversed())
+                    .limit(limit)
+                    .toList();
+        }
+
+        @Override
+        public List<SandboxSession> listExpiredActiveSessions(String tenantId, Instant now, int limit) {
+            return store.values().stream()
+                    .filter(session -> session.tenantId().equals(tenantId))
+                    .filter(session -> !session.status().isTerminal())
+                    .filter(session -> !session.expiresAt().isAfter(now))
+                    .sorted(Comparator.comparing(SandboxSession::expiresAt)
+                            .thenComparing(SandboxSession::createdAt)
+                            .thenComparing(SandboxSession::sessionId))
                     .limit(limit)
                     .toList();
         }

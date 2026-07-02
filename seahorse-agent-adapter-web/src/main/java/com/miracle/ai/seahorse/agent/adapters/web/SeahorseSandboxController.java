@@ -124,6 +124,14 @@ public class SeahorseSandboxController {
                 port -> port.listSessions(tenantId, limit));
     }
 
+    @PostMapping("/api/sandbox/sessions/expired:sweep")
+    public ApiResponse<Object> sweepExpiredSessions(@RequestParam(defaultValue = "default") String tenantId,
+                                                    @RequestParam(defaultValue = "20") int limit) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        return ApiResponses.requireService(sandboxRuntimePortProvider,
+                port -> port.sweepExpiredSessions(tenantId, limit));
+    }
+
     @GetMapping("/api/sandbox/sessions/{sessionId}/executions")
     public ApiResponse<Object> listExecutions(@PathVariable String sessionId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);

@@ -15,25 +15,21 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.ports.outbound.agent;
+package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 
-public interface SandboxSessionRepositoryPort {
+public record SandboxSessionSweepResult(String tenantId,
+                                        Instant sweptAt,
+                                        int matchedCount,
+                                        int closedCount,
+                                        int failedCount,
+                                        List<SandboxSession> closedSessions) {
 
-    SandboxSession saveSession(SandboxSession session);
-
-    Optional<SandboxSession> findSessionById(String sessionId);
-
-    default List<SandboxSession> listSessionsByTenant(String tenantId, int limit) {
-        return List.of();
-    }
-
-    default List<SandboxSession> listExpiredActiveSessions(String tenantId, Instant now, int limit) {
-        return List.of();
+    public SandboxSessionSweepResult {
+        closedSessions = closedSessions == null ? List.of() : List.copyOf(closedSessions);
     }
 }

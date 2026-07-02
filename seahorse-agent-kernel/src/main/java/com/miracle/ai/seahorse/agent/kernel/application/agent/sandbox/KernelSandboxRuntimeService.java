@@ -36,6 +36,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDe
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionSweepResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanResult;
@@ -299,6 +300,39 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         List<SandboxSession> records = sessionRepositoryPort.listSessionsByTenant(safeTenantId, safeLimit);
         records.forEach(session -> sessions.put(session.sessionId(), session));
         return records;
+    }
+
+    @Override
+    public SandboxSessionSweepResult sweepExpiredSessions(String tenantId, int limit) {
+        String safeTenantId = requireText(tenantId, "tenantId must not be blank");
+        int safeLimit = normalizeSessionListLimit(limit);
+        Instant now = clock.instant();
+        List<SandboxSession> expiredSessions = sessionRepositoryPort.listExpiredActiveSessions(
+                safeTenantId,
+                now,
+                safeLimit);
+        List<SandboxSession> closedSessions = new ArrayList<>();
+        int failedCount = 0;
+        for (SandboxSession session : expiredSessions) {
+            sessions.put(session.sessionId(), session);
+            if (session.status().isTerminal() || session.expiresAt().isAfter(now)) {
+                continue;
+            }
+            try {
+                runtimePort.closeSession(session);
+                SandboxSession timedOut = session.timedOut(now);
+                closedSessions.add(saveSession(timedOut, AuditEventType.SANDBOX_SESSION_EXPIRED));
+            } catch (RuntimeException ex) {
+                failedCount++;
+            }
+        }
+        return new SandboxSessionSweepResult(
+                safeTenantId,
+                now,
+                expiredSessions.size(),
+                closedSessions.size(),
+                failedCount,
+                closedSessions);
     }
 
     @Override
@@ -631,6 +665,24 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                             .thenComparing(SandboxSession::createdAt)
                             .thenComparing(SandboxSession::sessionId)
                             .reversed())
+                    .limit(safeLimit)
+                    .toList();
+        }
+
+        @Override
+        public List<SandboxSession> listExpiredActiveSessions(String tenantId, Instant now, int limit) {
+            if (!hasText(tenantId) || now == null) {
+                return List.of();
+            }
+            String safeTenantId = tenantId.trim();
+            int safeLimit = normalizeSessionListLimit(limit);
+            return store.values().stream()
+                    .filter(session -> session.tenantId().equals(safeTenantId))
+                    .filter(session -> !session.status().isTerminal())
+                    .filter(session -> !session.expiresAt().isAfter(now))
+                    .sorted(Comparator.comparing(SandboxSession::expiresAt)
+                            .thenComparing(SandboxSession::createdAt)
+                            .thenComparing(SandboxSession::sessionId))
                     .limit(safeLimit)
                     .toList();
         }

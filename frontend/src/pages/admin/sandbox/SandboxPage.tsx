@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, History, Info, Play, RefreshCw, Square } from "lucide-react";
+import { Download, History, Info, Play, RefreshCw, Square, TimerReset } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import {
   listSandboxSessions,
   listSandboxExecutions,
   listSandboxArtifacts,
+  sweepExpiredSandboxSessions,
   type SandboxSession,
   type SandboxExecution,
   type SandboxExecutionResult,
@@ -71,6 +72,7 @@ export function SandboxPage() {
   const [downloadingArtifactId, setDownloadingArtifactId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SandboxSession[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [sweepingExpiredSessions, setSweepingExpiredSessions] = useState(false);
 
   const clearArtifactSelection = () => {
     setSelectedArtifactId(null);
@@ -264,6 +266,31 @@ export function SandboxPage() {
     }
   };
 
+  const handleSweepExpiredSessions = async () => {
+    try {
+      setSweepingExpiredSessions(true);
+      const result = await sweepExpiredSandboxSessions();
+      const currentClosed = result.closedSessions?.find((item) => item.sessionId === session?.sessionId);
+      if (currentClosed) {
+        setSession(currentClosed);
+        await loadSessionData(currentClosed);
+      }
+      await refreshSessions();
+      const closedCount = result.closedCount ?? 0;
+      const failedCount = result.failedCount ?? 0;
+      if (failedCount > 0) {
+        toast.error(`Expired sweep closed ${closedCount} session(s), failed ${failedCount}`);
+      } else {
+        toast.success(`Expired sweep closed ${closedCount} session(s)`);
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Sweep expired sessions failed"));
+      console.error(error);
+    } finally {
+      setSweepingExpiredSessions(false);
+    }
+  };
+
   if (!featureState.enabled) {
     return <FeatureUnavailableState featureState={featureState} featureName="沙箱" />;
   }
@@ -337,16 +364,28 @@ export function SandboxPage() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between gap-2">
                 <span>最近会话</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  title="刷新会话"
-                  disabled={loadingSessions}
-                  onClick={() => void refreshSessions()}
-                >
-                  <RefreshCw className={`h-4 w-4 ${loadingSessions ? "animate-spin" : ""}`} />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    title="Sweep expired sessions"
+                    disabled={sweepingExpiredSessions}
+                    onClick={() => void handleSweepExpiredSessions()}
+                  >
+                    <TimerReset className={`h-4 w-4 ${sweepingExpiredSessions ? "animate-spin" : ""}`} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    title="刷新会话"
+                    disabled={loadingSessions}
+                    onClick={() => void refreshSessions()}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${loadingSessions ? "animate-spin" : ""}`} />
+                  </Button>
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent>
