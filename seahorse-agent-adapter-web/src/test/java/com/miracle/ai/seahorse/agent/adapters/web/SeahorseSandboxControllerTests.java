@@ -28,6 +28,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
@@ -104,6 +105,21 @@ class SeahorseSandboxControllerTests {
                 1,
                 0,
                 List.of("sandbox_container_orphan"),
+                List.of()));
+        when(port.inspectRuntimeHealth()).thenReturn(new SandboxRuntimeHealth(
+                NOW,
+                "container",
+                "docker",
+                SandboxRuntimeHealth.STATUS_HEALTHY,
+                true,
+                true,
+                1,
+                1,
+                0,
+                0,
+                0,
+                List.of(),
+                List.of(),
                 List.of()));
         when(port.listExecutions("session-1")).thenReturn(List.of(SandboxExecution.failed(
                 "exec-1",
@@ -210,6 +226,17 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data.failedWorkspaceCount").value(0))
                 .andExpect(jsonPath("$.data.removedWorkspaceNames[0]").value("sandbox_container_orphan"));
         verify(port).sweepOrphanedRuntimeResources();
+
+        mvc.perform(get("/api/sandbox/runtime/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.runtime").value("container"))
+                .andExpect(jsonPath("$.data.engine").value("docker"))
+                .andExpect(jsonPath("$.data.status").value("HEALTHY"))
+                .andExpect(jsonPath("$.data.engineAvailable").value(true))
+                .andExpect(jsonPath("$.data.workspaceAvailable").value(true))
+                .andExpect(jsonPath("$.data.activeSessionCount").value(1))
+                .andExpect(jsonPath("$.data.inspectedContainerCount").value(1));
+        verify(port).inspectRuntimeHealth();
 
         mvc.perform(get("/api/sandbox/sessions/session-1/executions"))
                 .andExpect(status().isOk())

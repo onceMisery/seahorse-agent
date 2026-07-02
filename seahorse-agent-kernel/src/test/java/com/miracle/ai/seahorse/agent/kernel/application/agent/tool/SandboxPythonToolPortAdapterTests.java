@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
@@ -190,6 +191,11 @@ class SandboxPythonToolPortAdapterTests {
         @Override
         public SandboxRuntimeCleanupResult sweepOrphanedRuntimeResources() {
             return SandboxRuntimeCleanupResult.empty(NOW, 0);
+        }
+
+        @Override
+        public SandboxRuntimeHealth inspectRuntimeHealth() {
+            return SandboxRuntimeHealth.unsupported(NOW, 0);
         }
 
         @Override

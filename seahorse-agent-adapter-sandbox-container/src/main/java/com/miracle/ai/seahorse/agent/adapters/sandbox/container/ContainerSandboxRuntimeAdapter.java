@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
@@ -263,6 +264,35 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 containerSummary.failureMessages());
     }
 
+    @Override
+    public SandboxRuntimeHealth inspectHealth(Set<String> activeSessionIds) {
+        Set<String> safeActiveSessionIds = normalizeActiveSessionIds(activeSessionIds);
+        Set<String> activeContainerNames = normalizeActiveContainerNames(safeActiveSessionIds);
+        ContainerInspectionSummary containerSummary = inspectManagedContainers(activeContainerNames);
+        boolean workspaceAvailable = Files.isDirectory(workspaceRoot, LinkOption.NOFOLLOW_LINKS)
+                && Files.isWritable(workspaceRoot);
+        List<String> failureMessages = new ArrayList<>(containerSummary.failureMessages());
+        if (!workspaceAvailable) {
+            failureMessages.add("sandbox workspace root is not available");
+        }
+        boolean engineAvailable = containerSummary.failedInspectionCount() == 0;
+        return new SandboxRuntimeHealth(
+                clock.instant(),
+                "container",
+                properties.getEngine(),
+                healthStatus(engineAvailable, workspaceAvailable, containerSummary.orphanCount(), failureMessages),
+                engineAvailable,
+                workspaceAvailable,
+                safeActiveSessionIds.size(),
+                containerSummary.inspectedCount(),
+                containerSummary.activeCount(),
+                containerSummary.orphanCount(),
+                containerSummary.failedInspectionCount(),
+                containerSummary.activeNames(),
+                containerSummary.orphanNames(),
+                failureMessages);
+    }
+
     private ContainerCommand containerCommand(SandboxSession session, Path workspace) {
         List<String> commandLine = new ArrayList<>();
         commandLine.add(properties.getEngine());
@@ -359,6 +389,19 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             return ContainerInspectionSummary.failed(
                     "container inspection failure: " + nullToEmpty(ex.getMessage()));
         }
+    }
+
+    private String healthStatus(boolean engineAvailable,
+                                boolean workspaceAvailable,
+                                int orphanContainerCount,
+                                List<String> failureMessages) {
+        if (!engineAvailable || !workspaceAvailable) {
+            return SandboxRuntimeHealth.STATUS_UNAVAILABLE;
+        }
+        if (orphanContainerCount > 0 || !failureMessages.isEmpty()) {
+            return SandboxRuntimeHealth.STATUS_DEGRADED;
+        }
+        return SandboxRuntimeHealth.STATUS_HEALTHY;
     }
 
     private List<SandboxArtifact> collectArtifacts(SandboxSession session,

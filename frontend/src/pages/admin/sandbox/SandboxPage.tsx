@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, FolderX, History, Info, Play, RefreshCw, Square, TimerReset } from "lucide-react";
+import { Activity, Download, FolderX, History, Info, Play, RefreshCw, Square, TimerReset } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ import {
   listSandboxArtifacts,
   sweepExpiredSandboxSessions,
   sweepOrphanedSandboxRuntimeResources,
+  getSandboxRuntimeHealth,
   type SandboxSession,
   type SandboxExecution,
   type SandboxExecutionResult,
@@ -75,6 +76,7 @@ export function SandboxPage() {
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [sweepingExpiredSessions, setSweepingExpiredSessions] = useState(false);
   const [sweepingOrphanedRuntimeResources, setSweepingOrphanedRuntimeResources] = useState(false);
+  const [checkingRuntimeHealth, setCheckingRuntimeHealth] = useState(false);
 
   const clearArtifactSelection = () => {
     setSelectedArtifactId(null);
@@ -319,6 +321,30 @@ export function SandboxPage() {
     }
   };
 
+  const handleInspectRuntimeHealth = async () => {
+    try {
+      setCheckingRuntimeHealth(true);
+      const health = await getSandboxRuntimeHealth();
+      const status = health.status || "UNKNOWN";
+      const inspected = health.inspectedContainerCount ?? 0;
+      const orphans = health.orphanContainerCount ?? 0;
+      const failures = health.failedContainerInspectionCount ?? 0;
+      const summary = `Runtime ${status}: engine ${health.engineAvailable ? "available" : "unavailable"}, workspace ${health.workspaceAvailable ? "available" : "unavailable"}, containers ${inspected}, orphan ${orphans}`;
+      if (status === "HEALTHY") {
+        toast.success(summary);
+      } else if (failures > 0 || status === "UNAVAILABLE" || status === "UNSUPPORTED") {
+        toast.error(summary);
+      } else {
+        toast.warning(summary);
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Runtime health check failed"));
+      console.error(error);
+    } finally {
+      setCheckingRuntimeHealth(false);
+    }
+  };
+
   if (!featureState.enabled) {
     return <FeatureUnavailableState featureState={featureState} featureName="沙箱" />;
   }
@@ -402,6 +428,16 @@ export function SandboxPage() {
                     onClick={() => void handleSweepExpiredSessions()}
                   >
                     <TimerReset className={`h-4 w-4 ${sweepingExpiredSessions ? "animate-spin" : ""}`} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    title="Inspect runtime health"
+                    disabled={checkingRuntimeHealth}
+                    onClick={() => void handleInspectRuntimeHealth()}
+                  >
+                    <Activity className={`h-4 w-4 ${checkingRuntimeHealth ? "animate-pulse" : ""}`} />
                   </Button>
                   <Button
                     variant="ghost"

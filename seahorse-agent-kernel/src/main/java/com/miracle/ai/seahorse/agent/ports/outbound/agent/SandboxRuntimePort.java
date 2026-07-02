@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 
 import java.time.Instant;
@@ -39,6 +40,11 @@ public interface SandboxRuntimePort {
     default SandboxRuntimeCleanupResult sweepOrphanedResources(Set<String> activeSessionIds) {
         int activeSessionCount = activeSessionIds == null ? 0 : activeSessionIds.size();
         return SandboxRuntimeCleanupResult.empty(Instant.now(), activeSessionCount);
+    }
+
+    default SandboxRuntimeHealth inspectHealth(Set<String> activeSessionIds) {
+        int activeSessionCount = activeSessionIds == null ? 0 : activeSessionIds.size();
+        return SandboxRuntimeHealth.unsupported(Instant.now(), activeSessionCount);
     }
 
     static SandboxRuntimePort unsupported() {

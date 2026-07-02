@@ -31,6 +31,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
@@ -341,6 +342,12 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     public SandboxRuntimeCleanupResult sweepOrphanedRuntimeResources() {
         Set<String> activeSessionIds = sessionRepositoryPort.listActiveSessionIds();
         return runtimePort.sweepOrphanedResources(activeSessionIds);
+    }
+
+    @Override
+    public SandboxRuntimeHealth inspectRuntimeHealth() {
+        Set<String> activeSessionIds = sessionRepositoryPort.listActiveSessionIds();
+        return runtimePort.inspectHealth(activeSessionIds);
     }
 
     @Override

@@ -139,6 +139,13 @@ public class SeahorseSandboxController {
                 SandboxRuntimeInboundPort::sweepOrphanedRuntimeResources);
     }
 
+    @GetMapping("/api/sandbox/runtime/health")
+    public ApiResponse<Object> inspectRuntimeHealth() {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        return ApiResponses.requireService(sandboxRuntimePortProvider,
+                SandboxRuntimeInboundPort::inspectRuntimeHealth);
+    }
+
     @GetMapping("/api/sandbox/sessions/{sessionId}/executions")
     public ApiResponse<Object> listExecutions(@PathVariable String sessionId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);

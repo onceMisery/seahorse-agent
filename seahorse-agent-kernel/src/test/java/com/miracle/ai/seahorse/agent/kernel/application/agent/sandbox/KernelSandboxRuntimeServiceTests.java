@@ -31,6 +31,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
@@ -541,6 +542,49 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldInspectRuntimeHealthWithActiveSessionIds() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        sessionRepository.saveSession(new SandboxSession(
+                "session-active",
+                "tenant-1",
+                "run-active",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                SandboxExecutionStatus.CREATED,
+                SandboxPolicyReasonCode.VALID_REQUEST,
+                "python-small",
+                NOW.plusSeconds(60),
+                NOW.minusSeconds(60),
+                NOW.minusSeconds(60)));
+        sessionRepository.saveSession(new SandboxSession(
+                "session-terminal",
+                "tenant-1",
+                "run-terminal",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                SandboxExecutionStatus.CANCELLED,
+                SandboxPolicyReasonCode.VALID_REQUEST,
+                "python-small",
+                NOW.minusSeconds(30),
+                NOW.minusSeconds(3600),
+                NOW.minusSeconds(30)));
+        RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                runtime,
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                CLOCK);
+
+        SandboxRuntimeHealth health = service.inspectRuntimeHealth();
+
+        assertEquals(Set.of("session-active"), runtime.healthActiveSessionIds);
+        assertEquals(SandboxRuntimeHealth.STATUS_HEALTHY, health.status());
+        assertEquals(1, health.activeSessionCount());
+        assertEquals("container", health.runtime());
+    }
+
+    @Test
     void shouldAllowPromptVisibleObjectArtifactDownloadDecision() {
         MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
         SandboxSession session = sessionRepository.saveSession(SandboxSession.created(
@@ -845,6 +889,7 @@ class KernelSandboxRuntimeServiceTests {
         private SandboxSessionRequest createSessionRequest;
         private final List<String> closedSessionIds = new ArrayList<>();
         private Set<String> orphanSweepActiveSessionIds = Set.of();
+        private Set<String> healthActiveSessionIds = Set.of();
 
         private RecordingSandboxRuntimePort() {
             this(List.of(
@@ -904,6 +949,26 @@ class KernelSandboxRuntimeServiceTests {
                     1,
                     0,
                     List.of("sandbox_container_orphan"),
+                    List.of());
+        }
+
+        @Override
+        public SandboxRuntimeHealth inspectHealth(Set<String> activeSessionIds) {
+            healthActiveSessionIds = activeSessionIds == null ? Set.of() : Set.copyOf(activeSessionIds);
+            return new SandboxRuntimeHealth(
+                    NOW,
+                    "container",
+                    "docker",
+                    SandboxRuntimeHealth.STATUS_HEALTHY,
+                    true,
+                    true,
+                    healthActiveSessionIds.size(),
+                    0,
+                    0,
+                    0,
+                    0,
+                    List.of(),
+                    List.of(),
                     List.of());
         }
     }

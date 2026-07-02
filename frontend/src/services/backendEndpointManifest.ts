@@ -1340,6 +1340,10 @@ export const backendEndpointManifest = [
     "path": "/api/run-profiles/{}/submit-approval"
   },
   {
+    "method": "GET",
+    "path": "/api/sandbox/runtime/health"
+  },
+  {
     "method": "POST",
     "path": "/api/sandbox/runtime/orphans:sweep"
   },

@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRequest;
@@ -292,6 +293,54 @@ class ContainerSandboxRuntimeAdapterTests {
                 .singleElement()
                 .satisfies(message -> assertThat(message).contains("exitCode=125", "Cannot connect"));
         assertThat(orphan).doesNotExist();
+    }
+
+    @Test
+    void shouldInspectRuntimeHealthFromWorkspaceAndManagedContainers() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded(
+                """
+                        seahorse-sandbox-sandbox_container_active\tUp 10 seconds
+                        seahorse-sandbox-orphan-live\tUp 2 minutes
+                        """,
+                Duration.ofMillis(80)));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+
+        SandboxRuntimeHealth health = adapter.inspectHealth(Set.of("sandbox_container_active"));
+
+        assertThat(health.runtime()).isEqualTo("container");
+        assertThat(health.engine()).isEqualTo("docker");
+        assertThat(health.status()).isEqualTo(SandboxRuntimeHealth.STATUS_DEGRADED);
+        assertThat(health.engineAvailable()).isTrue();
+        assertThat(health.workspaceAvailable()).isTrue();
+        assertThat(health.activeSessionCount()).isEqualTo(1);
+        assertThat(health.inspectedContainerCount()).isEqualTo(2);
+        assertThat(health.activeContainerCount()).isEqualTo(1);
+        assertThat(health.orphanContainerCount()).isEqualTo(1);
+        assertThat(health.activeContainerNames())
+                .containsExactly("seahorse-sandbox-sandbox_container_active");
+        assertThat(health.orphanContainerNames())
+                .containsExactly("seahorse-sandbox-orphan-live");
+        assertThat(health.failureMessages()).isEmpty();
+    }
+
+    @Test
+    void shouldReportRuntimeHealthUnavailableWhenContainerInspectionFails() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.failed(
+                125,
+                "",
+                "Cannot connect to Docker daemon",
+                Duration.ofMillis(50)));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+
+        SandboxRuntimeHealth health = adapter.inspectHealth(Set.of());
+
+        assertThat(health.status()).isEqualTo(SandboxRuntimeHealth.STATUS_UNAVAILABLE);
+        assertThat(health.engineAvailable()).isFalse();
+        assertThat(health.workspaceAvailable()).isTrue();
+        assertThat(health.failedContainerInspectionCount()).isEqualTo(1);
+        assertThat(health.failureMessages())
+                .singleElement()
+                .satisfies(message -> assertThat(message).contains("exitCode=125", "Cannot connect"));
     }
 
     private Path createWorkspace(String name, Instant modifiedAt) throws IOException {

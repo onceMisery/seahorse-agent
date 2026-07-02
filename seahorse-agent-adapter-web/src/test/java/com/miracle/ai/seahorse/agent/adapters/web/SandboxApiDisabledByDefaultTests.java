@@ -73,6 +73,9 @@ class SandboxApiDisabledByDefaultTests {
         mvc.perform(get("/api/sandbox/sessions").param("tenantId", "tenant-a"))
                 .andExpect(status().isForbidden());
 
+        mvc.perform(get("/api/sandbox/runtime/health"))
+                .andExpect(status().isForbidden());
+
         mvc.perform(get("/api/sandbox/sessions/session-1/executions"))
                 .andExpect(status().isForbidden());
 

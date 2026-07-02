@@ -48,6 +48,23 @@ export interface SandboxRuntimeCleanupResult {
   failedContainerInspectionMessages?: string[];
 }
 
+export interface SandboxRuntimeHealth {
+  checkedAt?: string;
+  runtime?: string;
+  engine?: string;
+  status?: string;
+  engineAvailable?: boolean;
+  workspaceAvailable?: boolean;
+  activeSessionCount?: number;
+  inspectedContainerCount?: number;
+  activeContainerCount?: number;
+  orphanContainerCount?: number;
+  failedContainerInspectionCount?: number;
+  activeContainerNames?: string[];
+  orphanContainerNames?: string[];
+  failureMessages?: string[];
+}
+
 export interface SandboxExecution {
   executionId?: string;
   sessionId?: string;
@@ -156,6 +173,10 @@ export function sweepOrphanedSandboxRuntimeResources() {
   return api.post<SandboxRuntimeCleanupResult, SandboxRuntimeCleanupResult>(
     "/api/sandbox/runtime/orphans:sweep"
   );
+}
+
+export function getSandboxRuntimeHealth() {
+  return api.get<SandboxRuntimeHealth>("/api/sandbox/runtime/health");
 }
 
 export function executeInSandbox(sessionId: string, payload: SandboxExecutePayload) {

@@ -314,6 +314,30 @@ try {
         }
     } | Out-Null
 
+    Test-Step "Inspect sandbox runtime health through backend Docker socket" {
+        $response = Invoke-Json -Method GET -Path "/api/sandbox/runtime/health" -Headers $headers
+        Assert-ApiOk $response "Inspect sandbox runtime health"
+        if ("$($response.data.runtime)" -ne "container") {
+            throw "Expected container runtime health but got: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($response.data.engine)" -ne "docker") {
+            throw "Expected docker engine but got: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($response.data.engineAvailable -ne $true) {
+            throw "Expected sandbox runtime engineAvailable=true: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($response.data.workspaceAvailable -ne $true) {
+            throw "Expected sandbox runtime workspaceAvailable=true: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ([int]$response.data.failedContainerInspectionCount -ne 0) {
+            throw "Expected failedContainerInspectionCount=0: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $healthJson = $response.data | ConvertTo-Json -Depth 20 -Compress
+        if ($healthJson -match [regex]::Escape($SandboxWorkspaceRoot)) {
+            throw "Sandbox runtime health leaked workspace root path: $healthJson"
+        }
+    } | Out-Null
+
     $expiredSweepStepName = if ($UseScheduledSweep) {
         "Wait for scheduled sandbox session sweep as TIMED_OUT"
     } else {
