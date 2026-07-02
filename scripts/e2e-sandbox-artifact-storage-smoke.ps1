@@ -165,6 +165,15 @@ function Invoke-PostgresNonQuery {
     }
 }
 
+function Remove-DockerContainerBestEffort {
+    param([string]$Name)
+    try {
+        & docker rm -f $Name 2>$null | Out-Null
+    } catch {
+        return
+    }
+}
+
 function Wait-ForSandboxSessionTimedOut {
     param(
         [string]$SessionId,
@@ -391,27 +400,48 @@ try {
         }
         $activePath = "$SandboxWorkspaceRoot/$activeSessionId"
         $orphanPath = "$SandboxWorkspaceRoot/$orphanName"
+        $orphanContainerName = "seahorse-sandbox-orphan-live-$suffix"
         & docker exec $BackendContainer sh -lc "test -d '$activePath' && mkdir -p '$orphanPath' && printf '%s\n' '$Marker' > '$orphanPath/orphan.txt' && touch -d '2 hours ago' '$orphanPath' '$orphanPath/orphan.txt'"
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to prepare active and orphan sandbox workspaces"
         }
 
-        $sweep = Invoke-Json -Method POST -Path "/api/sandbox/runtime/orphans:sweep" -Headers $headers
-        Assert-ApiOk $sweep "Sweep orphaned sandbox runtime resources"
-        if ([int]$sweep.data.failedWorkspaceCount -ne 0) {
-            throw "Expected failedWorkspaceCount=0: $($sweep.data | ConvertTo-Json -Depth 20 -Compress)"
-        }
-        $removed = @($sweep.data.removedWorkspaceNames | Where-Object { "$_" -eq $orphanName })
-        if ($removed.Count -ne 1) {
-            throw "Expected orphan workspace $orphanName in removedWorkspaceNames: $($sweep.data | ConvertTo-Json -Depth 20 -Compress)"
-        }
-        if ([int]$sweep.data.skippedActiveWorkspaceCount -lt 1) {
-            throw "Expected skippedActiveWorkspaceCount >= 1: $($sweep.data | ConvertTo-Json -Depth 20 -Compress)"
+        Remove-DockerContainerBestEffort -Name $orphanContainerName
+        & docker run -d --name $orphanContainerName python:3.11-alpine sh -lc "sleep 300" | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to start orphan sandbox container $orphanContainerName"
         }
 
-        & docker exec $BackendContainer sh -lc "test ! -e '$orphanPath' && test -d '$activePath'"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Orphan workspace was not removed or active workspace was deleted"
+        try {
+            $sweep = Invoke-Json -Method POST -Path "/api/sandbox/runtime/orphans:sweep" -Headers $headers
+            Assert-ApiOk $sweep "Sweep orphaned sandbox runtime resources"
+            if ([int]$sweep.data.failedWorkspaceCount -ne 0) {
+                throw "Expected failedWorkspaceCount=0: $($sweep.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ([int]$sweep.data.failedContainerInspectionCount -ne 0) {
+                throw "Expected failedContainerInspectionCount=0: $($sweep.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            $removed = @($sweep.data.removedWorkspaceNames | Where-Object { "$_" -eq $orphanName })
+            if ($removed.Count -ne 1) {
+                throw "Expected orphan workspace $orphanName in removedWorkspaceNames: $($sweep.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ([int]$sweep.data.skippedActiveWorkspaceCount -lt 1) {
+                throw "Expected skippedActiveWorkspaceCount >= 1: $($sweep.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ([int]$sweep.data.inspectedContainerCount -lt 1) {
+                throw "Expected inspectedContainerCount >= 1: $($sweep.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            $orphanContainers = @($sweep.data.orphanContainerNames | Where-Object { "$_" -eq $orphanContainerName })
+            if ($orphanContainers.Count -ne 1) {
+                throw "Expected orphan container $orphanContainerName in orphanContainerNames: $($sweep.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+
+            & docker exec $BackendContainer sh -lc "test ! -e '$orphanPath' && test -d '$activePath'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Orphan workspace was not removed or active workspace was deleted"
+            }
+        } finally {
+            Remove-DockerContainerBestEffort -Name $orphanContainerName
         }
 
         $closed = Invoke-Json -Method POST -Path "/api/sandbox/sessions/$activeSessionId/close" -Headers $headers

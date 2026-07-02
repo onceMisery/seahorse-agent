@@ -39,6 +39,13 @@ export interface SandboxRuntimeCleanupResult {
   failedWorkspaceCount?: number;
   removedWorkspaceNames?: string[];
   failedWorkspaceNames?: string[];
+  inspectedContainerCount?: number;
+  activeContainerCount?: number;
+  orphanContainerCount?: number;
+  failedContainerInspectionCount?: number;
+  activeContainerNames?: string[];
+  orphanContainerNames?: string[];
+  failedContainerInspectionMessages?: string[];
 }
 
 export interface SandboxExecution {

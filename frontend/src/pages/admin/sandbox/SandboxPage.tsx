@@ -300,10 +300,16 @@ export function SandboxPage() {
       await refreshSessions();
       const removedCount = result.removedWorkspaceCount ?? 0;
       const failedCount = result.failedWorkspaceCount ?? 0;
-      if (failedCount > 0) {
-        toast.error(`Runtime orphan sweep removed ${removedCount} workspace(s), failed ${failedCount}`);
+      const orphanContainerCount = result.orphanContainerCount ?? 0;
+      const containerInspectionFailures = result.failedContainerInspectionCount ?? 0;
+      if (failedCount > 0 || containerInspectionFailures > 0) {
+        toast.error(
+          `Runtime orphan sweep removed ${removedCount} workspace(s), found ${orphanContainerCount} orphan container(s), failed ${failedCount + containerInspectionFailures}`
+        );
       } else {
-        toast.success(`Runtime orphan sweep removed ${removedCount} workspace(s)`);
+        toast.success(
+          `Runtime orphan sweep removed ${removedCount} workspace(s), found ${orphanContainerCount} orphan container(s)`
+        );
       }
     } catch (error) {
       toast.error(getErrorMessage(error, "Runtime orphan sweep failed"));

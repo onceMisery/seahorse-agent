@@ -28,11 +28,50 @@ public record SandboxRuntimeCleanupResult(Instant sweptAt,
                                           int removedWorkspaceCount,
                                           int failedWorkspaceCount,
                                           List<String> removedWorkspaceNames,
-                                          List<String> failedWorkspaceNames) {
+                                          List<String> failedWorkspaceNames,
+                                          int inspectedContainerCount,
+                                          int activeContainerCount,
+                                          int orphanContainerCount,
+                                          int failedContainerInspectionCount,
+                                          List<String> activeContainerNames,
+                                          List<String> orphanContainerNames,
+                                          List<String> failedContainerInspectionMessages) {
 
     public SandboxRuntimeCleanupResult {
         removedWorkspaceNames = removedWorkspaceNames == null ? List.of() : List.copyOf(removedWorkspaceNames);
         failedWorkspaceNames = failedWorkspaceNames == null ? List.of() : List.copyOf(failedWorkspaceNames);
+        activeContainerNames = activeContainerNames == null ? List.of() : List.copyOf(activeContainerNames);
+        orphanContainerNames = orphanContainerNames == null ? List.of() : List.copyOf(orphanContainerNames);
+        failedContainerInspectionMessages = failedContainerInspectionMessages == null
+                ? List.of()
+                : List.copyOf(failedContainerInspectionMessages);
+    }
+
+    public SandboxRuntimeCleanupResult(Instant sweptAt,
+                                       int activeSessionCount,
+                                       int inspectedWorkspaceCount,
+                                       int skippedActiveWorkspaceCount,
+                                       int skippedRecentWorkspaceCount,
+                                       int removedWorkspaceCount,
+                                       int failedWorkspaceCount,
+                                       List<String> removedWorkspaceNames,
+                                       List<String> failedWorkspaceNames) {
+        this(sweptAt,
+                activeSessionCount,
+                inspectedWorkspaceCount,
+                skippedActiveWorkspaceCount,
+                skippedRecentWorkspaceCount,
+                removedWorkspaceCount,
+                failedWorkspaceCount,
+                removedWorkspaceNames,
+                failedWorkspaceNames,
+                0,
+                0,
+                0,
+                0,
+                List.of(),
+                List.of(),
+                List.of());
     }
 
     public static SandboxRuntimeCleanupResult empty(Instant sweptAt, int activeSessionCount) {

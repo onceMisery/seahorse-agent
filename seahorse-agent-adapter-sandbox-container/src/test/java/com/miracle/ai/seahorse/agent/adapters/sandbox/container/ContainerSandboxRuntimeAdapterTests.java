@@ -246,6 +246,54 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(unmanaged).exists();
     }
 
+    @Test
+    void shouldInspectManagedContainersAndClassifyOrphans() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded(
+                """
+                        seahorse-sandbox-sandbox_container_active\tUp 10 seconds
+                        seahorse-sandbox-orphan-live\tUp 2 minutes
+                        unrelated-container\tUp 1 hour
+                        """,
+                Duration.ofMillis(80)));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+
+        SandboxRuntimeCleanupResult result = adapter.sweepOrphanedResources(Set.of("sandbox_container_active"));
+
+        assertThat(result.inspectedContainerCount()).isEqualTo(2);
+        assertThat(result.activeContainerCount()).isEqualTo(1);
+        assertThat(result.orphanContainerCount()).isEqualTo(1);
+        assertThat(result.failedContainerInspectionCount()).isZero();
+        assertThat(result.activeContainerNames())
+                .containsExactly("seahorse-sandbox-sandbox_container_active");
+        assertThat(result.orphanContainerNames())
+                .containsExactly("seahorse-sandbox-orphan-live");
+        assertThat(runner.lastCommand.commandLine())
+                .containsSubsequence("docker", "ps", "-a")
+                .containsSubsequence("--filter", "name=seahorse-sandbox-")
+                .containsSubsequence("--format", "{{.Names}}\t{{.Status}}");
+    }
+
+    @Test
+    void shouldKeepWorkspaceSweepResultWhenContainerInspectionFails() throws Exception {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.failed(
+                125,
+                "",
+                "Cannot connect to Docker daemon",
+                Duration.ofMillis(50)));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        Path orphan = createWorkspace("sandbox_container_orphan", CLOCK.instant().minusSeconds(3600));
+
+        SandboxRuntimeCleanupResult result = adapter.sweepOrphanedResources(Set.of());
+
+        assertThat(result.removedWorkspaceCount()).isEqualTo(1);
+        assertThat(result.failedWorkspaceCount()).isZero();
+        assertThat(result.failedContainerInspectionCount()).isEqualTo(1);
+        assertThat(result.failedContainerInspectionMessages())
+                .singleElement()
+                .satisfies(message -> assertThat(message).contains("exitCode=125", "Cannot connect"));
+        assertThat(orphan).doesNotExist();
+    }
+
     private Path createWorkspace(String name, Instant modifiedAt) throws IOException {
         Path workspace = tempDir.resolve(name);
         Files.createDirectories(workspace);

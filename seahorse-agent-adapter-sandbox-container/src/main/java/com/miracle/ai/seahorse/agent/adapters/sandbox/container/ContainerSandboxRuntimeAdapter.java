@@ -55,6 +55,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final String ARTIFACT_ID_PREFIX = "sandbox_artifact_container_";
     private static final String SCRIPT_NAME = "main.py";
     private static final String CONTAINER_WORKSPACE = "/workspace";
+    private static final String CONTAINER_NAME_PREFIX = "seahorse-sandbox-";
 
     private final ContainerSandboxAdapterProperties properties;
     private final ContainerCommandRunner commandRunner;
@@ -187,6 +188,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     @Override
     public SandboxRuntimeCleanupResult sweepOrphanedResources(Set<String> activeSessionIds) {
         Set<String> safeActiveSessionIds = normalizeActiveSessionIds(activeSessionIds);
+        Set<String> activeContainerNames = normalizeActiveContainerNames(safeActiveSessionIds);
         Instant sweptAt = clock.instant();
         Instant cutoff = sweptAt.minus(properties.getOrphanWorkspaceMinAge());
         int inspected = 0;
@@ -222,6 +224,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 }
             }
         } catch (IOException ex) {
+            ContainerInspectionSummary containerSummary = inspectManagedContainers(activeContainerNames);
             return new SandboxRuntimeCleanupResult(
                     sweptAt,
                     safeActiveSessionIds.size(),
@@ -231,8 +234,16 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     removed,
                     failed + 1,
                     removedNames,
-                    failedNames);
+                    failedNames,
+                    containerSummary.inspectedCount(),
+                    containerSummary.activeCount(),
+                    containerSummary.orphanCount(),
+                    containerSummary.failedInspectionCount(),
+                    containerSummary.activeNames(),
+                    containerSummary.orphanNames(),
+                    containerSummary.failureMessages());
         }
+        ContainerInspectionSummary containerSummary = inspectManagedContainers(activeContainerNames);
         return new SandboxRuntimeCleanupResult(
                 sweptAt,
                 safeActiveSessionIds.size(),
@@ -242,7 +253,14 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 removed,
                 failed,
                 removedNames,
-                failedNames);
+                failedNames,
+                containerSummary.inspectedCount(),
+                containerSummary.activeCount(),
+                containerSummary.orphanCount(),
+                containerSummary.failedInspectionCount(),
+                containerSummary.activeNames(),
+                containerSummary.orphanNames(),
+                containerSummary.failureMessages());
     }
 
     private ContainerCommand containerCommand(SandboxSession session, Path workspace) {
@@ -273,6 +291,74 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 properties.getExecutionTimeout(),
                 properties.getStdoutLimitBytes(),
                 properties.getStderrLimitBytes());
+    }
+
+    private ContainerCommand containerInspectionCommand() {
+        List<String> commandLine = new ArrayList<>();
+        commandLine.add(properties.getEngine());
+        commandLine.add("ps");
+        commandLine.add("-a");
+        commandLine.add("--filter");
+        commandLine.add("name=" + CONTAINER_NAME_PREFIX);
+        commandLine.add("--format");
+        commandLine.add("{{.Names}}\t{{.Status}}");
+        return new ContainerCommand(
+                commandLine,
+                workspaceRoot,
+                properties.getExecutionTimeout(),
+                properties.getStdoutLimitBytes(),
+                properties.getStderrLimitBytes());
+    }
+
+    private ContainerInspectionSummary inspectManagedContainers(Set<String> activeContainerNames) {
+        Set<String> safeActiveContainerNames = activeContainerNames == null
+                ? Set.of()
+                : Set.copyOf(activeContainerNames);
+        try {
+            ContainerCommandResult result = commandRunner.run(containerInspectionCommand());
+            if (result.timedOut()) {
+                return ContainerInspectionSummary.failed("container inspection timed out");
+            }
+            if (result.exitCode() != 0) {
+                return ContainerInspectionSummary.failed(
+                        "container inspection exitCode=" + result.exitCode() + "; stderr="
+                                + oneLinePreview(result.stderr()));
+            }
+            List<String> activeNames = new ArrayList<>();
+            List<String> orphanNames = new ArrayList<>();
+            int inspectedCount = 0;
+            for (String line : result.stdout().lines().toList()) {
+                String name = containerNameFromPsLine(line);
+                if (!hasText(name) || !isManagedContainerName(name)) {
+                    continue;
+                }
+                inspectedCount++;
+                if (safeActiveContainerNames.contains(name)) {
+                    activeNames.add(name);
+                } else {
+                    orphanNames.add(name);
+                }
+            }
+            activeNames.sort(String::compareTo);
+            orphanNames.sort(String::compareTo);
+            return new ContainerInspectionSummary(
+                    inspectedCount,
+                    activeNames.size(),
+                    orphanNames.size(),
+                    0,
+                    activeNames,
+                    orphanNames,
+                    List.of());
+        } catch (IOException ex) {
+            return ContainerInspectionSummary.failed(
+                    "container inspection io failure: " + nullToEmpty(ex.getMessage()));
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return ContainerInspectionSummary.failed("container inspection interrupted");
+        } catch (RuntimeException ex) {
+            return ContainerInspectionSummary.failed(
+                    "container inspection failure: " + nullToEmpty(ex.getMessage()));
+        }
     }
 
     private List<SandboxArtifact> collectArtifacts(SandboxSession session,
@@ -443,6 +529,18 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return filename != null && filename.toString().startsWith(SESSION_ID_PREFIX);
     }
 
+    private boolean isManagedContainerName(String value) {
+        return hasText(value) && value.startsWith(CONTAINER_NAME_PREFIX);
+    }
+
+    private String containerNameFromPsLine(String line) {
+        if (!hasText(line)) {
+            return "";
+        }
+        String[] parts = line.split("\\t", 2);
+        return parts[0].trim();
+    }
+
     private boolean isRecentWorkspace(Path workspace, Instant cutoff) {
         try {
             FileTime modifiedTime = Files.getLastModifiedTime(workspace, LinkOption.NOFOLLOW_LINKS);
@@ -465,8 +563,21 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return Set.copyOf(safeNames);
     }
 
+    private Set<String> normalizeActiveContainerNames(Set<String> activeSessionIds) {
+        if (activeSessionIds == null || activeSessionIds.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> safeNames = new HashSet<>();
+        for (String sessionId : activeSessionIds) {
+            if (hasText(sessionId)) {
+                safeNames.add(containerName(sessionId));
+            }
+        }
+        return Set.copyOf(safeNames);
+    }
+
     private String containerName(String sessionId) {
-        String base = "seahorse-sandbox-" + safeFilesystemName(sessionId).toLowerCase(Locale.ROOT);
+        String base = CONTAINER_NAME_PREFIX + safeFilesystemName(sessionId).toLowerCase(Locale.ROOT);
         if (base.length() <= 96) {
             return base;
         }
@@ -518,5 +629,31 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             throw new IllegalArgumentException("workspaceMountSourceRoot must not be empty");
         }
         return result;
+    }
+
+    private record ContainerInspectionSummary(int inspectedCount,
+                                              int activeCount,
+                                              int orphanCount,
+                                              int failedInspectionCount,
+                                              List<String> activeNames,
+                                              List<String> orphanNames,
+                                              List<String> failureMessages) {
+
+        private ContainerInspectionSummary {
+            activeNames = activeNames == null ? List.of() : List.copyOf(activeNames);
+            orphanNames = orphanNames == null ? List.of() : List.copyOf(orphanNames);
+            failureMessages = failureMessages == null ? List.of() : List.copyOf(failureMessages);
+        }
+
+        private static ContainerInspectionSummary failed(String message) {
+            return new ContainerInspectionSummary(
+                    0,
+                    0,
+                    0,
+                    1,
+                    List.of(),
+                    List.of(),
+                    List.of(nullToEmpty(message)));
+        }
     }
 }
