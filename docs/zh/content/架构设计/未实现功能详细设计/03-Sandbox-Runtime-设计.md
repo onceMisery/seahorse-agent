@@ -381,6 +381,12 @@ Sandbox Runtime health now reports read-only active session capacity signals. Th
 
 The full-compose sandbox overlay exposes `SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_MAX_ACTIVE_SESSIONS`, and the admin Sandbox health toast includes the capacity status. This completes the first single-node capacity visibility signal; runtime admission control, tenant/agent quota policy, node-pool scheduling, and node-level health remain follow-up production hardening work.
 
+### 2026-07-02 Update: runtime capacity admission preflight
+
+Sandbox Runtime session creation now uses the capacity signal as a conservative admission preflight. After `SandboxPolicyPort` allows a create request and before `SandboxRuntimePort#createSession` is called, `KernelSandboxRuntimeService` reads non-terminal session ids from `SandboxSessionRepositoryPort.listActiveSessionIds()`, asks `SandboxRuntimePort.inspectHealth(...)` for adapter-owned capacity state, and persists a failed session with `RUNTIME_CAPACITY_EXCEEDED` when `activeSessionCapacityAvailable=false`.
+
+The default `max-active-sessions=0` remains unbounded, and the unsupported runtime keeps its existing fail-closed execution behavior because its health reports unbounded capacity. This is still a single-node preflight, not a tenant/agent quota model or runtime pool scheduler; those remain follow-up production hardening work.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

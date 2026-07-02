@@ -11,6 +11,7 @@ param(
     [string]$SandboxWorkspaceRoot = "/var/lib/seahorse-sandbox",
     [string]$ExpectedObjectUriPrefix = "local://sandbox-artifacts/",
     [int]$ExpectedRuntimeActiveSessionLimit = 0,
+    [switch]$VerifyCapacityAdmission,
     [switch]$UseScheduledSweep,
     [int]$ScheduledSweepWaitSeconds = 45,
     [switch]$SkipHealth
@@ -701,6 +702,85 @@ try {
             throw "Content-sensitive artifact detail leaked storage or secret content: $detailJson"
         }
     } | Out-Null
+
+    if ($VerifyCapacityAdmission) {
+        Test-Step "Reject sandbox session when runtime capacity is saturated" {
+            if ($ExpectedRuntimeActiveSessionLimit -le 0) {
+                throw "Capacity admission verification requires ExpectedRuntimeActiveSessionLimit > 0"
+            }
+            if ($ExpectedRuntimeActiveSessionLimit -gt 5) {
+                throw "Capacity admission verification is limited to small configured limits; got $ExpectedRuntimeActiveSessionLimit"
+            }
+
+            $createdSessionIds = @()
+            try {
+                $before = Invoke-Json -Method GET -Path "/api/sandbox/runtime/health" -Headers $headers
+                Assert-ApiOk $before "Inspect sandbox runtime health before capacity admission"
+                $activeCount = [int]$before.data.activeSessionCount
+                $sessionsToCreate = [Math]::Max($ExpectedRuntimeActiveSessionLimit - $activeCount, 0)
+
+                for ($i = 0; $i -lt $sessionsToCreate; $i++) {
+                    $create = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
+                        tenantId = "default"
+                        runId = "sandbox-capacity-fill-run-$suffix-$i"
+                        runtimeType = "CODE_INTERPRETER"
+                        networkRequested = $false
+                        requestedHosts = @()
+                    }
+                    Assert-ApiOk $create "Create sandbox session to fill runtime capacity"
+                    if ("$($create.data.status)" -ne "CREATED") {
+                        throw "Expected capacity filler session to be CREATED: $($create.data | ConvertTo-Json -Depth 20 -Compress)"
+                    }
+                    $createdSessionIds += "$($create.data.sessionId)"
+                }
+
+                $saturated = Invoke-Json -Method GET -Path "/api/sandbox/runtime/health" -Headers $headers
+                Assert-ApiOk $saturated "Inspect saturated sandbox runtime health"
+                if ($saturated.data.activeSessionCapacityAvailable -ne $false) {
+                    throw "Expected activeSessionCapacityAvailable=false after filling capacity: $($saturated.data | ConvertTo-Json -Depth 20 -Compress)"
+                }
+                if ("$($saturated.data.capacityStatus)" -ne "SATURATED") {
+                    throw "Expected capacityStatus=SATURATED after filling capacity: $($saturated.data | ConvertTo-Json -Depth 20 -Compress)"
+                }
+
+                $rejected = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
+                    tenantId = "default"
+                    runId = "sandbox-capacity-rejected-run-$suffix"
+                    runtimeType = "CODE_INTERPRETER"
+                    networkRequested = $false
+                    requestedHosts = @()
+                }
+                Assert-ApiOk $rejected "Create sandbox session beyond runtime capacity"
+                if ("$($rejected.data.status)" -ne "FAILED") {
+                    throw "Expected over-capacity session status FAILED: $($rejected.data | ConvertTo-Json -Depth 20 -Compress)"
+                }
+                if ("$($rejected.data.reasonCode)" -ne "RUNTIME_CAPACITY_EXCEEDED") {
+                    throw "Expected over-capacity reasonCode RUNTIME_CAPACITY_EXCEEDED: $($rejected.data | ConvertTo-Json -Depth 20 -Compress)"
+                }
+
+                $safeRejectedSessionId = "$($rejected.data.sessionId)".Replace("'", "''")
+                $row = Invoke-PostgresScalar "SELECT status, reason_code FROM sa_sandbox_session WHERE session_id = '$safeRejectedSessionId';"
+                $parts = $row -split "`t"
+                if ($parts.Count -ne 2) {
+                    throw "Unexpected rejected capacity session DB row: $row"
+                }
+                if ($parts[0] -ne "FAILED") {
+                    throw "Expected DB status FAILED for over-capacity session but got '$($parts[0])'"
+                }
+                if ($parts[1] -ne "RUNTIME_CAPACITY_EXCEEDED") {
+                    throw "Expected DB reason_code RUNTIME_CAPACITY_EXCEEDED but got '$($parts[1])'"
+                }
+            } finally {
+                foreach ($createdSessionId in $createdSessionIds) {
+                    try {
+                        Invoke-Json -Method POST -Path "/api/sandbox/sessions/$createdSessionId/close" -Headers $headers | Out-Null
+                    } catch {
+                        Write-Host "  WARN: failed to close capacity filler session ${createdSessionId}: $($_.Exception.Message)" -ForegroundColor Yellow
+                    }
+                }
+            }
+        } | Out-Null
+    }
 
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Host "Backend: $BaseUrl"

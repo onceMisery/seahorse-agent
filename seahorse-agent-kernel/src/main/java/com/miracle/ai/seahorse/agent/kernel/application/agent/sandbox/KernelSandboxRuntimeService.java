@@ -235,6 +235,19 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                     now);
             return saveSession(denied, AuditEventType.SANDBOX_SESSION_CREATED);
         }
+        if (runtimeCapacityExceeded()) {
+            Instant now = clock.instant();
+            SandboxSession rejected = SandboxSession.failed(
+                    sessionId(),
+                    safeCommand.tenantId(),
+                    safeCommand.runId(),
+                    safeCommand.runtimeType(),
+                    SandboxPolicyReasonCode.RUNTIME_CAPACITY_EXCEEDED,
+                    profileId,
+                    expiresAt,
+                    now);
+            return saveSession(rejected, AuditEventType.SANDBOX_SESSION_CREATED);
+        }
         SandboxSession session = runtimePort.createSession(new SandboxSessionRequest(
                 safeCommand.tenantId(),
                 safeCommand.runId(),
@@ -419,6 +432,14 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         SandboxExecution execution = executionRepositoryPort.saveExecution(failedExecution(session, reasonCode));
         appendExecutionAudit(session, execution, 0, 0, reasonCode);
         return SandboxExecutionResult.failed(execution, reasonCode);
+    }
+
+    private boolean runtimeCapacityExceeded() {
+        Set<String> activeSessionIds = sessionRepositoryPort.listActiveSessionIds();
+        SandboxRuntimeHealth health = Objects.requireNonNull(
+                runtimePort.inspectHealth(activeSessionIds),
+                "runtime health result must not be null");
+        return !health.activeSessionCapacityAvailable();
     }
 
     private SandboxSession saveSession(SandboxSession session, AuditEventType auditEventType) {

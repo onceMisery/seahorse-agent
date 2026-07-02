@@ -201,7 +201,11 @@ export function SandboxPage() {
         await refreshExecutions(data.sessionId);
       }
       await refreshSessions();
-      toast.success("沙箱会话已创建");
+      if (data.status === "FAILED") {
+        toast.error(`Sandbox session rejected: ${data.reasonCode || "UNKNOWN"}`);
+      } else {
+        toast.success("沙箱会话已创建");
+      }
     } catch (error) {
       toast.error(getErrorMessage(error, "创建沙箱会话失败"));
       console.error(error);

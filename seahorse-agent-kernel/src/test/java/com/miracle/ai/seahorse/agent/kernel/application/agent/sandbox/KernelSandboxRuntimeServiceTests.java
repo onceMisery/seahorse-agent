@@ -107,6 +107,58 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldRejectSessionBeforeCallingRuntimeWhenCapacityIsSaturated() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        sessionRepository.saveSession(SandboxSession.created(
+                "session-active",
+                "tenant-1",
+                "run-active",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW));
+        RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
+        runtime.healthResponse = new SandboxRuntimeHealth(
+                NOW,
+                "container",
+                "docker",
+                SandboxRuntimeHealth.STATUS_DEGRADED,
+                true,
+                true,
+                1,
+                1,
+                0,
+                false,
+                SandboxRuntimeHealth.CAPACITY_SATURATED,
+                0,
+                0,
+                0,
+                0,
+                List.of(),
+                List.of(),
+                List.of());
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                runtime,
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                CLOCK);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-2",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        assertEquals(Set.of("session-active"), runtime.healthActiveSessionIds);
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertEquals(SandboxPolicyReasonCode.RUNTIME_CAPACITY_EXCEEDED, session.reasonCode());
+        assertFalse(runtime.createSessionCalled);
+        assertEquals(session, sessionRepository.findSessionById(session.sessionId()).orElseThrow());
+    }
+
+    @Test
     void shouldApplyRuntimeProfileAndTtlWhenCreatingSession() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
         KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
@@ -939,6 +991,7 @@ class KernelSandboxRuntimeServiceTests {
         private Set<String> healthActiveSessionIds = Set.of();
         private Set<String> containerReapActiveSessionIds = Set.of();
         private boolean containerReapDryRun = true;
+        private SandboxRuntimeHealth healthResponse;
 
         private RecordingSandboxRuntimePort() {
             this(List.of(
@@ -1004,6 +1057,9 @@ class KernelSandboxRuntimeServiceTests {
         @Override
         public SandboxRuntimeHealth inspectHealth(Set<String> activeSessionIds) {
             healthActiveSessionIds = activeSessionIds == null ? Set.of() : Set.copyOf(activeSessionIds);
+            if (healthResponse != null) {
+                return healthResponse;
+            }
             return new SandboxRuntimeHealth(
                     NOW,
                     "container",
