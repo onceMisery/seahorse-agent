@@ -48,7 +48,8 @@ class ContainerSandboxAutoConfigurationTests {
                         "seahorse-agent.adapters.sandbox.container.workspace-root="
                                 + System.getProperty("java.io.tmpdir"),
                         "seahorse-agent.adapters.sandbox.container.workspace-mount-source-root=/host/sandbox",
-                        "seahorse-agent.adapters.sandbox.container.engine=podman")
+                        "seahorse-agent.adapters.sandbox.container.engine=podman",
+                        "seahorse-agent.adapters.sandbox.container.max-active-sessions=7")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(ContainerCommandRunner.class);
@@ -58,6 +59,8 @@ class ContainerSandboxAutoConfigurationTests {
                             .isEqualTo("podman");
                     assertThat(context.getBean(ContainerSandboxAdapterProperties.class).getWorkspaceMountSourceRoot())
                             .isEqualTo("/host/sandbox");
+                    assertThat(context.getBean(ContainerSandboxAdapterProperties.class).getMaxActiveSessions())
+                            .isEqualTo(7);
                 });
     }
 

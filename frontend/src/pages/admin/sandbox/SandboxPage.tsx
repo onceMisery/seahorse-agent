@@ -331,7 +331,13 @@ export function SandboxPage() {
       const inspected = health.inspectedContainerCount ?? 0;
       const orphans = health.orphanContainerCount ?? 0;
       const failures = health.failedContainerInspectionCount ?? 0;
-      const summary = `Runtime ${status}: engine ${health.engineAvailable ? "available" : "unavailable"}, workspace ${health.workspaceAvailable ? "available" : "unavailable"}, containers ${inspected}, orphan ${orphans}`;
+      const activeSessions = health.activeSessionCount ?? 0;
+      const activeLimit = health.activeSessionLimit ?? 0;
+      const capacity =
+        activeLimit > 0
+          ? `${health.capacityStatus || "UNKNOWN"} ${activeSessions}/${activeLimit}`
+          : health.capacityStatus || "UNBOUNDED";
+      const summary = `Runtime ${status}: engine ${health.engineAvailable ? "available" : "unavailable"}, workspace ${health.workspaceAvailable ? "available" : "unavailable"}, capacity ${capacity}, containers ${inspected}, orphan ${orphans}`;
       if (status === "HEALTHY") {
         toast.success(summary);
       } else if (failures > 0 || status === "UNAVAILABLE" || status === "UNSUPPORTED") {

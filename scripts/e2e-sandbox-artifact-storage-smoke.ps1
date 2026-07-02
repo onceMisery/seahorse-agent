@@ -10,6 +10,7 @@ param(
     [string]$StorageRoot = "/app/seahorse-agent-storage",
     [string]$SandboxWorkspaceRoot = "/var/lib/seahorse-sandbox",
     [string]$ExpectedObjectUriPrefix = "local://sandbox-artifacts/",
+    [int]$ExpectedRuntimeActiveSessionLimit = 0,
     [switch]$UseScheduledSweep,
     [int]$ScheduledSweepWaitSeconds = 45,
     [switch]$SkipHealth
@@ -341,6 +342,30 @@ try {
         }
         if ([int]$response.data.failedContainerInspectionCount -ne 0) {
             throw "Expected failedContainerInspectionCount=0: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ([int]$response.data.activeSessionLimit -ne $ExpectedRuntimeActiveSessionLimit) {
+            throw "Expected activeSessionLimit=${ExpectedRuntimeActiveSessionLimit}: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($response.data.activeSessionCapacityAvailable -ne $true) {
+            throw "Expected activeSessionCapacityAvailable=true: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $activeSessionCount = [int]$response.data.activeSessionCount
+        $activeSessionRemaining = [int]$response.data.activeSessionRemaining
+        if ($ExpectedRuntimeActiveSessionLimit -gt 0) {
+            $expectedRemaining = [Math]::Max($ExpectedRuntimeActiveSessionLimit - $activeSessionCount, 0)
+            if ($activeSessionRemaining -ne $expectedRemaining) {
+                throw "Expected activeSessionRemaining=${expectedRemaining}: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ("$($response.data.capacityStatus)" -ne "AVAILABLE") {
+                throw "Expected capacityStatus=AVAILABLE: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+        } else {
+            if ($activeSessionRemaining -ne 0) {
+                throw "Expected unbounded activeSessionRemaining=0: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ("$($response.data.capacityStatus)" -ne "UNBOUNDED") {
+                throw "Expected capacityStatus=UNBOUNDED: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
         }
         $healthJson = $response.data | ConvertTo-Json -Depth 20 -Compress
         if ($healthJson -match [regex]::Escape($SandboxWorkspaceRoot)) {

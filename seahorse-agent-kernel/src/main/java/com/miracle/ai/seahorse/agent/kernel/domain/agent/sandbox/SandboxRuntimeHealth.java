@@ -27,6 +27,10 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                                    boolean engineAvailable,
                                    boolean workspaceAvailable,
                                    int activeSessionCount,
+                                   int activeSessionLimit,
+                                   int activeSessionRemaining,
+                                   boolean activeSessionCapacityAvailable,
+                                   String capacityStatus,
                                    int inspectedContainerCount,
                                    int activeContainerCount,
                                    int orphanContainerCount,
@@ -39,11 +43,17 @@ public record SandboxRuntimeHealth(Instant checkedAt,
     public static final String STATUS_DEGRADED = "DEGRADED";
     public static final String STATUS_UNAVAILABLE = "UNAVAILABLE";
     public static final String STATUS_UNSUPPORTED = "UNSUPPORTED";
+    public static final String CAPACITY_UNBOUNDED = "UNBOUNDED";
+    public static final String CAPACITY_AVAILABLE = "AVAILABLE";
+    public static final String CAPACITY_SATURATED = "SATURATED";
 
     public SandboxRuntimeHealth {
         runtime = normalize(runtime, "unsupported");
         engine = normalize(engine, "");
         status = normalize(status, STATUS_UNAVAILABLE);
+        activeSessionLimit = Math.max(activeSessionLimit, 0);
+        activeSessionRemaining = Math.max(activeSessionRemaining, 0);
+        capacityStatus = normalize(capacityStatus, CAPACITY_UNBOUNDED);
         activeContainerNames = activeContainerNames == null ? List.of() : List.copyOf(activeContainerNames);
         orphanContainerNames = orphanContainerNames == null ? List.of() : List.copyOf(orphanContainerNames);
         failureMessages = failureMessages == null ? List.of() : List.copyOf(failureMessages);
@@ -58,6 +68,10 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                 false,
                 false,
                 Math.max(activeSessionCount, 0),
+                0,
+                0,
+                true,
+                CAPACITY_UNBOUNDED,
                 0,
                 0,
                 0,

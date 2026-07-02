@@ -4,7 +4,7 @@
 
 ## 1. 结论
 
-Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端口、artifact 端口、JDBC 存储、Web API、前端页面骨架、opt-in 的 Docker/Podman CLI 容器 adapter、full-compose backend Docker host-socket/CLI opt-in 接入、orphan workspace 清理、live container 只读巡检、runtime health 只读检查与受控 orphan container 回收，以及第一个 Agent 工具 `sandbox_python`：配置 `seahorse-agent.adapters.sandbox.runtime=container` 后，`CODE_INTERPRETER` 可以在无网络容器中执行 Python 最小闭环。默认 `SandboxRuntimePort` 仍是 `unsupported()`，不配置真实 adapter 时继续 fail closed。
+Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端口、artifact 端口、JDBC 存储、Web API、前端页面骨架、opt-in 的 Docker/Podman CLI 容器 adapter、full-compose backend Docker host-socket/CLI opt-in 接入、orphan workspace 清理、live container 只读巡检、runtime health 只读检查、active session capacity 只读信号与受控 orphan container 回收，以及第一个 Agent 工具 `sandbox_python`：配置 `seahorse-agent.adapters.sandbox.runtime=container` 后，`CODE_INTERPRETER` 可以在无网络容器中执行 Python 最小闭环。默认 `SandboxRuntimePort` 仍是 `unsupported()`，不配置真实 adapter 时继续 fail closed。
 
 因此它的现状应定义为“控制面、审计基础、Code Interpreter 容器 runtime 最小闭环、full-compose host-socket opt-in 接入、runtime 巡检/受控回收基础和 `sandbox_python` 工具链路已实现，生产级 sandbox 还需要补齐 profile/配额、更完整 Agent 工具化和强隔离加固”。
 
@@ -23,7 +23,7 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 | 默认 runtime | 默认 bean 是 `SandboxRuntimePort.unsupported()`，execute 返回 `RUNTIME_UNSUPPORTED` | `SeahorseAgentKernelRegistryAutoConfiguration.java` |
 | 容器 runtime | 显式配置 `seahorse-agent.adapters.sandbox.runtime=container` 后，可用 Docker/Podman CLI 执行 `CODE_INTERPRETER` Python 最小闭环 | `ContainerSandboxRuntimeAdapter.java` |
 | full-compose 接入 | 新增 `docker-compose.sandbox.yml` opt-in overlay，backend 镜像内置 Docker CLI，可显式挂载宿主 Docker socket 和 daemon-visible workspace mount source | `docker-compose.sandbox.yml`、`Dockerfile.backend` |
-| runtime 巡检与清理 | 已有 expired session sweep、scheduled TTL sweep、orphan workspace sweep、Docker/Podman live container 只读巡检、runtime health 只读检查和 dry-run 默认的 orphan container 受控回收 | `KernelSandboxRuntimeService.java`、`ContainerSandboxRuntimeAdapter.java`、`SandboxRuntimeOrphanSweepJob.java` |
+| runtime 巡检与清理 | 已有 expired session sweep、scheduled TTL sweep、orphan workspace sweep、Docker/Podman live container 只读巡检、runtime health 只读检查、active session capacity 只读信号和 dry-run 默认的 orphan container 受控回收 | `KernelSandboxRuntimeService.java`、`ContainerSandboxRuntimeAdapter.java`、`SandboxRuntimeOrphanSweepJob.java` |
 | 存储 | 已有 `sa_sandbox_session`、`sa_sandbox_execution`、`sa_sandbox_artifact` 对应 JDBC adapter | `JdbcSandboxRepositoryAdapter.java` |
 | Web API | 已有创建 session、execute、close、list executions、list artifacts API | `SeahorseSandboxController.java` |
 | 前端页面 | 已有 `/admin/sandbox`，可创建 session、输入参数、执行、查看结果、execution history 和 artifact | `frontend/src/pages/admin/sandbox/SandboxPage.tsx` |
@@ -35,7 +35,7 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 | 缺口 | 影响 | 设计处理 |
 | --- | --- | --- |
 | 真实隔离 runtime 覆盖仍窄 | Code Interpreter Python 最小容器闭环与 full-compose backend Docker host-socket opt-in 接入已落地；Browser Automation、Shell、File Conversion 仍未完成 | 扩展 Docker/Podman adapter 的 profile 覆盖，P1/P2 可替换为 gVisor 或 Firecracker |
-| 真实 runtime 清理仍需生产化 | 当前 adapter 使用 `--rm` 并在 close 时删除 per-session workspace；session TTL metadata 已持久化，管理员手动 expired session sweep 与后台定时 TTL sweep 均可将过期未终态 session 释放并标记为 `TIMED_OUT`；orphan workspace sweep 会保守删除旧 workspace 并只读巡检 `seahorse-sandbox-*` live/exited container；runtime health API 已暴露 engine/workspace/container 只读健康信号且不暴露 workspace root；orphan container reap 已提供默认 dry-run 的显式管理员操作并保护非终态 session container；仍缺 runtime pool 容量调度和节点级健康检查 | 接入 runtime 节点健康检查、容量指标和更完整的自动化回收策略 |
+| 真实 runtime 清理仍需生产化 | 当前 adapter 使用 `--rm` 并在 close 时删除 per-session workspace；session TTL metadata 已持久化，管理员手动 expired session sweep 与后台定时 TTL sweep 均可将过期未终态 session 释放并标记为 `TIMED_OUT`；orphan workspace sweep 会保守删除旧 workspace 并只读巡检 `seahorse-sandbox-*` live/exited container；runtime health API 已暴露 engine/workspace/container 与 active session capacity 只读健康信号且不暴露 workspace root；orphan container reap 已提供默认 dry-run 的显式管理员操作并保护非终态 session container；仍缺 runtime pool 调度和节点级健康检查 | 接入 runtime 节点健康检查、调度/admission control 和更完整的自动化回收策略 |
 | 资源配额仍不完整 | 当前 adapter 有固定 CPU、内存、pids、timeout、stdout/stderr limit，session `profileId`/`expiresAt` 已持久化；仍缺磁盘配额和按 tenant/agent/tool 的资源策略联动 | 新增 `SandboxResourcePolicy` 和更完整 runtime profile policy |
 | 真实 artifact 产物已进入最小闭环 | Code Interpreter adapter 已收集 workspace 文件，kernel 已将 prompt-visible file:// artifact 写入 object storage，并通过治理 API 下载/查看详情 | 后续补齐 preview、生命周期和更广运行时产物 |
 | 内容级 artifact 扫描仍需加固 | 基础 metadata scanner、file:// 文本类 secret/PII 内容阻断和 prompt visibility gate 已落地；仍缺病毒扫描、二进制/PDF 深度扫描、redaction summary | 后续接入专业扫描引擎和可审计 redaction summary |
@@ -203,13 +203,13 @@ SandboxArtifactScannerPort
 5. 不注入业务 secret，不继承额外 runtime 环境。
 6. `closeSession` 删除 session workspace；非 `CODE_INTERPRETER` runtime fail closed。
 7. `sweepOrphanedResources` 删除旧的孤儿 `sandbox_container_*` workspace，并通过 Docker/Podman CLI 只读巡检 `seahorse-sandbox-*` container，返回 active/orphan container 计数和名称。
-8. `inspectHealth` 复用 active session id 和只读 container 巡检，返回 engine/workspace 可用性、managed container 计数、active/orphan container 信号和 `HEALTHY`/`DEGRADED`/`UNAVAILABLE`/`UNSUPPORTED` 状态，不暴露 workspace root 路径。
+8. `inspectHealth` 复用 active session id 和只读 container 巡检，返回 engine/workspace 可用性、managed container 计数、active/orphan container 信号、active session capacity 信号和 `HEALTHY`/`DEGRADED`/`UNAVAILABLE`/`UNSUPPORTED` 状态，不暴露 workspace root 路径。
 9. `reapOrphanedContainers` 默认 dry-run，只回收命名为 `seahorse-sandbox-*` 且不匹配任何非终态 session id 的 managed container，真实执行前再次校验 managed prefix。
 
 后续职责：
 
 1. 引入持久化 runtime profile 和按 tenant/agent/tool 的资源策略。
-2. 增加磁盘配额、runtime pool 容量/节点级健康检查和更完整的自动化回收策略。
+2. 增加磁盘配额、runtime pool 调度/节点级健康检查和更完整的自动化回收策略。
 3. 收集 workspace 产物，写入 object storage，并进入 artifact scanner。
 4. 在 full-compose backend 容器内提供 Docker host-socket/CLI 的可运维接入方式。（已补齐 opt-in overlay、Docker CLI 和 workspace mount source 配置）
 
@@ -363,7 +363,7 @@ This completed the low-risk live container visibility portion of runtime patrol.
 
 Sandbox Runtime now exposes a read-only health endpoint at `GET /api/sandbox/runtime/health`. The kernel gathers non-terminal session ids through `SandboxSessionRepositoryPort.listActiveSessionIds()`, then asks `SandboxRuntimePort.inspectHealth(...)` for adapter-owned runtime signals. The Docker/Podman container adapter reports runtime type, engine, `HEALTHY`/`DEGRADED`/`UNAVAILABLE` status, engine availability, workspace availability, active session count, inspected/active/orphan managed container counts, active/orphan container names, and inspection failure messages. The unsupported default runtime returns `UNSUPPORTED` without touching the host.
 
-The endpoint intentionally remains non-destructive: it does not kill or remove containers, and it does not expose the configured workspace root path. Container reaping, capacity metrics, node-level health, and stronger isolation profiles such as gVisor/Firecracker remain follow-up production hardening work.
+The endpoint intentionally remains non-destructive: it does not kill or remove containers, and it does not expose the configured workspace root path. Container reaping, active-session capacity signals, node-level health, and stronger isolation profiles such as gVisor/Firecracker remain follow-up production hardening work.
 
 Fresh full-Docker evidence: `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-runtime-health-smoke` passed 16/16 after rebuilding the full-compose backend. The smoke verified `runtime=container`, `engine=docker`, `engineAvailable=true`, `workspaceAvailable=true`, `failedContainerInspectionCount=0`, and no configured sandbox workspace root leak.
 
@@ -374,6 +374,12 @@ Sandbox Runtime now exposes an explicit operator endpoint at `POST /api/sandbox/
 The admin Sandbox page uses a preview-then-confirm flow so operators see the candidate orphan containers before sending a non-dry-run reap. This leaves workspace cleanup under `/api/sandbox/runtime/orphans:sweep` and keeps live-container reaping as a separate, intentional recovery action.
 
 Fresh full-Docker evidence: `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-orphan-container-reap-smoke` passed 16/16 after rebuilding the full-compose backend. The smoke created a real `seahorse-sandbox-orphan-live-*` container, verified dry-run reported it without deletion, verified non-dry-run returned it in `reapedContainerNames`, and verified `docker ps -a` no longer listed it afterward.
+
+### 2026-07-02 Update: runtime capacity signal
+
+Sandbox Runtime health now reports read-only active session capacity signals. The container adapter exposes `max-active-sessions` configuration, defaulting to `0` for unbounded capacity. `GET /api/sandbox/runtime/health` now includes `activeSessionLimit`, `activeSessionRemaining`, `activeSessionCapacityAvailable`, and `capacityStatus` (`UNBOUNDED`, `AVAILABLE`, or `SATURATED`). A saturated configured capacity degrades health to `DEGRADED`, but this slice does not reject session creation or introduce runtime pool scheduling ownership.
+
+The full-compose sandbox overlay exposes `SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_MAX_ACTIVE_SESSIONS`, and the admin Sandbox health toast includes the capacity status. This completes the first single-node capacity visibility signal; runtime admission control, tenant/agent quota policy, node-pool scheduling, and node-level health remain follow-up production hardening work.
 
 ## 13. 非目标
 

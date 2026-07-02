@@ -47,6 +47,8 @@ public class ContainerSandboxAdapterProperties {
 
     private Duration orphanWorkspaceMinAge = Duration.ofMinutes(5);
 
+    private int maxActiveSessions = 0;
+
     public String getEngine() {
         return engine;
     }
@@ -141,6 +143,14 @@ public class ContainerSandboxAdapterProperties {
             return;
         }
         this.orphanWorkspaceMinAge = orphanWorkspaceMinAge;
+    }
+
+    public int getMaxActiveSessions() {
+        return maxActiveSessions;
+    }
+
+    public void setMaxActiveSessions(int maxActiveSessions) {
+        this.maxActiveSessions = Math.max(maxActiveSessions, 0);
     }
 
     private static int positiveOrDefault(int value, int fallback) {

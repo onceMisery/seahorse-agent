@@ -56,6 +56,10 @@ export interface SandboxRuntimeHealth {
   engineAvailable?: boolean;
   workspaceAvailable?: boolean;
   activeSessionCount?: number;
+  activeSessionLimit?: number;
+  activeSessionRemaining?: number;
+  activeSessionCapacityAvailable?: boolean;
+  capacityStatus?: string;
   inspectedContainerCount?: number;
   activeContainerCount?: number;
   orphanContainerCount?: number;

@@ -582,6 +582,8 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals(Set.of("session-active"), runtime.healthActiveSessionIds);
         assertEquals(SandboxRuntimeHealth.STATUS_HEALTHY, health.status());
         assertEquals(1, health.activeSessionCount());
+        assertEquals(SandboxRuntimeHealth.CAPACITY_UNBOUNDED, health.capacityStatus());
+        assertTrue(health.activeSessionCapacityAvailable());
         assertEquals("container", health.runtime());
     }
 
@@ -1010,6 +1012,10 @@ class KernelSandboxRuntimeServiceTests {
                     true,
                     true,
                     healthActiveSessionIds.size(),
+                    0,
+                    0,
+                    true,
+                    SandboxRuntimeHealth.CAPACITY_UNBOUNDED,
                     0,
                     0,
                     0,

@@ -277,14 +277,24 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             failureMessages.add("sandbox workspace root is not available");
         }
         boolean engineAvailable = containerSummary.failedInspectionCount() == 0;
+        CapacitySummary capacitySummary = capacitySummary(safeActiveSessionIds.size());
         return new SandboxRuntimeHealth(
                 clock.instant(),
                 "container",
                 properties.getEngine(),
-                healthStatus(engineAvailable, workspaceAvailable, containerSummary.orphanCount(), failureMessages),
+                healthStatus(
+                        engineAvailable,
+                        workspaceAvailable,
+                        capacitySummary.available(),
+                        containerSummary.orphanCount(),
+                        failureMessages),
                 engineAvailable,
                 workspaceAvailable,
                 safeActiveSessionIds.size(),
+                capacitySummary.limit(),
+                capacitySummary.remaining(),
+                capacitySummary.available(),
+                capacitySummary.status(),
                 containerSummary.inspectedCount(),
                 containerSummary.activeCount(),
                 containerSummary.orphanCount(),
@@ -459,14 +469,27 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
     }
 
+    private CapacitySummary capacitySummary(int activeSessionCount) {
+        int limit = Math.max(properties.getMaxActiveSessions(), 0);
+        if (limit == 0) {
+            return new CapacitySummary(0, 0, true, SandboxRuntimeHealth.CAPACITY_UNBOUNDED);
+        }
+        int remaining = Math.max(limit - Math.max(activeSessionCount, 0), 0);
+        if (remaining == 0) {
+            return new CapacitySummary(limit, 0, false, SandboxRuntimeHealth.CAPACITY_SATURATED);
+        }
+        return new CapacitySummary(limit, remaining, true, SandboxRuntimeHealth.CAPACITY_AVAILABLE);
+    }
+
     private String healthStatus(boolean engineAvailable,
                                 boolean workspaceAvailable,
+                                boolean capacityAvailable,
                                 int orphanContainerCount,
                                 List<String> failureMessages) {
         if (!engineAvailable || !workspaceAvailable) {
             return SandboxRuntimeHealth.STATUS_UNAVAILABLE;
         }
-        if (orphanContainerCount > 0 || !failureMessages.isEmpty()) {
+        if (!capacityAvailable || orphanContainerCount > 0 || !failureMessages.isEmpty()) {
             return SandboxRuntimeHealth.STATUS_DEGRADED;
         }
         return SandboxRuntimeHealth.STATUS_HEALTHY;
@@ -767,4 +790,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     List.of(nullToEmpty(message)));
         }
     }
+
+    private record CapacitySummary(int limit,
+                                   int remaining,
+                                   boolean available,
+                                   String status) {}
 }

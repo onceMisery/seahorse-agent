@@ -115,6 +115,10 @@ class SeahorseSandboxControllerTests {
                 true,
                 true,
                 1,
+                3,
+                2,
+                true,
+                SandboxRuntimeHealth.CAPACITY_AVAILABLE,
                 1,
                 0,
                 0,
@@ -251,6 +255,10 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data.engineAvailable").value(true))
                 .andExpect(jsonPath("$.data.workspaceAvailable").value(true))
                 .andExpect(jsonPath("$.data.activeSessionCount").value(1))
+                .andExpect(jsonPath("$.data.activeSessionLimit").value(3))
+                .andExpect(jsonPath("$.data.activeSessionRemaining").value(2))
+                .andExpect(jsonPath("$.data.activeSessionCapacityAvailable").value(true))
+                .andExpect(jsonPath("$.data.capacityStatus").value("AVAILABLE"))
                 .andExpect(jsonPath("$.data.inspectedContainerCount").value(1));
         verify(port).inspectRuntimeHealth();
 
