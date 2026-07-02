@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Download, History, Info, Play, Square } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Download, History, Info, Play, RefreshCw, Square } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import {
   closeSandboxSession,
   downloadSandboxArtifact,
   getSandboxArtifact,
+  listSandboxSessions,
   listSandboxExecutions,
   listSandboxArtifacts,
   type SandboxSession,
@@ -68,6 +69,57 @@ export function SandboxPage() {
   const [artifactDetail, setArtifactDetail] = useState<SandboxArtifactDetail | null>(null);
   const [loadingArtifactDetailId, setLoadingArtifactDetailId] = useState<string | null>(null);
   const [downloadingArtifactId, setDownloadingArtifactId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<SandboxSession[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+
+  const clearArtifactSelection = () => {
+    setSelectedArtifactId(null);
+    setArtifactDetail(null);
+  };
+
+  const refreshSessions = async () => {
+    try {
+      setLoadingSessions(true);
+      const data = await listSandboxSessions();
+      setSessions(data || []);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "加载沙箱会话失败"));
+      console.error(error);
+    } finally {
+      setLoadingSessions(false);
+    }
+  };
+
+  const loadSessionData = async (selected: SandboxSession) => {
+    if (!selected.sessionId) return;
+    try {
+      setLoadingHistory(true);
+      const [history, arts] = await Promise.all([
+        listSandboxExecutions(selected.sessionId),
+        listSandboxArtifacts(selected.sessionId)
+      ]);
+      setExecutions(history || []);
+      setArtifacts(arts || []);
+      clearArtifactSelection();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "加载沙箱会话数据失败"));
+      console.error(error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleSelectSession = async (selected: SandboxSession) => {
+    setSession(selected);
+    setLastResult(null);
+    await loadSessionData(selected);
+  };
+
+  useEffect(() => {
+    if (featureState.enabled) {
+      void refreshSessions();
+    }
+  }, [featureState.enabled]);
 
   const refreshExecutions = async (sessionId: string) => {
     try {
@@ -136,11 +188,11 @@ export function SandboxPage() {
       setLastResult(null);
       setArtifacts([]);
       setExecutions([]);
-      setSelectedArtifactId(null);
-      setArtifactDetail(null);
+      clearArtifactSelection();
       if (data.sessionId) {
         await refreshExecutions(data.sessionId);
       }
+      await refreshSessions();
       toast.success("沙箱会话已创建");
     } catch (error) {
       toast.error(getErrorMessage(error, "创建沙箱会话失败"));
@@ -177,8 +229,8 @@ export function SandboxPage() {
       ]);
       setArtifacts(arts || []);
       setExecutions(history || []);
-      setSelectedArtifactId(null);
-      setArtifactDetail(null);
+      clearArtifactSelection();
+      await refreshSessions();
     } catch (error) {
       toast.error(getErrorMessage(error, "执行失败"));
       console.error(error);
@@ -202,6 +254,7 @@ export function SandboxPage() {
       setClosing(true);
       const closed = await closeSandboxSession(session.sessionId);
       setSession((prev) => closed || (prev ? { ...prev, status: "CANCELLED" } : null));
+      await refreshSessions();
       toast.success("沙箱会话已关闭");
     } catch (error) {
       toast.error(getErrorMessage(error, "关闭会话失败"));
@@ -225,7 +278,8 @@ export function SandboxPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
+        <div className="space-y-4">
+          <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span>会话</span>
@@ -268,6 +322,69 @@ export function SandboxPage() {
             )}
           </CardContent>
         </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between gap-2">
+                <span>最近会话</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  title="刷新会话"
+                  disabled={loadingSessions}
+                  onClick={() => void refreshSessions()}
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingSessions ? "animate-spin" : ""}`} />
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {sessions.length === 0 ? (
+                <div className="text-sm text-muted-foreground">
+                  {loadingSessions ? "加载中..." : "暂无会话"}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {sessions.map((item) => {
+                    const active = item.sessionId && item.sessionId === session?.sessionId;
+                    return (
+                      <button
+                        key={item.sessionId || item.runId}
+                        type="button"
+                        disabled={!item.sessionId}
+                        className={`w-full rounded border p-3 text-left text-sm transition ${
+                          active
+                            ? "border-sky-300 bg-sky-50"
+                            : "border-slate-100 bg-slate-50 hover:border-slate-200 hover:bg-white"
+                        }`}
+                        onClick={() => void handleSelectSession(item)}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0 truncate font-mono text-xs text-slate-600">
+                            {item.sessionId || "-"}
+                          </div>
+                          <Badge variant={item.status === "CREATED" ? "default" : "secondary"}>
+                            {item.status || "UNKNOWN"}
+                          </Badge>
+                        </div>
+                        <div className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+                          <div className="truncate">{item.runtimeType || "CODE_INTERPRETER"}</div>
+                          <div className="truncate sm:text-right">{formatTimestamp(item.updatedAt || item.createdAt)}</div>
+                        </div>
+                        {item.runId && (
+                          <div className="mt-1 truncate text-xs text-muted-foreground">
+                            Run: {item.runId}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
         <div className="space-y-4">
           {lastResult?.execution && (

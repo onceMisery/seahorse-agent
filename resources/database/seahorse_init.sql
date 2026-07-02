@@ -1705,6 +1705,9 @@ CREATE TABLE IF NOT EXISTS sa_sandbox_session (
 CREATE INDEX IF NOT EXISTS idx_sa_sandbox_session_run
   ON sa_sandbox_session(tenant_id, run_id, created_at);
 
+CREATE INDEX IF NOT EXISTS idx_sa_sandbox_session_tenant_updated
+  ON sa_sandbox_session(tenant_id, updated_at DESC, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS sa_sandbox_execution (
   pk_id BIGSERIAL PRIMARY KEY,
   execution_id VARCHAR(64) NOT NULL UNIQUE,

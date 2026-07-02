@@ -76,6 +76,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private static final String RESOURCE_TYPE_SANDBOX_SESSION = "SANDBOX_SESSION";
     private static final String RESOURCE_TYPE_SANDBOX_EXECUTION = "SANDBOX_EXECUTION";
     private static final String SANDBOX_ARTIFACT_BUCKET = "sandbox-artifacts";
+    private static final int DEFAULT_SESSION_LIST_LIMIT = 20;
+    private static final int MAX_SESSION_LIST_LIMIT = 100;
     private static final String DOWNLOAD_BLOCKED = "Sandbox artifact is not available for download";
     private static final String UNSAFE_STORAGE_REF_BLOCKED =
             "Sandbox artifact storage reference is not available through the download endpoint";
@@ -276,6 +278,15 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 runtimePort.closeSession(session),
                 "runtime closeSession result must not be null");
         return saveSession(closed, AuditEventType.SANDBOX_SESSION_CLOSED);
+    }
+
+    @Override
+    public List<SandboxSession> listSessions(String tenantId, int limit) {
+        String safeTenantId = requireText(tenantId, "tenantId must not be blank");
+        int safeLimit = normalizeSessionListLimit(limit);
+        List<SandboxSession> records = sessionRepositoryPort.listSessionsByTenant(safeTenantId, safeLimit);
+        records.forEach(session -> sessions.put(session.sessionId(), session));
+        return records;
     }
 
     @Override
@@ -556,6 +567,13 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         return value != null && !value.isBlank();
     }
 
+    private static int normalizeSessionListLimit(int limit) {
+        if (limit <= 0) {
+            return DEFAULT_SESSION_LIST_LIMIT;
+        }
+        return Math.min(limit, MAX_SESSION_LIST_LIMIT);
+    }
+
     private record SandboxArtifactDownloadPolicy(boolean downloadable, String blockedReason) {
 
         private static SandboxArtifactDownloadPolicy allowed() {
@@ -584,6 +602,23 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 return Optional.empty();
             }
             return Optional.ofNullable(store.get(sessionId.trim()));
+        }
+
+        @Override
+        public List<SandboxSession> listSessionsByTenant(String tenantId, int limit) {
+            if (!hasText(tenantId)) {
+                return List.of();
+            }
+            String safeTenantId = tenantId.trim();
+            int safeLimit = normalizeSessionListLimit(limit);
+            return store.values().stream()
+                    .filter(session -> session.tenantId().equals(safeTenantId))
+                    .sorted(Comparator.comparing(SandboxSession::updatedAt)
+                            .thenComparing(SandboxSession::createdAt)
+                            .thenComparing(SandboxSession::sessionId)
+                            .reversed())
+                    .limit(safeLimit)
+                    .toList();
         }
     }
 

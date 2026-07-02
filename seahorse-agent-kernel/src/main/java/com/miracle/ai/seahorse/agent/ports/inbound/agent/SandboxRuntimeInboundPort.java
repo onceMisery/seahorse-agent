@@ -32,6 +32,8 @@ public interface SandboxRuntimeInboundPort {
 
     SandboxSession close(String sessionId);
 
+    List<SandboxSession> listSessions(String tenantId, int limit);
+
     List<SandboxExecution> listExecutions(String sessionId);
 
     List<SandboxArtifact> listArtifacts(String sessionId);

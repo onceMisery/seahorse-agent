@@ -91,6 +91,15 @@ export function createSandboxSession(payload: SandboxSessionCreatePayload = {}) 
   });
 }
 
+export function listSandboxSessions(tenantId = currentTenantId(), limit = 20) {
+  return api.get<SandboxSession[]>("/api/sandbox/sessions", {
+    params: {
+      tenantId,
+      limit
+    }
+  });
+}
+
 export function executeInSandbox(sessionId: string, payload: SandboxExecutePayload) {
   const input = payload.input ?? payload.argumentsJson ?? "";
   return api.post<SandboxExecutionResult, SandboxExecutionResult>(

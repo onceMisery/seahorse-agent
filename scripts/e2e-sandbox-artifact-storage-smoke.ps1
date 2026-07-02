@@ -240,6 +240,19 @@ try {
     }
     if (-not $objectUri) { exit 1 }
 
+    Test-Step "Verify sandbox session list includes session without storage URI" {
+        $response = Invoke-Json -Method GET -Path "/api/sandbox/sessions?tenantId=default&limit=20" -Headers $headers
+        Assert-ApiOk $response "List sandbox sessions"
+        $matched = @($response.data | Where-Object { "$($_.sessionId)" -eq $sessionId })
+        if ($matched.Count -ne 1) {
+            throw "Session $sessionId not found in sandbox session API response"
+        }
+        $sessionJson = $matched[0] | ConvertTo-Json -Depth 20 -Compress
+        if ($sessionJson -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Sandbox session API leaked storage URI fields: $sessionJson"
+        }
+    } | Out-Null
+
     Test-Step "Verify sandbox artifact API does not expose storage URI" {
         $response = Invoke-Json -Method GET -Path "/api/sandbox/sessions/$sessionId/artifacts" -Headers $headers
         Assert-ApiOk $response "List sandbox artifacts"

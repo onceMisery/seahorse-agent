@@ -79,6 +79,7 @@ class SeahorseSandboxControllerTests {
                         SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED),
                 SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED));
         when(port.close("session-1")).thenReturn(session(SandboxExecutionStatus.CANCELLED));
+        when(port.listSessions("tenant-a", 20)).thenReturn(List.of(session(SandboxExecutionStatus.CREATED)));
         when(port.listExecutions("session-1")).thenReturn(List.of(SandboxExecution.failed(
                 "exec-1",
                 "session-1",
@@ -146,6 +147,15 @@ class SeahorseSandboxControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("CANCELLED"));
         verify(port).close("session-1");
+
+        mvc.perform(get("/api/sandbox/sessions")
+                        .param("tenantId", "tenant-a")
+                        .param("limit", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].sessionId").value("session-1"))
+                .andExpect(jsonPath("$.data[0].tenantId").value("tenant-a"))
+                .andExpect(jsonPath("$.data[0].runtimeType").value("CODE_INTERPRETER"));
+        verify(port).listSessions("tenant-a", 20);
 
         mvc.perform(get("/api/sandbox/sessions/session-1/executions"))
                 .andExpect(status().isOk())

@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface SandboxSessionRepositoryPort {
@@ -26,4 +27,8 @@ public interface SandboxSessionRepositoryPort {
     SandboxSession saveSession(SandboxSession session);
 
     Optional<SandboxSession> findSessionById(String sessionId);
+
+    default List<SandboxSession> listSessionsByTenant(String tenantId, int limit) {
+        return List.of();
+    }
 }

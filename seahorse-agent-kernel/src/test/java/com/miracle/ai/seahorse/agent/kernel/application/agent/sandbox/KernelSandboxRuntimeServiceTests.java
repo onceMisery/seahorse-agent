@@ -360,6 +360,42 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldListRecentSessionsForTenant() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        sessionRepository.saveSession(SandboxSession.created(
+                "session-old",
+                "tenant-1",
+                "run-old",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW.minusSeconds(60)));
+        sessionRepository.saveSession(SandboxSession.created(
+                "session-other-tenant",
+                "tenant-2",
+                "run-other",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW.plusSeconds(60)));
+        sessionRepository.saveSession(SandboxSession.created(
+                "session-new",
+                "tenant-1",
+                "run-new",
+                SandboxRuntimeType.FILE_CONVERSION,
+                NOW.plusSeconds(30)));
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                CLOCK);
+
+        List<SandboxSession> sessions = service.listSessions("tenant-1", 1);
+
+        assertEquals(1, sessions.size());
+        assertEquals("session-new", sessions.get(0).sessionId());
+    }
+
+    @Test
     void shouldAllowPromptVisibleObjectArtifactDownloadDecision() {
         MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
         SandboxSession session = sessionRepository.saveSession(SandboxSession.created(
@@ -824,6 +860,18 @@ class KernelSandboxRuntimeServiceTests {
         @Override
         public Optional<SandboxSession> findSessionById(String sessionId) {
             return Optional.ofNullable(store.get(sessionId));
+        }
+
+        @Override
+        public List<SandboxSession> listSessionsByTenant(String tenantId, int limit) {
+            return store.values().stream()
+                    .filter(session -> session.tenantId().equals(tenantId))
+                    .sorted(Comparator.comparing(SandboxSession::updatedAt)
+                            .thenComparing(SandboxSession::createdAt)
+                            .thenComparing(SandboxSession::sessionId)
+                            .reversed())
+                    .limit(limit)
+                    .toList();
         }
     }
 

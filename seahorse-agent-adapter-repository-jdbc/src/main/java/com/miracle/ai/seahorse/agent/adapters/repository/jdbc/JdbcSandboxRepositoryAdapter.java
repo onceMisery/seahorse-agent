@@ -76,6 +76,13 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
             FROM sa_sandbox_session
             WHERE session_id = ?
             """.formatted(SESSION_COLUMNS);
+    private static final String SQL_LIST_SESSIONS_BY_TENANT = """
+            SELECT %s
+            FROM sa_sandbox_session
+            WHERE tenant_id = ?
+            ORDER BY updated_at DESC, created_at DESC, session_id DESC
+            LIMIT ?
+            """.formatted(SESSION_COLUMNS);
 
     private static final String SQL_INSERT_EXECUTION = """
             INSERT INTO sa_sandbox_execution
@@ -164,6 +171,14 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
             return Optional.empty();
         }
         return jdbcTemplate.query(SQL_FIND_SESSION, this::mapSession, sessionId.trim()).stream().findFirst();
+    }
+
+    @Override
+    public List<SandboxSession> listSessionsByTenant(String tenantId, int limit) {
+        if (!hasText(tenantId) || limit <= 0) {
+            return List.of();
+        }
+        return jdbcTemplate.query(SQL_LIST_SESSIONS_BY_TENANT, this::mapSession, tenantId.trim(), limit);
     }
 
     @Override

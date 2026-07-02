@@ -192,6 +192,11 @@ class BuiltInAgentToolRegistrarTests {
         }
 
         @Override
+        public List<SandboxSession> listSessions(String tenantId, int limit) {
+            return List.of();
+        }
+
+        @Override
         public List<SandboxExecution> listExecutions(String sessionId) {
             return List.of();
         }

@@ -39,6 +39,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -111,6 +112,14 @@ public class SeahorseSandboxController {
     public ApiResponse<Object> close(@PathVariable String sessionId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
         return ApiResponses.requireService(sandboxRuntimePortProvider, port -> port.close(sessionId));
+    }
+
+    @GetMapping("/api/sandbox/sessions")
+    public ApiResponse<Object> listSessions(@RequestParam String tenantId,
+                                            @RequestParam(defaultValue = "20") int limit) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        return ApiResponses.requireService(sandboxRuntimePortProvider,
+                port -> port.listSessions(tenantId, limit));
     }
 
     @GetMapping("/api/sandbox/sessions/{sessionId}/executions")
