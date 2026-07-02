@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
@@ -36,13 +37,16 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
 public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
@@ -178,6 +182,67 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         SandboxSession safeSession = Objects.requireNonNull(session, "session must not be null");
         deleteWorkspace(safeSession.sessionId());
         return safeSession.closed(clock.instant());
+    }
+
+    @Override
+    public SandboxRuntimeCleanupResult sweepOrphanedResources(Set<String> activeSessionIds) {
+        Set<String> safeActiveSessionIds = normalizeActiveSessionIds(activeSessionIds);
+        Instant sweptAt = clock.instant();
+        Instant cutoff = sweptAt.minus(properties.getOrphanWorkspaceMinAge());
+        int inspected = 0;
+        int skippedActive = 0;
+        int skippedRecent = 0;
+        int removed = 0;
+        int failed = 0;
+        List<String> removedNames = new ArrayList<>();
+        List<String> failedNames = new ArrayList<>();
+        try (var paths = Files.list(workspaceRoot)) {
+            List<Path> candidates = paths
+                    .filter(path -> Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
+                    .filter(this::isManagedWorkspaceDirectory)
+                    .sorted(Comparator.comparing(path -> path.getFileName().toString()))
+                    .toList();
+            for (Path candidate : candidates) {
+                inspected++;
+                String workspaceName = candidate.getFileName().toString();
+                if (safeActiveSessionIds.contains(workspaceName)) {
+                    skippedActive++;
+                    continue;
+                }
+                if (isRecentWorkspace(candidate, cutoff)) {
+                    skippedRecent++;
+                    continue;
+                }
+                if (deleteWorkspacePath(candidate)) {
+                    removed++;
+                    removedNames.add(workspaceName);
+                } else {
+                    failed++;
+                    failedNames.add(workspaceName);
+                }
+            }
+        } catch (IOException ex) {
+            return new SandboxRuntimeCleanupResult(
+                    sweptAt,
+                    safeActiveSessionIds.size(),
+                    inspected,
+                    skippedActive,
+                    skippedRecent,
+                    removed,
+                    failed + 1,
+                    removedNames,
+                    failedNames);
+        }
+        return new SandboxRuntimeCleanupResult(
+                sweptAt,
+                safeActiveSessionIds.size(),
+                inspected,
+                skippedActive,
+                skippedRecent,
+                removed,
+                failed,
+                removedNames,
+                failedNames);
     }
 
     private ContainerCommand containerCommand(SandboxSession session, Path workspace) {
@@ -343,9 +408,18 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         if (!Files.exists(workspace)) {
             return;
         }
+        deleteWorkspacePath(workspace);
+    }
+
+    private boolean deleteWorkspacePath(Path workspace) {
+        Path safeWorkspace = workspace.toAbsolutePath().normalize();
+        if (!safeWorkspace.startsWith(workspaceRoot) || safeWorkspace.equals(workspaceRoot)) {
+            return false;
+        }
         try (var paths = Files.walk(workspace)) {
             paths.sorted(Comparator.reverseOrder()).forEach(path -> {
-                if (path.equals(workspaceRoot)) {
+                Path safePath = path.toAbsolutePath().normalize();
+                if (!safePath.startsWith(workspaceRoot) || safePath.equals(workspaceRoot)) {
                     return;
                 }
                 try {
@@ -354,9 +428,41 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     // Best-effort cleanup; session close still records a terminal state.
                 }
             });
+            return !Files.exists(safeWorkspace);
         } catch (IOException ignored) {
-            // Best-effort cleanup; session close still records a terminal state.
+            return false;
         }
+    }
+
+    private boolean isManagedWorkspaceDirectory(Path path) {
+        Path safePath = path.toAbsolutePath().normalize();
+        if (!safePath.startsWith(workspaceRoot) || safePath.equals(workspaceRoot)) {
+            return false;
+        }
+        Path filename = safePath.getFileName();
+        return filename != null && filename.toString().startsWith(SESSION_ID_PREFIX);
+    }
+
+    private boolean isRecentWorkspace(Path workspace, Instant cutoff) {
+        try {
+            FileTime modifiedTime = Files.getLastModifiedTime(workspace, LinkOption.NOFOLLOW_LINKS);
+            return modifiedTime.toInstant().isAfter(cutoff);
+        } catch (IOException ex) {
+            return true;
+        }
+    }
+
+    private Set<String> normalizeActiveSessionIds(Set<String> activeSessionIds) {
+        if (activeSessionIds == null || activeSessionIds.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> safeNames = new HashSet<>();
+        for (String sessionId : activeSessionIds) {
+            if (hasText(sessionId)) {
+                safeNames.add(safeFilesystemName(sessionId.trim()));
+            }
+        }
+        return Set.copyOf(safeNames);
     }
 
     private String containerName(String sessionId) {

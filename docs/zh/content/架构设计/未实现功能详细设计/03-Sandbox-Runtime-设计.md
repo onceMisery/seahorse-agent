@@ -235,6 +235,7 @@ P0 profile：
 | `POST` | `/api/sandbox/sessions/{sessionId}/execute` | 执行输入 |
 | `POST` | `/api/sandbox/sessions/{sessionId}/close` | 关闭并释放 runtime |
 | `POST` | `/api/sandbox/sessions/expired:sweep` | 手动 sweep 过期未终态 session，释放 runtime 并标记为 `TIMED_OUT` |
+| `POST` | `/api/sandbox/runtime/orphans:sweep` | 手动 sweep 旧的孤儿 runtime workspace，保留所有非终态 session workspace |
 | `GET` | `/api/sandbox/sessions/{sessionId}/executions` | 执行历史 |
 | `GET` | `/api/sandbox/sessions/{sessionId}/artifacts` | artifact 列表 |
 | `GET` | `/api/sandbox/artifacts/{artifactId}` | artifact 元数据 |
@@ -339,6 +340,12 @@ P0 profile：
 | `KernelSandboxRuntimeServiceTests` / `SandboxArtifactTests` | clean、redacted、blocked、scanner failure、prompt visibility |
 | `SeahorseSandboxControllerTests` | API 入参和响应 |
 | `SandboxPage.test.tsx` | session、execute、artifact history UI |
+
+### 2026-07-02 Update: orphan workspace sweep
+
+The Docker/Podman container adapter now supports orphan workspace cleanup. `POST /api/sandbox/runtime/orphans:sweep` gathers all non-terminal sandbox session ids through the repository, then asks the runtime adapter to remove old `sandbox_container_*` workspace directories under the configured workspace root when they are not active sessions. A scheduled `SandboxRuntimeOrphanSweepJob` is available behind `seahorse.agent.sandbox.runtime-sweep.*`, and `orphan-workspace-min-age` protects newly created workspaces from racey cleanup.
+
+This completes the conservative workspace cleanup part of runtime patrol. Live orphan container inspection, runtime pool health/capacity checks, and deeper isolation profiles such as gVisor/Firecracker remain follow-up production hardening work.
 
 ## 13. 非目标
 

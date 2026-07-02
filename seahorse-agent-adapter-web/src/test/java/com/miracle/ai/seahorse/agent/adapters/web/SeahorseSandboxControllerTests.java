@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
@@ -94,6 +95,16 @@ class SeahorseSandboxControllerTests {
                 1,
                 0,
                 List.of(session(SandboxExecutionStatus.TIMED_OUT))));
+        when(port.sweepOrphanedRuntimeResources()).thenReturn(new SandboxRuntimeCleanupResult(
+                NOW,
+                1,
+                2,
+                1,
+                0,
+                1,
+                0,
+                List.of("sandbox_container_orphan"),
+                List.of()));
         when(port.listExecutions("session-1")).thenReturn(List.of(SandboxExecution.failed(
                 "exec-1",
                 "session-1",
@@ -189,6 +200,16 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data.failedCount").value(0))
                 .andExpect(jsonPath("$.data.closedSessions[0].status").value("TIMED_OUT"));
         verify(port).sweepExpiredSessions("tenant-a", 20);
+
+        mvc.perform(post("/api/sandbox/runtime/orphans:sweep"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.activeSessionCount").value(1))
+                .andExpect(jsonPath("$.data.inspectedWorkspaceCount").value(2))
+                .andExpect(jsonPath("$.data.skippedActiveWorkspaceCount").value(1))
+                .andExpect(jsonPath("$.data.removedWorkspaceCount").value(1))
+                .andExpect(jsonPath("$.data.failedWorkspaceCount").value(0))
+                .andExpect(jsonPath("$.data.removedWorkspaceNames[0]").value("sandbox_container_orphan"));
+        verify(port).sweepOrphanedRuntimeResources();
 
         mvc.perform(get("/api/sandbox/sessions/session-1/executions"))
                 .andExpect(status().isOk())

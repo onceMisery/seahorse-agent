@@ -30,6 +30,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
@@ -68,6 +69,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -497,6 +499,48 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldSweepOrphanedRuntimeResourcesWithActiveSessionIds() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        sessionRepository.saveSession(new SandboxSession(
+                "session-active",
+                "tenant-1",
+                "run-active",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                SandboxExecutionStatus.CREATED,
+                SandboxPolicyReasonCode.VALID_REQUEST,
+                "python-small",
+                NOW.plusSeconds(60),
+                NOW.minusSeconds(60),
+                NOW.minusSeconds(60)));
+        sessionRepository.saveSession(new SandboxSession(
+                "session-terminal",
+                "tenant-1",
+                "run-terminal",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                SandboxExecutionStatus.CANCELLED,
+                SandboxPolicyReasonCode.VALID_REQUEST,
+                "python-small",
+                NOW.minusSeconds(30),
+                NOW.minusSeconds(3600),
+                NOW.minusSeconds(30)));
+        RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                runtime,
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                CLOCK);
+
+        SandboxRuntimeCleanupResult result = service.sweepOrphanedRuntimeResources();
+
+        assertEquals(Set.of("session-active"), runtime.orphanSweepActiveSessionIds);
+        assertEquals(1, result.activeSessionCount());
+        assertEquals(1, result.removedWorkspaceCount());
+    }
+
+    @Test
     void shouldAllowPromptVisibleObjectArtifactDownloadDecision() {
         MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
         SandboxSession session = sessionRepository.saveSession(SandboxSession.created(
@@ -800,6 +844,7 @@ class KernelSandboxRuntimeServiceTests {
         private boolean closeSessionCalled;
         private SandboxSessionRequest createSessionRequest;
         private final List<String> closedSessionIds = new ArrayList<>();
+        private Set<String> orphanSweepActiveSessionIds = Set.of();
 
         private RecordingSandboxRuntimePort() {
             this(List.of(
@@ -845,6 +890,21 @@ class KernelSandboxRuntimeServiceTests {
             closeSessionCalled = true;
             closedSessionIds.add(session.sessionId());
             return session.closed(NOW.plusSeconds(5));
+        }
+
+        @Override
+        public SandboxRuntimeCleanupResult sweepOrphanedResources(Set<String> activeSessionIds) {
+            orphanSweepActiveSessionIds = activeSessionIds == null ? Set.of() : Set.copyOf(activeSessionIds);
+            return new SandboxRuntimeCleanupResult(
+                    NOW,
+                    orphanSweepActiveSessionIds.size(),
+                    1,
+                    0,
+                    0,
+                    1,
+                    0,
+                    List.of("sandbox_container_orphan"),
+                    List.of());
         }
     }
 
@@ -992,6 +1052,14 @@ class KernelSandboxRuntimeServiceTests {
                             .thenComparing(SandboxSession::sessionId))
                     .limit(limit)
                     .toList();
+        }
+
+        @Override
+        public Set<String> listActiveSessionIds() {
+            return store.values().stream()
+                    .filter(session -> !session.status().isTerminal())
+                    .map(SandboxSession::sessionId)
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
         }
     }
 

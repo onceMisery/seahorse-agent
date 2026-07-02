@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRequest;
@@ -32,11 +33,13 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -215,6 +218,42 @@ class ContainerSandboxRuntimeAdapterTests {
 
         assertThat(closed.status()).isEqualTo(SandboxExecutionStatus.CANCELLED);
         assertThat(workspace).doesNotExist();
+    }
+
+    @Test
+    void shouldSweepOnlyOldOrphanedManagedWorkspaces() throws Exception {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxAdapterProperties properties = properties();
+        properties.setOrphanWorkspaceMinAge(Duration.ofMinutes(10));
+        ContainerSandboxRuntimeAdapter adapter = new ContainerSandboxRuntimeAdapter(properties, runner, CLOCK);
+        Path active = createWorkspace("sandbox_container_active", CLOCK.instant().minusSeconds(3600));
+        Path orphan = createWorkspace("sandbox_container_orphan", CLOCK.instant().minusSeconds(3600));
+        Path recent = createWorkspace("sandbox_container_recent", CLOCK.instant());
+        Path unmanaged = createWorkspace("not_sandbox_container_orphan", CLOCK.instant().minusSeconds(3600));
+
+        SandboxRuntimeCleanupResult result = adapter.sweepOrphanedResources(Set.of("sandbox_container_active"));
+
+        assertThat(result.activeSessionCount()).isEqualTo(1);
+        assertThat(result.inspectedWorkspaceCount()).isEqualTo(3);
+        assertThat(result.skippedActiveWorkspaceCount()).isEqualTo(1);
+        assertThat(result.skippedRecentWorkspaceCount()).isEqualTo(1);
+        assertThat(result.removedWorkspaceCount()).isEqualTo(1);
+        assertThat(result.failedWorkspaceCount()).isZero();
+        assertThat(result.removedWorkspaceNames()).containsExactly("sandbox_container_orphan");
+        assertThat(active).exists();
+        assertThat(orphan).doesNotExist();
+        assertThat(recent).exists();
+        assertThat(unmanaged).exists();
+    }
+
+    private Path createWorkspace(String name, Instant modifiedAt) throws IOException {
+        Path workspace = tempDir.resolve(name);
+        Files.createDirectories(workspace);
+        Files.writeString(workspace.resolve("marker.txt"), name);
+        FileTime fileTime = FileTime.from(modifiedAt);
+        Files.setLastModifiedTime(workspace.resolve("marker.txt"), fileTime);
+        Files.setLastModifiedTime(workspace, fileTime);
+        return workspace;
     }
 
     private ContainerSandboxRuntimeAdapter adapter(RecordingRunner runner) {

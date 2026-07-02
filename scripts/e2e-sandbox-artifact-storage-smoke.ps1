@@ -8,6 +8,7 @@ param(
     [string]$PostgresDatabase = "seahorse",
     [string]$BackendContainer = "seahorse-backend",
     [string]$StorageRoot = "/app/seahorse-agent-storage",
+    [string]$SandboxWorkspaceRoot = "/var/lib/seahorse-sandbox",
     [string]$ExpectedObjectUriPrefix = "local://sandbox-artifacts/",
     [switch]$UseScheduledSweep,
     [int]$ScheduledSweepWaitSeconds = 45,
@@ -366,6 +367,58 @@ try {
         }
         if ($parts[1] -ne "RUNTIME_TIMED_OUT") {
             throw "Expected DB reason_code RUNTIME_TIMED_OUT after sweep but got '$($parts[1])'"
+        }
+    } | Out-Null
+
+    Test-Step "Sweep orphaned sandbox runtime workspace while preserving active session workspace" {
+        $activeRunId = "sandbox-orphan-runtime-active-run-$suffix"
+        $create = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
+            tenantId = "default"
+            runId = $activeRunId
+            runtimeType = "CODE_INTERPRETER"
+            networkRequested = $false
+            requestedHosts = @()
+        }
+        Assert-ApiOk $create "Create active sandbox session for orphan runtime sweep"
+        $activeSessionId = "$($create.data.sessionId)"
+        if (-not $activeSessionId) {
+            throw "Create active sandbox session response did not include sessionId"
+        }
+
+        $orphanName = "sandbox_container_orphan_$suffix"
+        if ($activeSessionId.Contains("'") -or $orphanName.Contains("'") -or $SandboxWorkspaceRoot.Contains("'")) {
+            throw "Cannot safely shell-quote sandbox workspace paths"
+        }
+        $activePath = "$SandboxWorkspaceRoot/$activeSessionId"
+        $orphanPath = "$SandboxWorkspaceRoot/$orphanName"
+        & docker exec $BackendContainer sh -lc "test -d '$activePath' && mkdir -p '$orphanPath' && printf '%s\n' '$Marker' > '$orphanPath/orphan.txt' && touch -d '2 hours ago' '$orphanPath' '$orphanPath/orphan.txt'"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to prepare active and orphan sandbox workspaces"
+        }
+
+        $sweep = Invoke-Json -Method POST -Path "/api/sandbox/runtime/orphans:sweep" -Headers $headers
+        Assert-ApiOk $sweep "Sweep orphaned sandbox runtime resources"
+        if ([int]$sweep.data.failedWorkspaceCount -ne 0) {
+            throw "Expected failedWorkspaceCount=0: $($sweep.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $removed = @($sweep.data.removedWorkspaceNames | Where-Object { "$_" -eq $orphanName })
+        if ($removed.Count -ne 1) {
+            throw "Expected orphan workspace $orphanName in removedWorkspaceNames: $($sweep.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ([int]$sweep.data.skippedActiveWorkspaceCount -lt 1) {
+            throw "Expected skippedActiveWorkspaceCount >= 1: $($sweep.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+
+        & docker exec $BackendContainer sh -lc "test ! -e '$orphanPath' && test -d '$activePath'"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Orphan workspace was not removed or active workspace was deleted"
+        }
+
+        $closed = Invoke-Json -Method POST -Path "/api/sandbox/sessions/$activeSessionId/close" -Headers $headers
+        Assert-ApiOk $closed "Close active sandbox session after orphan runtime sweep"
+        & docker exec $BackendContainer sh -lc "test ! -e '$activePath'"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Active sandbox workspace still exists after close: $activePath"
         }
     } | Out-Null
 

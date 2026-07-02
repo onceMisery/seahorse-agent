@@ -70,6 +70,7 @@ class SeahorseAgentSandboxAutoConfigurationTests {
                     assertThat(context).hasSingleBean(SandboxRuntimeInboundPort.class);
                     assertThat(context).hasSingleBean(KernelSandboxRuntimeService.class);
                     assertThat(context).hasSingleBean(SandboxSessionTtlSweepJob.class);
+                    assertThat(context).hasSingleBean(SandboxRuntimeOrphanSweepJob.class);
                     assertThat(context).hasSingleBean(KernelAuditLedgerService.class);
                     assertThat(context).hasSingleBean(ObjectStoragePort.class);
                     assertThat(field(context.getBean(KernelSandboxRuntimeService.class), "auditLedger"))
@@ -89,6 +90,19 @@ class SeahorseAgentSandboxAutoConfigurationTests {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(SandboxRuntimeInboundPort.class);
                     assertThat(context).doesNotHaveBean(SandboxSessionTtlSweepJob.class);
+                    assertThat(context).hasSingleBean(SandboxRuntimeOrphanSweepJob.class);
+                });
+    }
+
+    @Test
+    void shouldDisableSandboxRuntimeOrphanSweepJobWhenConfiguredOff() {
+        contextRunner.withUserConfiguration(TestInfrastructureConfiguration.class)
+                .withPropertyValues("seahorse.agent.sandbox.runtime-sweep.enabled=false")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(SandboxRuntimeInboundPort.class);
+                    assertThat(context).hasSingleBean(SandboxSessionTtlSweepJob.class);
+                    assertThat(context).doesNotHaveBean(SandboxRuntimeOrphanSweepJob.class);
                 });
     }
 

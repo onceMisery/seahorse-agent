@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxPython
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
@@ -38,6 +39,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -181,6 +183,11 @@ class SandboxPythonToolAutoConfigurationTests {
         @Override
         public SandboxSessionSweepResult sweepExpiredSessions(String tenantId, int limit) {
             throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public SandboxRuntimeCleanupResult sweepOrphanedRuntimeResources() {
+            return SandboxRuntimeCleanupResult.empty(Instant.EPOCH, 0);
         }
 
         @Override

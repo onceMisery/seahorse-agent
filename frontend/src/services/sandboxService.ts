@@ -29,6 +29,18 @@ export interface SandboxSessionSweepResult {
   closedSessions?: SandboxSession[];
 }
 
+export interface SandboxRuntimeCleanupResult {
+  sweptAt?: string;
+  activeSessionCount?: number;
+  inspectedWorkspaceCount?: number;
+  skippedActiveWorkspaceCount?: number;
+  skippedRecentWorkspaceCount?: number;
+  removedWorkspaceCount?: number;
+  failedWorkspaceCount?: number;
+  removedWorkspaceNames?: string[];
+  failedWorkspaceNames?: string[];
+}
+
 export interface SandboxExecution {
   executionId?: string;
   sessionId?: string;
@@ -130,6 +142,12 @@ export function sweepExpiredSandboxSessions(tenantId = currentTenantId(), limit 
         limit
       }
     }
+  );
+}
+
+export function sweepOrphanedSandboxRuntimeResources() {
+  return api.post<SandboxRuntimeCleanupResult, SandboxRuntimeCleanupResult>(
+    "/api/sandbox/runtime/orphans:sweep"
   );
 }
 

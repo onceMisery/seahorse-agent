@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, History, Info, Play, RefreshCw, Square, TimerReset } from "lucide-react";
+import { Download, FolderX, History, Info, Play, RefreshCw, Square, TimerReset } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ import {
   listSandboxExecutions,
   listSandboxArtifacts,
   sweepExpiredSandboxSessions,
+  sweepOrphanedSandboxRuntimeResources,
   type SandboxSession,
   type SandboxExecution,
   type SandboxExecutionResult,
@@ -28,7 +29,7 @@ import {
 import { getErrorMessage } from "@/utils/error";
 
 function isTerminalSessionStatus(status?: string) {
-  return ["CANCELLED", "FAILED", "SUCCEEDED", "CLOSED"].includes(status || "");
+  return ["CANCELLED", "FAILED", "SUCCEEDED", "TIMED_OUT", "CLOSED"].includes(status || "");
 }
 
 function executionBadgeVariant(status?: string): "default" | "secondary" | "destructive" {
@@ -73,6 +74,7 @@ export function SandboxPage() {
   const [sessions, setSessions] = useState<SandboxSession[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [sweepingExpiredSessions, setSweepingExpiredSessions] = useState(false);
+  const [sweepingOrphanedRuntimeResources, setSweepingOrphanedRuntimeResources] = useState(false);
 
   const clearArtifactSelection = () => {
     setSelectedArtifactId(null);
@@ -291,6 +293,26 @@ export function SandboxPage() {
     }
   };
 
+  const handleSweepOrphanedRuntimeResources = async () => {
+    try {
+      setSweepingOrphanedRuntimeResources(true);
+      const result = await sweepOrphanedSandboxRuntimeResources();
+      await refreshSessions();
+      const removedCount = result.removedWorkspaceCount ?? 0;
+      const failedCount = result.failedWorkspaceCount ?? 0;
+      if (failedCount > 0) {
+        toast.error(`Runtime orphan sweep removed ${removedCount} workspace(s), failed ${failedCount}`);
+      } else {
+        toast.success(`Runtime orphan sweep removed ${removedCount} workspace(s)`);
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Runtime orphan sweep failed"));
+      console.error(error);
+    } finally {
+      setSweepingOrphanedRuntimeResources(false);
+    }
+  };
+
   if (!featureState.enabled) {
     return <FeatureUnavailableState featureState={featureState} featureName="沙箱" />;
   }
@@ -374,6 +396,16 @@ export function SandboxPage() {
                     onClick={() => void handleSweepExpiredSessions()}
                   >
                     <TimerReset className={`h-4 w-4 ${sweepingExpiredSessions ? "animate-spin" : ""}`} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    title="Sweep orphaned runtime workspaces"
+                    disabled={sweepingOrphanedRuntimeResources}
+                    onClick={() => void handleSweepOrphanedRuntimeResources()}
+                  >
+                    <FolderX className={`h-4 w-4 ${sweepingOrphanedRuntimeResources ? "animate-pulse" : ""}`} />
                   </Button>
                   <Button
                     variant="ghost"

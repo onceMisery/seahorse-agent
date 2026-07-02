@@ -114,6 +114,8 @@ class JdbcSandboxRepositoryAdapterTests {
         assertThat(adapter.listSessionsByTenant("tenant-b", 10))
                 .extracting(SandboxSession::sessionId)
                 .containsExactly("session-other-tenant");
+        assertThat(adapter.listActiveSessionIds())
+                .containsExactlyInAnyOrder("session-2", "session-other-tenant");
         assertThat(adapter.findExecutionById("exec-2")).contains(failed);
         assertThat(adapter.listExecutionsBySession("session-1"))
                 .extracting(SandboxExecution::executionId)

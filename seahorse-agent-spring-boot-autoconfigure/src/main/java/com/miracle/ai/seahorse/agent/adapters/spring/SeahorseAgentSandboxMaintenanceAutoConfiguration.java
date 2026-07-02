@@ -51,4 +51,17 @@ public class SeahorseAgentSandboxMaintenanceAutoConfiguration {
                 tenantId,
                 limit);
     }
+
+    @Bean
+    @ConditionalOnBean(SandboxRuntimeInboundPort.class)
+    @ConditionalOnProperty(prefix = "seahorse.agent.sandbox.runtime-sweep", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public SandboxRuntimeOrphanSweepJob seahorseSandboxRuntimeOrphanSweepJob(
+            SandboxRuntimeInboundPort sandboxRuntime,
+            ObjectProvider<DistributedLockPort> lockPort) {
+        return new SandboxRuntimeOrphanSweepJob(
+                sandboxRuntime,
+                lockPort.getIfAvailable(DistributedLockPort::noop));
+    }
 }

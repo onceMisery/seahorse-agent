@@ -45,6 +45,8 @@ public class ContainerSandboxAdapterProperties {
 
     private long pidsLimit = 128L;
 
+    private Duration orphanWorkspaceMinAge = Duration.ofMinutes(5);
+
     public String getEngine() {
         return engine;
     }
@@ -127,6 +129,18 @@ public class ContainerSandboxAdapterProperties {
 
     public void setPidsLimit(long pidsLimit) {
         this.pidsLimit = pidsLimit > 0 ? pidsLimit : 128L;
+    }
+
+    public Duration getOrphanWorkspaceMinAge() {
+        return orphanWorkspaceMinAge;
+    }
+
+    public void setOrphanWorkspaceMinAge(Duration orphanWorkspaceMinAge) {
+        if (orphanWorkspaceMinAge == null || orphanWorkspaceMinAge.isNegative()) {
+            this.orphanWorkspaceMinAge = Duration.ofMinutes(5);
+            return;
+        }
+        this.orphanWorkspaceMinAge = orphanWorkspaceMinAge;
     }
 
     private static int positiveOrDefault(int value, int fallback) {

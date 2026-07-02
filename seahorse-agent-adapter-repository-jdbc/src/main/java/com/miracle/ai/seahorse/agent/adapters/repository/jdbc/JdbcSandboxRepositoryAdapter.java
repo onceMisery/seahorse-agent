@@ -39,6 +39,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPort,
         SandboxExecutionRepositoryPort,
@@ -94,6 +96,11 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
             ORDER BY expires_at ASC, created_at ASC, session_id ASC
             LIMIT ?
             """.formatted(SESSION_COLUMNS);
+    private static final String SQL_LIST_ACTIVE_SESSION_IDS = """
+            SELECT session_id
+            FROM sa_sandbox_session
+            WHERE status NOT IN (?, ?, ?, ?)
+            """;
 
     private static final String SQL_INSERT_EXECUTION = """
             INSERT INTO sa_sandbox_execution
@@ -206,6 +213,20 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 SandboxExecutionStatus.TIMED_OUT.name(),
                 SandboxExecutionStatus.CANCELLED.name(),
                 limit);
+    }
+
+    @Override
+    public Set<String> listActiveSessionIds() {
+        return jdbcTemplate.queryForList(SQL_LIST_ACTIVE_SESSION_IDS,
+                        String.class,
+                        SandboxExecutionStatus.SUCCEEDED.name(),
+                        SandboxExecutionStatus.FAILED.name(),
+                        SandboxExecutionStatus.TIMED_OUT.name(),
+                        SandboxExecutionStatus.CANCELLED.name())
+                .stream()
+                .filter(this::hasText)
+                .map(String::trim)
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     @Override

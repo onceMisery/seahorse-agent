@@ -32,6 +32,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToo
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
@@ -200,6 +201,11 @@ class BuiltInAgentToolRegistrarTests {
         @Override
         public SandboxSessionSweepResult sweepExpiredSessions(String tenantId, int limit) {
             throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public SandboxRuntimeCleanupResult sweepOrphanedRuntimeResources() {
+            return SandboxRuntimeCleanupResult.empty(Instant.EPOCH, 0);
         }
 
         @Override

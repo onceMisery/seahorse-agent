@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface SandboxSessionRepositoryPort {
 
@@ -35,5 +36,9 @@ public interface SandboxSessionRepositoryPort {
 
     default List<SandboxSession> listExpiredActiveSessions(String tenantId, Instant now, int limit) {
         return List.of();
+    }
+
+    default Set<String> listActiveSessionIds() {
+        return Set.of();
     }
 }

@@ -30,6 +30,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
@@ -66,6 +67,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
@@ -333,6 +335,12 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 closedSessions.size(),
                 failedCount,
                 closedSessions);
+    }
+
+    @Override
+    public SandboxRuntimeCleanupResult sweepOrphanedRuntimeResources() {
+        Set<String> activeSessionIds = sessionRepositoryPort.listActiveSessionIds();
+        return runtimePort.sweepOrphanedResources(activeSessionIds);
     }
 
     @Override
@@ -685,6 +693,14 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                             .thenComparing(SandboxSession::sessionId))
                     .limit(safeLimit)
                     .toList();
+        }
+
+        @Override
+        public Set<String> listActiveSessionIds() {
+            return store.values().stream()
+                    .filter(session -> !session.status().isTerminal())
+                    .map(SandboxSession::sessionId)
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
         }
     }
 

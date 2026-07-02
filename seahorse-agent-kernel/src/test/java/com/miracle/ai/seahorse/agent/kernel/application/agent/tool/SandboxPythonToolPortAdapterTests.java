@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
@@ -184,6 +185,11 @@ class SandboxPythonToolPortAdapterTests {
         @Override
         public SandboxSessionSweepResult sweepExpiredSessions(String tenantId, int limit) {
             return new SandboxSessionSweepResult(tenantId, NOW, 0, 0, 0, List.of());
+        }
+
+        @Override
+        public SandboxRuntimeCleanupResult sweepOrphanedRuntimeResources() {
+            return SandboxRuntimeCleanupResult.empty(NOW, 0);
         }
 
         @Override

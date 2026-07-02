@@ -1341,6 +1341,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/api/sandbox/runtime/orphans:sweep"
+  },
+  {
+    "method": "POST",
     "path": "/api/sandbox/sessions"
   },
   {

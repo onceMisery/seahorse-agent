@@ -30,7 +30,8 @@ import {
   listSandboxArtifacts,
   listSandboxExecutions,
   listSandboxSessions,
-  sweepExpiredSandboxSessions
+  sweepExpiredSandboxSessions,
+  sweepOrphanedSandboxRuntimeResources
 } from "@/services/sandboxService";
 
 const mockedApi = vi.mocked(api);
@@ -80,6 +81,7 @@ describe("frontend capability service contracts", () => {
     expect(backendEndpoints).toContain("GET /api/sandbox/artifacts/{}");
     expect(backendEndpoints).toContain("GET /api/sandbox/artifacts/{}/download");
     expect(backendEndpoints).toContain("POST /api/sandbox/sessions/expired:sweep");
+    expect(backendEndpoints).toContain("POST /api/sandbox/runtime/orphans:sweep");
   });
 
   it("publishes agents with the backend publish payload", async () => {
@@ -296,6 +298,7 @@ describe("frontend capability service contracts", () => {
     });
     await listSandboxSessions("default", 20);
     await sweepExpiredSandboxSessions("default", 20);
+    await sweepOrphanedSandboxRuntimeResources();
     await listSandboxExecutions("session-1");
     await listSandboxArtifacts("session-1");
     await getSandboxArtifact("artifact-1");
@@ -316,6 +319,7 @@ describe("frontend capability service contracts", () => {
     expect(mockedApi.post).toHaveBeenNthCalledWith(3, "/api/sandbox/sessions/expired:sweep", undefined, {
       params: { tenantId: "default", limit: 20 }
     });
+    expect(mockedApi.post).toHaveBeenNthCalledWith(4, "/api/sandbox/runtime/orphans:sweep");
     expect(mockedApi.get).toHaveBeenNthCalledWith(1, "/api/sandbox/sessions", {
       params: { tenantId: "default", limit: 20 }
     });
