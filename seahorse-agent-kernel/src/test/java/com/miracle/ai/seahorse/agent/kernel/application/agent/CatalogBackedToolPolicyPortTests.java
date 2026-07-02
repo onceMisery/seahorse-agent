@@ -17,14 +17,23 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaDecisionEffect;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaDecisionReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaDecisionResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.AgentToolBinding;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaDecisionCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaPolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessPort;
@@ -179,6 +188,80 @@ class CatalogBackedToolPolicyPortTests {
     }
 
     @Test
+    void shouldDenyWhenQuotaHardLimitIsExceeded() {
+        RecordingQuotaManagementPort quota = new RecordingQuotaManagementPort(quotaDecision(
+                QuotaDecisionEffect.DENY,
+                QuotaDecisionReasonCode.HARD_LIMIT_EXCEEDED,
+                "quota-tool-1"));
+        CatalogBackedToolPolicyPort policy = policy(
+                tool("knowledge-search", ToolRiskLevel.LOW, ToolActionType.READ, true, false),
+                binding("knowledge-search", 3),
+                quota);
+
+        PolicyDecision decision = policy.decide(request("knowledge-search"));
+
+        assertEquals(PolicyDecision.Effect.DENY, decision.effect());
+        assertEquals(ToolPolicyReasonCodes.QUOTA_HARD_LIMIT_EXCEEDED, decision.reasonCode());
+        assertEquals("quota-tool-1", decision.policyId());
+        assertEquals("tenant-1", quota.lastCommand.tenantId());
+        assertEquals("agent-1", quota.lastCommand.agentId());
+        assertEquals("user-1", quota.lastCommand.userId());
+        assertEquals("knowledge-search", quota.lastCommand.toolId());
+        assertEquals("run-1", quota.lastCommand.runId());
+        assertEquals(AgentRiskLevel.LOW, quota.lastCommand.riskLevel());
+        assertEquals(new QuotaUsage(0L, 1L, 0d), quota.lastCommand.requestedUsage());
+    }
+
+    @Test
+    void shouldRequireApprovalWhenQuotaRequiresApproval() {
+        CatalogBackedToolPolicyPort policy = policy(
+                tool("knowledge-search", ToolRiskLevel.LOW, ToolActionType.READ, true, false),
+                binding("knowledge-search", 3),
+                new RecordingQuotaManagementPort(quotaDecision(
+                        QuotaDecisionEffect.REQUIRE_APPROVAL,
+                        QuotaDecisionReasonCode.POLICY_MATCHED,
+                        "quota-approval-1")));
+
+        PolicyDecision decision = policy.decide(request("knowledge-search"));
+
+        assertEquals(PolicyDecision.Effect.APPROVAL_REQUIRED, decision.effect());
+        assertEquals(ToolPolicyReasonCodes.QUOTA_APPROVAL_REQUIRED, decision.reasonCode());
+        assertEquals("quota-approval-1", decision.policyId());
+    }
+
+    @Test
+    void shouldAllowWhenQuotaOnlyWarns() {
+        CatalogBackedToolPolicyPort policy = policy(
+                tool("knowledge-search", ToolRiskLevel.LOW, ToolActionType.READ, true, false),
+                binding("knowledge-search", 3),
+                new RecordingQuotaManagementPort(quotaDecision(
+                        QuotaDecisionEffect.WARN,
+                        QuotaDecisionReasonCode.WARN_THRESHOLD_EXCEEDED,
+                        "quota-tool-1")));
+
+        PolicyDecision decision = policy.decide(request("knowledge-search"));
+
+        assertEquals(PolicyDecision.Effect.ALLOW, decision.effect());
+        assertEquals(ToolPolicyReasonCodes.ALLOW, decision.reasonCode());
+    }
+
+    @Test
+    void shouldNotLetQuotaNoPolicyResultExpandToolApprovalSurface() {
+        CatalogBackedToolPolicyPort policy = policy(
+                tool("sandbox-python", ToolRiskLevel.HIGH, ToolActionType.EXECUTE, true, false),
+                binding("sandbox-python", 3),
+                new RecordingQuotaManagementPort(quotaDecision(
+                        QuotaDecisionEffect.REQUIRE_APPROVAL,
+                        QuotaDecisionReasonCode.NO_POLICY_HIGH_RISK,
+                        null)));
+
+        PolicyDecision decision = policy.decide(request("sandbox-python"));
+
+        assertEquals(PolicyDecision.Effect.ALLOW, decision.effect());
+        assertEquals(ToolPolicyReasonCodes.ALLOW, decision.reasonCode());
+    }
+
+    @Test
     void shouldDenyWhenResourceAccessPolicyRejectsReferencedResource() {
         CatalogBackedToolPolicyPort policy = new CatalogBackedToolPolicyPort(
                 new SingleToolCatalogRepository(tool("knowledge-search", ToolRiskLevel.LOW, ToolActionType.READ,
@@ -225,6 +308,25 @@ class CatalogBackedToolPolicyPortTests {
                 new SingleAgentToolBindingRepository(binding),
                 ToolInvocationUsagePort.empty(),
                 ToolPolicyRequest::toolRegistered);
+    }
+
+    private static CatalogBackedToolPolicyPort policy(ToolCatalogEntry tool,
+                                                      AgentToolBinding binding,
+                                                      QuotaManagementInboundPort quotaManagementPort) {
+        return new CatalogBackedToolPolicyPort(
+                new SingleToolCatalogRepository(tool),
+                new SingleAgentToolBindingRepository(binding),
+                ToolInvocationUsagePort.empty(),
+                ToolPolicyRequest::toolRegistered,
+                ToolResourceAccessPort.allowAll(),
+                quotaManagementPort);
+    }
+
+    private static QuotaDecisionResult quotaDecision(QuotaDecisionEffect effect,
+                                                    QuotaDecisionReasonCode reasonCode,
+                                                    String policyId) {
+        return new QuotaDecisionResult(effect, reasonCode, policyId,
+                new QuotaUsage(0L, 1L, 0d), Instant.EPOCH);
     }
 
     private static ToolPolicyRequest request(String toolId) {
@@ -361,6 +463,31 @@ class CatalogBackedToolPolicyPortTests {
         @Override
         public long countRequestedCalls(String runId, String agentId, String versionId, String toolId) {
             return callCount;
+        }
+    }
+
+    private static final class RecordingQuotaManagementPort implements QuotaManagementInboundPort {
+        private final QuotaDecisionResult decision;
+        private QuotaDecisionCommand lastCommand;
+
+        private RecordingQuotaManagementPort(QuotaDecisionResult decision) {
+            this.decision = decision;
+        }
+
+        @Override
+        public QuotaPolicy upsertPolicy(QuotaPolicyUpsertCommand command) {
+            throw new UnsupportedOperationException("not used");
+        }
+
+        @Override
+        public void disablePolicy(String policyId) {
+            throw new UnsupportedOperationException("not used");
+        }
+
+        @Override
+        public QuotaDecisionResult evaluate(QuotaDecisionCommand command) {
+            this.lastCommand = command;
+            return decision;
         }
     }
 }

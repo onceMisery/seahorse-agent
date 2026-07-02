@@ -75,6 +75,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceReco
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
@@ -360,13 +361,15 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             ToolCatalogRepositoryPort toolCatalogRepositoryPort,
             AgentToolBindingRepositoryPort agentToolBindingRepositoryPort,
             ObjectProvider<ToolInvocationUsagePort> toolInvocationUsagePort,
-            ObjectProvider<ToolResourceAccessPort> toolResourceAccessPort) {
+            ObjectProvider<ToolResourceAccessPort> toolResourceAccessPort,
+            ObjectProvider<QuotaManagementInboundPort> quotaManagementPort) {
         return new CatalogBackedToolPolicyPort(
                 toolCatalogRepositoryPort,
                 agentToolBindingRepositoryPort,
                 toolInvocationUsagePort.getIfAvailable(ToolInvocationUsagePort::empty),
                 ToolPolicyRequest::toolRegistered,
-                toolResourceAccessPort.getIfAvailable(ToolResourceAccessPort::allowAll));
+                toolResourceAccessPort.getIfAvailable(ToolResourceAccessPort::allowAll),
+                quotaManagementPort.getIfAvailable());
     }
 
     @Bean

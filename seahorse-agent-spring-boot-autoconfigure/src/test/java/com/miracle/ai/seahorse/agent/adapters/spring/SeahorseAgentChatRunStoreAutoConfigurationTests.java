@@ -39,11 +39,17 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalReques
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaDecisionEffect;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaDecisionReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaDecisionResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpointType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
@@ -68,6 +74,9 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaDecisionCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaPolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
@@ -267,6 +276,39 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
 
                     assertThat(decision.effect()).isEqualTo(PolicyDecision.Effect.DENY);
                     assertThat(decision.reasonCode()).isEqualTo(ToolPolicyReasonCodes.RESOURCE_FORBIDDEN);
+                });
+    }
+
+    @Test
+    void shouldWireQuotaDecisionIntoCatalogBackedPolicy() {
+        contextRunner.withUserConfiguration(TestCatalogBackedQuotaPolicyConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+
+                    PolicyDecision decision = context.getBean(ToolPolicyPort.class).decide(new ToolPolicyRequest(
+                            "run-1",
+                            "step-1",
+                            "call-1",
+                            "agent-1",
+                            "version-1",
+                            "tenant-1",
+                            "user-1",
+                            "agent-identity-1",
+                            "memory-write",
+                            Map.of(),
+                            Map.of(),
+                            "run-1:call-1",
+                            List.of("memory-write"),
+                            true));
+
+                    assertThat(decision.effect()).isEqualTo(PolicyDecision.Effect.DENY);
+                    assertThat(decision.reasonCode()).isEqualTo(ToolPolicyReasonCodes.QUOTA_HARD_LIMIT_EXCEEDED);
+                    RecordingQuotaManagementPort quota = context.getBean(RecordingQuotaManagementPort.class);
+                    assertThat(quota.lastCommand).isNotNull();
+                    assertThat(quota.lastCommand.tenantId()).isEqualTo("tenant-1");
+                    assertThat(quota.lastCommand.toolId()).isEqualTo("memory-write");
+                    assertThat(quota.lastCommand.riskLevel()).isEqualTo(AgentRiskLevel.MEDIUM);
+                    assertThat(quota.lastCommand.requestedUsage()).isEqualTo(new QuotaUsage(0L, 1L, 0d));
                 });
     }
 
@@ -747,6 +789,27 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         @Bean
         ToolResourceAccessPort toolResourceAccessPort() {
             return request -> ToolResourceAccessDecision.deny("resource denied");
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TestCatalogBackedQuotaPolicyConfiguration
+            extends TestCatalogBackedCallLimitPolicyConfiguration {
+
+        @Bean
+        @Override
+        ToolInvocationUsagePort toolInvocationUsagePort() {
+            return (runId, agentId, versionId, toolId) -> 1L;
+        }
+
+        @Bean
+        RecordingQuotaManagementPort quotaManagementInboundPort() {
+            return new RecordingQuotaManagementPort(new QuotaDecisionResult(
+                    QuotaDecisionEffect.DENY,
+                    QuotaDecisionReasonCode.HARD_LIMIT_EXCEEDED,
+                    "quota-policy-1",
+                    new QuotaUsage(0L, 1L, 0d),
+                    FIXED_CLOCK.instant()));
         }
     }
 
@@ -1439,6 +1502,31 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
     }
 
     private record PublishedToolArtifact(ToolInvocationRequest request, ToolInvocationResult result) {
+    }
+
+    static final class RecordingQuotaManagementPort implements QuotaManagementInboundPort {
+        private final QuotaDecisionResult decision;
+        private QuotaDecisionCommand lastCommand;
+
+        RecordingQuotaManagementPort(QuotaDecisionResult decision) {
+            this.decision = decision;
+        }
+
+        @Override
+        public QuotaPolicy upsertPolicy(QuotaPolicyUpsertCommand command) {
+            throw new UnsupportedOperationException("not used");
+        }
+
+        @Override
+        public void disablePolicy(String policyId) {
+            throw new UnsupportedOperationException("not used");
+        }
+
+        @Override
+        public QuotaDecisionResult evaluate(QuotaDecisionCommand command) {
+            lastCommand = command;
+            return decision;
+        }
     }
 
     static final class RecordingToolRegistry implements ToolRegistryPort {

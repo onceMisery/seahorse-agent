@@ -20,10 +20,17 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLevel;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaDecisionEffect;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaDecisionReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaDecisionResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.AgentToolBinding;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaDecisionCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
@@ -48,6 +55,7 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
     private final ToolInvocationUsagePort invocationUsagePort;
     private final Predicate<ToolPolicyRequest> toolRegisteredPredicate;
     private final ToolResourceAccessPort resourceAccessPort;
+    private final QuotaManagementInboundPort quotaManagementPort;
 
     public CatalogBackedToolPolicyPort(ToolCatalogRepositoryPort toolCatalogRepository,
                                        AgentToolBindingRepositoryPort bindingRepository) {
@@ -80,6 +88,16 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
                                        ToolInvocationUsagePort invocationUsagePort,
                                        Predicate<ToolPolicyRequest> toolRegisteredPredicate,
                                        ToolResourceAccessPort resourceAccessPort) {
+        this(toolCatalogRepository, bindingRepository, invocationUsagePort, toolRegisteredPredicate,
+                resourceAccessPort, null);
+    }
+
+    public CatalogBackedToolPolicyPort(ToolCatalogRepositoryPort toolCatalogRepository,
+                                       AgentToolBindingRepositoryPort bindingRepository,
+                                       ToolInvocationUsagePort invocationUsagePort,
+                                       Predicate<ToolPolicyRequest> toolRegisteredPredicate,
+                                       ToolResourceAccessPort resourceAccessPort,
+                                       QuotaManagementInboundPort quotaManagementPort) {
         this.toolCatalogRepository = Objects.requireNonNullElseGet(
                 toolCatalogRepository,
                 ToolCatalogRepositoryPort::empty);
@@ -95,6 +113,7 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
         this.resourceAccessPort = Objects.requireNonNullElseGet(
                 resourceAccessPort,
                 ToolResourceAccessPort::allowAll);
+        this.quotaManagementPort = quotaManagementPort;
     }
 
     @Override
@@ -140,6 +159,10 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
         if (resourceDecision != null) {
             return resourceDecision;
         }
+        PolicyDecision quotaDecision = validateQuota(request, tool);
+        if (quotaDecision != null) {
+            return quotaDecision;
+        }
         if (requiresApproval(tool)) {
             return PolicyDecision.approvalRequired(
                     "builtin-tool-approval-required",
@@ -182,6 +205,66 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
         return deny(ToolPolicyReasonCodes.RESOURCE_FORBIDDEN, reason);
     }
 
+    private PolicyDecision validateQuota(ToolPolicyRequest request, ToolCatalogEntry tool) {
+        if (quotaManagementPort == null) {
+            return null;
+        }
+        QuotaDecisionResult quotaDecision = quotaManagementPort.evaluate(new QuotaDecisionCommand(
+                request.tenantId(),
+                request.agentId(),
+                request.userId(),
+                request.toolId(),
+                null,
+                request.runId(),
+                riskLevel(tool.riskLevel()),
+                new QuotaUsage(0L, 1L, 0d)));
+        if (quotaDecision == null) {
+            return deny(ToolPolicyReasonCodes.QUOTA_DECISION_MISSING,
+                    "Quota policy did not return a decision");
+        }
+        if (isNoPolicyDecision(quotaDecision)) {
+            return null;
+        }
+        return switch (quotaDecision.effect()) {
+            case DENY -> quotaPolicyDecision(
+                    PolicyDecision.Effect.DENY,
+                    ToolPolicyReasonCodes.QUOTA_HARD_LIMIT_EXCEEDED,
+                    "Quota hard limit exceeded",
+                    quotaDecision);
+            case REQUIRE_APPROVAL -> quotaPolicyDecision(
+                    PolicyDecision.Effect.APPROVAL_REQUIRED,
+                    ToolPolicyReasonCodes.QUOTA_APPROVAL_REQUIRED,
+                    "Quota policy requires approval",
+                    quotaDecision);
+            case WARN, ALLOW -> null;
+        };
+    }
+
+    private boolean isNoPolicyDecision(QuotaDecisionResult quotaDecision) {
+        return quotaDecision.reasonCode() == QuotaDecisionReasonCode.NO_POLICY_LOW_RISK
+                || quotaDecision.reasonCode() == QuotaDecisionReasonCode.NO_POLICY_HIGH_RISK;
+    }
+
+    private PolicyDecision quotaPolicyDecision(PolicyDecision.Effect effect,
+                                               String reasonCode,
+                                               String reasonMessage,
+                                               QuotaDecisionResult quotaDecision) {
+        String decisionId = "quota-" + quotaDecision.reasonCode().name().toLowerCase().replace('_', '-');
+        String policyId = quotaDecision.policyId() == null ? "builtin-quota-policy" : quotaDecision.policyId();
+        String approvalPolicyId = effect == PolicyDecision.Effect.APPROVAL_REQUIRED
+                ? "quota-approval"
+                : null;
+        return new PolicyDecision(
+                decisionId,
+                effect,
+                reasonCode,
+                reasonMessage,
+                policyId,
+                "1",
+                approvalPolicyId,
+                null);
+    }
+
     private boolean exceedsCallLimit(ToolPolicyRequest request, AgentToolBinding binding) {
         if (request.runId() == null) {
             return false;
@@ -195,6 +278,15 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
         return tool.requiresApproval()
                 || tool.riskLevel() == ToolRiskLevel.CRITICAL
                 || APPROVAL_ACTION_TYPES.contains(tool.actionType());
+    }
+
+    private AgentRiskLevel riskLevel(ToolRiskLevel riskLevel) {
+        return switch (Objects.requireNonNullElse(riskLevel, ToolRiskLevel.LOW)) {
+            case LOW -> AgentRiskLevel.LOW;
+            case MEDIUM -> AgentRiskLevel.MEDIUM;
+            case HIGH -> AgentRiskLevel.HIGH;
+            case CRITICAL -> AgentRiskLevel.CRITICAL;
+        };
     }
 
     private PolicyDecision deny(String reasonCode, String reasonMessage) {

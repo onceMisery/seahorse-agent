@@ -32,6 +32,9 @@ public final class ToolPolicyReasonCodes {
     public static final String TOOL_ARGUMENT_NOT_ALLOWED = "TOOL_ARGUMENT_NOT_ALLOWED";
     public static final String TOOL_APPROVAL_REQUIRED = "TOOL_APPROVAL_REQUIRED";
     public static final String RESOURCE_FORBIDDEN = "RESOURCE_FORBIDDEN";
+    public static final String QUOTA_HARD_LIMIT_EXCEEDED = "QUOTA_HARD_LIMIT_EXCEEDED";
+    public static final String QUOTA_APPROVAL_REQUIRED = "QUOTA_APPROVAL_REQUIRED";
+    public static final String QUOTA_DECISION_MISSING = "QUOTA_DECISION_MISSING";
     public static final String POLICY_DECISION_MISSING = "POLICY_DECISION_MISSING";
 
     private ToolPolicyReasonCodes() {
