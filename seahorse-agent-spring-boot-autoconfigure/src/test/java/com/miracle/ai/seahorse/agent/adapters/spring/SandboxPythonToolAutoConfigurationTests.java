@@ -25,6 +25,10 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -32,6 +36,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -59,12 +64,87 @@ class SandboxPythonToolAutoConfigurationTests {
                 });
     }
 
+    @Test
+    void kernelAutoConfigurationShouldRegisterSandboxPythonToolAfterSandboxRuntimeInboundPort() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(SeahorseAgentKernelAutoConfiguration.class))
+                .withUserConfiguration(SandboxRepositoryConfiguration.class)
+                .withPropertyValues("seahorse-agent.chat.agent-mode-enabled=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(SandboxRuntimeInboundPort.class);
+                    assertThat(context).hasSingleBean(SandboxPythonToolPortAdapter.class);
+                });
+    }
+
     @Configuration(proxyBeanMethods = false)
     static class SandboxRuntimeConfiguration {
 
         @Bean
         SandboxRuntimeInboundPort sandboxRuntimeInboundPort() {
             return new NoopSandboxRuntime();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class SandboxRepositoryConfiguration {
+
+        @Bean
+        SandboxSessionRepositoryPort sandboxSessionRepositoryPort() {
+            return new SandboxSessionRepositoryPort() {
+
+                @Override
+                public SandboxSession saveSession(SandboxSession session) {
+                    return session;
+                }
+
+                @Override
+                public Optional<SandboxSession> findSessionById(String sessionId) {
+                    return Optional.empty();
+                }
+            };
+        }
+
+        @Bean
+        SandboxExecutionRepositoryPort sandboxExecutionRepositoryPort() {
+            return new SandboxExecutionRepositoryPort() {
+
+                @Override
+                public SandboxExecution saveExecution(SandboxExecution execution) {
+                    return execution;
+                }
+
+                @Override
+                public Optional<SandboxExecution> findExecutionById(String executionId) {
+                    return Optional.empty();
+                }
+
+                @Override
+                public List<SandboxExecution> listExecutionsBySession(String sessionId) {
+                    return List.of();
+                }
+            };
+        }
+
+        @Bean
+        SandboxArtifactPort sandboxArtifactPort() {
+            return artifact -> artifact;
+        }
+
+        @Bean
+        SandboxArtifactQueryPort sandboxArtifactQueryPort() {
+            return new SandboxArtifactQueryPort() {
+
+                @Override
+                public List<SandboxArtifact> listArtifactsBySession(String sessionId) {
+                    return List.of();
+                }
+
+                @Override
+                public List<SandboxArtifact> listPromptVisibleBySession(String sessionId) {
+                    return List.of();
+                }
+            };
         }
     }
 

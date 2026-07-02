@@ -51,6 +51,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private final ContainerCommandRunner commandRunner;
     private final Clock clock;
     private final Path workspaceRoot;
+    private final String workspaceMountSourceRoot;
 
     public ContainerSandboxRuntimeAdapter(ContainerSandboxAdapterProperties properties,
                                           ContainerCommandRunner commandRunner,
@@ -59,6 +60,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         this.commandRunner = Objects.requireNonNull(commandRunner, "commandRunner must not be null");
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
         this.workspaceRoot = resolveWorkspaceRoot(properties.getWorkspaceRoot());
+        this.workspaceMountSourceRoot = trimToNull(properties.getWorkspaceMountSourceRoot());
     }
 
     @Override
@@ -183,7 +185,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         commandLine.add("--pids-limit");
         commandLine.add(Long.toString(properties.getPidsLimit()));
         commandLine.add("-v");
-        commandLine.add(workspace.toAbsolutePath().normalize() + ":" + CONTAINER_WORKSPACE + ":rw");
+        commandLine.add(mountSourceForSession(session.sessionId(), workspace) + ":" + CONTAINER_WORKSPACE + ":rw");
         commandLine.add("-w");
         commandLine.add(CONTAINER_WORKSPACE);
         commandLine.add(properties.getPythonImage());
@@ -245,6 +247,13 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return workspace;
     }
 
+    private String mountSourceForSession(String sessionId, Path workspace) {
+        if (workspaceMountSourceRoot == null) {
+            return workspace.toAbsolutePath().normalize().toString();
+        }
+        return stripTrailingSeparators(workspaceMountSourceRoot) + "/" + safeFilesystemName(sessionId);
+    }
+
     private void deleteWorkspace(String sessionId) {
         Path workspace = workspaceForSession(sessionId);
         if (!Files.exists(workspace)) {
@@ -301,5 +310,23 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
     private static boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private static String stripTrailingSeparators(String value) {
+        String result = Objects.requireNonNull(value, "value must not be null").trim();
+        while (result.endsWith("/") || result.endsWith("\\")) {
+            result = result.substring(0, result.length() - 1);
+        }
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException("workspaceMountSourceRoot must not be empty");
+        }
+        return result;
     }
 }

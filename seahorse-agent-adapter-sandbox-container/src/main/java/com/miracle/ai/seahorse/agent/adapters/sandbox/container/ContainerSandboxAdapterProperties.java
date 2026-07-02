@@ -31,6 +31,8 @@ public class ContainerSandboxAdapterProperties {
 
     private String workspaceRoot = "";
 
+    private String workspaceMountSourceRoot = "";
+
     private Duration executionTimeout = Duration.ofSeconds(30);
 
     private int stdoutLimitBytes = 16 * 1024;
@@ -65,6 +67,14 @@ public class ContainerSandboxAdapterProperties {
 
     public void setWorkspaceRoot(String workspaceRoot) {
         this.workspaceRoot = Objects.requireNonNullElse(workspaceRoot, "");
+    }
+
+    public String getWorkspaceMountSourceRoot() {
+        return workspaceMountSourceRoot;
+    }
+
+    public void setWorkspaceMountSourceRoot(String workspaceMountSourceRoot) {
+        this.workspaceMountSourceRoot = Objects.requireNonNullElse(workspaceMountSourceRoot, "").trim();
     }
 
     public Duration getExecutionTimeout() {

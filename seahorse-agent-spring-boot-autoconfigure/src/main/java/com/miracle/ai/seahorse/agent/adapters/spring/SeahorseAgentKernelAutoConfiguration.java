@@ -63,10 +63,10 @@ import org.springframework.context.annotation.Import;
         SeahorseAgentMemoryRecallAutoConfiguration.class,
         SeahorseAgentKernelModelAutoConfiguration.class,
         SeahorseAgentKernelRetrievalAutoConfiguration.class,
+        SeahorseAgentKernelRegistryAutoConfiguration.class,
         SeahorseAgentKernelAgentAutoConfiguration.class,
         SeahorseAgentKernelOpsAutoConfiguration.class,
         SeahorseAgentKernelPluginAutoConfiguration.class,
-        SeahorseAgentKernelRegistryAutoConfiguration.class,
         SeahorseAgentKernelTraceAutoConfiguration.class
 })
 public class SeahorseAgentKernelAutoConfiguration {

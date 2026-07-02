@@ -94,6 +94,34 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldUseConfiguredMountSourceRootWhileWritingToWorkspaceRoot() throws Exception {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded(
+                "mount source smoke\n",
+                Duration.ofMillis(100)));
+        ContainerSandboxAdapterProperties properties = properties();
+        Path containerWorkspaceRoot = tempDir.resolve("container-workspaces");
+        Path hostMountSourceRoot = tempDir.resolve("host-workspaces");
+        properties.setWorkspaceRoot(containerWorkspaceRoot.toString());
+        properties.setWorkspaceMountSourceRoot(hostMountSourceRoot.toString());
+        ContainerSandboxRuntimeAdapter adapter = new ContainerSandboxRuntimeAdapter(properties, runner, CLOCK);
+
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.CODE_INTERPRETER));
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                "print('mount source smoke')",
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(runner.lastCommand.workingDirectory())
+                .isEqualTo(containerWorkspaceRoot.resolve(session.sessionId()).toAbsolutePath().normalize());
+        assertThat(Files.readString(runner.lastCommand.workingDirectory().resolve("main.py")))
+                .isEqualTo("print('mount source smoke')");
+        assertThat(runner.lastCommand.commandLine())
+                .contains(hostMountSourceRoot + "/" + session.sessionId() + ":/workspace:rw");
+    }
+
+    @Test
     void shouldMarkExecutionTimedOut() {
         RecordingRunner runner = new RecordingRunner(ContainerCommandResult.timedOut(
                 "",
@@ -145,13 +173,17 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     private ContainerSandboxRuntimeAdapter adapter(RecordingRunner runner) {
+        return new ContainerSandboxRuntimeAdapter(properties(), runner, CLOCK);
+    }
+
+    private ContainerSandboxAdapterProperties properties() {
         ContainerSandboxAdapterProperties properties = new ContainerSandboxAdapterProperties();
         properties.setWorkspaceRoot(tempDir.toString());
         properties.setMemory("128m");
         properties.setCpus("0.5");
         properties.setPidsLimit(64L);
         properties.setExecutionTimeout(Duration.ofSeconds(3));
-        return new ContainerSandboxRuntimeAdapter(properties, runner, CLOCK);
+        return properties;
     }
 
     private SandboxSessionRequest sessionRequest(SandboxRuntimeType runtimeType) {

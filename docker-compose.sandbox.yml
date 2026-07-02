@@ -1,0 +1,21 @@
+# Optional sandbox runtime overlay.
+#
+# Usage:
+#   docker compose -f docker-compose.full.yml -f docker-compose.sandbox.yml up -d --build backend
+#
+# Before using this file, set
+# SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_WORKSPACE_MOUNT_SOURCE_ROOT to an
+# absolute directory path visible to the Docker daemon. The same directory is
+# mounted into the backend at WORKSPACE_ROOT, while sandbox child containers bind
+# the daemon-visible MOUNT_SOURCE_ROOT/session path.
+
+services:
+  backend:
+    environment:
+      SPRING_APPLICATION_JSON: >-
+        {"seahorse-agent":{"adapters":{"sandbox":{"runtime":"container","container":{"engine":"${SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_ENGINE:-docker}","python-image":"${SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_PYTHON_IMAGE:-python:3.11-alpine}","workspace-root":"${SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_WORKSPACE_ROOT:-/var/lib/seahorse-sandbox}","workspace-mount-source-root":"${SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_WORKSPACE_MOUNT_SOURCE_ROOT:?Set SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_WORKSPACE_MOUNT_SOURCE_ROOT to a Docker-daemon-visible absolute host path}","execution-timeout":"${SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_EXECUTION_TIMEOUT:-30s}","stdout-limit-bytes":${SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_STDOUT_LIMIT_BYTES:-16384},"stderr-limit-bytes":${SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_STDERR_LIMIT_BYTES:-16384},"memory":"${SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_MEMORY:-256m}","cpus":"${SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_CPUS:-1.0}","pids-limit":${SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_PIDS_LIMIT:-128}}}}}}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - type: bind
+        source: ${SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_WORKSPACE_MOUNT_SOURCE_ROOT:?Set SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_WORKSPACE_MOUNT_SOURCE_ROOT to a Docker-daemon-visible absolute host path}
+        target: ${SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_WORKSPACE_ROOT:-/var/lib/seahorse-sandbox}

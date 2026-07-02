@@ -4,11 +4,11 @@
 
 ## 1. 结论
 
-Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端口、artifact 端口、JDBC 存储、Web API、前端页面骨架、opt-in 的 Docker/Podman CLI 容器 adapter，以及第一个 Agent 工具 `sandbox_python`：配置 `seahorse-agent.adapters.sandbox.runtime=container` 后，`CODE_INTERPRETER` 可以在无网络容器中执行 Python 最小闭环。默认 `SandboxRuntimePort` 仍是 `unsupported()`，不配置真实 adapter 时继续 fail closed。
+Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端口、artifact 端口、JDBC 存储、Web API、前端页面骨架、opt-in 的 Docker/Podman CLI 容器 adapter、full-compose backend Docker host-socket/CLI opt-in 接入，以及第一个 Agent 工具 `sandbox_python`：配置 `seahorse-agent.adapters.sandbox.runtime=container` 后，`CODE_INTERPRETER` 可以在无网络容器中执行 Python 最小闭环。默认 `SandboxRuntimePort` 仍是 `unsupported()`，不配置真实 adapter 时继续 fail closed。
 
-因此它的现状应定义为“控制面、审计基础、Code Interpreter 容器 runtime 最小闭环和 `sandbox_python` 工具链路已实现，生产级 sandbox 还需要补齐 full-compose 宿主接入、profile/配额、artifact 产物、更完整 Agent 工具化和强隔离加固”。
+因此它的现状应定义为“控制面、审计基础、Code Interpreter 容器 runtime 最小闭环、full-compose host-socket opt-in 接入和 `sandbox_python` 工具链路已实现，生产级 sandbox 还需要补齐 profile/配额、artifact 产物、更完整 Agent 工具化和强隔离加固”。
 
-剩余设计重点是：把外部隔离 runtime 接入 full-compose backend 容器环境，补齐 runtime profile、磁盘/TTL/网络 allowlist、内容级 MIME/病毒/PII 扫描、artifact 详情/下载治理，并把 sandbox 执行接入 Agent 工具和运行记录。
+剩余设计重点是：补齐 runtime profile、磁盘/TTL/网络 allowlist、内容级 MIME/病毒/PII 扫描、artifact 详情/下载治理，并把更广 sandbox 执行接入 Agent 工具和运行记录。
 
 ## 2. 当前实现状态
 
@@ -22,6 +22,7 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 | 运行时端口 | 已有 `SandboxRuntimePort#createSession/execute/closeSession` | `SandboxRuntimePort.java` |
 | 默认 runtime | 默认 bean 是 `SandboxRuntimePort.unsupported()`，execute 返回 `RUNTIME_UNSUPPORTED` | `SeahorseAgentKernelRegistryAutoConfiguration.java` |
 | 容器 runtime | 显式配置 `seahorse-agent.adapters.sandbox.runtime=container` 后，可用 Docker/Podman CLI 执行 `CODE_INTERPRETER` Python 最小闭环 | `ContainerSandboxRuntimeAdapter.java` |
+| full-compose 接入 | 新增 `docker-compose.sandbox.yml` opt-in overlay，backend 镜像内置 Docker CLI，可显式挂载宿主 Docker socket 和 daemon-visible workspace mount source | `docker-compose.sandbox.yml`、`Dockerfile.backend` |
 | 存储 | 已有 `sa_sandbox_session`、`sa_sandbox_execution`、`sa_sandbox_artifact` 对应 JDBC adapter | `JdbcSandboxRepositoryAdapter.java` |
 | Web API | 已有创建 session、execute、close、list executions、list artifacts API | `SeahorseSandboxController.java` |
 | 前端页面 | 已有 `/admin/sandbox`，可创建 session、输入参数、执行、查看结果、execution history 和 artifact | `frontend/src/pages/admin/sandbox/SandboxPage.tsx` |
@@ -32,7 +33,7 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 
 | 缺口 | 影响 | 设计处理 |
 | --- | --- | --- |
-| 真实隔离 runtime 覆盖仍窄 | Code Interpreter Python 最小容器闭环已落地；Browser Automation、Shell、File Conversion 和 full-compose backend 容器内 Docker/Podman 接入仍未完成 | 扩展 Docker/Podman adapter 的 profile 覆盖，P1/P2 可替换为 gVisor 或 Firecracker |
+| 真实隔离 runtime 覆盖仍窄 | Code Interpreter Python 最小容器闭环与 full-compose backend Docker host-socket opt-in 接入已落地；Browser Automation、Shell、File Conversion 仍未完成 | 扩展 Docker/Podman adapter 的 profile 覆盖，P1/P2 可替换为 gVisor 或 Firecracker |
 | 真实 runtime 清理仍需生产化 | 当前 adapter 使用 `--rm` 并在 close 时删除 per-session workspace；仍缺 TTL、孤儿容器巡检、runtime pool 清理 | 接入 session TTL、后台清理任务和 runtime 节点健康检查 |
 | 资源配额仍不完整 | 当前 adapter 有固定 CPU、内存、pids、timeout、stdout/stderr limit；仍缺磁盘配额、按 tenant/agent/tool 的 profile 和持久化记录 | 新增 `SandboxResourcePolicy` 和 runtime profile |
 | 真实 artifact 产物未落地 | 当前 Code Interpreter adapter 只把 stdout/stderr 写入 execution summary，不扫描/保存运行生成文件 | 增加 workspace artifact 收集、object storage 写入和 scanner 闭环 |
@@ -206,7 +207,7 @@ SandboxArtifactScannerPort
 1. 引入持久化 runtime profile 和按 tenant/agent/tool 的资源策略。
 2. 增加磁盘配额、TTL、孤儿容器巡检和 runtime pool 健康检查。
 3. 收集 workspace 产物，写入 object storage，并进入 artifact scanner。
-4. 在 full-compose backend 容器内提供 Docker/Podman CLI/socket 的可运维接入方式。
+4. 在 full-compose backend 容器内提供 Docker host-socket/CLI 的可运维接入方式。（已补齐 opt-in overlay、Docker CLI 和 workspace mount source 配置）
 
 P0 profile：
 
@@ -289,7 +290,7 @@ P0 profile：
 3. 新增 runtime profile 配置。（当前 adapter 有固定配置项；持久化 profile 和策略联动仍后续）
 4. 增加 execution history API。（已补齐 `GET /api/sandbox/sessions/{sessionId}/executions`）
 5. 增加 container adapter 单元测试和本地集成测试。（已补齐 mock runner 单测、auto-config 测试和 Docker CLI gated smoke）
-6. full-compose backend 容器内接入 Docker/Podman CLI/socket。（后续）
+6. full-compose backend 容器内接入 Docker/Podman CLI/socket。（已补齐 Docker host-socket opt-in overlay；Podman 可通过自定义镜像/engine 配置继续扩展）
 
 ### P1：artifact 安全闭环
 

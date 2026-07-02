@@ -66,11 +66,15 @@ RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && \
 # Stage 2: Node runtime for stdio MCP servers
 FROM node:20-alpine AS node-runtime
 
-# Stage 3: Run
+# Stage 3: Docker CLI for opt-in host-socket sandbox runtime
+FROM docker:27-cli AS docker-cli
+
+# Stage 4: Run
 FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
 COPY --from=node-runtime /lib/ld-musl-x86_64.so.1 /lib/ld-musl-x86_64.so.1
@@ -84,6 +88,7 @@ RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
     && chmod +x /app/mcp-stdio-echo.js \
     && curl --version >/dev/null \
+    && docker --version \
     && node --version \
     && npm --version \
     && npx --version
