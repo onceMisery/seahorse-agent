@@ -533,6 +533,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/sandbox/artifacts/{}/download"
+  },
+  {
+    "method": "GET",
     "path": "/api/sandbox/sessions/{}/executions"
   },
   {

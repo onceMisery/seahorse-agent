@@ -104,6 +104,8 @@ class JdbcSandboxRepositoryAdapterTests {
                 .extracting(SandboxArtifact::artifactId)
                 .containsExactly("artifact-clean", "artifact-pending", "artifact-redacted", "artifact-secret");
         assertThat(adapter.listPromptVisibleBySession("session-1")).containsExactly(clean, redacted);
+        assertThat(adapter.findArtifactById("artifact-clean")).contains(clean);
+        assertThat(adapter.findArtifactById(" ")).isEmpty();
     }
 
     private static SandboxArtifact artifact(String artifactId,

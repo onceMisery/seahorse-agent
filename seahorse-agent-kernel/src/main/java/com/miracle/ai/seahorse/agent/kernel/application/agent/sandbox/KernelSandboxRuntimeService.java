@@ -32,6 +32,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyDe
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
@@ -59,6 +60,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -73,6 +75,19 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private static final String RESOURCE_TYPE_SANDBOX_SESSION = "SANDBOX_SESSION";
     private static final String RESOURCE_TYPE_SANDBOX_EXECUTION = "SANDBOX_EXECUTION";
     private static final String SANDBOX_ARTIFACT_BUCKET = "sandbox-artifacts";
+    private static final String DOWNLOAD_BLOCKED = "Sandbox artifact is not available for download";
+    private static final String UNSAFE_STORAGE_REF_BLOCKED =
+            "Sandbox artifact storage reference is not available through the download endpoint";
+    private static final Map<String, String> FILE_EXTENSIONS = Map.ofEntries(
+            Map.entry("text/html", ".html"),
+            Map.entry("text/markdown", ".md"),
+            Map.entry("text/plain", ".txt"),
+            Map.entry("text/csv", ".csv"),
+            Map.entry("application/json", ".json"),
+            Map.entry("application/pdf", ".pdf"),
+            Map.entry("image/png", ".png"),
+            Map.entry("image/jpeg", ".jpg"),
+            Map.entry("image/svg+xml", ".svg"));
 
     private final SandboxPolicyPort policyPort;
     private final SandboxRuntimePort runtimePort;
@@ -276,6 +291,25 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         return artifactQueryPort.listArtifactsBySession(safeSessionId);
     }
 
+    @Override
+    public SandboxArtifactDownloadDecision downloadArtifact(String artifactId) {
+        SandboxArtifact artifact = artifactQueryPort.findArtifactById(
+                        requireText(artifactId, "artifactId must not be blank"))
+                .orElseThrow(() -> new IllegalArgumentException("Sandbox artifact not found"));
+        findSessionOrThrow(artifact.sessionId());
+        if (!artifact.promptVisible()) {
+            throw new IllegalStateException(DOWNLOAD_BLOCKED);
+        }
+        if (isUnsafeDownloadReference(artifact.objectUri())) {
+            throw new IllegalStateException(UNSAFE_STORAGE_REF_BLOCKED);
+        }
+        return new SandboxArtifactDownloadDecision(
+                artifact,
+                artifact.mediaType(),
+                artifactFilename(artifact),
+                artifact.objectUri());
+    }
+
     private SandboxExecutionResult failedResult(SandboxSession session, SandboxPolicyReasonCode reasonCode) {
         SandboxExecution execution = executionRepositoryPort.saveExecution(failedExecution(session, reasonCode));
         appendExecutionAudit(session, execution, 0, 0, reasonCode);
@@ -384,6 +418,34 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         } catch (RuntimeException ex) {
             return false;
         }
+    }
+
+    private boolean isUnsafeDownloadReference(String objectUri) {
+        try {
+            String scheme = URI.create(objectUri).getScheme();
+            if (!hasText(scheme)) {
+                return true;
+            }
+            String normalized = scheme.toLowerCase(Locale.ROOT);
+            return "file".equals(normalized) || "http".equals(normalized) || "https".equals(normalized);
+        } catch (RuntimeException ex) {
+            return true;
+        }
+    }
+
+    private String artifactFilename(SandboxArtifact artifact) {
+        String safeBase = artifact.artifactId().replaceAll("[^A-Za-z0-9._-]", "_");
+        String extension = FILE_EXTENSIONS.getOrDefault(normalizedMediaType(artifact.mediaType()), ".bin");
+        if (safeBase.toLowerCase(Locale.ROOT).endsWith(extension)) {
+            return safeBase;
+        }
+        return safeBase + extension;
+    }
+
+    private String normalizedMediaType(String mediaType) {
+        int separator = mediaType.indexOf(';');
+        String base = separator >= 0 ? mediaType.substring(0, separator) : mediaType;
+        return base.trim().toLowerCase(Locale.ROOT);
     }
 
     private String sessionId() {
@@ -523,6 +585,11 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     }
 
     private static final class EmptySandboxArtifactQueryPort implements SandboxArtifactQueryPort {
+
+        @Override
+        public Optional<SandboxArtifact> findArtifactById(String artifactId) {
+            return Optional.empty();
+        }
 
         @Override
         public List<SandboxArtifact> listArtifactsBySession(String sessionId) {

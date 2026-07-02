@@ -15,18 +15,12 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.ports.outbound.agent;
+package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 
-import java.util.List;
-import java.util.Optional;
-
-public interface SandboxArtifactQueryPort {
-
-    Optional<SandboxArtifact> findArtifactById(String artifactId);
-
-    List<SandboxArtifact> listArtifactsBySession(String sessionId);
-
-    List<SandboxArtifact> listPromptVisibleBySession(String sessionId);
+public record SandboxArtifactDownloadDecision(SandboxArtifact artifact,
+                                              String contentType,
+                                              String filename,
+                                              String storageRef) {
 }

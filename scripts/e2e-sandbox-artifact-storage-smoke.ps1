@@ -87,6 +87,35 @@ function Invoke-Json {
     return $content | ConvertFrom-Json
 }
 
+function Invoke-Text {
+    param(
+        [string]$Method,
+        [string]$Path,
+        [hashtable]$Headers = @{},
+        [int]$ExpectedStatus = 200
+    )
+
+    $args = @("-sS", "-w", "`n%{http_code}", "-X", $Method, "$BaseUrl$Path")
+    foreach ($key in $Headers.Keys) {
+        $args += @("-H", "${key}: $($Headers[$key])")
+    }
+
+    $raw = & curl.exe @args
+    if ($LASTEXITCODE -ne 0) {
+        throw "curl exited with $LASTEXITCODE for $Method $Path"
+    }
+    $lines = @($raw)
+    if ($lines.Count -eq 0) {
+        throw "empty curl output for $Method $Path"
+    }
+    $status = [int]$lines[-1]
+    $content = if ($lines.Count -gt 1) { ($lines[0..($lines.Count - 2)] -join "`n") } else { "" }
+    if ($status -ne $ExpectedStatus) {
+        throw "Expected HTTP $ExpectedStatus but got $status for $Method $Path body=$content"
+    }
+    return $content
+}
+
 function Assert-ApiOk {
     param([object]$Response, [string]$Name)
     if ($null -eq $Response -or "$($Response.code)" -ne "0") {
@@ -221,6 +250,16 @@ try {
         $artifactJson = $matched[0] | ConvertTo-Json -Depth 20 -Compress
         if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
             throw "Sandbox artifact API leaked storage URI fields: $artifactJson"
+        }
+    } | Out-Null
+
+    Test-Step "Download governed sandbox artifact from object storage" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$artifactId/download" -Headers $headers
+        if ($content -notlike "*$Marker*") {
+            throw "Downloaded artifact did not contain marker '$Marker': $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded artifact body unexpectedly leaked storage metadata: $content"
         }
     } | Out-Null
 

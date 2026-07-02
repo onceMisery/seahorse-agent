@@ -114,3 +114,9 @@ export function listSandboxArtifacts(sessionId: string) {
     `/api/sandbox/sessions/${encodeURIComponent(sessionId)}/artifacts`
   );
 }
+
+export function downloadSandboxArtifact(artifactId: string) {
+  return api.get(`/api/sandbox/artifacts/${encodeURIComponent(artifactId)}/download`, {
+    responseType: "blob"
+  });
+}

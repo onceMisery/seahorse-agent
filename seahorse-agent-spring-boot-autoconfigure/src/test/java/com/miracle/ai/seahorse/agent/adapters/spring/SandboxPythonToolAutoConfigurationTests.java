@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
@@ -136,6 +137,11 @@ class SandboxPythonToolAutoConfigurationTests {
             return new SandboxArtifactQueryPort() {
 
                 @Override
+                public Optional<SandboxArtifact> findArtifactById(String artifactId) {
+                    return Optional.empty();
+                }
+
+                @Override
                 public List<SandboxArtifact> listArtifactsBySession(String sessionId) {
                     return List.of();
                 }
@@ -173,6 +179,11 @@ class SandboxPythonToolAutoConfigurationTests {
         @Override
         public List<SandboxArtifact> listArtifacts(String sessionId) {
             return List.of();
+        }
+
+        @Override
+        public SandboxArtifactDownloadDecision downloadArtifact(String artifactId) {
+            throw new UnsupportedOperationException();
         }
     }
 }

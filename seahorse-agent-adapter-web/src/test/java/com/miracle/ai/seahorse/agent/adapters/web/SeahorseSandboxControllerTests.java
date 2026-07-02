@@ -27,17 +27,22 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +54,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -77,11 +84,21 @@ class SeahorseSandboxControllerTests {
                 SandboxRuntimeType.CODE_INTERPRETER,
                 NOW.plusSeconds(1),
                 SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED)));
-        when(port.listArtifacts("session-1")).thenReturn(List.of(artifact()));
+        SandboxArtifact artifact = artifact();
+        when(port.listArtifacts("session-1")).thenReturn(List.of(artifact));
+        when(port.downloadArtifact("artifact-clean")).thenReturn(new SandboxArtifactDownloadDecision(
+                artifact,
+                "text/plain",
+                "artifact-clean.txt",
+                "local://sandbox-artifacts/artifact-clean.txt"));
+        ObjectStoragePort storagePort = mock(ObjectStoragePort.class);
+        when(storagePort.openStream("local://sandbox-artifacts/artifact-clean.txt"))
+                .thenReturn(new ByteArrayInputStream("download body".getBytes(StandardCharsets.UTF_8)));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseSandboxController(
                         provider(SandboxRuntimeInboundPort.class, port),
-                        AdvancedFeatureGate.allEnabledForTests())).build();
+                        AdvancedFeatureGate.allEnabledForTests(),
+                        provider(ObjectStoragePort.class, storagePort))).build();
 
         mvc.perform(post("/api/sandbox/sessions")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -137,6 +154,14 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data[0].sensitivity").value("INTERNAL"))
                 .andExpect(jsonPath("$.data[0].promptVisible").value(true));
         verify(port).listArtifacts("session-1");
+
+        mvc.perform(get("/api/sandbox/artifacts/artifact-clean/download"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"artifact-clean.txt\""))
+                .andExpect(content().string("download body"));
+        verify(port).downloadArtifact("artifact-clean");
+        verify(storagePort).openStream("local://sandbox-artifacts/artifact-clean.txt");
     }
 
     private String json(Object value) throws Exception {

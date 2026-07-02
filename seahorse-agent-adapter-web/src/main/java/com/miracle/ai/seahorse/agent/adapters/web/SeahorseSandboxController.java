@@ -24,17 +24,24 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.InputStream;
 import java.util.List;
 import java.time.Instant;
 
@@ -42,18 +49,28 @@ import java.time.Instant;
 public class SeahorseSandboxController {
 
     private final ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider;
+    private final ObjectProvider<ObjectStoragePort> objectStoragePortProvider;
     private final AdvancedFeatureGate advancedFeatureGate;
 
     @Autowired
     public SeahorseSandboxController(ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider,
-                                     ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+                                     ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider,
+                                     ObjectProvider<ObjectStoragePort> objectStoragePortProvider) {
         this(sandboxRuntimePortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults),
+                objectStoragePortProvider);
     }
 
     public SeahorseSandboxController(ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider,
                                      AdvancedFeatureGate advancedFeatureGate) {
+        this(sandboxRuntimePortProvider, advancedFeatureGate, null);
+    }
+
+    public SeahorseSandboxController(ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider,
+                                     AdvancedFeatureGate advancedFeatureGate,
+                                     ObjectProvider<ObjectStoragePort> objectStoragePortProvider) {
         this.sandboxRuntimePortProvider = sandboxRuntimePortProvider;
+        this.objectStoragePortProvider = objectStoragePortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
                 ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
@@ -107,6 +124,39 @@ public class SeahorseSandboxController {
         return ApiResponses.requireService(sandboxRuntimePortProvider, port -> port.listArtifacts(sessionId).stream()
                 .map(SeahorseSandboxController::toResponse)
                 .toList());
+    }
+
+    @GetMapping("/api/sandbox/artifacts/{artifactId}/download")
+    public ResponseEntity<InputStreamResource> downloadArtifact(@PathVariable String artifactId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        SandboxRuntimeInboundPort sandboxPort = requireSandboxPort();
+        ObjectStoragePort storagePort = requireStoragePort();
+        SandboxArtifactDownloadDecision decision = sandboxPort.downloadArtifact(artifactId);
+        InputStream stream = storagePort.openStream(decision.storageRef());
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(decision.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + decision.filename() + "\"")
+                .body(new InputStreamResource(stream));
+    }
+
+    private SandboxRuntimeInboundPort requireSandboxPort() {
+        SandboxRuntimeInboundPort port = sandboxRuntimePortProvider == null
+                ? null
+                : sandboxRuntimePortProvider.getIfAvailable();
+        if (port == null) {
+            throw new IllegalStateException(ApiResponses.SERVICE_NOT_AVAILABLE_MESSAGE);
+        }
+        return port;
+    }
+
+    private ObjectStoragePort requireStoragePort() {
+        ObjectStoragePort port = objectStoragePortProvider == null
+                ? null
+                : objectStoragePortProvider.getIfAvailable();
+        if (port == null) {
+            throw new IllegalStateException(ApiResponses.SERVICE_NOT_AVAILABLE_MESSAGE);
+        }
+        return port;
     }
 
     private static SandboxExecutionResultResponse toResponse(SandboxExecutionResult result) {

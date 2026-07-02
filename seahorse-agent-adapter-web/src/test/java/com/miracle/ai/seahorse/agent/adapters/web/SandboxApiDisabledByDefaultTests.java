@@ -76,6 +76,9 @@ class SandboxApiDisabledByDefaultTests {
         mvc.perform(get("/api/sandbox/sessions/session-1/artifacts"))
                 .andExpect(status().isForbidden());
 
+        mvc.perform(get("/api/sandbox/artifacts/artifact-1/download"))
+                .andExpect(status().isForbidden());
+
         verifyNoInteractions(port);
     }
 

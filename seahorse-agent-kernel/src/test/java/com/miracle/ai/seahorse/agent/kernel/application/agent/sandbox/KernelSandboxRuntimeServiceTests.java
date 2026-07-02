@@ -32,6 +32,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyDe
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
@@ -69,6 +70,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KernelSandboxRuntimeServiceTests {
@@ -356,6 +358,99 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldAllowPromptVisibleObjectArtifactDownloadDecision() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        SandboxSession session = sessionRepository.saveSession(SandboxSession.created(
+                "session-1",
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW));
+        MemorySandboxArtifactQueryPort artifactQueryPort = new MemorySandboxArtifactQueryPort(storedArtifact(
+                "artifact-clean",
+                "local://sandbox-artifacts/artifact-clean"));
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                artifactQueryPort,
+                CLOCK);
+
+        SandboxArtifactDownloadDecision decision = service.downloadArtifact("artifact-clean");
+
+        assertEquals(session.sessionId(), decision.artifact().sessionId());
+        assertEquals("text/plain", decision.contentType());
+        assertEquals("artifact-clean.txt", decision.filename());
+        assertEquals("local://sandbox-artifacts/artifact-clean", decision.storageRef());
+    }
+
+    @Test
+    void shouldRejectSecretSandboxArtifactDownloadDecision() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        sessionRepository.saveSession(SandboxSession.created(
+                "session-1",
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW));
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new MemorySandboxArtifactQueryPort(storedArtifact(
+                        "artifact-secret",
+                        "local://sandbox-artifacts/artifact-secret")
+                        .withScanDecision(SandboxArtifactScanStatus.CLEAN, ContextSensitivity.SECRET)),
+                CLOCK);
+
+        assertThrows(IllegalStateException.class, () -> service.downloadArtifact("artifact-secret"));
+    }
+
+    @Test
+    void shouldRejectRawFileSandboxArtifactDownloadDecision(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("answer.txt");
+        Files.writeString(output, "artifact marker", StandardCharsets.UTF_8);
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        sessionRepository.saveSession(SandboxSession.created(
+                "session-1",
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW));
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new MemorySandboxArtifactQueryPort(fileArtifact("artifact-file", output)
+                        .withScanDecision(SandboxArtifactScanStatus.CLEAN, ContextSensitivity.INTERNAL)),
+                CLOCK);
+
+        assertThrows(IllegalStateException.class, () -> service.downloadArtifact("artifact-file"));
+    }
+
+    @Test
+    void shouldRejectSandboxArtifactDownloadDecisionWhenSessionIsMissing() {
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                new MemorySandboxSessionRepository(),
+                new MemorySandboxExecutionRepository(),
+                new MemorySandboxArtifactQueryPort(storedArtifact(
+                        "artifact-clean",
+                        "local://sandbox-artifacts/artifact-clean")),
+                CLOCK);
+
+        assertThrows(IllegalArgumentException.class, () -> service.downloadArtifact("artifact-clean"));
+    }
+
+    @Test
     void shouldDelegateCloseToRuntimeAndPersistClosedSession() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
         MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
@@ -536,6 +631,18 @@ class KernelSandboxRuntimeServiceTests {
                 NOW);
     }
 
+    private static SandboxArtifact storedArtifact(String artifactId, String objectUri) {
+        return new SandboxArtifact(
+                artifactId,
+                "session-1",
+                "exec-1",
+                objectUri,
+                "text/plain",
+                SandboxArtifactScanStatus.CLEAN,
+                ContextSensitivity.INTERNAL,
+                NOW);
+    }
+
     private static final class MemoryArtifactPort implements SandboxArtifactPort {
 
         private final List<SandboxArtifact> saved = new ArrayList<>();
@@ -659,7 +766,44 @@ class KernelSandboxRuntimeServiceTests {
         }
     }
 
+    private static final class MemorySandboxArtifactQueryPort implements SandboxArtifactQueryPort {
+
+        private final Map<String, SandboxArtifact> artifacts = new ConcurrentHashMap<>();
+
+        private MemorySandboxArtifactQueryPort(SandboxArtifact... artifacts) {
+            for (SandboxArtifact artifact : artifacts) {
+                this.artifacts.put(artifact.artifactId(), artifact);
+            }
+        }
+
+        @Override
+        public Optional<SandboxArtifact> findArtifactById(String artifactId) {
+            return Optional.ofNullable(artifacts.get(artifactId));
+        }
+
+        @Override
+        public List<SandboxArtifact> listArtifactsBySession(String sessionId) {
+            return artifacts.values().stream()
+                    .filter(artifact -> artifact.sessionId().equals(sessionId))
+                    .sorted(Comparator.comparing(SandboxArtifact::createdAt)
+                            .thenComparing(SandboxArtifact::artifactId))
+                    .toList();
+        }
+
+        @Override
+        public List<SandboxArtifact> listPromptVisibleBySession(String sessionId) {
+            return listArtifactsBySession(sessionId).stream()
+                    .filter(SandboxArtifact::promptVisible)
+                    .toList();
+        }
+    }
+
     private static final class EmptySandboxArtifactQueryPort implements SandboxArtifactQueryPort {
+
+        @Override
+        public Optional<SandboxArtifact> findArtifactById(String artifactId) {
+            return Optional.empty();
+        }
 
         @Override
         public List<SandboxArtifact> listArtifactsBySession(String sessionId) {

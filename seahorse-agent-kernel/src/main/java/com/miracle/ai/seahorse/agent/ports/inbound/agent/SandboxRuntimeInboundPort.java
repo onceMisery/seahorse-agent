@@ -35,4 +35,6 @@ public interface SandboxRuntimeInboundPort {
     List<SandboxExecution> listExecutions(String sessionId);
 
     List<SandboxArtifact> listArtifacts(String sessionId);
+
+    SandboxArtifactDownloadDecision downloadArtifact(String artifactId);
 }

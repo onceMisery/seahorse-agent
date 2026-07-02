@@ -273,7 +273,8 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 execution.executionId());
     }
 
-    private Optional<SandboxArtifact> findArtifactById(String artifactId) {
+    @Override
+    public Optional<SandboxArtifact> findArtifactById(String artifactId) {
         if (!hasText(artifactId)) {
             return Optional.empty();
         }
