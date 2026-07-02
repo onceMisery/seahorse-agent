@@ -32,6 +32,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyDe
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
@@ -292,22 +293,47 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     }
 
     @Override
+    public SandboxArtifactDetailDecision describeArtifact(String artifactId) {
+        SandboxArtifact artifact = findArtifactWithSession(artifactId);
+        SandboxArtifactDownloadPolicy policy = downloadPolicy(artifact);
+        return new SandboxArtifactDetailDecision(
+                artifact,
+                artifact.mediaType(),
+                artifactFilename(artifact),
+                policy.downloadable(),
+                policy.blockedReason());
+    }
+
+    @Override
     public SandboxArtifactDownloadDecision downloadArtifact(String artifactId) {
-        SandboxArtifact artifact = artifactQueryPort.findArtifactById(
-                        requireText(artifactId, "artifactId must not be blank"))
-                .orElseThrow(() -> new IllegalArgumentException("Sandbox artifact not found"));
-        findSessionOrThrow(artifact.sessionId());
-        if (!artifact.promptVisible()) {
-            throw new IllegalStateException(DOWNLOAD_BLOCKED);
-        }
-        if (isUnsafeDownloadReference(artifact.objectUri())) {
-            throw new IllegalStateException(UNSAFE_STORAGE_REF_BLOCKED);
+        SandboxArtifact artifact = findArtifactWithSession(artifactId);
+        SandboxArtifactDownloadPolicy policy = downloadPolicy(artifact);
+        if (!policy.downloadable()) {
+            throw new IllegalStateException(policy.blockedReason());
         }
         return new SandboxArtifactDownloadDecision(
                 artifact,
                 artifact.mediaType(),
                 artifactFilename(artifact),
                 artifact.objectUri());
+    }
+
+    private SandboxArtifact findArtifactWithSession(String artifactId) {
+        SandboxArtifact artifact = artifactQueryPort.findArtifactById(
+                        requireText(artifactId, "artifactId must not be blank"))
+                .orElseThrow(() -> new IllegalArgumentException("Sandbox artifact not found"));
+        findSessionOrThrow(artifact.sessionId());
+        return artifact;
+    }
+
+    private SandboxArtifactDownloadPolicy downloadPolicy(SandboxArtifact artifact) {
+        if (!artifact.promptVisible()) {
+            return SandboxArtifactDownloadPolicy.blocked(DOWNLOAD_BLOCKED);
+        }
+        if (isUnsafeDownloadReference(artifact.objectUri())) {
+            return SandboxArtifactDownloadPolicy.blocked(UNSAFE_STORAGE_REF_BLOCKED);
+        }
+        return SandboxArtifactDownloadPolicy.allowed();
     }
 
     private SandboxExecutionResult failedResult(SandboxSession session, SandboxPolicyReasonCode reasonCode) {
@@ -528,6 +554,17 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private record SandboxArtifactDownloadPolicy(boolean downloadable, String blockedReason) {
+
+        private static SandboxArtifactDownloadPolicy allowed() {
+            return new SandboxArtifactDownloadPolicy(true, null);
+        }
+
+        private static SandboxArtifactDownloadPolicy blocked(String reason) {
+            return new SandboxArtifactDownloadPolicy(false, reason);
+        }
     }
 
     private static final class InMemorySandboxSessionRepository implements SandboxSessionRepositoryPort {

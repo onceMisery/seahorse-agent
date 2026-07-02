@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
@@ -86,6 +87,12 @@ class SeahorseSandboxControllerTests {
                 SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED)));
         SandboxArtifact artifact = artifact();
         when(port.listArtifacts("session-1")).thenReturn(List.of(artifact));
+        when(port.describeArtifact("artifact-clean")).thenReturn(new SandboxArtifactDetailDecision(
+                artifact,
+                "text/plain",
+                "artifact-clean.txt",
+                true,
+                null));
         when(port.downloadArtifact("artifact-clean")).thenReturn(new SandboxArtifactDownloadDecision(
                 artifact,
                 "text/plain",
@@ -154,6 +161,17 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data[0].sensitivity").value("INTERNAL"))
                 .andExpect(jsonPath("$.data[0].promptVisible").value(true));
         verify(port).listArtifacts("session-1");
+
+        mvc.perform(get("/api/sandbox/artifacts/artifact-clean"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.artifactId").value("artifact-clean"))
+                .andExpect(jsonPath("$.data.contentType").value("text/plain"))
+                .andExpect(jsonPath("$.data.filename").value("artifact-clean.txt"))
+                .andExpect(jsonPath("$.data.downloadable").value(true))
+                .andExpect(jsonPath("$.data.objectUri").doesNotExist())
+                .andExpect(jsonPath("$.data.storageRef").doesNotExist());
+        verify(port).describeArtifact("artifact-clean");
 
         mvc.perform(get("/api/sandbox/artifacts/artifact-clean/download"))
                 .andExpect(status().isOk())

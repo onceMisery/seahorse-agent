@@ -38,6 +38,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
@@ -198,6 +199,11 @@ class BuiltInAgentToolRegistrarTests {
         @Override
         public List<SandboxArtifact> listArtifacts(String sessionId) {
             return List.of();
+        }
+
+        @Override
+        public SandboxArtifactDetailDecision describeArtifact(String artifactId) {
+            throw new UnsupportedOperationException();
         }
 
         @Override

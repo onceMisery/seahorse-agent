@@ -26,6 +26,7 @@ import {
   createSandboxSession,
   downloadSandboxArtifact,
   executeInSandbox,
+  getSandboxArtifact,
   listSandboxArtifacts,
   listSandboxExecutions
 } from "@/services/sandboxService";
@@ -73,6 +74,7 @@ describe("frontend capability service contracts", () => {
     expect(backendEndpoints).toContain("GET /admin/dashboard/performance");
     expect(backendEndpoints).toContain("GET /admin/dashboard/trends");
     expect(backendEndpoints).toContain("GET /api/sandbox/sessions/{}/executions");
+    expect(backendEndpoints).toContain("GET /api/sandbox/artifacts/{}");
     expect(backendEndpoints).toContain("GET /api/sandbox/artifacts/{}/download");
   });
 
@@ -290,6 +292,7 @@ describe("frontend capability service contracts", () => {
     });
     await listSandboxExecutions("session-1");
     await listSandboxArtifacts("session-1");
+    await getSandboxArtifact("artifact-1");
     await downloadSandboxArtifact("artifact-1");
 
     expect(mockedApi.post).toHaveBeenNthCalledWith(1, "/api/sandbox/sessions", {
@@ -306,7 +309,8 @@ describe("frontend capability service contracts", () => {
     });
     expect(mockedApi.get).toHaveBeenNthCalledWith(1, "/api/sandbox/sessions/session-1/executions");
     expect(mockedApi.get).toHaveBeenNthCalledWith(2, "/api/sandbox/sessions/session-1/artifacts");
-    expect(mockedApi.get).toHaveBeenNthCalledWith(3, "/api/sandbox/artifacts/artifact-1/download", {
+    expect(mockedApi.get).toHaveBeenNthCalledWith(3, "/api/sandbox/artifacts/artifact-1");
+    expect(mockedApi.get).toHaveBeenNthCalledWith(4, "/api/sandbox/artifacts/artifact-1/download", {
       responseType: "blob"
     });
   });

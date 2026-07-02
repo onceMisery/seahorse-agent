@@ -18,25 +18,10 @@
 package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 
-import java.util.List;
-
-public interface SandboxRuntimeInboundPort {
-
-    SandboxSession createSession(SandboxSessionCreateCommand command);
-
-    SandboxExecutionResult execute(SandboxExecutionCommand command);
-
-    SandboxSession close(String sessionId);
-
-    List<SandboxExecution> listExecutions(String sessionId);
-
-    List<SandboxArtifact> listArtifacts(String sessionId);
-
-    SandboxArtifactDetailDecision describeArtifact(String artifactId);
-
-    SandboxArtifactDownloadDecision downloadArtifact(String artifactId);
+public record SandboxArtifactDetailDecision(SandboxArtifact artifact,
+                                            String contentType,
+                                            String filename,
+                                            boolean downloadable,
+                                            String downloadBlockedReason) {
 }

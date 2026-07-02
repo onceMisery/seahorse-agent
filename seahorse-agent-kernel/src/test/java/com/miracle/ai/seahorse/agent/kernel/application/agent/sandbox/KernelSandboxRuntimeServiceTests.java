@@ -33,6 +33,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyRe
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
@@ -70,6 +71,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -384,6 +386,90 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals("text/plain", decision.contentType());
         assertEquals("artifact-clean.txt", decision.filename());
         assertEquals("local://sandbox-artifacts/artifact-clean", decision.storageRef());
+    }
+
+    @Test
+    void shouldDescribePromptVisibleObjectArtifactWithDownloadPolicy() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        SandboxSession session = sessionRepository.saveSession(SandboxSession.created(
+                "session-1",
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW));
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new MemorySandboxArtifactQueryPort(storedArtifact(
+                        "artifact-clean",
+                        "local://sandbox-artifacts/artifact-clean")),
+                CLOCK);
+
+        SandboxArtifactDetailDecision decision = service.describeArtifact("artifact-clean");
+
+        assertEquals(session.sessionId(), decision.artifact().sessionId());
+        assertEquals("text/plain", decision.contentType());
+        assertEquals("artifact-clean.txt", decision.filename());
+        assertTrue(decision.downloadable());
+        assertNull(decision.downloadBlockedReason());
+    }
+
+    @Test
+    void shouldDescribeSecretSandboxArtifactAsBlockedForDownload() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        sessionRepository.saveSession(SandboxSession.created(
+                "session-1",
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW));
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new MemorySandboxArtifactQueryPort(storedArtifact(
+                        "artifact-secret",
+                        "local://sandbox-artifacts/artifact-secret")
+                        .withScanDecision(SandboxArtifactScanStatus.CLEAN, ContextSensitivity.SECRET)),
+                CLOCK);
+
+        SandboxArtifactDetailDecision decision = service.describeArtifact("artifact-secret");
+
+        assertFalse(decision.downloadable());
+        assertEquals("Sandbox artifact is not available for download", decision.downloadBlockedReason());
+    }
+
+    @Test
+    void shouldDescribeRawFileSandboxArtifactAsBlockedForDownload(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("answer.txt");
+        Files.writeString(output, "artifact marker", StandardCharsets.UTF_8);
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        sessionRepository.saveSession(SandboxSession.created(
+                "session-1",
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW));
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new MemorySandboxArtifactQueryPort(fileArtifact("artifact-file", output)
+                        .withScanDecision(SandboxArtifactScanStatus.CLEAN, ContextSensitivity.INTERNAL)),
+                CLOCK);
+
+        SandboxArtifactDetailDecision decision = service.describeArtifact("artifact-file");
+
+        assertFalse(decision.downloadable());
+        assertEquals("Sandbox artifact storage reference is not available through the download endpoint",
+                decision.downloadBlockedReason());
     }
 
     @Test

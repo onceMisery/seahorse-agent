@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { History, Play, Square } from "lucide-react";
+import { Download, History, Info, Play, Square } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -13,12 +13,15 @@ import {
   createSandboxSession,
   executeInSandbox,
   closeSandboxSession,
+  downloadSandboxArtifact,
+  getSandboxArtifact,
   listSandboxExecutions,
   listSandboxArtifacts,
   type SandboxSession,
   type SandboxExecution,
   type SandboxExecutionResult,
-  type SandboxArtifact
+  type SandboxArtifact,
+  type SandboxArtifactDetail
 } from "@/services/sandboxService";
 import { getErrorMessage } from "@/utils/error";
 
@@ -45,6 +48,10 @@ function formatTimestamp(value?: string) {
   return date.toLocaleString();
 }
 
+function artifactDisplayName(artifact?: SandboxArtifact | SandboxArtifactDetail | null) {
+  return artifact?.name || artifact?.filename || artifact?.artifactId || "-";
+}
+
 export function SandboxPage() {
   const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.SANDBOX);
 
@@ -57,6 +64,10 @@ export function SandboxPage() {
   const [executions, setExecutions] = useState<SandboxExecution[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [artifacts, setArtifacts] = useState<SandboxArtifact[]>([]);
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
+  const [artifactDetail, setArtifactDetail] = useState<SandboxArtifactDetail | null>(null);
+  const [loadingArtifactDetailId, setLoadingArtifactDetailId] = useState<string | null>(null);
+  const [downloadingArtifactId, setDownloadingArtifactId] = useState<string | null>(null);
 
   const refreshExecutions = async (sessionId: string) => {
     try {
@@ -71,6 +82,53 @@ export function SandboxPage() {
     }
   };
 
+  const handleSelectArtifact = async (artifactId?: string) => {
+    if (!artifactId) return;
+    setSelectedArtifactId(artifactId);
+    setLoadingArtifactDetailId(artifactId);
+    try {
+      const detail = await getSandboxArtifact(artifactId);
+      setArtifactDetail(detail || null);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Load artifact detail failed"));
+      console.error(error);
+    } finally {
+      setLoadingArtifactDetailId(null);
+    }
+  };
+
+  const handleDownloadArtifact = async (artifact: SandboxArtifact | SandboxArtifactDetail) => {
+    const artifactId = artifact.artifactId;
+    if (!artifactId) return;
+    setDownloadingArtifactId(artifactId);
+    try {
+      let detail = artifactDetail?.artifactId === artifactId ? artifactDetail : null;
+      if (!detail) {
+        detail = await getSandboxArtifact(artifactId);
+        setSelectedArtifactId(artifactId);
+        setArtifactDetail(detail || null);
+      }
+      if (detail?.downloadable === false) {
+        toast.error(detail.downloadBlockedReason || "Artifact download is blocked");
+        return;
+      }
+      const blob = (await downloadSandboxArtifact(artifactId)) as Blob;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = detail?.filename || artifactDisplayName(artifact);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Download artifact failed"));
+      console.error(error);
+    } finally {
+      setDownloadingArtifactId(null);
+    }
+  };
+
   const handleCreateSession = async () => {
     try {
       const data = await createSandboxSession();
@@ -78,6 +136,8 @@ export function SandboxPage() {
       setLastResult(null);
       setArtifacts([]);
       setExecutions([]);
+      setSelectedArtifactId(null);
+      setArtifactDetail(null);
       if (data.sessionId) {
         await refreshExecutions(data.sessionId);
       }
@@ -117,6 +177,8 @@ export function SandboxPage() {
       ]);
       setArtifacts(arts || []);
       setExecutions(history || []);
+      setSelectedArtifactId(null);
+      setArtifactDetail(null);
     } catch (error) {
       toast.error(getErrorMessage(error, "执行失败"));
       console.error(error);
@@ -124,6 +186,13 @@ export function SandboxPage() {
       setExecuting(false);
     }
   };
+
+  const selectedArtifact = selectedArtifactId
+    ? artifactDetail?.artifactId === selectedArtifactId
+      ? artifactDetail
+      : artifacts.find((artifact) => artifact.artifactId === selectedArtifactId) || null
+    : null;
+  const selectedArtifactDetailLoaded = artifactDetail?.artifactId === selectedArtifactId;
 
   const handleClose = async () => {
     if (!session?.sessionId) return;
@@ -252,18 +321,106 @@ export function SandboxPage() {
               <CardHeader><CardTitle>产物</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {artifacts.map((art) => (
-                    <div key={art.artifactId} className="p-2 bg-slate-50 rounded text-sm">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0 truncate font-medium">{art.name || art.artifactId}</div>
-                        <Badge variant={artifactBadgeVariant(art.scanStatus)}>{art.scanStatus || "UNKNOWN"}</Badge>
+                  {artifacts.map((art) => {
+                    const detailForArtifact = artifactDetail?.artifactId === art.artifactId ? artifactDetail : null;
+                    const downloadBlocked = art.promptVisible === false || detailForArtifact?.downloadable === false;
+                    return (
+                      <div key={art.artifactId} className="p-2 bg-slate-50 rounded text-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            className="min-w-0 truncate text-left font-medium"
+                            onClick={() => handleSelectArtifact(art.artifactId)}
+                          >
+                            {artifactDisplayName(art)}
+                          </button>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <Badge variant={artifactBadgeVariant(art.scanStatus)}>{art.scanStatus || "UNKNOWN"}</Badge>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              title="Details"
+                              disabled={loadingArtifactDetailId === art.artifactId}
+                              onClick={() => handleSelectArtifact(art.artifactId)}
+                            >
+                              <Info className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              title={downloadBlocked ? "Download blocked" : "Download"}
+                              disabled={downloadBlocked || downloadingArtifactId === art.artifactId}
+                              onClick={() => handleDownloadArtifact(detailForArtifact || art)}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="mt-1 truncate text-muted-foreground">
+                          {art.mediaType || art.mimeType || "unknown"} · {art.sensitivity || "UNKNOWN"} · {art.promptVisible ? "PROMPT_VISIBLE" : "PROMPT_BLOCKED"}
+                        </div>
                       </div>
-                      <div className="mt-1 text-muted-foreground">
-                        {art.mediaType || art.mimeType || "unknown"} · {art.sensitivity || "UNKNOWN"} · {art.promptVisible ? "PROMPT_VISIBLE" : "PROMPT_BLOCKED"}
+                    );
+                  })}
+                </div>
+                {selectedArtifact && (
+                  <div className="mt-4 rounded border border-slate-200 bg-white p-3 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{artifactDisplayName(selectedArtifact)}</div>
+                        <div className="truncate font-mono text-xs text-muted-foreground">{selectedArtifact.artifactId}</div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Badge variant={artifactBadgeVariant(selectedArtifact.scanStatus)}>
+                          {selectedArtifact.scanStatus || "UNKNOWN"}
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={
+                            selectedArtifact.promptVisible === false ||
+                            selectedArtifact.downloadable === false ||
+                            loadingArtifactDetailId === selectedArtifact.artifactId ||
+                            downloadingArtifactId === selectedArtifact.artifactId
+                          }
+                          onClick={() => handleDownloadArtifact(selectedArtifact)}
+                        >
+                          <Download className="h-4 w-4" />
+                          Download
+                        </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <div className="text-xs uppercase text-muted-foreground">MIME</div>
+                        <div className="truncate">{selectedArtifact.contentType || selectedArtifact.mediaType || selectedArtifact.mimeType || "unknown"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase text-muted-foreground">Sensitivity</div>
+                        <div>{selectedArtifact.sensitivity || "UNKNOWN"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase text-muted-foreground">Filename</div>
+                        <div className="truncate">{selectedArtifact.filename || artifactDisplayName(selectedArtifact)}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase text-muted-foreground">Created</div>
+                        <div>{formatTimestamp(selectedArtifact.createdAt)}</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 rounded bg-slate-50 p-2 text-xs text-muted-foreground">
+                      {loadingArtifactDetailId === selectedArtifact.artifactId && "Download policy: loading"}
+                      {loadingArtifactDetailId !== selectedArtifact.artifactId &&
+                        selectedArtifact.downloadable === false &&
+                        (selectedArtifact.downloadBlockedReason || "Download blocked")}
+                      {loadingArtifactDetailId !== selectedArtifact.artifactId &&
+                        selectedArtifact.downloadable !== false &&
+                        (selectedArtifactDetailLoaded ? "Download policy: allowed" : "Download policy: pending")}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

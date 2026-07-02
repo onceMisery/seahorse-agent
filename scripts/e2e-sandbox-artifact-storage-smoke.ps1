@@ -253,6 +253,30 @@ try {
         }
     } | Out-Null
 
+    Test-Step "Verify sandbox artifact detail exposes download policy without storage URI" {
+        $response = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$artifactId" -Headers $headers
+        Assert-ApiOk $response "Get sandbox artifact detail"
+        if ("$($response.data.artifactId)" -ne $artifactId) {
+            throw "Artifact detail id mismatch: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($response.data.promptVisible -ne $true) {
+            throw "Expected promptVisible=true in artifact detail: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($response.data.downloadable -ne $true) {
+            throw "Expected downloadable=true in artifact detail: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($response.data.contentType)" -ne "text/plain") {
+            throw "Expected contentType=text/plain in artifact detail: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if (-not "$($response.data.filename)") {
+            throw "Artifact detail did not include filename: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $detailJson = $response.data | ConvertTo-Json -Depth 20 -Compress
+        if ($detailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Sandbox artifact detail leaked storage URI fields: $detailJson"
+        }
+    } | Out-Null
+
     Test-Step "Download governed sandbox artifact from object storage" {
         $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$artifactId/download" -Headers $headers
         if ($content -notlike "*$Marker*") {

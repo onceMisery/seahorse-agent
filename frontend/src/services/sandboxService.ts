@@ -42,13 +42,19 @@ export interface SandboxArtifact {
   name?: string;
   mimeType?: string;
   mediaType?: string;
+  contentType?: string;
+  filename?: string;
   sizeBytes?: number;
   content?: string;
   scanStatus?: string;
   sensitivity?: string;
   promptVisible?: boolean;
+  downloadable?: boolean;
+  downloadBlockedReason?: string | null;
   createdAt?: string;
 }
+
+export type SandboxArtifactDetail = SandboxArtifact;
 
 export interface SandboxSessionCreatePayload {
   tenantId?: string;
@@ -112,6 +118,12 @@ export function listSandboxExecutions(sessionId: string) {
 export function listSandboxArtifacts(sessionId: string) {
   return api.get<SandboxArtifact[]>(
     `/api/sandbox/sessions/${encodeURIComponent(sessionId)}/artifacts`
+  );
+}
+
+export function getSandboxArtifact(artifactId: string) {
+  return api.get<SandboxArtifactDetail>(
+    `/api/sandbox/artifacts/${encodeURIComponent(artifactId)}`
   );
 }
 

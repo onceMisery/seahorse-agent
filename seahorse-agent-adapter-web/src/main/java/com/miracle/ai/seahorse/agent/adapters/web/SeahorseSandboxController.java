@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
@@ -126,6 +127,13 @@ public class SeahorseSandboxController {
                 .toList());
     }
 
+    @GetMapping("/api/sandbox/artifacts/{artifactId}")
+    public ApiResponse<Object> describeArtifact(@PathVariable String artifactId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        return ApiResponses.requireService(sandboxRuntimePortProvider,
+                port -> toResponse(port.describeArtifact(artifactId)));
+    }
+
     @GetMapping("/api/sandbox/artifacts/{artifactId}/download")
     public ResponseEntity<InputStreamResource> downloadArtifact(@PathVariable String artifactId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
@@ -180,6 +188,23 @@ public class SeahorseSandboxController {
                 artifact.createdAt());
     }
 
+    private static SandboxArtifactDetailResponse toResponse(SandboxArtifactDetailDecision decision) {
+        SandboxArtifact artifact = decision.artifact();
+        return new SandboxArtifactDetailResponse(
+                artifact.artifactId(),
+                artifact.sessionId(),
+                artifact.executionId(),
+                artifact.mediaType(),
+                decision.contentType(),
+                decision.filename(),
+                artifact.scanStatus(),
+                artifact.sensitivity(),
+                artifact.promptVisible(),
+                decision.downloadable(),
+                decision.downloadBlockedReason(),
+                artifact.createdAt());
+    }
+
     public record SandboxSessionCreateRequest(String tenantId,
                                               String runId,
                                               SandboxRuntimeType runtimeType,
@@ -218,5 +243,19 @@ public class SeahorseSandboxController {
                                           ContextSensitivity sensitivity,
                                           boolean promptVisible,
                                           Instant createdAt) {
+    }
+
+    public record SandboxArtifactDetailResponse(String artifactId,
+                                                String sessionId,
+                                                String executionId,
+                                                String mediaType,
+                                                String contentType,
+                                                String filename,
+                                                SandboxArtifactScanStatus scanStatus,
+                                                ContextSensitivity sensitivity,
+                                                boolean promptVisible,
+                                                boolean downloadable,
+                                                String downloadBlockedReason,
+                                                Instant createdAt) {
     }
 }
