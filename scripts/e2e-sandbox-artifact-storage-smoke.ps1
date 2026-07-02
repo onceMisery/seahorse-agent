@@ -174,6 +174,16 @@ function Remove-DockerContainerBestEffort {
     }
 }
 
+function Test-DockerContainerExists {
+    param([string]$Name)
+
+    $names = & docker ps -a --format "{{.Names}}"
+    if ($LASTEXITCODE -ne 0) {
+        throw "docker ps exited with $LASTEXITCODE while checking container $Name"
+    }
+    return (@($names | Where-Object { "$_" -eq $Name }).Count -gt 0)
+}
+
 function Wait-ForSandboxSessionTimedOut {
     param(
         [string]$SessionId,
@@ -463,6 +473,47 @@ try {
             & docker exec $BackendContainer sh -lc "test ! -e '$orphanPath' && test -d '$activePath'"
             if ($LASTEXITCODE -ne 0) {
                 throw "Orphan workspace was not removed or active workspace was deleted"
+            }
+
+            $dryRun = Invoke-Json -Method POST -Path "/api/sandbox/runtime/orphan-containers:reap?dryRun=true" -Headers $headers
+            Assert-ApiOk $dryRun "Dry-run orphan sandbox runtime container reap"
+            if ($dryRun.data.dryRun -ne $true) {
+                throw "Expected dryRun=true for orphan container reap preview: $($dryRun.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ([int]$dryRun.data.failedContainerInspectionCount -ne 0) {
+                throw "Expected dry-run failedContainerInspectionCount=0: $($dryRun.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ([int]$dryRun.data.failedContainerCount -ne 0) {
+                throw "Expected dry-run failedContainerCount=0: $($dryRun.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ([int]$dryRun.data.reapedContainerCount -ne 0) {
+                throw "Dry-run should not reap containers: $($dryRun.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            $dryRunOrphans = @($dryRun.data.orphanContainerNames | Where-Object { "$_" -eq $orphanContainerName })
+            if ($dryRunOrphans.Count -ne 1) {
+                throw "Expected dry-run orphan container $orphanContainerName in orphanContainerNames: $($dryRun.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if (-not (Test-DockerContainerExists -Name $orphanContainerName)) {
+                throw "Dry-run unexpectedly removed orphan container $orphanContainerName"
+            }
+
+            $reap = Invoke-Json -Method POST -Path "/api/sandbox/runtime/orphan-containers:reap?dryRun=false" -Headers $headers
+            Assert-ApiOk $reap "Reap orphan sandbox runtime containers"
+            if ($reap.data.dryRun -ne $false) {
+                throw "Expected dryRun=false for orphan container reap: $($reap.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ([int]$reap.data.failedContainerInspectionCount -ne 0) {
+                throw "Expected reap failedContainerInspectionCount=0: $($reap.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ([int]$reap.data.failedContainerCount -ne 0) {
+                throw "Expected reap failedContainerCount=0: $($reap.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            $reapedContainers = @($reap.data.reapedContainerNames | Where-Object { "$_" -eq $orphanContainerName })
+            if ($reapedContainers.Count -ne 1) {
+                throw "Expected reaped container $orphanContainerName in reapedContainerNames: $($reap.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if (Test-DockerContainerExists -Name $orphanContainerName) {
+                throw "Orphan container still exists after reap: $orphanContainerName"
             }
         } finally {
             Remove-DockerContainerBestEffort -Name $orphanContainerName

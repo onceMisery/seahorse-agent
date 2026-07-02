@@ -30,6 +30,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
@@ -585,6 +586,50 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldReapOrphanedRuntimeContainersWithActiveSessionIdsAndDryRunFlag() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        sessionRepository.saveSession(new SandboxSession(
+                "session-active",
+                "tenant-1",
+                "run-active",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                SandboxExecutionStatus.CREATED,
+                SandboxPolicyReasonCode.VALID_REQUEST,
+                "python-small",
+                NOW.plusSeconds(60),
+                NOW.minusSeconds(60),
+                NOW.minusSeconds(60)));
+        sessionRepository.saveSession(new SandboxSession(
+                "session-terminal",
+                "tenant-1",
+                "run-terminal",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                SandboxExecutionStatus.TIMED_OUT,
+                SandboxPolicyReasonCode.RUNTIME_TIMED_OUT,
+                "python-small",
+                NOW.minusSeconds(30),
+                NOW.minusSeconds(3600),
+                NOW.minusSeconds(30)));
+        RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                runtime,
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                CLOCK);
+
+        SandboxRuntimeContainerReapResult result = service.reapOrphanedRuntimeContainers(false);
+
+        assertFalse(runtime.containerReapDryRun);
+        assertEquals(Set.of("session-active"), runtime.containerReapActiveSessionIds);
+        assertEquals(1, result.activeSessionCount());
+        assertEquals(1, result.reapedContainerCount());
+        assertEquals(List.of("seahorse-sandbox-orphan-live"), result.reapedContainerNames());
+    }
+
+    @Test
     void shouldAllowPromptVisibleObjectArtifactDownloadDecision() {
         MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
         SandboxSession session = sessionRepository.saveSession(SandboxSession.created(
@@ -890,6 +935,8 @@ class KernelSandboxRuntimeServiceTests {
         private final List<String> closedSessionIds = new ArrayList<>();
         private Set<String> orphanSweepActiveSessionIds = Set.of();
         private Set<String> healthActiveSessionIds = Set.of();
+        private Set<String> containerReapActiveSessionIds = Set.of();
+        private boolean containerReapDryRun = true;
 
         private RecordingSandboxRuntimePort() {
             this(List.of(
@@ -968,6 +1015,27 @@ class KernelSandboxRuntimeServiceTests {
                     0,
                     0,
                     List.of(),
+                    List.of(),
+                    List.of());
+        }
+
+        @Override
+        public SandboxRuntimeContainerReapResult reapOrphanedContainers(Set<String> activeSessionIds, boolean dryRun) {
+            containerReapActiveSessionIds = activeSessionIds == null ? Set.of() : Set.copyOf(activeSessionIds);
+            containerReapDryRun = dryRun;
+            return new SandboxRuntimeContainerReapResult(
+                    NOW,
+                    dryRun,
+                    containerReapActiveSessionIds.size(),
+                    1,
+                    0,
+                    1,
+                    0,
+                    dryRun ? 0 : 1,
+                    0,
+                    List.of(),
+                    List.of("seahorse-sandbox-orphan-live"),
+                    dryRun ? List.of() : List.of("seahorse-sandbox-orphan-live"),
                     List.of(),
                     List.of());
         }

@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
@@ -343,6 +344,60 @@ class ContainerSandboxRuntimeAdapterTests {
                 .satisfies(message -> assertThat(message).contains("exitCode=125", "Cannot connect"));
     }
 
+    @Test
+    void shouldDryRunOrphanContainerReapWithoutRemovingContainers() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded(
+                """
+                        seahorse-sandbox-sandbox_container_active\tUp 10 seconds
+                        seahorse-sandbox-orphan-live\tUp 2 minutes
+                        """,
+                Duration.ofMillis(80)));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+
+        SandboxRuntimeContainerReapResult result = adapter.reapOrphanedContainers(
+                Set.of("sandbox_container_active"),
+                true);
+
+        assertThat(result.dryRun()).isTrue();
+        assertThat(result.activeSessionCount()).isEqualTo(1);
+        assertThat(result.inspectedContainerCount()).isEqualTo(2);
+        assertThat(result.activeContainerNames())
+                .containsExactly("seahorse-sandbox-sandbox_container_active");
+        assertThat(result.orphanContainerNames())
+                .containsExactly("seahorse-sandbox-orphan-live");
+        assertThat(result.reapedContainerCount()).isZero();
+        assertThat(result.failedContainerCount()).isZero();
+        assertThat(runner.commands).hasSize(1);
+        assertThat(runner.commands.getFirst().commandLine())
+                .containsSubsequence("docker", "ps", "-a");
+    }
+
+    @Test
+    void shouldReapOnlyOrphanManagedContainers() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded(
+                """
+                        seahorse-sandbox-sandbox_container_active\tUp 10 seconds
+                        seahorse-sandbox-orphan-live\tUp 2 minutes
+                        """,
+                Duration.ofMillis(80)));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+
+        SandboxRuntimeContainerReapResult result = adapter.reapOrphanedContainers(
+                Set.of("sandbox_container_active"),
+                false);
+
+        assertThat(result.dryRun()).isFalse();
+        assertThat(result.reapedContainerCount()).isEqualTo(1);
+        assertThat(result.failedContainerCount()).isZero();
+        assertThat(result.reapedContainerNames())
+                .containsExactly("seahorse-sandbox-orphan-live");
+        assertThat(result.activeContainerNames())
+                .containsExactly("seahorse-sandbox-sandbox_container_active");
+        assertThat(runner.commands).hasSize(2);
+        assertThat(runner.commands.get(1).commandLine())
+                .containsExactly("docker", "rm", "-f", "seahorse-sandbox-orphan-live");
+    }
+
     private Path createWorkspace(String name, Instant modifiedAt) throws IOException {
         Path workspace = tempDir.resolve(name);
         Files.createDirectories(workspace);
@@ -376,6 +431,7 @@ class ContainerSandboxRuntimeAdapterTests {
         private final ContainerCommandResult result;
         private final IOException exception;
         private final OnRun onRun;
+        private final List<ContainerCommand> commands = new java.util.ArrayList<>();
         private ContainerCommand lastCommand;
 
         private RecordingRunner(ContainerCommandResult result) {
@@ -399,6 +455,7 @@ class ContainerSandboxRuntimeAdapterTests {
         @Override
         public ContainerCommandResult run(ContainerCommand command) throws IOException {
             lastCommand = command;
+            commands.add(command);
             if (exception != null) {
                 throw exception;
             }

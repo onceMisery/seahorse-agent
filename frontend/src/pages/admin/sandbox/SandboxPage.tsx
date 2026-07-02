@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, Download, FolderX, History, Info, Play, RefreshCw, Square, TimerReset } from "lucide-react";
+import { Activity, Download, FolderX, History, Info, Play, RefreshCw, Square, TimerReset, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import {
   sweepExpiredSandboxSessions,
   sweepOrphanedSandboxRuntimeResources,
   getSandboxRuntimeHealth,
+  reapOrphanedSandboxRuntimeContainers,
   type SandboxSession,
   type SandboxExecution,
   type SandboxExecutionResult,
@@ -77,6 +78,7 @@ export function SandboxPage() {
   const [sweepingExpiredSessions, setSweepingExpiredSessions] = useState(false);
   const [sweepingOrphanedRuntimeResources, setSweepingOrphanedRuntimeResources] = useState(false);
   const [checkingRuntimeHealth, setCheckingRuntimeHealth] = useState(false);
+  const [reapingOrphanedRuntimeContainers, setReapingOrphanedRuntimeContainers] = useState(false);
 
   const clearArtifactSelection = () => {
     setSelectedArtifactId(null);
@@ -345,6 +347,39 @@ export function SandboxPage() {
     }
   };
 
+  const handleReapOrphanedRuntimeContainers = async () => {
+    try {
+      setReapingOrphanedRuntimeContainers(true);
+      const preview = await reapOrphanedSandboxRuntimeContainers(true);
+      const orphanCount = preview.orphanContainerCount ?? 0;
+      const inspectionFailures = preview.failedContainerInspectionCount ?? 0;
+      if (inspectionFailures > 0) {
+        toast.error(`Runtime container inspection failed: ${inspectionFailures}`);
+        return;
+      }
+      if (orphanCount <= 0) {
+        toast.success("No orphan runtime containers found");
+        return;
+      }
+      if (!confirm(`Reap ${orphanCount} orphan runtime container(s)?`)) {
+        return;
+      }
+      const result = await reapOrphanedSandboxRuntimeContainers(false);
+      const reapedCount = result.reapedContainerCount ?? 0;
+      const failedCount = result.failedContainerCount ?? 0;
+      if (failedCount > 0) {
+        toast.error(`Runtime container reap removed ${reapedCount}, failed ${failedCount}`);
+      } else {
+        toast.success(`Runtime container reap removed ${reapedCount}`);
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Runtime container reap failed"));
+      console.error(error);
+    } finally {
+      setReapingOrphanedRuntimeContainers(false);
+    }
+  };
+
   if (!featureState.enabled) {
     return <FeatureUnavailableState featureState={featureState} featureName="沙箱" />;
   }
@@ -438,6 +473,16 @@ export function SandboxPage() {
                     onClick={() => void handleInspectRuntimeHealth()}
                   >
                     <Activity className={`h-4 w-4 ${checkingRuntimeHealth ? "animate-pulse" : ""}`} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    title="Reap orphaned runtime containers"
+                    disabled={reapingOrphanedRuntimeContainers}
+                    onClick={() => void handleReapOrphanedRuntimeContainers()}
+                  >
+                    <Trash2 className={`h-4 w-4 ${reapingOrphanedRuntimeContainers ? "animate-pulse" : ""}`} />
                   </Button>
                   <Button
                     variant="ghost"

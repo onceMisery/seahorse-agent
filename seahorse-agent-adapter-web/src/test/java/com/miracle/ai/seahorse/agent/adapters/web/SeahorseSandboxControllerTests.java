@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
@@ -119,6 +120,21 @@ class SeahorseSandboxControllerTests {
                 0,
                 0,
                 List.of(),
+                List.of(),
+                List.of()));
+        when(port.reapOrphanedRuntimeContainers(false)).thenReturn(new SandboxRuntimeContainerReapResult(
+                NOW,
+                false,
+                1,
+                1,
+                0,
+                1,
+                0,
+                1,
+                0,
+                List.of(),
+                List.of("seahorse-sandbox-orphan-live"),
+                List.of("seahorse-sandbox-orphan-live"),
                 List.of(),
                 List.of()));
         when(port.listExecutions("session-1")).thenReturn(List.of(SandboxExecution.failed(
@@ -237,6 +253,17 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data.activeSessionCount").value(1))
                 .andExpect(jsonPath("$.data.inspectedContainerCount").value(1));
         verify(port).inspectRuntimeHealth();
+
+        mvc.perform(post("/api/sandbox/runtime/orphan-containers:reap")
+                        .param("dryRun", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.dryRun").value(false))
+                .andExpect(jsonPath("$.data.activeSessionCount").value(1))
+                .andExpect(jsonPath("$.data.orphanContainerCount").value(1))
+                .andExpect(jsonPath("$.data.reapedContainerCount").value(1))
+                .andExpect(jsonPath("$.data.failedContainerCount").value(0))
+                .andExpect(jsonPath("$.data.reapedContainerNames[0]").value("seahorse-sandbox-orphan-live"));
+        verify(port).reapOrphanedRuntimeContainers(false);
 
         mvc.perform(get("/api/sandbox/sessions/session-1/executions"))
                 .andExpect(status().isOk())

@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxPython
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
@@ -194,6 +195,11 @@ class SandboxPythonToolAutoConfigurationTests {
         @Override
         public SandboxRuntimeHealth inspectRuntimeHealth() {
             return SandboxRuntimeHealth.unsupported(Instant.EPOCH, 0);
+        }
+
+        @Override
+        public SandboxRuntimeContainerReapResult reapOrphanedRuntimeContainers(boolean dryRun) {
+            return SandboxRuntimeContainerReapResult.empty(Instant.EPOCH, dryRun, 0);
         }
 
         @Override

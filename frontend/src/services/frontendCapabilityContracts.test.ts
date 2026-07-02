@@ -31,6 +31,7 @@ import {
   listSandboxArtifacts,
   listSandboxExecutions,
   listSandboxSessions,
+  reapOrphanedSandboxRuntimeContainers,
   sweepExpiredSandboxSessions,
   sweepOrphanedSandboxRuntimeResources
 } from "@/services/sandboxService";
@@ -82,6 +83,7 @@ describe("frontend capability service contracts", () => {
     expect(backendEndpoints).toContain("GET /api/sandbox/artifacts/{}");
     expect(backendEndpoints).toContain("GET /api/sandbox/artifacts/{}/download");
     expect(backendEndpoints).toContain("GET /api/sandbox/runtime/health");
+    expect(backendEndpoints).toContain("POST /api/sandbox/runtime/orphan-containers:reap");
     expect(backendEndpoints).toContain("POST /api/sandbox/sessions/expired:sweep");
     expect(backendEndpoints).toContain("POST /api/sandbox/runtime/orphans:sweep");
   });
@@ -301,6 +303,7 @@ describe("frontend capability service contracts", () => {
     await listSandboxSessions("default", 20);
     await sweepExpiredSandboxSessions("default", 20);
     await sweepOrphanedSandboxRuntimeResources();
+    await reapOrphanedSandboxRuntimeContainers(false);
     await getSandboxRuntimeHealth();
     await listSandboxExecutions("session-1");
     await listSandboxArtifacts("session-1");
@@ -323,6 +326,9 @@ describe("frontend capability service contracts", () => {
       params: { tenantId: "default", limit: 20 }
     });
     expect(mockedApi.post).toHaveBeenNthCalledWith(4, "/api/sandbox/runtime/orphans:sweep");
+    expect(mockedApi.post).toHaveBeenNthCalledWith(5, "/api/sandbox/runtime/orphan-containers:reap", undefined, {
+      params: { dryRun: false }
+    });
     expect(mockedApi.get).toHaveBeenNthCalledWith(1, "/api/sandbox/sessions", {
       params: { tenantId: "default", limit: 20 }
     });

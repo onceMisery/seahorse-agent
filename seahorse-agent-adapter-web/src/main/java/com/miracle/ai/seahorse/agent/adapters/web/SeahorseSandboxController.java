@@ -146,6 +146,14 @@ public class SeahorseSandboxController {
                 SandboxRuntimeInboundPort::inspectRuntimeHealth);
     }
 
+    @PostMapping("/api/sandbox/runtime/orphan-containers:reap")
+    public ApiResponse<Object> reapOrphanedRuntimeContainers(
+            @RequestParam(defaultValue = "true") boolean dryRun) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        return ApiResponses.requireService(sandboxRuntimePortProvider,
+                port -> port.reapOrphanedRuntimeContainers(dryRun));
+    }
+
     @GetMapping("/api/sandbox/sessions/{sessionId}/executions")
     public ApiResponse<Object> listExecutions(@PathVariable String sessionId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);

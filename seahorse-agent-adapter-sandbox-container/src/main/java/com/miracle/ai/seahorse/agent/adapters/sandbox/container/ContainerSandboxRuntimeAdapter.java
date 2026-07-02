@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
@@ -293,6 +294,42 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 failureMessages);
     }
 
+    @Override
+    public SandboxRuntimeContainerReapResult reapOrphanedContainers(Set<String> activeSessionIds, boolean dryRun) {
+        Set<String> safeActiveSessionIds = normalizeActiveSessionIds(activeSessionIds);
+        Set<String> activeContainerNames = normalizeActiveContainerNames(safeActiveSessionIds);
+        Instant reapedAt = clock.instant();
+        ContainerInspectionSummary containerSummary = inspectManagedContainers(activeContainerNames);
+        List<String> reapedNames = new ArrayList<>();
+        List<String> failedNames = new ArrayList<>();
+        List<String> failureMessages = new ArrayList<>(containerSummary.failureMessages());
+        if (containerSummary.failedInspectionCount() == 0 && !dryRun) {
+            for (String containerName : containerSummary.orphanNames()) {
+                if (removeManagedContainer(containerName)) {
+                    reapedNames.add(containerName);
+                } else {
+                    failedNames.add(containerName);
+                    failureMessages.add("failed to remove sandbox container " + containerName);
+                }
+            }
+        }
+        return new SandboxRuntimeContainerReapResult(
+                reapedAt,
+                dryRun,
+                safeActiveSessionIds.size(),
+                containerSummary.inspectedCount(),
+                containerSummary.activeCount(),
+                containerSummary.orphanCount(),
+                containerSummary.failedInspectionCount(),
+                reapedNames.size(),
+                failedNames.size(),
+                containerSummary.activeNames(),
+                containerSummary.orphanNames(),
+                reapedNames,
+                failedNames,
+                failureMessages);
+    }
+
     private ContainerCommand containerCommand(SandboxSession session, Path workspace) {
         List<String> commandLine = new ArrayList<>();
         commandLine.add(properties.getEngine());
@@ -332,6 +369,20 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         commandLine.add("name=" + CONTAINER_NAME_PREFIX);
         commandLine.add("--format");
         commandLine.add("{{.Names}}\t{{.Status}}");
+        return new ContainerCommand(
+                commandLine,
+                workspaceRoot,
+                properties.getExecutionTimeout(),
+                properties.getStdoutLimitBytes(),
+                properties.getStderrLimitBytes());
+    }
+
+    private ContainerCommand containerRemoveCommand(String containerName) {
+        List<String> commandLine = new ArrayList<>();
+        commandLine.add(properties.getEngine());
+        commandLine.add("rm");
+        commandLine.add("-f");
+        commandLine.add(containerName);
         return new ContainerCommand(
                 commandLine,
                 workspaceRoot,
@@ -388,6 +439,23 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         } catch (RuntimeException ex) {
             return ContainerInspectionSummary.failed(
                     "container inspection failure: " + nullToEmpty(ex.getMessage()));
+        }
+    }
+
+    private boolean removeManagedContainer(String containerName) {
+        if (!isManagedContainerName(containerName)) {
+            return false;
+        }
+        try {
+            ContainerCommandResult result = commandRunner.run(containerRemoveCommand(containerName));
+            return !result.timedOut() && result.exitCode() == 0;
+        } catch (IOException ex) {
+            return false;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (RuntimeException ex) {
+            return false;
         }
     }
 

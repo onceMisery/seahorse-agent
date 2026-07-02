@@ -1345,6 +1345,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/api/sandbox/runtime/orphan-containers:reap"
+  },
+  {
+    "method": "POST",
     "path": "/api/sandbox/runtime/orphans:sweep"
   },
   {

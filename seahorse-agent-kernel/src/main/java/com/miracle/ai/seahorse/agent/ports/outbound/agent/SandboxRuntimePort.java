@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
@@ -45,6 +46,11 @@ public interface SandboxRuntimePort {
     default SandboxRuntimeHealth inspectHealth(Set<String> activeSessionIds) {
         int activeSessionCount = activeSessionIds == null ? 0 : activeSessionIds.size();
         return SandboxRuntimeHealth.unsupported(Instant.now(), activeSessionCount);
+    }
+
+    default SandboxRuntimeContainerReapResult reapOrphanedContainers(Set<String> activeSessionIds, boolean dryRun) {
+        int activeSessionCount = activeSessionIds == null ? 0 : activeSessionIds.size();
+        return SandboxRuntimeContainerReapResult.empty(Instant.now(), dryRun, activeSessionCount);
     }
 
     static SandboxRuntimePort unsupported() {
