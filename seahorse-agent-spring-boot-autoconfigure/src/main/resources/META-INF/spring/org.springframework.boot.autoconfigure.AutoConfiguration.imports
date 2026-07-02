@@ -58,6 +58,7 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelModelAutoConfig
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelOpsAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelPluginAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelRegistryAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentSandboxMaintenanceAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelRetrievalAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelAgentAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelTraceAutoConfiguration

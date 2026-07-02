@@ -9,6 +9,8 @@ param(
     [string]$BackendContainer = "seahorse-backend",
     [string]$StorageRoot = "/app/seahorse-agent-storage",
     [string]$ExpectedObjectUriPrefix = "local://sandbox-artifacts/",
+    [switch]$UseScheduledSweep,
+    [int]$ScheduledSweepWaitSeconds = 45,
     [switch]$SkipHealth
 )
 
@@ -162,6 +164,26 @@ function Invoke-PostgresNonQuery {
     }
 }
 
+function Wait-ForSandboxSessionTimedOut {
+    param(
+        [string]$SessionId,
+        [int]$TimeoutSeconds = 45
+    )
+    $safeSessionId = $SessionId.Replace("'", "''")
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $lastRow = ""
+    while ((Get-Date) -lt $deadline) {
+        $row = Invoke-PostgresScalar "SELECT status, reason_code FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
+        $lastRow = $row
+        $parts = $row -split "`t"
+        if ($parts.Count -eq 2 -and $parts[0] -eq "TIMED_OUT" -and $parts[1] -eq "RUNTIME_TIMED_OUT") {
+            return $parts
+        }
+        Start-Sleep -Seconds 2
+    }
+    throw "Timed out waiting for scheduled sweep to mark session $SessionId as TIMED_OUT; last row: $lastRow"
+}
+
 try {
     if (-not $SkipHealth) {
         Test-Step "Wait for backend health" {
@@ -282,7 +304,13 @@ try {
         }
     } | Out-Null
 
-    Test-Step "Sweep expired sandbox session as TIMED_OUT" {
+    $expiredSweepStepName = if ($UseScheduledSweep) {
+        "Wait for scheduled sandbox session sweep as TIMED_OUT"
+    } else {
+        "Sweep expired sandbox session as TIMED_OUT"
+    }
+
+    Test-Step $expiredSweepStepName {
         $expiredRunId = "sandbox-expired-sweep-run-$suffix"
         $create = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
             tenantId = "default"
@@ -298,6 +326,20 @@ try {
         }
         $safeExpiredSessionId = $expiredSessionId.Replace("'", "''")
         Invoke-PostgresNonQuery "UPDATE sa_sandbox_session SET created_at = now() - interval '2 hours', expires_at = now() - interval '1 hour', updated_at = now() - interval '2 hours' WHERE session_id = '$safeExpiredSessionId';"
+
+        if ($UseScheduledSweep) {
+            Wait-ForSandboxSessionTimedOut -SessionId $expiredSessionId -TimeoutSeconds $ScheduledSweepWaitSeconds | Out-Null
+            $response = Invoke-Json -Method GET -Path "/api/sandbox/sessions?tenantId=default&limit=20" -Headers $headers
+            Assert-ApiOk $response "List sandbox sessions after scheduled sweep"
+            $matched = @($response.data | Where-Object { "$($_.sessionId)" -eq $expiredSessionId })
+            if ($matched.Count -ne 1) {
+                throw "Scheduled-swept session $expiredSessionId not found in sandbox session API response"
+            }
+            if ("$($matched[0].status)" -ne "TIMED_OUT") {
+                throw "Expected scheduled-swept session status TIMED_OUT: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            return
+        }
 
         $sweep = Invoke-Json -Method POST -Path "/api/sandbox/sessions/expired:sweep?tenantId=default&limit=20" -Headers $headers
         Assert-ApiOk $sweep "Sweep expired sandbox sessions"

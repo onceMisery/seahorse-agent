@@ -48,7 +48,8 @@ class SeahorseAgentSandboxAutoConfigurationTests {
             .withConfiguration(AutoConfigurations.of(
                     SeahorseAgentStorageAdapterAutoConfiguration.class,
                     SeahorseAgentRegistryRepositoryAutoConfiguration.class,
-                    SeahorseAgentKernelRegistryAutoConfiguration.class));
+                    SeahorseAgentKernelRegistryAutoConfiguration.class,
+                    SeahorseAgentSandboxMaintenanceAutoConfiguration.class));
 
     @Test
     void shouldWireFailClosedSandboxRuntimeByDefault() {
@@ -68,6 +69,7 @@ class SeahorseAgentSandboxAutoConfigurationTests {
                     assertThat(context).hasSingleBean(SandboxRuntimePort.class);
                     assertThat(context).hasSingleBean(SandboxRuntimeInboundPort.class);
                     assertThat(context).hasSingleBean(KernelSandboxRuntimeService.class);
+                    assertThat(context).hasSingleBean(SandboxSessionTtlSweepJob.class);
                     assertThat(context).hasSingleBean(KernelAuditLedgerService.class);
                     assertThat(context).hasSingleBean(ObjectStoragePort.class);
                     assertThat(field(context.getBean(KernelSandboxRuntimeService.class), "auditLedger"))
@@ -76,6 +78,17 @@ class SeahorseAgentSandboxAutoConfigurationTests {
                             .isSameAs(context.getBean(SandboxArtifactScannerPort.class));
                     assertThat(field(context.getBean(KernelSandboxRuntimeService.class), "artifactStoragePort"))
                             .isSameAs(context.getBean(ObjectStoragePort.class));
+                });
+    }
+
+    @Test
+    void shouldDisableSandboxSessionTtlSweepJobWhenConfiguredOff() {
+        contextRunner.withUserConfiguration(TestInfrastructureConfiguration.class)
+                .withPropertyValues("seahorse.agent.sandbox.session-sweep.enabled=false")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(SandboxRuntimeInboundPort.class);
+                    assertThat(context).doesNotHaveBean(SandboxSessionTtlSweepJob.class);
                 });
     }
 
