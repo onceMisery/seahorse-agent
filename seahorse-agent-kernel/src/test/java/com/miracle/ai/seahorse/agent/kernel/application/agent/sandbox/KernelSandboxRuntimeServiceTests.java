@@ -293,8 +293,8 @@ class KernelSandboxRuntimeServiceTests {
 
     @Test
     void shouldNotCopyScannerBlockedFileArtifacts(@TempDir Path tempDir) throws Exception {
-        Path output = tempDir.resolve("secret-token.txt");
-        Files.writeString(output, "secret marker", StandardCharsets.UTF_8);
+        Path output = tempDir.resolve("answer.txt");
+        Files.writeString(output, "api_key = 'sk-seahorse-secret-1234567890'", StandardCharsets.UTF_8);
         MemoryArtifactPort artifactPort = new MemoryArtifactPort();
         RecordingObjectStoragePort objectStorage = new RecordingObjectStoragePort();
         KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(

@@ -24,11 +24,18 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanReq
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
 
+import java.io.IOException;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScannerPort {
 
+    private static final int MAX_CONTENT_SCAN_BYTES = 256 * 1024;
     private static final Set<String> SAFE_EXACT_MEDIA_TYPES = Set.of(
             "application/json",
             "application/pdf",
@@ -44,6 +51,19 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
             "private_key",
             "secret",
             "token");
+    private static final Pattern PRIVATE_KEY_PATTERN = Pattern.compile(
+            "-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern ASSIGNED_SECRET_PATTERN = Pattern.compile(
+            "\\b(api[_-]?key|access[_-]?token|auth[_-]?token|secret|password)\\b\\s*[:=]\\s*['\"]?[^\\s'\";,]{8,}",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern OPENAI_STYLE_TOKEN_PATTERN = Pattern.compile(
+            "\\bsk-[A-Za-z0-9_-]{16,}\\b");
+    private static final Pattern EMAIL_PATTERN = Pattern.compile(
+            "\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern US_SSN_PATTERN = Pattern.compile(
+            "\\b\\d{3}-\\d{2}-\\d{4}\\b");
 
     @Override
     public SandboxArtifactScanResult scan(SandboxArtifactScanRequest request) {
@@ -55,6 +75,10 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
         }
         if (!isPromptSafeMediaType(artifact.mediaType())) {
             return SandboxArtifactScanResult.blocked(artifact.sensitivity(), "unsupported prompt media type");
+        }
+        SandboxArtifactScanResult contentScan = scanLocalTextContent(artifact);
+        if (contentScan != null) {
+            return contentScan;
         }
         if (artifact.sensitivity() == ContextSensitivity.CONFIDENTIAL) {
             return SandboxArtifactScanResult.redacted(ContextSensitivity.CONFIDENTIAL, "confidential artifact metadata");
@@ -68,6 +92,56 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
         }
         String normalized = mediaType.toLowerCase(Locale.ROOT).split(";", 2)[0].trim();
         return normalized.startsWith("text/") || SAFE_EXACT_MEDIA_TYPES.contains(normalized);
+    }
+
+    private static SandboxArtifactScanResult scanLocalTextContent(SandboxArtifact artifact) {
+        if (!isLocalFileReference(artifact.objectUri()) || !isContentScannableMediaType(artifact.mediaType())) {
+            return null;
+        }
+        try {
+            Path path = Path.of(URI.create(artifact.objectUri())).toAbsolutePath().normalize();
+            if (!Files.isRegularFile(path)) {
+                return SandboxArtifactScanResult.blocked(ContextSensitivity.SECRET, "artifact content unavailable");
+            }
+            if (Files.size(path) > MAX_CONTENT_SCAN_BYTES) {
+                return SandboxArtifactScanResult.blocked(
+                        ContextSensitivity.CONFIDENTIAL,
+                        "artifact content exceeds scanner limit");
+            }
+            String content = Files.readString(path, StandardCharsets.UTF_8);
+            if (PRIVATE_KEY_PATTERN.matcher(content).find()
+                    || ASSIGNED_SECRET_PATTERN.matcher(content).find()
+                    || OPENAI_STYLE_TOKEN_PATTERN.matcher(content).find()) {
+                return SandboxArtifactScanResult.blocked(ContextSensitivity.SECRET, "sensitive artifact content");
+            }
+            if (EMAIL_PATTERN.matcher(content).find() || US_SSN_PATTERN.matcher(content).find()) {
+                return SandboxArtifactScanResult.blocked(ContextSensitivity.CONFIDENTIAL, "personal data artifact content");
+            }
+            return null;
+        } catch (IOException | RuntimeException ex) {
+            return SandboxArtifactScanResult.blocked(ContextSensitivity.SECRET, "artifact content scan failed");
+        }
+    }
+
+    private static boolean isLocalFileReference(String value) {
+        if (!hasText(value)) {
+            return false;
+        }
+        try {
+            return "file".equalsIgnoreCase(URI.create(value).getScheme());
+        } catch (RuntimeException ex) {
+            return false;
+        }
+    }
+
+    private static boolean isContentScannableMediaType(String mediaType) {
+        if (!hasText(mediaType)) {
+            return false;
+        }
+        String normalized = mediaType.toLowerCase(Locale.ROOT).split(";", 2)[0].trim();
+        return normalized.startsWith("text/")
+                || "application/json".equals(normalized)
+                || "application/xml".equals(normalized);
     }
 
     private static boolean containsSensitiveMarker(String value) {

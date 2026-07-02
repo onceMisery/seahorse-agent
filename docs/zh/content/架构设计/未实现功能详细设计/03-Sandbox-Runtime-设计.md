@@ -8,7 +8,7 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 
 因此它的现状应定义为“控制面、审计基础、Code Interpreter 容器 runtime 最小闭环、full-compose host-socket opt-in 接入和 `sandbox_python` 工具链路已实现，生产级 sandbox 还需要补齐 profile/配额、artifact 产物、更完整 Agent 工具化和强隔离加固”。
 
-剩余设计重点是：补齐 runtime profile、磁盘/TTL/网络 allowlist、内容级 MIME/病毒/PII 扫描、artifact 详情/下载治理，并把更广 sandbox 执行接入 Agent 工具和运行记录。
+剩余设计重点是：补齐 runtime profile、磁盘/TTL/网络 allowlist、病毒/二进制深扫/redaction summary、artifact preview 治理，并把更广 sandbox 执行接入 Agent 工具和运行记录。
 
 ## 2. 当前实现状态
 
@@ -27,7 +27,7 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 | Web API | 已有创建 session、execute、close、list executions、list artifacts API | `SeahorseSandboxController.java` |
 | 前端页面 | 已有 `/admin/sandbox`，可创建 session、输入参数、执行、查看结果、execution history 和 artifact | `frontend/src/pages/admin/sandbox/SandboxPage.tsx` |
 | Agent 工具 | 已有 `sandbox_python` 最小工具链路，经过 Tool Gateway policy/audit/redaction，并调用 `SandboxRuntimeInboundPort` 执行 `CODE_INTERPRETER` | `SandboxPythonToolPortAdapter.java` |
-| artifact scanner | 已有 `SandboxArtifactScannerPort`、默认保守 scanner、`REDACTED` 状态和 prompt visibility gate；scanner 失败 fail closed | `DefaultSandboxArtifactScannerPort.java`、`KernelSandboxRuntimeService.java` |
+| artifact scanner | 已有 `SandboxArtifactScannerPort`、默认保守 scanner、`REDACTED` 状态、prompt visibility gate，以及 file:// 文本类 artifact 的 secret/PII 内容扫描；scanner 失败 fail closed | `DefaultSandboxArtifactScannerPort.java`、`KernelSandboxRuntimeService.java` |
 
 ### 2.2 真实缺口
 
@@ -36,8 +36,8 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 | 真实隔离 runtime 覆盖仍窄 | Code Interpreter Python 最小容器闭环与 full-compose backend Docker host-socket opt-in 接入已落地；Browser Automation、Shell、File Conversion 仍未完成 | 扩展 Docker/Podman adapter 的 profile 覆盖，P1/P2 可替换为 gVisor 或 Firecracker |
 | 真实 runtime 清理仍需生产化 | 当前 adapter 使用 `--rm` 并在 close 时删除 per-session workspace；仍缺 TTL、孤儿容器巡检、runtime pool 清理 | 接入 session TTL、后台清理任务和 runtime 节点健康检查 |
 | 资源配额仍不完整 | 当前 adapter 有固定 CPU、内存、pids、timeout、stdout/stderr limit；仍缺磁盘配额、按 tenant/agent/tool 的 profile 和持久化记录 | 新增 `SandboxResourcePolicy` 和 runtime profile |
-| 真实 artifact 产物未落地 | 当前 Code Interpreter adapter 只把 stdout/stderr 写入 execution summary，不扫描/保存运行生成文件 | 增加 workspace artifact 收集、object storage 写入和 scanner 闭环 |
-| 内容级 artifact 扫描未落地 | 基础 metadata scanner 和 prompt visibility gate 已落地；仍缺对象内容读取、病毒/PII/secret 深度扫描、redaction summary 和下载授权闭环 | 在真实 container runtime 与 object storage artifact 写入后接入内容级 scanner |
+| 真实 artifact 产物已进入最小闭环 | Code Interpreter adapter 已收集 workspace 文件，kernel 已将 prompt-visible file:// artifact 写入 object storage，并通过治理 API 下载/查看详情 | 后续补齐 preview、生命周期和更广运行时产物 |
+| 内容级 artifact 扫描仍需加固 | 基础 metadata scanner、file:// 文本类 secret/PII 内容阻断和 prompt visibility gate 已落地；仍缺病毒扫描、二进制/PDF 深度扫描、redaction summary | 后续接入专业扫描引擎和可审计 redaction summary |
 | 网络策略只有默认 deny 与 allowlist 基础 | 当前容器 adapter 强制 `--network none`；仍缺按 tenant/agent/tool 的网络 profile、DNS/IP 限制、egress proxy 和审计可视化 | 引入 policy profile、egress proxy 和 network decision log |
 | UI 偏 demo | execution history 已补齐；仍缺 session 列表、artifact 详情、policy preview | 升级为 Sandbox Operations 页面 |
 | Agent 工具化未完整 | `sandbox_python` 已接入 Tool Gateway；browser/file conversion、artifact 收集和 Inspector 展示仍未完成 | 继续补齐更广 sandbox-backed tool adapters |
@@ -185,7 +185,7 @@ SandboxArtifactScannerPort
 2. 命中 secret、token、private key、PII 的 artifact 默认 blocked 或 redacted。
 3. 二进制文件除图片/PDF 预览外默认不进入 prompt。
 4. scanner 失败时 fail closed，`promptVisible=false`。
-5. 后续真实 runtime 写入 object storage 后，补齐内容级病毒/PII/secret 扫描和 redaction summary。
+5. file:// 文本类 artifact 会读取小窗口内容并阻断 secret、token、private key、email、SSN 等高置信命中；后续补齐病毒扫描、二进制/PDF 深度扫描和 redaction summary。
 
 ## 6. 运行时适配器设计
 
@@ -294,7 +294,7 @@ P0 profile：
 
 ### P1：artifact 安全闭环
 
-1. 新增 artifact scanner port。（已补齐基础 metadata scanner）
+1. 新增 artifact scanner port。（已补齐基础 metadata scanner 和 file:// 文本内容 secret/PII 阻断）
 2. 只有 scan clean/redacted 的 artifact 可 prompt visible。（已补齐）
 3. UI 增加 artifact scan 状态和预览。（scan 状态已补齐；详情/预览/下载仍后续）
 4. 增加 scanner fail-closed 测试。（已补齐）

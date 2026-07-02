@@ -314,6 +314,95 @@ try {
         } | Out-Null
     }
 
+    $secretToken = "sk-seahorse-secret-$suffix-1234567890"
+    $secretMarker = "$Marker-secret-scan"
+    $secretCode = "from pathlib import Path`nPath('answer-secret-content.txt').write_text('api_key = `"$secretToken`"', encoding='utf-8')`nprint('$secretMarker')"
+    $secretObservation = Test-Step "Invoke sandbox_python with content-sensitive artifact" {
+        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $headers -Body @{
+            runId = "sandbox-artifact-secret-run-$suffix"
+            stepId = "sandbox-artifact-secret-step-$suffix"
+            toolCallId = "sandbox-artifact-secret-call-$suffix"
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{ code = $secretCode }
+            resourceRefs = @{}
+            idempotencyKey = "sandbox-artifact-secret-run-${suffix}:sandbox-artifact-secret-call-$suffix"
+            allowedToolIds = @("sandbox_python")
+        }
+        Assert-ApiOk $response "Invoke sandbox_python secret artifact"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_python secret artifact invocation failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        if ($content -notlike "*$secretMarker*") {
+            throw "sandbox_python secret artifact content did not contain marker '$secretMarker': $content"
+        }
+        if ($content -like "*$secretToken*") {
+            throw "sandbox_python observation leaked secret content: $content"
+        }
+        $parsed = $content | ConvertFrom-Json
+        if (@($parsed.artifacts).Count -ne 0) {
+            throw "Content-sensitive artifact should not be prompt-visible: $content"
+        }
+        if (-not "$($parsed.sessionId)") {
+            throw "sandbox_python observation did not include secret scan sessionId: $content"
+        }
+        $parsed
+    }
+    if (-not $secretObservation) { exit 1 }
+
+    $secretSessionId = "$($secretObservation.sessionId)"
+    $secretArtifactId = Test-Step "Verify content-sensitive sandbox artifact is blocked before object storage" {
+        $safeSecretSessionId = $secretSessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, scan_status, sensitivity FROM sa_sandbox_artifact WHERE session_id = '$safeSecretSessionId' ORDER BY created_at DESC LIMIT 1;"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 4) {
+            throw "Unexpected secret artifact row: $row"
+        }
+        if ($parts[1] -like "$ExpectedObjectUriPrefix*") {
+            throw "Content-sensitive artifact was copied to object storage: $($parts[1])"
+        }
+        if ($parts[2] -ne "BLOCKED") {
+            throw "Expected BLOCKED scan_status for content-sensitive artifact but got '$($parts[2])'"
+        }
+        if ($parts[3] -ne "SECRET") {
+            throw "Expected SECRET sensitivity for content-sensitive artifact but got '$($parts[3])'"
+        }
+        $parts[0]
+    }
+    if (-not $secretArtifactId) { exit 1 }
+
+    Test-Step "Verify content-sensitive sandbox artifact API exposes only blocked metadata" {
+        $response = Invoke-Json -Method GET -Path "/api/sandbox/sessions/$secretSessionId/artifacts" -Headers $headers
+        Assert-ApiOk $response "List content-sensitive sandbox artifacts"
+        $matched = @($response.data | Where-Object { "$($_.artifactId)" -eq $secretArtifactId })
+        if ($matched.Count -ne 1) {
+            throw "Content-sensitive artifact $secretArtifactId not found in sandbox artifact API response"
+        }
+        if ($matched[0].promptVisible -ne $false) {
+            throw "Expected content-sensitive artifact promptVisible=false: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($matched[0].scanStatus)" -ne "BLOCKED") {
+            throw "Expected content-sensitive artifact scanStatus=BLOCKED: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $artifactJson = $matched[0] | ConvertTo-Json -Depth 20 -Compress
+        if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|$secretToken") {
+            throw "Content-sensitive artifact API leaked storage or secret content: $artifactJson"
+        }
+
+        $detail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$secretArtifactId" -Headers $headers
+        Assert-ApiOk $detail "Get content-sensitive sandbox artifact detail"
+        if ($detail.data.downloadable -ne $false) {
+            throw "Expected content-sensitive artifact downloadable=false: $($detail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $detailJson = $detail.data | ConvertTo-Json -Depth 20 -Compress
+        if ($detailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|$secretToken") {
+            throw "Content-sensitive artifact detail leaked storage or secret content: $detailJson"
+        }
+    } | Out-Null
+
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Host "Backend: $BaseUrl"
     Write-Host "Artifact: $artifactId"
