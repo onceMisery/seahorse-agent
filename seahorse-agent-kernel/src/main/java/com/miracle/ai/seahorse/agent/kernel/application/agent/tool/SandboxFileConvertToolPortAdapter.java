@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, ToolInvocationRequestAwarePort {
 
@@ -46,13 +47,15 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
     private static final String TARGET_FORMAT_ARGUMENT = "targetFormat";
     private static final String CONTENT_ARGUMENT = "content";
     private static final String CSV_FORMAT = "csv";
+    private static final String TSV_FORMAT = "tsv";
     private static final String JSON_FORMAT = "json";
+    private static final Set<String> DELIMITED_FORMATS = Set.of(CSV_FORMAT, TSV_FORMAT);
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
             "Sandbox File Convert",
-            "Convert bounded file content through the Seahorse sandbox runtime. Currently supports CSV to JSON with network disabled.",
+            "Convert bounded file content through the Seahorse sandbox runtime. Supports CSV/TSV to JSON and JSON to CSV/TSV with network disabled.",
             """
-                    {"type":"object","required":["sourceFormat","targetFormat","content"],"properties":{"sourceFormat":{"type":"string","enum":["csv"]},"targetFormat":{"type":"string","enum":["json"]},"content":{"type":"string","minLength":1,"maxLength":262144}}}
+                    {"type":"object","required":["sourceFormat","targetFormat","content"],"properties":{"sourceFormat":{"type":"string","enum":["csv","tsv","json"]},"targetFormat":{"type":"string","enum":["json","csv","tsv"]},"content":{"type":"string","minLength":1,"maxLength":262144}}}
                     """);
 
     private final SandboxRuntimeInboundPort sandboxRuntime;
@@ -95,9 +98,9 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
         String sourceFormat = normalizedFormat(jsonSupport.string(safeRequest.arguments(), SOURCE_FORMAT_ARGUMENT));
         String targetFormat = normalizedFormat(jsonSupport.string(safeRequest.arguments(), TARGET_FORMAT_ARGUMENT));
         String content = argumentStringPreservingWhitespace(safeRequest.arguments(), CONTENT_ARGUMENT);
-        if (!CSV_FORMAT.equals(sourceFormat) || !JSON_FORMAT.equals(targetFormat)) {
+        if (!isSupportedConversion(sourceFormat, targetFormat)) {
             return ToolInvocationResult.failed(
-                    "sandbox_file_convert failed: supported conversion is sourceFormat=csv targetFormat=json");
+                    "sandbox_file_convert failed: supported conversions are csv/tsv to json and json to csv/tsv");
         }
         if (content.isBlank()) {
             return ToolInvocationResult.failed("sandbox_file_convert failed: content is required");
@@ -223,6 +226,11 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
 
     private String normalizedFormat(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isSupportedConversion(String sourceFormat, String targetFormat) {
+        return (DELIMITED_FORMATS.contains(sourceFormat) && JSON_FORMAT.equals(targetFormat))
+                || (JSON_FORMAT.equals(sourceFormat) && DELIMITED_FORMATS.contains(targetFormat));
     }
 
     private static boolean hasText(String value) {

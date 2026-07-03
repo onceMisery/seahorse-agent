@@ -34,14 +34,14 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 
 | 缺口 | 影响 | 设计处理 |
 | --- | --- | --- |
-| 真实隔离 runtime 覆盖仍窄 | Code Interpreter Python 最小容器闭环与 full-compose backend Docker host-socket opt-in 接入已落地；Browser Automation、Shell、File Conversion 仍未完成 | 扩展 Docker/Podman adapter 的 profile 覆盖，P1/P2 可替换为 gVisor 或 Firecracker |
+| 真实隔离 runtime 覆盖仍窄 | Code Interpreter Python 最小容器闭环与 full-compose backend Docker host-socket opt-in 接入已落地；File Conversion 已有 CSV/TSV 与 JSON 表格转换闭环；Browser Automation、Shell 和更广文档/二进制转换仍未完成 | 扩展 Docker/Podman adapter 的 profile 覆盖，P1/P2 可替换为 gVisor 或 Firecracker |
 | 真实 runtime 清理仍需生产化 | 当前 adapter 使用 `--rm` 并在 close 时删除 per-session workspace；session TTL metadata 已持久化，管理员手动 expired session sweep 与后台定时 TTL sweep 均可将过期未终态 session 释放并标记为 `TIMED_OUT`；orphan workspace sweep 会保守删除旧 workspace 并只读巡检 `seahorse-sandbox-*` live/exited container；runtime health API 已暴露 engine/workspace/container 与 active session capacity 只读健康信号且不暴露 workspace root；orphan container reap 已提供默认 dry-run 的显式管理员操作并保护非终态 session container；仍缺 runtime pool 调度和节点级健康检查 | 接入 runtime 节点健康检查、调度/admission control 和更完整的自动化回收策略 |
 | 资源配额仍不完整 | 当前 adapter 有固定 CPU、内存、pids、timeout、stdout/stderr limit，session `profileId`/`expiresAt` 已持久化；仍缺磁盘配额和按 tenant/agent/tool 的资源策略联动 | 新增 `SandboxResourcePolicy` 和更完整 runtime profile policy |
 | 真实 artifact 产物已进入最小闭环 | Code Interpreter adapter 已收集 workspace 文件，kernel 已将 prompt-visible file:// artifact 写入 object storage，并通过治理 API 下载/查看详情 | 后续补齐 preview、生命周期和更广运行时产物 |
 | 内容级 artifact 扫描仍需加固 | 基础 metadata scanner、file:// 文本类 secret/PII 内容阻断和 prompt visibility gate 已落地；仍缺病毒扫描、二进制/PDF 深度扫描、redaction summary | 后续接入专业扫描引擎和可审计 redaction summary |
 | 网络策略只有默认 deny 与 allowlist 基础 | 当前容器 adapter 强制 `--network none`；仍缺按 tenant/agent/tool 的网络 profile、DNS/IP 限制、egress proxy 和审计可视化 | 引入 policy profile、egress proxy 和 network decision log |
 | UI 偏 demo | execution history 已补齐；仍缺 session 列表、artifact 详情、policy preview | 升级为 Sandbox Operations 页面 |
-| Agent 工具化未完整 | `sandbox_python` 已接入 Tool Gateway；`sandbox_file_convert` 已有 CSV-to-JSON 最小闭环；browser automation、更广文件格式转换和 Inspector 展示仍未完成 | 继续补齐更广 sandbox-backed tool adapters |
+| Agent 工具化未完整 | `sandbox_python` 已接入 Tool Gateway；`sandbox_file_convert` 已有 CSV/TSV 与 JSON 表格转换闭环；browser automation、更广文档/二进制格式转换和 Inspector 展示仍未完成 | 继续补齐更广 sandbox-backed tool adapters |
 
 ## 3. 目标架构
 
@@ -263,13 +263,13 @@ P0 profile：
 
 新增 sandbox-backed tools：
 
-当前已落地 `sandbox_python` 最小版本和 `sandbox_file_convert` CSV-to-JSON 最小版本：工具本身是普通 `DescribedToolPort`，通过 `LocalToolGatewayPort` 的 request-aware 路径拿到 tenant/run/user 上下文，再调用 `SandboxRuntimeInboundPort` 创建 session、执行并关闭 session。后续仍需补齐浏览器自动化、更广文件格式转换和 Inspector 展示。
+当前已落地 `sandbox_python` 最小版本和 `sandbox_file_convert` CSV/TSV 与 JSON 表格转换版本：工具本身是普通 `DescribedToolPort`，通过 `LocalToolGatewayPort` 的 request-aware 路径拿到 tenant/run/user 上下文，再调用 `SandboxRuntimeInboundPort` 创建 session、执行并关闭 session。后续仍需补齐浏览器自动化、更广文档/二进制格式转换和 Inspector 展示。
 
 | Tool | Runtime | 说明 |
 | --- | --- | --- |
 | `sandbox_python` | `CODE_INTERPRETER` | 已有最小闭环：执行 Python 片段并返回 execution summary；artifact 收集后续补齐 |
 | `sandbox_browser` | `BROWSER_AUTOMATION` | 受限 Playwright 浏览，返回截图/HAR/summary |
-| `sandbox_file_convert` | `FILE_CONVERSION` | 已有 CSV-to-JSON 最小闭环，返回 governed JSON artifact；更广格式后续补齐 |
+| `sandbox_file_convert` | `FILE_CONVERSION` | 已有 CSV/TSV -> JSON 与 JSON -> CSV/TSV 表格转换闭环，返回 governed artifact；更广文档/二进制格式后续补齐 |
 
 集成规则：
 
@@ -309,7 +309,7 @@ P0 profile：
 
 ### P2：Agent 工具化
 
-1. 新增 `sandbox_python`、`sandbox_browser`、`sandbox_file_convert` tool adapters。（`sandbox_python` 与 `sandbox_file_convert` CSV-to-JSON 最小闭环已补齐；browser 和更广转换格式后续）
+1. 新增 `sandbox_python`、`sandbox_browser`、`sandbox_file_convert` tool adapters。（`sandbox_python` 与 `sandbox_file_convert` CSV/TSV 与 JSON 表格转换闭环已补齐；browser 和更广文档/二进制转换格式后续）
 2. Tool Gateway policy 中区分 sandbox-backed tool。（`sandbox_python` 与 `sandbox_file_convert` 已注册为 HIGH / EXECUTE / SANDBOX）
 3. Agent Inspector 展示 sandbox execution 与 artifact。
 4. 加入审批与配额联动。

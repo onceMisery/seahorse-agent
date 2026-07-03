@@ -58,8 +58,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final String EXECUTION_ID_PREFIX = "sandbox_exec_container_";
     private static final String ARTIFACT_ID_PREFIX = "sandbox_artifact_container_";
     private static final String SCRIPT_NAME = "main.py";
-    private static final String FILE_CONVERSION_INPUT_NAME = "input.csv";
-    private static final String FILE_CONVERSION_OUTPUT_NAME = "converted.json";
+    private static final String CSV_FORMAT = "csv";
+    private static final String TSV_FORMAT = "tsv";
+    private static final String JSON_FORMAT = "json";
     private static final String CONTAINER_WORKSPACE = "/workspace";
     private static final String CONTAINER_NAME_PREFIX = "seahorse-sandbox-";
     private static final int MAX_FILE_CONVERSION_CONTENT_CHARS = 256 * 1024;
@@ -209,14 +210,15 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
         if (runtimeType == SandboxRuntimeType.FILE_CONVERSION) {
             FileConversionRequest request = parseFileConversionRequest(input);
-            Files.writeString(safeWorkspace.resolve(SCRIPT_NAME), fileConversionScript(), StandardCharsets.UTF_8);
+            Path inputPath = safeWorkspace.resolve(fileConversionInputName(request.sourceFormat()));
+            Files.writeString(safeWorkspace.resolve(SCRIPT_NAME), fileConversionScript(request), StandardCharsets.UTF_8);
             Files.writeString(
-                    safeWorkspace.resolve(FILE_CONVERSION_INPUT_NAME),
+                    inputPath,
                     request.content(),
                     StandardCharsets.UTF_8);
             return Set.of(
                     safeWorkspace.resolve(SCRIPT_NAME),
-                    safeWorkspace.resolve(FILE_CONVERSION_INPUT_NAME));
+                    inputPath);
         }
         throw new IllegalArgumentException("unsupported sandbox runtime type: " + runtimeType);
     }
@@ -225,9 +227,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         JsonNode root = objectMapper.readTree(nullToEmpty(input));
         String sourceFormat = normalizedFormat(root.path("sourceFormat").asText());
         String targetFormat = normalizedFormat(root.path("targetFormat").asText());
-        if (!"csv".equals(sourceFormat) || !"json".equals(targetFormat)) {
+        if (!isSupportedFileConversion(sourceFormat, targetFormat)) {
             throw new UnsupportedFileConversionException(
-                    "container file conversion supports csv to json only");
+                    "container file conversion supports csv/tsv to json and json to csv/tsv only");
         }
         String content = root.path("content").asText("");
         if (!hasText(content)) {
@@ -237,28 +239,101 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             throw new IllegalArgumentException(
                     "file conversion content exceeds " + MAX_FILE_CONVERSION_CONTENT_CHARS + " chars");
         }
-        return new FileConversionRequest(content);
+        return new FileConversionRequest(sourceFormat, targetFormat, content);
     }
 
-    private String fileConversionScript() {
+    private String fileConversionScript(FileConversionRequest request) {
         return """
                 import csv
                 import json
                 from pathlib import Path
 
-                input_path = Path("/workspace/input.csv")
-                output_path = Path("/workspace/converted.json")
+                source_format = "%s"
+                target_format = "%s"
+                input_path = Path("/workspace/%s")
+                output_path = Path("/workspace/%s")
 
-                with input_path.open("r", encoding="utf-8-sig", newline="") as source:
-                    reader = csv.DictReader(source)
-                    rows = [dict(row) for row in reader]
+                def delimiter(format_name):
+                    return "\\t" if format_name == "tsv" else ","
 
-                output_path.write_text(
-                    json.dumps(rows, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-                print(f"converted {len(rows)} rows from csv to json")
-                """;
+                def normalize_cell(value):
+                    if value is None:
+                        return ""
+                    if isinstance(value, (dict, list)):
+                        return json.dumps(
+                            value,
+                            ensure_ascii=False,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        )
+                    return str(value)
+
+                def read_json_rows():
+                    raw = json.loads(input_path.read_text(encoding="utf-8-sig"))
+                    if isinstance(raw, dict) and isinstance(raw.get("rows"), list):
+                        rows = raw["rows"]
+                    elif isinstance(raw, dict):
+                        rows = [raw]
+                    elif isinstance(raw, list):
+                        rows = raw
+                    else:
+                        raise ValueError("json input must be an object, an array, or an object with a rows array")
+
+                    normalized_rows = []
+                    fieldnames = []
+                    for index, item in enumerate(rows):
+                        if not isinstance(item, dict):
+                            raise ValueError(f"json row {index} must be an object")
+                        normalized = {}
+                        for key, value in item.items():
+                            name = str(key)
+                            if name not in fieldnames:
+                                fieldnames.append(name)
+                            normalized[name] = normalize_cell(value)
+                        normalized_rows.append(normalized)
+                    return normalized_rows, fieldnames
+
+                if target_format == "json" and source_format in ("csv", "tsv"):
+                    with input_path.open("r", encoding="utf-8-sig", newline="") as source:
+                        reader = csv.DictReader(source, delimiter=delimiter(source_format))
+                        rows = [dict(row) for row in reader]
+
+                    output_path.write_text(
+                        json.dumps(rows, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                    print(f"converted {len(rows)} rows from {source_format} to json")
+                elif source_format == "json" and target_format in ("csv", "tsv"):
+                    rows, fieldnames = read_json_rows()
+                    with output_path.open("w", encoding="utf-8", newline="") as target:
+                        writer = csv.DictWriter(target, fieldnames=fieldnames, delimiter=delimiter(target_format))
+                        writer.writeheader()
+                        writer.writerows(rows)
+                    print(f"converted {len(rows)} rows from json to {target_format}")
+                else:
+                    raise ValueError(f"unsupported conversion: {source_format} to {target_format}")
+                """.formatted(
+                request.sourceFormat(),
+                request.targetFormat(),
+                fileConversionInputName(request.sourceFormat()),
+                fileConversionOutputName(request.targetFormat()));
+    }
+
+    private boolean isSupportedFileConversion(String sourceFormat, String targetFormat) {
+        return (isDelimitedFileFormat(sourceFormat) && JSON_FORMAT.equals(targetFormat))
+                || (JSON_FORMAT.equals(sourceFormat) && isDelimitedFileFormat(targetFormat));
+    }
+
+    private boolean isDelimitedFileFormat(String format) {
+        return CSV_FORMAT.equals(format) || TSV_FORMAT.equals(format);
+    }
+
+    private String fileConversionInputName(String sourceFormat) {
+        return "input." + sourceFormat;
+    }
+
+    private String fileConversionOutputName(String targetFormat) {
+        return "converted." + targetFormat;
     }
 
     @Override
@@ -857,7 +932,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return result;
     }
 
-    private record FileConversionRequest(String content) {}
+    private record FileConversionRequest(String sourceFormat, String targetFormat, String content) {}
 
     private static final class UnsupportedFileConversionException extends RuntimeException {
 

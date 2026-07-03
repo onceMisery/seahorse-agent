@@ -132,7 +132,7 @@ class ContainerSandboxRuntimeAdapterTests {
                 ContainerCommandResult.succeeded("converted 1 rows from csv to json\n", Duration.ofMillis(210)),
                 command -> {
                     assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
-                            .contains("csv.DictReader", "converted.json")
+                            .contains("csv.DictReader", "source_format = \"csv\"", "converted.json")
                             .doesNotContain("Ada,42");
                     assertThat(Files.readString(command.workingDirectory().resolve("input.csv")))
                             .isEqualTo("name,score\nAda,42\n");
@@ -163,6 +163,96 @@ class ContainerSandboxRuntimeAdapterTests {
                 .containsSubsequence("docker", "run", "--rm")
                 .containsSubsequence("--network", "none")
                 .containsSubsequence("python:3.11-alpine", "python", "/workspace/main.py");
+    }
+
+    @Test
+    void shouldRunJsonToCsvFileConversionAndCollectCsvOutputOnly() throws Exception {
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted 2 rows from json to csv\n", Duration.ofMillis(220)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("csv.DictWriter", "source_format = \"json\"", "converted.csv")
+                            .doesNotContain("Grace");
+                    assertThat(Files.readString(command.workingDirectory().resolve("input.json")))
+                            .contains("\"Ada\"", "\"Grace\"");
+                    Files.writeString(command.workingDirectory().resolve("converted.csv"),
+                            "name,score\nAda,42\nGrace,99\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"json","targetFormat":"csv","content":"[{\\"name\\":\\"Ada\\",\\"score\\":42},{\\"name\\":\\"Grace\\",\\"score\\":99}]"}
+                        """,
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().reasonCode()).isEqualTo(SandboxPolicyReasonCode.VALID_REQUEST);
+        assertThat(result.execution().resultSummary()).contains("converted 2 rows");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.csv");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/csv");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.json"));
+    }
+
+    @Test
+    void shouldRunTsvToJsonFileConversion() throws Exception {
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted 1 rows from tsv to json\n", Duration.ofMillis(210)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("csv.DictReader", "source_format = \"tsv\"", "converted.json")
+                            .doesNotContain("Ada\t42");
+                    assertThat(Files.readString(command.workingDirectory().resolve("input.tsv")))
+                            .isEqualTo("name\tscore\nAda\t42\n");
+                    Files.writeString(command.workingDirectory().resolve("converted.json"),
+                            "[{\"name\":\"Ada\",\"score\":\"42\"}]");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"tsv","targetFormat":"json","content":"name\\tscore\\nAda\\t42\\n"}
+                        """,
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted 1 rows");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.json");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("application/json");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.tsv"));
+    }
+
+    @Test
+    void shouldRejectUnsupportedFileConversionPairBeforeRunningContainer() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"csv","targetFormat":"tsv","content":"name,score\\nAda,42\\n"}
+                        """,
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED);
+        assertThat(result.execution().resultSummary())
+                .contains("supports csv/tsv to json and json to csv/tsv only");
+        assertThat(runner.lastCommand).isNull();
     }
 
     @Test

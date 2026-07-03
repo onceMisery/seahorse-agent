@@ -56,6 +56,21 @@ class SandboxFileConvertToolPortAdapterTests {
     private final AgentToolJsonSupport jsonSupport = new AgentToolJsonSupport(objectMapper);
 
     @Test
+    void descriptorShouldAdvertiseSupportedTableConversions() {
+        SandboxFileConvertToolPortAdapter adapter = new SandboxFileConvertToolPortAdapter(
+                new RecordingSandboxRuntime(null),
+                jsonSupport);
+
+        String schema = adapter.descriptor().jsonSchema();
+
+        assertTrue(schema.contains("\"csv\""));
+        assertTrue(schema.contains("\"tsv\""));
+        assertTrue(schema.contains("\"json\""));
+        assertTrue(adapter.descriptor().description().contains("CSV/TSV to JSON"));
+        assertTrue(adapter.descriptor().description().contains("JSON to CSV/TSV"));
+    }
+
+    @Test
     void shouldExecuteCsvToJsonThroughFileConversionRuntime() throws Exception {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
                 new SandboxExecution(
@@ -109,6 +124,100 @@ class SandboxFileConvertToolPortAdapterTests {
         assertEquals("application/json", root.path("artifacts").get(0).path("mediaType").asText());
         assertEquals("metadata scan passed", root.path("artifacts").get(0).path("scanSummary").asText());
         assertTrue(root.path("artifacts").get(0).path("promptVisible").asBoolean());
+    }
+
+    @Test
+    void shouldExecuteJsonToCsvThroughFileConversionRuntime() throws Exception {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
+                new SandboxExecution(
+                        "exec-1",
+                        "session-1",
+                        SandboxRuntimeType.FILE_CONVERSION,
+                        SandboxExecutionStatus.SUCCEEDED,
+                        "exitCode=0; stdout=converted 2 rows from json to csv",
+                        SandboxPolicyReasonCode.VALID_REQUEST,
+                        NOW,
+                        NOW),
+                List.of(new SandboxArtifact(
+                        "artifact-1",
+                        "session-1",
+                        "exec-1",
+                        "local://sandbox-artifacts/converted.csv",
+                        "text/csv",
+                        SandboxArtifactScanStatus.CLEAN,
+                        ContextSensitivity.INTERNAL,
+                        "metadata scan passed",
+                        NOW))));
+        SandboxFileConvertToolPortAdapter adapter = new SandboxFileConvertToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "sourceFormat", "json",
+                "targetFormat", "csv",
+                "content", """
+                        [{"name":"Ada","score":42},{"name":"Grace","score":99}]
+                        """)));
+
+        assertTrue(result.success());
+        assertEquals(SandboxRuntimeType.FILE_CONVERSION, runtime.createCommand.runtimeType());
+        assertFalse(runtime.createCommand.networkRequested());
+        assertFalse(runtime.executeCommand.networkRequested());
+        assertEquals("session-1", runtime.closedSessionId);
+
+        JsonNode conversionInput = objectMapper.readTree(runtime.executeCommand.input());
+        assertEquals("json", conversionInput.path("sourceFormat").asText());
+        assertEquals("csv", conversionInput.path("targetFormat").asText());
+        assertTrue(conversionInput.path("content").asText().contains("\"Ada\""));
+
+        JsonNode root = objectMapper.readTree(result.content());
+        assertEquals("SUCCEEDED", root.path("executionStatus").asText());
+        assertEquals("json", root.path("conversion").path("sourceFormat").asText());
+        assertEquals("csv", root.path("conversion").path("targetFormat").asText());
+        assertEquals("text/csv", root.path("artifacts").get(0).path("mediaType").asText());
+        assertEquals("metadata scan passed", root.path("artifacts").get(0).path("scanSummary").asText());
+    }
+
+    @Test
+    void shouldExecuteTsvToJsonThroughFileConversionRuntime() throws Exception {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
+                new SandboxExecution(
+                        "exec-1",
+                        "session-1",
+                        SandboxRuntimeType.FILE_CONVERSION,
+                        SandboxExecutionStatus.SUCCEEDED,
+                        "exitCode=0; stdout=converted 1 rows from tsv to json",
+                        SandboxPolicyReasonCode.VALID_REQUEST,
+                        NOW,
+                        NOW),
+                List.of(new SandboxArtifact(
+                        "artifact-1",
+                        "session-1",
+                        "exec-1",
+                        "local://sandbox-artifacts/converted.json",
+                        "application/json",
+                        SandboxArtifactScanStatus.CLEAN,
+                        ContextSensitivity.INTERNAL,
+                        "metadata scan passed",
+                        NOW))));
+        SandboxFileConvertToolPortAdapter adapter = new SandboxFileConvertToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "sourceFormat", "tsv",
+                "targetFormat", "json",
+                "content", "name\tscore\nAda\t42\n")));
+
+        assertTrue(result.success());
+        assertFalse(runtime.createCommand.networkRequested());
+        assertFalse(runtime.executeCommand.networkRequested());
+
+        JsonNode conversionInput = objectMapper.readTree(runtime.executeCommand.input());
+        assertEquals("tsv", conversionInput.path("sourceFormat").asText());
+        assertEquals("json", conversionInput.path("targetFormat").asText());
+        assertEquals("name\tscore\nAda\t42\n", conversionInput.path("content").asText());
+
+        JsonNode root = objectMapper.readTree(result.content());
+        assertEquals("tsv", root.path("conversion").path("sourceFormat").asText());
+        assertEquals("json", root.path("conversion").path("targetFormat").asText());
+        assertEquals("application/json", root.path("artifacts").get(0).path("mediaType").asText());
     }
 
     @Test

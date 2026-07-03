@@ -335,6 +335,149 @@ try {
         } | Out-Null
     }
 
+    $jsonToCsvRunId = "sandbox-file-convert-json-csv-run-$suffix"
+    $jsonToCsvToolCallId = "sandbox-file-convert-json-csv-call-$suffix"
+    $jsonRows = @(
+        [ordered]@{ name = "Lin"; score = "7"; marker = $Marker },
+        [ordered]@{ name = "Katherine"; score = "11"; marker = $Marker }
+    )
+    $jsonContent = $jsonRows | ConvertTo-Json -Depth 10 -Compress
+
+    $jsonToCsvObservation = Test-Step "Invoke sandbox_file_convert JSON to CSV through Tool Gateway" {
+        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_file_convert/invoke" -Headers $headers -Body @{
+            runId = $jsonToCsvRunId
+            stepId = "sandbox-file-convert-json-csv-step-$suffix"
+            toolCallId = $jsonToCsvToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "json"
+                targetFormat = "csv"
+                content = $jsonContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${jsonToCsvRunId}:${jsonToCsvToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        Assert-ApiOk $response "Invoke sandbox_file_convert JSON to CSV"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert JSON to CSV failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION") {
+            throw "Expected FILE_CONVERSION runtime for JSON to CSV: $content"
+        }
+        if ("$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected SUCCEEDED JSON to CSV execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "json" -or "$($parsed.conversion.targetFormat)" -ne "csv") {
+            throw "Unexpected JSON to CSV conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1) {
+            throw "Expected one JSON to CSV artifact: $content"
+        }
+        if ("$($artifacts[0].mediaType)" -ne "text/csv") {
+            throw "Expected CSV artifact mediaType: $content"
+        }
+        if ("$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected CLEAN JSON to CSV artifact scan status: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed") {
+            throw "Expected JSON to CSV metadata scan summary: $content"
+        }
+        if ($artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible JSON to CSV artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $jsonToCsvObservation) { exit 1 }
+
+    $jsonToCsvSessionId = "$($jsonToCsvObservation.sessionId)"
+    $jsonToCsvArtifactId = "$(@($jsonToCsvObservation.artifacts)[0].artifactId)"
+
+    $jsonToCsvObjectUri = Test-Step "Verify persisted JSON to CSV session and artifact" {
+        $safeSessionId = $jsonToCsvSessionId.Replace("'", "''")
+        $sessionRow = Invoke-PostgresScalar "SELECT runtime_type, profile_id, status FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
+        $sessionParts = $sessionRow -split "`t"
+        if ($sessionParts.Count -ne 3) {
+            throw "Unexpected JSON to CSV sa_sandbox_session row: $sessionRow"
+        }
+        if ($sessionParts[0] -ne "FILE_CONVERSION") {
+            throw "Expected JSON to CSV runtime_type FILE_CONVERSION but got '$($sessionParts[0])'"
+        }
+        if ($sessionParts[1] -ne "file-conversion") {
+            throw "Expected JSON to CSV profile_id file-conversion but got '$($sessionParts[1])'"
+        }
+        if ($sessionParts[2] -ne "CANCELLED") {
+            throw "Expected JSON to CSV closed session status CANCELLED but got '$($sessionParts[2])'"
+        }
+
+        $safeArtifactId = $jsonToCsvArtifactId.Replace("'", "''")
+        $artifactRow = Invoke-PostgresScalar "SELECT object_uri, media_type, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
+        $artifactParts = $artifactRow -split "`t"
+        if ($artifactParts.Count -ne 5) {
+            throw "Unexpected JSON to CSV sa_sandbox_artifact row: $artifactRow"
+        }
+        if ($artifactParts[0] -like "file:*") {
+            throw "JSON to CSV artifact still points at file URI: $($artifactParts[0])"
+        }
+        if ($ExpectedObjectUriPrefix -and $artifactParts[0] -notlike "$ExpectedObjectUriPrefix*") {
+            throw "Expected JSON to CSV object_uri prefix '$ExpectedObjectUriPrefix' but got '$($artifactParts[0])'"
+        }
+        if ($artifactParts[1] -ne "text/csv") {
+            throw "Expected JSON to CSV media_type text/csv but got '$($artifactParts[1])'"
+        }
+        if ($artifactParts[2] -ne "CLEAN") {
+            throw "Expected JSON to CSV scan_status CLEAN but got '$($artifactParts[2])'"
+        }
+        if ($artifactParts[3] -ne "INTERNAL") {
+            throw "Expected JSON to CSV sensitivity INTERNAL but got '$($artifactParts[3])'"
+        }
+        if ($artifactParts[4] -ne "metadata scan passed") {
+            throw "Expected JSON to CSV scan_summary metadata scan passed but got '$($artifactParts[4])'"
+        }
+        $artifactParts[0]
+    }
+    if (-not $jsonToCsvObjectUri) { exit 1 }
+
+    Test-Step "Download converted CSV through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$jsonToCsvArtifactId/download" -Headers $headers
+        $rows = @($content -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ConvertFrom-Csv)
+        if ($rows.Count -ne 2) {
+            throw "Expected two converted CSV rows: $content"
+        }
+        if ("$($rows[0].name)" -ne "Lin" -or "$($rows[0].score)" -ne "7") {
+            throw "First converted CSV row mismatch: $content"
+        }
+        if ("$($rows[1].name)" -ne "Katherine" -or "$($rows[1].score)" -ne "11") {
+            throw "Second converted CSV row mismatch: $content"
+        }
+        if ($content -notlike "*$Marker*") {
+            throw "Downloaded CSV did not contain marker '$Marker': $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded CSV artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($jsonToCsvObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted CSV object exists in backend storage volume" {
+            $key = $jsonToCsvObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote JSON to CSV key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored JSON to CSV object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Host "Backend: $BaseUrl"
     Write-Host "Tool: sandbox_file_convert"
