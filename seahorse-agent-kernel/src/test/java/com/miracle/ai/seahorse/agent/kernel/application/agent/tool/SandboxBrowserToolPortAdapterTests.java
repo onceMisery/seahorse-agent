@@ -69,6 +69,7 @@ class SandboxBrowserToolPortAdapterTests {
         assertTrue(schema.contains("\"url\""));
         assertTrue(schema.contains("\"allowedHosts\""));
         assertTrue(schema.contains("\"cookies\""));
+        assertTrue(schema.contains("\"sessionState\""));
         assertTrue(schema.contains("\"anyOf\""));
         assertTrue(schema.contains("\"snapshot\""));
         assertTrue(schema.contains("\"extract_text\""));
@@ -208,6 +209,7 @@ class SandboxBrowserToolPortAdapterTests {
 
         String url = "http://example.test/page";
         String cookieValue = "session-secret-value";
+        String storageValue = "local-storage-secret-value";
         ToolInvocationResult result = adapter.invoke(request(Map.of(
                 "action", "snapshot",
                 "url", url,
@@ -219,6 +221,20 @@ class SandboxBrowserToolPortAdapterTests {
                         "path", "/",
                         "httpOnly", true,
                         "sameSite", "Lax")),
+                "sessionState", Map.of(
+                        "cookies", List.of(Map.of(
+                                "name", "restored_session",
+                                "value", "restored-secret-value",
+                                "domain", "example.test",
+                                "path", "/",
+                                "httpOnly", true,
+                                "secure", false,
+                                "sameSite", "Lax")),
+                        "origins", List.of(Map.of(
+                                "origin", "http://example.test",
+                                "localStorage", List.of(Map.of(
+                                        "name", "seahorse_session_marker",
+                                        "value", storageValue))))),
                 "captureSessionState", true,
                 "har", true)));
 
@@ -236,6 +252,9 @@ class SandboxBrowserToolPortAdapterTests {
         assertEquals(cookieValue, browserInput.path("cookies").get(0).path("value").asText());
         assertEquals("example.test", browserInput.path("cookies").get(0).path("domain").asText());
         assertTrue(browserInput.path("captureSessionState").asBoolean());
+        assertEquals("restored_session", browserInput.path("sessionState").path("cookies").get(0).path("name").asText());
+        assertEquals(storageValue, browserInput.path("sessionState").path("origins").get(0)
+                .path("localStorage").get(0).path("value").asText());
 
         JsonNode root = objectMapper.readTree(result.content());
         assertTrue(root.path("browser").path("networkAllowed").asBoolean());
@@ -244,7 +263,9 @@ class SandboxBrowserToolPortAdapterTests {
         assertEquals(1, root.path("browser").path("cookieCount").asInt());
         assertEquals("example.test", root.path("browser").path("cookieDomains").get(0).asText());
         assertTrue(root.path("browser").path("sessionState").path("captureRequested").asBoolean());
+        assertTrue(root.path("browser").path("sessionState").path("replayRequested").asBoolean());
         assertFalse(result.content().contains(cookieValue));
+        assertFalse(result.content().contains(storageValue));
     }
 
     @Test
@@ -327,6 +348,21 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldRejectSessionStateReplayForInlineHtmlBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "html", "<main>inline</main>",
+                "sessionState", Map.of("cookies", List.of()))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("sessionState is only supported for url mode"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
     void shouldRejectUrlWhenHostIsNotAllowlistedBeforeCreatingSession() {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
@@ -357,6 +393,27 @@ class SandboxBrowserToolPortAdapterTests {
 
         assertFalse(result.success());
         assertTrue(result.error().contains("cookie domain must be included in allowedHosts"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
+    void shouldRejectSessionStateOriginWhenHostIsNotAllowlistedBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/page",
+                "allowedHosts", List.of("example.test"),
+                "sessionState", Map.of(
+                        "origins", List.of(Map.of(
+                                "origin", "http://other.test",
+                                "localStorage", List.of(Map.of(
+                                        "name", "seahorse_session_marker",
+                                        "value", "secret"))))))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("sessionState origin host must be included in allowedHosts"));
         assertEquals(0, runtime.createCalls);
     }
 

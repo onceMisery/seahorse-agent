@@ -378,9 +378,10 @@ class ContainerSandboxRuntimeAdapterTests {
     @Test
     void shouldRunBrowserAutomationUrlModeWithAllowlistedHostNetwork() throws Exception {
         String cookieValue = "session-secret-value";
+        String storageValue = "restored-local-storage-secret";
         RecordingRunner runner = new RecordingRunner(
                 ContainerCommandResult.succeeded(
-                        "browser snapshot completed; textLength=18; screenshot=True; har=True; video=False; cookies=1; sessionState=True\n",
+                        "browser snapshot completed; textLength=18; screenshot=True; har=True; video=False; cookies=1; sessionStateReplay=True; sessionStateCapture=True\n",
                         Duration.ofMillis(320)),
                 command -> {
                     String script = Files.readString(command.workingDirectory().resolve("main.py"));
@@ -388,6 +389,8 @@ class ContainerSandboxRuntimeAdapterTests {
                             .contains("target_url = \"http://host.docker.internal:18080/page\"",
                                     "allowed_hosts = set([\"host.docker.internal\"])",
                                     "cookies_path = Path(\"/workspace/browser-cookies.json\")",
+                                    "session_state_input_path = Path(\"/workspace/browser-session-state-input.json\")",
+                                    "context_options[\"storage_state\"] = str(session_state_input_path)",
                                     "context.add_cookies(browser_cookies)",
                                     "capture_session_state = True",
                                     "context.storage_state(path=str(session_state_path))",
@@ -395,13 +398,16 @@ class ContainerSandboxRuntimeAdapterTests {
                                     "browser-session-summary.json",
                                     "page.goto",
                                     "\"source\": \"url\" if target_url else \"html\"")
-                            .doesNotContain("url mode marker", cookieValue);
+                            .doesNotContain("url mode marker", cookieValue, storageValue);
                     assertThat(Files.readString(command.workingDirectory().resolve("browser-cookies.json")))
                             .contains("seahorse_session", cookieValue, "host.docker.internal");
+                    assertThat(Files.readString(command.workingDirectory().resolve("browser-session-state-input.json")))
+                            .contains("restored_session", storageValue, "host.docker.internal")
+                            .doesNotContain("objectUri", "storageRef");
                     assertThat(command.workingDirectory().resolve("browser-input.html")).doesNotExist();
                     Files.writeString(command.workingDirectory().resolve("browser-result.json"),
                             """
-                                    {"action":"snapshot","source":"url","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"cookies":{"count":1,"domains":["host.docker.internal"]},"text":"url mode marker"}
+                                    {"action":"snapshot","source":"url","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"cookies":{"count":1,"domains":["host.docker.internal"]},"sessionState":{"replayed":true,"replay":{"cookies":{"count":1,"domains":["host.docker.internal"]},"origins":[{"origin":"http://host.docker.internal:18080","localStorageCount":1}]},"captured":true},"text":"url mode marker"}
                                     """);
                     Files.writeString(command.workingDirectory().resolve("browser-network.har"),
                             """
@@ -422,8 +428,8 @@ class ContainerSandboxRuntimeAdapterTests {
         SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
                 session,
                 """
-                        {"action":"snapshot","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"cookies":[{"name":"seahorse_session","value":"%s","domain":"host.docker.internal","path":"/","httpOnly":true,"secure":false,"sameSite":"Lax"}],"har":true,"captureSessionState":true}
-                        """.formatted(cookieValue),
+                        {"action":"snapshot","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"cookies":[{"name":"seahorse_session","value":"%s","domain":"host.docker.internal","path":"/","httpOnly":true,"secure":false,"sameSite":"Lax"}],"sessionState":{"cookies":[{"name":"restored_session","value":"restored-secret-value","domain":"host.docker.internal","path":"/","httpOnly":true,"secure":false,"sameSite":"Lax"}],"origins":[{"origin":"http://host.docker.internal:18080","localStorage":[{"name":"seahorse_session_marker","value":"%s"}]}]},"har":true,"captureSessionState":true}
+                        """.formatted(cookieValue, storageValue),
                 true,
                 List.of("host.docker.internal")));
 
@@ -441,7 +447,8 @@ class ContainerSandboxRuntimeAdapterTests {
                     assertThat(artifact.sensitivity()).isEqualTo(ContextSensitivity.SECRET);
                 })
                 .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-input.html"))
-                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-cookies.json"));
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-cookies.json"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-session-state-input.json"));
         assertThat(runner.lastCommand.commandLine())
                 .containsSubsequence("docker", "run", "--rm")
                 .containsSubsequence("--add-host", "host.docker.internal:host-gateway")
@@ -467,6 +474,46 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
         assertThat(result.execution().resultSummary()).contains("session state capture is only supported for url mode");
+        assertThat(runner.lastCommand).isNull();
+    }
+
+    @Test
+    void shouldFailClosedWhenBrowserSessionStateReplayIsRequestedForInlineHtml() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","html":"<main>inline</main>","sessionState":{"cookies":[]}}
+                        """,
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("session state replay is only supported for url mode");
+        assertThat(runner.lastCommand).isNull();
+    }
+
+    @Test
+    void shouldFailClosedWhenBrowserSessionStateOriginIsNotAllowlistedBeforeRunningContainer() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","url":"http://example.test/page","allowedHosts":["example.test"],"sessionState":{"origins":[{"origin":"http://other.test","localStorage":[{"name":"seahorse_session_marker","value":"secret"}]}]}}
+                        """,
+                true,
+                List.of("example.test")));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("sessionState origin host must be included in allowedHosts");
         assertThat(runner.lastCommand).isNull();
     }
 

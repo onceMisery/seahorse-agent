@@ -82,6 +82,12 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final int MAX_BROWSER_COOKIES = 16;
     private static final int MAX_BROWSER_COOKIE_NAME_CHARS = 128;
     private static final int MAX_BROWSER_COOKIE_VALUE_CHARS = 4096;
+    private static final int MAX_BROWSER_SESSION_STATE_CHARS = 128 * 1024;
+    private static final int MAX_BROWSER_SESSION_STATE_COOKIES = 32;
+    private static final int MAX_BROWSER_SESSION_STATE_ORIGINS = 16;
+    private static final int MAX_BROWSER_SESSION_STATE_LOCAL_STORAGE_ITEMS = 128;
+    private static final int MAX_BROWSER_SESSION_STATE_NAME_CHARS = 256;
+    private static final int MAX_BROWSER_SESSION_STATE_VALUE_CHARS = 8192;
     private static final int DEFAULT_BROWSER_VIEWPORT_WIDTH = 1280;
     private static final int DEFAULT_BROWSER_VIEWPORT_HEIGHT = 720;
     private static final int MIN_BROWSER_VIEWPORT_SIZE = 320;
@@ -259,27 +265,27 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             BrowserAutomationRequest request = parseBrowserAutomationRequest(input);
             Path inputPath = safeWorkspace.resolve(browserInputName());
             Path cookiesPath = safeWorkspace.resolve(browserCookiesName());
+            Path sessionStateInputPath = safeWorkspace.resolve(browserSessionStateInputName());
             Files.writeString(safeWorkspace.resolve(SCRIPT_NAME), browserAutomationScript(request), StandardCharsets.UTF_8);
+            LinkedHashSet<Path> excluded = new LinkedHashSet<>();
+            excluded.add(safeWorkspace.resolve(SCRIPT_NAME));
             if (!request.cookies().isEmpty()) {
                 Files.writeString(cookiesPath, jsonForScript(request.cookies()), StandardCharsets.UTF_8);
+                excluded.add(cookiesPath);
+            }
+            if (hasText(request.sessionStateJson())) {
+                Files.writeString(sessionStateInputPath, request.sessionStateJson(), StandardCharsets.UTF_8);
+                excluded.add(sessionStateInputPath);
             }
             if (!hasText(request.url())) {
                 Files.writeString(
                         inputPath,
                         request.html(),
                         StandardCharsets.UTF_8);
-                LinkedHashSet<Path> excluded = new LinkedHashSet<>();
-                excluded.add(safeWorkspace.resolve(SCRIPT_NAME));
                 excluded.add(inputPath);
-                if (!request.cookies().isEmpty()) {
-                    excluded.add(cookiesPath);
-                }
                 return Set.copyOf(excluded);
             }
-            if (!request.cookies().isEmpty()) {
-                return Set.of(safeWorkspace.resolve(SCRIPT_NAME), cookiesPath);
-            }
-            return Set.of(safeWorkspace.resolve(SCRIPT_NAME));
+            return Set.copyOf(excluded);
         }
         throw new IllegalArgumentException("unsupported sandbox runtime type: " + runtimeType);
     }
@@ -353,10 +359,22 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         boolean har = root.path("har").asBoolean(false);
         boolean video = root.path("video").asBoolean(false);
         boolean captureSessionState = root.path("captureSessionState").asBoolean(false);
+        String sessionStateJson = normalizedBrowserSessionState(root.get("sessionState"), allowedHosts, hasText(url));
         if (captureSessionState && !hasText(url)) {
             throw new IllegalArgumentException("browser automation session state capture is only supported for url mode");
         }
-        return new BrowserAutomationRequest(action, html, url, allowedHosts, cookies, viewportWidth, viewportHeight, screenshot, har, video, captureSessionState);
+        return new BrowserAutomationRequest(action,
+                html,
+                url,
+                allowedHosts,
+                cookies,
+                viewportWidth,
+                viewportHeight,
+                screenshot,
+                har,
+                video,
+                captureSessionState,
+                sessionStateJson);
     }
 
     private String browserAutomationScript(BrowserAutomationRequest request) {
@@ -378,6 +396,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 capture_session_state = %s
                 input_path = Path("/workspace/%s")
                 cookies_path = Path("/workspace/%s")
+                session_state_input_path = Path("/workspace/%s")
                 result_path = Path("/workspace/%s")
                 screenshot_path = Path("/workspace/%s")
                 har_path = Path("/workspace/%s")
@@ -478,6 +497,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
                 html = "" if target_url else input_path.read_text(encoding="utf-8-sig")
                 browser_cookies = json.loads(cookies_path.read_text(encoding="utf-8")) if cookies_path.exists() else []
+                browser_session_state = json.loads(session_state_input_path.read_text(encoding="utf-8")) if session_state_input_path.exists() else None
                 network_events = []
                 network_event_index = {}
                 video_file = None
@@ -492,6 +512,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         context_options = {
                             "viewport": {"width": viewport_width, "height": viewport_height},
                         }
+                        if browser_session_state is not None:
+                            context_options["storage_state"] = str(session_state_input_path)
                         if video_enabled:
                             video_dir.mkdir(parents=True, exist_ok=True)
                             context_options["record_video_dir"] = str(video_dir)
@@ -556,6 +578,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             screenshot_file = screenshot_path.name
                         session_summary_file = None
                         session_state_file = None
+                        session_replay_summary = build_session_summary(browser_session_state, target_url) if browser_session_state is not None else None
                         if capture_session_state:
                             state = context.storage_state(path=str(session_state_path))
                             session_summary_path.write_text(
@@ -585,6 +608,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             "har": har_path.name if har_enabled else None,
                             "video": video_path.name if video_enabled else None,
                             "sessionState": {
+                                "replayed": bool(browser_session_state is not None),
+                                "replay": session_replay_summary,
                                 "captured": bool(capture_session_state),
                                 "summary": session_summary_file,
                                 "state": session_state_file,
@@ -615,7 +640,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             context.close()
                         browser.close()
 
-                print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}; har={har_enabled}; video={video_enabled}; cookies={len(browser_cookies)}; sessionState={capture_session_state}")
+                print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}; har={har_enabled}; video={video_enabled}; cookies={len(browser_cookies)}; sessionStateReplay={browser_session_state is not None}; sessionStateCapture={capture_session_state}")
                 """.formatted(
                 request.action(),
                 jsonForScript(request.url()),
@@ -628,6 +653,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 request.captureSessionState() ? "True" : "False",
                 browserInputName(),
                 browserCookiesName(),
+                browserSessionStateInputName(),
                 browserResultName(),
                 browserScreenshotName(),
                 browserHarName(),
@@ -890,6 +916,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return "browser-cookies.json";
     }
 
+    private String browserSessionStateInputName() {
+        return "browser-session-state-input.json";
+    }
+
     private String browserResultName() {
         return "browser-result.json";
     }
@@ -987,6 +1017,139 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             throw new IllegalArgumentException("browser automation allowedHosts must contain host names only");
         }
         hosts.add(host);
+    }
+
+    private String normalizedBrowserSessionState(JsonNode value,
+                                                 List<String> allowedHosts,
+                                                 boolean urlMode) throws IOException {
+        if (value == null || value.isMissingNode() || value.isNull()) {
+            return "";
+        }
+        if (!urlMode) {
+            throw new IllegalArgumentException("browser automation session state replay is only supported for url mode");
+        }
+        JsonNode state = value.isTextual()
+                ? objectMapper.readTree(value.asText(""))
+                : value;
+        if (state == null || !state.isObject()) {
+            throw new IllegalArgumentException("browser automation sessionState must be an object");
+        }
+        validateBrowserSessionStateCookies(state.get("cookies"), allowedHosts);
+        validateBrowserSessionStateOrigins(state.get("origins"), allowedHosts);
+        String serialized = objectMapper.writeValueAsString(state);
+        if (serialized.length() > MAX_BROWSER_SESSION_STATE_CHARS) {
+            throw new IllegalArgumentException("browser automation sessionState exceeds "
+                    + MAX_BROWSER_SESSION_STATE_CHARS + " chars");
+        }
+        return serialized;
+    }
+
+    private void validateBrowserSessionStateCookies(JsonNode value, List<String> allowedHosts) {
+        if (value == null || value.isMissingNode() || value.isNull()) {
+            return;
+        }
+        if (!value.isArray()) {
+            throw new IllegalArgumentException("browser automation sessionState cookies must be an array");
+        }
+        if (value.size() > MAX_BROWSER_SESSION_STATE_COOKIES) {
+            throw new IllegalArgumentException("browser automation sessionState cookies exceeds "
+                    + MAX_BROWSER_SESSION_STATE_COOKIES + " items");
+        }
+        for (JsonNode cookieNode : value) {
+            if (!cookieNode.isObject()) {
+                throw new IllegalArgumentException("browser automation sessionState cookie must be an object");
+            }
+            normalizedBrowserCookieName(cookieNode.path("name").asText(""));
+            normalizedBrowserCookieValue(cookieNode.path("value").asText(""));
+            String domain = normalizedBrowserCookieDomain(cookieNode.path("domain").asText(""));
+            if (!allowedHosts.contains(browserCookieDomainHost(domain))) {
+                throw new IllegalArgumentException(
+                        "browser automation sessionState cookie domain must be included in allowedHosts");
+            }
+            normalizedBrowserCookiePath(cookieNode.path("path").asText("/"));
+        }
+    }
+
+    private void validateBrowserSessionStateOrigins(JsonNode value, List<String> allowedHosts) {
+        if (value == null || value.isMissingNode() || value.isNull()) {
+            return;
+        }
+        if (!value.isArray()) {
+            throw new IllegalArgumentException("browser automation sessionState origins must be an array");
+        }
+        if (value.size() > MAX_BROWSER_SESSION_STATE_ORIGINS) {
+            throw new IllegalArgumentException("browser automation sessionState origins exceeds "
+                    + MAX_BROWSER_SESSION_STATE_ORIGINS + " items");
+        }
+        for (JsonNode originNode : value) {
+            if (!originNode.isObject()) {
+                throw new IllegalArgumentException("browser automation sessionState origin must be an object");
+            }
+            String host = browserSessionStateOriginHost(originNode.path("origin").asText(""));
+            if (!allowedHosts.contains(host)) {
+                throw new IllegalArgumentException(
+                        "browser automation sessionState origin host must be included in allowedHosts");
+            }
+            validateBrowserSessionStateLocalStorage(originNode.get("localStorage"));
+        }
+    }
+
+    private void validateBrowserSessionStateLocalStorage(JsonNode value) {
+        if (value == null || value.isMissingNode() || value.isNull()) {
+            return;
+        }
+        if (!value.isArray()) {
+            throw new IllegalArgumentException("browser automation sessionState localStorage must be an array");
+        }
+        if (value.size() > MAX_BROWSER_SESSION_STATE_LOCAL_STORAGE_ITEMS) {
+            throw new IllegalArgumentException("browser automation sessionState localStorage exceeds "
+                    + MAX_BROWSER_SESSION_STATE_LOCAL_STORAGE_ITEMS + " items");
+        }
+        for (JsonNode item : value) {
+            if (!item.isObject()) {
+                throw new IllegalArgumentException("browser automation sessionState localStorage item must be an object");
+            }
+            boundedBrowserSessionStateText(item.path("name").asText(""),
+                    "sessionState localStorage name",
+                    MAX_BROWSER_SESSION_STATE_NAME_CHARS,
+                    true);
+            boundedBrowserSessionStateText(item.path("value").asText(""),
+                    "sessionState localStorage value",
+                    MAX_BROWSER_SESSION_STATE_VALUE_CHARS,
+                    false);
+        }
+    }
+
+    private String boundedBrowserSessionStateText(String value, String label, int maxChars, boolean required) {
+        String text = value == null ? "" : value;
+        if ((required && !hasText(text)) || text.length() > maxChars || containsControlCharacter(text)) {
+            throw new IllegalArgumentException("browser automation " + label + " is invalid");
+        }
+        return text;
+    }
+
+    private String browserCookieDomainHost(String domain) {
+        String host = domain.startsWith(".") ? domain.substring(1) : domain;
+        if (!hasText(host) || !host.matches("[a-z0-9.-]+")) {
+            throw new IllegalArgumentException("browser automation sessionState cookie domain is invalid");
+        }
+        return host;
+    }
+
+    private String browserSessionStateOriginHost(String origin) {
+        if (!hasText(origin)) {
+            throw new IllegalArgumentException("browser automation sessionState origin is required");
+        }
+        try {
+            URI uri = new URI(origin.trim());
+            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+            if (!Set.of("http", "https").contains(scheme) || !hasText(uri.getHost())) {
+                throw new IllegalArgumentException("browser automation sessionState origin must be HTTP/HTTPS");
+            }
+            return uri.getHost().toLowerCase(Locale.ROOT);
+        } catch (URISyntaxException ex) {
+            throw new IllegalArgumentException("browser automation sessionState origin is not valid", ex);
+        }
     }
 
     private List<BrowserCookie> normalizedBrowserCookies(JsonNode value,
@@ -1756,7 +1919,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                                             boolean screenshot,
                                             boolean har,
                                             boolean video,
-                                            boolean captureSessionState) {}
+                                            boolean captureSessionState,
+                                            String sessionStateJson) {}
 
     private record BrowserCookie(String name,
                                  String value,

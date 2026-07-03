@@ -52,11 +52,18 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private static final int MAX_COOKIES = 16;
     private static final int MAX_COOKIE_NAME_CHARS = 128;
     private static final int MAX_COOKIE_VALUE_CHARS = 4096;
+    private static final int MAX_SESSION_STATE_CHARS = 128 * 1024;
+    private static final int MAX_SESSION_STATE_COOKIES = 32;
+    private static final int MAX_SESSION_STATE_ORIGINS = 16;
+    private static final int MAX_SESSION_STATE_LOCAL_STORAGE_ITEMS = 128;
+    private static final int MAX_SESSION_STATE_NAME_CHARS = 256;
+    private static final int MAX_SESSION_STATE_VALUE_CHARS = 8192;
     private static final String ACTION_ARGUMENT = "action";
     private static final String HTML_ARGUMENT = "html";
     private static final String URL_ARGUMENT = "url";
     private static final String ALLOWED_HOSTS_ARGUMENT = "allowedHosts";
     private static final String COOKIES_ARGUMENT = "cookies";
+    private static final String SESSION_STATE_ARGUMENT = "sessionState";
     private static final String SCREENSHOT_ARGUMENT = "screenshot";
     private static final String HAR_ARGUMENT = "har";
     private static final String VIDEO_ARGUMENT = "video";
@@ -69,9 +76,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
             "Sandbox Browser",
-            "Render bounded inline HTML or an explicitly allowlisted HTTP/HTTPS URL through a Playwright browser sandbox. Inline HTML stays no-network; URL mode requires allowedHosts, can inject bounded host-scoped cookies, and can capture governed browser session state without exposing values in observations.",
+            "Render bounded inline HTML or an explicitly allowlisted HTTP/HTTPS URL through a Playwright browser sandbox. Inline HTML stays no-network; URL mode requires allowedHosts, can inject bounded host-scoped cookies, can replay explicit request-scoped Playwright session state, and can capture governed browser session state without exposing values in observations.",
             """
-                    {"type":"object","properties":{"html":{"type":"string","minLength":1,"maxLength":262144},"url":{"type":"string","minLength":1,"maxLength":2048,"description":"HTTP/HTTPS URL to visit. Requires allowedHosts and sandbox egress policy."},"allowedHosts":{"type":"array","items":{"type":"string"},"maxItems":16,"default":[],"description":"Exact host allowlist for URL mode. The URL host must be included."},"cookies":{"type":"array","maxItems":16,"description":"Optional URL-mode cookies. Each cookie domain must match an allowed host; cookie values are injected into the sandbox but omitted from observations.","items":{"type":"object","required":["name","value"],"properties":{"name":{"type":"string","minLength":1,"maxLength":128},"value":{"type":"string","maxLength":4096},"domain":{"type":"string","description":"Host-only cookie domain. Defaults to the URL host and must be in allowedHosts."},"path":{"type":"string","default":"/"},"httpOnly":{"type":"boolean","default":true},"secure":{"type":"boolean","default":false},"sameSite":{"type":"string","enum":["Lax","Strict","None"],"default":"Lax"}}}},"captureSessionState":{"type":"boolean","default":false,"description":"URL-mode only. Captures a governed browser storage-state artifact plus a value-free summary; secret values are omitted from observations and prompt-visible artifacts."},"action":{"type":"string","enum":["snapshot","extract_text"],"default":"snapshot"},"screenshot":{"type":"boolean","default":true},"har":{"type":"boolean","default":false},"video":{"type":"boolean","default":false},"viewportWidth":{"type":"integer","minimum":320,"maximum":2400,"default":1280},"viewportHeight":{"type":"integer","minimum":320,"maximum":2400,"default":720}},"anyOf":[{"required":["html"]},{"required":["url","allowedHosts"]}]}
+                    {"type":"object","properties":{"html":{"type":"string","minLength":1,"maxLength":262144},"url":{"type":"string","minLength":1,"maxLength":2048,"description":"HTTP/HTTPS URL to visit. Requires allowedHosts and sandbox egress policy."},"allowedHosts":{"type":"array","items":{"type":"string"},"maxItems":16,"default":[],"description":"Exact host allowlist for URL mode. The URL host must be included."},"cookies":{"type":"array","maxItems":16,"description":"Optional URL-mode cookies. Each cookie domain must match an allowed host; cookie values are injected into the sandbox but omitted from observations.","items":{"type":"object","required":["name","value"],"properties":{"name":{"type":"string","minLength":1,"maxLength":128},"value":{"type":"string","maxLength":4096},"domain":{"type":"string","description":"Host-only cookie domain. Defaults to the URL host and must be in allowedHosts."},"path":{"type":"string","default":"/"},"httpOnly":{"type":"boolean","default":true},"secure":{"type":"boolean","default":false},"sameSite":{"type":"string","enum":["Lax","Strict","None"],"default":"Lax"}}}},"sessionState":{"type":"object","description":"Optional URL-mode Playwright storageState object for one-run replay. Cookie/localStorage values are written only to transient runtime input and omitted from observations and prompt-visible artifacts.","properties":{"cookies":{"type":"array","maxItems":32},"origins":{"type":"array","maxItems":16}}},"captureSessionState":{"type":"boolean","default":false,"description":"URL-mode only. Captures a governed browser storage-state artifact plus a value-free summary; secret values are omitted from observations and prompt-visible artifacts."},"action":{"type":"string","enum":["snapshot","extract_text"],"default":"snapshot"},"screenshot":{"type":"boolean","default":true},"har":{"type":"boolean","default":false},"video":{"type":"boolean","default":false},"viewportWidth":{"type":"integer","minimum":320,"maximum":2400,"default":1280},"viewportHeight":{"type":"integer","minimum":320,"maximum":2400,"default":720}},"anyOf":[{"required":["html"]},{"required":["url","allowedHosts"]}]}
                     """);
 
     private final SandboxRuntimeInboundPort sandboxRuntime;
@@ -133,6 +140,15 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             cookies = normalizedCookies(
                     safeRequest.arguments().get(COOKIES_ARGUMENT),
                     urlHost,
+                    allowedHosts,
+                    urlMode);
+        } catch (IllegalArgumentException ex) {
+            return ToolInvocationResult.failed(ex.getMessage());
+        }
+        Object sessionState;
+        try {
+            sessionState = normalizedSessionState(
+                    safeRequest.arguments().get(SESSION_STATE_ARGUMENT),
                     allowedHosts,
                     urlMode);
         } catch (IllegalArgumentException ex) {
@@ -200,6 +216,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                 url,
                                 requestedHosts,
                                 cookies,
+                                sessionState,
                                 networkRequested,
                                 viewportWidth,
                                 viewportHeight,
@@ -210,7 +227,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             }
             SandboxExecutionResult result = sandboxRuntime.execute(new SandboxExecutionCommand(
                     session.sessionId(),
-                    browserInput(action, html, url, requestedHosts, cookies, viewportWidth, viewportHeight, screenshot, har, video, captureSessionState),
+                    browserInput(action, html, url, requestedHosts, cookies, sessionState, viewportWidth, viewportHeight, screenshot, har, video, captureSessionState),
                     networkRequested,
                     requestedHosts));
             Map<String, Object> observation = observation(
@@ -221,6 +238,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                     url,
                     requestedHosts,
                     cookies,
+                    sessionState,
                     networkRequested,
                     viewportWidth,
                     viewportHeight,
@@ -244,6 +262,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                 String url,
                                 List<String> allowedHosts,
                                 List<BrowserCookie> cookies,
+                                Object sessionState,
                                 int viewportWidth,
                                 int viewportHeight,
                                 boolean screenshot,
@@ -257,6 +276,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         input.put("allowedHosts", allowedHosts);
         if (cookies != null && !cookies.isEmpty()) {
             input.put("cookies", cookiesForRuntime(cookies));
+        }
+        if (sessionState != null) {
+            input.put("sessionState", sessionState);
         }
         input.put("viewportWidth", viewportWidth);
         input.put("viewportHeight", viewportHeight);
@@ -279,6 +301,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                             String url,
                                             List<String> allowedHosts,
                                             List<BrowserCookie> cookies,
+                                            Object sessionState,
                                             boolean networkRequested,
                                             int viewportWidth,
                                             int viewportHeight,
@@ -295,7 +318,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         observation.put("executionStatus", execution == null ? null : execution.status().name());
         observation.put("reasonCode", execution == null ? null : execution.reasonCode().name());
         observation.put("resultSummary", execution == null ? null : execution.resultSummary());
-        observation.put("browser", browser(action, url, allowedHosts, cookies, networkRequested, viewportWidth, viewportHeight, har, video, captureSessionState));
+        observation.put("browser", browser(action, url, allowedHosts, cookies, sessionState, networkRequested, viewportWidth, viewportHeight, har, video, captureSessionState));
         observation.put("artifacts", artifacts(artifacts));
         return observation;
     }
@@ -304,6 +327,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                         String url,
                                         List<String> allowedHosts,
                                         List<BrowserCookie> cookies,
+                                        Object sessionState,
                                         boolean networkRequested,
                                         int viewportWidth,
                                         int viewportHeight,
@@ -321,7 +345,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         browser.put("networkAllowed", networkRequested);
         browser.put("har", har);
         browser.put("video", video);
-        browser.put("sessionState", Map.of("captureRequested", captureSessionState));
+        browser.put("sessionState", Map.of(
+                "captureRequested", captureSessionState,
+                "replayRequested", sessionState != null));
         return browser;
     }
 
@@ -438,6 +464,136 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             throw new IllegalArgumentException("sandbox_browser failed: allowedHosts must contain host names only");
         }
         return host;
+    }
+
+    private Object normalizedSessionState(Object value,
+                                          List<String> allowedHosts,
+                                          boolean urlMode) {
+        if (value == null) {
+            return null;
+        }
+        if (!urlMode) {
+            throw new IllegalArgumentException("sandbox_browser failed: sessionState is only supported for url mode");
+        }
+        if (!(value instanceof Map<?, ?> state)) {
+            throw new IllegalArgumentException("sandbox_browser failed: sessionState must be an object");
+        }
+        validateSessionStateCookies(state.get("cookies"), allowedHosts);
+        validateSessionStateOrigins(state.get("origins"), allowedHosts);
+        if (jsonSupport.write(value).length() > MAX_SESSION_STATE_CHARS) {
+            throw new IllegalArgumentException("sandbox_browser failed: sessionState exceeds "
+                    + MAX_SESSION_STATE_CHARS + " chars");
+        }
+        return value;
+    }
+
+    private void validateSessionStateCookies(Object value, List<String> allowedHosts) {
+        if (value == null) {
+            return;
+        }
+        if (!(value instanceof List<?> cookies)) {
+            throw new IllegalArgumentException("sandbox_browser failed: sessionState cookies must be an array");
+        }
+        if (cookies.size() > MAX_SESSION_STATE_COOKIES) {
+            throw new IllegalArgumentException("sandbox_browser failed: sessionState cookies exceeds "
+                    + MAX_SESSION_STATE_COOKIES + " items");
+        }
+        for (Object rawCookie : cookies) {
+            if (!(rawCookie instanceof Map<?, ?> cookie)) {
+                throw new IllegalArgumentException("sandbox_browser failed: sessionState cookie must be an object");
+            }
+            normalizedCookieName(mapString(cookie, "name"));
+            normalizedCookieValue(mapStringPreservingWhitespace(cookie, "value"));
+            String domain = normalizedCookieDomain(mapString(cookie, "domain"));
+            if (!allowedHosts.contains(cookieDomainHost(domain))) {
+                throw new IllegalArgumentException(
+                        "sandbox_browser failed: sessionState cookie domain must be included in allowedHosts");
+            }
+            normalizedCookiePath(mapString(cookie, "path"));
+        }
+    }
+
+    private void validateSessionStateOrigins(Object value, List<String> allowedHosts) {
+        if (value == null) {
+            return;
+        }
+        if (!(value instanceof List<?> origins)) {
+            throw new IllegalArgumentException("sandbox_browser failed: sessionState origins must be an array");
+        }
+        if (origins.size() > MAX_SESSION_STATE_ORIGINS) {
+            throw new IllegalArgumentException("sandbox_browser failed: sessionState origins exceeds "
+                    + MAX_SESSION_STATE_ORIGINS + " items");
+        }
+        for (Object rawOrigin : origins) {
+            if (!(rawOrigin instanceof Map<?, ?> origin)) {
+                throw new IllegalArgumentException("sandbox_browser failed: sessionState origin must be an object");
+            }
+            String host = sessionStateOriginHost(mapString(origin, "origin"));
+            if (!allowedHosts.contains(host)) {
+                throw new IllegalArgumentException(
+                        "sandbox_browser failed: sessionState origin host must be included in allowedHosts");
+            }
+            validateSessionStateLocalStorage(origin.get("localStorage"));
+        }
+    }
+
+    private void validateSessionStateLocalStorage(Object value) {
+        if (value == null) {
+            return;
+        }
+        if (!(value instanceof List<?> entries)) {
+            throw new IllegalArgumentException("sandbox_browser failed: sessionState localStorage must be an array");
+        }
+        if (entries.size() > MAX_SESSION_STATE_LOCAL_STORAGE_ITEMS) {
+            throw new IllegalArgumentException("sandbox_browser failed: sessionState localStorage exceeds "
+                    + MAX_SESSION_STATE_LOCAL_STORAGE_ITEMS + " items");
+        }
+        for (Object rawEntry : entries) {
+            if (!(rawEntry instanceof Map<?, ?> entry)) {
+                throw new IllegalArgumentException(
+                        "sandbox_browser failed: sessionState localStorage item must be an object");
+            }
+            boundedSessionStateText(mapStringPreservingWhitespace(entry, "name"),
+                    "sessionState localStorage name",
+                    MAX_SESSION_STATE_NAME_CHARS,
+                    true);
+            boundedSessionStateText(mapStringPreservingWhitespace(entry, "value"),
+                    "sessionState localStorage value",
+                    MAX_SESSION_STATE_VALUE_CHARS,
+                    false);
+        }
+    }
+
+    private String boundedSessionStateText(String value, String label, int maxChars, boolean required) {
+        String text = value == null ? "" : value;
+        if ((required && !hasText(text)) || text.length() > maxChars || containsControlCharacter(text)) {
+            throw new IllegalArgumentException("sandbox_browser failed: " + label + " is invalid");
+        }
+        return text;
+    }
+
+    private String cookieDomainHost(String domain) {
+        String host = domain.startsWith(".") ? domain.substring(1) : domain;
+        if (!hasText(host) || !host.matches("[a-z0-9.-]+")) {
+            throw new IllegalArgumentException("sandbox_browser failed: sessionState cookie domain is invalid");
+        }
+        return host;
+    }
+
+    private String sessionStateOriginHost(String origin) {
+        if (!hasText(origin)) {
+            throw new IllegalArgumentException("sandbox_browser failed: sessionState origin is required");
+        }
+        try {
+            URI uri = new URI(origin.trim());
+            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+            if (!Set.of("http", "https").contains(scheme) || !hasText(uri.getHost())) {
+                throw new IllegalArgumentException("sandbox_browser failed: sessionState origin must be HTTP/HTTPS");
+            }
+            return uri.getHost().toLowerCase(Locale.ROOT);
+        } catch (URISyntaxException ex) {
+            throw new IllegalArgumentException("sandbox_browser failed: sessionState origin is not valid", ex);
+        }
     }
 
     private List<BrowserCookie> normalizedCookies(Object value,

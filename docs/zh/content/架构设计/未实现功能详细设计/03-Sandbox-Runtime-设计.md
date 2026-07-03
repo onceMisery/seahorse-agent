@@ -495,6 +495,16 @@ Fresh full-Docker evidence: focused kernel/container tests passed 35/35, the ful
 
 This completes governed one-run session-state capture. Session replay, credential storage, operator approval UX, and long-lived browser profile management remain follow-up production work.
 
+### 2026-07-03 Update: sandbox browser request-scoped session state replay
+
+`sandbox_browser` URL mode now supports an explicit request-scoped Playwright `sessionState` object for one-run replay. Inline HTML requests are rejected for replay. The tool and runtime both require every session-state cookie domain and localStorage origin host to be present in `allowedHosts`, so replay remains behind the existing URL allowlist, browser profile network policy, and global sandbox egress policy.
+
+The runtime writes replay input only to transient `browser-session-state-input.json`, excludes that file from artifact collection, and loads it through Playwright `browser.new_context(storage_state=...)`. Observations expose only `browser.sessionState.replayRequested`; governed browser result JSON contains only value-free replay counts/domains/origins. Cookie and localStorage values are not written to observations, prompt-visible artifacts, HAR downloads, object-storage references, or collected artifacts.
+
+Fresh full-Docker evidence: focused kernel/container tests passed 39/39, compose overlay validation passed, the full-compose backend rebuilt with an in-image Maven `BUILD SUCCESS`, and `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-session-replay-smoke` passed 25/25. The smoke verified request-scoped replay of a real fixture cookie plus localStorage value, restored authenticated and localStorage-dependent page output, governed JSON/HAR downloads without value leakage, replay input staying out of `sa_sandbox_artifact`, browser profile network restore, no leftover managed sandbox containers, and zero non-terminal sandbox sessions.
+
+This completes explicit request-scoped one-run session-state replay. Replaying captured SECRET/BLOCKED artifacts, credential storage, operator approval UX, and long-lived browser profile management remain follow-up production work.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

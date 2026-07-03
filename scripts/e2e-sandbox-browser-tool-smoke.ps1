@@ -285,7 +285,7 @@ class Handler(BaseHTTPRequestHandler):
         body = f"""<!doctype html>
 <html>
 <head><title>External {MARKER}</title></head>
-<body><main><h1>{MARKER}</h1><p>Seahorse browser sandbox URL mode marker.</p>{auth_html}</main><script>localStorage.setItem("seahorse_session_marker", "{STORAGE_VALUE}");</script></body>
+<body><main><h1>{MARKER}</h1><p>Seahorse browser sandbox URL mode marker.</p>{auth_html}<p id="storage-status"></p></main><script>const restored = localStorage.getItem("seahorse_session_marker"); document.getElementById("storage-status").textContent = restored ? "storage-restored" : "storage-missing"; localStorage.setItem("seahorse_session_marker", "{STORAGE_VALUE}");</script></body>
 </html>
 """.encode("utf-8")
         self.send_response(200)
@@ -710,6 +710,143 @@ try {
         }
     } | Out-Null
 
+    $replayObservation = Test-Step "Invoke sandbox_browser URL mode with request session state replay" {
+        $replayRunId = "sandbox-browser-replay-run-$suffix"
+        $replayToolCallId = "sandbox-browser-replay-call-$suffix"
+        $externalOrigin = "http://${ExternalHost}:$ExternalPort"
+        $sessionState = @{
+            cookies = @(
+                @{
+                    name = $externalCookieName
+                    value = $externalCookieValue
+                    domain = $ExternalHost
+                    path = "/"
+                    expires = -1
+                    httpOnly = $true
+                    secure = $false
+                    sameSite = "Lax"
+                }
+            )
+            origins = @(
+                @{
+                    origin = $externalOrigin
+                    localStorage = @(
+                        @{
+                            name = "seahorse_session_marker"
+                            value = $externalStorageValue
+                        }
+                    )
+                }
+            )
+        }
+        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_browser/invoke" -Headers $headers -Body @{
+            runId = $replayRunId
+            stepId = "sandbox-browser-replay-step-$suffix"
+            toolCallId = $replayToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                action = "snapshot"
+                url = $externalUrl
+                allowedHosts = @($ExternalHost)
+                sessionState = $sessionState
+                viewportWidth = 1024
+                viewportHeight = 640
+                screenshot = $true
+                har = $true
+                video = $false
+                captureSessionState = $false
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${replayRunId}:${replayToolCallId}"
+            allowedToolIds = @("sandbox_browser")
+        }
+        Assert-ApiOk $response "Invoke sandbox_browser URL mode session replay"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_browser URL mode session replay failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "BROWSER_AUTOMATION" -or "$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected succeeded BROWSER_AUTOMATION replay execution: $content"
+        }
+        if ($parsed.browser.networkAllowed -ne $true) {
+            throw "Expected browser.networkAllowed=true for replay URL mode: $content"
+        }
+        if ([int]$parsed.browser.cookieCount -ne 0) {
+            throw "Expected no explicit cookie metadata for session replay request: $content"
+        }
+        if ($parsed.browser.sessionState.replayRequested -ne $true -or $parsed.browser.sessionState.captureRequested -ne $false) {
+            throw "Expected replay-only sessionState metadata: $content"
+        }
+        if ($content -like "*$externalCookieValue*" -or $content -like "*$externalStorageValue*") {
+            throw "Browser replay observation leaked session values: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 3) {
+            throw "Expected replay result JSON, screenshot, and HAR artifacts only: $content"
+        }
+        $jsonArtifacts = @($artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" })
+        $harArtifacts = @($artifacts | Where-Object { "$($_.mediaType)" -eq "application/har+json" })
+        if ($jsonArtifacts.Count -ne 1 -or $harArtifacts.Count -ne 1) {
+            throw "Expected one replay JSON artifact and one replay HAR artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $replayObservation) { exit 1 }
+
+    $replaySessionId = "$($replayObservation.sessionId)"
+    $replayJsonArtifactId = "$(@($replayObservation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" })[0].artifactId)"
+    $replayHarArtifactId = "$(@($replayObservation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/har+json" })[0].artifactId)"
+
+    Test-Step "Download governed replay browser JSON artifact" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$replayJsonArtifactId/download" -Headers $headers
+        if ($content -notlike "*$externalAuthMarker*") {
+            throw "Replay browser result did not use restored cookie auth marker: $content"
+        }
+        if ($content -notlike "*storage-restored*") {
+            throw "Replay browser result did not show restored localStorage marker: $content"
+        }
+        if ($content -like "*$externalCookieValue*" -or $content -like "*$externalStorageValue*") {
+            throw "Replay browser result leaked session values: $content"
+        }
+        if ($content -notlike "*`"replayed`": true*" -and $content -notlike "*`"replayed`":true*") {
+            throw "Replay browser result did not include safe replay metadata: $content"
+        }
+        if ($content -notlike "*localStorageCount*") {
+            throw "Replay browser result did not include value-free localStorage count: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Replay browser result leaked storage reference: $content"
+        }
+    } | Out-Null
+
+    Test-Step "Download governed replay browser HAR artifact" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$replayHarArtifactId/download" -Headers $headers
+        $har = $content | ConvertFrom-Json
+        $entries = @($har.log.entries)
+        $mainRequests = @($entries | Where-Object { "$($_.request.url)" -eq $externalUrl })
+        if ($mainRequests.Count -lt 1 -or [int]$mainRequests[0].response.status -ne 200 -or $mainRequests[0]._blocked -eq $true) {
+            throw "Replay HAR did not contain an allowed 200 main request: $content"
+        }
+        if ($content -like "*$externalCookieValue*" -or $content -like "*$externalStorageValue*") {
+            throw "Replay HAR leaked session values: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Replay HAR leaked storage reference: $content"
+        }
+    } | Out-Null
+
+    Test-Step "Verify request session state replay inputs stay transient" {
+        $safeReplaySessionId = $replaySessionId.Replace("'", "''")
+        $transientCount = Invoke-PostgresScalar "SELECT count(*) FROM sa_sandbox_artifact WHERE session_id = '$safeReplaySessionId' AND (object_uri LIKE '%browser-session-state-input.json' OR object_uri LIKE '%browser-session-state.json' OR object_uri LIKE '%browser-session-summary.json');"
+        if ([int]$transientCount -ne 0) {
+            throw "Expected no collected session-state artifacts for replay-only request but got $transientCount"
+        }
+    } | Out-Null
+
     Test-Step "Restore browser runtime profile network deny" {
         $response = Invoke-Json -Method POST -Path "/api/sandbox/runtime/profile-policies" -Headers $headers -Body @{
             tenantId = "default"
@@ -894,6 +1031,9 @@ try {
     Write-Host "URL Session Summary Artifact: $urlSessionSummaryArtifactId"
     Write-Host "URL Session State Artifact: $urlSessionStateArtifactId"
     Write-Host "URL HAR Artifact: $urlHarArtifactId"
+    Write-Host "Replay URL Session: $replaySessionId"
+    Write-Host "Replay URL Result Artifact: $replayJsonArtifactId"
+    Write-Host "Replay URL HAR Artifact: $replayHarArtifactId"
 } catch {
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Error $_.Exception.Message
