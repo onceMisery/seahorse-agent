@@ -27,6 +27,7 @@ public record SandboxArtifactScannerPolicy(String scannerId,
                                            int maxBinarySignatureScanBytes,
                                            int maxArchiveScanEntries,
                                            int maxArchiveEntryScanBytes,
+                                           long maxCompressedArchiveDecompressedBytes,
                                            List<String> promptSafeMediaTypes,
                                            List<String> downloadOnlyMediaTypes,
                                            List<String> contentScannedMediaTypes,
@@ -43,6 +44,7 @@ public record SandboxArtifactScannerPolicy(String scannerId,
         maxBinarySignatureScanBytes = Math.max(maxBinarySignatureScanBytes, 0);
         maxArchiveScanEntries = Math.max(maxArchiveScanEntries, 0);
         maxArchiveEntryScanBytes = Math.max(maxArchiveEntryScanBytes, 0);
+        maxCompressedArchiveDecompressedBytes = Math.max(maxCompressedArchiveDecompressedBytes, 0L);
         promptSafeMediaTypes = copy(promptSafeMediaTypes);
         downloadOnlyMediaTypes = copy(downloadOnlyMediaTypes);
         contentScannedMediaTypes = copy(contentScannedMediaTypes);
@@ -63,6 +65,7 @@ public record SandboxArtifactScannerPolicy(String scannerId,
                 0,
                 0,
                 0,
+                0L,
                 List.of(),
                 List.of(),
                 List.of(),

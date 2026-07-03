@@ -332,6 +332,7 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data.rawFindingValuesPersisted").value(false))
                 .andExpect(jsonPath("$.data.maxContentScanBytes").value(262144))
                 .andExpect(jsonPath("$.data.maxArchiveScanEntries").value(128))
+                .andExpect(jsonPath("$.data.maxCompressedArchiveDecompressedBytes").value(33554432))
                 .andExpect(jsonPath("$.data.downloadOnlyMediaTypes[0]").value("application/zip"))
                 .andExpect(jsonPath("$.data.blockedCategories[0]").value("OFFICE_MACRO"))
                 .andExpect(jsonPath("$.data.unsupportedCapabilities[0]").value("external virus scanning"));
@@ -542,6 +543,7 @@ class SeahorseSandboxControllerTests {
                 262144,
                 128,
                 262144,
+                33554432L,
                 List.of("application/json", "text/*"),
                 List.of("application/zip", "video/webm"),
                 List.of("application/json", "text/*"),

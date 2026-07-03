@@ -609,6 +609,9 @@ try {
         if ([int]$response.data.maxContentScanBytes -ne 262144 -or [int]$response.data.maxArchiveScanEntries -ne 128) {
             throw "Expected scanner byte/entry limits: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
+        if ([int64]$response.data.maxCompressedArchiveDecompressedBytes -ne 33554432) {
+            throw "Expected scanner compressed archive decompressed byte limit: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
         $downloadOnlyMediaTypes = @($response.data.downloadOnlyMediaTypes)
         if ($downloadOnlyMediaTypes -notcontains "application/gzip" -or $downloadOnlyMediaTypes -notcontains "application/x-gzip" -or $downloadOnlyMediaTypes -notcontains "application/zip" -or $downloadOnlyMediaTypes -notcontains "application/x-tar" -or $downloadOnlyMediaTypes -notcontains "video/webm") {
             throw "Expected governed download-only media types in scanner policy: $($response.data | ConvertTo-Json -Depth 20 -Compress)"

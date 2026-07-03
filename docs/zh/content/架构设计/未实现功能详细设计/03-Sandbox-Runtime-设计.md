@@ -593,6 +593,14 @@ Runtime artifact media detection now maps `.tar.gz` and `.tgz` to `application/g
 
 Fresh full-Docker evidence: focused kernel/container regression passed 106/106 with reactor `BUILD SUCCESS`, compose overlay validation passed, the backend rebuilt through the local 7890 proxy path with an in-image Maven `BUILD SUCCESS` after one transient proxy TLS EOF retry, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-targz-archive-smoke-review` passed 43/43. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and backend health `UP`.
 
+### 2026-07-04 Update: sandbox artifact scanner compressed archive budget visibility
+
+The sandbox runtime scanner policy now exposes the compressed archive decompression budget as `maxCompressedArchiveDecompressedBytes`. The default local bounded scanner reports the TAR.GZ decompression ceiling as `33554432` bytes, `GET /api/sandbox/runtime/artifact-scanner-policy` returns the value, and the admin Sandbox Runtime governance panel includes it in the scanner window summary beside the text scan byte and archive entry limits.
+
+This is policy/API/operator visibility only. It does not change scanner behavior, the TAR.GZ decompression budget itself, mutable scanner policy handling, recursive extraction, generic gzip scanning, external scanner integration, prompt visibility, or download eligibility.
+
+Fresh full-Docker evidence: focused Java/Web regression passed with reactor `BUILD SUCCESS`, frontend contracts passed 10/10, frontend build completed with existing warnings, compose overlay validation passed, the backend rebuilt through the local 7890 proxy path with an in-image Maven `BUILD SUCCESS`, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-scanner-compressed-budget-smoke` passed 43/43 with the live scanner-policy assertion for `maxCompressedArchiveDecompressedBytes=33554432`. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and backend health `UP`.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

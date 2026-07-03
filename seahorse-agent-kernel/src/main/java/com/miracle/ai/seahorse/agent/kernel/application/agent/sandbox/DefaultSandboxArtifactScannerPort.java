@@ -209,6 +209,7 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                 MAX_BINARY_SIGNATURE_SCAN_BYTES,
                 MAX_ARCHIVE_SCAN_ENTRIES,
                 MAX_ARCHIVE_ENTRY_SCAN_BYTES,
+                MAX_COMPRESSED_ARCHIVE_DECOMPRESSED_BYTES,
                 promptSafeMediaTypes(),
                 sorted(DOWNLOAD_ONLY_EXACT_MEDIA_TYPES),
                 List.of(

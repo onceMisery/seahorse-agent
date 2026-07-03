@@ -126,6 +126,7 @@ export interface SandboxArtifactScannerPolicy {
   maxBinarySignatureScanBytes?: number;
   maxArchiveScanEntries?: number;
   maxArchiveEntryScanBytes?: number;
+  maxCompressedArchiveDecompressedBytes?: number;
   promptSafeMediaTypes?: string[];
   downloadOnlyMediaTypes?: string[];
   contentScannedMediaTypes?: string[];

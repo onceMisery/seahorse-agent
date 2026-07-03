@@ -157,7 +157,7 @@ function previewList(values?: string[], limit = 4) {
 
 function formatScannerWindow(policy?: SandboxArtifactScannerPolicy | null) {
   if (!policy) return "-";
-  return `${formatBytes(policy.maxContentScanBytes)} text / ${policy.maxArchiveScanEntries ?? 0} entries`;
+  return `${formatBytes(policy.maxContentScanBytes)} text / ${policy.maxArchiveScanEntries ?? 0} entries / ${formatBytes(policy.maxCompressedArchiveDecompressedBytes)} compressed`;
 }
 
 function optionalDraftNumber(value: string, label: string, options: { integer?: boolean; max?: number } = {}) {

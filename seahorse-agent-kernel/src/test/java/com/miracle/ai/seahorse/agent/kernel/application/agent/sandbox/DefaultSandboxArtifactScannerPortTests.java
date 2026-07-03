@@ -63,6 +63,7 @@ class DefaultSandboxArtifactScannerPortTests {
         assertEquals(256 * 1024, policy.maxBinarySignatureScanBytes());
         assertEquals(128, policy.maxArchiveScanEntries());
         assertEquals(256 * 1024, policy.maxArchiveEntryScanBytes());
+        assertEquals(32L * 1024L * 1024L, policy.maxCompressedArchiveDecompressedBytes());
         assertTrue(policy.promptSafeMediaTypes().contains("text/*"));
         assertTrue(policy.downloadOnlyMediaTypes().contains("application/gzip"));
         assertTrue(policy.downloadOnlyMediaTypes().contains("application/x-gzip"));
