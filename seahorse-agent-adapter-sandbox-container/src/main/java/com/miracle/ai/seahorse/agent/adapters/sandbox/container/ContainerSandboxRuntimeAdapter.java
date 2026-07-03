@@ -45,6 +45,7 @@ import java.nio.file.attribute.FileTime;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -64,6 +65,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final String TXT_FORMAT = "txt";
     private static final String HTML_FORMAT = "html";
     private static final String MARKDOWN_FORMAT = "markdown";
+    private static final String DOCX_FORMAT = "docx";
+    private static final String BASE64_ENCODING = "base64";
+    private static final String PLAIN_ENCODING = "plain";
     private static final String BROWSER_ACTION_SNAPSHOT = "snapshot";
     private static final String BROWSER_ACTION_EXTRACT_TEXT = "extract_text";
     private static final String CONTAINER_WORKSPACE = "/workspace";
@@ -230,10 +234,14 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             FileConversionRequest request = parseFileConversionRequest(input);
             Path inputPath = safeWorkspace.resolve(fileConversionInputName(request.sourceFormat()));
             Files.writeString(safeWorkspace.resolve(SCRIPT_NAME), fileConversionScript(request), StandardCharsets.UTF_8);
-            Files.writeString(
-                    inputPath,
-                    request.content(),
-                    StandardCharsets.UTF_8);
+            if (BASE64_ENCODING.equals(request.contentEncoding())) {
+                Files.write(inputPath, decodeBase64Content(request.content()));
+            } else {
+                Files.writeString(
+                        inputPath,
+                        request.content(),
+                        StandardCharsets.UTF_8);
+            }
             return Set.of(
                     safeWorkspace.resolve(SCRIPT_NAME),
                     inputPath);
@@ -257,9 +265,16 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         JsonNode root = objectMapper.readTree(nullToEmpty(input));
         String sourceFormat = normalizedFormat(root.path("sourceFormat").asText());
         String targetFormat = normalizedFormat(root.path("targetFormat").asText());
+        String contentEncoding = normalizedContentEncoding(root.path("contentEncoding").asText(PLAIN_ENCODING));
         if (!isSupportedFileConversion(sourceFormat, targetFormat)) {
             throw new UnsupportedFileConversionException(
-                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, and markdown/md to html/txt only");
+                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, and docx to txt only");
+        }
+        if (DOCX_FORMAT.equals(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
+            throw new IllegalArgumentException("docx file conversion contentEncoding must be base64");
+        }
+        if (!DOCX_FORMAT.equals(sourceFormat) && BASE64_ENCODING.equals(contentEncoding)) {
+            throw new IllegalArgumentException("base64 contentEncoding is only supported for docx input");
         }
         String content = root.path("content").asText("");
         if (!hasText(content)) {
@@ -269,7 +284,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             throw new IllegalArgumentException(
                     "file conversion content exceeds " + MAX_FILE_CONVERSION_CONTENT_CHARS + " chars");
         }
-        return new FileConversionRequest(sourceFormat, targetFormat, content);
+        return new FileConversionRequest(sourceFormat, targetFormat, contentEncoding, content);
     }
 
     private BrowserAutomationRequest parseBrowserAutomationRequest(String input) throws IOException {
@@ -525,6 +540,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 import html
                 import json
                 import re
+                import xml.etree.ElementTree as ET
+                import zipfile
                 from html.parser import HTMLParser
                 from pathlib import Path
 
@@ -666,6 +683,25 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     output.extend(["</body></html>", ""])
                     return "\\n".join(output)
 
+                def docx_to_text(path):
+                    with zipfile.ZipFile(path) as archive:
+                        try:
+                            document_xml = archive.read("word/document.xml")
+                        except KeyError as exc:
+                            raise ValueError("docx word/document.xml not found") from exc
+                    root = ET.fromstring(document_xml)
+                    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+                    paragraphs = []
+                    for paragraph in root.findall(".//w:p", ns):
+                        parts = []
+                        for node in paragraph.findall(".//w:t", ns):
+                            if node.text:
+                                parts.append(node.text)
+                        text = "".join(parts).strip()
+                        if text:
+                            paragraphs.append(text)
+                    return "\\n".join(paragraphs) + ("\\n" if paragraphs else "")
+
                 if target_format == "json" and source_format in ("csv", "tsv"):
                     with input_path.open("r", encoding="utf-8-sig", newline="") as source:
                         reader = csv.DictReader(source, delimiter=delimiter(source_format))
@@ -699,6 +735,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     raw = input_path.read_text(encoding="utf-8-sig")
                     output_path.write_text(html_to_text(markdown_to_html(raw)), encoding="utf-8")
                     print(f"converted markdown document to text")
+                elif source_format == "docx" and target_format == "txt":
+                    output_path.write_text(docx_to_text(input_path), encoding="utf-8")
+                    print(f"converted docx document to text")
                 else:
                     raise ValueError(f"unsupported conversion: {source_format} to {target_format}")
                 """.formatted(
@@ -714,7 +753,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || (TXT_FORMAT.equals(sourceFormat) && HTML_FORMAT.equals(targetFormat))
                 || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
                 || (MARKDOWN_FORMAT.equals(sourceFormat)
-                && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)));
+                && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
+                || (DOCX_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat));
     }
 
     private boolean isDelimitedFileFormat(String format) {
@@ -726,6 +766,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             case MARKDOWN_FORMAT -> "md";
             case TXT_FORMAT -> "txt";
             case HTML_FORMAT -> "html";
+            case DOCX_FORMAT -> "docx";
             default -> sourceFormat;
         };
         return "input." + extension;
@@ -1365,6 +1406,14 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return "md".equals(normalized) ? MARKDOWN_FORMAT : normalized;
     }
 
+    private static String normalizedContentEncoding(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return PLAIN_ENCODING;
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        return BASE64_ENCODING.equals(normalized) ? BASE64_ENCODING : PLAIN_ENCODING;
+    }
+
     private static String normalizedBrowserAction(String value) {
         return value == null
                 ? ""
@@ -1382,6 +1431,14 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return value.trim();
     }
 
+    private static byte[] decodeBase64Content(String value) {
+        try {
+            return Base64.getDecoder().decode(nullToEmpty(value).trim());
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("file conversion content is not valid base64", ex);
+        }
+    }
+
     private static String stripTrailingSeparators(String value) {
         String result = Objects.requireNonNull(value, "value must not be null").trim();
         while (result.endsWith("/") || result.endsWith("\\")) {
@@ -1393,7 +1450,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return result;
     }
 
-    private record FileConversionRequest(String sourceFormat, String targetFormat, String content) {}
+    private record FileConversionRequest(String sourceFormat,
+                                         String targetFormat,
+                                         String contentEncoding,
+                                         String content) {}
 
     private record BrowserAutomationRequest(String action,
                                             String html,

@@ -40,6 +40,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 
@@ -269,6 +270,41 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldRunDocxToTextFileConversionAndCollectTextOutputOnly() throws Exception {
+        String docxBase64 = Base64.getEncoder().encodeToString("fake-docx-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted docx document to text\n", Duration.ofMillis(190)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("docx_to_text", "source_format = \"docx\"", "converted.txt")
+                            .doesNotContain(docxBase64);
+                    assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.docx")))
+                            .isEqualTo("fake-docx-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    Files.writeString(command.workingDirectory().resolve("converted.txt"),
+                            "Sandbox DOCX marker\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"docx","targetFormat":"txt","contentEncoding":"base64","content":"%s"}
+                        """.formatted(docxBase64),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted docx document to text");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.txt");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/plain");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.docx"));
+    }
+
+    @Test
     void shouldRunBrowserAutomationWithGeneratedPlaywrightScriptAndCollectOnlyOutputs() throws Exception {
         String html = "<!doctype html><html><head><title>Browser Smoke</title></head><body><main>browser marker</main></body></html>";
         RecordingRunner runner = new RecordingRunner(
@@ -355,7 +391,7 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED);
         assertThat(result.execution().resultSummary())
-                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, and markdown/md to html/txt only");
+                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, and docx to txt only");
         assertThat(runner.lastCommand).isNull();
     }
 

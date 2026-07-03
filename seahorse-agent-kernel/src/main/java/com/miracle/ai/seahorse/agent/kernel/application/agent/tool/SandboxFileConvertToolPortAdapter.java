@@ -46,19 +46,23 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
     private static final String SOURCE_FORMAT_ARGUMENT = "sourceFormat";
     private static final String TARGET_FORMAT_ARGUMENT = "targetFormat";
     private static final String CONTENT_ARGUMENT = "content";
+    private static final String CONTENT_ENCODING_ARGUMENT = "contentEncoding";
+    private static final String BASE64_ENCODING = "base64";
+    private static final String PLAIN_ENCODING = "plain";
     private static final String CSV_FORMAT = "csv";
     private static final String TSV_FORMAT = "tsv";
     private static final String JSON_FORMAT = "json";
     private static final String TXT_FORMAT = "txt";
     private static final String HTML_FORMAT = "html";
     private static final String MARKDOWN_FORMAT = "markdown";
+    private static final String DOCX_FORMAT = "docx";
     private static final Set<String> DELIMITED_FORMATS = Set.of(CSV_FORMAT, TSV_FORMAT);
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
             "Sandbox File Convert",
-            "Convert bounded file content through the Seahorse sandbox runtime. Supports CSV/TSV to JSON, JSON to CSV/TSV, text to HTML, HTML to text, and Markdown to HTML/text with network disabled.",
+            "Convert bounded file content through the Seahorse sandbox runtime. Supports CSV/TSV to JSON, JSON to CSV/TSV, text to HTML, HTML to text, Markdown to HTML/text, and base64 DOCX to text with network disabled.",
             """
-                    {"type":"object","required":["sourceFormat","targetFormat","content"],"properties":{"sourceFormat":{"type":"string","enum":["csv","tsv","json","txt","html","markdown","md"]},"targetFormat":{"type":"string","enum":["json","csv","tsv","txt","html"]},"content":{"type":"string","minLength":1,"maxLength":262144}}}
+                    {"type":"object","required":["sourceFormat","targetFormat","content"],"properties":{"sourceFormat":{"type":"string","enum":["csv","tsv","json","txt","html","markdown","md","docx"]},"targetFormat":{"type":"string","enum":["json","csv","tsv","txt","html"]},"contentEncoding":{"type":"string","enum":["plain","base64"],"default":"plain","description":"Use base64 for binary DOCX input; plain is used for text inputs."},"content":{"type":"string","minLength":1,"maxLength":262144}}}
                     """);
 
     private final SandboxRuntimeInboundPort sandboxRuntime;
@@ -100,10 +104,19 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
         ToolInvocationRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
         String sourceFormat = normalizedFormat(jsonSupport.string(safeRequest.arguments(), SOURCE_FORMAT_ARGUMENT));
         String targetFormat = normalizedFormat(jsonSupport.string(safeRequest.arguments(), TARGET_FORMAT_ARGUMENT));
+        String contentEncoding = normalizedContentEncoding(jsonSupport.string(
+                safeRequest.arguments(),
+                CONTENT_ENCODING_ARGUMENT));
         String content = argumentStringPreservingWhitespace(safeRequest.arguments(), CONTENT_ARGUMENT);
         if (!isSupportedConversion(sourceFormat, targetFormat)) {
             return ToolInvocationResult.failed(
-                    "sandbox_file_convert failed: supported conversions are csv/tsv to json, json to csv/tsv, txt to html, html to txt, and markdown/md to html/txt");
+                    "sandbox_file_convert failed: supported conversions are csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, and docx to txt");
+        }
+        if (DOCX_FORMAT.equals(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
+            return ToolInvocationResult.failed("sandbox_file_convert failed: docx contentEncoding must be base64");
+        }
+        if (!DOCX_FORMAT.equals(sourceFormat) && BASE64_ENCODING.equals(contentEncoding)) {
+            return ToolInvocationResult.failed("sandbox_file_convert failed: base64 contentEncoding is only supported for docx input");
         }
         if (content.isBlank()) {
             return ToolInvocationResult.failed("sandbox_file_convert failed: content is required");
@@ -121,12 +134,12 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
                     false,
                     List.of()));
             if (session.status().isTerminal()) {
-                return failed(observation(session, null, List.of(), sourceFormat, targetFormat),
+                return failed(observation(session, null, List.of(), sourceFormat, targetFormat, contentEncoding),
                         "sandbox file conversion session did not start: " + session.reasonCode());
             }
             SandboxExecutionResult result = sandboxRuntime.execute(new SandboxExecutionCommand(
                     session.sessionId(),
-                    conversionInput(sourceFormat, targetFormat, content),
+                    conversionInput(sourceFormat, targetFormat, content, contentEncoding),
                     false,
                     List.of()));
             Map<String, Object> observation = observation(
@@ -134,7 +147,8 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
                     result.execution(),
                     result.artifacts(),
                     sourceFormat,
-                    targetFormat);
+                    targetFormat,
+                    contentEncoding);
             if (result.execution().status() == SandboxExecutionStatus.SUCCEEDED) {
                 return ToolInvocationResult.ok(jsonSupport.write(observation));
             }
@@ -148,10 +162,11 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
         }
     }
 
-    private String conversionInput(String sourceFormat, String targetFormat, String content) {
+    private String conversionInput(String sourceFormat, String targetFormat, String content, String contentEncoding) {
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("sourceFormat", sourceFormat);
         request.put("targetFormat", targetFormat);
+        request.put("contentEncoding", contentEncoding);
         request.put("content", content);
         return jsonSupport.write(request);
     }
@@ -165,7 +180,8 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
                                             SandboxExecution execution,
                                             List<SandboxArtifact> artifacts,
                                             String sourceFormat,
-                                            String targetFormat) {
+                                            String targetFormat,
+                                            String contentEncoding) {
         Map<String, Object> observation = new LinkedHashMap<>();
         observation.put("toolId", TOOL_ID);
         observation.put("sessionId", session == null ? null : session.sessionId());
@@ -176,15 +192,16 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
         observation.put("executionStatus", execution == null ? null : execution.status().name());
         observation.put("reasonCode", execution == null ? null : execution.reasonCode().name());
         observation.put("resultSummary", execution == null ? null : execution.resultSummary());
-        observation.put("conversion", conversion(sourceFormat, targetFormat));
+        observation.put("conversion", conversion(sourceFormat, targetFormat, contentEncoding));
         observation.put("artifacts", artifacts(artifacts));
         return observation;
     }
 
-    private Map<String, Object> conversion(String sourceFormat, String targetFormat) {
+    private Map<String, Object> conversion(String sourceFormat, String targetFormat, String contentEncoding) {
         Map<String, Object> conversion = new LinkedHashMap<>();
         conversion.put("sourceFormat", sourceFormat);
         conversion.put("targetFormat", targetFormat);
+        conversion.put("contentEncoding", contentEncoding);
         return conversion;
     }
 
@@ -233,13 +250,22 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
         return "md".equals(normalized) ? MARKDOWN_FORMAT : normalized;
     }
 
+    private String normalizedContentEncoding(String value) {
+        if (value == null || value.isBlank()) {
+            return PLAIN_ENCODING;
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        return BASE64_ENCODING.equals(normalized) ? BASE64_ENCODING : PLAIN_ENCODING;
+    }
+
     private boolean isSupportedConversion(String sourceFormat, String targetFormat) {
         return (DELIMITED_FORMATS.contains(sourceFormat) && JSON_FORMAT.equals(targetFormat))
                 || (JSON_FORMAT.equals(sourceFormat) && DELIMITED_FORMATS.contains(targetFormat))
                 || (TXT_FORMAT.equals(sourceFormat) && HTML_FORMAT.equals(targetFormat))
                 || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
                 || (MARKDOWN_FORMAT.equals(sourceFormat)
-                && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)));
+                && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
+                || (DOCX_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat));
     }
 
     private static boolean hasText(String value) {

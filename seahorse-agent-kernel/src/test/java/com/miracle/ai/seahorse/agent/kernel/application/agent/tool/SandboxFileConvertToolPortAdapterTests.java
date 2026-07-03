@@ -70,9 +70,13 @@ class SandboxFileConvertToolPortAdapterTests {
         assertTrue(schema.contains("\"html\""));
         assertTrue(schema.contains("\"markdown\""));
         assertTrue(schema.contains("\"md\""));
+        assertTrue(schema.contains("\"docx\""));
+        assertTrue(schema.contains("\"contentEncoding\""));
+        assertTrue(schema.contains("\"base64\""));
         assertTrue(adapter.descriptor().description().contains("CSV/TSV to JSON"));
         assertTrue(adapter.descriptor().description().contains("JSON to CSV/TSV"));
         assertTrue(adapter.descriptor().description().contains("Markdown to HTML/text"));
+        assertTrue(adapter.descriptor().description().contains("base64 DOCX to text"));
     }
 
     @Test
@@ -271,6 +275,71 @@ class SandboxFileConvertToolPortAdapterTests {
         assertEquals("text/html", root.path("artifacts").get(0).path("mediaType").asText());
         assertEquals("metadata scan passed", root.path("artifacts").get(0).path("scanSummary").asText());
         assertTrue(root.path("artifacts").get(0).path("promptVisible").asBoolean());
+    }
+
+    @Test
+    void shouldExecuteDocxToTextThroughFileConversionRuntimeWithBase64Input() throws Exception {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
+                new SandboxExecution(
+                        "exec-1",
+                        "session-1",
+                        SandboxRuntimeType.FILE_CONVERSION,
+                        SandboxExecutionStatus.SUCCEEDED,
+                        "exitCode=0; stdout=converted docx document to text",
+                        SandboxPolicyReasonCode.VALID_REQUEST,
+                        NOW,
+                        NOW),
+                List.of(new SandboxArtifact(
+                        "artifact-1",
+                        "session-1",
+                        "exec-1",
+                        "local://sandbox-artifacts/converted.txt",
+                        "text/plain",
+                        SandboxArtifactScanStatus.CLEAN,
+                        ContextSensitivity.INTERNAL,
+                        "metadata scan passed",
+                        NOW))));
+        SandboxFileConvertToolPortAdapter adapter = new SandboxFileConvertToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "sourceFormat", "docx",
+                "targetFormat", "txt",
+                "contentEncoding", "base64",
+                "content", "UEsDBAo=")));
+
+        assertTrue(result.success());
+        assertEquals(SandboxRuntimeType.FILE_CONVERSION, runtime.createCommand.runtimeType());
+        assertFalse(runtime.createCommand.networkRequested());
+        assertFalse(runtime.executeCommand.networkRequested());
+        assertEquals("session-1", runtime.closedSessionId);
+
+        JsonNode conversionInput = objectMapper.readTree(runtime.executeCommand.input());
+        assertEquals("docx", conversionInput.path("sourceFormat").asText());
+        assertEquals("txt", conversionInput.path("targetFormat").asText());
+        assertEquals("base64", conversionInput.path("contentEncoding").asText());
+        assertEquals("UEsDBAo=", conversionInput.path("content").asText());
+
+        JsonNode root = objectMapper.readTree(result.content());
+        assertEquals("docx", root.path("conversion").path("sourceFormat").asText());
+        assertEquals("txt", root.path("conversion").path("targetFormat").asText());
+        assertEquals("base64", root.path("conversion").path("contentEncoding").asText());
+        assertEquals("text/plain", root.path("artifacts").get(0).path("mediaType").asText());
+        assertTrue(root.path("artifacts").get(0).path("promptVisible").asBoolean());
+    }
+
+    @Test
+    void shouldRejectDocxWithoutBase64EncodingBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxFileConvertToolPortAdapter adapter = new SandboxFileConvertToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "sourceFormat", "docx",
+                "targetFormat", "txt",
+                "content", "not-a-docx")));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("docx contentEncoding must be base64"));
+        assertEquals(0, runtime.createCalls);
     }
 
     @Test

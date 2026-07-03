@@ -154,6 +154,67 @@ function Invoke-PostgresScalar {
     return $rows[0]
 }
 
+function Add-ZipTextEntry {
+    param(
+        [System.IO.Compression.ZipArchive]$Archive,
+        [string]$Name,
+        [string]$Content
+    )
+    $entry = $Archive.CreateEntry($Name)
+    $stream = $entry.Open()
+    $writer = [System.IO.StreamWriter]::new($stream, [System.Text.UTF8Encoding]::new($false))
+    try {
+        $writer.Write($Content)
+    } finally {
+        $writer.Dispose()
+        $stream.Dispose()
+    }
+}
+
+function New-DocxBase64 {
+    param([string[]]$Paragraphs)
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $tempPath = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "seahorse-docx-$([guid]::NewGuid().ToString('N')).docx")
+    $fileStream = [System.IO.File]::Open($tempPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite)
+    $archive = [System.IO.Compression.ZipArchive]::new($fileStream, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        Add-ZipTextEntry -Archive $archive -Name "[Content_Types].xml" -Content @'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>
+'@
+        Add-ZipTextEntry -Archive $archive -Name "_rels/.rels" -Content @'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>
+'@
+        $body = ($Paragraphs | ForEach-Object {
+                $escaped = [System.Security.SecurityElement]::Escape($_)
+                "<w:p><w:r><w:t>$escaped</w:t></w:r></w:p>"
+            }) -join ""
+        $documentXml = @"
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>$body</w:body>
+</w:document>
+"@
+        Add-ZipTextEntry -Archive $archive -Name "word/document.xml" -Content $documentXml
+    } finally {
+        $archive.Dispose()
+        $fileStream.Dispose()
+    }
+    try {
+        return [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($tempPath))
+    } finally {
+        Remove-Item -LiteralPath $tempPath -ErrorAction SilentlyContinue
+    }
+}
+
 try {
     if (-not $SkipHealth) {
         Test-Step "Wait for backend health" {
@@ -609,6 +670,142 @@ try {
             & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
             if ($LASTEXITCODE -ne 0) {
                 throw "Stored Markdown to HTML object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
+    $docxRunId = "sandbox-file-convert-docx-txt-run-$suffix"
+    $docxToolCallId = "sandbox-file-convert-docx-txt-call-$suffix"
+    $docxContent = New-DocxBase64 -Paragraphs @(
+        "Sandbox DOCX $Marker",
+        "DOCX conversion preserves paragraph text"
+    )
+
+    $docxObservation = Test-Step "Invoke sandbox_file_convert DOCX to TXT through Tool Gateway" {
+        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_file_convert/invoke" -Headers $headers -Body @{
+            runId = $docxRunId
+            stepId = "sandbox-file-convert-docx-txt-step-$suffix"
+            toolCallId = $docxToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "docx"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $docxContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${docxRunId}:${docxToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        Assert-ApiOk $response "Invoke sandbox_file_convert DOCX to TXT"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert DOCX to TXT failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION") {
+            throw "Expected FILE_CONVERSION runtime for DOCX to TXT: $content"
+        }
+        if ("$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected SUCCEEDED DOCX to TXT execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "docx" -or "$($parsed.conversion.targetFormat)" -ne "txt" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected DOCX to TXT conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1) {
+            throw "Expected one DOCX to TXT artifact: $content"
+        }
+        if ("$($artifacts[0].mediaType)" -ne "text/plain") {
+            throw "Expected TXT artifact mediaType: $content"
+        }
+        if ("$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected CLEAN DOCX to TXT artifact scan status: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed") {
+            throw "Expected DOCX to TXT metadata scan summary: $content"
+        }
+        if ($artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible DOCX to TXT artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $docxObservation) { exit 1 }
+
+    $docxSessionId = "$($docxObservation.sessionId)"
+    $docxArtifactId = "$(@($docxObservation.artifacts)[0].artifactId)"
+
+    $docxObjectUri = Test-Step "Verify persisted DOCX to TXT session and artifact" {
+        $safeSessionId = $docxSessionId.Replace("'", "''")
+        $sessionRow = Invoke-PostgresScalar "SELECT runtime_type, profile_id, status FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
+        $sessionParts = $sessionRow -split "`t"
+        if ($sessionParts.Count -ne 3) {
+            throw "Unexpected DOCX to TXT sa_sandbox_session row: $sessionRow"
+        }
+        if ($sessionParts[0] -ne "FILE_CONVERSION") {
+            throw "Expected DOCX to TXT runtime_type FILE_CONVERSION but got '$($sessionParts[0])'"
+        }
+        if ($sessionParts[1] -ne "file-conversion") {
+            throw "Expected DOCX to TXT profile_id file-conversion but got '$($sessionParts[1])'"
+        }
+        if ($sessionParts[2] -ne "CANCELLED") {
+            throw "Expected DOCX to TXT closed session status CANCELLED but got '$($sessionParts[2])'"
+        }
+
+        $safeArtifactId = $docxArtifactId.Replace("'", "''")
+        $artifactRow = Invoke-PostgresScalar "SELECT object_uri, media_type, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
+        $artifactParts = $artifactRow -split "`t"
+        if ($artifactParts.Count -ne 5) {
+            throw "Unexpected DOCX to TXT sa_sandbox_artifact row: $artifactRow"
+        }
+        if ($artifactParts[0] -like "file:*") {
+            throw "DOCX to TXT artifact still points at file URI: $($artifactParts[0])"
+        }
+        if ($ExpectedObjectUriPrefix -and $artifactParts[0] -notlike "$ExpectedObjectUriPrefix*") {
+            throw "Expected DOCX to TXT object_uri prefix '$ExpectedObjectUriPrefix' but got '$($artifactParts[0])'"
+        }
+        if ($artifactParts[1] -ne "text/plain") {
+            throw "Expected DOCX to TXT media_type text/plain but got '$($artifactParts[1])'"
+        }
+        if ($artifactParts[2] -ne "CLEAN") {
+            throw "Expected DOCX to TXT scan_status CLEAN but got '$($artifactParts[2])'"
+        }
+        if ($artifactParts[3] -ne "INTERNAL") {
+            throw "Expected DOCX to TXT sensitivity INTERNAL but got '$($artifactParts[3])'"
+        }
+        if ($artifactParts[4] -ne "metadata scan passed") {
+            throw "Expected DOCX to TXT scan_summary metadata scan passed but got '$($artifactParts[4])'"
+        }
+        $artifactParts[0]
+    }
+    if (-not $docxObjectUri) { exit 1 }
+
+    Test-Step "Download converted TXT through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$docxArtifactId/download" -Headers $headers
+        if ($content -notlike "*Sandbox DOCX $Marker*") {
+            throw "Downloaded TXT did not include marker '$Marker': $content"
+        }
+        if ($content -notlike "*DOCX conversion preserves paragraph text*") {
+            throw "Downloaded TXT did not include second paragraph: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded TXT artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($docxObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted TXT object exists in backend storage volume" {
+            $key = $docxObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote DOCX to TXT key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored DOCX to TXT object not found or marker missing at $path"
             }
         } | Out-Null
     }
