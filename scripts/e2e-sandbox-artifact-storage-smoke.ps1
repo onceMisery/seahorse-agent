@@ -11,6 +11,7 @@ param(
     [string]$SandboxWorkspaceRoot = "/var/lib/seahorse-sandbox",
     [string]$ExpectedObjectUriPrefix = "local://sandbox-artifacts/",
     [int]$ExpectedRuntimeActiveSessionLimit = 0,
+    [long]$ExpectedWorkspaceMinFreeBytes = 0,
     [switch]$VerifyCapacityAdmission,
     [switch]$UseScheduledSweep,
     [int]$ScheduledSweepWaitSeconds = 45,
@@ -375,6 +376,27 @@ try {
         }
         if ($response.data.workspaceAvailable -ne $true) {
             throw "Expected sandbox runtime workspaceAvailable=true: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($null -eq $response.data.PSObject.Properties["workspaceFreeBytes"]) {
+            throw "Sandbox runtime health did not include workspaceFreeBytes: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($null -eq $response.data.PSObject.Properties["workspaceMinFreeBytes"]) {
+            throw "Sandbox runtime health did not include workspaceMinFreeBytes: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($response.data.workspaceDiskAvailable -ne $true) {
+            throw "Expected sandbox runtime workspaceDiskAvailable=true: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $workspaceFreeBytes = [long]$response.data.workspaceFreeBytes
+        $workspaceMinFreeBytes = [long]$response.data.workspaceMinFreeBytes
+        if ($workspaceFreeBytes -lt 0) {
+            throw "Expected workspaceFreeBytes >= 0: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($workspaceMinFreeBytes -ne $ExpectedWorkspaceMinFreeBytes) {
+            throw "Expected workspaceMinFreeBytes=${ExpectedWorkspaceMinFreeBytes}: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $expectedWorkspaceDiskStatus = if ($ExpectedWorkspaceMinFreeBytes -gt 0) { "AVAILABLE" } else { "UNBOUNDED" }
+        if ("$($response.data.workspaceDiskStatus)" -ne $expectedWorkspaceDiskStatus) {
+            throw "Expected workspaceDiskStatus=${expectedWorkspaceDiskStatus}: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         if ([int]$response.data.failedContainerInspectionCount -ne 0) {
             throw "Expected failedContainerInspectionCount=0: $($response.data | ConvertTo-Json -Depth 20 -Compress)"

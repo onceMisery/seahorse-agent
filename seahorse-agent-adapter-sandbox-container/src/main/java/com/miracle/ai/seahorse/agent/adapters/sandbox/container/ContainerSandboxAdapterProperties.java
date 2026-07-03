@@ -53,6 +53,8 @@ public class ContainerSandboxAdapterProperties {
 
     private int maxActiveSessions = 0;
 
+    private long minWorkspaceFreeBytes = 0L;
+
     public String getEngine() {
         return engine;
     }
@@ -173,6 +175,14 @@ public class ContainerSandboxAdapterProperties {
 
     public void setMaxActiveSessions(int maxActiveSessions) {
         this.maxActiveSessions = Math.max(maxActiveSessions, 0);
+    }
+
+    public long getMinWorkspaceFreeBytes() {
+        return minWorkspaceFreeBytes;
+    }
+
+    public void setMinWorkspaceFreeBytes(long minWorkspaceFreeBytes) {
+        this.minWorkspaceFreeBytes = Math.max(minWorkspaceFreeBytes, 0L);
     }
 
     private static int positiveOrDefault(int value, int fallback) {

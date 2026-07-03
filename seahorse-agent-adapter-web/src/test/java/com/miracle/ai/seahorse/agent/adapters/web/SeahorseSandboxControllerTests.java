@@ -126,6 +126,10 @@ class SeahorseSandboxControllerTests {
                 SandboxRuntimeHealth.STATUS_HEALTHY,
                 true,
                 true,
+                4096L,
+                1024L,
+                true,
+                SandboxRuntimeHealth.DISK_AVAILABLE,
                 1,
                 3,
                 2,
@@ -290,6 +294,10 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data.status").value("HEALTHY"))
                 .andExpect(jsonPath("$.data.engineAvailable").value(true))
                 .andExpect(jsonPath("$.data.workspaceAvailable").value(true))
+                .andExpect(jsonPath("$.data.workspaceFreeBytes").value(4096))
+                .andExpect(jsonPath("$.data.workspaceMinFreeBytes").value(1024))
+                .andExpect(jsonPath("$.data.workspaceDiskAvailable").value(true))
+                .andExpect(jsonPath("$.data.workspaceDiskStatus").value("AVAILABLE"))
                 .andExpect(jsonPath("$.data.activeSessionCount").value(1))
                 .andExpect(jsonPath("$.data.activeSessionLimit").value(3))
                 .andExpect(jsonPath("$.data.activeSessionRemaining").value(2))

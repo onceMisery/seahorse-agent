@@ -40,6 +40,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -1461,6 +1462,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         if (!workspaceAvailable) {
             failureMessages.add("sandbox workspace root is not available");
         }
+        WorkspaceDiskSummary diskSummary = workspaceDiskSummary(workspaceAvailable);
+        failureMessages.addAll(diskSummary.failureMessages());
         boolean engineAvailable = containerSummary.failedInspectionCount() == 0;
         CapacitySummary capacitySummary = capacitySummary(safeActiveSessionIds.size());
         return new SandboxRuntimeHealth(
@@ -1470,11 +1473,16 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 healthStatus(
                         engineAvailable,
                         workspaceAvailable,
+                        diskSummary.available(),
                         capacitySummary.available(),
                         containerSummary.orphanCount(),
                         failureMessages),
                 engineAvailable,
                 workspaceAvailable,
+                diskSummary.freeBytes(),
+                diskSummary.minFreeBytes(),
+                diskSummary.available(),
+                diskSummary.status(),
                 safeActiveSessionIds.size(),
                 capacitySummary.limit(),
                 capacitySummary.remaining(),
@@ -1685,15 +1693,69 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return new CapacitySummary(limit, remaining, true, SandboxRuntimeHealth.CAPACITY_AVAILABLE);
     }
 
+    private WorkspaceDiskSummary workspaceDiskSummary(boolean workspaceAvailable) {
+        long minFreeBytes = Math.max(properties.getMinWorkspaceFreeBytes(), 0L);
+        if (!workspaceAvailable) {
+            return new WorkspaceDiskSummary(
+                    -1L,
+                    minFreeBytes,
+                    false,
+                    SandboxRuntimeHealth.DISK_UNKNOWN,
+                    List.of());
+        }
+        try {
+            FileStore store = Files.getFileStore(workspaceRoot);
+            long freeBytes = Math.max(store.getUsableSpace(), 0L);
+            if (minFreeBytes == 0L) {
+                return new WorkspaceDiskSummary(
+                        freeBytes,
+                        0L,
+                        true,
+                        SandboxRuntimeHealth.DISK_UNBOUNDED,
+                        List.of());
+            }
+            if (freeBytes >= minFreeBytes) {
+                return new WorkspaceDiskSummary(
+                        freeBytes,
+                        minFreeBytes,
+                        true,
+                        SandboxRuntimeHealth.DISK_AVAILABLE,
+                        List.of());
+            }
+            return new WorkspaceDiskSummary(
+                    freeBytes,
+                    minFreeBytes,
+                    false,
+                    SandboxRuntimeHealth.DISK_LOW,
+                    List.of());
+        } catch (IOException | RuntimeException ex) {
+            if (minFreeBytes == 0L) {
+                return new WorkspaceDiskSummary(
+                        -1L,
+                        0L,
+                        true,
+                        SandboxRuntimeHealth.DISK_UNBOUNDED,
+                        List.of());
+            }
+            return new WorkspaceDiskSummary(
+                    -1L,
+                    minFreeBytes,
+                    false,
+                    SandboxRuntimeHealth.DISK_UNKNOWN,
+                    List.of("workspace disk inspection failed"));
+        }
+    }
+
     private String healthStatus(boolean engineAvailable,
                                 boolean workspaceAvailable,
+                                boolean workspaceDiskAvailable,
                                 boolean capacityAvailable,
                                 int orphanContainerCount,
                                 List<String> failureMessages) {
         if (!engineAvailable || !workspaceAvailable) {
             return SandboxRuntimeHealth.STATUS_UNAVAILABLE;
         }
-        if (!capacityAvailable || orphanContainerCount > 0 || !failureMessages.isEmpty()) {
+        if (!workspaceDiskAvailable || !capacityAvailable || orphanContainerCount > 0 || !failureMessages.isEmpty()) {
             return SandboxRuntimeHealth.STATUS_DEGRADED;
         }
         return SandboxRuntimeHealth.STATUS_HEALTHY;
@@ -2086,4 +2148,15 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                                    int remaining,
                                    boolean available,
                                    String status) {}
+
+    private record WorkspaceDiskSummary(long freeBytes,
+                                        long minFreeBytes,
+                                        boolean available,
+                                        String status,
+                                        List<String> failureMessages) {
+
+        private WorkspaceDiskSummary {
+            failureMessages = failureMessages == null ? List.of() : List.copyOf(failureMessages);
+        }
+    }
 }

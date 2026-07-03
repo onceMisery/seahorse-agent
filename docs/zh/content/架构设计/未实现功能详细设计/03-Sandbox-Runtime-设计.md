@@ -525,6 +525,16 @@ Fresh full-Docker evidence: focused kernel/container tests passed 45/45 with rea
 
 This slice does not add ClamAV, another scanner engine, recursive decompression, general archive/container extraction, full PDF rendering/parsing, Office parsing, or general binary conversion.
 
+### 2026-07-03 Update: runtime workspace disk health
+
+Sandbox Runtime health now reports a read-only workspace disk signal. The Docker/Podman container adapter adds `workspaceFreeBytes`, `workspaceMinFreeBytes`, `workspaceDiskAvailable`, and `workspaceDiskStatus` to `GET /api/sandbox/runtime/health`. `workspaceDiskStatus` is `UNBOUNDED` when `min-workspace-free-bytes=0`, `AVAILABLE` when a positive threshold is met, `LOW` when a positive threshold is not met, and `UNKNOWN` when the workspace or disk inspection cannot be trusted.
+
+The signal uses `Files.getFileStore(workspaceRoot).getUsableSpace()` against the configured workspace filesystem. A positive threshold below current usable space remains healthy; a threshold above usable space degrades runtime health to `DEGRADED`. This does not reject session creation, enforce disk quotas, add node scheduling, or change sandbox execution semantics.
+
+Full compose exposes the setting as `SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_MIN_WORKSPACE_FREE_BYTES`, and the admin Sandbox Runtime governance panel plus health toast display the disk status/free-space summary. Fresh full-Docker evidence passed the artifact-storage smoke 27/27 for the default unbounded path and 27/27 again with `-ExpectedWorkspaceMinFreeBytes 1`, verifying threshold propagation through the real backend API.
+
+This closes the low-risk workspace disk visibility slice. Real per-session disk quota enforcement, node-pool scheduling, node-level health checks, and stronger isolation remain follow-up production hardening work.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

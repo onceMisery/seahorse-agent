@@ -114,6 +114,30 @@ function formatRuntimeCapacity(health?: SandboxRuntimeHealth | null) {
   return `${health.capacityStatus || "UNKNOWN"} ${active}/${limit}`;
 }
 
+function formatBytes(value?: number) {
+  if (value === undefined || value === null || value < 0) return "-";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex++;
+  }
+  const precision = unitIndex === 0 || size >= 10 ? 0 : 1;
+  return `${size.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function formatWorkspaceDisk(health?: SandboxRuntimeHealth | null) {
+  if (!health) return "-";
+  const status = health.workspaceDiskStatus || "UNKNOWN";
+  const free = formatBytes(health.workspaceFreeBytes);
+  const minFreeBytes = health.workspaceMinFreeBytes ?? 0;
+  if (minFreeBytes > 0) {
+    return `${status} ${free}/${formatBytes(minFreeBytes)}`;
+  }
+  return `${status} ${free}`;
+}
+
 function optionalDraftNumber(value: string, label: string, options: { integer?: boolean; max?: number } = {}) {
   const trimmed = value.trim();
   if (!trimmed) return { value: undefined as number | undefined };
@@ -216,6 +240,9 @@ function RuntimeGovernancePanel({
                 <div className="font-mono text-sm text-slate-700">{formatRuntimeCapacity(health)}</div>
                 <div className="mt-1 text-xs text-muted-foreground">
                   Remaining: {health?.activeSessionRemaining ?? "-"}
+                </div>
+                <div className="mt-1 truncate text-xs text-muted-foreground">
+                  Disk: {formatWorkspaceDisk(health)}
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">
                   Containers: {health?.inspectedContainerCount ?? 0} / orphan {health?.orphanContainerCount ?? 0}
@@ -811,7 +838,8 @@ export function SandboxPage() {
         activeLimit > 0
           ? `${health.capacityStatus || "UNKNOWN"} ${activeSessions}/${activeLimit}`
           : health.capacityStatus || "UNBOUNDED";
-      const summary = `Runtime ${status}: engine ${health.engineAvailable ? "available" : "unavailable"}, workspace ${health.workspaceAvailable ? "available" : "unavailable"}, capacity ${capacity}, containers ${inspected}, orphan ${orphans}`;
+      const disk = `${health.workspaceDiskStatus || "UNKNOWN"} ${formatBytes(health.workspaceFreeBytes)}`;
+      const summary = `Runtime ${status}: engine ${health.engineAvailable ? "available" : "unavailable"}, workspace ${health.workspaceAvailable ? "available" : "unavailable"}, disk ${disk}, capacity ${capacity}, containers ${inspected}, orphan ${orphans}`;
       if (status === "HEALTHY") {
         toast.success(summary);
       } else if (failures > 0 || status === "UNAVAILABLE" || status === "UNSUPPORTED") {

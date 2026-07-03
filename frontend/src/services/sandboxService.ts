@@ -56,6 +56,10 @@ export interface SandboxRuntimeHealth {
   status?: string;
   engineAvailable?: boolean;
   workspaceAvailable?: boolean;
+  workspaceFreeBytes?: number;
+  workspaceMinFreeBytes?: number;
+  workspaceDiskAvailable?: boolean;
+  workspaceDiskStatus?: string;
   activeSessionCount?: number;
   activeSessionLimit?: number;
   activeSessionRemaining?: number;

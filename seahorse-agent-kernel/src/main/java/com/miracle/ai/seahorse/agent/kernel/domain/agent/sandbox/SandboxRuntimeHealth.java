@@ -26,6 +26,10 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                                    String status,
                                    boolean engineAvailable,
                                    boolean workspaceAvailable,
+                                   long workspaceFreeBytes,
+                                   long workspaceMinFreeBytes,
+                                   boolean workspaceDiskAvailable,
+                                   String workspaceDiskStatus,
                                    int activeSessionCount,
                                    int activeSessionLimit,
                                    int activeSessionRemaining,
@@ -46,11 +50,18 @@ public record SandboxRuntimeHealth(Instant checkedAt,
     public static final String CAPACITY_UNBOUNDED = "UNBOUNDED";
     public static final String CAPACITY_AVAILABLE = "AVAILABLE";
     public static final String CAPACITY_SATURATED = "SATURATED";
+    public static final String DISK_UNBOUNDED = "UNBOUNDED";
+    public static final String DISK_AVAILABLE = "AVAILABLE";
+    public static final String DISK_LOW = "LOW";
+    public static final String DISK_UNKNOWN = "UNKNOWN";
 
     public SandboxRuntimeHealth {
         runtime = normalize(runtime, "unsupported");
         engine = normalize(engine, "");
         status = normalize(status, STATUS_UNAVAILABLE);
+        workspaceFreeBytes = workspaceFreeBytes < 0 ? -1L : workspaceFreeBytes;
+        workspaceMinFreeBytes = Math.max(workspaceMinFreeBytes, 0L);
+        workspaceDiskStatus = normalize(workspaceDiskStatus, DISK_UNKNOWN);
         activeSessionLimit = Math.max(activeSessionLimit, 0);
         activeSessionRemaining = Math.max(activeSessionRemaining, 0);
         capacityStatus = normalize(capacityStatus, CAPACITY_UNBOUNDED);
@@ -67,6 +78,10 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                 STATUS_UNSUPPORTED,
                 false,
                 false,
+                -1L,
+                0L,
+                false,
+                DISK_UNKNOWN,
                 Math.max(activeSessionCount, 0),
                 0,
                 0,

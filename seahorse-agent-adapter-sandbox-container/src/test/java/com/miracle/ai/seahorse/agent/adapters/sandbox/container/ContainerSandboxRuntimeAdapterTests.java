@@ -821,6 +821,10 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(health.status()).isEqualTo(SandboxRuntimeHealth.STATUS_DEGRADED);
         assertThat(health.engineAvailable()).isTrue();
         assertThat(health.workspaceAvailable()).isTrue();
+        assertThat(health.workspaceFreeBytes()).isGreaterThanOrEqualTo(0L);
+        assertThat(health.workspaceMinFreeBytes()).isZero();
+        assertThat(health.workspaceDiskAvailable()).isTrue();
+        assertThat(health.workspaceDiskStatus()).isEqualTo(SandboxRuntimeHealth.DISK_UNBOUNDED);
         assertThat(health.activeSessionCount()).isEqualTo(1);
         assertThat(health.activeSessionLimit()).isZero();
         assertThat(health.activeSessionRemaining()).isZero();
@@ -854,6 +858,26 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(health.failureMessages())
                 .singleElement()
                 .satisfies(message -> assertThat(message).contains("exitCode=125", "Cannot connect"));
+    }
+
+    @Test
+    void shouldReportRuntimeHealthDegradedWhenWorkspaceDiskThresholdIsNotMet() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded(
+                "",
+                Duration.ofMillis(80)));
+        ContainerSandboxAdapterProperties properties = properties();
+        properties.setMinWorkspaceFreeBytes(Long.MAX_VALUE);
+        ContainerSandboxRuntimeAdapter adapter = new ContainerSandboxRuntimeAdapter(properties, runner, CLOCK);
+
+        SandboxRuntimeHealth health = adapter.inspectHealth(Set.of());
+
+        assertThat(health.status()).isEqualTo(SandboxRuntimeHealth.STATUS_DEGRADED);
+        assertThat(health.workspaceAvailable()).isTrue();
+        assertThat(health.workspaceFreeBytes()).isGreaterThanOrEqualTo(0L);
+        assertThat(health.workspaceMinFreeBytes()).isEqualTo(Long.MAX_VALUE);
+        assertThat(health.workspaceDiskAvailable()).isFalse();
+        assertThat(health.workspaceDiskStatus()).isEqualTo(SandboxRuntimeHealth.DISK_LOW);
+        assertThat(health.failureMessages()).isEmpty();
     }
 
     @Test
