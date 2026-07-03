@@ -49,10 +49,14 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private static final int MAX_HTML_CHARS = 256 * 1024;
     private static final int MAX_URL_CHARS = 2048;
     private static final int MAX_ALLOWED_HOSTS = 16;
+    private static final int MAX_COOKIES = 16;
+    private static final int MAX_COOKIE_NAME_CHARS = 128;
+    private static final int MAX_COOKIE_VALUE_CHARS = 4096;
     private static final String ACTION_ARGUMENT = "action";
     private static final String HTML_ARGUMENT = "html";
     private static final String URL_ARGUMENT = "url";
     private static final String ALLOWED_HOSTS_ARGUMENT = "allowedHosts";
+    private static final String COOKIES_ARGUMENT = "cookies";
     private static final String SCREENSHOT_ARGUMENT = "screenshot";
     private static final String HAR_ARGUMENT = "har";
     private static final String VIDEO_ARGUMENT = "video";
@@ -64,9 +68,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
             "Sandbox Browser",
-            "Render bounded inline HTML or an explicitly allowlisted HTTP/HTTPS URL through a Playwright browser sandbox. Inline HTML stays no-network; URL mode requires allowedHosts and returns governed screenshot/result/HAR/video artifacts.",
+            "Render bounded inline HTML or an explicitly allowlisted HTTP/HTTPS URL through a Playwright browser sandbox. Inline HTML stays no-network; URL mode requires allowedHosts and can inject bounded host-scoped cookies without exposing cookie values in observations.",
             """
-                    {"type":"object","properties":{"html":{"type":"string","minLength":1,"maxLength":262144},"url":{"type":"string","minLength":1,"maxLength":2048,"description":"HTTP/HTTPS URL to visit. Requires allowedHosts and sandbox egress policy."},"allowedHosts":{"type":"array","items":{"type":"string"},"maxItems":16,"default":[],"description":"Exact host allowlist for URL mode. The URL host must be included."},"action":{"type":"string","enum":["snapshot","extract_text"],"default":"snapshot"},"screenshot":{"type":"boolean","default":true},"har":{"type":"boolean","default":false},"video":{"type":"boolean","default":false},"viewportWidth":{"type":"integer","minimum":320,"maximum":2400,"default":1280},"viewportHeight":{"type":"integer","minimum":320,"maximum":2400,"default":720}},"anyOf":[{"required":["html"]},{"required":["url","allowedHosts"]}]}
+                    {"type":"object","properties":{"html":{"type":"string","minLength":1,"maxLength":262144},"url":{"type":"string","minLength":1,"maxLength":2048,"description":"HTTP/HTTPS URL to visit. Requires allowedHosts and sandbox egress policy."},"allowedHosts":{"type":"array","items":{"type":"string"},"maxItems":16,"default":[],"description":"Exact host allowlist for URL mode. The URL host must be included."},"cookies":{"type":"array","maxItems":16,"description":"Optional URL-mode cookies. Each cookie domain must match an allowed host; cookie values are injected into the sandbox but omitted from observations.","items":{"type":"object","required":["name","value"],"properties":{"name":{"type":"string","minLength":1,"maxLength":128},"value":{"type":"string","maxLength":4096},"domain":{"type":"string","description":"Host-only cookie domain. Defaults to the URL host and must be in allowedHosts."},"path":{"type":"string","default":"/"},"httpOnly":{"type":"boolean","default":true},"secure":{"type":"boolean","default":false},"sameSite":{"type":"string","enum":["Lax","Strict","None"],"default":"Lax"}}}},"action":{"type":"string","enum":["snapshot","extract_text"],"default":"snapshot"},"screenshot":{"type":"boolean","default":true},"har":{"type":"boolean","default":false},"video":{"type":"boolean","default":false},"viewportWidth":{"type":"integer","minimum":320,"maximum":2400,"default":1280},"viewportHeight":{"type":"integer","minimum":320,"maximum":2400,"default":720}},"anyOf":[{"required":["html"]},{"required":["url","allowedHosts"]}]}
                     """);
 
     private final SandboxRuntimeInboundPort sandboxRuntime;
@@ -123,6 +127,16 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             return ToolInvocationResult.failed(ex.getMessage());
         }
         boolean urlMode = hasText(url);
+        List<BrowserCookie> cookies;
+        try {
+            cookies = normalizedCookies(
+                    safeRequest.arguments().get(COOKIES_ARGUMENT),
+                    urlHost,
+                    allowedHosts,
+                    urlMode);
+        } catch (IllegalArgumentException ex) {
+            return ToolInvocationResult.failed(ex.getMessage());
+        }
         if (!urlMode && html.isBlank()) {
             return ToolInvocationResult.failed("sandbox_browser failed: html is required");
         }
@@ -177,6 +191,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                 action,
                                 url,
                                 requestedHosts,
+                                cookies,
                                 networkRequested,
                                 viewportWidth,
                                 viewportHeight,
@@ -186,7 +201,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             }
             SandboxExecutionResult result = sandboxRuntime.execute(new SandboxExecutionCommand(
                     session.sessionId(),
-                    browserInput(action, html, url, requestedHosts, viewportWidth, viewportHeight, screenshot, har, video),
+                    browserInput(action, html, url, requestedHosts, cookies, viewportWidth, viewportHeight, screenshot, har, video),
                     networkRequested,
                     requestedHosts));
             Map<String, Object> observation = observation(
@@ -196,6 +211,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                     action,
                     url,
                     requestedHosts,
+                    cookies,
                     networkRequested,
                     viewportWidth,
                     viewportHeight,
@@ -217,6 +233,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                 String html,
                                 String url,
                                 List<String> allowedHosts,
+                                List<BrowserCookie> cookies,
                                 int viewportWidth,
                                 int viewportHeight,
                                 boolean screenshot,
@@ -227,6 +244,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         input.put("html", html);
         input.put("url", url);
         input.put("allowedHosts", allowedHosts);
+        if (cookies != null && !cookies.isEmpty()) {
+            input.put("cookies", cookiesForRuntime(cookies));
+        }
         input.put("viewportWidth", viewportWidth);
         input.put("viewportHeight", viewportHeight);
         input.put("screenshot", screenshot);
@@ -246,6 +266,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                             String action,
                                             String url,
                                             List<String> allowedHosts,
+                                            List<BrowserCookie> cookies,
                                             boolean networkRequested,
                                             int viewportWidth,
                                             int viewportHeight,
@@ -261,7 +282,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         observation.put("executionStatus", execution == null ? null : execution.status().name());
         observation.put("reasonCode", execution == null ? null : execution.reasonCode().name());
         observation.put("resultSummary", execution == null ? null : execution.resultSummary());
-        observation.put("browser", browser(action, url, allowedHosts, networkRequested, viewportWidth, viewportHeight, har, video));
+        observation.put("browser", browser(action, url, allowedHosts, cookies, networkRequested, viewportWidth, viewportHeight, har, video));
         observation.put("artifacts", artifacts(artifacts));
         return observation;
     }
@@ -269,6 +290,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private Map<String, Object> browser(String action,
                                         String url,
                                         List<String> allowedHosts,
+                                        List<BrowserCookie> cookies,
                                         boolean networkRequested,
                                         int viewportWidth,
                                         int viewportHeight,
@@ -278,6 +300,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         browser.put("action", action);
         browser.put("url", hasText(url) ? url : null);
         browser.put("allowedHosts", allowedHosts == null ? List.of() : List.copyOf(allowedHosts));
+        browser.put("cookieCount", cookies == null ? 0 : cookies.size());
+        browser.put("cookieDomains", cookieDomains(cookies));
         browser.put("viewportWidth", viewportWidth);
         browser.put("viewportHeight", viewportHeight);
         browser.put("networkAllowed", networkRequested);
@@ -401,12 +425,163 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         return host;
     }
 
+    private List<BrowserCookie> normalizedCookies(Object value,
+                                                  String urlHost,
+                                                  List<String> allowedHosts,
+                                                  boolean urlMode) {
+        if (value == null) {
+            return List.of();
+        }
+        List<?> rawValues;
+        if (value instanceof List<?> list) {
+            rawValues = list;
+        } else {
+            throw new IllegalArgumentException("sandbox_browser failed: cookies must be an array");
+        }
+        if (rawValues.size() > MAX_COOKIES) {
+            throw new IllegalArgumentException("sandbox_browser failed: cookies exceeds " + MAX_COOKIES + " items");
+        }
+        if (rawValues.isEmpty()) {
+            return List.of();
+        }
+        if (!urlMode) {
+            throw new IllegalArgumentException("sandbox_browser failed: cookies are only supported for url mode");
+        }
+        List<BrowserCookie> cookies = new ArrayList<>();
+        for (Object rawValue : rawValues) {
+            if (!(rawValue instanceof Map<?, ?> item)) {
+                throw new IllegalArgumentException("sandbox_browser failed: each cookie must be an object");
+            }
+            String name = normalizedCookieName(mapString(item, "name"));
+            String cookieValue = normalizedCookieValue(mapStringPreservingWhitespace(item, "value"));
+            String domain = normalizedCookieDomain(
+                    hasText(mapString(item, "domain")) ? mapString(item, "domain") : urlHost);
+            if (!allowedHosts.contains(domain)) {
+                throw new IllegalArgumentException("sandbox_browser failed: cookie domain must be included in allowedHosts");
+            }
+            cookies.add(new BrowserCookie(
+                    name,
+                    cookieValue,
+                    domain,
+                    normalizedCookiePath(mapString(item, "path")),
+                    mapBoolean(item, "httpOnly", true),
+                    mapBoolean(item, "secure", false),
+                    normalizedSameSite(mapString(item, "sameSite"))));
+        }
+        return cookies;
+    }
+
+    private List<Map<String, Object>> cookiesForRuntime(List<BrowserCookie> cookies) {
+        return Objects.requireNonNullElse(cookies, List.<BrowserCookie>of()).stream()
+                .map(cookie -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("name", cookie.name());
+                    item.put("value", cookie.value());
+                    item.put("domain", cookie.domain());
+                    item.put("path", cookie.path());
+                    item.put("httpOnly", cookie.httpOnly());
+                    item.put("secure", cookie.secure());
+                    item.put("sameSite", cookie.sameSite());
+                    return item;
+                })
+                .toList();
+    }
+
+    private List<String> cookieDomains(List<BrowserCookie> cookies) {
+        if (cookies == null || cookies.isEmpty()) {
+            return List.of();
+        }
+        return cookies.stream()
+                .map(BrowserCookie::domain)
+                .distinct()
+                .toList();
+    }
+
+    private String normalizedCookieName(String value) {
+        String name = value == null ? "" : value.trim();
+        if (!hasText(name)) {
+            throw new IllegalArgumentException("sandbox_browser failed: cookie name is required");
+        }
+        if (name.length() > MAX_COOKIE_NAME_CHARS || name.matches(".*[\\s;,=].*") || containsControlCharacter(name)) {
+            throw new IllegalArgumentException("sandbox_browser failed: cookie name is invalid");
+        }
+        return name;
+    }
+
+    private String normalizedCookieValue(String value) {
+        String cookieValue = value == null ? "" : value;
+        if (cookieValue.length() > MAX_COOKIE_VALUE_CHARS || containsControlCharacter(cookieValue)) {
+            throw new IllegalArgumentException("sandbox_browser failed: cookie value is invalid");
+        }
+        return cookieValue;
+    }
+
+    private String normalizedCookieDomain(String value) {
+        String domain = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        if (!hasText(domain) || domain.contains("/") || domain.contains(":") || !domain.matches("[a-z0-9.-]+")) {
+            throw new IllegalArgumentException("sandbox_browser failed: cookie domain must be a host name only");
+        }
+        return domain;
+    }
+
+    private String normalizedCookiePath(String value) {
+        String path = hasText(value) ? value.trim() : "/";
+        if (!path.startsWith("/") || containsControlCharacter(path)) {
+            throw new IllegalArgumentException("sandbox_browser failed: cookie path must start with /");
+        }
+        return path;
+    }
+
+    private String normalizedSameSite(String value) {
+        if (!hasText(value)) {
+            return "Lax";
+        }
+        return switch (value.trim().toLowerCase(Locale.ROOT)) {
+            case "strict" -> "Strict";
+            case "none" -> "None";
+            default -> "Lax";
+        };
+    }
+
+    private String mapString(Map<?, ?> map, String name) {
+        Object value = map.get(name);
+        return value == null ? "" : value.toString().trim();
+    }
+
+    private String mapStringPreservingWhitespace(Map<?, ?> map, String name) {
+        Object value = map.get(name);
+        return value == null ? "" : value.toString();
+    }
+
+    private boolean mapBoolean(Map<?, ?> map, String name, boolean defaultValue) {
+        Object value = map.get(name);
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        if (value == null || value.toString().isBlank()) {
+            return defaultValue;
+        }
+        return Boolean.parseBoolean(value.toString());
+    }
+
+    private boolean containsControlCharacter(String value) {
+        return value.chars().anyMatch(ch -> ch < 0x20 || ch == 0x7f);
+    }
+
     private String normalizedAction(String action) {
         if (!hasText(action)) {
             return ACTION_SNAPSHOT;
         }
         return action.trim().toLowerCase(Locale.ROOT).replace('-', '_');
     }
+
+    private record BrowserCookie(String name,
+                                 String value,
+                                 String domain,
+                                 String path,
+                                 boolean httpOnly,
+                                 boolean secure,
+                                 String sameSite) {}
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();

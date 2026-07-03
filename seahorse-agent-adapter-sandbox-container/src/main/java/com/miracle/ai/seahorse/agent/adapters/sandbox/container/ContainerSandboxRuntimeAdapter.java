@@ -79,6 +79,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final int MAX_BROWSER_HTML_CHARS = 256 * 1024;
     private static final int MAX_BROWSER_URL_CHARS = 2048;
     private static final int MAX_BROWSER_ALLOWED_HOSTS = 16;
+    private static final int MAX_BROWSER_COOKIES = 16;
+    private static final int MAX_BROWSER_COOKIE_NAME_CHARS = 128;
+    private static final int MAX_BROWSER_COOKIE_VALUE_CHARS = 4096;
     private static final int DEFAULT_BROWSER_VIEWPORT_WIDTH = 1280;
     private static final int DEFAULT_BROWSER_VIEWPORT_HEIGHT = 720;
     private static final int MIN_BROWSER_VIEWPORT_SIZE = 320;
@@ -255,15 +258,26 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         if (runtimeType == SandboxRuntimeType.BROWSER_AUTOMATION) {
             BrowserAutomationRequest request = parseBrowserAutomationRequest(input);
             Path inputPath = safeWorkspace.resolve(browserInputName());
+            Path cookiesPath = safeWorkspace.resolve(browserCookiesName());
             Files.writeString(safeWorkspace.resolve(SCRIPT_NAME), browserAutomationScript(request), StandardCharsets.UTF_8);
+            if (!request.cookies().isEmpty()) {
+                Files.writeString(cookiesPath, jsonForScript(request.cookies()), StandardCharsets.UTF_8);
+            }
             if (!hasText(request.url())) {
                 Files.writeString(
                         inputPath,
                         request.html(),
                         StandardCharsets.UTF_8);
-                return Set.of(
-                        safeWorkspace.resolve(SCRIPT_NAME),
-                        inputPath);
+                LinkedHashSet<Path> excluded = new LinkedHashSet<>();
+                excluded.add(safeWorkspace.resolve(SCRIPT_NAME));
+                excluded.add(inputPath);
+                if (!request.cookies().isEmpty()) {
+                    excluded.add(cookiesPath);
+                }
+                return Set.copyOf(excluded);
+            }
+            if (!request.cookies().isEmpty()) {
+                return Set.of(safeWorkspace.resolve(SCRIPT_NAME), cookiesPath);
             }
             return Set.of(safeWorkspace.resolve(SCRIPT_NAME));
         }
@@ -306,6 +320,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String html = root.path("html").asText("");
         String url = normalizedBrowserUrl(root.path("url").asText(""));
         List<String> allowedHosts = normalizedBrowserAllowedHosts(root.get("allowedHosts"));
+        List<BrowserCookie> cookies = normalizedBrowserCookies(
+                root.get("cookies"),
+                allowedHosts,
+                hasText(url) ? browserUrlHost(url) : "");
         if (!hasText(url) && !hasText(html)) {
             throw new IllegalArgumentException("browser automation html or url is required");
         }
@@ -334,7 +352,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 : root.path("screenshot").asBoolean(BROWSER_ACTION_SNAPSHOT.equals(action));
         boolean har = root.path("har").asBoolean(false);
         boolean video = root.path("video").asBoolean(false);
-        return new BrowserAutomationRequest(action, html, url, allowedHosts, viewportWidth, viewportHeight, screenshot, har, video);
+        return new BrowserAutomationRequest(action, html, url, allowedHosts, cookies, viewportWidth, viewportHeight, screenshot, har, video);
     }
 
     private String browserAutomationScript(BrowserAutomationRequest request) {
@@ -354,6 +372,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 har_enabled = %s
                 video_enabled = %s
                 input_path = Path("/workspace/%s")
+                cookies_path = Path("/workspace/%s")
                 result_path = Path("/workspace/%s")
                 screenshot_path = Path("/workspace/%s")
                 har_path = Path("/workspace/%s")
@@ -430,6 +449,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     }
 
                 html = "" if target_url else input_path.read_text(encoding="utf-8-sig")
+                browser_cookies = json.loads(cookies_path.read_text(encoding="utf-8")) if cookies_path.exists() else []
                 network_events = []
                 network_event_index = {}
                 video_file = None
@@ -441,18 +461,17 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     )
                     context = None
                     try:
+                        context_options = {
+                            "viewport": {"width": viewport_width, "height": viewport_height},
+                        }
                         if video_enabled:
                             video_dir.mkdir(parents=True, exist_ok=True)
-                            context = browser.new_context(
-                                viewport={"width": viewport_width, "height": viewport_height},
-                                record_video_dir=str(video_dir),
-                                record_video_size={"width": viewport_width, "height": viewport_height},
-                            )
-                            page = context.new_page()
-                        else:
-                            page = browser.new_page(
-                                viewport={"width": viewport_width, "height": viewport_height}
-                            )
+                            context_options["record_video_dir"] = str(video_dir)
+                            context_options["record_video_size"] = {"width": viewport_width, "height": viewport_height}
+                        context = browser.new_context(**context_options)
+                        if browser_cookies:
+                            context.add_cookies(browser_cookies)
+                        page = context.new_page()
 
                         def on_request(request):
                             event = {
@@ -514,6 +533,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             "url": page.url,
                             "targetUrl": target_url or None,
                             "allowedHosts": sorted(allowed_hosts),
+                            "cookies": {
+                                "count": len(browser_cookies),
+                                "domains": sorted({cookie.get("domain") for cookie in browser_cookies if cookie.get("domain")}),
+                            },
                             "text": compact_text(body_text),
                             "textLength": len(body_text),
                             "viewport": {
@@ -549,7 +572,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             context.close()
                         browser.close()
 
-                print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}; har={har_enabled}; video={video_enabled}")
+                print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}; har={har_enabled}; video={video_enabled}; cookies={len(browser_cookies)}")
                 """.formatted(
                 request.action(),
                 jsonForScript(request.url()),
@@ -560,6 +583,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 request.har() ? "True" : "False",
                 request.video() ? "True" : "False",
                 browserInputName(),
+                browserCookiesName(),
                 browserResultName(),
                 browserScreenshotName(),
                 browserHarName(),
@@ -816,6 +840,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return "browser-input.html";
     }
 
+    private String browserCookiesName() {
+        return "browser-cookies.json";
+    }
+
     private String browserResultName() {
         return "browser-result.json";
     }
@@ -905,6 +933,100 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             throw new IllegalArgumentException("browser automation allowedHosts must contain host names only");
         }
         hosts.add(host);
+    }
+
+    private List<BrowserCookie> normalizedBrowserCookies(JsonNode value,
+                                                         List<String> allowedHosts,
+                                                         String urlHost) {
+        if (value == null || value.isMissingNode() || value.isNull()) {
+            return List.of();
+        }
+        if (!value.isArray()) {
+            throw new IllegalArgumentException("browser automation cookies must be an array");
+        }
+        if (value.size() > MAX_BROWSER_COOKIES) {
+            throw new IllegalArgumentException(
+                    "browser automation cookies exceeds " + MAX_BROWSER_COOKIES + " items");
+        }
+        if (value.isEmpty()) {
+            return List.of();
+        }
+        if (!hasText(urlHost)) {
+            throw new IllegalArgumentException("browser automation cookies are only supported for url mode");
+        }
+        List<BrowserCookie> cookies = new ArrayList<>();
+        for (JsonNode cookieNode : value) {
+            if (!cookieNode.isObject()) {
+                throw new IllegalArgumentException("browser automation cookie must be an object");
+            }
+            String name = normalizedBrowserCookieName(cookieNode.path("name").asText(""));
+            String cookieValue = normalizedBrowserCookieValue(cookieNode.path("value").asText(""));
+            String domain = normalizedBrowserCookieDomain(cookieNode.path("domain").asText(urlHost));
+            if (!allowedHosts.contains(domain)) {
+                throw new IllegalArgumentException("browser automation cookie domain must be included in allowedHosts");
+            }
+            cookies.add(new BrowserCookie(
+                    name,
+                    cookieValue,
+                    domain,
+                    normalizedBrowserCookiePath(cookieNode.path("path").asText("/")),
+                    cookieNode.path("httpOnly").asBoolean(true),
+                    cookieNode.path("secure").asBoolean(false),
+                    normalizedBrowserCookieSameSite(cookieNode.path("sameSite").asText("Lax"))));
+        }
+        return cookies;
+    }
+
+    private String normalizedBrowserCookieName(String value) {
+        String name = value == null ? "" : value.trim();
+        if (!hasText(name)) {
+            throw new IllegalArgumentException("browser automation cookie name is required");
+        }
+        if (name.length() > MAX_BROWSER_COOKIE_NAME_CHARS
+                || name.matches(".*[\\s;,=].*")
+                || containsControlCharacter(name)) {
+            throw new IllegalArgumentException("browser automation cookie name is invalid");
+        }
+        return name;
+    }
+
+    private String normalizedBrowserCookieValue(String value) {
+        String cookieValue = value == null ? "" : value;
+        if (cookieValue.length() > MAX_BROWSER_COOKIE_VALUE_CHARS || containsControlCharacter(cookieValue)) {
+            throw new IllegalArgumentException("browser automation cookie value is invalid");
+        }
+        return cookieValue;
+    }
+
+    private String normalizedBrowserCookieDomain(String value) {
+        String domain = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        if (!hasText(domain) || domain.contains("/") || domain.contains(":") || !domain.matches("[a-z0-9.-]+")) {
+            throw new IllegalArgumentException("browser automation cookie domain must be a host name only");
+        }
+        return domain;
+    }
+
+    private String normalizedBrowserCookiePath(String value) {
+        String path = hasText(value) ? value.trim() : "/";
+        if (!path.startsWith("/") || containsControlCharacter(path)) {
+            throw new IllegalArgumentException("browser automation cookie path must start with /");
+        }
+        return path;
+    }
+
+    private String normalizedBrowserCookieSameSite(String value) {
+        if (!hasText(value)) {
+            return "Lax";
+        }
+        return switch (value.trim().toLowerCase(Locale.ROOT)) {
+            case "strict" -> "Strict";
+            case "none" -> "None";
+            default -> "Lax";
+        };
+    }
+
+    private boolean containsControlCharacter(String value) {
+        return value.chars().anyMatch(ch -> ch < 0x20 || ch == 0x7f);
     }
 
     private String jsonForScript(Object value) {
@@ -1564,11 +1686,20 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                                             String html,
                                             String url,
                                             List<String> allowedHosts,
+                                            List<BrowserCookie> cookies,
                                             int viewportWidth,
                                             int viewportHeight,
                                             boolean screenshot,
                                             boolean har,
                                             boolean video) {}
+
+    private record BrowserCookie(String name,
+                                 String value,
+                                 String domain,
+                                 String path,
+                                 boolean httpOnly,
+                                 boolean secure,
+                                 String sameSite) {}
 
     private static final class UnsupportedFileConversionException extends RuntimeException {
 

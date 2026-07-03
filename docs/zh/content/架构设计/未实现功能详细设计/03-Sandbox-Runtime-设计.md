@@ -475,6 +475,16 @@ Runtime enforcement is layered. `networkAllowed=true` runtime profile policies a
 
 This is intentionally a minimum viable egress path, not a full browser platform. Credentials, auth/session capture, arbitrary browsing policy UX, proxy/audit-rich egress, broader workflows, stronger runtime isolation, and external scanner hardening remain follow-up production work.
 
+### 2026-07-03 Update: sandbox browser request-scoped cookie injection
+
+`sandbox_browser` URL mode now supports explicit, bounded cookie injection for allowlisted hosts. The request may include `cookies` with name/value/domain/path/httpOnly/secure/sameSite metadata; cookie domains must be present in `allowedHosts`, and empty cookie arrays are treated as no injection. Inline HTML remains no-network and does not carry cookie state.
+
+The container adapter writes cookie values only to transient `browser-cookies.json`, excludes that file from artifact collection, and loads cookies through Playwright `context.add_cookies(...)`. Tool observations and governed browser result JSON expose only cookie count and domains; cookie values are not written to observations, generated scripts, governed result assertions, HAR downloads, or collected artifacts.
+
+Fresh full-Docker evidence: after focused kernel/container tests passed 33/33 and the full-compose backend rebuilt with an in-image Maven `BUILD SUCCESS`, `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-cookie-smoke` passed 20/20. The smoke covered inline no-network regression, URL-mode cookie-authenticated fixture access, governed result/HAR downloads without cookie-value leakage, browser profile network restore, no leftover managed sandbox containers, and zero non-terminal sandbox sessions.
+
+This is the first request-scoped auth/session step only. Persistent browser session capture/replay, credential governance, operator session UX, proxy/audit-rich egress, and broader browser workflow controls remain follow-up production work.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

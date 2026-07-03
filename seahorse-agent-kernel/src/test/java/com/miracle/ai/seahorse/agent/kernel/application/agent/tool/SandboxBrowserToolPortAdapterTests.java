@@ -68,6 +68,7 @@ class SandboxBrowserToolPortAdapterTests {
         assertTrue(schema.contains("\"html\""));
         assertTrue(schema.contains("\"url\""));
         assertTrue(schema.contains("\"allowedHosts\""));
+        assertTrue(schema.contains("\"cookies\""));
         assertTrue(schema.contains("\"anyOf\""));
         assertTrue(schema.contains("\"snapshot\""));
         assertTrue(schema.contains("\"extract_text\""));
@@ -139,7 +140,8 @@ class SandboxBrowserToolPortAdapterTests {
                 "viewportHeight", 640,
                 "screenshot", true,
                 "har", true,
-                "video", true)));
+                "video", true,
+                "cookies", List.of())));
 
         assertTrue(result.success());
         assertEquals("tenant-1", runtime.createCommand.tenantId());
@@ -160,6 +162,7 @@ class SandboxBrowserToolPortAdapterTests {
         assertTrue(browserInput.path("har").asBoolean());
         assertTrue(browserInput.path("video").asBoolean());
         assertTrue(browserInput.path("html").asText().contains("browser marker"));
+        assertFalse(browserInput.has("cookies"));
 
         JsonNode root = objectMapper.readTree(result.content());
         assertEquals(SandboxBrowserToolPortAdapter.TOOL_ID, root.path("toolId").asText());
@@ -203,10 +206,18 @@ class SandboxBrowserToolPortAdapterTests {
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
 
         String url = "http://example.test/page";
+        String cookieValue = "session-secret-value";
         ToolInvocationResult result = adapter.invoke(request(Map.of(
                 "action", "snapshot",
                 "url", url,
                 "allowedHosts", List.of("Example.Test"),
+                "cookies", List.of(Map.of(
+                        "name", "seahorse_session",
+                        "value", cookieValue,
+                        "domain", "example.test",
+                        "path", "/",
+                        "httpOnly", true,
+                        "sameSite", "Lax")),
                 "har", true)));
 
         assertTrue(result.success());
@@ -219,11 +230,17 @@ class SandboxBrowserToolPortAdapterTests {
         assertEquals(url, browserInput.path("url").asText());
         assertEquals("", browserInput.path("html").asText());
         assertEquals("example.test", browserInput.path("allowedHosts").get(0).asText());
+        assertEquals("seahorse_session", browserInput.path("cookies").get(0).path("name").asText());
+        assertEquals(cookieValue, browserInput.path("cookies").get(0).path("value").asText());
+        assertEquals("example.test", browserInput.path("cookies").get(0).path("domain").asText());
 
         JsonNode root = objectMapper.readTree(result.content());
         assertTrue(root.path("browser").path("networkAllowed").asBoolean());
         assertEquals(url, root.path("browser").path("url").asText());
         assertEquals("example.test", root.path("browser").path("allowedHosts").get(0).asText());
+        assertEquals(1, root.path("browser").path("cookieCount").asInt());
+        assertEquals("example.test", root.path("browser").path("cookieDomains").get(0).asText());
+        assertFalse(result.content().contains(cookieValue));
     }
 
     @Test
@@ -302,6 +319,25 @@ class SandboxBrowserToolPortAdapterTests {
 
         assertFalse(result.success());
         assertTrue(result.error().contains("url host must be included in allowedHosts"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
+    void shouldRejectCookieWhenDomainIsNotAllowlistedBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/page",
+                "allowedHosts", List.of("example.test"),
+                "cookies", List.of(Map.of(
+                        "name", "seahorse_session",
+                        "value", "secret",
+                        "domain", "other.test")))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("cookie domain must be included in allowedHosts"));
         assertEquals(0, runtime.createCalls);
     }
 

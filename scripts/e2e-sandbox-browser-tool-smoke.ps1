@@ -264,14 +264,40 @@ function Start-ExternalHttpFixture {
         Remove-Item -LiteralPath $root -Recurse -Force
     }
     New-Item -ItemType Directory -Path $root | Out-Null
-    $html = @"
-<!doctype html>
+    $cookieName = "seahorse_browser_session"
+    $cookieValue = "$Marker-session"
+    $authMarker = "$Marker-authenticated"
+    $serverScript = @"
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+MARKER = "$Marker"
+COOKIE_NAME = "$cookieName"
+COOKIE_VALUE = "$cookieValue"
+AUTH_MARKER = "$authMarker"
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        cookie = self.headers.get("Cookie", "")
+        authenticated = f"{COOKIE_NAME}={COOKIE_VALUE}" in cookie
+        auth_html = f"<p>{AUTH_MARKER}</p>" if authenticated else "<p>anonymous</p>"
+        body = f"""<!doctype html>
 <html>
-<head><title>External $Marker</title></head>
-<body><main><h1>$Marker</h1><p>Seahorse browser sandbox URL mode marker.</p></main></body>
+<head><title>External {MARKER}</title></head>
+<body><main><h1>{MARKER}</h1><p>Seahorse browser sandbox URL mode marker.</p>{auth_html}</main></body>
 </html>
+""".encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        return
+
+ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
 "@
-    Set-Content -LiteralPath (Join-Path $root "index.html") -Value $html -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $root "server.py") -Value $serverScript -Encoding UTF8
 
     $run = Invoke-NativeCommandCapture -Command "docker" -Arguments @(
         "run",
@@ -287,11 +313,7 @@ function Start-ExternalHttpFixture {
         "/srv",
         "python:3.11-alpine",
         "python",
-        "-m",
-        "http.server",
-        "8080",
-        "--bind",
-        "0.0.0.0"
+        "server.py"
     )
     if ($run.ExitCode -ne 0) {
         throw "docker run failed for external HTTP fixture: $($run.Output -join "`n")"
@@ -306,6 +328,9 @@ function Start-ExternalHttpFixture {
                 Name = $Name
                 Root = $root
                 Url = "http://${HostName}:$Port/index.html?marker=$Marker"
+                CookieName = $cookieName
+                CookieValue = $cookieValue
+                AuthMarker = $authMarker
             }
         }
         Start-Sleep -Seconds 1
@@ -458,6 +483,9 @@ try {
     $externalHttpContainerName = "$($egressFixture.Name)"
     $externalHttpRoot = "$($egressFixture.Root)"
     $externalUrl = "$($egressFixture.Url)"
+    $externalCookieName = "$($egressFixture.CookieName)"
+    $externalCookieValue = "$($egressFixture.CookieValue)"
+    $externalAuthMarker = "$($egressFixture.AuthMarker)"
 
     $egressConfigOk = Test-Step "Verify sandbox URL egress allowlist is configured" {
         $profilesResponse = Invoke-Json -Method GET -Path "/api/sandbox/runtime/profiles" -Headers $headers
@@ -506,6 +534,17 @@ try {
                 action = "snapshot"
                 url = $externalUrl
                 allowedHosts = @($ExternalHost)
+                cookies = @(
+                    @{
+                        name = $externalCookieName
+                        value = $externalCookieValue
+                        domain = $ExternalHost
+                        path = "/"
+                        httpOnly = $true
+                        secure = $false
+                        sameSite = "Lax"
+                    }
+                )
                 viewportWidth = 1024
                 viewportHeight = 640
                 screenshot = $true
@@ -534,6 +573,12 @@ try {
         if (@($parsed.browser.allowedHosts) -notcontains $ExternalHost) {
             throw "Expected browser allowedHosts to contain ${ExternalHost}: $content"
         }
+        if ([int]$parsed.browser.cookieCount -ne 1 -or @($parsed.browser.cookieDomains) -notcontains $ExternalHost) {
+            throw "Expected browser cookie metadata for ${ExternalHost}: $content"
+        }
+        if ($content -like "*$externalCookieValue*") {
+            throw "Browser observation leaked cookie value: $content"
+        }
         $artifacts = @($parsed.artifacts)
         if ($artifacts.Count -ne 3) {
             throw "Expected URL mode result JSON, screenshot, and HAR artifacts: $content"
@@ -560,11 +605,17 @@ try {
         if ($content -notlike "*$Marker-url*") {
             throw "Downloaded URL mode browser result did not contain marker '$Marker-url': $content"
         }
+        if ($content -notlike "*$externalAuthMarker*") {
+            throw "Downloaded URL mode browser result did not contain authenticated marker '$externalAuthMarker': $content"
+        }
         if ($content -notlike "*`"source`": `"url`"*" -and $content -notlike "*`"source`":`"url`"*") {
             throw "Downloaded URL mode browser result did not include source=url: $content"
         }
         if ($content -notlike "*host.docker.internal*") {
             throw "Downloaded URL mode browser result did not include allowlisted host: $content"
+        }
+        if ($content -like "*$externalCookieValue*") {
+            throw "Downloaded URL mode browser result leaked cookie value: $content"
         }
         if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
             throw "Downloaded URL mode browser result leaked storage reference: $content"
@@ -584,6 +635,9 @@ try {
         }
         if ([int]$mainRequests[0].response.status -ne 200) {
             throw "Downloaded URL mode HAR expected main URL status 200: $content"
+        }
+        if ($content -like "*$externalCookieValue*") {
+            throw "Downloaded URL mode HAR leaked cookie value: $content"
         }
         if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
             throw "Downloaded URL mode HAR leaked storage reference: $content"

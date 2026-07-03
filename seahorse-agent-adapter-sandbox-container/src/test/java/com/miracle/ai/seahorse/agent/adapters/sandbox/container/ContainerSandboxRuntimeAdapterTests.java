@@ -322,6 +322,7 @@ class ContainerSandboxRuntimeAdapterTests {
                             .doesNotContain("browser marker");
                     assertThat(Files.readString(command.workingDirectory().resolve("browser-input.html")))
                             .isEqualTo(html);
+                    assertThat(command.workingDirectory().resolve("browser-cookies.json")).doesNotExist();
                     Files.writeString(command.workingDirectory().resolve("browser-result.json"),
                             """
                                     {"action":"snapshot","title":"Browser Smoke","text":"browser marker"}
@@ -339,7 +340,7 @@ class ContainerSandboxRuntimeAdapterTests {
         SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
                 session,
                 """
-                        {"action":"snapshot","html":"<!doctype html><html><head><title>Browser Smoke</title></head><body><main>browser marker</main></body></html>","viewportWidth":1024,"viewportHeight":640,"screenshot":true,"har":true,"video":true}
+                        {"action":"snapshot","html":"<!doctype html><html><head><title>Browser Smoke</title></head><body><main>browser marker</main></body></html>","cookies":[],"viewportWidth":1024,"viewportHeight":640,"screenshot":true,"har":true,"video":true}
                         """,
                 false,
                 List.of()));
@@ -376,22 +377,27 @@ class ContainerSandboxRuntimeAdapterTests {
 
     @Test
     void shouldRunBrowserAutomationUrlModeWithAllowlistedHostNetwork() throws Exception {
+        String cookieValue = "session-secret-value";
         RecordingRunner runner = new RecordingRunner(
                 ContainerCommandResult.succeeded(
-                        "browser snapshot completed; textLength=18; screenshot=True; har=True; video=False\n",
+                        "browser snapshot completed; textLength=18; screenshot=True; har=True; video=False; cookies=1\n",
                         Duration.ofMillis(320)),
                 command -> {
                     String script = Files.readString(command.workingDirectory().resolve("main.py"));
                     assertThat(script)
                             .contains("target_url = \"http://host.docker.internal:18080/page\"",
                                     "allowed_hosts = set([\"host.docker.internal\"])",
+                                    "cookies_path = Path(\"/workspace/browser-cookies.json\")",
+                                    "context.add_cookies(browser_cookies)",
                                     "page.goto",
                                     "\"source\": \"url\" if target_url else \"html\"")
-                            .doesNotContain("url mode marker");
+                            .doesNotContain("url mode marker", cookieValue);
+                    assertThat(Files.readString(command.workingDirectory().resolve("browser-cookies.json")))
+                            .contains("seahorse_session", cookieValue, "host.docker.internal");
                     assertThat(command.workingDirectory().resolve("browser-input.html")).doesNotExist();
                     Files.writeString(command.workingDirectory().resolve("browser-result.json"),
                             """
-                                    {"action":"snapshot","source":"url","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"text":"url mode marker"}
+                                    {"action":"snapshot","source":"url","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"cookies":{"count":1,"domains":["host.docker.internal"]},"text":"url mode marker"}
                                     """);
                     Files.writeString(command.workingDirectory().resolve("browser-network.har"),
                             """
@@ -404,8 +410,8 @@ class ContainerSandboxRuntimeAdapterTests {
         SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
                 session,
                 """
-                        {"action":"snapshot","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"har":true}
-                        """,
+                        {"action":"snapshot","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"cookies":[{"name":"seahorse_session","value":"%s","domain":"host.docker.internal","path":"/","httpOnly":true,"secure":false,"sameSite":"Lax"}],"har":true}
+                        """.formatted(cookieValue),
                 true,
                 List.of("host.docker.internal")));
 
@@ -414,7 +420,8 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.artifacts())
                 .anySatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-result.json"))
                 .anySatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-network.har"))
-                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-input.html"));
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-input.html"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-cookies.json"));
         assertThat(runner.lastCommand.commandLine())
                 .containsSubsequence("docker", "run", "--rm")
                 .containsSubsequence("--add-host", "host.docker.internal:host-gateway")
@@ -440,6 +447,26 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
         assertThat(result.execution().resultSummary()).contains("url host must be included in allowedHosts");
+        assertThat(runner.lastCommand).isNull();
+    }
+
+    @Test
+    void shouldFailClosedWhenBrowserCookieDomainIsNotAllowlistedBeforeRunningContainer() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","url":"http://example.test/page","allowedHosts":["example.test"],"cookies":[{"name":"seahorse_session","value":"secret","domain":"other.test"}]}
+                        """,
+                true,
+                List.of("example.test")));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("cookie domain must be included in allowedHosts");
         assertThat(runner.lastCommand).isNull();
     }
 
