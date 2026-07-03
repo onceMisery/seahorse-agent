@@ -76,6 +76,9 @@ class SandboxApiDisabledByDefaultTests {
         mvc.perform(get("/api/sandbox/runtime/health"))
                 .andExpect(status().isForbidden());
 
+        mvc.perform(get("/api/sandbox/runtime/nodes"))
+                .andExpect(status().isForbidden());
+
         mvc.perform(get("/api/sandbox/runtime/artifact-scanner-policy"))
                 .andExpect(status().isForbidden());
 

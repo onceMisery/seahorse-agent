@@ -29,6 +29,7 @@ import {
   getSandboxArtifact,
   getSandboxArtifactScannerPolicy,
   getSandboxRuntimeHealth,
+  getSandboxRuntimeNodes,
   getSandboxRuntimeProfiles,
   listSandboxArtifacts,
   listSandboxExecutions,
@@ -87,6 +88,7 @@ describe("frontend capability service contracts", () => {
     expect(backendEndpoints).toContain("GET /api/sandbox/artifacts/{}");
     expect(backendEndpoints).toContain("GET /api/sandbox/artifacts/{}/download");
     expect(backendEndpoints).toContain("GET /api/sandbox/runtime/health");
+    expect(backendEndpoints).toContain("GET /api/sandbox/runtime/nodes");
     expect(backendEndpoints).toContain("GET /api/sandbox/runtime/artifact-scanner-policy");
     expect(backendEndpoints).toContain("GET /api/sandbox/runtime/profiles");
     expect(backendEndpoints).toContain("POST /api/sandbox/runtime/orphan-containers:reap");
@@ -329,6 +331,7 @@ describe("frontend capability service contracts", () => {
       networkAllowed: false
     });
     await getSandboxRuntimeHealth();
+    await getSandboxRuntimeNodes();
     await getSandboxArtifactScannerPolicy();
     await getSandboxRuntimeProfiles();
     await listSandboxExecutions("session-1");
@@ -375,14 +378,15 @@ describe("frontend capability service contracts", () => {
       params: { tenantId: "default", limit: 20 }
     });
     expect(mockedApi.get).toHaveBeenNthCalledWith(2, "/api/api/sandbox/runtime/health");
-    expect(mockedApi.get).toHaveBeenNthCalledWith(3, "/api/api/sandbox/runtime/artifact-scanner-policy");
-    expect(mockedApi.get).toHaveBeenNthCalledWith(4, "/api/api/sandbox/runtime/profiles", {
+    expect(mockedApi.get).toHaveBeenNthCalledWith(3, "/api/api/sandbox/runtime/nodes");
+    expect(mockedApi.get).toHaveBeenNthCalledWith(4, "/api/api/sandbox/runtime/artifact-scanner-policy");
+    expect(mockedApi.get).toHaveBeenNthCalledWith(5, "/api/api/sandbox/runtime/profiles", {
       params: { tenantId: "default" }
     });
-    expect(mockedApi.get).toHaveBeenNthCalledWith(5, "/api/api/sandbox/sessions/session-1/executions");
-    expect(mockedApi.get).toHaveBeenNthCalledWith(6, "/api/api/sandbox/sessions/session-1/artifacts");
-    expect(mockedApi.get).toHaveBeenNthCalledWith(7, "/api/api/sandbox/artifacts/artifact-1");
-    expect(mockedApi.get).toHaveBeenNthCalledWith(8, "/api/api/sandbox/artifacts/artifact-1/download", {
+    expect(mockedApi.get).toHaveBeenNthCalledWith(6, "/api/api/sandbox/sessions/session-1/executions");
+    expect(mockedApi.get).toHaveBeenNthCalledWith(7, "/api/api/sandbox/sessions/session-1/artifacts");
+    expect(mockedApi.get).toHaveBeenNthCalledWith(8, "/api/api/sandbox/artifacts/artifact-1");
+    expect(mockedApi.get).toHaveBeenNthCalledWith(9, "/api/api/sandbox/artifacts/artifact-1/download", {
       responseType: "blob"
     });
   });

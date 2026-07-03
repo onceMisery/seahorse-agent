@@ -35,6 +35,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyRe
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicyStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
@@ -436,6 +437,11 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     public SandboxRuntimeHealth inspectRuntimeHealth() {
         Set<String> activeSessionIds = sessionRepositoryPort.listActiveSessionIds();
         return runtimePort.inspectHealth(activeSessionIds);
+    }
+
+    @Override
+    public List<SandboxRuntimeNodeHealth> inspectRuntimeNodes() {
+        return List.of(SandboxRuntimeNodeHealth.fromHealth(inspectRuntimeHealth()));
     }
 
     @Override

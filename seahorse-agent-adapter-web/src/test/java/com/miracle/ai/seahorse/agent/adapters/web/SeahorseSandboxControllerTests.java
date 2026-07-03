@@ -36,6 +36,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyRe
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicyStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
@@ -143,6 +144,7 @@ class SeahorseSandboxControllerTests {
                 List.of(),
                 List.of(),
                 List.of()));
+        when(port.inspectRuntimeNodes()).thenReturn(List.of(nodeHealth()));
         when(port.inspectArtifactScannerPolicy()).thenReturn(defaultScannerPolicy());
         when(port.listRuntimeProfilePolicies("default")).thenReturn(List.of(
                 runtimeProfilePolicy("default", SandboxRuntimeType.CODE_INTERPRETER, SandboxRuntimeProfilePolicyStatus.ACTIVE, 3600),
@@ -307,6 +309,20 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data.capacityStatus").value("AVAILABLE"))
                 .andExpect(jsonPath("$.data.inspectedContainerCount").value(1));
         verify(port).inspectRuntimeHealth();
+
+        mvc.perform(get("/api/sandbox/runtime/nodes"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].nodeId").value("local-container-docker"))
+                .andExpect(jsonPath("$.data[0].runtime").value("container"))
+                .andExpect(jsonPath("$.data[0].engine").value("docker"))
+                .andExpect(jsonPath("$.data[0].status").value("HEALTHY"))
+                .andExpect(jsonPath("$.data[0].admissionAvailable").value(true))
+                .andExpect(jsonPath("$.data[0].admissionStatus").value("AVAILABLE"))
+                .andExpect(jsonPath("$.data[0].activeSessionCount").value(1))
+                .andExpect(jsonPath("$.data[0].activeSessionLimit").value(3))
+                .andExpect(jsonPath("$.data[0].activeSessionRemaining").value(2))
+                .andExpect(jsonPath("$.data[0].workspaceDiskStatus").value("AVAILABLE"));
+        verify(port).inspectRuntimeNodes();
 
         mvc.perform(get("/api/sandbox/runtime/artifact-scanner-policy"))
                 .andExpect(status().isOk())
@@ -534,6 +550,32 @@ class SeahorseSandboxControllerTests {
                 List.of("OFFICE_MACRO", "PDF_ACTIVE_CONTENT"),
                 List.of("CONFIDENTIAL_METADATA"),
                 List.of("external virus scanning"));
+    }
+
+    private static SandboxRuntimeNodeHealth nodeHealth() {
+        return new SandboxRuntimeNodeHealth(
+                NOW,
+                "local-container-docker",
+                "container",
+                "docker",
+                SandboxRuntimeHealth.STATUS_HEALTHY,
+                true,
+                SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE,
+                true,
+                true,
+                4096L,
+                1024L,
+                true,
+                SandboxRuntimeHealth.DISK_AVAILABLE,
+                1,
+                3,
+                2,
+                true,
+                SandboxRuntimeHealth.CAPACITY_AVAILABLE,
+                1,
+                0,
+                0,
+                List.of());
     }
 
     private static <T> ObjectProvider<T> provider(Class<T> type, T instance) {

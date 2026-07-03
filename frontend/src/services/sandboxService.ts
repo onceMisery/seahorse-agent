@@ -74,6 +74,31 @@ export interface SandboxRuntimeHealth {
   failureMessages?: string[];
 }
 
+export interface SandboxRuntimeNodeHealth {
+  checkedAt?: string;
+  nodeId?: string;
+  runtime?: string;
+  engine?: string;
+  status?: string;
+  admissionAvailable?: boolean;
+  admissionStatus?: string;
+  engineAvailable?: boolean;
+  workspaceAvailable?: boolean;
+  workspaceFreeBytes?: number;
+  workspaceMinFreeBytes?: number;
+  workspaceDiskAvailable?: boolean;
+  workspaceDiskStatus?: string;
+  activeSessionCount?: number;
+  activeSessionLimit?: number;
+  activeSessionRemaining?: number;
+  activeSessionCapacityAvailable?: boolean;
+  capacityStatus?: string;
+  inspectedContainerCount?: number;
+  orphanContainerCount?: number;
+  failedContainerInspectionCount?: number;
+  failureMessages?: string[];
+}
+
 export interface SandboxRuntimeProfile {
   runtimeType?: string;
   profileId?: string;
@@ -293,6 +318,10 @@ export function sweepOrphanedSandboxRuntimeResources() {
 
 export function getSandboxRuntimeHealth() {
   return api.get<SandboxRuntimeHealth>(`${SANDBOX_API_PREFIX}/runtime/health`);
+}
+
+export function getSandboxRuntimeNodes() {
+  return api.get<SandboxRuntimeNodeHealth[]>(`${SANDBOX_API_PREFIX}/runtime/nodes`);
 }
 
 export function getSandboxArtifactScannerPolicy() {

@@ -518,6 +518,47 @@ try {
         }
     } | Out-Null
 
+    Test-Step "Inspect sandbox runtime node health" {
+        $response = Invoke-Json -Method GET -Path "/api/sandbox/runtime/nodes" -Headers $headers
+        Assert-ApiOk $response "Inspect sandbox runtime nodes"
+        $nodes = @($response.data)
+        if ($nodes.Count -ne 1) {
+            throw "Expected one local sandbox runtime node: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $node = $nodes[0]
+        if ("$($node.runtime)" -ne "container") {
+            throw "Expected container runtime node but got: $($node | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($node.engine)" -ne "docker") {
+            throw "Expected docker runtime node but got: $($node | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($node.nodeId)" -ne "local-container-docker") {
+            throw "Expected local-container-docker node id but got: $($node | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($node.engineAvailable -ne $true -or $node.workspaceAvailable -ne $true) {
+            throw "Expected runtime node engine/workspace availability: $($node | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($node.admissionAvailable -ne $true) {
+            throw "Expected runtime node admissionAvailable=true: $($node | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($node.admissionStatus)" -notin @("AVAILABLE", "DEGRADED")) {
+            throw "Expected runtime node admissionStatus AVAILABLE or DEGRADED: $($node | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ([int]$node.activeSessionLimit -ne $ExpectedRuntimeActiveSessionLimit) {
+            throw "Expected runtime node activeSessionLimit=${ExpectedRuntimeActiveSessionLimit}: $($node | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($node.workspaceDiskAvailable -ne $true) {
+            throw "Expected runtime node workspaceDiskAvailable=true: $($node | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($null -eq $node.PSObject.Properties["workspaceFreeBytes"] -or $null -eq $node.PSObject.Properties["workspaceMinFreeBytes"]) {
+            throw "Runtime node health did not include workspace disk fields: $($node | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $nodeJson = $node | ConvertTo-Json -Depth 20 -Compress
+        if ($nodeJson -match [regex]::Escape($SandboxWorkspaceRoot)) {
+            throw "Sandbox runtime node health leaked workspace root path: $nodeJson"
+        }
+    } | Out-Null
+
     Test-Step "Inspect sandbox runtime governance profiles" {
         $response = Invoke-Json -Method GET -Path "/api/sandbox/runtime/profiles" -Headers $headers
         Assert-ApiOk $response "Inspect sandbox runtime profiles"

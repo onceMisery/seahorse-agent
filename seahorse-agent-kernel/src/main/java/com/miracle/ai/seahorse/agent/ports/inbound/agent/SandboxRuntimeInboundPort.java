@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 
@@ -44,6 +45,10 @@ public interface SandboxRuntimeInboundPort {
     SandboxRuntimeCleanupResult sweepOrphanedRuntimeResources();
 
     SandboxRuntimeHealth inspectRuntimeHealth();
+
+    default List<SandboxRuntimeNodeHealth> inspectRuntimeNodes() {
+        return List.of(SandboxRuntimeNodeHealth.fromHealth(inspectRuntimeHealth()));
+    }
 
     default SandboxArtifactScannerPolicy inspectArtifactScannerPolicy() {
         return SandboxArtifactScannerPolicy.unavailable();

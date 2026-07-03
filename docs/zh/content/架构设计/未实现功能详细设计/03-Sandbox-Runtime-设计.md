@@ -563,6 +563,16 @@ Fresh full-Docker evidence: Docker image pulls recovered through the local proxy
 
 The admin Sandbox Runtime governance panel loads this policy beside runtime health and runtime profiles, giving operators a stable place to inspect scanner coverage without opening individual artifacts. This is visibility only: it does not add ClamAV or another external scanner, recursive archive/container extraction, full PDF rendering/OCR, Office rendering/editing, LibreOffice/Tika conversion, macro parsing/execution, or general binary conversion.
 
+### 2026-07-04 Update: sandbox runtime node health visibility
+
+Sandbox Runtime now exposes the current local runtime as a read-only node list through `GET /api/sandbox/runtime/nodes`. The node payload is derived from `SandboxRuntimeHealth`, so the existing runtime health owner remains authoritative for engine/workspace availability, active-session capacity, workspace disk state, container inspection counters, and failure messages. The full-Docker sandbox overlay reports the single node as `local-container-docker`.
+
+The node shape adds an operator-oriented admission summary: `AVAILABLE`, `DEGRADED`, `DISK_LOW`, `SATURATED`, or `UNAVAILABLE`. This is descriptive visibility only. It does not add a node registry, multi-node scheduler, remote runtime discovery, placement policy, or destructive cleanup behavior.
+
+The admin Sandbox Runtime governance panel renders runtime node rows beside runtime health, runtime profiles, and artifact scanner policy. Fresh full-Docker evidence: focused Java/Web regressions passed, frontend contracts passed 10/10, frontend build completed with existing warnings, the backend rebuilt through the local 7890 proxy path with an in-image Maven `BUILD SUCCESS`, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-runtime-node-health-smoke` passed 35/35. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, backend health `UP`, and live node health `local-container-docker|HEALTHY|AVAILABLE`.
+
+This closes the first single-node runtime node health visibility slice. Real node-pool scheduling, distributed runtime registration, placement policy, per-session disk quotas, stronger isolation, and deeper scanner hardening remain follow-up production work.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

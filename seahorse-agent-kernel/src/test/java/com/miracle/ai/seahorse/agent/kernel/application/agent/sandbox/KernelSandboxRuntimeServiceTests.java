@@ -34,6 +34,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyRe
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicyStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
@@ -221,6 +222,39 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals(SandboxPolicyReasonCode.RUNTIME_WORKSPACE_DISK_LOW, session.reasonCode());
         assertFalse(runtime.createSessionCalled);
         assertEquals(session, sessionRepository.findSessionById(session.sessionId()).orElseThrow());
+    }
+
+    @Test
+    void shouldExposeRuntimeNodeHealthFromCurrentRuntimeHealth() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        sessionRepository.saveSession(SandboxSession.created(
+                "session-active",
+                "tenant-1",
+                "run-active",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW));
+        RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                runtime,
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                CLOCK);
+
+        List<SandboxRuntimeNodeHealth> nodes = service.inspectRuntimeNodes();
+
+        assertEquals(Set.of("session-active"), runtime.healthActiveSessionIds);
+        assertEquals(1, nodes.size());
+        SandboxRuntimeNodeHealth node = nodes.get(0);
+        assertEquals("local-container-docker", node.nodeId());
+        assertEquals("container", node.runtime());
+        assertEquals("docker", node.engine());
+        assertEquals(SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, node.admissionStatus());
+        assertTrue(node.admissionAvailable());
+        assertEquals(1, node.activeSessionCount());
+        assertEquals(SandboxRuntimeHealth.CAPACITY_UNBOUNDED, node.capacityStatus());
     }
 
     @Test

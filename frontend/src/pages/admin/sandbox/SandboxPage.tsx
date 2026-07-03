@@ -22,6 +22,7 @@ import {
   sweepOrphanedSandboxRuntimeResources,
   getSandboxArtifactScannerPolicy,
   getSandboxRuntimeHealth,
+  getSandboxRuntimeNodes,
   getSandboxRuntimeProfiles,
   upsertSandboxRuntimeProfilePolicy,
   upsertSandboxToolQuotaPolicy,
@@ -34,6 +35,7 @@ import {
   type SandboxArtifactDetail,
   type SandboxArtifactScannerPolicy,
   type SandboxRuntimeHealth,
+  type SandboxRuntimeNodeHealth,
   type SandboxRuntimeProfile,
   type SandboxRuntimeProfilesResponse,
   type SandboxToolQuotaPolicy
@@ -92,6 +94,12 @@ function runtimeHealthBadgeVariant(status?: string): "default" | "secondary" | "
 function runtimeProfileBadgeVariant(status?: string): "default" | "secondary" | "destructive" {
   if (status === "SUPPORTED") return "default";
   if (status === "BLOCKED") return "destructive";
+  return "secondary";
+}
+
+function nodeAdmissionBadgeVariant(status?: string): "default" | "secondary" | "destructive" {
+  if (status === "AVAILABLE") return "default";
+  if (status === "UNAVAILABLE" || status === "DISK_LOW" || status === "SATURATED") return "destructive";
   return "secondary";
 }
 
@@ -170,6 +178,7 @@ function optionalDraftNumber(value: string, label: string, options: { integer?: 
 
 function RuntimeGovernancePanel({
   health,
+  nodes,
   profiles,
   scannerPolicy,
   loading,
@@ -179,6 +188,7 @@ function RuntimeGovernancePanel({
   savingProfileRuntimeType
 }: {
   health: SandboxRuntimeHealth | null;
+  nodes: SandboxRuntimeNodeHealth[];
   profiles: SandboxRuntimeProfilesResponse | null;
   scannerPolicy: SandboxArtifactScannerPolicy | null;
   loading: boolean;
@@ -188,6 +198,7 @@ function RuntimeGovernancePanel({
   savingProfileRuntimeType: string | null;
 }) {
   const profileRows = profiles?.profiles || [];
+  const nodeRows = nodes || [];
   const checkedAt = health?.checkedAt ? formatTimestamp(health.checkedAt) : "-";
   const [ttlDrafts, setTtlDrafts] = useState<Record<string, string>>({});
   const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({});
@@ -219,7 +230,7 @@ function RuntimeGovernancePanel({
           </div>
         )}
 
-        {!error && loading && !health && !profiles && !scannerPolicy && (
+        {!error && loading && !health && nodeRows.length === 0 && !profiles && !scannerPolicy && (
           <div className="grid gap-3 sm:grid-cols-3">
             {[0, 1, 2].map((item) => (
               <div key={item} className="h-20 animate-pulse rounded border border-slate-100 bg-slate-50" />
@@ -227,11 +238,11 @@ function RuntimeGovernancePanel({
           </div>
         )}
 
-        {!loading && !error && !health && !profiles && !scannerPolicy && (
+        {!loading && !error && !health && nodeRows.length === 0 && !profiles && !scannerPolicy && (
           <div className="text-sm text-muted-foreground">No runtime governance data</div>
         )}
 
-        {(health || profiles || scannerPolicy) && (
+        {(health || nodeRows.length > 0 || profiles || scannerPolicy) && (
           <>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded border border-slate-100 bg-slate-50 p-3">
@@ -281,6 +292,37 @@ function RuntimeGovernancePanel({
                 </div>
               </div>
             </div>
+
+            {nodeRows.length > 0 && (
+              <div className="space-y-2">
+                {nodeRows.map((node) => (
+                  <div
+                    key={node.nodeId || `${node.runtime}-${node.engine}`}
+                    className="grid gap-3 rounded border border-slate-100 bg-white p-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto_auto]"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
+                        <Server className="h-3.5 w-3.5" />
+                        Runtime node
+                      </div>
+                      <div className="mt-1 truncate font-mono text-sm text-slate-800">
+                        {node.nodeId || "local-runtime"}
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {node.runtime || "-"} / {node.engine || "-"} / {node.status || "UNKNOWN"}
+                      </div>
+                    </div>
+                    <Badge variant={nodeAdmissionBadgeVariant(node.admissionStatus)}>
+                      {node.admissionStatus || "UNKNOWN"}
+                    </Badge>
+                    <div className="text-right font-mono text-xs text-muted-foreground">
+                      <div>{formatRuntimeCapacity(node)}</div>
+                      <div>{formatWorkspaceDisk(node)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {scannerPolicy && (
               <div className="rounded border border-slate-100 bg-white p-3">
@@ -607,6 +649,7 @@ export function SandboxPage() {
   const [checkingRuntimeHealth, setCheckingRuntimeHealth] = useState(false);
   const [reapingOrphanedRuntimeContainers, setReapingOrphanedRuntimeContainers] = useState(false);
   const [runtimeHealth, setRuntimeHealth] = useState<SandboxRuntimeHealth | null>(null);
+  const [runtimeNodes, setRuntimeNodes] = useState<SandboxRuntimeNodeHealth[]>([]);
   const [runtimeProfiles, setRuntimeProfiles] = useState<SandboxRuntimeProfilesResponse | null>(null);
   const [artifactScannerPolicy, setArtifactScannerPolicy] = useState<SandboxArtifactScannerPolicy | null>(null);
   const [loadingRuntimeGovernance, setLoadingRuntimeGovernance] = useState(false);
@@ -663,12 +706,14 @@ export function SandboxPage() {
       setLoadingRuntimeGovernance(true);
       setRuntimeGovernanceError(null);
       const tenantId = currentSandboxTenantId();
-      const [health, profiles, scannerPolicy] = await Promise.all([
+      const [health, nodes, profiles, scannerPolicy] = await Promise.all([
         getSandboxRuntimeHealth(),
+        getSandboxRuntimeNodes(),
         getSandboxRuntimeProfiles(tenantId),
         getSandboxArtifactScannerPolicy()
       ]);
       setRuntimeHealth(health || null);
+      setRuntimeNodes(nodes || []);
       setRuntimeProfiles(profiles || null);
       setArtifactScannerPolicy(scannerPolicy || null);
       if (showToast) {
@@ -895,8 +940,12 @@ export function SandboxPage() {
   const handleInspectRuntimeHealth = async () => {
     try {
       setCheckingRuntimeHealth(true);
-      const health = await getSandboxRuntimeHealth();
+      const [health, nodes] = await Promise.all([
+        getSandboxRuntimeHealth(),
+        getSandboxRuntimeNodes()
+      ]);
       setRuntimeHealth(health || null);
+      setRuntimeNodes(nodes || []);
       setRuntimeGovernanceError(null);
       const status = health.status || "UNKNOWN";
       const inspected = health.inspectedContainerCount ?? 0;
@@ -1039,6 +1088,7 @@ export function SandboxPage() {
         <div className="space-y-4">
           <RuntimeGovernancePanel
             health={runtimeHealth}
+            nodes={runtimeNodes}
             profiles={runtimeProfiles}
             scannerPolicy={artifactScannerPolicy}
             loading={loadingRuntimeGovernance}
