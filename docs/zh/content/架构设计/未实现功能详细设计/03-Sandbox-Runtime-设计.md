@@ -41,7 +41,7 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 | 内容级 artifact 扫描仍需加固 | 基础 metadata scanner、file:// 文本类 secret/PII 内容阻断和 prompt visibility gate 已落地；仍缺病毒扫描、二进制/PDF 深度扫描、redaction summary | 后续接入专业扫描引擎和可审计 redaction summary |
 | 网络策略只有默认 deny 与 allowlist 基础 | 当前容器 adapter 强制 `--network none`；仍缺按 tenant/agent/tool 的网络 profile、DNS/IP 限制、egress proxy 和审计可视化 | 引入 policy profile、egress proxy 和 network decision log |
 | UI 偏 demo | execution history 已补齐；仍缺 session 列表、artifact 详情、policy preview | 升级为 Sandbox Operations 页面 |
-| Agent 工具化未完整 | `sandbox_python` 已接入 Tool Gateway；browser/file conversion、artifact 收集和 Inspector 展示仍未完成 | 继续补齐更广 sandbox-backed tool adapters |
+| Agent 工具化未完整 | `sandbox_python` 已接入 Tool Gateway；`sandbox_file_convert` 已有 CSV-to-JSON 最小闭环；browser automation、更广文件格式转换和 Inspector 展示仍未完成 | 继续补齐更广 sandbox-backed tool adapters |
 
 ## 3. 目标架构
 
@@ -263,13 +263,13 @@ P0 profile：
 
 新增 sandbox-backed tools：
 
-当前已落地 `sandbox_python` 最小版本：工具本身是普通 `DescribedToolPort`，通过 `LocalToolGatewayPort` 的 request-aware 路径拿到 tenant/run/user 上下文，再调用 `SandboxRuntimeInboundPort` 创建 session、执行 Python、关闭 session。后续仍需补齐 artifact 收集、浏览器自动化、文件转换和 Inspector 展示。
+当前已落地 `sandbox_python` 最小版本和 `sandbox_file_convert` CSV-to-JSON 最小版本：工具本身是普通 `DescribedToolPort`，通过 `LocalToolGatewayPort` 的 request-aware 路径拿到 tenant/run/user 上下文，再调用 `SandboxRuntimeInboundPort` 创建 session、执行并关闭 session。后续仍需补齐浏览器自动化、更广文件格式转换和 Inspector 展示。
 
 | Tool | Runtime | 说明 |
 | --- | --- | --- |
 | `sandbox_python` | `CODE_INTERPRETER` | 已有最小闭环：执行 Python 片段并返回 execution summary；artifact 收集后续补齐 |
 | `sandbox_browser` | `BROWSER_AUTOMATION` | 受限 Playwright 浏览，返回截图/HAR/summary |
-| `sandbox_file_convert` | `FILE_CONVERSION` | 文件转换，返回 artifact |
+| `sandbox_file_convert` | `FILE_CONVERSION` | 已有 CSV-to-JSON 最小闭环，返回 governed JSON artifact；更广格式后续补齐 |
 
 集成规则：
 
@@ -309,8 +309,8 @@ P0 profile：
 
 ### P2：Agent 工具化
 
-1. 新增 `sandbox_python`、`sandbox_browser`、`sandbox_file_convert` tool adapters。（`sandbox_python` 最小闭环已补齐；其余后续）
-2. Tool Gateway policy 中区分 sandbox-backed tool。（`sandbox_python` 已注册为 HIGH / EXECUTE / SANDBOX）
+1. 新增 `sandbox_python`、`sandbox_browser`、`sandbox_file_convert` tool adapters。（`sandbox_python` 与 `sandbox_file_convert` CSV-to-JSON 最小闭环已补齐；browser 和更广转换格式后续）
+2. Tool Gateway policy 中区分 sandbox-backed tool。（`sandbox_python` 与 `sandbox_file_convert` 已注册为 HIGH / EXECUTE / SANDBOX）
 3. Agent Inspector 展示 sandbox execution 与 artifact。
 4. 加入审批与配额联动。
 

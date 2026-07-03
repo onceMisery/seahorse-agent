@@ -1,0 +1,231 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
+
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationRequestAwarePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+
+public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, ToolInvocationRequestAwarePort {
+
+    public static final String TOOL_ID = "sandbox_file_convert";
+    private static final int MAX_CONTENT_CHARS = 256 * 1024;
+    private static final String SOURCE_FORMAT_ARGUMENT = "sourceFormat";
+    private static final String TARGET_FORMAT_ARGUMENT = "targetFormat";
+    private static final String CONTENT_ARGUMENT = "content";
+    private static final String CSV_FORMAT = "csv";
+    private static final String JSON_FORMAT = "json";
+    private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
+            TOOL_ID,
+            "Sandbox File Convert",
+            "Convert bounded file content through the Seahorse sandbox runtime. Currently supports CSV to JSON with network disabled.",
+            """
+                    {"type":"object","required":["sourceFormat","targetFormat","content"],"properties":{"sourceFormat":{"type":"string","enum":["csv"]},"targetFormat":{"type":"string","enum":["json"]},"content":{"type":"string","minLength":1,"maxLength":262144}}}
+                    """);
+
+    private final SandboxRuntimeInboundPort sandboxRuntime;
+    private final AgentToolJsonSupport jsonSupport;
+
+    public SandboxFileConvertToolPortAdapter(SandboxRuntimeInboundPort sandboxRuntime,
+                                             AgentToolJsonSupport jsonSupport) {
+        this.sandboxRuntime = Objects.requireNonNull(sandboxRuntime, "sandboxRuntime must not be null");
+        this.jsonSupport = Objects.requireNonNull(jsonSupport, "jsonSupport must not be null");
+    }
+
+    @Override
+    public ToolDescriptor descriptor() {
+        return DESCRIPTOR;
+    }
+
+    @Override
+    public ToolInvocationResult invoke(String toolCallId, String toolId, Map<String, Object> arguments) {
+        String safeCallId = hasText(toolCallId) ? toolCallId.trim() : "direct";
+        return invoke(new ToolInvocationRequest(
+                "sandbox-file-convert-" + safeCallId,
+                safeCallId,
+                safeCallId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                TOOL_ID,
+                arguments,
+                Map.of(),
+                null,
+                List.of(TOOL_ID)));
+    }
+
+    @Override
+    public ToolInvocationResult invoke(ToolInvocationRequest request) {
+        ToolInvocationRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
+        String sourceFormat = normalizedFormat(jsonSupport.string(safeRequest.arguments(), SOURCE_FORMAT_ARGUMENT));
+        String targetFormat = normalizedFormat(jsonSupport.string(safeRequest.arguments(), TARGET_FORMAT_ARGUMENT));
+        String content = argumentStringPreservingWhitespace(safeRequest.arguments(), CONTENT_ARGUMENT);
+        if (!CSV_FORMAT.equals(sourceFormat) || !JSON_FORMAT.equals(targetFormat)) {
+            return ToolInvocationResult.failed(
+                    "sandbox_file_convert failed: supported conversion is sourceFormat=csv targetFormat=json");
+        }
+        if (content.isBlank()) {
+            return ToolInvocationResult.failed("sandbox_file_convert failed: content is required");
+        }
+        if (content.length() > MAX_CONTENT_CHARS) {
+            return ToolInvocationResult.failed(
+                    "sandbox_file_convert failed: content exceeds " + MAX_CONTENT_CHARS + " chars");
+        }
+        SandboxSession session = null;
+        try {
+            session = sandboxRuntime.createSession(new SandboxSessionCreateCommand(
+                    safeRequest.tenantId(),
+                    sandboxRunId(safeRequest),
+                    SandboxRuntimeType.FILE_CONVERSION,
+                    false,
+                    List.of()));
+            if (session.status().isTerminal()) {
+                return failed(observation(session, null, List.of(), sourceFormat, targetFormat),
+                        "sandbox file conversion session did not start: " + session.reasonCode());
+            }
+            SandboxExecutionResult result = sandboxRuntime.execute(new SandboxExecutionCommand(
+                    session.sessionId(),
+                    conversionInput(sourceFormat, targetFormat, content),
+                    false,
+                    List.of()));
+            Map<String, Object> observation = observation(
+                    session,
+                    result.execution(),
+                    result.artifacts(),
+                    sourceFormat,
+                    targetFormat);
+            if (result.execution().status() == SandboxExecutionStatus.SUCCEEDED) {
+                return ToolInvocationResult.ok(jsonSupport.write(observation));
+            }
+            return failed(observation,
+                    "sandbox file conversion " + result.execution().status() + ": " + result.reasonCode());
+        } catch (Exception ex) {
+            return ToolInvocationResult.failed("sandbox_file_convert failed: "
+                    + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+        } finally {
+            closeQuietly(session);
+        }
+    }
+
+    private String conversionInput(String sourceFormat, String targetFormat, String content) {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("sourceFormat", sourceFormat);
+        request.put("targetFormat", targetFormat);
+        request.put("content", content);
+        return jsonSupport.write(request);
+    }
+
+    private ToolInvocationResult failed(Map<String, Object> observation, String summary) {
+        String payload = jsonSupport.write(observation);
+        return ToolInvocationResult.failed(summary + "; observation=" + payload);
+    }
+
+    private Map<String, Object> observation(SandboxSession session,
+                                            SandboxExecution execution,
+                                            List<SandboxArtifact> artifacts,
+                                            String sourceFormat,
+                                            String targetFormat) {
+        Map<String, Object> observation = new LinkedHashMap<>();
+        observation.put("toolId", TOOL_ID);
+        observation.put("sessionId", session == null ? null : session.sessionId());
+        observation.put("runtimeType", SandboxRuntimeType.FILE_CONVERSION.name());
+        observation.put("sessionStatus", session == null ? null : session.status().name());
+        observation.put("sessionReasonCode", session == null ? null : session.reasonCode().name());
+        observation.put("executionId", execution == null ? null : execution.executionId());
+        observation.put("executionStatus", execution == null ? null : execution.status().name());
+        observation.put("reasonCode", execution == null ? null : execution.reasonCode().name());
+        observation.put("resultSummary", execution == null ? null : execution.resultSummary());
+        observation.put("conversion", conversion(sourceFormat, targetFormat));
+        observation.put("artifacts", artifacts(artifacts));
+        return observation;
+    }
+
+    private Map<String, Object> conversion(String sourceFormat, String targetFormat) {
+        Map<String, Object> conversion = new LinkedHashMap<>();
+        conversion.put("sourceFormat", sourceFormat);
+        conversion.put("targetFormat", targetFormat);
+        return conversion;
+    }
+
+    private List<Map<String, Object>> artifacts(List<SandboxArtifact> artifacts) {
+        return Objects.requireNonNullElse(artifacts, List.<SandboxArtifact>of()).stream()
+                .map(artifact -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("artifactId", artifact.artifactId());
+                    item.put("executionId", artifact.executionId());
+                    item.put("mediaType", artifact.mediaType());
+                    item.put("scanStatus", artifact.scanStatus().name());
+                    item.put("sensitivity", artifact.sensitivity().name());
+                    item.put("scanSummary", artifact.scanSummary());
+                    item.put("promptVisible", artifact.promptVisible());
+                    return item;
+                })
+                .toList();
+    }
+
+    private void closeQuietly(SandboxSession session) {
+        if (session == null || session.status().isTerminal()) {
+            return;
+        }
+        try {
+            sandboxRuntime.close(session.sessionId());
+        } catch (RuntimeException ignored) {
+            // Tool observations are about execution; close is best-effort cleanup here.
+        }
+    }
+
+    private String sandboxRunId(ToolInvocationRequest request) {
+        if (hasText(request.runId())) {
+            return request.runId().trim();
+        }
+        return "sandbox-file-convert-" + request.toolCallId();
+    }
+
+    private String argumentStringPreservingWhitespace(Map<String, Object> arguments, String name) {
+        Object value = arguments == null ? null : arguments.get(name);
+        return value == null ? "" : value.toString();
+    }
+
+    private String normalizedFormat(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+}

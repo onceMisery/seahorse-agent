@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.adapters.sandbox.container;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
@@ -56,14 +58,18 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final String EXECUTION_ID_PREFIX = "sandbox_exec_container_";
     private static final String ARTIFACT_ID_PREFIX = "sandbox_artifact_container_";
     private static final String SCRIPT_NAME = "main.py";
+    private static final String FILE_CONVERSION_INPUT_NAME = "input.csv";
+    private static final String FILE_CONVERSION_OUTPUT_NAME = "converted.json";
     private static final String CONTAINER_WORKSPACE = "/workspace";
     private static final String CONTAINER_NAME_PREFIX = "seahorse-sandbox-";
+    private static final int MAX_FILE_CONVERSION_CONTENT_CHARS = 256 * 1024;
 
     private final ContainerSandboxAdapterProperties properties;
     private final ContainerCommandRunner commandRunner;
     private final Clock clock;
     private final Path workspaceRoot;
     private final String workspaceMountSourceRoot;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ContainerSandboxRuntimeAdapter(ContainerSandboxAdapterProperties properties,
                                           ContainerCommandRunner commandRunner,
@@ -109,18 +115,19 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         SandboxSession session = safeRequest.session();
         Instant startedAt = clock.instant();
         String executionId = EXECUTION_ID_PREFIX + SnowflakeIds.nextIdString();
-        if (session.runtimeType() != SandboxRuntimeType.CODE_INTERPRETER) {
+        if (session.runtimeType() != SandboxRuntimeType.CODE_INTERPRETER
+                && session.runtimeType() != SandboxRuntimeType.FILE_CONVERSION) {
             return failedResult(
                     executionId,
                     session,
                     startedAt,
                     SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED,
-                    "container sandbox supports CODE_INTERPRETER only");
+                    "container sandbox supports CODE_INTERPRETER and FILE_CONVERSION only");
         }
         try {
             Path workspace = workspaceForSession(session.sessionId());
             Files.createDirectories(workspace);
-            Files.writeString(workspace.resolve(SCRIPT_NAME), safeRequest.input(), StandardCharsets.UTF_8);
+            Set<Path> excludedArtifacts = prepareWorkspace(session.runtimeType(), safeRequest.input(), workspace);
             ContainerCommandResult commandResult = commandRunner.run(containerCommand(session, workspace));
             Instant finishedAt = clock.instant();
             if (commandResult.timedOut()) {
@@ -147,7 +154,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         finishedAt);
                 return SandboxExecutionResult.succeeded(
                         execution,
-                        collectArtifacts(session, execution.executionId(), workspace, finishedAt));
+                        collectArtifacts(session, execution.executionId(), workspace, finishedAt, excludedArtifacts));
             }
             return failedResult(
                     executionId,
@@ -162,6 +169,20 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     startedAt,
                     SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED,
                     "container runtime io failure: " + nullToEmpty(ex.getMessage()));
+        } catch (UnsupportedFileConversionException ex) {
+            return failedResult(
+                    executionId,
+                    session,
+                    startedAt,
+                    SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED,
+                    ex.getMessage());
+        } catch (IllegalArgumentException ex) {
+            return failedResult(
+                    executionId,
+                    session,
+                    startedAt,
+                    SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED,
+                    "container runtime invalid request: " + nullToEmpty(ex.getMessage()));
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             return failedResult(
@@ -178,6 +199,66 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED,
                     "container runtime failure: " + nullToEmpty(ex.getMessage()));
         }
+    }
+
+    private Set<Path> prepareWorkspace(SandboxRuntimeType runtimeType, String input, Path workspace) throws IOException {
+        Path safeWorkspace = workspace.toAbsolutePath().normalize();
+        if (runtimeType == SandboxRuntimeType.CODE_INTERPRETER) {
+            Files.writeString(safeWorkspace.resolve(SCRIPT_NAME), input, StandardCharsets.UTF_8);
+            return Set.of(safeWorkspace.resolve(SCRIPT_NAME));
+        }
+        if (runtimeType == SandboxRuntimeType.FILE_CONVERSION) {
+            FileConversionRequest request = parseFileConversionRequest(input);
+            Files.writeString(safeWorkspace.resolve(SCRIPT_NAME), fileConversionScript(), StandardCharsets.UTF_8);
+            Files.writeString(
+                    safeWorkspace.resolve(FILE_CONVERSION_INPUT_NAME),
+                    request.content(),
+                    StandardCharsets.UTF_8);
+            return Set.of(
+                    safeWorkspace.resolve(SCRIPT_NAME),
+                    safeWorkspace.resolve(FILE_CONVERSION_INPUT_NAME));
+        }
+        throw new IllegalArgumentException("unsupported sandbox runtime type: " + runtimeType);
+    }
+
+    private FileConversionRequest parseFileConversionRequest(String input) throws IOException {
+        JsonNode root = objectMapper.readTree(nullToEmpty(input));
+        String sourceFormat = normalizedFormat(root.path("sourceFormat").asText());
+        String targetFormat = normalizedFormat(root.path("targetFormat").asText());
+        if (!"csv".equals(sourceFormat) || !"json".equals(targetFormat)) {
+            throw new UnsupportedFileConversionException(
+                    "container file conversion supports csv to json only");
+        }
+        String content = root.path("content").asText("");
+        if (!hasText(content)) {
+            throw new IllegalArgumentException("file conversion content is required");
+        }
+        if (content.length() > MAX_FILE_CONVERSION_CONTENT_CHARS) {
+            throw new IllegalArgumentException(
+                    "file conversion content exceeds " + MAX_FILE_CONVERSION_CONTENT_CHARS + " chars");
+        }
+        return new FileConversionRequest(content);
+    }
+
+    private String fileConversionScript() {
+        return """
+                import csv
+                import json
+                from pathlib import Path
+
+                input_path = Path("/workspace/input.csv")
+                output_path = Path("/workspace/converted.json")
+
+                with input_path.open("r", encoding="utf-8-sig", newline="") as source:
+                    reader = csv.DictReader(source)
+                    rows = [dict(row) for row in reader]
+
+                output_path.write_text(
+                    json.dumps(rows, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                print(f"converted {len(rows)} rows from csv to json")
+                """;
     }
 
     @Override
@@ -498,17 +579,24 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private List<SandboxArtifact> collectArtifacts(SandboxSession session,
                                                    String executionId,
                                                    Path workspace,
-                                                   Instant createdAt) throws IOException {
+                                                   Instant createdAt,
+                                                   Set<Path> excludedArtifacts) throws IOException {
         if (!Files.exists(workspace)) {
             return List.of();
         }
         Path safeWorkspace = workspace.toAbsolutePath().normalize();
+        Set<Path> safeExcludedArtifacts = excludedArtifacts == null
+                ? Set.of()
+                : excludedArtifacts.stream()
+                .filter(Objects::nonNull)
+                .map(path -> path.toAbsolutePath().normalize())
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
         try (var paths = Files.walk(safeWorkspace)) {
             return paths
                     .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
                     .map(path -> path.toAbsolutePath().normalize())
                     .filter(path -> path.startsWith(safeWorkspace))
-                    .filter(path -> !path.equals(safeWorkspace.resolve(SCRIPT_NAME)))
+                    .filter(path -> !safeExcludedArtifacts.contains(path))
                     .sorted(Comparator.comparing(path -> safeWorkspace.relativize(path).toString()))
                     .map(path -> artifact(session, executionId, path, createdAt))
                     .toList();
@@ -743,6 +831,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return value == null ? "" : value;
     }
 
+    private static String normalizedFormat(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
     private static boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
     }
@@ -763,6 +855,15 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             throw new IllegalArgumentException("workspaceMountSourceRoot must not be empty");
         }
         return result;
+    }
+
+    private record FileConversionRequest(String content) {}
+
+    private static final class UnsupportedFileConversionException extends RuntimeException {
+
+        private UnsupportedFileConversionException(String message) {
+            super(message);
+        }
     }
 
     private record ContainerInspectionSummary(int inspectedCount,

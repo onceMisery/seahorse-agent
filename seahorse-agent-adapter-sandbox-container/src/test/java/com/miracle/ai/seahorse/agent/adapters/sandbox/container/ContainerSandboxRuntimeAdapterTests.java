@@ -127,6 +127,45 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldRunFileConversionWithGeneratedConverterAndCollectOnlyOutputArtifact() throws Exception {
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted 1 rows from csv to json\n", Duration.ofMillis(210)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("csv.DictReader", "converted.json")
+                            .doesNotContain("Ada,42");
+                    assertThat(Files.readString(command.workingDirectory().resolve("input.csv")))
+                            .isEqualTo("name,score\nAda,42\n");
+                    Files.writeString(command.workingDirectory().resolve("converted.json"),
+                            "[{\"name\":\"Ada\",\"score\":\"42\"}]");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"csv","targetFormat":"json","content":"name,score\\nAda,42\\n"}
+                        """,
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().reasonCode()).isEqualTo(SandboxPolicyReasonCode.VALID_REQUEST);
+        assertThat(result.execution().resultSummary()).contains("converted 1 rows");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.json");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("application/json");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.csv"));
+        assertThat(runner.lastCommand.commandLine())
+                .containsSubsequence("docker", "run", "--rm")
+                .containsSubsequence("--network", "none")
+                .containsSubsequence("python:3.11-alpine", "python", "/workspace/main.py");
+    }
+
+    @Test
     void shouldFailClosedWhenContainerRunnerThrows() {
         RecordingRunner runner = new RecordingRunner(new IOException("docker missing"));
         ContainerSandboxRuntimeAdapter adapter = adapter(runner);
