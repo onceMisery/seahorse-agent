@@ -54,6 +54,12 @@ final class AgentLoopModelTurns {
             "Load Skill",
             "Load SKILL.md for a skill selected in the current Agent runtime snapshot.",
             "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"]}");
+    private static final String STRUCTURED_TOOL_CALL_PROTOCOL = """
+            Tool protocol: when tools are available, call them only through native structured tool calls.
+            Do not write <tool_code>, </tool_code>, <tool_call>, </tool_call>, Python-style calls such as
+            print('tool(...)'), or any textual tool invocation markup in assistant content.
+            If no tool call is needed, answer normally.
+            """.trim();
 
     private final StreamingChatModelPort modelPort;
     private final ToolRegistryPort toolRegistry;
@@ -188,12 +194,13 @@ final class AgentLoopModelTurns {
         TurnBuffer callback = new TurnBuffer();
         AtomicReference<List<AgentToolCall>> collectedCalls = new AtomicReference<>();
         AtomicBoolean collectorInvoked = new AtomicBoolean(false);
+        List<ToolDescriptor> safeTools = tools == null ? List.of() : tools;
 
         StreamCancellationHandle handle = modelPort.streamChatWithTools(ChatRequest.builder()
-                .messages(List.copyOf(messages))
+                .messages(modelRequestMessages(messages, safeTools))
                 .modelId(request.modelId())
                 .samplingOptions(request.samplingOptions())
-                .tools(tools == null ? List.of() : tools)
+                .tools(safeTools)
                 .toolChoice(toolChoice)
                 .build(), callback, toolCalls -> {
                     if (callback.completed()) {
@@ -224,7 +231,25 @@ final class AgentLoopModelTurns {
         }
         ModelTurn turn = new ModelTurn(callback.content(), callback.thinking(),
                 Objects.requireNonNullElse(collectedCalls.get(), List.of()));
-        return normalizeTextEncodedToolCalls(turn, tools);
+        return normalizeTextEncodedToolCalls(turn, safeTools);
+    }
+
+    private List<ChatMessage> modelRequestMessages(List<ChatMessage> messages, List<ToolDescriptor> tools) {
+        List<ChatMessage> safeMessages = messages == null ? List.of() : messages;
+        if (tools == null || tools.isEmpty()) {
+            return List.copyOf(safeMessages);
+        }
+        List<ChatMessage> requestMessages = new ArrayList<>(safeMessages);
+        if (!requestMessages.isEmpty() && requestMessages.get(0).getRole() == ChatRole.SYSTEM) {
+            ChatMessage first = requestMessages.get(0);
+            String content = Objects.requireNonNullElse(first.getContent(), "");
+            if (!content.contains(STRUCTURED_TOOL_CALL_PROTOCOL)) {
+                requestMessages.set(0, ChatMessage.system(appendContextText(content, STRUCTURED_TOOL_CALL_PROTOCOL)));
+            }
+            return List.copyOf(requestMessages);
+        }
+        requestMessages.add(0, ChatMessage.system(STRUCTURED_TOOL_CALL_PROTOCOL));
+        return List.copyOf(requestMessages);
     }
 
     private ModelTurn normalizeTextEncodedToolCalls(ModelTurn turn, List<ToolDescriptor> tools) {

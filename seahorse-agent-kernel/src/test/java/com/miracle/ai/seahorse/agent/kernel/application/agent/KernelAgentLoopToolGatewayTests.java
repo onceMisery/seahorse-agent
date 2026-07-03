@@ -39,6 +39,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillToolPolicyMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
@@ -115,6 +116,35 @@ class KernelAgentLoopToolGatewayTests {
         assertEquals("user-1", request.userId());
         assertEquals("conversation-1", request.arguments().get("_seahorseConversationId"));
         assertEquals(List.of("weather"), request.allowedToolIds());
+    }
+
+    @Test
+    void shouldInstructModelToUseStructuredToolCallsWhenToolsAreExposed() {
+        ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("direct answer")));
+        KernelAgentLoop loop = kernelLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                new RecordingToolGateway(),
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("weather?")
+                .allowedToolIds(List.of("weather"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-tool-protocol")
+                .build());
+
+        assertEquals("direct answer", result.finalAnswer());
+        ChatRequest firstRequest = model.requests.get(0);
+        assertFalse(firstRequest.getTools().isEmpty());
+        String systemPrompt = firstRequest.getMessages().stream()
+                .filter(message -> message.getRole() == ChatRole.SYSTEM)
+                .findFirst()
+                .map(message -> message.getContent())
+                .orElse("");
+        assertTrue(systemPrompt.contains("structured tool calls"), systemPrompt);
+        assertTrue(systemPrompt.contains("<tool_code>"), systemPrompt);
+        assertTrue(systemPrompt.contains("print('tool(...)')"), systemPrompt);
     }
 
     @Test
