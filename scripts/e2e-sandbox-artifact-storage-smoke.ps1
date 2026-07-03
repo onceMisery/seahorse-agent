@@ -777,6 +777,116 @@ try {
         }
     } | Out-Null
 
+    $binaryMarker = "$Marker-binary-signature-scan"
+    $binaryCode = "from pathlib import Path`nPath('active.pdf').write_bytes(b'%PDF-1.7\n1 0 obj\n<< /OpenAction 2 0 R >>\nendobj\n')`nPath('chart.png').write_bytes(b'MZ\x00\x00seahorse')`nprint('$binaryMarker')"
+    $binaryObservation = Test-Step "Invoke sandbox_python with binary-signature artifacts" {
+        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $headers -Body @{
+            runId = "sandbox-artifact-binary-run-$suffix"
+            stepId = "sandbox-artifact-binary-step-$suffix"
+            toolCallId = "sandbox-artifact-binary-call-$suffix"
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{ code = $binaryCode }
+            resourceRefs = @{}
+            idempotencyKey = "sandbox-artifact-binary-run-${suffix}:sandbox-artifact-binary-call-$suffix"
+            allowedToolIds = @("sandbox_python")
+        }
+        Assert-ApiOk $response "Invoke sandbox_python binary-signature artifacts"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_python binary-signature invocation failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        if ($content -notlike "*$binaryMarker*") {
+            throw "sandbox_python binary-signature content did not contain marker '$binaryMarker': $content"
+        }
+        $parsed = $content | ConvertFrom-Json
+        if (@($parsed.artifacts).Count -ne 0) {
+            throw "Binary-signature artifacts should not be prompt-visible: $content"
+        }
+        if (-not "$($parsed.sessionId)") {
+            throw "sandbox_python observation did not include binary-signature sessionId: $content"
+        }
+        $parsed
+    }
+    if (-not $binaryObservation) { exit 1 }
+
+    $binarySessionId = "$($binaryObservation.sessionId)"
+    Test-Step "Verify PDF active-content artifact is blocked before object storage" {
+        $safeBinarySessionId = $binarySessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeBinarySessionId' AND media_type = 'application/pdf' ORDER BY created_at DESC LIMIT 1;"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 7) {
+            throw "Unexpected PDF binary-signature artifact row: $row"
+        }
+        if ($parts[1] -like "$ExpectedObjectUriPrefix*") {
+            throw "PDF active-content artifact was copied to object storage: $($parts[1])"
+        }
+        if ($parts[2] -ne "application/pdf" -or $parts[3] -ne "BLOCKED" -or $parts[4] -ne "CONFIDENTIAL") {
+            throw "Expected blocked CONFIDENTIAL PDF artifact but got: $row"
+        }
+        if ($parts[5] -ne "pdf active content") {
+            throw "Expected PDF active-content scan summary but got '$($parts[5])'"
+        }
+        if ($parts[6] -notlike '*"decision":"BLOCKED"*' -or $parts[6] -notlike '*"PDF_ACTIVE_CONTENT"*') {
+            throw "Expected BLOCKED PDF_ACTIVE_CONTENT redaction summary but got '$($parts[6])'"
+        }
+        if ($parts[6] -like "*OpenAction*") {
+            throw "PDF redaction summary leaked active-content marker: $($parts[6])"
+        }
+        $parts[0]
+    } | Out-Null
+
+    $executableArtifactId = Test-Step "Verify executable masquerading artifact is blocked before object storage" {
+        $safeBinarySessionId = $binarySessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeBinarySessionId' AND media_type = 'image/png' ORDER BY created_at DESC LIMIT 1;"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 7) {
+            throw "Unexpected executable masquerading artifact row: $row"
+        }
+        if ($parts[1] -like "$ExpectedObjectUriPrefix*") {
+            throw "Executable masquerading artifact was copied to object storage: $($parts[1])"
+        }
+        if ($parts[2] -ne "image/png" -or $parts[3] -ne "BLOCKED" -or $parts[4] -ne "CONFIDENTIAL") {
+            throw "Expected blocked CONFIDENTIAL image/png artifact but got: $row"
+        }
+        if ($parts[5] -ne "executable binary artifact content") {
+            throw "Expected executable binary scan summary but got '$($parts[5])'"
+        }
+        if ($parts[6] -notlike '*"decision":"BLOCKED"*' -or $parts[6] -notlike '*"EXECUTABLE_BINARY"*') {
+            throw "Expected BLOCKED EXECUTABLE_BINARY redaction summary but got '$($parts[6])'"
+        }
+        $parts[0]
+    }
+    if (-not $executableArtifactId) { exit 1 }
+
+    Test-Step "Verify binary-signature artifact API exposes only blocked metadata" {
+        $response = Invoke-Json -Method GET -Path "/api/sandbox/sessions/$binarySessionId/artifacts" -Headers $headers
+        Assert-ApiOk $response "List binary-signature sandbox artifacts"
+        $blockedArtifacts = @($response.data | Where-Object { "$($_.scanStatus)" -eq "BLOCKED" })
+        if ($blockedArtifacts.Count -lt 2) {
+            throw "Expected at least two blocked binary-signature artifacts: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $artifactJson = $response.data | ConvertTo-Json -Depth 20 -Compress
+        if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|OpenAction") {
+            throw "Binary-signature artifact API leaked storage or active-content details: $artifactJson"
+        }
+
+        $detail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$executableArtifactId" -Headers $headers
+        Assert-ApiOk $detail "Get executable masquerading artifact detail"
+        if ($detail.data.downloadable -ne $false -or $detail.data.promptVisible -ne $false) {
+            throw "Expected executable masquerading artifact to be non-downloadable and prompt-hidden: $($detail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($detail.data.redactionSummaryJson)" -notlike '*"EXECUTABLE_BINARY"*') {
+            throw "Expected executable detail redaction summary category: $($detail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $detailJson = $detail.data | ConvertTo-Json -Depth 20 -Compress
+        if ($detailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Executable masquerading detail leaked storage metadata: $detailJson"
+        }
+    } | Out-Null
+
     if ($VerifyCapacityAdmission) {
         Test-Step "Reject sandbox session when runtime capacity is saturated" {
             if ($ExpectedRuntimeActiveSessionLimit -le 0) {

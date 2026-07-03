@@ -505,6 +505,16 @@ Fresh full-Docker evidence: focused kernel/container tests passed 39/39, compose
 
 This completes explicit request-scoped one-run session-state replay. Replaying captured SECRET/BLOCKED artifacts, credential storage, operator approval UX, and long-lived browser profile management remain follow-up production work.
 
+### 2026-07-03 Update: sandbox artifact binary/PDF signature scan
+
+`DefaultSandboxArtifactScannerPort` now adds a bounded binary/PDF signature scan for local `file://` artifacts that are already prompt-safe binary media types (`application/pdf`, supported image media types) or governed download-only `video/webm`. The scanner reads only the first 256 KiB, blocks PE/ELF executable headers, blocks ZIP/PDF/EBML/script-like masquerading under mismatched media types, and blocks PDF active-content markers such as `/JavaScript`, `/JS`, `/OpenAction`, and `/AA`.
+
+New structured redaction categories are value-free: `EXECUTABLE_BINARY`, `PDF_ACTIVE_CONTENT`, and `BINARY_SIGNATURE_MISMATCH`. Clean WebM remains download-only and prompt-hidden, but now records `contentScanned=true` because the EBML header is inspected. This update does not add ClamAV or another external virus engine, archive decompression, full PDF parsing/rendering, Office rendering/editing, or general binary conversion.
+
+Fresh full-Docker evidence: focused scanner tests passed 10/10, broader kernel artifact governance tests passed 46/46, the full-compose backend rebuilt with an in-image Maven `BUILD SUCCESS`, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-binary-signature-smoke` passed 21/21. The smoke verified real `sandbox_python` PDF active-content and executable-masquerading artifacts are persisted as `BLOCKED|CONFIDENTIAL`, not copied to object storage, not prompt-visible, not downloadable, and exposed through APIs only as blocked metadata without raw `OpenAction` or storage-reference leakage.
+
+This completes the first bounded binary/PDF signature scan slice. External virus scanning, richer PDF/binary deep scanning with a dedicated scanner engine, archive/container introspection, PDF/Office/binary conversion, stronger runtime isolation, node-pool health, and broader Tool Gateway hardening remain follow-up production work.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

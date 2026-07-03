@@ -115,7 +115,68 @@ class DefaultSandboxArtifactScannerPortTests {
         assertEquals("metadata scan passed", result.summary());
         JsonNode redactionSummary = redactionSummary(result);
         assertEquals("CLEAN", redactionSummary.path("decision").asText());
-        assertEquals(false, redactionSummary.path("contentScanned").asBoolean());
+        assertEquals(true, redactionSummary.path("contentScanned").asBoolean());
+    }
+
+    @Test
+    void shouldBlockPromptSafeBinaryArtifactWithExecutableSignature(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("chart.png");
+        Files.write(output, new byte[]{'M', 'Z', 0, 0, 0, 0});
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "image/png")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("executable binary artifact content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("BLOCKED", redactionSummary.path("decision").asText());
+        assertEquals(true, redactionSummary.path("contentScanned").asBoolean());
+        assertEquals("EXECUTABLE_BINARY", redactionSummary.path("categories").get(0).asText());
+    }
+
+    @Test
+    void shouldBlockPdfArtifactWithActiveContent(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("report.pdf");
+        Files.writeString(output, "%PDF-1.7\n1 0 obj\n<< /OpenAction 2 0 R >>\nendobj", StandardCharsets.ISO_8859_1);
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/pdf")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("pdf active content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("BLOCKED", redactionSummary.path("decision").asText());
+        assertEquals(true, redactionSummary.path("contentScanned").asBoolean());
+        assertEquals("PDF_ACTIVE_CONTENT", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("OpenAction"));
+    }
+
+    @Test
+    void shouldBlockPromptSafeBinaryArtifactWithSignatureMismatch(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("report.pdf");
+        Files.write(output, new byte[]{'P', 'K', 0x03, 0x04, 0, 0});
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/pdf")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("binary signature mismatch", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("BLOCKED", redactionSummary.path("decision").asText());
+        assertEquals(true, redactionSummary.path("contentScanned").asBoolean());
+        assertEquals("BINARY_SIGNATURE_MISMATCH", redactionSummary.path("categories").get(0).asText());
+    }
+
+    @Test
+    void shouldBlockDownloadOnlyVideoArtifactWithExecutableSignature(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("browser-video.webm");
+        Files.write(output, new byte[]{0x7F, 'E', 'L', 'F', 0, 0});
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "video/webm")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("EXECUTABLE_BINARY", redactionSummary(result).path("categories").get(0).asText());
     }
 
     @Test

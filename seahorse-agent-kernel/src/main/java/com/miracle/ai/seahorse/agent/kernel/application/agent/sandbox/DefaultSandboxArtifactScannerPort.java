@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanRes
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -37,6 +38,7 @@ import java.util.regex.Pattern;
 public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScannerPort {
 
     private static final int MAX_CONTENT_SCAN_BYTES = 256 * 1024;
+    private static final int MAX_BINARY_SIGNATURE_SCAN_BYTES = 256 * 1024;
     private static final Set<String> PROMPT_SAFE_EXACT_MEDIA_TYPES = Set.of(
             "application/json",
             "application/pdf",
@@ -67,6 +69,12 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
             Pattern.CASE_INSENSITIVE);
     private static final Pattern US_SSN_PATTERN = Pattern.compile(
             "\\b\\d{3}-\\d{2}-\\d{4}\\b");
+    private static final Pattern PDF_ACTIVE_CONTENT_PATTERN = Pattern.compile(
+            "/(JavaScript|JS|OpenAction|AA)\\b",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern SCRIPT_LIKE_PREFIX_PATTERN = Pattern.compile(
+            "\\A\\s*(#!|<(!doctype\\s+html|html|script)\\b|javascript:)",
+            Pattern.CASE_INSENSITIVE);
 
     @Override
     public SandboxArtifactScanResult scan(SandboxArtifactScanRequest request) {
@@ -80,9 +88,17 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                     false,
                     List.of("SENSITIVE_METADATA"));
         }
+        SandboxArtifactScanResult binarySignatureScan = scanLocalBinarySignatures(artifact);
+        if (binarySignatureScan != null
+                && binarySignatureScan.scanStatus() == SandboxArtifactScanStatus.BLOCKED) {
+            return binarySignatureScan;
+        }
         if (!isPromptSafeMediaType(artifact.mediaType())) {
             if (isDownloadOnlyMediaType(artifact.mediaType())) {
-                return SandboxArtifactScanResult.clean(artifact.sensitivity(), "metadata scan passed", false);
+                return SandboxArtifactScanResult.clean(
+                        artifact.sensitivity(),
+                        "metadata scan passed",
+                        binarySignatureScan != null);
             }
             return SandboxArtifactScanResult.blocked(
                     artifact.sensitivity(),
@@ -104,6 +120,9 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
         if (contentScan != null) {
             return contentScan;
         }
+        if (binarySignatureScan != null) {
+            return binarySignatureScan;
+        }
         return SandboxArtifactScanResult.clean(artifact.sensitivity(), "metadata scan passed", false);
     }
 
@@ -121,8 +140,60 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
         if (!hasText(mediaType)) {
             return false;
         }
-        String normalized = mediaType.toLowerCase(Locale.ROOT).split(";", 2)[0].trim();
-        return DOWNLOAD_ONLY_EXACT_MEDIA_TYPES.contains(normalized);
+        return DOWNLOAD_ONLY_EXACT_MEDIA_TYPES.contains(normalizedMediaType(mediaType));
+    }
+
+    private static SandboxArtifactScanResult scanLocalBinarySignatures(SandboxArtifact artifact) {
+        if (!isLocalFileReference(artifact.objectUri())
+                || !isBinarySignatureScannableMediaType(artifact.mediaType())) {
+            return null;
+        }
+        try {
+            Path path = Path.of(URI.create(artifact.objectUri())).toAbsolutePath().normalize();
+            if (!Files.isRegularFile(path)) {
+                return SandboxArtifactScanResult.blocked(
+                        ContextSensitivity.SECRET,
+                        "artifact content unavailable",
+                        true,
+                        List.of("CONTENT_UNAVAILABLE"));
+            }
+            byte[] prefix = readPrefix(path, MAX_BINARY_SIGNATURE_SCAN_BYTES);
+            String mediaType = normalizedMediaType(artifact.mediaType());
+            if (hasExecutableSignature(prefix)) {
+                return SandboxArtifactScanResult.blocked(
+                        ContextSensitivity.CONFIDENTIAL,
+                        "executable binary artifact content",
+                        true,
+                        List.of("EXECUTABLE_BINARY"));
+            }
+            if ("application/pdf".equals(mediaType) && containsPdfActiveContent(prefix)) {
+                return SandboxArtifactScanResult.blocked(
+                        ContextSensitivity.CONFIDENTIAL,
+                        "pdf active content",
+                        true,
+                        List.of("PDF_ACTIVE_CONTENT"));
+            }
+            if (hasMismatchedBinarySignature(mediaType, prefix)) {
+                return SandboxArtifactScanResult.blocked(
+                        ContextSensitivity.CONFIDENTIAL,
+                        "binary signature mismatch",
+                        true,
+                        List.of("BINARY_SIGNATURE_MISMATCH"));
+            }
+            return SandboxArtifactScanResult.clean(artifact.sensitivity(), "metadata scan passed", true);
+        } catch (IOException | RuntimeException ex) {
+            return SandboxArtifactScanResult.blocked(
+                    ContextSensitivity.SECRET,
+                    "artifact content scan failed",
+                    true,
+                    List.of("SCAN_ERROR"));
+        }
+    }
+
+    private static byte[] readPrefix(Path path, int maxBytes) throws IOException {
+        try (InputStream input = Files.newInputStream(path)) {
+            return input.readNBytes(maxBytes);
+        }
     }
 
     private static SandboxArtifactScanResult scanLocalTextContent(SandboxArtifact artifact) {
@@ -193,11 +264,67 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
         if (!hasText(mediaType)) {
             return false;
         }
-        String normalized = mediaType.toLowerCase(Locale.ROOT).split(";", 2)[0].trim();
+        String normalized = normalizedMediaType(mediaType);
         return normalized.startsWith("text/")
                 || "application/json".equals(normalized)
                 || normalized.endsWith("+json")
                 || "application/xml".equals(normalized);
+    }
+
+    private static boolean isBinarySignatureScannableMediaType(String mediaType) {
+        if (!hasText(mediaType)) {
+            return false;
+        }
+        String normalized = normalizedMediaType(mediaType);
+        return "application/pdf".equals(normalized)
+                || (normalized.startsWith("image/") && PROMPT_SAFE_EXACT_MEDIA_TYPES.contains(normalized))
+                || DOWNLOAD_ONLY_EXACT_MEDIA_TYPES.contains(normalized);
+    }
+
+    private static boolean hasExecutableSignature(byte[] content) {
+        return startsWith(content, (byte) 'M', (byte) 'Z')
+                || startsWith(content, (byte) 0x7F, (byte) 'E', (byte) 'L', (byte) 'F');
+    }
+
+    private static boolean hasMismatchedBinarySignature(String mediaType, byte[] content) {
+        return (hasZipSignature(content) && !"application/zip".equals(mediaType))
+                || (hasPdfSignature(content) && !"application/pdf".equals(mediaType))
+                || (hasEbmlSignature(content) && !"video/webm".equals(mediaType))
+                || hasScriptLikePrefix(content);
+    }
+
+    private static boolean hasZipSignature(byte[] content) {
+        return startsWith(content, (byte) 'P', (byte) 'K', (byte) 0x03, (byte) 0x04)
+                || startsWith(content, (byte) 'P', (byte) 'K', (byte) 0x05, (byte) 0x06)
+                || startsWith(content, (byte) 'P', (byte) 'K', (byte) 0x07, (byte) 0x08);
+    }
+
+    private static boolean hasPdfSignature(byte[] content) {
+        return startsWith(content, (byte) '%', (byte) 'P', (byte) 'D', (byte) 'F', (byte) '-');
+    }
+
+    private static boolean hasEbmlSignature(byte[] content) {
+        return startsWith(content, (byte) 0x1A, (byte) 0x45, (byte) 0xDF, (byte) 0xA3);
+    }
+
+    private static boolean hasScriptLikePrefix(byte[] content) {
+        return SCRIPT_LIKE_PREFIX_PATTERN.matcher(new String(content, StandardCharsets.ISO_8859_1)).find();
+    }
+
+    private static boolean containsPdfActiveContent(byte[] content) {
+        return PDF_ACTIVE_CONTENT_PATTERN.matcher(new String(content, StandardCharsets.ISO_8859_1)).find();
+    }
+
+    private static boolean startsWith(byte[] content, byte... signature) {
+        if (content.length < signature.length) {
+            return false;
+        }
+        for (int index = 0; index < signature.length; index++) {
+            if (content[index] != signature[index]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean containsSensitiveMarker(String value) {
@@ -210,5 +337,9 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private static String normalizedMediaType(String mediaType) {
+        return mediaType.toLowerCase(Locale.ROOT).split(";", 2)[0].trim();
     }
 }
