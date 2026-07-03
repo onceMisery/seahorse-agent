@@ -13,6 +13,7 @@ param(
     [int]$ExpectedRuntimeActiveSessionLimit = 0,
     [long]$ExpectedWorkspaceMinFreeBytes = 0,
     [switch]$VerifyCapacityAdmission,
+    [switch]$VerifyWorkspaceDiskAdmission,
     [switch]$UseScheduledSweep,
     [int]$ScheduledSweepWaitSeconds = 45,
     [switch]$SkipHealth
@@ -258,6 +259,88 @@ try {
 
     $headers = @{ Authorization = "Bearer $($login.data.token)" }
     $suffix = ([guid]::NewGuid().ToString('N')).Substring(0, 8)
+
+    if ($VerifyWorkspaceDiskAdmission) {
+        Test-Step "Inspect low-disk sandbox runtime health" {
+            if ($ExpectedWorkspaceMinFreeBytes -le 0) {
+                throw "Workspace disk admission verification requires ExpectedWorkspaceMinFreeBytes > 0"
+            }
+            $response = Invoke-Json -Method GET -Path "/api/sandbox/runtime/health" -Headers $headers
+            Assert-ApiOk $response "Inspect low-disk sandbox runtime health"
+            if ("$($response.data.runtime)" -ne "container") {
+                throw "Expected container runtime health but got: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ("$($response.data.engine)" -ne "docker") {
+                throw "Expected docker engine but got: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ($response.data.engineAvailable -ne $true -or $response.data.workspaceAvailable -ne $true) {
+                throw "Expected available engine/workspace for low-disk admission smoke: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ([long]$response.data.workspaceMinFreeBytes -ne $ExpectedWorkspaceMinFreeBytes) {
+                throw "Expected workspaceMinFreeBytes=${ExpectedWorkspaceMinFreeBytes}: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ($response.data.workspaceDiskAvailable -ne $false) {
+                throw "Expected workspaceDiskAvailable=false: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ("$($response.data.workspaceDiskStatus)" -ne "LOW") {
+                throw "Expected workspaceDiskStatus=LOW: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ("$($response.data.status)" -ne "DEGRADED") {
+                throw "Expected low-disk runtime health status=DEGRADED: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ($response.data.activeSessionCapacityAvailable -ne $true) {
+                throw "Expected activeSessionCapacityAvailable=true for low-disk admission smoke: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            $healthJson = $response.data | ConvertTo-Json -Depth 20 -Compress
+            if ($healthJson -match [regex]::Escape($SandboxWorkspaceRoot)) {
+                throw "Sandbox runtime health leaked workspace root path: $healthJson"
+            }
+        } | Out-Null
+
+        Test-Step "Reject sandbox session when workspace disk threshold is not met" {
+            $rejected = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
+                tenantId = "default"
+                runId = "sandbox-disk-admission-rejected-run-$suffix"
+                runtimeType = "CODE_INTERPRETER"
+                networkRequested = $false
+                requestedHosts = @()
+            }
+            Assert-ApiOk $rejected "Create sandbox session below workspace disk threshold"
+            if ("$($rejected.data.status)" -ne "FAILED") {
+                throw "Expected low-disk session status FAILED: $($rejected.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ("$($rejected.data.reasonCode)" -ne "RUNTIME_WORKSPACE_DISK_LOW") {
+                throw "Expected low-disk reasonCode RUNTIME_WORKSPACE_DISK_LOW: $($rejected.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+
+            $safeRejectedSessionId = "$($rejected.data.sessionId)".Replace("'", "''")
+            $row = Invoke-PostgresScalar "SELECT status, reason_code FROM sa_sandbox_session WHERE session_id = '$safeRejectedSessionId';"
+            $parts = $row -split "`t"
+            if ($parts.Count -ne 2) {
+                throw "Unexpected rejected low-disk session DB row: $row"
+            }
+            if ($parts[0] -ne "FAILED") {
+                throw "Expected DB status FAILED for low-disk session but got '$($parts[0])'"
+            }
+            if ($parts[1] -ne "RUNTIME_WORKSPACE_DISK_LOW") {
+                throw "Expected DB reason_code RUNTIME_WORKSPACE_DISK_LOW but got '$($parts[1])'"
+            }
+
+            if ("$($rejected.data.sessionId)".Contains("'")) {
+                throw "Cannot safely shell-quote rejected low-disk session id"
+            }
+            & docker exec $BackendContainer sh -lc "test ! -d '$SandboxWorkspaceRoot/$($rejected.data.sessionId)'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Rejected low-disk session unexpectedly created workspace $SandboxWorkspaceRoot/$($rejected.data.sessionId)"
+            }
+        } | Out-Null
+
+        Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
+        Write-Host "Backend: $BaseUrl"
+        if ($failed -gt 0) { exit 1 }
+        return
+    }
+
     $runId = "sandbox-artifact-storage-run-$suffix"
     $toolCallId = "sandbox-artifact-storage-call-$suffix"
     $escapedMarker = $Marker.Replace("\", "\\").Replace("'", "\'")
@@ -383,8 +466,9 @@ try {
         if ($null -eq $response.data.PSObject.Properties["workspaceMinFreeBytes"]) {
             throw "Sandbox runtime health did not include workspaceMinFreeBytes: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
-        if ($response.data.workspaceDiskAvailable -ne $true) {
-            throw "Expected sandbox runtime workspaceDiskAvailable=true: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        $expectedWorkspaceDiskAvailable = -not $VerifyWorkspaceDiskAdmission
+        if ($response.data.workspaceDiskAvailable -ne $expectedWorkspaceDiskAvailable) {
+            throw "Expected sandbox runtime workspaceDiskAvailable=${expectedWorkspaceDiskAvailable}: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $workspaceFreeBytes = [long]$response.data.workspaceFreeBytes
         $workspaceMinFreeBytes = [long]$response.data.workspaceMinFreeBytes
@@ -394,9 +478,12 @@ try {
         if ($workspaceMinFreeBytes -ne $ExpectedWorkspaceMinFreeBytes) {
             throw "Expected workspaceMinFreeBytes=${ExpectedWorkspaceMinFreeBytes}: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
-        $expectedWorkspaceDiskStatus = if ($ExpectedWorkspaceMinFreeBytes -gt 0) { "AVAILABLE" } else { "UNBOUNDED" }
+        $expectedWorkspaceDiskStatus = if ($VerifyWorkspaceDiskAdmission) { "LOW" } elseif ($ExpectedWorkspaceMinFreeBytes -gt 0) { "AVAILABLE" } else { "UNBOUNDED" }
         if ("$($response.data.workspaceDiskStatus)" -ne $expectedWorkspaceDiskStatus) {
             throw "Expected workspaceDiskStatus=${expectedWorkspaceDiskStatus}: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($VerifyWorkspaceDiskAdmission -and "$($response.data.status)" -ne "DEGRADED") {
+            throw "Expected low-disk runtime health status=DEGRADED: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         if ([int]$response.data.failedContainerInspectionCount -ne 0) {
             throw "Expected failedContainerInspectionCount=0: $($response.data | ConvertTo-Json -Depth 20 -Compress)"

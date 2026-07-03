@@ -308,13 +308,14 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                     now);
             return saveSession(denied, AuditEventType.SANDBOX_SESSION_CREATED);
         }
-        if (runtimeCapacityExceeded()) {
+        Optional<SandboxPolicyReasonCode> runtimeAdmissionRejection = runtimeAdmissionRejectionReason();
+        if (runtimeAdmissionRejection.isPresent()) {
             SandboxSession rejected = SandboxSession.failed(
                     sessionId(),
                     safeCommand.tenantId(),
                     safeCommand.runId(),
                     safeCommand.runtimeType(),
-                    SandboxPolicyReasonCode.RUNTIME_CAPACITY_EXCEEDED,
+                    runtimeAdmissionRejection.get(),
                     profileId,
                     expiresAt,
                     now);
@@ -556,12 +557,18 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         return SandboxExecutionResult.failed(execution, reasonCode);
     }
 
-    private boolean runtimeCapacityExceeded() {
+    private Optional<SandboxPolicyReasonCode> runtimeAdmissionRejectionReason() {
         Set<String> activeSessionIds = sessionRepositoryPort.listActiveSessionIds();
         SandboxRuntimeHealth health = Objects.requireNonNull(
                 runtimePort.inspectHealth(activeSessionIds),
                 "runtime health result must not be null");
-        return !health.activeSessionCapacityAvailable();
+        if (health.workspaceMinFreeBytes() > 0L && !health.workspaceDiskAvailable()) {
+            return Optional.of(SandboxPolicyReasonCode.RUNTIME_WORKSPACE_DISK_LOW);
+        }
+        if (!health.activeSessionCapacityAvailable()) {
+            return Optional.of(SandboxPolicyReasonCode.RUNTIME_CAPACITY_EXCEEDED);
+        }
+        return Optional.empty();
     }
 
     private SandboxRuntimeProfilePolicy effectiveRuntimeProfilePolicy(String tenantId,

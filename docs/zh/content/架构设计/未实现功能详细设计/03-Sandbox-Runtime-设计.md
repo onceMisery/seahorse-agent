@@ -545,6 +545,16 @@ Fresh full-Docker evidence: focused kernel/container tests passed 85/85, the ful
 
 This closes bounded OOXML package/macro governance only. Office rendering/editing, macro execution or parsing, LibreOffice/Tika conversion, recursive archive extraction, ClamAV or another external scanner engine, and richer scanner policy UX remain follow-up production hardening work.
 
+### 2026-07-03 Update: sandbox workspace disk admission
+
+Sandbox session creation now uses the workspace disk health signal as an admission preflight. After runtime profile and sandbox policy checks pass, `KernelSandboxRuntimeService` asks the runtime for health with current active session ids. If a positive `workspaceMinFreeBytes` is configured and `workspaceDiskAvailable=false`, the service persists a failed session with `RUNTIME_WORKSPACE_DISK_LOW` and does not call `SandboxRuntimePort#createSession(...)`.
+
+The default `min-workspace-free-bytes=0` path remains unbounded and behavior-compatible, including unsupported runtime health responses. This update is an admission guard only: it does not add per-session filesystem quotas, actual disk quota enforcement, node scheduling, or changes to already-running sessions.
+
+Fresh full-Docker evidence: focused kernel/container/Web tests passed 69/69, PowerShell parsing passed for the artifact-storage smoke, the full-compose backend rebuilt with an in-image Maven `BUILD SUCCESS`, and the default artifact-storage smoke passed 33/33. With `SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_MIN_WORKSPACE_FREE_BYTES=9223372036854775807`, the low-disk admission smoke passed 4/4, verifying `DEGRADED|LOW` runtime health, `FAILED|RUNTIME_WORKSPACE_DISK_LOW` API/DB state, and no workspace directory for the rejected session. The backend was restored to the default unbounded threshold afterward.
+
+This closes the first disk admission guard. Real per-session disk quota enforcement, node-pool scheduling, node-level health checks, stronger isolation, and external scanner hardening remain follow-up production work.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。
