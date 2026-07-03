@@ -262,6 +262,31 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data.inspectedContainerCount").value(1));
         verify(port).inspectRuntimeHealth();
 
+        mvc.perform(get("/api/sandbox/runtime/profiles"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.defaultNetworkPolicy").value("DENY_ALL"))
+                .andExpect(jsonPath("$.data.defaultTtlSeconds").value(3600))
+                .andExpect(jsonPath("$.data.profiles[0].runtimeType").value("CODE_INTERPRETER"))
+                .andExpect(jsonPath("$.data.profiles[0].profileId").value("python-small"))
+                .andExpect(jsonPath("$.data.profiles[0].supportedByContainerRuntime").value(true))
+                .andExpect(jsonPath("$.data.profiles[0].networkAllowed").value(false))
+                .andExpect(jsonPath("$.data.profiles[0].status").value("SUPPORTED"))
+                .andExpect(jsonPath("$.data.profiles[1].runtimeType").value("FILE_CONVERSION"))
+                .andExpect(jsonPath("$.data.profiles[1].profileId").value("file-conversion"))
+                .andExpect(jsonPath("$.data.profiles[1].supportedByContainerRuntime").value(true))
+                .andExpect(jsonPath("$.data.profiles[1].networkAllowed").value(false))
+                .andExpect(jsonPath("$.data.profiles[1].status").value("SUPPORTED"))
+                .andExpect(jsonPath("$.data.profiles[2].runtimeType").value("BROWSER_AUTOMATION"))
+                .andExpect(jsonPath("$.data.profiles[2].profileId").value("browser-readonly"))
+                .andExpect(jsonPath("$.data.profiles[2].supportedByContainerRuntime").value(false))
+                .andExpect(jsonPath("$.data.profiles[2].networkAllowed").value(false))
+                .andExpect(jsonPath("$.data.profiles[2].status").value("PLANNED"))
+                .andExpect(jsonPath("$.data.profiles[3].runtimeType").value("SHELL"))
+                .andExpect(jsonPath("$.data.profiles[3].profileId").value("shell-restricted"))
+                .andExpect(jsonPath("$.data.profiles[3].supportedByContainerRuntime").value(false))
+                .andExpect(jsonPath("$.data.profiles[3].networkAllowed").value(false))
+                .andExpect(jsonPath("$.data.profiles[3].status").value("PLANNED"));
+
         mvc.perform(post("/api/sandbox/runtime/orphan-containers:reap")
                         .param("dryRun", "false"))
                 .andExpect(status().isOk())

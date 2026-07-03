@@ -377,6 +377,41 @@ try {
         }
     } | Out-Null
 
+    Test-Step "Inspect sandbox runtime governance profiles" {
+        $response = Invoke-Json -Method GET -Path "/api/sandbox/runtime/profiles" -Headers $headers
+        Assert-ApiOk $response "Inspect sandbox runtime profiles"
+        if ("$($response.data.defaultNetworkPolicy)" -ne "DENY_ALL") {
+            throw "Expected defaultNetworkPolicy=DENY_ALL: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ([int]$response.data.defaultTtlSeconds -ne 3600) {
+            throw "Expected defaultTtlSeconds=3600: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $profiles = @($response.data.profiles)
+        if ($profiles.Count -ne 4) {
+            throw "Expected 4 runtime profiles: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $pythonProfile = @($profiles | Where-Object { "$($_.runtimeType)" -eq "CODE_INTERPRETER" -and "$($_.profileId)" -eq "python-small" })
+        if ($pythonProfile.Count -ne 1 -or $pythonProfile[0].supportedByContainerRuntime -ne $true -or "$($pythonProfile[0].status)" -ne "SUPPORTED" -or $pythonProfile[0].networkAllowed -ne $false) {
+            throw "Expected supported python-small no-network profile: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $fileProfile = @($profiles | Where-Object { "$($_.runtimeType)" -eq "FILE_CONVERSION" -and "$($_.profileId)" -eq "file-conversion" })
+        if ($fileProfile.Count -ne 1 -or $fileProfile[0].supportedByContainerRuntime -ne $true -or "$($fileProfile[0].status)" -ne "SUPPORTED" -or $fileProfile[0].networkAllowed -ne $false) {
+            throw "Expected supported file-conversion no-network profile: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $browserProfile = @($profiles | Where-Object { "$($_.runtimeType)" -eq "BROWSER_AUTOMATION" -and "$($_.profileId)" -eq "browser-readonly" })
+        if ($browserProfile.Count -ne 1 -or $browserProfile[0].supportedByContainerRuntime -ne $false -or "$($browserProfile[0].status)" -ne "PLANNED" -or $browserProfile[0].networkAllowed -ne $false) {
+            throw "Expected planned browser-readonly no-network profile: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $shellProfile = @($profiles | Where-Object { "$($_.runtimeType)" -eq "SHELL" -and "$($_.profileId)" -eq "shell-restricted" })
+        if ($shellProfile.Count -ne 1 -or $shellProfile[0].supportedByContainerRuntime -ne $false -or "$($shellProfile[0].status)" -ne "PLANNED" -or $shellProfile[0].networkAllowed -ne $false) {
+            throw "Expected planned shell-restricted no-network profile: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $profilesJson = $response.data | ConvertTo-Json -Depth 20 -Compress
+        if ($profilesJson -match [regex]::Escape($SandboxWorkspaceRoot)) {
+            throw "Sandbox runtime profiles leaked workspace root path: $profilesJson"
+        }
+    } | Out-Null
+
     $expiredSweepStepName = if ($UseScheduledSweep) {
         "Wait for scheduled sandbox session sweep as TIMED_OUT"
     } else {

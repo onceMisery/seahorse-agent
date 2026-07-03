@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, Download, FolderX, History, Info, Play, RefreshCw, Square, TimerReset, Trash2 } from "lucide-react";
+import { Activity, Download, FolderX, Gauge, History, Info, Play, RefreshCw, Server, ShieldCheck, Square, TimerReset, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -21,12 +21,15 @@ import {
   sweepExpiredSandboxSessions,
   sweepOrphanedSandboxRuntimeResources,
   getSandboxRuntimeHealth,
+  getSandboxRuntimeProfiles,
   reapOrphanedSandboxRuntimeContainers,
   type SandboxSession,
   type SandboxExecution,
   type SandboxExecutionResult,
   type SandboxArtifact,
-  type SandboxArtifactDetail
+  type SandboxArtifactDetail,
+  type SandboxRuntimeHealth,
+  type SandboxRuntimeProfilesResponse
 } from "@/services/sandboxService";
 import { getErrorMessage } from "@/utils/error";
 
@@ -57,6 +60,166 @@ function artifactDisplayName(artifact?: SandboxArtifact | SandboxArtifactDetail 
   return artifact?.name || artifact?.filename || artifact?.artifactId || "-";
 }
 
+function runtimeHealthBadgeVariant(status?: string): "default" | "secondary" | "destructive" {
+  if (status === "HEALTHY") return "default";
+  if (status === "UNAVAILABLE" || status === "UNSUPPORTED") return "destructive";
+  return "secondary";
+}
+
+function runtimeProfileBadgeVariant(status?: string): "default" | "secondary" | "destructive" {
+  if (status === "SUPPORTED") return "default";
+  if (status === "BLOCKED") return "destructive";
+  return "secondary";
+}
+
+function formatDurationSeconds(value?: number) {
+  if (!value || value < 0) return "-";
+  if (value % 3600 === 0) return `${value / 3600}h`;
+  if (value % 60 === 0) return `${value / 60}m`;
+  return `${value}s`;
+}
+
+function formatRuntimeCapacity(health?: SandboxRuntimeHealth | null) {
+  if (!health) return "-";
+  const limit = health.activeSessionLimit ?? 0;
+  const active = health.activeSessionCount ?? 0;
+  if (limit <= 0) return health.capacityStatus || "UNBOUNDED";
+  return `${health.capacityStatus || "UNKNOWN"} ${active}/${limit}`;
+}
+
+function RuntimeGovernancePanel({
+  health,
+  profiles,
+  loading,
+  error,
+  onRefresh
+}: {
+  health: SandboxRuntimeHealth | null;
+  profiles: SandboxRuntimeProfilesResponse | null;
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
+  const profileRows = profiles?.profiles || [];
+  const checkedAt = health?.checkedAt ? formatTimestamp(health.checkedAt) : "-";
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4" />
+            Runtime governance
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            title="Refresh runtime governance"
+            disabled={loading}
+            onClick={onRefresh}
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error && (
+          <div className="rounded border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {!error && loading && !health && !profiles && (
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="h-20 animate-pulse rounded border border-slate-100 bg-slate-50" />
+            ))}
+          </div>
+        )}
+
+        {!loading && !error && !health && !profiles && (
+          <div className="text-sm text-muted-foreground">No runtime governance data</div>
+        )}
+
+        {(health || profiles) && (
+          <>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded border border-slate-100 bg-slate-50 p-3">
+                <div className="mb-2 flex items-center gap-2 text-xs uppercase text-muted-foreground">
+                  <Server className="h-3.5 w-3.5" />
+                  Runtime
+                </div>
+                <Badge variant={runtimeHealthBadgeVariant(health?.status)}>
+                  {health?.status || "UNKNOWN"}
+                </Badge>
+                <div className="mt-2 truncate font-mono text-xs text-slate-600">
+                  {health?.runtime || "-"} / {health?.engine || "-"}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">{checkedAt}</div>
+              </div>
+
+              <div className="rounded border border-slate-100 bg-slate-50 p-3">
+                <div className="mb-2 flex items-center gap-2 text-xs uppercase text-muted-foreground">
+                  <Gauge className="h-3.5 w-3.5" />
+                  Capacity
+                </div>
+                <div className="font-mono text-sm text-slate-700">{formatRuntimeCapacity(health)}</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Remaining: {health?.activeSessionRemaining ?? "-"}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Containers: {health?.inspectedContainerCount ?? 0} / orphan {health?.orphanContainerCount ?? 0}
+                </div>
+              </div>
+
+              <div className="rounded border border-slate-100 bg-slate-50 p-3">
+                <div className="mb-2 flex items-center gap-2 text-xs uppercase text-muted-foreground">
+                  <Activity className="h-3.5 w-3.5" />
+                  Policy
+                </div>
+                <div className="font-mono text-sm text-slate-700">
+                  {profiles?.defaultNetworkPolicy || "DENY_ALL"}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  TTL: {formatDurationSeconds(profiles?.defaultTtlSeconds)}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Profiles: {profileRows.length || "-"}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {profileRows.map((profile) => (
+                <div
+                  key={profile.runtimeType || profile.profileId}
+                  className="grid gap-2 rounded border border-slate-100 bg-white p-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto_auto]"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate font-mono text-xs text-slate-600">
+                      {profile.runtimeType || "UNKNOWN"}
+                    </div>
+                    <div className="truncate text-sm font-medium text-slate-800">
+                      {profile.profileId || "-"}
+                    </div>
+                  </div>
+                  <Badge variant={runtimeProfileBadgeVariant(profile.status)}>
+                    {profile.status || "UNKNOWN"}
+                  </Badge>
+                  <Badge variant={profile.networkAllowed ? "destructive" : "secondary"}>
+                    {profile.networkAllowed ? "NETWORK" : "NO NETWORK"}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function SandboxPage() {
   const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.SANDBOX);
 
@@ -79,6 +242,10 @@ export function SandboxPage() {
   const [sweepingOrphanedRuntimeResources, setSweepingOrphanedRuntimeResources] = useState(false);
   const [checkingRuntimeHealth, setCheckingRuntimeHealth] = useState(false);
   const [reapingOrphanedRuntimeContainers, setReapingOrphanedRuntimeContainers] = useState(false);
+  const [runtimeHealth, setRuntimeHealth] = useState<SandboxRuntimeHealth | null>(null);
+  const [runtimeProfiles, setRuntimeProfiles] = useState<SandboxRuntimeProfilesResponse | null>(null);
+  const [loadingRuntimeGovernance, setLoadingRuntimeGovernance] = useState(false);
+  const [runtimeGovernanceError, setRuntimeGovernanceError] = useState<string | null>(null);
 
   const clearArtifactSelection = () => {
     setSelectedArtifactId(null);
@@ -123,9 +290,35 @@ export function SandboxPage() {
     await loadSessionData(selected);
   };
 
+  const refreshRuntimeGovernance = async (showToast = false) => {
+    try {
+      setLoadingRuntimeGovernance(true);
+      setRuntimeGovernanceError(null);
+      const [health, profiles] = await Promise.all([
+        getSandboxRuntimeHealth(),
+        getSandboxRuntimeProfiles()
+      ]);
+      setRuntimeHealth(health || null);
+      setRuntimeProfiles(profiles || null);
+      if (showToast) {
+        toast.success(`Runtime ${health?.status || "UNKNOWN"} / ${profiles?.defaultNetworkPolicy || "DENY_ALL"}`);
+      }
+    } catch (error) {
+      const message = getErrorMessage(error, "Runtime governance load failed");
+      setRuntimeGovernanceError(message);
+      if (showToast) {
+        toast.error(message);
+      }
+      console.error(error);
+    } finally {
+      setLoadingRuntimeGovernance(false);
+    }
+  };
+
   useEffect(() => {
     if (featureState.enabled) {
       void refreshSessions();
+      void refreshRuntimeGovernance();
     }
   }, [featureState.enabled]);
 
@@ -306,6 +499,7 @@ export function SandboxPage() {
       setSweepingOrphanedRuntimeResources(true);
       const result = await sweepOrphanedSandboxRuntimeResources();
       await refreshSessions();
+      await refreshRuntimeGovernance();
       const removedCount = result.removedWorkspaceCount ?? 0;
       const failedCount = result.failedWorkspaceCount ?? 0;
       const orphanContainerCount = result.orphanContainerCount ?? 0;
@@ -331,6 +525,8 @@ export function SandboxPage() {
     try {
       setCheckingRuntimeHealth(true);
       const health = await getSandboxRuntimeHealth();
+      setRuntimeHealth(health || null);
+      setRuntimeGovernanceError(null);
       const status = health.status || "UNKNOWN";
       const inspected = health.inspectedContainerCount ?? 0;
       const orphans = health.orphanContainerCount ?? 0;
@@ -375,6 +571,7 @@ export function SandboxPage() {
         return;
       }
       const result = await reapOrphanedSandboxRuntimeContainers(false);
+      await refreshRuntimeGovernance();
       const reapedCount = result.reapedContainerCount ?? 0;
       const failedCount = result.failedContainerCount ?? 0;
       if (failedCount > 0) {
@@ -405,6 +602,14 @@ export function SandboxPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="space-y-4">
+          <RuntimeGovernancePanel
+            health={runtimeHealth}
+            profiles={runtimeProfiles}
+            loading={loadingRuntimeGovernance}
+            error={runtimeGovernanceError}
+            onRefresh={() => void refreshRuntimeGovernance(true)}
+          />
+
           <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">

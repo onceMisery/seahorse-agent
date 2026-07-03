@@ -17,12 +17,13 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
@@ -146,6 +147,12 @@ public class SeahorseSandboxController {
                 SandboxRuntimeInboundPort::inspectRuntimeHealth);
     }
 
+    @GetMapping("/api/sandbox/runtime/profiles")
+    public ApiResponse<Object> listRuntimeProfiles() {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        return ApiResponse.ok(runtimeProfilesResponse());
+    }
+
     @PostMapping("/api/sandbox/runtime/orphan-containers:reap")
     public ApiResponse<Object> reapOrphanedRuntimeContainers(
             @RequestParam(defaultValue = "true") boolean dryRun) {
@@ -248,6 +255,28 @@ public class SeahorseSandboxController {
                 artifact.createdAt());
     }
 
+    private static SandboxRuntimeProfilesResponse runtimeProfilesResponse() {
+        return new SandboxRuntimeProfilesResponse(
+                List.of(
+                        runtimeProfile(SandboxRuntimeType.CODE_INTERPRETER),
+                        runtimeProfile(SandboxRuntimeType.FILE_CONVERSION),
+                        runtimeProfile(SandboxRuntimeType.BROWSER_AUTOMATION),
+                        runtimeProfile(SandboxRuntimeType.SHELL)),
+                "DENY_ALL",
+                SandboxSession.DEFAULT_SESSION_TTL.toSeconds());
+    }
+
+    private static SandboxRuntimeProfileResponse runtimeProfile(SandboxRuntimeType runtimeType) {
+        boolean supportedByContainerRuntime = runtimeType == SandboxRuntimeType.CODE_INTERPRETER
+                || runtimeType == SandboxRuntimeType.FILE_CONVERSION;
+        return new SandboxRuntimeProfileResponse(
+                runtimeType,
+                SandboxSession.profileIdOrDefault(null, runtimeType),
+                supportedByContainerRuntime,
+                false,
+                supportedByContainerRuntime ? "SUPPORTED" : "PLANNED");
+    }
+
     public record SandboxSessionCreateRequest(String tenantId,
                                               String runId,
                                               SandboxRuntimeType runtimeType,
@@ -305,5 +334,21 @@ public class SeahorseSandboxController {
                                                 boolean downloadable,
                                                 String downloadBlockedReason,
                                                 Instant createdAt) {
+    }
+
+    public record SandboxRuntimeProfilesResponse(List<SandboxRuntimeProfileResponse> profiles,
+                                                 String defaultNetworkPolicy,
+                                                 long defaultTtlSeconds) {
+
+        public SandboxRuntimeProfilesResponse {
+            profiles = profiles == null ? List.of() : List.copyOf(profiles);
+        }
+    }
+
+    public record SandboxRuntimeProfileResponse(SandboxRuntimeType runtimeType,
+                                                String profileId,
+                                                boolean supportedByContainerRuntime,
+                                                boolean networkAllowed,
+                                                String status) {
     }
 }

@@ -395,6 +395,12 @@ Sandbox artifacts now preserve the scanner-owned decision summary across the run
 
 This closes the immediate auditability gap for the existing metadata/text scanner. Virus scanning, binary/PDF deep scanning, and structured redaction-summary payloads remain follow-up hardening work.
 
+### 2026-07-03 Update: runtime governance profile visibility
+
+Sandbox Runtime now exposes `GET /api/sandbox/runtime/profiles` as a read-only governance endpoint. The response is derived from kernel-owned defaults instead of Docker inspection: `CODE_INTERPRETER -> python-small`, `FILE_CONVERSION -> file-conversion`, `BROWSER_AUTOMATION -> browser-readonly`, and `SHELL -> shell-restricted`, with default network policy `DENY_ALL` and default TTL `3600` seconds. Container support is marked as supported for Code Interpreter and File Conversion, while Browser Automation and Shell stay planned.
+
+The admin Sandbox page now has a persistent Runtime governance panel that combines this profile metadata with `GET /api/sandbox/runtime/health` capacity and container signals. This closes the first Operations visibility gap for profile/capacity state. It deliberately does not add profile mutation, tenant/agent quota policy writes, runtime pool scheduling, or adapter side effects; those remain production hardening follow-ups.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

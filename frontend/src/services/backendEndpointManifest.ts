@@ -85,6 +85,14 @@ export const backendEndpointManifest = [
   },
   {
     "method": "DELETE",
+    "path": "/marketplace/agents/{}/subscribe"
+  },
+  {
+    "method": "DELETE",
+    "path": "/me/memories/{}"
+  },
+  {
+    "method": "DELETE",
     "path": "/memories/{}/{}"
   },
   {
@@ -133,6 +141,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/agent-catalog"
+  },
+  {
+    "method": "GET",
     "path": "/agent-runs"
   },
   {
@@ -169,6 +181,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/agent-templates"
+  },
+  {
+    "method": "GET",
     "path": "/agent/plugins/health"
   },
   {
@@ -189,7 +205,19 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/agents/{}/publish-checks/latest"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/{}/rollouts/{}/cost-summary"
+  },
+  {
+    "method": "GET",
     "path": "/agents/{}/versions/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/{}/versions/{}/rollouts/latest"
   },
   {
     "method": "GET",
@@ -529,19 +557,27 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
-    "path": "/api/sandbox/sessions"
-  },
-  {
-    "method": "GET",
-    "path": "/api/sandbox/sessions/{}/artifacts"
-  },
-  {
-    "method": "GET",
     "path": "/api/sandbox/artifacts/{}"
   },
   {
     "method": "GET",
     "path": "/api/sandbox/artifacts/{}/download"
+  },
+  {
+    "method": "GET",
+    "path": "/api/sandbox/runtime/health"
+  },
+  {
+    "method": "GET",
+    "path": "/api/sandbox/runtime/profiles"
+  },
+  {
+    "method": "GET",
+    "path": "/api/sandbox/sessions"
+  },
+  {
+    "method": "GET",
+    "path": "/api/sandbox/sessions/{}/artifacts"
   },
   {
     "method": "GET",
@@ -584,14 +620,6 @@ export const backendEndpointManifest = [
     "path": "/api/tools/{}"
   },
   {
-    "method": "POST",
-    "path": "/api/tools/{}/preflight"
-  },
-  {
-    "method": "POST",
-    "path": "/api/tools/{}/invoke"
-  },
-  {
     "method": "GET",
     "path": "/api/workflows/{}/visualization"
   },
@@ -606,6 +634,18 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/auth/email-available"
+  },
+  {
+    "method": "GET",
+    "path": "/connectors"
+  },
+  {
+    "method": "GET",
+    "path": "/connectors/{}/operations"
+  },
+  {
+    "method": "GET",
+    "path": "/connectors/{}/operations/{}/credential-binding"
   },
   {
     "method": "GET",
@@ -757,6 +797,18 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/marketplace/agents"
+  },
+  {
+    "method": "GET",
+    "path": "/marketplace/agents/my-subscriptions"
+  },
+  {
+    "method": "GET",
+    "path": "/marketplace/reviews/pending"
+  },
+  {
+    "method": "GET",
     "path": "/mcp/servers"
   },
   {
@@ -766,6 +818,10 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/mcp/servers/{}/stderr-tail"
+  },
+  {
+    "method": "GET",
+    "path": "/me/memories"
   },
   {
     "method": "GET",
@@ -949,6 +1005,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/run-experiments/{}/report"
+  },
+  {
+    "method": "GET",
     "path": "/run-profiles"
   },
   {
@@ -998,6 +1058,18 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/tasks/{}/events"
+  },
+  {
+    "method": "GET",
+    "path": "/tool-invocations"
+  },
+  {
+    "method": "GET",
+    "path": "/tools"
+  },
+  {
+    "method": "GET",
+    "path": "/tools/{}"
   },
   {
     "method": "GET",
@@ -1057,7 +1129,35 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/agents/{}/rollouts/{}/pause"
+  },
+  {
+    "method": "POST",
+    "path": "/agents/{}/rollouts/{}/promote"
+  },
+  {
+    "method": "POST",
+    "path": "/agents/{}/rollouts/{}/rollback"
+  },
+  {
+    "method": "POST",
     "path": "/agents/{}/runs"
+  },
+  {
+    "method": "POST",
+    "path": "/agents/{}/validate"
+  },
+  {
+    "method": "POST",
+    "path": "/agents/{}/versions/{}/rollback"
+  },
+  {
+    "method": "POST",
+    "path": "/agents/{}/versions/{}/rollouts/canary"
+  },
+  {
+    "method": "POST",
+    "path": "/agents/from-template"
   },
   {
     "method": "POST",
@@ -1340,10 +1440,6 @@ export const backendEndpointManifest = [
     "path": "/api/run-profiles/{}/submit-approval"
   },
   {
-    "method": "GET",
-    "path": "/api/sandbox/runtime/health"
-  },
-  {
     "method": "POST",
     "path": "/api/sandbox/runtime/orphan-containers:reap"
   },
@@ -1357,15 +1453,15 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
-    "path": "/api/sandbox/sessions/expired:sweep"
-  },
-  {
-    "method": "POST",
     "path": "/api/sandbox/sessions/{}/close"
   },
   {
     "method": "POST",
     "path": "/api/sandbox/sessions/{}/execute"
+  },
+  {
+    "method": "POST",
+    "path": "/api/sandbox/sessions/expired:sweep"
   },
   {
     "method": "POST",
@@ -1401,6 +1497,14 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/api/tools/{}/invoke"
+  },
+  {
+    "method": "POST",
+    "path": "/api/tools/{}/preflight"
+  },
+  {
+    "method": "POST",
     "path": "/auth/login"
   },
   {
@@ -1418,6 +1522,18 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/auth/send-code"
+  },
+  {
+    "method": "POST",
+    "path": "/connectors/{}/operations/{}/disable"
+  },
+  {
+    "method": "POST",
+    "path": "/connectors/{}/operations/{}/enable"
+  },
+  {
+    "method": "POST",
+    "path": "/connectors/openapi"
   },
   {
     "method": "POST",
@@ -1565,6 +1681,18 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/marketplace/agents/{}/publish"
+  },
+  {
+    "method": "POST",
+    "path": "/marketplace/agents/{}/ratings"
+  },
+  {
+    "method": "POST",
+    "path": "/marketplace/agents/{}/subscribe"
+  },
+  {
+    "method": "POST",
     "path": "/mcp/servers/{}/refresh-tools"
   },
   {
@@ -1574,6 +1702,10 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/mcp/servers/{}/test"
+  },
+  {
+    "method": "POST",
+    "path": "/me/memory-settings/privacy-mode"
   },
   {
     "method": "POST",
@@ -1757,6 +1889,22 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/tools/{}/disable"
+  },
+  {
+    "method": "POST",
+    "path": "/tools/{}/enable"
+  },
+  {
+    "method": "POST",
+    "path": "/tools/{}/invoke"
+  },
+  {
+    "method": "POST",
+    "path": "/tools/{}/preflight"
+  },
+  {
+    "method": "POST",
     "path": "/users"
   },
   {
@@ -1829,6 +1977,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "PUT",
+    "path": "/connectors/{}/operations/{}/credential-binding"
+  },
+  {
+    "method": "PUT",
     "path": "/conversations/{}"
   },
   {
@@ -1862,6 +2014,14 @@ export const backendEndpointManifest = [
   {
     "method": "PUT",
     "path": "/mappings/{}"
+  },
+  {
+    "method": "PUT",
+    "path": "/marketplace/reviews/{}/approve"
+  },
+  {
+    "method": "PUT",
+    "path": "/marketplace/reviews/{}/reject"
   },
   {
     "method": "PUT",

@@ -102,3 +102,9 @@ Seahorse Agent 的目标是形成一个可证据化、可治理、可持续演�
 | 运维证据 | health/readiness、metrics、日志、失败恢复步骤 |
 
 不满足运行证据的能力，只能写成“设计中”或“部分实现”，不能写成“完整闭环”。完成后必须移动到 [路线图完成情况报告](../analysis/roadmap-completion-status-report.md)，并从本文规划主体移除。
+
+## 2026-07-03 Update: Sandbox Runtime Governance Visibility
+
+Sandbox Runtime now exposes read-only runtime governance/profile visibility through `GET /api/sandbox/runtime/profiles` and the admin Sandbox Operations panel. The endpoint reports the kernel-owned default profile mapping, default `DENY_ALL` network posture, default TTL, and container-supported versus planned runtime types without touching Docker/Podman.
+
+This moves runtime profile/capacity visibility out of one-off health toasts and into the operator surface. Remaining Sandbox productionization work is profile/policy mutation, tenant/agent quota administration, browser automation, broader document/binary conversion, deeper scanning/redaction, stronger isolation, and node-pool scheduling/health.

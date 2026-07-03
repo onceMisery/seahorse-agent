@@ -69,6 +69,20 @@ export interface SandboxRuntimeHealth {
   failureMessages?: string[];
 }
 
+export interface SandboxRuntimeProfile {
+  runtimeType?: string;
+  profileId?: string;
+  supportedByContainerRuntime?: boolean;
+  networkAllowed?: boolean;
+  status?: string;
+}
+
+export interface SandboxRuntimeProfilesResponse {
+  profiles?: SandboxRuntimeProfile[];
+  defaultNetworkPolicy?: string;
+  defaultTtlSeconds?: number;
+}
+
 export interface SandboxRuntimeContainerReapResult {
   reapedAt?: string;
   dryRun?: boolean;
@@ -199,6 +213,10 @@ export function sweepOrphanedSandboxRuntimeResources() {
 
 export function getSandboxRuntimeHealth() {
   return api.get<SandboxRuntimeHealth>("/api/sandbox/runtime/health");
+}
+
+export function getSandboxRuntimeProfiles() {
+  return api.get<SandboxRuntimeProfilesResponse>("/api/sandbox/runtime/profiles");
 }
 
 export function reapOrphanedSandboxRuntimeContainers(dryRun = true) {
