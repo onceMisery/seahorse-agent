@@ -37,6 +37,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -48,6 +50,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -74,6 +77,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final String CONTAINER_NAME_PREFIX = "seahorse-sandbox-";
     private static final int MAX_FILE_CONVERSION_CONTENT_CHARS = 256 * 1024;
     private static final int MAX_BROWSER_HTML_CHARS = 256 * 1024;
+    private static final int MAX_BROWSER_URL_CHARS = 2048;
+    private static final int MAX_BROWSER_ALLOWED_HOSTS = 16;
     private static final int DEFAULT_BROWSER_VIEWPORT_WIDTH = 1280;
     private static final int DEFAULT_BROWSER_VIEWPORT_HEIGHT = 720;
     private static final int MIN_BROWSER_VIEWPORT_SIZE = 320;
@@ -144,7 +149,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             Path workspace = workspaceForSession(session.sessionId());
             Files.createDirectories(workspace);
             Set<Path> excludedArtifacts = prepareWorkspace(session.runtimeType(), safeRequest.input(), workspace);
-            ContainerCommandResult commandResult = commandRunner.run(containerCommand(session, workspace));
+            ContainerCommandResult commandResult = commandRunner.run(
+                    containerCommand(session, workspace, safeRequest.networkRequested()));
             Instant finishedAt = clock.instant();
             if (commandResult.timedOut()) {
                 SandboxExecution execution = new SandboxExecution(
@@ -250,13 +256,16 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             BrowserAutomationRequest request = parseBrowserAutomationRequest(input);
             Path inputPath = safeWorkspace.resolve(browserInputName());
             Files.writeString(safeWorkspace.resolve(SCRIPT_NAME), browserAutomationScript(request), StandardCharsets.UTF_8);
-            Files.writeString(
-                    inputPath,
-                    request.html(),
-                    StandardCharsets.UTF_8);
-            return Set.of(
-                    safeWorkspace.resolve(SCRIPT_NAME),
-                    inputPath);
+            if (!hasText(request.url())) {
+                Files.writeString(
+                        inputPath,
+                        request.html(),
+                        StandardCharsets.UTF_8);
+                return Set.of(
+                        safeWorkspace.resolve(SCRIPT_NAME),
+                        inputPath);
+            }
+            return Set.of(safeWorkspace.resolve(SCRIPT_NAME));
         }
         throw new IllegalArgumentException("unsupported sandbox runtime type: " + runtimeType);
     }
@@ -295,8 +304,16 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     "container browser automation supports snapshot and extract_text actions only");
         }
         String html = root.path("html").asText("");
-        if (!hasText(html)) {
-            throw new IllegalArgumentException("browser automation html is required");
+        String url = normalizedBrowserUrl(root.path("url").asText(""));
+        List<String> allowedHosts = normalizedBrowserAllowedHosts(root.get("allowedHosts"));
+        if (!hasText(url) && !hasText(html)) {
+            throw new IllegalArgumentException("browser automation html or url is required");
+        }
+        if (hasText(url) && allowedHosts.isEmpty()) {
+            throw new IllegalArgumentException("browser automation allowedHosts is required for url mode");
+        }
+        if (hasText(url) && !allowedHosts.contains(browserUrlHost(url))) {
+            throw new IllegalArgumentException("browser automation url host must be included in allowedHosts");
         }
         if (html.length() > MAX_BROWSER_HTML_CHARS) {
             throw new IllegalArgumentException(
@@ -317,7 +334,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 : root.path("screenshot").asBoolean(BROWSER_ACTION_SNAPSHOT.equals(action));
         boolean har = root.path("har").asBoolean(false);
         boolean video = root.path("video").asBoolean(false);
-        return new BrowserAutomationRequest(action, html, viewportWidth, viewportHeight, screenshot, har, video);
+        return new BrowserAutomationRequest(action, html, url, allowedHosts, viewportWidth, viewportHeight, screenshot, har, video);
     }
 
     private String browserAutomationScript(BrowserAutomationRequest request) {
@@ -325,9 +342,12 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 import json
                 from datetime import datetime, timezone
                 from pathlib import Path
+                from urllib.parse import urlparse
                 from playwright.sync_api import sync_playwright
 
                 action = "%s"
+                target_url = %s
+                allowed_hosts = set(%s)
                 viewport_width = %d
                 viewport_height = %d
                 screenshot_enabled = %s
@@ -348,7 +368,11 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
                 def allowed_url(url):
-                    return url.startswith(("about:", "blob:", "data:"))
+                    if url.startswith(("about:", "blob:", "data:")):
+                        return True
+                    parsed = urlparse(url)
+                    host = (parsed.hostname or "").lower()
+                    return parsed.scheme in ("http", "https") and host in allowed_hosts
 
                 def empty_har_request(method, url):
                     return {
@@ -405,7 +429,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         }
                     }
 
-                html = input_path.read_text(encoding="utf-8-sig")
+                html = "" if target_url else input_path.read_text(encoding="utf-8-sig")
                 network_events = []
                 network_event_index = {}
                 video_file = None
@@ -468,7 +492,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         page.on("response", on_response)
                         page.on("requestfailed", on_request_failed)
                         page.route("**/*", block_external)
-                        page.set_content(html, wait_until="load", timeout=10000)
+                        if target_url:
+                            page.goto(target_url, wait_until="load", timeout=10000)
+                        else:
+                            page.set_content(html, wait_until="load", timeout=10000)
                         if har_enabled:
                             page.wait_for_timeout(250)
                         title = page.title()
@@ -482,8 +509,11 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             screenshot_file = screenshot_path.name
                         result = {
                             "action": action,
+                            "source": "url" if target_url else "html",
                             "title": title,
                             "url": page.url,
+                            "targetUrl": target_url or None,
+                            "allowedHosts": sorted(allowed_hosts),
                             "text": compact_text(body_text),
                             "textLength": len(body_text),
                             "viewport": {
@@ -522,6 +552,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}; har={har_enabled}; video={video_enabled}")
                 """.formatted(
                 request.action(),
+                jsonForScript(request.url()),
+                jsonForScript(request.allowedHosts()),
                 request.viewportWidth(),
                 request.viewportHeight(),
                 request.screenshot() ? "True" : "False",
@@ -815,6 +847,74 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return Math.max(min, Math.min(max, parsed));
     }
 
+    private String normalizedBrowserUrl(String value) {
+        if (!hasText(value)) {
+            return "";
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() > MAX_BROWSER_URL_CHARS) {
+            throw new IllegalArgumentException("browser automation url exceeds " + MAX_BROWSER_URL_CHARS + " chars");
+        }
+        try {
+            URI uri = new URI(trimmed);
+            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+            if (!Set.of("http", "https").contains(scheme) || !hasText(uri.getHost())) {
+                throw new IllegalArgumentException("browser automation url must be an HTTP/HTTPS URL with a host");
+            }
+            return uri.normalize().toString();
+        } catch (URISyntaxException ex) {
+            throw new IllegalArgumentException("browser automation url is not valid", ex);
+        }
+    }
+
+    private String browserUrlHost(String url) {
+        try {
+            return new URI(url).getHost().toLowerCase(Locale.ROOT);
+        } catch (URISyntaxException ex) {
+            throw new IllegalArgumentException("browser automation url is not valid", ex);
+        }
+    }
+
+    private List<String> normalizedBrowserAllowedHosts(JsonNode value) {
+        if (value == null || value.isMissingNode() || value.isNull()) {
+            return List.of();
+        }
+        LinkedHashSet<String> hosts = new LinkedHashSet<>();
+        if (value.isArray()) {
+            value.forEach(item -> addNormalizedBrowserHost(hosts, item.asText("")));
+        } else if (value.isTextual()) {
+            for (String item : value.asText("").split(",")) {
+                addNormalizedBrowserHost(hosts, item);
+            }
+        } else {
+            addNormalizedBrowserHost(hosts, value.asText(""));
+        }
+        if (hosts.size() > MAX_BROWSER_ALLOWED_HOSTS) {
+            throw new IllegalArgumentException(
+                    "browser automation allowedHosts exceeds " + MAX_BROWSER_ALLOWED_HOSTS + " hosts");
+        }
+        return new ArrayList<>(hosts);
+    }
+
+    private void addNormalizedBrowserHost(Set<String> hosts, String value) {
+        if (!hasText(value)) {
+            return;
+        }
+        String host = value.trim().toLowerCase(Locale.ROOT);
+        if (host.contains("/") || host.contains(":") || !host.matches("[a-z0-9.-]+")) {
+            throw new IllegalArgumentException("browser automation allowedHosts must contain host names only");
+        }
+        hosts.add(host);
+    }
+
+    private String jsonForScript(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("browser automation script input could not be serialized", ex);
+        }
+    }
+
     @Override
     public SandboxSession closeSession(SandboxSession session) {
         SandboxSession safeSession = Objects.requireNonNull(session, "session must not be null");
@@ -975,15 +1075,20 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 failureMessages);
     }
 
-    private ContainerCommand containerCommand(SandboxSession session, Path workspace) {
+    private ContainerCommand containerCommand(SandboxSession session, Path workspace, boolean networkRequested) {
         List<String> commandLine = new ArrayList<>();
         commandLine.add(properties.getEngine());
         commandLine.add("run");
         commandLine.add("--rm");
         commandLine.add("--name");
         commandLine.add(containerName(session.sessionId()));
-        commandLine.add("--network");
-        commandLine.add("none");
+        if (networkRequested) {
+            commandLine.add("--add-host");
+            commandLine.add("host.docker.internal:host-gateway");
+        } else {
+            commandLine.add("--network");
+            commandLine.add("none");
+        }
         commandLine.add("--memory");
         commandLine.add(memoryForRuntime(session.runtimeType()));
         commandLine.add("--cpus");
@@ -1457,6 +1562,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
     private record BrowserAutomationRequest(String action,
                                             String html,
+                                            String url,
+                                            List<String> allowedHosts,
                                             int viewportWidth,
                                             int viewportHeight,
                                             boolean screenshot,

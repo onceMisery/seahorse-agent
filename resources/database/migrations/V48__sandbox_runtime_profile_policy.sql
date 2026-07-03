@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS sa_sandbox_runtime_profile_policy (
   CONSTRAINT chk_sa_sandbox_runtime_profile_policy_ttl
     CHECK (session_ttl_seconds >= 60 AND session_ttl_seconds <= 7200),
   CONSTRAINT chk_sa_sandbox_runtime_profile_policy_network
-    CHECK (network_allowed = FALSE)
+    CHECK (network_allowed = FALSE OR runtime_type = 'BROWSER_AUTOMATION')
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_sa_sandbox_runtime_profile_policy_runtime

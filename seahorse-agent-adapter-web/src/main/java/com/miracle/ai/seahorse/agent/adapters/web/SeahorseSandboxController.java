@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxNetworkPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicyStatus;
@@ -37,6 +38,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeProfilePolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
@@ -69,17 +71,20 @@ public class SeahorseSandboxController {
     private final ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider;
     private final ObjectProvider<ObjectStoragePort> objectStoragePortProvider;
     private final ObjectProvider<QuotaManagementInboundPort> quotaManagementPortProvider;
+    private final ObjectProvider<SandboxPolicyPort> sandboxPolicyPortProvider;
     private final AdvancedFeatureGate advancedFeatureGate;
 
     @Autowired
     public SeahorseSandboxController(ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider,
-                                     ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider,
-                                     ObjectProvider<ObjectStoragePort> objectStoragePortProvider,
-                                     ObjectProvider<QuotaManagementInboundPort> quotaManagementPortProvider) {
+                                      ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider,
+                                      ObjectProvider<ObjectStoragePort> objectStoragePortProvider,
+                                      ObjectProvider<QuotaManagementInboundPort> quotaManagementPortProvider,
+                                      ObjectProvider<SandboxPolicyPort> sandboxPolicyPortProvider) {
         this(sandboxRuntimePortProvider,
                 advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults),
                 objectStoragePortProvider,
-                quotaManagementPortProvider);
+                quotaManagementPortProvider,
+                sandboxPolicyPortProvider);
     }
 
     public SeahorseSandboxController(ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider,
@@ -88,18 +93,27 @@ public class SeahorseSandboxController {
     }
 
     public SeahorseSandboxController(ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider,
-                                     AdvancedFeatureGate advancedFeatureGate,
-                                     ObjectProvider<ObjectStoragePort> objectStoragePortProvider) {
+                                      AdvancedFeatureGate advancedFeatureGate,
+                                      ObjectProvider<ObjectStoragePort> objectStoragePortProvider) {
         this(sandboxRuntimePortProvider, advancedFeatureGate, objectStoragePortProvider, null);
     }
 
     public SeahorseSandboxController(ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider,
-                                     AdvancedFeatureGate advancedFeatureGate,
-                                     ObjectProvider<ObjectStoragePort> objectStoragePortProvider,
-                                     ObjectProvider<QuotaManagementInboundPort> quotaManagementPortProvider) {
+                                      AdvancedFeatureGate advancedFeatureGate,
+                                      ObjectProvider<ObjectStoragePort> objectStoragePortProvider,
+                                      ObjectProvider<QuotaManagementInboundPort> quotaManagementPortProvider) {
+        this(sandboxRuntimePortProvider, advancedFeatureGate, objectStoragePortProvider, quotaManagementPortProvider, null);
+    }
+
+    public SeahorseSandboxController(ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider,
+                                      AdvancedFeatureGate advancedFeatureGate,
+                                      ObjectProvider<ObjectStoragePort> objectStoragePortProvider,
+                                      ObjectProvider<QuotaManagementInboundPort> quotaManagementPortProvider,
+                                      ObjectProvider<SandboxPolicyPort> sandboxPolicyPortProvider) {
         this.sandboxRuntimePortProvider = sandboxRuntimePortProvider;
         this.objectStoragePortProvider = objectStoragePortProvider;
         this.quotaManagementPortProvider = quotaManagementPortProvider;
+        this.sandboxPolicyPortProvider = sandboxPolicyPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
                 ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
@@ -179,7 +193,11 @@ public class SeahorseSandboxController {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
         String safeTenantId = requireText(tenantId, "tenantId must not be blank");
         return ApiResponses.requireService(sandboxRuntimePortProvider,
-                port -> runtimeProfilesResponse(port.listRuntimeProfilePolicies(safeTenantId)));
+                port -> runtimeProfilesResponse(
+                        port.listRuntimeProfilePolicies(safeTenantId),
+                        sandboxPolicyPortProvider == null
+                                ? null
+                                : sandboxPolicyPortProvider.getIfAvailable()));
     }
 
     @PostMapping("/api/sandbox/runtime/profile-policies")
@@ -331,7 +349,8 @@ public class SeahorseSandboxController {
                 artifact.createdAt());
     }
 
-    private static SandboxRuntimeProfilesResponse runtimeProfilesResponse(List<SandboxRuntimeProfilePolicy> policies) {
+    private static SandboxRuntimeProfilesResponse runtimeProfilesResponse(List<SandboxRuntimeProfilePolicy> policies,
+                                                                          SandboxPolicyPort policyPort) {
         List<SandboxRuntimeProfilePolicy> safePolicies = policies == null ? List.of() : List.copyOf(policies);
         return new SandboxRuntimeProfilesResponse(
                 List.of(
@@ -339,7 +358,8 @@ public class SeahorseSandboxController {
                         runtimeProfile(SandboxRuntimeType.FILE_CONVERSION, safePolicies),
                         runtimeProfile(SandboxRuntimeType.BROWSER_AUTOMATION, safePolicies),
                         runtimeProfile(SandboxRuntimeType.SHELL, safePolicies)),
-                "DENY_ALL",
+                policyPort == null ? SandboxNetworkPolicy.DENY_ALL.name() : policyPort.networkPolicy().name(),
+                policyPort == null ? List.of() : policyPort.allowlistedHosts(),
                 SandboxRuntimeProfilePolicy.DEFAULT_SESSION_TTL_SECONDS);
     }
 
@@ -446,11 +466,13 @@ public class SeahorseSandboxController {
     }
 
     public record SandboxRuntimeProfilesResponse(List<SandboxRuntimeProfileResponse> profiles,
-                                                 String defaultNetworkPolicy,
-                                                 long defaultTtlSeconds) {
+                                                  String defaultNetworkPolicy,
+                                                  List<String> allowlistedHosts,
+                                                  long defaultTtlSeconds) {
 
         public SandboxRuntimeProfilesResponse {
             profiles = profiles == null ? List.of() : List.copyOf(profiles);
+            allowlistedHosts = allowlistedHosts == null ? List.of() : List.copyOf(allowlistedHosts);
         }
     }
 

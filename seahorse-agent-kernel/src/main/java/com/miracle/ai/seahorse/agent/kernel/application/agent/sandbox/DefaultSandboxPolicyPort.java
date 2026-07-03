@@ -54,6 +54,18 @@ public class DefaultSandboxPolicyPort implements SandboxPolicyPort {
         return SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST);
     }
 
+    @Override
+    public SandboxNetworkPolicy networkPolicy() {
+        return networkPolicy;
+    }
+
+    @Override
+    public List<String> allowlistedHosts() {
+        return allowlistedHosts.stream()
+                .sorted()
+                .toList();
+    }
+
     private Set<String> normalizeHosts(List<String> hosts) {
         if (hosts == null) {
             return Set.of();

@@ -44,8 +44,9 @@ public record SandboxRuntimeProfilePolicy(String policyId,
         if (sessionTtlSeconds < MIN_SESSION_TTL_SECONDS || sessionTtlSeconds > MAX_SESSION_TTL_SECONDS) {
             throw new IllegalArgumentException("sessionTtlSeconds must be between 60 and 7200");
         }
-        if (networkAllowed) {
-            throw new IllegalArgumentException("networkAllowed must remain false until sandbox egress policy is available");
+        if (networkAllowed && runtimeType != SandboxRuntimeType.BROWSER_AUTOMATION) {
+            throw new IllegalArgumentException(
+                    "networkAllowed is only supported for BROWSER_AUTOMATION until broader sandbox egress policy is available");
         }
         createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
         updatedAt = Objects.requireNonNullElse(updatedAt, createdAt);

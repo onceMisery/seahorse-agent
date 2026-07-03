@@ -17,9 +17,20 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxNetworkPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyDecision;
+
+import java.util.List;
 
 public interface SandboxPolicyPort {
 
     SandboxPolicyDecision decide(SandboxPolicyRequest request);
+
+    default SandboxNetworkPolicy networkPolicy() {
+        return SandboxNetworkPolicy.DENY_ALL;
+    }
+
+    default List<String> allowlistedHosts() {
+        return List.of();
+    }
 }

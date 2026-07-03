@@ -160,6 +160,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Clock;
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration(proxyBeanMethods = false)
@@ -754,14 +755,26 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(SandboxPolicyPort.class)
-    public SandboxPolicyPort seahorseSandboxPolicyPort() {
-        return new DefaultSandboxPolicyPort(SandboxNetworkPolicy.DENY_ALL, List.of());
+    public SandboxPolicyPort seahorseSandboxPolicyPort(
+            @Value("${seahorse.agent.sandbox.network-policy:DENY_ALL}") SandboxNetworkPolicy networkPolicy,
+            @Value("${seahorse.agent.sandbox.allowlisted-hosts:}") String allowlistedHosts) {
+        return new DefaultSandboxPolicyPort(networkPolicy, csvList(allowlistedHosts));
     }
 
     @Bean
     @ConditionalOnMissingBean(SandboxRuntimePort.class)
     public SandboxRuntimePort seahorseSandboxRuntimePort() {
         return SandboxRuntimePort.unsupported();
+    }
+
+    private static List<String> csvList(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return List.of();
+        }
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(item -> !item.isEmpty())
+                .toList();
     }
 
     @Bean

@@ -83,6 +83,7 @@ export interface SandboxRuntimeProfile {
 export interface SandboxRuntimeProfilesResponse {
   profiles?: SandboxRuntimeProfile[];
   defaultNetworkPolicy?: string;
+  allowlistedHosts?: string[];
   defaultTtlSeconds?: number;
 }
 

@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditL
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.KernelSandboxRuntimeService;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxNetworkPolicy;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
@@ -108,6 +109,21 @@ class SeahorseAgentSandboxAutoConfigurationTests {
                     assertThat(context).hasSingleBean(SandboxRuntimeInboundPort.class);
                     assertThat(context).hasSingleBean(SandboxSessionTtlSweepJob.class);
                     assertThat(context).doesNotHaveBean(SandboxRuntimeOrphanSweepJob.class);
+                });
+    }
+
+    @Test
+    void shouldBindSandboxNetworkPolicyProperties() {
+        contextRunner.withUserConfiguration(TestInfrastructureConfiguration.class)
+                .withPropertyValues(
+                        "seahorse.agent.sandbox.network-policy=ALLOWLISTED",
+                        "seahorse.agent.sandbox.allowlisted-hosts=host.docker.internal, api.example.com")
+                .run(context -> {
+                    SandboxPolicyPort policyPort = context.getBean(SandboxPolicyPort.class);
+
+                    assertThat(policyPort.networkPolicy()).isEqualTo(SandboxNetworkPolicy.ALLOWLISTED);
+                    assertThat(policyPort.allowlistedHosts())
+                            .containsExactly("api.example.com", "host.docker.internal");
                 });
     }
 

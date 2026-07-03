@@ -32,6 +32,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationRequestAwarePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -43,8 +47,12 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
 
     public static final String TOOL_ID = "sandbox_browser";
     private static final int MAX_HTML_CHARS = 256 * 1024;
+    private static final int MAX_URL_CHARS = 2048;
+    private static final int MAX_ALLOWED_HOSTS = 16;
     private static final String ACTION_ARGUMENT = "action";
     private static final String HTML_ARGUMENT = "html";
+    private static final String URL_ARGUMENT = "url";
+    private static final String ALLOWED_HOSTS_ARGUMENT = "allowedHosts";
     private static final String SCREENSHOT_ARGUMENT = "screenshot";
     private static final String HAR_ARGUMENT = "har";
     private static final String VIDEO_ARGUMENT = "video";
@@ -56,9 +64,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
             "Sandbox Browser",
-            "Render bounded inline HTML through a no-network Playwright browser sandbox. Supports page snapshots, text extraction, and governed screenshot/result/HAR/video artifacts.",
+            "Render bounded inline HTML or an explicitly allowlisted HTTP/HTTPS URL through a Playwright browser sandbox. Inline HTML stays no-network; URL mode requires allowedHosts and returns governed screenshot/result/HAR/video artifacts.",
             """
-                    {"type":"object","required":["html"],"properties":{"html":{"type":"string","minLength":1,"maxLength":262144},"action":{"type":"string","enum":["snapshot","extract_text"],"default":"snapshot"},"screenshot":{"type":"boolean","default":true},"har":{"type":"boolean","default":false},"video":{"type":"boolean","default":false},"viewportWidth":{"type":"integer","minimum":320,"maximum":2400,"default":1280},"viewportHeight":{"type":"integer","minimum":320,"maximum":2400,"default":720}}}
+                    {"type":"object","properties":{"html":{"type":"string","minLength":1,"maxLength":262144},"url":{"type":"string","minLength":1,"maxLength":2048,"description":"HTTP/HTTPS URL to visit. Requires allowedHosts and sandbox egress policy."},"allowedHosts":{"type":"array","items":{"type":"string"},"maxItems":16,"default":[],"description":"Exact host allowlist for URL mode. The URL host must be included."},"action":{"type":"string","enum":["snapshot","extract_text"],"default":"snapshot"},"screenshot":{"type":"boolean","default":true},"har":{"type":"boolean","default":false},"video":{"type":"boolean","default":false},"viewportWidth":{"type":"integer","minimum":320,"maximum":2400,"default":1280},"viewportHeight":{"type":"integer","minimum":320,"maximum":2400,"default":720}},"anyOf":[{"required":["html"]},{"required":["url","allowedHosts"]}]}
                     """);
 
     private final SandboxRuntimeInboundPort sandboxRuntime;
@@ -104,8 +112,25 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                     "sandbox_browser failed: supported actions are snapshot and extract_text");
         }
         String html = argumentStringPreservingWhitespace(safeRequest.arguments(), HTML_ARGUMENT);
-        if (html.isBlank()) {
+        String url;
+        List<String> allowedHosts;
+        String urlHost;
+        try {
+            url = normalizedUrl(jsonSupport.string(safeRequest.arguments(), URL_ARGUMENT));
+            allowedHosts = normalizedAllowedHosts(safeRequest.arguments().get(ALLOWED_HOSTS_ARGUMENT));
+            urlHost = hasText(url) ? urlHost(url) : "";
+        } catch (IllegalArgumentException ex) {
+            return ToolInvocationResult.failed(ex.getMessage());
+        }
+        boolean urlMode = hasText(url);
+        if (!urlMode && html.isBlank()) {
             return ToolInvocationResult.failed("sandbox_browser failed: html is required");
+        }
+        if (urlMode && allowedHosts.isEmpty()) {
+            return ToolInvocationResult.failed("sandbox_browser failed: allowedHosts is required for url mode");
+        }
+        if (urlMode && !allowedHosts.contains(urlHost)) {
+            return ToolInvocationResult.failed("sandbox_browser failed: url host must be included in allowedHosts");
         }
         if (html.length() > MAX_HTML_CHARS) {
             return ToolInvocationResult.failed("sandbox_browser failed: html exceeds " + MAX_HTML_CHARS + " chars");
@@ -134,28 +159,44 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                 safeRequest.arguments(),
                 VIDEO_ARGUMENT,
                 false);
+        boolean networkRequested = urlMode;
+        List<String> requestedHosts = urlMode ? allowedHosts : List.of();
         SandboxSession session = null;
         try {
             session = sandboxRuntime.createSession(new SandboxSessionCreateCommand(
                     safeRequest.tenantId(),
                     sandboxRunId(safeRequest),
                     SandboxRuntimeType.BROWSER_AUTOMATION,
-                    false,
-                    List.of()));
+                    networkRequested,
+                    requestedHosts));
             if (session.status().isTerminal()) {
-                return failed(observation(session, null, List.of(), action, viewportWidth, viewportHeight, har, video),
+                return failed(observation(
+                                session,
+                                null,
+                                List.of(),
+                                action,
+                                url,
+                                requestedHosts,
+                                networkRequested,
+                                viewportWidth,
+                                viewportHeight,
+                                har,
+                                video),
                         "sandbox browser session did not start: " + session.reasonCode());
             }
             SandboxExecutionResult result = sandboxRuntime.execute(new SandboxExecutionCommand(
                     session.sessionId(),
-                    browserInput(action, html, viewportWidth, viewportHeight, screenshot, har, video),
-                    false,
-                    List.of()));
+                    browserInput(action, html, url, requestedHosts, viewportWidth, viewportHeight, screenshot, har, video),
+                    networkRequested,
+                    requestedHosts));
             Map<String, Object> observation = observation(
                     session,
                     result.execution(),
                     result.artifacts(),
                     action,
+                    url,
+                    requestedHosts,
+                    networkRequested,
                     viewportWidth,
                     viewportHeight,
                     har,
@@ -174,6 +215,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
 
     private String browserInput(String action,
                                 String html,
+                                String url,
+                                List<String> allowedHosts,
                                 int viewportWidth,
                                 int viewportHeight,
                                 boolean screenshot,
@@ -182,6 +225,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("action", action);
         input.put("html", html);
+        input.put("url", url);
+        input.put("allowedHosts", allowedHosts);
         input.put("viewportWidth", viewportWidth);
         input.put("viewportHeight", viewportHeight);
         input.put("screenshot", screenshot);
@@ -199,6 +244,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                             SandboxExecution execution,
                                             List<SandboxArtifact> artifacts,
                                             String action,
+                                            String url,
+                                            List<String> allowedHosts,
+                                            boolean networkRequested,
                                             int viewportWidth,
                                             int viewportHeight,
                                             boolean har,
@@ -213,17 +261,26 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         observation.put("executionStatus", execution == null ? null : execution.status().name());
         observation.put("reasonCode", execution == null ? null : execution.reasonCode().name());
         observation.put("resultSummary", execution == null ? null : execution.resultSummary());
-        observation.put("browser", browser(action, viewportWidth, viewportHeight, har, video));
+        observation.put("browser", browser(action, url, allowedHosts, networkRequested, viewportWidth, viewportHeight, har, video));
         observation.put("artifacts", artifacts(artifacts));
         return observation;
     }
 
-    private Map<String, Object> browser(String action, int viewportWidth, int viewportHeight, boolean har, boolean video) {
+    private Map<String, Object> browser(String action,
+                                        String url,
+                                        List<String> allowedHosts,
+                                        boolean networkRequested,
+                                        int viewportWidth,
+                                        int viewportHeight,
+                                        boolean har,
+                                        boolean video) {
         Map<String, Object> browser = new LinkedHashMap<>();
         browser.put("action", action);
+        browser.put("url", hasText(url) ? url : null);
+        browser.put("allowedHosts", allowedHosts == null ? List.of() : List.copyOf(allowedHosts));
         browser.put("viewportWidth", viewportWidth);
         browser.put("viewportHeight", viewportHeight);
-        browser.put("networkAllowed", false);
+        browser.put("networkAllowed", networkRequested);
         browser.put("har", har);
         browser.put("video", video);
         return browser;
@@ -278,6 +335,70 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private String argumentStringPreservingWhitespace(Map<String, Object> arguments, String name) {
         Object value = arguments == null ? null : arguments.get(name);
         return value == null ? "" : value.toString();
+    }
+
+    private String normalizedUrl(String value) {
+        if (!hasText(value)) {
+            return "";
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() > MAX_URL_CHARS) {
+            throw new IllegalArgumentException("sandbox_browser failed: url exceeds " + MAX_URL_CHARS + " chars");
+        }
+        try {
+            URI uri = new URI(trimmed);
+            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+            if (!Set.of("http", "https").contains(scheme) || !hasText(uri.getHost())) {
+                throw new IllegalArgumentException("sandbox_browser failed: url must be an HTTP/HTTPS URL with a host");
+            }
+            return uri.normalize().toString();
+        } catch (URISyntaxException ex) {
+            throw new IllegalArgumentException("sandbox_browser failed: url is not valid", ex);
+        }
+    }
+
+    private String urlHost(String url) {
+        try {
+            return new URI(url).getHost().toLowerCase(Locale.ROOT);
+        } catch (URISyntaxException ex) {
+            throw new IllegalArgumentException("sandbox_browser failed: url is not valid", ex);
+        }
+    }
+
+    private List<String> normalizedAllowedHosts(Object value) {
+        if (value == null) {
+            return List.of();
+        }
+        List<?> rawValues;
+        if (value instanceof List<?> list) {
+            rawValues = list;
+        } else if (value instanceof String text) {
+            rawValues = List.of(text.split(","));
+        } else {
+            rawValues = List.of(value);
+        }
+        LinkedHashSet<String> hosts = new LinkedHashSet<>();
+        for (Object rawValue : rawValues) {
+            String host = normalizedHost(rawValue == null ? "" : rawValue.toString());
+            if (hasText(host)) {
+                hosts.add(host);
+            }
+        }
+        if (hosts.size() > MAX_ALLOWED_HOSTS) {
+            throw new IllegalArgumentException("sandbox_browser failed: allowedHosts exceeds " + MAX_ALLOWED_HOSTS + " hosts");
+        }
+        return new ArrayList<>(hosts);
+    }
+
+    private String normalizedHost(String value) {
+        if (!hasText(value)) {
+            return "";
+        }
+        String host = value.trim().toLowerCase(Locale.ROOT);
+        if (host.contains("/") || host.contains(":") || !host.matches("[a-z0-9.-]+")) {
+            throw new IllegalArgumentException("sandbox_browser failed: allowedHosts must contain host names only");
+        }
+        return host;
     }
 
     private String normalizedAction(String action) {

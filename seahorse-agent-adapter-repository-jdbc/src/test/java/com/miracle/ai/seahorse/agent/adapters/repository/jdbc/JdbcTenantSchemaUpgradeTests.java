@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
@@ -25,6 +26,7 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JdbcTenantSchemaUpgradeTests {
 
@@ -131,6 +133,61 @@ class JdbcTenantSchemaUpgradeTests {
         assertThat(indexExists(jdbcTemplate,
                 "sa_sandbox_runtime_profile_policy",
                 "uk_sa_sandbox_runtime_profile_policy_runtime")).isTrue();
+    }
+
+    @Test
+    void shouldRelaxSandboxRuntimeProfilePolicyNetworkConstraintForBrowserAutomation() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:tenant-schema-upgrade-sandbox-runtime-profile-network-" + System.nanoTime()
+                        + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+                "sa",
+                "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.execute("""
+                CREATE TABLE sa_sandbox_runtime_profile_policy (
+                  pk_id BIGSERIAL PRIMARY KEY,
+                  policy_id VARCHAR(96) NOT NULL UNIQUE,
+                  tenant_id VARCHAR(64) NOT NULL,
+                  runtime_type VARCHAR(32) NOT NULL,
+                  profile_id VARCHAR(64) NOT NULL,
+                  status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                  session_ttl_seconds BIGINT NOT NULL DEFAULT 3600,
+                  network_allowed BOOLEAN NOT NULL DEFAULT FALSE,
+                  created_at TIMESTAMP NOT NULL,
+                  updated_at TIMESTAMP NOT NULL,
+                  CONSTRAINT chk_sa_sandbox_runtime_profile_policy_network
+                    CHECK (network_allowed = FALSE)
+                )
+                """);
+
+        JdbcTenantSchemaUpgrade upgrade = new JdbcTenantSchemaUpgrade(dataSource);
+        upgrade.upgrade();
+        upgrade.upgrade();
+
+        jdbcTemplate.update("""
+                INSERT INTO sa_sandbox_runtime_profile_policy (
+                  policy_id, tenant_id, runtime_type, profile_id, status,
+                  session_ttl_seconds, network_allowed, created_at, updated_at
+                )
+                VALUES (
+                  'policy-browser', 'default', 'BROWSER_AUTOMATION', 'browser-readonly', 'ACTIVE',
+                  3600, TRUE, TIMESTAMP '2026-07-03 00:00:00', TIMESTAMP '2026-07-03 00:00:00'
+                )
+                """);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT network_allowed FROM sa_sandbox_runtime_profile_policy WHERE policy_id = 'policy-browser'",
+                Boolean.class)).isTrue();
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                INSERT INTO sa_sandbox_runtime_profile_policy (
+                  policy_id, tenant_id, runtime_type, profile_id, status,
+                  session_ttl_seconds, network_allowed, created_at, updated_at
+                )
+                VALUES (
+                  'policy-python', 'default', 'CODE_INTERPRETER', 'python-small', 'ACTIVE',
+                  3600, TRUE, TIMESTAMP '2026-07-03 00:00:00', TIMESTAMP '2026-07-03 00:00:00'
+                )
+                """))
+                .isInstanceOf(DataAccessException.class);
     }
 
     private static boolean tableExists(JdbcTemplate jdbcTemplate, String tableName) {

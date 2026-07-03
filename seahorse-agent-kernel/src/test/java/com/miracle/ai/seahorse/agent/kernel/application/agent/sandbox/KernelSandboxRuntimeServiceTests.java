@@ -246,7 +246,7 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
-    void shouldRejectRuntimeProfilePolicyThatEnablesNetwork() {
+    void shouldRejectRuntimeProfilePolicyThatEnablesNetworkForNonBrowserRuntime() {
         KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
                 request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
                 new RecordingSandboxRuntimePort(),
@@ -262,6 +262,57 @@ class KernelSandboxRuntimeServiceTests {
                         SandboxRuntimeProfilePolicyStatus.ACTIVE,
                         120L,
                         true)));
+    }
+
+    @Test
+    void shouldRejectBrowserNetworkRequestWhenRuntimeProfileDisallowsNetwork() {
+        RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                runtime,
+                new MemoryArtifactPort(),
+                CLOCK);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.BROWSER_AUTOMATION,
+                true,
+                List.of("example.test")));
+
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertEquals(SandboxPolicyReasonCode.NETWORK_DENIED_BY_DEFAULT, session.reasonCode());
+        assertFalse(runtime.createSessionCalled);
+    }
+
+    @Test
+    void shouldAllowBrowserNetworkRequestWhenRuntimeProfileAllowsNetwork() {
+        RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                runtime,
+                new MemoryArtifactPort(),
+                CLOCK);
+        service.upsertRuntimeProfilePolicy(new SandboxRuntimeProfilePolicyUpsertCommand(
+                null,
+                "tenant-1",
+                SandboxRuntimeType.BROWSER_AUTOMATION,
+                "browser-readonly",
+                SandboxRuntimeProfilePolicyStatus.ACTIVE,
+                3600L,
+                true));
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.BROWSER_AUTOMATION,
+                true,
+                List.of("example.test")));
+
+        assertEquals(SandboxExecutionStatus.CREATED, session.status());
+        assertTrue(runtime.createSessionCalled);
+        assertTrue(runtime.createSessionRequest.networkRequested());
+        assertEquals(List.of("example.test"), runtime.createSessionRequest.requestedHosts());
     }
 
     @Test

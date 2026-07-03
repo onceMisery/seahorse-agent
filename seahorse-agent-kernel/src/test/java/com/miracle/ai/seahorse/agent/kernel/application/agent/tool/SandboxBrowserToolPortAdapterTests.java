@@ -56,7 +56,7 @@ class SandboxBrowserToolPortAdapterTests {
     private final AgentToolJsonSupport jsonSupport = new AgentToolJsonSupport(objectMapper);
 
     @Test
-    void descriptorShouldAdvertiseNoNetworkBrowserSnapshotInputs() {
+    void descriptorShouldAdvertiseInlineAndAllowlistedUrlBrowserInputs() {
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(
                 new RecordingSandboxRuntime(null),
                 jsonSupport);
@@ -64,8 +64,11 @@ class SandboxBrowserToolPortAdapterTests {
         String schema = adapter.descriptor().jsonSchema();
 
         assertEquals(SandboxBrowserToolPortAdapter.TOOL_ID, adapter.descriptor().toolId());
-        assertTrue(adapter.descriptor().description().contains("no-network Playwright"));
+        assertTrue(adapter.descriptor().description().contains("allowlisted HTTP/HTTPS URL"));
         assertTrue(schema.contains("\"html\""));
+        assertTrue(schema.contains("\"url\""));
+        assertTrue(schema.contains("\"allowedHosts\""));
+        assertTrue(schema.contains("\"anyOf\""));
         assertTrue(schema.contains("\"snapshot\""));
         assertTrue(schema.contains("\"extract_text\""));
         assertTrue(schema.contains("\"viewportWidth\""));
@@ -176,6 +179,54 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldExecuteUrlThroughBrowserRuntimeWithAllowlistedHost() throws Exception {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
+                new SandboxExecution(
+                        "exec-1",
+                        "session-1",
+                        SandboxRuntimeType.BROWSER_AUTOMATION,
+                        SandboxExecutionStatus.SUCCEEDED,
+                        "exitCode=0; stdout=browser snapshot completed",
+                        SandboxPolicyReasonCode.VALID_REQUEST,
+                        NOW,
+                        NOW),
+                List.of(new SandboxArtifact(
+                        "artifact-json",
+                        "session-1",
+                        "exec-1",
+                        "local://sandbox-artifacts/browser-result.json",
+                        "application/json",
+                        SandboxArtifactScanStatus.CLEAN,
+                        ContextSensitivity.INTERNAL,
+                        "metadata scan passed",
+                        NOW))));
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        String url = "http://example.test/page";
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", url,
+                "allowedHosts", List.of("Example.Test"),
+                "har", true)));
+
+        assertTrue(result.success());
+        assertTrue(runtime.createCommand.networkRequested());
+        assertEquals(List.of("example.test"), runtime.createCommand.requestedHosts());
+        assertTrue(runtime.executeCommand.networkRequested());
+        assertEquals(List.of("example.test"), runtime.executeCommand.requestedHosts());
+
+        JsonNode browserInput = objectMapper.readTree(runtime.executeCommand.input());
+        assertEquals(url, browserInput.path("url").asText());
+        assertEquals("", browserInput.path("html").asText());
+        assertEquals("example.test", browserInput.path("allowedHosts").get(0).asText());
+
+        JsonNode root = objectMapper.readTree(result.content());
+        assertTrue(root.path("browser").path("networkAllowed").asBoolean());
+        assertEquals(url, root.path("browser").path("url").asText());
+        assertEquals("example.test", root.path("browser").path("allowedHosts").get(0).asText());
+    }
+
+    @Test
     void shouldNormalizeExtractTextActionAndDisableDefaultScreenshot() throws Exception {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
                 new SandboxExecution(
@@ -236,6 +287,21 @@ class SandboxBrowserToolPortAdapterTests {
 
         assertFalse(result.success());
         assertTrue(result.error().contains("html is required"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
+    void shouldRejectUrlWhenHostIsNotAllowlistedBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/page",
+                "allowedHosts", List.of("other.test"))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("url host must be included in allowedHosts"));
         assertEquals(0, runtime.createCalls);
     }
 

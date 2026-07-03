@@ -375,6 +375,75 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldRunBrowserAutomationUrlModeWithAllowlistedHostNetwork() throws Exception {
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded(
+                        "browser snapshot completed; textLength=18; screenshot=True; har=True; video=False\n",
+                        Duration.ofMillis(320)),
+                command -> {
+                    String script = Files.readString(command.workingDirectory().resolve("main.py"));
+                    assertThat(script)
+                            .contains("target_url = \"http://host.docker.internal:18080/page\"",
+                                    "allowed_hosts = set([\"host.docker.internal\"])",
+                                    "page.goto",
+                                    "\"source\": \"url\" if target_url else \"html\"")
+                            .doesNotContain("url mode marker");
+                    assertThat(command.workingDirectory().resolve("browser-input.html")).doesNotExist();
+                    Files.writeString(command.workingDirectory().resolve("browser-result.json"),
+                            """
+                                    {"action":"snapshot","source":"url","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"text":"url mode marker"}
+                                    """);
+                    Files.writeString(command.workingDirectory().resolve("browser-network.har"),
+                            """
+                                    {"log":{"version":"1.2","entries":[{"request":{"url":"http://host.docker.internal:18080/page"},"response":{"status":200},"_blocked":false}]}}
+                                    """);
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"har":true}
+                        """,
+                true,
+                List.of("host.docker.internal")));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.artifacts()).hasSize(2);
+        assertThat(result.artifacts())
+                .anySatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-result.json"))
+                .anySatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-network.har"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-input.html"));
+        assertThat(runner.lastCommand.commandLine())
+                .containsSubsequence("docker", "run", "--rm")
+                .containsSubsequence("--add-host", "host.docker.internal:host-gateway")
+                .containsSubsequence("--memory", "768m")
+                .containsSubsequence("seahorse-sandbox-browser:playwright-1.48.0", "python", "/workspace/main.py")
+                .doesNotContain("--network");
+    }
+
+    @Test
+    void shouldFailClosedWhenBrowserUrlHostIsNotAllowlistedBeforeRunningContainer() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","url":"http://example.test/page","allowedHosts":["other.test"]}
+                        """,
+                true,
+                List.of("other.test")));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("url host must be included in allowedHosts");
+        assertThat(runner.lastCommand).isNull();
+    }
+
+    @Test
     void shouldRejectUnsupportedFileConversionPairBeforeRunningContainer() {
         RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
         ContainerSandboxRuntimeAdapter adapter = adapter(runner);

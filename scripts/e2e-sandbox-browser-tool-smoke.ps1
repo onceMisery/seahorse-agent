@@ -10,6 +10,8 @@ param(
     [string]$BrowserImage = "seahorse-sandbox-browser:playwright-1.48.0",
     [string]$BrowserImageDockerfile = "resources/docker/Dockerfile.sandbox-browser-runtime",
     [string]$BrowserImageBuildContext = ".",
+    [string]$ExternalHost = "host.docker.internal",
+    [int]$ExternalPort = 18080,
     [string]$StorageRoot = "/app/seahorse-agent-storage",
     [string]$ExpectedObjectUriPrefix = "local://sandbox-artifacts/",
     [switch]$SkipBrowserImageBuild,
@@ -20,6 +22,10 @@ $ErrorActionPreference = "Stop"
 $passed = 0
 $failed = 0
 $total = 0
+$externalHttpContainerName = $null
+$externalHttpRoot = $null
+$headers = $null
+$browserProfileNetworkEnabled = $false
 
 function Test-Step {
     param([string]$Name, [scriptblock]$Action)
@@ -243,6 +249,94 @@ function Ensure-DockerImage {
     }
 }
 
+function Start-ExternalHttpFixture {
+    param(
+        [string]$Name,
+        [int]$Port,
+        [string]$HostName,
+        [string]$Marker
+    )
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        throw "External HTTP container name must not be blank"
+    }
+    $root = Join-Path ([System.IO.Path]::GetTempPath()) $Name
+    if (Test-Path -LiteralPath $root) {
+        Remove-Item -LiteralPath $root -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $root | Out-Null
+    $html = @"
+<!doctype html>
+<html>
+<head><title>External $Marker</title></head>
+<body><main><h1>$Marker</h1><p>Seahorse browser sandbox URL mode marker.</p></main></body>
+</html>
+"@
+    Set-Content -LiteralPath (Join-Path $root "index.html") -Value $html -Encoding UTF8
+
+    $run = Invoke-NativeCommandCapture -Command "docker" -Arguments @(
+        "run",
+        "-d",
+        "--rm",
+        "--name",
+        $Name,
+        "-p",
+        "${Port}:8080",
+        "-v",
+        "${root}:/srv:ro",
+        "-w",
+        "/srv",
+        "python:3.11-alpine",
+        "python",
+        "-m",
+        "http.server",
+        "8080",
+        "--bind",
+        "0.0.0.0"
+    )
+    if ($run.ExitCode -ne 0) {
+        throw "docker run failed for external HTTP fixture: $($run.Output -join "`n")"
+    }
+
+    $localUrl = "http://127.0.0.1:$Port/index.html?marker=$Marker"
+    for ($attempt = 1; $attempt -le 30; $attempt++) {
+        $probe = Invoke-NativeCommandCapture -Command "curl" -Arguments @("-fsS", $localUrl)
+        $content = $probe.Output -join "`n"
+        if ($probe.ExitCode -eq 0 -and "$content" -like "*$Marker*") {
+            return [pscustomobject]@{
+                Name = $Name
+                Root = $root
+                Url = "http://${HostName}:$Port/index.html?marker=$Marker"
+            }
+        }
+        Start-Sleep -Seconds 1
+    }
+    throw "Timed out waiting for external HTTP fixture at $localUrl"
+}
+
+function Stop-ExternalHttpFixture {
+    param(
+        [string]$Name,
+        [string]$Root
+    )
+    if (-not [string]::IsNullOrWhiteSpace($Name)) {
+        try {
+            $stop = Invoke-NativeCommandCapture -Command "docker" -Arguments @("rm", "-f", $Name)
+            if ($stop.ExitCode -ne 0) {
+                Write-Host "  WARN: failed to remove external HTTP fixture ${Name}: $($stop.Output -join "`n")" -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "  WARN: failed to remove external HTTP fixture ${Name}: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Root) -and (Test-Path -LiteralPath $Root)) {
+        try {
+            Remove-Item -LiteralPath $Root -Recurse -Force
+        } catch {
+            Write-Host "  WARN: failed to remove external HTTP fixture workspace ${Root}: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+}
+
 try {
     if (-not $SkipHealth) {
         Test-Step "Wait for backend health" {
@@ -352,6 +446,162 @@ try {
     $jsonArtifactId = "$(@($observation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" })[0].artifactId)"
     $pngArtifactId = "$(@($observation.artifacts | Where-Object { "$($_.mediaType)" -eq "image/png" })[0].artifactId)"
     $harArtifactId = "$(@($observation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/har+json" })[0].artifactId)"
+
+    $egressFixture = Test-Step "Start local HTTP fixture for sandbox_browser URL mode" {
+        Start-ExternalHttpFixture `
+            -Name "seahorse-browser-egress-smoke-$suffix" `
+            -Port $ExternalPort `
+            -HostName $ExternalHost `
+            -Marker "$Marker-url"
+    }
+    if (-not $egressFixture) { exit 1 }
+    $externalHttpContainerName = "$($egressFixture.Name)"
+    $externalHttpRoot = "$($egressFixture.Root)"
+    $externalUrl = "$($egressFixture.Url)"
+
+    $egressConfigOk = Test-Step "Verify sandbox URL egress allowlist is configured" {
+        $profilesResponse = Invoke-Json -Method GET -Path "/api/sandbox/runtime/profiles" -Headers $headers
+        Assert-ApiOk $profilesResponse "Get sandbox runtime profiles"
+        if ("$($profilesResponse.data.defaultNetworkPolicy)" -ne "ALLOWLISTED") {
+            throw "Expected defaultNetworkPolicy=ALLOWLISTED for URL egress smoke: $($profilesResponse.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $hosts = @($profilesResponse.data.allowlistedHosts)
+        if ($hosts -notcontains $ExternalHost) {
+            throw "Expected allowlistedHosts to contain ${ExternalHost}: $($profilesResponse.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $true
+    }
+    if (-not $egressConfigOk) { exit 1 }
+
+    $profileNetworkEnabled = Test-Step "Enable browser runtime profile network for URL mode" {
+        $response = Invoke-Json -Method POST -Path "/api/sandbox/runtime/profile-policies" -Headers $headers -Body @{
+            tenantId = "default"
+            runtimeType = "BROWSER_AUTOMATION"
+            profileId = "browser-readonly"
+            status = "ACTIVE"
+            sessionTtlSeconds = 3600
+            networkAllowed = $true
+        }
+        Assert-ApiOk $response "Enable browser runtime profile network"
+        if ($response.data.networkAllowed -ne $true) {
+            throw "Expected browser runtime profile networkAllowed=true: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $script:browserProfileNetworkEnabled = $true
+        $true
+    }
+    if (-not $profileNetworkEnabled) { exit 1 }
+
+    $urlObservation = Test-Step "Invoke sandbox_browser URL mode through Tool Gateway" {
+        $urlRunId = "sandbox-browser-url-run-$suffix"
+        $urlToolCallId = "sandbox-browser-url-call-$suffix"
+        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_browser/invoke" -Headers $headers -Body @{
+            runId = $urlRunId
+            stepId = "sandbox-browser-url-step-$suffix"
+            toolCallId = $urlToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                action = "snapshot"
+                url = $externalUrl
+                allowedHosts = @($ExternalHost)
+                viewportWidth = 1024
+                viewportHeight = 640
+                screenshot = $true
+                har = $true
+                video = $false
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${urlRunId}:${urlToolCallId}"
+            allowedToolIds = @("sandbox_browser")
+        }
+        Assert-ApiOk $response "Invoke sandbox_browser URL mode"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_browser URL mode failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "BROWSER_AUTOMATION" -or "$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected succeeded BROWSER_AUTOMATION URL mode execution: $content"
+        }
+        if ($parsed.browser.networkAllowed -ne $true) {
+            throw "Expected browser.networkAllowed=true for URL mode: $content"
+        }
+        if ("$($parsed.browser.url)" -ne $externalUrl) {
+            throw "Expected browser URL ${externalUrl}: $content"
+        }
+        if (@($parsed.browser.allowedHosts) -notcontains $ExternalHost) {
+            throw "Expected browser allowedHosts to contain ${ExternalHost}: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 3) {
+            throw "Expected URL mode result JSON, screenshot, and HAR artifacts: $content"
+        }
+        $parsed
+    }
+    if (-not $urlObservation) { exit 1 }
+
+    $urlSessionId = "$($urlObservation.sessionId)"
+    $urlJsonArtifactId = "$(@($urlObservation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" })[0].artifactId)"
+    $urlHarArtifactId = "$(@($urlObservation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/har+json" })[0].artifactId)"
+
+    Test-Step "Verify persisted URL mode browser session" {
+        $safeSessionId = $urlSessionId.Replace("'", "''")
+        $sessionRow = Invoke-PostgresScalar "SELECT runtime_type, profile_id, status FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
+        $sessionParts = $sessionRow -split "`t"
+        if ($sessionParts.Count -ne 3 -or $sessionParts[0] -ne "BROWSER_AUTOMATION" -or $sessionParts[1] -ne "browser-readonly" -or $sessionParts[2] -ne "CANCELLED") {
+            throw "Unexpected URL mode sandbox session row: $sessionRow"
+        }
+    } | Out-Null
+
+    Test-Step "Download governed URL mode browser result artifact" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$urlJsonArtifactId/download" -Headers $headers
+        if ($content -notlike "*$Marker-url*") {
+            throw "Downloaded URL mode browser result did not contain marker '$Marker-url': $content"
+        }
+        if ($content -notlike "*`"source`": `"url`"*" -and $content -notlike "*`"source`":`"url`"*") {
+            throw "Downloaded URL mode browser result did not include source=url: $content"
+        }
+        if ($content -notlike "*host.docker.internal*") {
+            throw "Downloaded URL mode browser result did not include allowlisted host: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded URL mode browser result leaked storage reference: $content"
+        }
+    } | Out-Null
+
+    Test-Step "Download governed URL mode browser HAR artifact" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$urlHarArtifactId/download" -Headers $headers
+        $har = $content | ConvertFrom-Json
+        $entries = @($har.log.entries)
+        $mainRequests = @($entries | Where-Object { "$($_.request.url)" -eq $externalUrl })
+        if ($mainRequests.Count -lt 1) {
+            throw "Downloaded URL mode HAR did not include main URL ${externalUrl}: $content"
+        }
+        if ($mainRequests[0]._blocked -eq $true) {
+            throw "Downloaded URL mode HAR marked main URL as blocked: $content"
+        }
+        if ([int]$mainRequests[0].response.status -ne 200) {
+            throw "Downloaded URL mode HAR expected main URL status 200: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded URL mode HAR leaked storage reference: $content"
+        }
+    } | Out-Null
+
+    Test-Step "Restore browser runtime profile network deny" {
+        $response = Invoke-Json -Method POST -Path "/api/sandbox/runtime/profile-policies" -Headers $headers -Body @{
+            tenantId = "default"
+            runtimeType = "BROWSER_AUTOMATION"
+            profileId = "browser-readonly"
+            status = "ACTIVE"
+            sessionTtlSeconds = 3600
+            networkAllowed = $false
+        }
+        Assert-ApiOk $response "Restore browser runtime profile network"
+        $script:browserProfileNetworkEnabled = $false
+    } | Out-Null
 
     $artifactEvidence = Test-Step "Verify persisted BROWSER_AUTOMATION session and artifacts" {
         $safeSessionId = $sessionId.Replace("'", "''")
@@ -519,10 +769,32 @@ try {
     Write-Host "Screenshot Artifact: $pngArtifactId"
     Write-Host "HAR Artifact: $harArtifactId"
     Write-Host "Video Artifact: $videoArtifactId"
+    Write-Host "URL Session: $urlSessionId"
+    Write-Host "URL Result Artifact: $urlJsonArtifactId"
+    Write-Host "URL HAR Artifact: $urlHarArtifactId"
 } catch {
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Error $_.Exception.Message
     exit 1
+} finally {
+    if ($browserProfileNetworkEnabled -and $null -ne $headers) {
+        try {
+            $restore = Invoke-Json -Method POST -Path "/api/sandbox/runtime/profile-policies" -Headers $headers -Body @{
+                tenantId = "default"
+                runtimeType = "BROWSER_AUTOMATION"
+                profileId = "browser-readonly"
+                status = "ACTIVE"
+                sessionTtlSeconds = 3600
+                networkAllowed = $false
+            }
+            if ($null -ne $restore) {
+                Write-Host "  Restored browser runtime profile networkAllowed=false" -ForegroundColor DarkGray
+            }
+        } catch {
+            Write-Host "  WARN: failed to restore browser runtime profile network policy: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+    Stop-ExternalHttpFixture -Name $externalHttpContainerName -Root $externalHttpRoot
 }
 
 if ($failed -gt 0) {

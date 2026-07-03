@@ -463,6 +463,14 @@ Fresh full-Docker evidence: `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseU
 
 This completes download-only browser video artifact capture for inline no-network browser automation. External URL browsing, egress allowlists/proxying, credentials, auth/session state capture, richer browser workflows, stronger isolation, PDF conversion, Office rendering/editing beyond conservative DOCX text extraction, LibreOffice/Tika-backed conversion, arbitrary binary conversion, virus/binary/PDF deep scanning, and broader A2A/cross-provider Tool Gateway hardening remain follow-up work.
 
+### 2026-07-03 Update: sandbox browser allowlisted URL egress
+
+`sandbox_browser` now adds the first explicit URL egress path. The existing inline HTML path remains no-network and still runs the browser container with `--network none`. URL mode requires an HTTP/HTTPS `url` plus `allowedHosts`; the tool normalizes hosts, requires the URL host to be present, and passes `networkRequested=true` with the requested hosts into sandbox session creation and execution.
+
+Runtime enforcement is layered. `networkAllowed=true` runtime profile policies are accepted only for `BROWSER_AUTOMATION`; the global sandbox policy must be `ALLOWLISTED` and contain the requested host; the container runtime only removes `--network none` for requested-network executions and adds `--add-host host.docker.internal:host-gateway`; and the generated Playwright route handler only allows `about:`, `blob:`, `data:`, or HTTP/HTTPS requests whose hostname is in `allowedHosts`.
+
+This is intentionally a minimum viable egress path, not a full browser platform. Credentials, auth/session capture, arbitrary browsing policy UX, proxy/audit-rich egress, broader workflows, stronger runtime isolation, and external scanner hardening remain follow-up production work.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

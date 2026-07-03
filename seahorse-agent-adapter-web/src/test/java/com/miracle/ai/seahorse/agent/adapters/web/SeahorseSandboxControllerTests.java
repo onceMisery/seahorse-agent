@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaPolicyStatus;
@@ -29,6 +30,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxNetworkPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
@@ -46,6 +48,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPo
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeProfilePolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionSweepResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -298,6 +301,7 @@ class SeahorseSandboxControllerTests {
         mvc.perform(get("/api/sandbox/runtime/profiles"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.defaultNetworkPolicy").value("DENY_ALL"))
+                .andExpect(jsonPath("$.data.allowlistedHosts.length()").value(0))
                 .andExpect(jsonPath("$.data.defaultTtlSeconds").value(3600))
                 .andExpect(jsonPath("$.data.profiles[0].runtimeType").value("CODE_INTERPRETER"))
                 .andExpect(jsonPath("$.data.profiles[0].profileId").value("python-small"))
@@ -417,6 +421,31 @@ class SeahorseSandboxControllerTests {
                 .andExpect(content().string("download body"));
         verify(port).downloadArtifact("artifact-clean");
         verify(storagePort).openStream("local://sandbox-artifacts/artifact-clean.txt");
+    }
+
+    @Test
+    void shouldExposeConfiguredSandboxNetworkPolicyInRuntimeProfiles() throws Exception {
+        SandboxRuntimeInboundPort port = mock(SandboxRuntimeInboundPort.class);
+        when(port.listRuntimeProfilePolicies("default")).thenReturn(List.of());
+        ObjectStoragePort storagePort = mock(ObjectStoragePort.class);
+        QuotaManagementInboundPort quotaPort = mock(QuotaManagementInboundPort.class);
+        SandboxPolicyPort policyPort = new DefaultSandboxPolicyPort(
+                SandboxNetworkPolicy.ALLOWLISTED,
+                List.of("host.docker.internal"));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseSandboxController(
+                        provider(SandboxRuntimeInboundPort.class, port),
+                        AdvancedFeatureGate.allEnabledForTests(),
+                        provider(ObjectStoragePort.class, storagePort),
+                        provider(QuotaManagementInboundPort.class, quotaPort),
+                        provider(SandboxPolicyPort.class, policyPort)))
+                .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
+                .build();
+
+        mvc.perform(get("/api/sandbox/runtime/profiles"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.defaultNetworkPolicy").value("ALLOWLISTED"))
+                .andExpect(jsonPath("$.data.allowlistedHosts[0]").value("host.docker.internal"));
     }
 
     private String json(Object value) throws Exception {

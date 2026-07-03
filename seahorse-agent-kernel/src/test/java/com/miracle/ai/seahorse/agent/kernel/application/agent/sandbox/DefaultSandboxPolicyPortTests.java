@@ -29,6 +29,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DefaultSandboxPolicyPortTests {
 
@@ -61,5 +62,43 @@ class DefaultSandboxPolicyPortTests {
 
         assertEquals(SandboxPolicyEffect.ALLOW, decision.effect());
         assertEquals(SandboxPolicyReasonCode.VALID_REQUEST, decision.reasonCode());
+    }
+
+    @Test
+    void shouldAllowNetworkRequestForAllowlistedHost() {
+        DefaultSandboxPolicyPort policy = new DefaultSandboxPolicyPort(
+                SandboxNetworkPolicy.ALLOWLISTED,
+                List.of("api.example.com"));
+
+        SandboxPolicyDecision decision = policy.decide(new SandboxPolicyRequest(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.BROWSER_AUTOMATION,
+                true,
+                List.of("API.EXAMPLE.COM")));
+
+        assertEquals(SandboxNetworkPolicy.ALLOWLISTED, policy.networkPolicy());
+        assertEquals(List.of("api.example.com"), policy.allowlistedHosts());
+        assertEquals(SandboxPolicyEffect.ALLOW, decision.effect());
+        assertEquals(SandboxPolicyReasonCode.VALID_REQUEST, decision.reasonCode());
+        assertTrue(decision.allowsExecution());
+    }
+
+    @Test
+    void shouldDenyNetworkRequestForNonAllowlistedHost() {
+        DefaultSandboxPolicyPort policy = new DefaultSandboxPolicyPort(
+                SandboxNetworkPolicy.ALLOWLISTED,
+                List.of("api.example.com"));
+
+        SandboxPolicyDecision decision = policy.decide(new SandboxPolicyRequest(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.BROWSER_AUTOMATION,
+                true,
+                List.of("other.example.com")));
+
+        assertEquals(SandboxPolicyEffect.DENY, decision.effect());
+        assertEquals(SandboxPolicyReasonCode.NETWORK_HOST_NOT_ALLOWLISTED, decision.reasonCode());
+        assertFalse(decision.allowsExecution());
     }
 }
