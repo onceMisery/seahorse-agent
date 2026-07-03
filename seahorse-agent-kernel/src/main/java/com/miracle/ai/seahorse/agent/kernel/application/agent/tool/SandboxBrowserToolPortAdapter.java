@@ -60,6 +60,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private static final String SCREENSHOT_ARGUMENT = "screenshot";
     private static final String HAR_ARGUMENT = "har";
     private static final String VIDEO_ARGUMENT = "video";
+    private static final String CAPTURE_SESSION_STATE_ARGUMENT = "captureSessionState";
     private static final String VIEWPORT_WIDTH_ARGUMENT = "viewportWidth";
     private static final String VIEWPORT_HEIGHT_ARGUMENT = "viewportHeight";
     private static final String ACTION_SNAPSHOT = "snapshot";
@@ -68,9 +69,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
             "Sandbox Browser",
-            "Render bounded inline HTML or an explicitly allowlisted HTTP/HTTPS URL through a Playwright browser sandbox. Inline HTML stays no-network; URL mode requires allowedHosts and can inject bounded host-scoped cookies without exposing cookie values in observations.",
+            "Render bounded inline HTML or an explicitly allowlisted HTTP/HTTPS URL through a Playwright browser sandbox. Inline HTML stays no-network; URL mode requires allowedHosts, can inject bounded host-scoped cookies, and can capture governed browser session state without exposing values in observations.",
             """
-                    {"type":"object","properties":{"html":{"type":"string","minLength":1,"maxLength":262144},"url":{"type":"string","minLength":1,"maxLength":2048,"description":"HTTP/HTTPS URL to visit. Requires allowedHosts and sandbox egress policy."},"allowedHosts":{"type":"array","items":{"type":"string"},"maxItems":16,"default":[],"description":"Exact host allowlist for URL mode. The URL host must be included."},"cookies":{"type":"array","maxItems":16,"description":"Optional URL-mode cookies. Each cookie domain must match an allowed host; cookie values are injected into the sandbox but omitted from observations.","items":{"type":"object","required":["name","value"],"properties":{"name":{"type":"string","minLength":1,"maxLength":128},"value":{"type":"string","maxLength":4096},"domain":{"type":"string","description":"Host-only cookie domain. Defaults to the URL host and must be in allowedHosts."},"path":{"type":"string","default":"/"},"httpOnly":{"type":"boolean","default":true},"secure":{"type":"boolean","default":false},"sameSite":{"type":"string","enum":["Lax","Strict","None"],"default":"Lax"}}}},"action":{"type":"string","enum":["snapshot","extract_text"],"default":"snapshot"},"screenshot":{"type":"boolean","default":true},"har":{"type":"boolean","default":false},"video":{"type":"boolean","default":false},"viewportWidth":{"type":"integer","minimum":320,"maximum":2400,"default":1280},"viewportHeight":{"type":"integer","minimum":320,"maximum":2400,"default":720}},"anyOf":[{"required":["html"]},{"required":["url","allowedHosts"]}]}
+                    {"type":"object","properties":{"html":{"type":"string","minLength":1,"maxLength":262144},"url":{"type":"string","minLength":1,"maxLength":2048,"description":"HTTP/HTTPS URL to visit. Requires allowedHosts and sandbox egress policy."},"allowedHosts":{"type":"array","items":{"type":"string"},"maxItems":16,"default":[],"description":"Exact host allowlist for URL mode. The URL host must be included."},"cookies":{"type":"array","maxItems":16,"description":"Optional URL-mode cookies. Each cookie domain must match an allowed host; cookie values are injected into the sandbox but omitted from observations.","items":{"type":"object","required":["name","value"],"properties":{"name":{"type":"string","minLength":1,"maxLength":128},"value":{"type":"string","maxLength":4096},"domain":{"type":"string","description":"Host-only cookie domain. Defaults to the URL host and must be in allowedHosts."},"path":{"type":"string","default":"/"},"httpOnly":{"type":"boolean","default":true},"secure":{"type":"boolean","default":false},"sameSite":{"type":"string","enum":["Lax","Strict","None"],"default":"Lax"}}}},"captureSessionState":{"type":"boolean","default":false,"description":"URL-mode only. Captures a governed browser storage-state artifact plus a value-free summary; secret values are omitted from observations and prompt-visible artifacts."},"action":{"type":"string","enum":["snapshot","extract_text"],"default":"snapshot"},"screenshot":{"type":"boolean","default":true},"har":{"type":"boolean","default":false},"video":{"type":"boolean","default":false},"viewportWidth":{"type":"integer","minimum":320,"maximum":2400,"default":1280},"viewportHeight":{"type":"integer","minimum":320,"maximum":2400,"default":720}},"anyOf":[{"required":["html"]},{"required":["url","allowedHosts"]}]}
                     """);
 
     private final SandboxRuntimeInboundPort sandboxRuntime;
@@ -173,6 +174,13 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                 safeRequest.arguments(),
                 VIDEO_ARGUMENT,
                 false);
+        boolean captureSessionState = booleanArgument(
+                safeRequest.arguments(),
+                CAPTURE_SESSION_STATE_ARGUMENT,
+                false);
+        if (captureSessionState && !urlMode) {
+            return ToolInvocationResult.failed("sandbox_browser failed: captureSessionState is only supported for url mode");
+        }
         boolean networkRequested = urlMode;
         List<String> requestedHosts = urlMode ? allowedHosts : List.of();
         SandboxSession session = null;
@@ -196,12 +204,13 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                 viewportWidth,
                                 viewportHeight,
                                 har,
-                                video),
+                                video,
+                                captureSessionState),
                         "sandbox browser session did not start: " + session.reasonCode());
             }
             SandboxExecutionResult result = sandboxRuntime.execute(new SandboxExecutionCommand(
                     session.sessionId(),
-                    browserInput(action, html, url, requestedHosts, cookies, viewportWidth, viewportHeight, screenshot, har, video),
+                    browserInput(action, html, url, requestedHosts, cookies, viewportWidth, viewportHeight, screenshot, har, video, captureSessionState),
                     networkRequested,
                     requestedHosts));
             Map<String, Object> observation = observation(
@@ -216,7 +225,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                     viewportWidth,
                     viewportHeight,
                     har,
-                    video);
+                    video,
+                    captureSessionState);
             if (result.execution().status() == SandboxExecutionStatus.SUCCEEDED) {
                 return ToolInvocationResult.ok(jsonSupport.write(observation));
             }
@@ -238,7 +248,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                 int viewportHeight,
                                 boolean screenshot,
                                 boolean har,
-                                boolean video) {
+                                boolean video,
+                                boolean captureSessionState) {
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("action", action);
         input.put("html", html);
@@ -252,6 +263,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         input.put("screenshot", screenshot);
         input.put("har", har);
         input.put("video", video);
+        input.put("captureSessionState", captureSessionState);
         return jsonSupport.write(input);
     }
 
@@ -271,7 +283,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                             int viewportWidth,
                                             int viewportHeight,
                                             boolean har,
-                                            boolean video) {
+                                            boolean video,
+                                            boolean captureSessionState) {
         Map<String, Object> observation = new LinkedHashMap<>();
         observation.put("toolId", TOOL_ID);
         observation.put("sessionId", session == null ? null : session.sessionId());
@@ -282,7 +295,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         observation.put("executionStatus", execution == null ? null : execution.status().name());
         observation.put("reasonCode", execution == null ? null : execution.reasonCode().name());
         observation.put("resultSummary", execution == null ? null : execution.resultSummary());
-        observation.put("browser", browser(action, url, allowedHosts, cookies, networkRequested, viewportWidth, viewportHeight, har, video));
+        observation.put("browser", browser(action, url, allowedHosts, cookies, networkRequested, viewportWidth, viewportHeight, har, video, captureSessionState));
         observation.put("artifacts", artifacts(artifacts));
         return observation;
     }
@@ -295,7 +308,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                         int viewportWidth,
                                         int viewportHeight,
                                         boolean har,
-                                        boolean video) {
+                                        boolean video,
+                                        boolean captureSessionState) {
         Map<String, Object> browser = new LinkedHashMap<>();
         browser.put("action", action);
         browser.put("url", hasText(url) ? url : null);
@@ -307,6 +321,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         browser.put("networkAllowed", networkRequested);
         browser.put("har", har);
         browser.put("video", video);
+        browser.put("sessionState", Map.of("captureRequested", captureSessionState));
         return browser;
     }
 

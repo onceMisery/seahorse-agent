@@ -380,7 +380,7 @@ class ContainerSandboxRuntimeAdapterTests {
         String cookieValue = "session-secret-value";
         RecordingRunner runner = new RecordingRunner(
                 ContainerCommandResult.succeeded(
-                        "browser snapshot completed; textLength=18; screenshot=True; har=True; video=False; cookies=1\n",
+                        "browser snapshot completed; textLength=18; screenshot=True; har=True; video=False; cookies=1; sessionState=True\n",
                         Duration.ofMillis(320)),
                 command -> {
                     String script = Files.readString(command.workingDirectory().resolve("main.py"));
@@ -389,6 +389,10 @@ class ContainerSandboxRuntimeAdapterTests {
                                     "allowed_hosts = set([\"host.docker.internal\"])",
                                     "cookies_path = Path(\"/workspace/browser-cookies.json\")",
                                     "context.add_cookies(browser_cookies)",
+                                    "capture_session_state = True",
+                                    "context.storage_state(path=str(session_state_path))",
+                                    "browser-session-state.json",
+                                    "browser-session-summary.json",
                                     "page.goto",
                                     "\"source\": \"url\" if target_url else \"html\"")
                             .doesNotContain("url mode marker", cookieValue);
@@ -403,6 +407,14 @@ class ContainerSandboxRuntimeAdapterTests {
                             """
                                     {"log":{"version":"1.2","entries":[{"request":{"url":"http://host.docker.internal:18080/page"},"response":{"status":200},"_blocked":false}]}}
                                     """);
+                    Files.writeString(command.workingDirectory().resolve("browser-session-summary.json"),
+                            """
+                                    {"cookies":{"count":1,"domains":["host.docker.internal"]},"origins":[{"origin":"http://host.docker.internal:18080","localStorageCount":1}]}
+                                    """);
+                    Files.writeString(command.workingDirectory().resolve("browser-session-state.json"),
+                            """
+                                    {"cookies":[{"name":"seahorse_session","value":"session-secret-value","domain":"host.docker.internal"}],"origins":[{"origin":"http://host.docker.internal:18080","localStorage":[{"name":"token","value":"secret-token-value"}]}]}
+                                    """);
                 });
         ContainerSandboxRuntimeAdapter adapter = adapter(runner);
         SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
@@ -410,16 +422,24 @@ class ContainerSandboxRuntimeAdapterTests {
         SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
                 session,
                 """
-                        {"action":"snapshot","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"cookies":[{"name":"seahorse_session","value":"%s","domain":"host.docker.internal","path":"/","httpOnly":true,"secure":false,"sameSite":"Lax"}],"har":true}
+                        {"action":"snapshot","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"cookies":[{"name":"seahorse_session","value":"%s","domain":"host.docker.internal","path":"/","httpOnly":true,"secure":false,"sameSite":"Lax"}],"har":true,"captureSessionState":true}
                         """.formatted(cookieValue),
                 true,
                 List.of("host.docker.internal")));
 
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
-        assertThat(result.artifacts()).hasSize(2);
+        assertThat(result.artifacts()).hasSize(4);
         assertThat(result.artifacts())
                 .anySatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-result.json"))
                 .anySatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-network.har"))
+                .anySatisfy(artifact -> {
+                    assertThat(artifact.objectUri()).contains("browser-session-summary.json");
+                    assertThat(artifact.sensitivity()).isEqualTo(ContextSensitivity.INTERNAL);
+                })
+                .anySatisfy(artifact -> {
+                    assertThat(artifact.objectUri()).contains("browser-session-state.json");
+                    assertThat(artifact.sensitivity()).isEqualTo(ContextSensitivity.SECRET);
+                })
                 .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-input.html"))
                 .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-cookies.json"));
         assertThat(runner.lastCommand.commandLine())
@@ -428,6 +448,26 @@ class ContainerSandboxRuntimeAdapterTests {
                 .containsSubsequence("--memory", "768m")
                 .containsSubsequence("seahorse-sandbox-browser:playwright-1.48.0", "python", "/workspace/main.py")
                 .doesNotContain("--network");
+    }
+
+    @Test
+    void shouldFailClosedWhenBrowserSessionStateCaptureIsRequestedForInlineHtml() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","html":"<main>inline</main>","captureSessionState":true}
+                        """,
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("session state capture is only supported for url mode");
+        assertThat(runner.lastCommand).isNull();
     }
 
     @Test

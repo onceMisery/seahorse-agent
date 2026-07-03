@@ -485,6 +485,16 @@ Fresh full-Docker evidence: after focused kernel/container tests passed 33/33 an
 
 This is the first request-scoped auth/session step only. Persistent browser session capture/replay, credential governance, operator session UX, proxy/audit-rich egress, and broader browser workflow controls remain follow-up production work.
 
+### 2026-07-03 Update: sandbox browser governed session state capture
+
+`sandbox_browser` URL mode now supports `captureSessionState=true` after allowlisted navigation. Inline HTML requests are rejected for session-state capture. The runtime writes Playwright `browser-session-state.json` and a value-free `browser-session-summary.json`; observations only report that capture was requested and never include cookie/localStorage values.
+
+The full state artifact is forced to `SECRET`, so the default scanner marks it `BLOCKED` with `sensitive artifact metadata`; it is not prompt-visible, not copied to object storage, and not downloadable. The summary artifact remains prompt-visible and only contains cookie counts/domains and origin-level localStorage counts.
+
+Fresh full-Docker evidence: focused kernel/container tests passed 35/35, the full-compose backend rebuilt with an in-image Maven `BUILD SUCCESS`, and `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-session-state-smoke` passed 21/21. The smoke verified a real fixture cookie plus localStorage value, governed JSON/HAR downloads without value leakage, SECRET/BLOCKED full state metadata, non-downloadable artifact detail without storage references, browser profile network restore, no leftover managed sandbox containers, and zero non-terminal sandbox sessions.
+
+This completes governed one-run session-state capture. Session replay, credential storage, operator approval UX, and long-lived browser profile management remain follow-up production work.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

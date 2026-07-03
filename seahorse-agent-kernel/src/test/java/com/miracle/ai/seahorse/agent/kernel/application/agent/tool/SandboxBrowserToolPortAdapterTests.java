@@ -76,6 +76,7 @@ class SandboxBrowserToolPortAdapterTests {
         assertTrue(schema.contains("\"screenshot\""));
         assertTrue(schema.contains("\"har\""));
         assertTrue(schema.contains("\"video\""));
+        assertTrue(schema.contains("\"captureSessionState\""));
     }
 
     @Test
@@ -218,6 +219,7 @@ class SandboxBrowserToolPortAdapterTests {
                         "path", "/",
                         "httpOnly", true,
                         "sameSite", "Lax")),
+                "captureSessionState", true,
                 "har", true)));
 
         assertTrue(result.success());
@@ -233,6 +235,7 @@ class SandboxBrowserToolPortAdapterTests {
         assertEquals("seahorse_session", browserInput.path("cookies").get(0).path("name").asText());
         assertEquals(cookieValue, browserInput.path("cookies").get(0).path("value").asText());
         assertEquals("example.test", browserInput.path("cookies").get(0).path("domain").asText());
+        assertTrue(browserInput.path("captureSessionState").asBoolean());
 
         JsonNode root = objectMapper.readTree(result.content());
         assertTrue(root.path("browser").path("networkAllowed").asBoolean());
@@ -240,6 +243,7 @@ class SandboxBrowserToolPortAdapterTests {
         assertEquals("example.test", root.path("browser").path("allowedHosts").get(0).asText());
         assertEquals(1, root.path("browser").path("cookieCount").asInt());
         assertEquals("example.test", root.path("browser").path("cookieDomains").get(0).asText());
+        assertTrue(root.path("browser").path("sessionState").path("captureRequested").asBoolean());
         assertFalse(result.content().contains(cookieValue));
     }
 
@@ -304,6 +308,21 @@ class SandboxBrowserToolPortAdapterTests {
 
         assertFalse(result.success());
         assertTrue(result.error().contains("html is required"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
+    void shouldRejectSessionStateCaptureForInlineHtmlBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "html", "<main>inline</main>",
+                "captureSessionState", true)));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("captureSessionState is only supported for url mode"));
         assertEquals(0, runtime.createCalls);
     }
 

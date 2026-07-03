@@ -352,7 +352,11 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 : root.path("screenshot").asBoolean(BROWSER_ACTION_SNAPSHOT.equals(action));
         boolean har = root.path("har").asBoolean(false);
         boolean video = root.path("video").asBoolean(false);
-        return new BrowserAutomationRequest(action, html, url, allowedHosts, cookies, viewportWidth, viewportHeight, screenshot, har, video);
+        boolean captureSessionState = root.path("captureSessionState").asBoolean(false);
+        if (captureSessionState && !hasText(url)) {
+            throw new IllegalArgumentException("browser automation session state capture is only supported for url mode");
+        }
+        return new BrowserAutomationRequest(action, html, url, allowedHosts, cookies, viewportWidth, viewportHeight, screenshot, har, video, captureSessionState);
     }
 
     private String browserAutomationScript(BrowserAutomationRequest request) {
@@ -371,6 +375,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 screenshot_enabled = %s
                 har_enabled = %s
                 video_enabled = %s
+                capture_session_state = %s
                 input_path = Path("/workspace/%s")
                 cookies_path = Path("/workspace/%s")
                 result_path = Path("/workspace/%s")
@@ -378,6 +383,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 har_path = Path("/workspace/%s")
                 video_dir = Path("/workspace/browser-video-recordings")
                 video_path = Path("/workspace/%s")
+                session_state_path = Path("/workspace/%s")
+                session_summary_path = Path("/workspace/%s")
 
                 def compact_text(value, limit=12000):
                     normalized = "\\n".join(line.strip() for line in value.replace("\\r", "\\n").split("\\n") if line.strip())
@@ -446,6 +453,27 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             }],
                             "entries": entries,
                         }
+                    }
+
+                def build_session_summary(state, current_url):
+                    cookies = state.get("cookies") or []
+                    origins = state.get("origins") or []
+                    return {
+                        "source": "url" if target_url else "html",
+                        "targetUrl": target_url or None,
+                        "url": current_url,
+                        "cookies": {
+                            "count": len(cookies),
+                            "domains": sorted({cookie.get("domain") for cookie in cookies if cookie.get("domain")}),
+                        },
+                        "origins": [
+                            {
+                                "origin": origin.get("origin"),
+                                "localStorageCount": len(origin.get("localStorage") or []),
+                            }
+                            for origin in origins
+                            if origin.get("origin")
+                        ],
                     }
 
                 html = "" if target_url else input_path.read_text(encoding="utf-8-sig")
@@ -526,6 +554,16 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         if screenshot_enabled:
                             page.screenshot(path=str(screenshot_path), full_page=True)
                             screenshot_file = screenshot_path.name
+                        session_summary_file = None
+                        session_state_file = None
+                        if capture_session_state:
+                            state = context.storage_state(path=str(session_state_path))
+                            session_summary_path.write_text(
+                                json.dumps(build_session_summary(state, page.url), ensure_ascii=False, indent=2),
+                                encoding="utf-8",
+                            )
+                            session_summary_file = session_summary_path.name
+                            session_state_file = session_state_path.name
                         result = {
                             "action": action,
                             "source": "url" if target_url else "html",
@@ -546,6 +584,11 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             "screenshot": screenshot_file,
                             "har": har_path.name if har_enabled else None,
                             "video": video_path.name if video_enabled else None,
+                            "sessionState": {
+                                "captured": bool(capture_session_state),
+                                "summary": session_summary_file,
+                                "state": session_state_file,
+                            },
                         }
                         result_path.write_text(
                             json.dumps(result, ensure_ascii=False, indent=2),
@@ -572,7 +615,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             context.close()
                         browser.close()
 
-                print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}; har={har_enabled}; video={video_enabled}; cookies={len(browser_cookies)}")
+                print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}; har={har_enabled}; video={video_enabled}; cookies={len(browser_cookies)}; sessionState={capture_session_state}")
                 """.formatted(
                 request.action(),
                 jsonForScript(request.url()),
@@ -582,12 +625,15 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 request.screenshot() ? "True" : "False",
                 request.har() ? "True" : "False",
                 request.video() ? "True" : "False",
+                request.captureSessionState() ? "True" : "False",
                 browserInputName(),
                 browserCookiesName(),
                 browserResultName(),
                 browserScreenshotName(),
                 browserHarName(),
-                browserVideoName());
+                browserVideoName(),
+                browserSessionStateName(),
+                browserSessionSummaryName());
     }
 
     private String fileConversionScript(FileConversionRequest request) {
@@ -858,6 +904,14 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
     private String browserVideoName() {
         return "browser-video.webm";
+    }
+
+    private String browserSessionStateName() {
+        return "browser-session-state.json";
+    }
+
+    private String browserSessionSummaryName() {
+        return "browser-session-summary.json";
     }
 
     private int boundedInt(JsonNode root, String name, int defaultValue, int min, int max) {
@@ -1406,8 +1460,18 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 path.toUri().toString(),
                 mediaType(path),
                 SandboxArtifactScanStatus.PENDING,
-                ContextSensitivity.INTERNAL,
+                artifactSensitivity(path),
                 createdAt);
+    }
+
+    private ContextSensitivity artifactSensitivity(Path path) {
+        String name = path.getFileName() == null
+                ? ""
+                : path.getFileName().toString();
+        if (browserSessionStateName().equals(name)) {
+            return ContextSensitivity.SECRET;
+        }
+        return ContextSensitivity.INTERNAL;
     }
 
     private String mediaType(Path path) {
@@ -1691,7 +1755,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                                             int viewportHeight,
                                             boolean screenshot,
                                             boolean har,
-                                            boolean video) {}
+                                            boolean video,
+                                            boolean captureSessionState) {}
 
     private record BrowserCookie(String name,
                                  String value,

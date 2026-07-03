@@ -266,6 +266,7 @@ function Start-ExternalHttpFixture {
     New-Item -ItemType Directory -Path $root | Out-Null
     $cookieName = "seahorse_browser_session"
     $cookieValue = "$Marker-session"
+    $storageValue = "$Marker-local-storage-secret"
     $authMarker = "$Marker-authenticated"
     $serverScript = @"
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -273,6 +274,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 MARKER = "$Marker"
 COOKIE_NAME = "$cookieName"
 COOKIE_VALUE = "$cookieValue"
+STORAGE_VALUE = "$storageValue"
 AUTH_MARKER = "$authMarker"
 
 class Handler(BaseHTTPRequestHandler):
@@ -283,7 +285,7 @@ class Handler(BaseHTTPRequestHandler):
         body = f"""<!doctype html>
 <html>
 <head><title>External {MARKER}</title></head>
-<body><main><h1>{MARKER}</h1><p>Seahorse browser sandbox URL mode marker.</p>{auth_html}</main></body>
+<body><main><h1>{MARKER}</h1><p>Seahorse browser sandbox URL mode marker.</p>{auth_html}</main><script>localStorage.setItem("seahorse_session_marker", "{STORAGE_VALUE}");</script></body>
 </html>
 """.encode("utf-8")
         self.send_response(200)
@@ -330,6 +332,7 @@ ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
                 Url = "http://${HostName}:$Port/index.html?marker=$Marker"
                 CookieName = $cookieName
                 CookieValue = $cookieValue
+                StorageValue = $storageValue
                 AuthMarker = $authMarker
             }
         }
@@ -485,6 +488,7 @@ try {
     $externalUrl = "$($egressFixture.Url)"
     $externalCookieName = "$($egressFixture.CookieName)"
     $externalCookieValue = "$($egressFixture.CookieValue)"
+    $externalStorageValue = "$($egressFixture.StorageValue)"
     $externalAuthMarker = "$($egressFixture.AuthMarker)"
 
     $egressConfigOk = Test-Step "Verify sandbox URL egress allowlist is configured" {
@@ -550,6 +554,7 @@ try {
                 screenshot = $true
                 har = $true
                 video = $false
+                captureSessionState = $true
             }
             resourceRefs = @{}
             idempotencyKey = "${urlRunId}:${urlToolCallId}"
@@ -576,19 +581,32 @@ try {
         if ([int]$parsed.browser.cookieCount -ne 1 -or @($parsed.browser.cookieDomains) -notcontains $ExternalHost) {
             throw "Expected browser cookie metadata for ${ExternalHost}: $content"
         }
+        if ($parsed.browser.sessionState.captureRequested -ne $true) {
+            throw "Expected browser sessionState capture metadata: $content"
+        }
         if ($content -like "*$externalCookieValue*") {
             throw "Browser observation leaked cookie value: $content"
         }
+        if ($content -like "*$externalStorageValue*") {
+            throw "Browser observation leaked session storage value: $content"
+        }
         $artifacts = @($parsed.artifacts)
-        if ($artifacts.Count -ne 3) {
-            throw "Expected URL mode result JSON, screenshot, and HAR artifacts: $content"
+        if ($artifacts.Count -ne 4) {
+            throw "Expected URL mode result JSON, screenshot, HAR, and session summary artifacts: $content"
+        }
+        $jsonArtifacts = @($artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" })
+        if ($jsonArtifacts.Count -ne 2) {
+            throw "Expected URL mode result JSON plus session summary JSON artifacts: $content"
         }
         $parsed
     }
     if (-not $urlObservation) { exit 1 }
 
     $urlSessionId = "$($urlObservation.sessionId)"
-    $urlJsonArtifactId = "$(@($urlObservation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" })[0].artifactId)"
+    $urlJsonArtifactIds = @($urlObservation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" } | ForEach-Object { "$($_.artifactId)" })
+    $urlJsonArtifactId = $null
+    $urlSessionSummaryArtifactId = $null
+    $urlSessionStateArtifactId = $null
     $urlHarArtifactId = "$(@($urlObservation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/har+json" })[0].artifactId)"
 
     Test-Step "Verify persisted URL mode browser session" {
@@ -600,25 +618,38 @@ try {
         }
     } | Out-Null
 
-    Test-Step "Download governed URL mode browser result artifact" {
-        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$urlJsonArtifactId/download" -Headers $headers
-        if ($content -notlike "*$Marker-url*") {
-            throw "Downloaded URL mode browser result did not contain marker '$Marker-url': $content"
+    Test-Step "Download governed URL mode browser JSON artifacts" {
+        foreach ($artifactId in $urlJsonArtifactIds) {
+            $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$artifactId/download" -Headers $headers
+            if ($content -like "*$externalCookieValue*") {
+                throw "Downloaded URL mode JSON artifact leaked cookie value: $content"
+            }
+            if ($content -like "*$externalStorageValue*") {
+                throw "Downloaded URL mode JSON artifact leaked session storage value: $content"
+            }
+            if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+                throw "Downloaded URL mode JSON artifact leaked storage reference: $content"
+            }
+            if ($content -like "*$Marker-url*" -and $content -like "*$externalAuthMarker*") {
+                if ($content -notlike "*`"source`": `"url`"*" -and $content -notlike "*`"source`":`"url`"*") {
+                    throw "Downloaded URL mode browser result did not include source=url: $content"
+                }
+                if ($content -notlike "*host.docker.internal*") {
+                    throw "Downloaded URL mode browser result did not include allowlisted host: $content"
+                }
+                $script:urlJsonArtifactId = $artifactId
+            } elseif ($content -like "*localStorageCount*" -and ($content -like "*`"count`": 1*" -or $content -like "*`"count`":1*")) {
+                if ($content -notlike "*host.docker.internal*") {
+                    throw "Downloaded session summary did not include cookie domain: $content"
+                }
+                $script:urlSessionSummaryArtifactId = $artifactId
+            }
         }
-        if ($content -notlike "*$externalAuthMarker*") {
-            throw "Downloaded URL mode browser result did not contain authenticated marker '$externalAuthMarker': $content"
+        if ([string]::IsNullOrWhiteSpace($script:urlJsonArtifactId)) {
+            throw "Could not identify URL mode browser result artifact from JSON artifacts: $($urlJsonArtifactIds -join ', ')"
         }
-        if ($content -notlike "*`"source`": `"url`"*" -and $content -notlike "*`"source`":`"url`"*") {
-            throw "Downloaded URL mode browser result did not include source=url: $content"
-        }
-        if ($content -notlike "*host.docker.internal*") {
-            throw "Downloaded URL mode browser result did not include allowlisted host: $content"
-        }
-        if ($content -like "*$externalCookieValue*") {
-            throw "Downloaded URL mode browser result leaked cookie value: $content"
-        }
-        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
-            throw "Downloaded URL mode browser result leaked storage reference: $content"
+        if ([string]::IsNullOrWhiteSpace($script:urlSessionSummaryArtifactId)) {
+            throw "Could not identify URL mode session summary artifact from JSON artifacts: $($urlJsonArtifactIds -join ', ')"
         }
     } | Out-Null
 
@@ -641,6 +672,41 @@ try {
         }
         if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
             throw "Downloaded URL mode HAR leaked storage reference: $content"
+        }
+    } | Out-Null
+
+    Test-Step "Verify governed URL mode session state artifacts" {
+        $safeUrlSessionId = $urlSessionId.Replace("'", "''")
+        $summaryRow = Invoke-PostgresScalar "SELECT artifact_id, media_type, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE session_id = '$safeUrlSessionId' AND object_uri LIKE '%browser-session-summary.json';"
+        $summaryParts = $summaryRow -split "`t"
+        if ($summaryParts.Count -ne 5 -or $summaryParts[1] -ne "application/json" -or $summaryParts[2] -ne "CLEAN" -or $summaryParts[3] -ne "INTERNAL") {
+            throw "Unexpected session summary artifact row: $summaryRow"
+        }
+        if ($summaryParts[0] -ne $script:urlSessionSummaryArtifactId) {
+            throw "Session summary artifact id mismatch, observation=$script:urlSessionSummaryArtifactId db=$($summaryParts[0])"
+        }
+
+        $stateRow = Invoke-PostgresScalar "SELECT artifact_id, media_type, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE session_id = '$safeUrlSessionId' AND object_uri LIKE '%browser-session-state.json';"
+        $stateParts = $stateRow -split "`t"
+        if ($stateParts.Count -ne 5 -or $stateParts[1] -ne "application/json" -or $stateParts[2] -ne "BLOCKED" -or $stateParts[3] -ne "SECRET") {
+            throw "Unexpected session state artifact row: $stateRow"
+        }
+        if ("$($stateParts[4])" -ne "sensitive artifact metadata") {
+            throw "Expected sensitive artifact metadata scan summary for session state: $stateRow"
+        }
+        $script:urlSessionStateArtifactId = "$($stateParts[0])"
+
+        $detail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$script:urlSessionStateArtifactId" -Headers $headers
+        Assert-ApiOk $detail "Get governed session state artifact detail"
+        if ($detail.data.downloadable -ne $false -or $detail.data.promptVisible -ne $false) {
+            throw "Expected session state artifact to be non-downloadable and prompt hidden: $($detail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($detail.data.sensitivity)" -ne "SECRET" -or "$($detail.data.scanStatus)" -ne "BLOCKED") {
+            throw "Expected SECRET/BLOCKED session state detail: $($detail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $detailJson = $detail.data | ConvertTo-Json -Depth 20 -Compress
+        if ($detailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|$externalCookieValue|$externalStorageValue") {
+            throw "Session state artifact detail leaked storage or session values: $detailJson"
         }
     } | Out-Null
 
@@ -825,6 +891,8 @@ try {
     Write-Host "Video Artifact: $videoArtifactId"
     Write-Host "URL Session: $urlSessionId"
     Write-Host "URL Result Artifact: $urlJsonArtifactId"
+    Write-Host "URL Session Summary Artifact: $urlSessionSummaryArtifactId"
+    Write-Host "URL Session State Artifact: $urlSessionStateArtifactId"
     Write-Host "URL HAR Artifact: $urlHarArtifactId"
 } catch {
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
