@@ -939,6 +939,14 @@ The smoke verifies PostgreSQL state for the artifact as `application/gzip|BLOCKE
 
 Fresh evidence: PowerShell parsing passed for `scripts/e2e-sandbox-artifact-storage-smoke.ps1`; backend health returned `{"status":"UP"}` before the run; `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-plain-gzip-failclosed-smoke-rerun` passed 45/45 against the local full-Docker backend, including the new "Verify plain GZIP archive is blocked before object storage" step. Cleanup confirmed no `seahorse-sandbox-*` containers, PostgreSQL reported zero non-terminal sandbox sessions, and backend health remained `{"status":"UP"}`.
 
+### 2026-07-04 Sandbox Archive Unsafe Path E2E Guard Evidence Update
+
+The artifact-storage smoke now exercises archive path traversal handling through the real sandbox runtime. The test-created `path-traversal-bundle.zip` contains `../outside.txt`, so the scanner must block it as an unsafe archive entry before any object-storage copy.
+
+The smoke verifies PostgreSQL state for the artifact as `application/zip|BLOCKED|CONFIDENTIAL`, scan summary `unsafe archive entry`, and redaction summary containing `ARCHIVE_UNSAFE_ENTRY` without the raw entry name. The sandbox artifact list/detail APIs must keep it prompt-hidden, non-downloadable, and free of storage references or `outside.txt` leakage. This is verification hardening only; it does not change ZIP/TAR/TAR.GZ parsing, extraction behavior, recursive archive handling, or external scanner integration.
+
+Fresh evidence: PowerShell parsing passed for `scripts/e2e-sandbox-artifact-storage-smoke.ps1`; `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-archive-path-guard-smoke` passed 46/46 against the local full-Docker backend, including the new "Verify path-traversal ZIP archive is blocked before object storage" step. Cleanup confirmed no `seahorse-sandbox-*` containers, PostgreSQL reported zero non-terminal sandbox sessions, and backend health returned `{"status":"UP"}`.
+
 ### 2026-07-04 Sandbox Artifact TAR.GZ Archive Introspection Evidence Update
 
 The default sandbox artifact scanner now performs conservative TAR.GZ archive introspection for local `file://` artifacts whose media type is `application/gzip` or `application/x-gzip` and whose filename ends with `.tar.gz` or `.tgz`. These artifacts are governed download-only media: clean archives are copied to object storage and downloadable through artifact APIs, but remain prompt-hidden and are not returned in sandbox-backed tool observations.
