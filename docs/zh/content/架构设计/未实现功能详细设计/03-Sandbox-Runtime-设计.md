@@ -420,7 +420,7 @@ Fresh full-Docker evidence: `.\scripts\e2e-tool-gateway-quota-smoke.ps1 -BaseUrl
 
 `sandbox_browser` now covers the first browser automation minimum path. The tool accepts bounded inline HTML and supports `snapshot` plus `extract_text`; it creates a `BROWSER_AUTOMATION` session with network disabled, invokes the container runtime through `SandboxRuntimeInboundPort`, and closes the session after execution. The runtime writes `browser-input.html`, generates a Python Playwright script, runs it in `seahorse-sandbox-browser:playwright-1.48.0`, and collects only `browser-result.json` plus optional `screenshot.png` as governed artifacts.
 
-The browser runtime image is project-owned at `resources/docker/Dockerfile.sandbox-browser-runtime`, based on the upstream Playwright Python image with the matching Python `playwright` package installed. This keeps the runtime reproducible for local full-Docker validation while preserving the no-network execution posture. This slice does not add external URL browsing, egress allowlists, HAR/video recording, auth/session capture, or broad browser workflow building.
+The browser runtime image is project-owned at `resources/docker/Dockerfile.sandbox-browser-runtime`, based on the upstream Playwright Python image with the matching Python `playwright` package installed. This keeps the runtime reproducible for local full-Docker validation while preserving the no-network execution posture. This slice does not add external URL browsing, egress allowlists, video recording, auth/session capture, or broad browser workflow building.
 
 Fresh full-Docker evidence: `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-smoke` passed 10/10. The smoke verified built-in catalog exposure, Tool Gateway invocation, persisted `BROWSER_AUTOMATION` session/profile metadata, governed JSON and PNG artifacts, governed result download, local object storage files, no leftover managed sandbox containers, and zero non-terminal sandbox sessions.
 
@@ -443,7 +443,15 @@ Sandbox artifacts now store and expose a bounded structured `redactionSummaryJso
 
 Fresh full-Docker evidence: `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-redaction-summary-smoke` passed 17/17 after rebuilding the full-compose backend. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and PostgreSQL column metadata `redaction_summary_json|character varying|2048`.
 
-This completes the structured summary payload for the current conservative scanner. Virus scanning, PDF/binary deep scanning, external scanner engines, browser egress/URL policy, HAR/video capture, stronger isolation, and node-pool health remain follow-up production hardening work.
+This completes the structured summary payload for the current conservative scanner. Virus scanning, PDF/binary deep scanning, external scanner engines, browser egress/URL policy, video capture, stronger isolation, and node-pool health remain follow-up production hardening work.
+
+### 2026-07-03 Update: sandbox browser restricted HAR capture
+
+`sandbox_browser` now supports an optional `har=true` argument on the existing inline no-network browser automation path. The container adapter records Playwright request, response, and request-failed events, emits a governed `browser-network.har` artifact as `application/har+json`, and marks blocked non-inline requests with `_blocked: true`.
+
+The runtime security boundary is unchanged: the tool still accepts bounded inline HTML only, runs the browser container with network disabled, aborts non-`about:`/`blob:`/`data:` requests at the page route layer, and exposes artifacts only through the existing scanner/object-storage/governed-download path. This update does not add external URL browsing, egress allowlists or proxying, credentials, video recording, session/auth capture, or broader browser workflow automation.
+
+Fresh full-Docker evidence: `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-har-smoke` passed 11/11, verifying real Tool Gateway invocation, three governed artifacts (`browser-result.json`, `screenshot.png`, `browser-network.har`), PostgreSQL `application/har+json` metadata, blocked external request markers in the downloaded HAR, no storage-reference leakage, object storage files, no leftover managed sandbox containers, and zero non-terminal sandbox sessions.
 
 ## 13. 非目标
 

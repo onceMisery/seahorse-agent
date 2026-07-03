@@ -90,6 +90,20 @@ class DefaultSandboxArtifactScannerPortTests {
     }
 
     @Test
+    void shouldPassHarJsonArtifactThroughContentScanner(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("browser-network.har");
+        Files.writeString(output, "{\"log\":{\"entries\":[{\"_blocked\":true}]}}", StandardCharsets.UTF_8);
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/har+json")));
+
+        assertEquals(SandboxArtifactScanStatus.CLEAN, result.scanStatus());
+        assertEquals(ContextSensitivity.INTERNAL, result.sensitivity());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("CLEAN", redactionSummary.path("decision").asText());
+        assertEquals(true, redactionSummary.path("contentScanned").asBoolean());
+    }
+
+    @Test
     void shouldFailClosedWhenLocalTextArtifactCannotBeRead(@TempDir Path tempDir) throws Exception {
         Path missing = tempDir.resolve("missing.txt");
 
@@ -106,12 +120,16 @@ class DefaultSandboxArtifactScannerPortTests {
     }
 
     private static SandboxArtifact fileArtifact(Path path) {
+        return fileArtifact(path, "text/plain");
+    }
+
+    private static SandboxArtifact fileArtifact(Path path, String mediaType) {
         return new SandboxArtifact(
                 "artifact-1",
                 "session-1",
                 "exec-1",
                 path.toUri().toString(),
-                "text/plain",
+                mediaType,
                 SandboxArtifactScanStatus.PENDING,
                 ContextSensitivity.INTERNAL,
                 NOW);

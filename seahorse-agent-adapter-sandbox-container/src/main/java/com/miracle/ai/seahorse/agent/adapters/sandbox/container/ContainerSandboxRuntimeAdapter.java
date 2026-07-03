@@ -300,12 +300,14 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         boolean screenshot = root.path("screenshot").isMissingNode()
                 ? BROWSER_ACTION_SNAPSHOT.equals(action)
                 : root.path("screenshot").asBoolean(BROWSER_ACTION_SNAPSHOT.equals(action));
-        return new BrowserAutomationRequest(action, html, viewportWidth, viewportHeight, screenshot);
+        boolean har = root.path("har").asBoolean(false);
+        return new BrowserAutomationRequest(action, html, viewportWidth, viewportHeight, screenshot, har);
     }
 
     private String browserAutomationScript(BrowserAutomationRequest request) {
         return """
                 import json
+                from datetime import datetime, timezone
                 from pathlib import Path
                 from playwright.sync_api import sync_playwright
 
@@ -313,15 +315,80 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 viewport_width = %d
                 viewport_height = %d
                 screenshot_enabled = %s
+                har_enabled = %s
                 input_path = Path("/workspace/%s")
                 result_path = Path("/workspace/%s")
                 screenshot_path = Path("/workspace/%s")
+                har_path = Path("/workspace/%s")
 
                 def compact_text(value, limit=12000):
                     normalized = "\\n".join(line.strip() for line in value.replace("\\r", "\\n").split("\\n") if line.strip())
                     return normalized[:limit]
 
+                def utc_now():
+                    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+                def allowed_url(url):
+                    return url.startswith(("about:", "blob:", "data:"))
+
+                def empty_har_request(method, url):
+                    return {
+                        "method": method,
+                        "url": url,
+                        "httpVersion": "HTTP/1.1",
+                        "cookies": [],
+                        "headers": [],
+                        "queryString": [],
+                        "headersSize": -1,
+                        "bodySize": 0,
+                    }
+
+                def empty_har_response(status, status_text):
+                    return {
+                        "status": status,
+                        "statusText": status_text,
+                        "httpVersion": "HTTP/1.1",
+                        "cookies": [],
+                        "headers": [],
+                        "content": {"size": 0, "mimeType": ""},
+                        "redirectURL": "",
+                        "headersSize": -1,
+                        "bodySize": 0,
+                    }
+
+                def build_har(events):
+                    entries = []
+                    for event in events:
+                        status = event.get("status") or 0
+                        status_text = event.get("statusText") or event.get("failure") or ("blocked" if event.get("blocked") else "")
+                        entries.append({
+                            "startedDateTime": event["startedDateTime"],
+                            "time": 0,
+                            "request": empty_har_request(event["method"], event["url"]),
+                            "response": empty_har_response(status, status_text),
+                            "cache": {},
+                            "timings": {"send": 0, "wait": 0, "receive": 0},
+                            "_resourceType": event.get("resourceType"),
+                            "_blocked": bool(event.get("blocked")),
+                            "_failure": event.get("failure"),
+                        })
+                    return {
+                        "log": {
+                            "version": "1.2",
+                            "creator": {"name": "seahorse-sandbox-browser", "version": "1"},
+                            "pages": [{
+                                "startedDateTime": utc_now(),
+                                "id": "sandbox-browser-page",
+                                "title": "sandbox browser",
+                                "pageTimings": {},
+                            }],
+                            "entries": entries,
+                        }
+                    }
+
                 html = input_path.read_text(encoding="utf-8-sig")
+                network_events = []
+                network_event_index = {}
 
                 with sync_playwright() as playwright:
                     browser = playwright.chromium.launch(
@@ -333,15 +400,47 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             viewport={"width": viewport_width, "height": viewport_height}
                         )
 
+                        def on_request(request):
+                            event = {
+                                "startedDateTime": utc_now(),
+                                "method": request.method,
+                                "url": request.url,
+                                "resourceType": request.resource_type,
+                                "status": 0,
+                                "statusText": "",
+                                "failure": None,
+                                "blocked": not allowed_url(request.url),
+                            }
+                            network_event_index[id(request)] = event
+                            network_events.append(event)
+
+                        def on_response(response):
+                            event = network_event_index.get(id(response.request))
+                            if event is not None:
+                                event["status"] = response.status
+                                event["statusText"] = response.status_text
+
+                        def on_request_failed(request):
+                            event = network_event_index.get(id(request))
+                            if event is not None:
+                                failure = request.failure or "request failed"
+                                event["failure"] = failure
+                                event["statusText"] = failure
+
                         def block_external(route):
                             url = route.request.url
-                            if url.startswith(("about:", "blob:", "data:")):
+                            if allowed_url(url):
                                 route.continue_()
                             else:
                                 route.abort()
 
+                        page.on("request", on_request)
+                        page.on("response", on_response)
+                        page.on("requestfailed", on_request_failed)
                         page.route("**/*", block_external)
                         page.set_content(html, wait_until="load", timeout=10000)
+                        if har_enabled:
+                            page.wait_for_timeout(250)
                         title = page.title()
                         try:
                             body_text = page.locator("body").inner_text(timeout=3000)
@@ -362,23 +461,31 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                                 "height": viewport_height,
                             },
                             "screenshot": screenshot_file,
+                            "har": har_path.name if har_enabled else None,
                         }
                         result_path.write_text(
                             json.dumps(result, ensure_ascii=False, indent=2),
                             encoding="utf-8",
                         )
+                        if har_enabled:
+                            har_path.write_text(
+                                json.dumps(build_har(network_events), ensure_ascii=False, indent=2),
+                                encoding="utf-8",
+                            )
                     finally:
                         browser.close()
 
-                print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}")
+                print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}; har={har_enabled}")
                 """.formatted(
                 request.action(),
                 request.viewportWidth(),
                 request.viewportHeight(),
                 request.screenshot() ? "True" : "False",
+                request.har() ? "True" : "False",
                 browserInputName(),
                 browserResultName(),
-                browserScreenshotName());
+                browserScreenshotName(),
+                browserHarName());
     }
 
     private String fileConversionScript(FileConversionRequest request) {
@@ -611,6 +718,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
     private String browserScreenshotName() {
         return "screenshot.png";
+    }
+
+    private String browserHarName() {
+        return "browser-network.har";
     }
 
     private int boundedInt(JsonNode root, String name, int defaultValue, int min, int max) {
@@ -1027,6 +1138,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             case "py" -> "text/x-python";
             case "yaml", "yml" -> "text/yaml";
             case "json" -> "application/json";
+            case "har" -> "application/har+json";
             case "xml" -> "application/xml";
             case "pdf" -> "application/pdf";
             case "gif" -> "image/gif";
@@ -1251,7 +1363,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                                             String html,
                                             int viewportWidth,
                                             int viewportHeight,
-                                            boolean screenshot) {}
+                                            boolean screenshot,
+                                            boolean har) {}
 
     private static final class UnsupportedFileConversionException extends RuntimeException {
 

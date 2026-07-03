@@ -70,6 +70,7 @@ class SandboxBrowserToolPortAdapterTests {
         assertTrue(schema.contains("\"extract_text\""));
         assertTrue(schema.contains("\"viewportWidth\""));
         assertTrue(schema.contains("\"screenshot\""));
+        assertTrue(schema.contains("\"har\""));
     }
 
     @Test
@@ -104,6 +105,16 @@ class SandboxBrowserToolPortAdapterTests {
                                 SandboxArtifactScanStatus.CLEAN,
                                 ContextSensitivity.INTERNAL,
                                 "metadata scan passed",
+                                NOW),
+                        new SandboxArtifact(
+                                "artifact-har",
+                                "session-1",
+                                "exec-1",
+                                "local://sandbox-artifacts/browser-network.har",
+                                "application/har+json",
+                                SandboxArtifactScanStatus.CLEAN,
+                                ContextSensitivity.INTERNAL,
+                                "metadata scan passed",
                                 NOW))));
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
 
@@ -112,7 +123,8 @@ class SandboxBrowserToolPortAdapterTests {
                 "html", "<!doctype html><title>Browser Smoke</title><main>browser marker</main>",
                 "viewportWidth", 1024,
                 "viewportHeight", 640,
-                "screenshot", true)));
+                "screenshot", true,
+                "har", true)));
 
         assertTrue(result.success());
         assertEquals("tenant-1", runtime.createCommand.tenantId());
@@ -130,6 +142,7 @@ class SandboxBrowserToolPortAdapterTests {
         assertEquals(1024, browserInput.path("viewportWidth").asInt());
         assertEquals(640, browserInput.path("viewportHeight").asInt());
         assertTrue(browserInput.path("screenshot").asBoolean());
+        assertTrue(browserInput.path("har").asBoolean());
         assertTrue(browserInput.path("html").asText().contains("browser marker"));
 
         JsonNode root = objectMapper.readTree(result.content());
@@ -138,8 +151,10 @@ class SandboxBrowserToolPortAdapterTests {
         assertEquals("SUCCEEDED", root.path("executionStatus").asText());
         assertEquals("snapshot", root.path("browser").path("action").asText());
         assertFalse(root.path("browser").path("networkAllowed").asBoolean());
+        assertTrue(root.path("browser").path("har").asBoolean());
         assertEquals("application/json", root.path("artifacts").get(0).path("mediaType").asText());
         assertEquals("image/png", root.path("artifacts").get(1).path("mediaType").asText());
+        assertEquals("application/har+json", root.path("artifacts").get(2).path("mediaType").asText());
         assertEquals("metadata scan passed", root.path("artifacts").get(0).path("scanSummary").asText());
         assertTrue(root.path("artifacts").get(0).path("promptVisible").asBoolean());
     }
@@ -176,6 +191,7 @@ class SandboxBrowserToolPortAdapterTests {
         JsonNode browserInput = objectMapper.readTree(runtime.executeCommand.input());
         assertEquals("extract_text", browserInput.path("action").asText());
         assertFalse(browserInput.path("screenshot").asBoolean());
+        assertFalse(browserInput.path("har").asBoolean());
     }
 
     @Test

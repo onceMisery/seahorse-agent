@@ -273,11 +273,11 @@ class ContainerSandboxRuntimeAdapterTests {
         String html = "<!doctype html><html><head><title>Browser Smoke</title></head><body><main>browser marker</main></body></html>";
         RecordingRunner runner = new RecordingRunner(
                 ContainerCommandResult.succeeded(
-                        "browser snapshot completed; textLength=14; screenshot=True\n",
+                        "browser snapshot completed; textLength=14; screenshot=True; har=True\n",
                         Duration.ofMillis(320)),
                 command -> {
                     assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
-                            .contains("sync_playwright", "page.set_content", "screenshot.png")
+                            .contains("sync_playwright", "page.set_content", "screenshot.png", "browser-network.har")
                             .doesNotContain("browser marker");
                     assertThat(Files.readString(command.workingDirectory().resolve("browser-input.html")))
                             .isEqualTo(html);
@@ -286,6 +286,10 @@ class ContainerSandboxRuntimeAdapterTests {
                                     {"action":"snapshot","title":"Browser Smoke","text":"browser marker"}
                                     """);
                     Files.write(command.workingDirectory().resolve("screenshot.png"), new byte[]{1, 2, 3});
+                    Files.writeString(command.workingDirectory().resolve("browser-network.har"),
+                            """
+                                    {"log":{"version":"1.2","entries":[{"_blocked":true}]}}
+                                    """);
                 });
         ContainerSandboxRuntimeAdapter adapter = adapter(runner);
         SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
@@ -293,7 +297,7 @@ class ContainerSandboxRuntimeAdapterTests {
         SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
                 session,
                 """
-                        {"action":"snapshot","html":"<!doctype html><html><head><title>Browser Smoke</title></head><body><main>browser marker</main></body></html>","viewportWidth":1024,"viewportHeight":640,"screenshot":true}
+                        {"action":"snapshot","html":"<!doctype html><html><head><title>Browser Smoke</title></head><body><main>browser marker</main></body></html>","viewportWidth":1024,"viewportHeight":640,"screenshot":true,"har":true}
                         """,
                 false,
                 List.of()));
@@ -301,7 +305,7 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
         assertThat(result.execution().reasonCode()).isEqualTo(SandboxPolicyReasonCode.VALID_REQUEST);
         assertThat(result.execution().resultSummary()).contains("browser snapshot completed");
-        assertThat(result.artifacts()).hasSize(2);
+        assertThat(result.artifacts()).hasSize(3);
         assertThat(result.artifacts())
                 .anySatisfy(artifact -> {
                     assertThat(artifact.objectUri()).contains("browser-result.json");
@@ -310,6 +314,10 @@ class ContainerSandboxRuntimeAdapterTests {
                 .anySatisfy(artifact -> {
                     assertThat(artifact.objectUri()).contains("screenshot.png");
                     assertThat(artifact.mediaType()).isEqualTo("image/png");
+                })
+                .anySatisfy(artifact -> {
+                    assertThat(artifact.objectUri()).contains("browser-network.har");
+                    assertThat(artifact.mediaType()).isEqualTo("application/har+json");
                 })
                 .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
                 .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-input.html"));

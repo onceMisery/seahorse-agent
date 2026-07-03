@@ -107,7 +107,7 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
             return false;
         }
         String normalized = mediaType.toLowerCase(Locale.ROOT).split(";", 2)[0].trim();
-        return normalized.startsWith("text/") || SAFE_EXACT_MEDIA_TYPES.contains(normalized);
+        return normalized.startsWith("text/") || normalized.endsWith("+json") || SAFE_EXACT_MEDIA_TYPES.contains(normalized);
     }
 
     private static SandboxArtifactScanResult scanLocalTextContent(SandboxArtifact artifact) {
@@ -181,6 +181,7 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
         String normalized = mediaType.toLowerCase(Locale.ROOT).split(";", 2)[0].trim();
         return normalized.startsWith("text/")
                 || "application/json".equals(normalized)
+                || normalized.endsWith("+json")
                 || "application/xml".equals(normalized);
     }
 

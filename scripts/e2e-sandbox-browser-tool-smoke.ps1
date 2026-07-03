@@ -273,7 +273,7 @@ try {
     $suffix = ([guid]::NewGuid().ToString('N')).Substring(0, 8)
     $runId = "sandbox-browser-run-$suffix"
     $toolCallId = "sandbox-browser-call-$suffix"
-    $html = "<!doctype html><html><head><title>Browser $Marker</title></head><body><main><h1>$Marker</h1><p>Seahorse browser sandbox smoke.</p></main></body></html>"
+    $html = "<!doctype html><html><head><title>Browser $Marker</title></head><body><main><h1>$Marker</h1><p>Seahorse browser sandbox smoke.</p><img alt='blocked' src='https://example.invalid/$Marker/pixel.png' /></main></body></html>"
 
     Test-Step "Verify sandbox_browser is cataloged" {
         $response = Invoke-Json -Method GET -Path "/api/tools?current=1&size=50&provider=BUILTIN&keyword=sandbox_browser" -Headers $headers
@@ -306,6 +306,7 @@ try {
                 viewportWidth = 1024
                 viewportHeight = 640
                 screenshot = $true
+                har = $true
             }
             resourceRefs = @{}
             idempotencyKey = "${runId}:${toolCallId}"
@@ -327,15 +328,16 @@ try {
             throw "Unexpected browser metadata: $content"
         }
         $artifacts = @($parsed.artifacts)
-        if ($artifacts.Count -ne 2) {
-            throw "Expected browser result JSON and screenshot artifacts: $content"
+        if ($artifacts.Count -ne 3) {
+            throw "Expected browser result JSON, screenshot, and HAR artifacts: $content"
         }
         $jsonArtifact = @($artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" })
         $pngArtifact = @($artifacts | Where-Object { "$($_.mediaType)" -eq "image/png" })
-        if ($jsonArtifact.Count -ne 1 -or $pngArtifact.Count -ne 1) {
-            throw "Expected application/json and image/png artifacts: $content"
+        $harArtifact = @($artifacts | Where-Object { "$($_.mediaType)" -eq "application/har+json" })
+        if ($jsonArtifact.Count -ne 1 -or $pngArtifact.Count -ne 1 -or $harArtifact.Count -ne 1) {
+            throw "Expected application/json, image/png, and application/har+json artifacts: $content"
         }
-        if ($jsonArtifact[0].promptVisible -ne $true -or $pngArtifact[0].promptVisible -ne $true) {
+        if ($jsonArtifact[0].promptVisible -ne $true -or $pngArtifact[0].promptVisible -ne $true -or $harArtifact[0].promptVisible -ne $true) {
             throw "Expected prompt-visible browser artifacts: $content"
         }
         $parsed
@@ -345,6 +347,7 @@ try {
     $sessionId = "$($observation.sessionId)"
     $jsonArtifactId = "$(@($observation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" })[0].artifactId)"
     $pngArtifactId = "$(@($observation.artifacts | Where-Object { "$($_.mediaType)" -eq "image/png" })[0].artifactId)"
+    $harArtifactId = "$(@($observation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/har+json" })[0].artifactId)"
 
     $objectUris = Test-Step "Verify persisted BROWSER_AUTOMATION session and artifacts" {
         $safeSessionId = $sessionId.Replace("'", "''")
@@ -382,7 +385,17 @@ try {
         if ($pngParts[0] -like "file:*") {
             throw "browser screenshot artifact still points at file URI: $($pngParts[0])"
         }
-        @($jsonParts[0], $pngParts[0])
+
+        $safeHarArtifactId = $harArtifactId.Replace("'", "''")
+        $harRow = Invoke-PostgresScalar "SELECT object_uri, media_type, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE artifact_id = '$safeHarArtifactId';"
+        $harParts = $harRow -split "`t"
+        if ($harParts.Count -ne 5 -or $harParts[1] -ne "application/har+json" -or $harParts[2] -ne "CLEAN" -or $harParts[3] -ne "INTERNAL") {
+            throw "Unexpected browser HAR artifact row: $harRow"
+        }
+        if ($harParts[0] -like "file:*") {
+            throw "browser HAR artifact still points at file URI: $($harParts[0])"
+        }
+        @($jsonParts[0], $pngParts[0], $harParts[0])
     }
     if (-not $objectUris) { exit 1 }
 
@@ -396,6 +409,22 @@ try {
         }
         if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
             throw "Downloaded browser result leaked storage reference: $content"
+        }
+    } | Out-Null
+
+    Test-Step "Download governed browser HAR artifact" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$harArtifactId/download" -Headers $headers
+        if ($content -notlike "*`"log`"*" -or $content -notlike "*`"entries`"*") {
+            throw "Downloaded browser HAR did not include log entries: $content"
+        }
+        if ($content -notlike "*example.invalid*" -or $content -notlike "*$Marker*") {
+            throw "Downloaded browser HAR did not include blocked external request marker: $content"
+        }
+        if ($content -notlike "*`"_blocked`": true*" -and $content -notlike "*`"_blocked`":true*") {
+            throw "Downloaded browser HAR did not mark external request as blocked: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded browser HAR leaked storage reference: $content"
         }
     } | Out-Null
 
@@ -438,6 +467,7 @@ try {
     Write-Host "Session: $sessionId"
     Write-Host "JSON Artifact: $jsonArtifactId"
     Write-Host "Screenshot Artifact: $pngArtifactId"
+    Write-Host "HAR Artifact: $harArtifactId"
 } catch {
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Error $_.Exception.Message
