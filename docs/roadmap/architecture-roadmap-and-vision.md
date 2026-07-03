@@ -298,3 +298,11 @@ The artifact-storage full-Docker smoke now verifies unsafe archive entry paths t
 The archive artifact API check also verifies that the path-traversal artifact stays prompt-hidden, non-downloadable, and does not leak the raw entry name or any storage reference. This is verification hardening only; it does not change archive parsing, add extraction, add recursive scanning, or introduce an external scanner engine.
 
 Fresh evidence: PowerShell parsing returned `PSParser OK`; `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-archive-path-guard-smoke` passed 46/46 against the local full-Docker backend, including the new "Verify path-traversal ZIP archive is blocked before object storage" step. Cleanup confirmed no `seahorse-sandbox-*` containers, PostgreSQL reported zero non-terminal sandbox sessions, and backend health remained `UP`.
+
+## 2026-07-04 Update: Sandbox TAR Unsafe Path E2E Guard
+
+The artifact-storage full-Docker smoke now verifies unsafe TAR entry paths through the real runtime path. The sandbox run creates `path-traversal-bundle.tar` with `../outside.txt`; the scanner blocks it before object storage copy as `BLOCKED|CONFIDENTIAL`, summary `unsafe archive entry`, and value-free `ARCHIVE_UNSAFE_ENTRY` metadata.
+
+The archive artifact API check also verifies that the path-traversal TAR artifact stays prompt-hidden, non-downloadable, and does not leak the raw entry name or any storage reference. This is verification hardening only; it does not change TAR parsing, add extraction, add recursive scanning, or introduce an external scanner engine.
+
+Fresh evidence: PowerShell parsing returned `PSParser OK`; `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-tar-path-guard-smoke` passed 47/47 against the local full-Docker backend, including the new "Verify path-traversal TAR archive is blocked before object storage" step. Cleanup confirmed no `seahorse-sandbox-*` containers, PostgreSQL reported zero non-terminal sandbox sessions, and backend health remained `UP`.

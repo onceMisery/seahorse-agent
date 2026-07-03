@@ -1144,6 +1144,11 @@ with tarfile.open('unsafe-bundle.tar', 'w', format=tarfile.USTAR_FORMAT) as arch
     entry = tarfile.TarInfo('bin/payload.exe')
     entry.size = len(unsafe_tar_data)
     archive.addfile(entry, io.BytesIO(unsafe_tar_data))
+path_traversal_tar_data = b'unsafe tar path $escapedArchiveMarker'
+with tarfile.open('path-traversal-bundle.tar', 'w', format=tarfile.USTAR_FORMAT) as archive:
+    entry = tarfile.TarInfo('../outside.txt')
+    entry.size = len(path_traversal_tar_data)
+    archive.addfile(entry, io.BytesIO(path_traversal_tar_data))
 safe_targz_data = b'safe gzip tar archive $escapedArchiveMarker'
 with tarfile.open('safe-bundle.tar.gz', 'w:gz', format=tarfile.USTAR_FORMAT) as archive:
     entry = tarfile.TarInfo('docs/readme.txt')
@@ -1452,6 +1457,32 @@ print('$escapedArchiveMarker')
     }
     if (-not $unsafeTarArchiveArtifactId) { exit 1 }
 
+    $pathTraversalTarArchiveArtifactId = Test-Step "Verify path-traversal TAR archive is blocked before object storage" {
+        $safeArchiveSessionId = $archiveSessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeArchiveSessionId' AND object_uri LIKE '%/path-traversal-bundle.tar' ORDER BY created_at DESC LIMIT 1;"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 7) {
+            throw "Unexpected path-traversal TAR artifact row: $row"
+        }
+        if ($parts[1] -like "$ExpectedObjectUriPrefix*") {
+            throw "Path-traversal TAR archive was copied to object storage: $($parts[1])"
+        }
+        if ($parts[2] -ne "application/x-tar" -or $parts[3] -ne "BLOCKED" -or $parts[4] -ne "CONFIDENTIAL") {
+            throw "Expected BLOCKED CONFIDENTIAL application/x-tar archive but got: $row"
+        }
+        if ($parts[5] -ne "unsafe archive entry") {
+            throw "Expected path-traversal TAR scan summary unsafe archive entry but got '$($parts[5])'"
+        }
+        if ($parts[6] -notlike '*"decision":"BLOCKED"*' -or $parts[6] -notlike '*"ARCHIVE_UNSAFE_ENTRY"*') {
+            throw "Expected BLOCKED ARCHIVE_UNSAFE_ENTRY TAR redaction summary but got '$($parts[6])'"
+        }
+        if ($parts[6] -like "*outside.txt*") {
+            throw "Path-traversal TAR redaction summary leaked entry name: $($parts[6])"
+        }
+        $parts[0]
+    }
+    if (-not $pathTraversalTarArchiveArtifactId) { exit 1 }
+
     $unsafeGzipTarArchiveArtifactId = Test-Step "Verify unsafe TAR.GZ archive is blocked before object storage" {
         $safeArchiveSessionId = $archiveSessionId.Replace("'", "''")
         $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeArchiveSessionId' AND object_uri LIKE '%/unsafe-bundle.tar.gz' ORDER BY created_at DESC LIMIT 1;"
@@ -1557,6 +1588,10 @@ print('$escapedArchiveMarker')
         if ($unsafeTarMatched.Count -ne 1 -or $unsafeTarMatched[0].promptVisible -ne $false) {
             throw "Expected unsafe TAR to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
+        $pathTraversalTarMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$pathTraversalTarArchiveArtifactId" })
+        if ($pathTraversalTarMatched.Count -ne 1 -or $pathTraversalTarMatched[0].promptVisible -ne $false) {
+            throw "Expected path-traversal TAR to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
         $unsafeGzipTarMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$unsafeGzipTarArchiveArtifactId" })
         if ($unsafeGzipTarMatched.Count -ne 1 -or $unsafeGzipTarMatched[0].promptVisible -ne $false) {
             throw "Expected unsafe TAR.GZ to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
@@ -1629,6 +1664,19 @@ print('$escapedArchiveMarker')
         $tarDetailJson = $tarDetail.data | ConvertTo-Json -Depth 20 -Compress
         if ($tarDetailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|payload.exe") {
             throw "Unsafe TAR detail leaked storage or unsafe entry details: $tarDetailJson"
+        }
+
+        $pathTraversalTarDetail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$pathTraversalTarArchiveArtifactId" -Headers $headers
+        Assert-ApiOk $pathTraversalTarDetail "Get path-traversal TAR artifact detail"
+        if ($pathTraversalTarDetail.data.downloadable -ne $false -or $pathTraversalTarDetail.data.promptVisible -ne $false) {
+            throw "Expected path-traversal TAR detail to be non-downloadable and prompt-hidden: $($pathTraversalTarDetail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($pathTraversalTarDetail.data.redactionSummaryJson)" -notlike '*"ARCHIVE_UNSAFE_ENTRY"*') {
+            throw "Expected path-traversal TAR detail archive unsafe entry category: $($pathTraversalTarDetail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $pathTraversalTarDetailJson = $pathTraversalTarDetail.data | ConvertTo-Json -Depth 20 -Compress
+        if ($pathTraversalTarDetailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|outside.txt") {
+            throw "Path-traversal TAR detail leaked storage or unsafe entry details: $pathTraversalTarDetailJson"
         }
 
         $gzipTarDetail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$unsafeGzipTarArchiveArtifactId" -Headers $headers

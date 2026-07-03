@@ -633,6 +633,14 @@ The artifact list/detail API checks also verify that the path-traversal ZIP rema
 
 Fresh full-Docker evidence: PowerShell parsing passed for the artifact-storage smoke, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-archive-path-guard-smoke` passed 46/46 against the local full-Docker backend. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and backend health `UP`.
 
+### 2026-07-04 Update: sandbox TAR unsafe path E2E guard
+
+The artifact-storage smoke now also verifies TAR path traversal handling through the real sandbox runtime. The sandbox run creates `path-traversal-bundle.tar` with `../outside.txt`; the scanner blocks it before object storage copy as `application/x-tar|BLOCKED|CONFIDENTIAL`, with summary `unsafe archive entry` and value-free `ARCHIVE_UNSAFE_ENTRY` metadata.
+
+The artifact list/detail API checks also verify that the path-traversal TAR remains prompt-hidden, non-downloadable, and does not leak storage references or the raw `outside.txt` entry name. This is runtime verification hardening only; it does not change scanner behavior, archive extraction, recursive scanning, or external scanner integration.
+
+Fresh full-Docker evidence: PowerShell parsing passed for the artifact-storage smoke, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-tar-path-guard-smoke` passed 47/47 against the local full-Docker backend. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and backend health `UP`.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。
