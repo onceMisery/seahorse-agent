@@ -56,13 +56,14 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
     private static final String HTML_FORMAT = "html";
     private static final String MARKDOWN_FORMAT = "markdown";
     private static final String DOCX_FORMAT = "docx";
+    private static final String PDF_FORMAT = "pdf";
     private static final Set<String> DELIMITED_FORMATS = Set.of(CSV_FORMAT, TSV_FORMAT);
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
             "Sandbox File Convert",
-            "Convert bounded file content through the Seahorse sandbox runtime. Supports CSV/TSV to JSON, JSON to CSV/TSV, text to HTML, HTML to text, Markdown to HTML/text, and base64 DOCX to text with network disabled.",
+            "Convert bounded file content through the Seahorse sandbox runtime. Supports CSV/TSV to JSON, JSON to CSV/TSV, text to HTML, HTML to text, Markdown to HTML/text, and base64 DOCX/PDF to text with network disabled.",
             """
-                    {"type":"object","required":["sourceFormat","targetFormat","content"],"properties":{"sourceFormat":{"type":"string","enum":["csv","tsv","json","txt","html","markdown","md","docx"]},"targetFormat":{"type":"string","enum":["json","csv","tsv","txt","html"]},"contentEncoding":{"type":"string","enum":["plain","base64"],"default":"plain","description":"Use base64 for binary DOCX input; plain is used for text inputs."},"content":{"type":"string","minLength":1,"maxLength":262144}}}
+                    {"type":"object","required":["sourceFormat","targetFormat","content"],"properties":{"sourceFormat":{"type":"string","enum":["csv","tsv","json","txt","html","markdown","md","docx","pdf"]},"targetFormat":{"type":"string","enum":["json","csv","tsv","txt","html"]},"contentEncoding":{"type":"string","enum":["plain","base64"],"default":"plain","description":"Use base64 for binary DOCX/PDF input; plain is used for text inputs."},"content":{"type":"string","minLength":1,"maxLength":262144}}}
                     """);
 
     private final SandboxRuntimeInboundPort sandboxRuntime;
@@ -110,13 +111,15 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
         String content = argumentStringPreservingWhitespace(safeRequest.arguments(), CONTENT_ARGUMENT);
         if (!isSupportedConversion(sourceFormat, targetFormat)) {
             return ToolInvocationResult.failed(
-                    "sandbox_file_convert failed: supported conversions are csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, and docx to txt");
+                    "sandbox_file_convert failed: supported conversions are csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, and docx/pdf to txt");
         }
-        if (DOCX_FORMAT.equals(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
-            return ToolInvocationResult.failed("sandbox_file_convert failed: docx contentEncoding must be base64");
+        if (isBinaryDocumentFormat(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
+            return ToolInvocationResult.failed("sandbox_file_convert failed: "
+                    + sourceFormat + " contentEncoding must be base64");
         }
-        if (!DOCX_FORMAT.equals(sourceFormat) && BASE64_ENCODING.equals(contentEncoding)) {
-            return ToolInvocationResult.failed("sandbox_file_convert failed: base64 contentEncoding is only supported for docx input");
+        if (!isBinaryDocumentFormat(sourceFormat) && BASE64_ENCODING.equals(contentEncoding)) {
+            return ToolInvocationResult.failed(
+                    "sandbox_file_convert failed: base64 contentEncoding is only supported for docx/pdf input");
         }
         if (content.isBlank()) {
             return ToolInvocationResult.failed("sandbox_file_convert failed: content is required");
@@ -265,7 +268,11 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
                 || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
                 || (MARKDOWN_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
-                || (DOCX_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat));
+                || (isBinaryDocumentFormat(sourceFormat) && TXT_FORMAT.equals(targetFormat));
+    }
+
+    private boolean isBinaryDocumentFormat(String sourceFormat) {
+        return DOCX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat);
     }
 
     private static boolean hasText(String value) {

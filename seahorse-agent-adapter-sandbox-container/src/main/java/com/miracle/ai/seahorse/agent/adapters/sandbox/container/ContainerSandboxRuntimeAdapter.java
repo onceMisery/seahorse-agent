@@ -69,6 +69,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final String HTML_FORMAT = "html";
     private static final String MARKDOWN_FORMAT = "markdown";
     private static final String DOCX_FORMAT = "docx";
+    private static final String PDF_FORMAT = "pdf";
     private static final String BASE64_ENCODING = "base64";
     private static final String PLAIN_ENCODING = "plain";
     private static final String BROWSER_ACTION_SNAPSHOT = "snapshot";
@@ -297,13 +298,13 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String contentEncoding = normalizedContentEncoding(root.path("contentEncoding").asText(PLAIN_ENCODING));
         if (!isSupportedFileConversion(sourceFormat, targetFormat)) {
             throw new UnsupportedFileConversionException(
-                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, and docx to txt only");
+                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, and docx/pdf to txt only");
         }
-        if (DOCX_FORMAT.equals(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
-            throw new IllegalArgumentException("docx file conversion contentEncoding must be base64");
+        if (isBinaryDocumentFormat(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
+            throw new IllegalArgumentException(sourceFormat + " file conversion contentEncoding must be base64");
         }
-        if (!DOCX_FORMAT.equals(sourceFormat) && BASE64_ENCODING.equals(contentEncoding)) {
-            throw new IllegalArgumentException("base64 contentEncoding is only supported for docx input");
+        if (!isBinaryDocumentFormat(sourceFormat) && BASE64_ENCODING.equals(contentEncoding)) {
+            throw new IllegalArgumentException("base64 contentEncoding is only supported for docx/pdf input");
         }
         String content = root.path("content").asText("");
         if (!hasText(content)) {
@@ -670,6 +671,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 import re
                 import xml.etree.ElementTree as ET
                 import zipfile
+                import zlib
                 from html.parser import HTMLParser
                 from pathlib import Path
 
@@ -830,6 +832,107 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             paragraphs.append(text)
                     return "\\n".join(paragraphs) + ("\\n" if paragraphs else "")
 
+                def pdf_unescape_literal(value):
+                    output = bytearray()
+                    index = 0
+                    while index < len(value):
+                        current = value[index]
+                        if current != 92:
+                            output.append(current)
+                            index += 1
+                            continue
+                        index += 1
+                        if index >= len(value):
+                            break
+                        escaped = value[index]
+                        if escaped == 110:
+                            output.append(10)
+                        elif escaped == 114:
+                            output.append(13)
+                        elif escaped == 116:
+                            output.append(9)
+                        elif escaped == 98:
+                            output.append(8)
+                        elif escaped == 102:
+                            output.append(12)
+                        elif escaped in (40, 41, 92):
+                            output.append(escaped)
+                        elif 48 <= escaped <= 55:
+                            digits = [escaped]
+                            index += 1
+                            while index < len(value) and len(digits) < 3 and 48 <= value[index] <= 55:
+                                digits.append(value[index])
+                                index += 1
+                            output.append(int(bytes(digits), 8))
+                            continue
+                        else:
+                            output.append(escaped)
+                        index += 1
+                    return bytes(output).decode("latin-1", errors="replace")
+
+                def pdf_literal_strings(data):
+                    values = []
+                    index = 0
+                    while index < len(data):
+                        if data[index] != 40:
+                            index += 1
+                            continue
+                        depth = 1
+                        index += 1
+                        raw = bytearray()
+                        escaped = False
+                        while index < len(data) and depth > 0:
+                            current = data[index]
+                            if escaped:
+                                raw.append(92)
+                                raw.append(current)
+                                escaped = False
+                            elif current == 92:
+                                escaped = True
+                            elif current == 40:
+                                depth += 1
+                                raw.append(current)
+                            elif current == 41:
+                                depth -= 1
+                                if depth > 0:
+                                    raw.append(current)
+                            else:
+                                raw.append(current)
+                            index += 1
+                        if raw:
+                            text = pdf_unescape_literal(bytes(raw)).strip()
+                            if text:
+                                values.append(text)
+                    return values
+
+                def pdf_streams(content):
+                    streams = []
+                    for match in re.finditer(rb"<<(.*?)>>\\s*stream\\r?\\n(.*?)\\r?\\nendstream", content, re.DOTALL):
+                        dictionary = match.group(1)
+                        data = match.group(2)
+                        if b"FlateDecode" in dictionary:
+                            try:
+                                data = zlib.decompress(data)
+                            except zlib.error as exc:
+                                raise ValueError("pdf FlateDecode stream could not be decompressed") from exc
+                        streams.append(data)
+                    if not streams:
+                        raise ValueError("pdf text stream not found")
+                    return streams
+
+                def pdf_to_text(path):
+                    content = path.read_bytes()
+                    if not content.startswith(b"%%PDF-"):
+                        raise ValueError("pdf header not found")
+                    texts = []
+                    for stream in pdf_streams(content):
+                        if b"BT" not in stream or b"ET" not in stream:
+                            continue
+                        texts.extend(pdf_literal_strings(stream))
+                    if not texts:
+                        raise ValueError("pdf text not found")
+                    return "\\n".join(texts) + "\\n"
+
                 if target_format == "json" and source_format in ("csv", "tsv"):
                     with input_path.open("r", encoding="utf-8-sig", newline="") as source:
                         reader = csv.DictReader(source, delimiter=delimiter(source_format))
@@ -866,6 +969,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "docx" and target_format == "txt":
                     output_path.write_text(docx_to_text(input_path), encoding="utf-8")
                     print(f"converted docx document to text")
+                elif source_format == "pdf" and target_format == "txt":
+                    output_path.write_text(pdf_to_text(input_path), encoding="utf-8")
+                    print(f"converted pdf document to text")
                 else:
                     raise ValueError(f"unsupported conversion: {source_format} to {target_format}")
                 """.formatted(
@@ -882,11 +988,15 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
                 || (MARKDOWN_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
-                || (DOCX_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat));
+                || (isBinaryDocumentFormat(sourceFormat) && TXT_FORMAT.equals(targetFormat));
     }
 
     private boolean isDelimitedFileFormat(String format) {
         return CSV_FORMAT.equals(format) || TSV_FORMAT.equals(format);
+    }
+
+    private boolean isBinaryDocumentFormat(String sourceFormat) {
+        return DOCX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat);
     }
 
     private String fileConversionInputName(String sourceFormat) {
@@ -895,6 +1005,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             case TXT_FORMAT -> "txt";
             case HTML_FORMAT -> "html";
             case DOCX_FORMAT -> "docx";
+            case PDF_FORMAT -> "pdf";
             default -> sourceFormat;
         };
         return "input." + extension;

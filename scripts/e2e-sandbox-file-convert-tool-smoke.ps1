@@ -215,6 +215,52 @@ function New-DocxBase64 {
     }
 }
 
+function ConvertTo-PdfLiteral {
+    param([string]$Value)
+    return $Value.Replace('\', '\\').Replace('(', '\(').Replace(')', '\)')
+}
+
+function New-PdfBase64 {
+    param([string[]]$Lines)
+    $textCommands = @($Lines | ForEach-Object {
+            $escaped = ConvertTo-PdfLiteral $_
+            "($escaped) Tj"
+        }) -join "`n0 -18 Td`n"
+    $stream = @"
+BT
+/F1 12 Tf
+72 720 Td
+$textCommands
+ET
+"@
+    $streamLength = [System.Text.Encoding]::ASCII.GetByteCount($stream)
+    $pdf = @"
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length $streamLength >>
+stream
+$stream
+endstream
+endobj
+trailer
+<< /Root 1 0 R >>
+%%EOF
+"@
+    return [Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($pdf))
+}
+
 try {
     if (-not $SkipHealth) {
         Test-Step "Wait for backend health" {
@@ -806,6 +852,142 @@ try {
             & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
             if ($LASTEXITCODE -ne 0) {
                 throw "Stored DOCX to TXT object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
+    $pdfRunId = "sandbox-file-convert-pdf-txt-run-$suffix"
+    $pdfToolCallId = "sandbox-file-convert-pdf-txt-call-$suffix"
+    $pdfContent = New-PdfBase64 -Lines @(
+        "Sandbox PDF $Marker",
+        "PDF conversion extracts literal text"
+    )
+
+    $pdfObservation = Test-Step "Invoke sandbox_file_convert PDF to TXT through Tool Gateway" {
+        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_file_convert/invoke" -Headers $headers -Body @{
+            runId = $pdfRunId
+            stepId = "sandbox-file-convert-pdf-txt-step-$suffix"
+            toolCallId = $pdfToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "pdf"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $pdfContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${pdfRunId}:${pdfToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        Assert-ApiOk $response "Invoke sandbox_file_convert PDF to TXT"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert PDF to TXT failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION") {
+            throw "Expected FILE_CONVERSION runtime for PDF to TXT: $content"
+        }
+        if ("$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected SUCCEEDED PDF to TXT execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "pdf" -or "$($parsed.conversion.targetFormat)" -ne "txt" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected PDF to TXT conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1) {
+            throw "Expected one PDF to TXT artifact: $content"
+        }
+        if ("$($artifacts[0].mediaType)" -ne "text/plain") {
+            throw "Expected PDF to TXT artifact mediaType text/plain: $content"
+        }
+        if ("$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected CLEAN PDF to TXT artifact scan status: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed") {
+            throw "Expected PDF to TXT metadata scan summary: $content"
+        }
+        if ($artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible PDF to TXT artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $pdfObservation) { exit 1 }
+
+    $pdfSessionId = "$($pdfObservation.sessionId)"
+    $pdfArtifactId = "$(@($pdfObservation.artifacts)[0].artifactId)"
+
+    $pdfObjectUri = Test-Step "Verify persisted PDF to TXT session and artifact" {
+        $safeSessionId = $pdfSessionId.Replace("'", "''")
+        $sessionRow = Invoke-PostgresScalar "SELECT runtime_type, profile_id, status FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
+        $sessionParts = $sessionRow -split "`t"
+        if ($sessionParts.Count -ne 3) {
+            throw "Unexpected PDF to TXT sa_sandbox_session row: $sessionRow"
+        }
+        if ($sessionParts[0] -ne "FILE_CONVERSION") {
+            throw "Expected PDF to TXT runtime_type FILE_CONVERSION but got '$($sessionParts[0])'"
+        }
+        if ($sessionParts[1] -ne "file-conversion") {
+            throw "Expected PDF to TXT profile_id file-conversion but got '$($sessionParts[1])'"
+        }
+        if ($sessionParts[2] -ne "CANCELLED") {
+            throw "Expected PDF to TXT closed session status CANCELLED but got '$($sessionParts[2])'"
+        }
+
+        $safeArtifactId = $pdfArtifactId.Replace("'", "''")
+        $artifactRow = Invoke-PostgresScalar "SELECT object_uri, media_type, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
+        $artifactParts = $artifactRow -split "`t"
+        if ($artifactParts.Count -ne 5) {
+            throw "Unexpected PDF to TXT sa_sandbox_artifact row: $artifactRow"
+        }
+        if ($artifactParts[0] -like "file:*") {
+            throw "PDF to TXT artifact still points at file URI: $($artifactParts[0])"
+        }
+        if ($ExpectedObjectUriPrefix -and $artifactParts[0] -notlike "$ExpectedObjectUriPrefix*") {
+            throw "Expected PDF to TXT object_uri prefix '$ExpectedObjectUriPrefix' but got '$($artifactParts[0])'"
+        }
+        if ($artifactParts[1] -ne "text/plain") {
+            throw "Expected PDF to TXT media_type text/plain but got '$($artifactParts[1])'"
+        }
+        if ($artifactParts[2] -ne "CLEAN") {
+            throw "Expected PDF to TXT scan_status CLEAN but got '$($artifactParts[2])'"
+        }
+        if ($artifactParts[3] -ne "INTERNAL") {
+            throw "Expected PDF to TXT sensitivity INTERNAL but got '$($artifactParts[3])'"
+        }
+        if ($artifactParts[4] -ne "metadata scan passed") {
+            throw "Expected PDF to TXT scan_summary metadata scan passed but got '$($artifactParts[4])'"
+        }
+        $artifactParts[0]
+    }
+    if (-not $pdfObjectUri) { exit 1 }
+
+    Test-Step "Download converted PDF TXT through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$pdfArtifactId/download" -Headers $headers
+        if ($content -notlike "*Sandbox PDF $Marker*") {
+            throw "Downloaded PDF TXT did not include marker '$Marker': $content"
+        }
+        if ($content -notlike "*PDF conversion extracts literal text*") {
+            throw "Downloaded PDF TXT did not include second line: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded PDF TXT artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($pdfObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted PDF TXT object exists in backend storage volume" {
+            $key = $pdfObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote PDF to TXT key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored PDF to TXT object not found or marker missing at $path"
             }
         } | Out-Null
     }

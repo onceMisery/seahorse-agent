@@ -8,7 +8,7 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 
 因此它的现状应定义为“控制面、审计基础、Code Interpreter/File Conversion/受限 Browser Automation 容器 runtime 最小闭环、full-compose host-socket opt-in 接入、runtime 巡检/受控回收基础和 sandbox-backed 工具链路已实现，生产级 sandbox 还需要补齐更广格式/外联/会话场景、profile/配额和强隔离加固”。
 
-剩余设计重点是：补齐磁盘/网络 allowlist、tenant/agent 配额、病毒/二进制深扫、PDF 转换、Office 渲染/编辑、LibreOffice/Tika 与二进制转换、browser egress/URL policy 与 auth/session state capture，并继续加固运行隔离和审计可视化。
+剩余设计重点是：补齐磁盘/网络 allowlist、tenant/agent 配额、病毒/二进制深扫、PDF 渲染/OCR、Office 渲染/编辑、LibreOffice/Tika 与二进制转换、browser egress/URL policy 与 auth/session state capture，并继续加固运行隔离和审计可视化。
 
 ## 2. 当前实现状态
 
@@ -34,14 +34,14 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 
 | 缺口 | 影响 | 设计处理 |
 | --- | --- | --- |
-| 真实隔离 runtime 覆盖仍窄 | Code Interpreter Python 最小容器闭环与 full-compose backend Docker host-socket opt-in 接入已落地；File Conversion 已有 CSV/TSV/JSON 表格转换、txt/html/markdown 文本文档转换与 base64 `docx -> txt` 保守 Office 文本提取闭环；Browser Automation 已有 inline no-network 截图/HAR/download-only 视频 artifact；Shell、PDF 转换、Office 渲染/编辑、LibreOffice/Tika、二进制转换、外部 URL/egress 和 auth/session capture 仍未完成 | 扩展 Docker/Podman adapter 的 profile 覆盖，P1/P2 可替换为 gVisor 或 Firecracker |
+| 真实隔离 runtime 覆盖仍窄 | Code Interpreter Python 最小容器闭环与 full-compose backend Docker host-socket opt-in 接入已落地；File Conversion 已有 CSV/TSV/JSON 表格转换、txt/html/markdown 文本文档转换与 base64 `docx -> txt`/`pdf -> txt` 保守文档文本提取闭环；Browser Automation 已有 inline no-network 截图/HAR/download-only 视频 artifact；Shell、PDF 渲染/OCR、Office 渲染/编辑、LibreOffice/Tika、二进制转换、外部 URL/egress 和 auth/session capture 仍未完成 | 扩展 Docker/Podman adapter 的 profile 覆盖，P1/P2 可替换为 gVisor 或 Firecracker |
 | 真实 runtime 清理仍需生产化 | 当前 adapter 使用 `--rm` 并在 close 时删除 per-session workspace；session TTL metadata 已持久化，管理员手动 expired session sweep 与后台定时 TTL sweep 均可将过期未终态 session 释放并标记为 `TIMED_OUT`；orphan workspace sweep 会保守删除旧 workspace 并只读巡检 `seahorse-sandbox-*` live/exited container；runtime health API 已暴露 engine/workspace/container 与 active session capacity 只读健康信号且不暴露 workspace root；orphan container reap 已提供默认 dry-run 的显式管理员操作并保护非终态 session container；仍缺 runtime pool 调度和节点级健康检查 | 接入 runtime 节点健康检查、调度/admission control 和更完整的自动化回收策略 |
 | 资源配额仍不完整 | 当前 adapter 有固定 CPU、内存、pids、timeout、stdout/stderr limit，session `profileId`/`expiresAt` 已持久化；仍缺磁盘配额和按 tenant/agent/tool 的资源策略联动 | 新增 `SandboxResourcePolicy` 和更完整 runtime profile policy |
 | 真实 artifact 产物已进入最小闭环 | Code Interpreter adapter 已收集 workspace 文件，kernel 已将 prompt-visible file:// artifact 写入 object storage，并通过治理 API 下载/查看详情 | 后续补齐 preview、生命周期和更广运行时产物 |
 | 内容级 artifact 扫描仍需加固 | 基础 metadata scanner、file:// 文本类 secret/PII 内容阻断、prompt visibility gate、scan summary 和结构化 redaction summary 已落地；仍缺病毒扫描、二进制/PDF 深度扫描 | 后续接入专业扫描引擎和更深内容扫描 |
 | 网络策略只有默认 deny 与 allowlist 基础 | 当前容器 adapter 强制 `--network none`；仍缺按 tenant/agent/tool 的网络 profile、DNS/IP 限制、egress proxy 和审计可视化 | 引入 policy profile、egress proxy 和 network decision log |
 | UI 偏 demo | execution history 已补齐；仍缺 session 列表、artifact 详情、policy preview | 升级为 Sandbox Operations 页面 |
-| Agent 工具化未完整 | `sandbox_python` 已接入 Tool Gateway；`sandbox_file_convert` 已有 CSV/TSV/JSON 表格转换、txt/html/markdown 文本文档转换与 base64 `docx -> txt` 保守 Office 文本提取闭环；`sandbox_browser` 已有 inline no-network 截图/HAR/download-only 视频 artifact；PDF 转换、Office 渲染/编辑、LibreOffice/Tika、二进制格式转换、browser egress/session capture 和 Inspector 展示仍未完成 | 继续补齐更广 sandbox-backed tool adapters |
+| Agent 工具化未完整 | `sandbox_python` 已接入 Tool Gateway；`sandbox_file_convert` 已有 CSV/TSV/JSON 表格转换、txt/html/markdown 文本文档转换与 base64 `docx -> txt`/`pdf -> txt` 保守文档文本提取闭环；`sandbox_browser` 已有 inline no-network 截图/HAR/download-only 视频 artifact；PDF 渲染/OCR、Office 渲染/编辑、LibreOffice/Tika、二进制格式转换、browser egress/session capture 和 Inspector 展示仍未完成 | 继续补齐更广 sandbox-backed tool adapters |
 
 ## 3. 目标架构
 
@@ -263,13 +263,13 @@ P0 profile：
 
 新增 sandbox-backed tools：
 
-当前已落地 `sandbox_python` 最小版本和 `sandbox_file_convert` CSV/TSV/JSON 表格转换与 txt/html/markdown 文本文档转换版本：工具本身是普通 `DescribedToolPort`，通过 `LocalToolGatewayPort` 的 request-aware 路径拿到 tenant/run/user 上下文，再调用 `SandboxRuntimeInboundPort` 创建 session、执行并关闭 session。后续仍需补齐浏览器自动化、PDF/Office/二进制格式转换和 Inspector 展示。
+当前已落地 `sandbox_python` 最小版本和 `sandbox_file_convert` CSV/TSV/JSON 表格转换、txt/html/markdown 文本文档转换、base64 `docx -> txt`/`pdf -> txt` 保守文档文本提取版本：工具本身是普通 `DescribedToolPort`，通过 `LocalToolGatewayPort` 的 request-aware 路径拿到 tenant/run/user 上下文，再调用 `SandboxRuntimeInboundPort` 创建 session、执行并关闭 session。后续仍需补齐浏览器自动化、PDF 渲染/OCR、Office 渲染/编辑、二进制格式转换和 Inspector 展示。
 
 | Tool | Runtime | 说明 |
 | --- | --- | --- |
 | `sandbox_python` | `CODE_INTERPRETER` | 已有最小闭环：执行 Python 片段并返回 execution summary；artifact 收集后续补齐 |
 | `sandbox_browser` | `BROWSER_AUTOMATION` | 受限 Playwright 浏览，返回 summary、截图、HAR 和 download-only 视频 artifact；外部 URL/egress 与 auth/session capture 后续 |
-| `sandbox_file_convert` | `FILE_CONVERSION` | 已有 CSV/TSV -> JSON、JSON -> CSV/TSV、txt -> html、html -> txt、markdown/md -> html/txt 转换闭环，返回 governed artifact；PDF/Office/二进制格式后续补齐 |
+| `sandbox_file_convert` | `FILE_CONVERSION` | 已有 CSV/TSV -> JSON、JSON -> CSV/TSV、txt -> html、html -> txt、markdown/md -> html/txt、base64 `docx -> txt`/`pdf -> txt` 转换闭环，返回 governed artifact；PDF 渲染/OCR、Office/二进制格式后续补齐 |
 
 集成规则：
 
@@ -309,7 +309,7 @@ P0 profile：
 
 ### P2：Agent 工具化
 
-1. 新增 `sandbox_python`、`sandbox_browser`、`sandbox_file_convert` tool adapters。（`sandbox_python`、`sandbox_file_convert` CSV/TSV/JSON 表格转换和 txt/html/markdown 文本文档转换、受限 inline no-network `sandbox_browser` 截图/HAR/download-only 视频 artifact 已补齐；browser 外部 URL/egress、auth/session capture、PDF/Office/二进制转换格式后续）
+1. 新增 `sandbox_python`、`sandbox_browser`、`sandbox_file_convert` tool adapters。（`sandbox_python`、`sandbox_file_convert` CSV/TSV/JSON 表格转换、txt/html/markdown 文本文档转换、base64 `docx -> txt`/`pdf -> txt` 保守文档文本提取、受限 inline no-network `sandbox_browser` 截图/HAR/download-only 视频 artifact 已补齐；browser 外部 URL/egress、auth/session capture、PDF 渲染/OCR、Office/二进制转换格式后续）
 2. Tool Gateway policy 中区分 sandbox-backed tool。（`sandbox_python` 与 `sandbox_file_convert` 已注册为 HIGH / EXECUTE / SANDBOX）
 3. Agent Inspector 展示 sandbox execution 与 artifact。
 4. 加入审批与配额联动。
@@ -403,9 +403,9 @@ The admin Sandbox page now has a persistent Runtime governance panel that combin
 
 ### 2026-07-03 Update: sandbox document text conversion
 
-`sandbox_file_convert` now supports conservative text-oriented document conversions in the `FILE_CONVERSION` runtime: `txt -> html`, `html -> txt`, `markdown/md -> html/txt`, and base64 `docx -> txt`. The container adapter still generates a stdlib-only Python converter, writes text source content to `input.txt`/`input.html`/`input.md`, decodes DOCX input to `input.docx`, runs with network disabled, and collects only `converted.<targetFormat>` as the governed artifact. The DOCX path reads `word/document.xml` with Python stdlib `zipfile` plus `xml.etree.ElementTree`; it deliberately avoids LibreOffice/Tika, PDF rendering, Office editing, arbitrary binary conversion, external packages, and network access.
+`sandbox_file_convert` now supports conservative text-oriented document conversions in the `FILE_CONVERSION` runtime: `txt -> html`, `html -> txt`, `markdown/md -> html/txt`, and base64 `docx -> txt` / `pdf -> txt`. The container adapter still generates a stdlib-only Python converter, writes text source content to `input.txt`/`input.html`/`input.md`, decodes DOCX/PDF input to `input.docx`/`input.pdf`, runs with network disabled, and collects only `converted.<targetFormat>` as the governed artifact. The DOCX path reads `word/document.xml` with Python stdlib `zipfile` plus `xml.etree.ElementTree`; the PDF path extracts literal text from unencrypted PDF streams with stdlib `re`/`zlib`. It deliberately avoids LibreOffice/Tika, PDF rendering/OCR, Office editing, arbitrary binary conversion, external packages, and network access.
 
-Fresh full-Docker evidence: `.\scripts\e2e-sandbox-file-convert-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-docx-convert-smoke` passed 19/19 after rebuilding the full-compose backend, including CSV/JSON conversions, Markdown-to-HTML invocation, DOCX-to-TXT invocation through Tool Gateway, persisted `FILE_CONVERSION` session/profile metadata, governed TXT download, local object storage verification, no leftover managed sandbox containers, and zero non-terminal sandbox sessions. Browser egress/URL policy, auth/session capture, PDF conversion, Office rendering/editing beyond conservative DOCX text extraction, LibreOffice/Tika-backed conversion, virus scanning, and binary/PDF deep scanning remain follow-up hardening work.
+Fresh full-Docker evidence: `.\scripts\e2e-sandbox-file-convert-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-pdf-convert-smoke` passed 23/23 after rebuilding the full-compose backend, including CSV/JSON conversions, Markdown-to-HTML invocation, DOCX-to-TXT and PDF-to-TXT invocations through Tool Gateway, persisted `FILE_CONVERSION` session/profile metadata, governed TXT download, local object storage verification, no leftover managed sandbox containers, and zero non-terminal sandbox sessions. Browser egress/URL policy, auth/session capture, PDF rendering/OCR beyond conservative literal-text extraction, Office rendering/editing beyond conservative DOCX text extraction, LibreOffice/Tika-backed conversion, virus scanning, and binary/PDF deep scanning remain follow-up hardening work.
 
 ### 2026-07-03 Update: sandbox-backed tool quota governance
 
@@ -414,7 +414,7 @@ Sandbox Runtime now exposes a narrow Operations write path for sandbox-backed to
 
 The admin Sandbox page now includes a compact Tool quota panel for policy id, sandbox tool id, status, calls, tokens, cost, and warn ratio. The frontend sandbox service uses the browser proxy path required by the packaged Nginx/Vite proxy so UI calls reach backend `/api/sandbox/...` routes correctly.
 
-This closes the immediate operator path for sandbox-backed tool quotas without adding a separate `SandboxResourcePolicy`, runtime profile mutation, or broad tenant/agent quota UI. Tenant/agent quota UX, PDF/Office/binary conversion, virus scanning, binary/PDF deep scanning, and stronger isolation remain follow-up hardening work.
+This closes the immediate operator path for sandbox-backed tool quotas without adding a separate `SandboxResourcePolicy`, runtime profile mutation, or broad tenant/agent quota UI. Tenant/agent quota UX, PDF rendering/OCR plus Office/binary conversion beyond conservative text extraction, virus scanning, binary/PDF deep scanning, and stronger isolation remain follow-up hardening work.
 
 Fresh full-Docker evidence: `.\scripts\e2e-tool-gateway-quota-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-tool-quota-smoke-rerun` passed 4/4. The smoke created a zero-call sandbox tool quota policy through the Sandbox API, invoked `sandbox_python` through Tool Gateway, and observed `QUOTA_HARD_LIMIT_EXCEEDED`; cleanup confirmed no leftover managed sandbox containers and zero non-terminal sandbox sessions.
 
@@ -465,7 +465,7 @@ This update splits governed download eligibility from prompt visibility. `Sandbo
 
 Fresh full-Docker evidence: `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-video-smoke` passed 12/12 after rebuilding the full-compose backend. The smoke verified real Tool Gateway invocation with `video=true`, prompt-visible JSON/PNG/HAR artifacts only, persisted clean/internal `video/webm` metadata, prompt-blocked but downloadable video detail, WebM download with EBML header, object storage, no leftover managed sandbox containers, and zero non-terminal sandbox sessions.
 
-This completes download-only browser video artifact capture for inline no-network browser automation. External URL browsing, egress allowlists/proxying, credentials, auth/session state capture, richer browser workflows, stronger isolation, PDF conversion, Office rendering/editing beyond conservative DOCX text extraction, LibreOffice/Tika-backed conversion, arbitrary binary conversion, virus/binary/PDF deep scanning, and broader A2A/cross-provider Tool Gateway hardening remain follow-up work.
+This completes download-only browser video artifact capture for inline no-network browser automation. External URL browsing, egress allowlists/proxying, credentials, auth/session state capture, richer browser workflows, stronger isolation, PDF rendering/OCR beyond conservative literal-text extraction, Office rendering/editing beyond conservative DOCX text extraction, LibreOffice/Tika-backed conversion, arbitrary binary conversion, virus/binary/PDF deep scanning, and broader A2A/cross-provider Tool Gateway hardening remain follow-up work.
 
 ### 2026-07-03 Update: sandbox browser allowlisted URL egress
 
@@ -513,7 +513,7 @@ New structured redaction categories are value-free: `EXECUTABLE_BINARY`, `PDF_AC
 
 Fresh full-Docker evidence: focused scanner tests passed 10/10, broader kernel artifact governance tests passed 46/46, the full-compose backend rebuilt with an in-image Maven `BUILD SUCCESS`, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-binary-signature-smoke` passed 21/21. The smoke verified real `sandbox_python` PDF active-content and executable-masquerading artifacts are persisted as `BLOCKED|CONFIDENTIAL`, not copied to object storage, not prompt-visible, not downloadable, and exposed through APIs only as blocked metadata without raw `OpenAction` or storage-reference leakage.
 
-This completes the first bounded binary/PDF signature scan slice. External virus scanning, richer PDF/binary deep scanning with a dedicated scanner engine, archive/container introspection, PDF/Office/binary conversion, stronger runtime isolation, node-pool health, and broader Tool Gateway hardening remain follow-up production work.
+This completes the first bounded binary/PDF signature scan slice. External virus scanning, richer PDF/binary deep scanning with a dedicated scanner engine, archive/container introspection, PDF rendering/OCR plus Office/binary conversion beyond conservative text extraction, stronger runtime isolation, node-pool health, and broader Tool Gateway hardening remain follow-up production work.
 
 ## 13. 非目标
 

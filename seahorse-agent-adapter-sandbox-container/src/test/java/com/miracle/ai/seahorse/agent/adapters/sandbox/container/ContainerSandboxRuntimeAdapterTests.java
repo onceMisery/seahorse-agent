@@ -305,6 +305,41 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldRunPdfToTextFileConversionAndCollectTextOutputOnly() throws Exception {
+        String pdfBase64 = Base64.getEncoder().encodeToString("%PDF-1.4\nfake-pdf-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted pdf document to text\n", Duration.ofMillis(190)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("pdf_to_text", "source_format = \"pdf\"", "b\"%PDF-\"", "converted.txt")
+                            .doesNotContain(pdfBase64);
+                    assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.pdf")))
+                            .isEqualTo("%PDF-1.4\nfake-pdf-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    Files.writeString(command.workingDirectory().resolve("converted.txt"),
+                            "Sandbox PDF marker\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"pdf","targetFormat":"txt","contentEncoding":"base64","content":"%s"}
+                        """.formatted(pdfBase64),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted pdf document to text");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.txt");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/plain");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.pdf"));
+    }
+
+    @Test
     void shouldRunBrowserAutomationWithGeneratedPlaywrightScriptAndCollectOnlyOutputs() throws Exception {
         String html = "<!doctype html><html><head><title>Browser Smoke</title></head><body><main>browser marker</main></body></html>";
         RecordingRunner runner = new RecordingRunner(
@@ -574,7 +609,7 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED);
         assertThat(result.execution().resultSummary())
-                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, and docx to txt only");
+                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, and docx/pdf to txt only");
         assertThat(runner.lastCommand).isNull();
     }
 
