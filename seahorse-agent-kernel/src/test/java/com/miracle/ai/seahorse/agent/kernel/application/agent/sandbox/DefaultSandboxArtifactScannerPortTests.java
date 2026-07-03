@@ -40,6 +40,9 @@ class DefaultSandboxArtifactScannerPortTests {
 
     private static final Instant NOW = Instant.parse("2026-05-26T00:00:00Z");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final String DOCX_MEDIA_TYPE =
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    private static final String DOCM_MEDIA_TYPE = "application/vnd.ms-word.document.macroenabled.12";
     private final DefaultSandboxArtifactScannerPort scanner = new DefaultSandboxArtifactScannerPort();
 
     @Test
@@ -194,6 +197,49 @@ class DefaultSandboxArtifactScannerPortTests {
         JsonNode redactionSummary = redactionSummary(result);
         assertEquals("CLEAN", redactionSummary.path("decision").asText());
         assertEquals(true, redactionSummary.path("contentScanned").asBoolean());
+    }
+
+    @Test
+    void shouldPassCleanOfficeOpenXmlArchiveAsDownloadOnlyArtifact(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("report.docx");
+        writeZip(output, "word/document.xml", "<w:t>safe office document</w:t>".getBytes(StandardCharsets.UTF_8));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, DOCX_MEDIA_TYPE)));
+
+        assertEquals(SandboxArtifactScanStatus.CLEAN, result.scanStatus());
+        assertEquals(ContextSensitivity.INTERNAL, result.sensitivity());
+        assertEquals("metadata scan passed", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("CLEAN", redactionSummary.path("decision").asText());
+        assertEquals(true, redactionSummary.path("contentScanned").asBoolean());
+    }
+
+    @Test
+    void shouldBlockOfficeOpenXmlArchiveWithMacroProject(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("macro-report.docx");
+        writeZip(output, "word/vbaProject.bin", "macro marker".getBytes(StandardCharsets.UTF_8));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, DOCX_MEDIA_TYPE)));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("office macro artifact content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("OFFICE_MACRO", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("vbaProject.bin"));
+    }
+
+    @Test
+    void shouldBlockMacroEnabledOfficeArchiveByMediaType(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("macro-report.docm");
+        writeZip(output, "word/document.xml", "<w:t>macro-enabled office document</w:t>".getBytes(StandardCharsets.UTF_8));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, DOCM_MEDIA_TYPE)));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("office macro artifact content", result.summary());
+        assertEquals("OFFICE_MACRO", redactionSummary(result).path("categories").get(0).asText());
     }
 
     @Test

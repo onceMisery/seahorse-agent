@@ -1845,6 +1845,12 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             case "xml" -> "application/xml";
             case "pdf" -> "application/pdf";
             case "zip" -> "application/zip";
+            case "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            case "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            case "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+            case "docm" -> "application/vnd.ms-word.document.macroenabled.12";
+            case "xlsm" -> "application/vnd.ms-excel.sheet.macroenabled.12";
+            case "pptm" -> "application/vnd.ms-powerpoint.presentation.macroenabled.12";
             case "gif" -> "image/gif";
             case "jpg", "jpeg" -> "image/jpeg";
             case "png" -> "image/png";

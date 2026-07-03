@@ -44,6 +44,15 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
     private static final int MAX_BINARY_SIGNATURE_SCAN_BYTES = 256 * 1024;
     private static final int MAX_ARCHIVE_SCAN_ENTRIES = 128;
     private static final int MAX_ARCHIVE_ENTRY_SCAN_BYTES = 256 * 1024;
+    private static final String DOCX_MEDIA_TYPE =
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    private static final String XLSX_MEDIA_TYPE =
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    private static final String PPTX_MEDIA_TYPE =
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    private static final String DOCM_MEDIA_TYPE = "application/vnd.ms-word.document.macroenabled.12";
+    private static final String XLSM_MEDIA_TYPE = "application/vnd.ms-excel.sheet.macroenabled.12";
+    private static final String PPTM_MEDIA_TYPE = "application/vnd.ms-powerpoint.presentation.macroenabled.12";
     private static final Set<String> PROMPT_SAFE_EXACT_MEDIA_TYPES = Set.of(
             "application/json",
             "application/pdf",
@@ -53,12 +62,28 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
             "image/png",
             "image/webp");
     private static final Set<String> DOWNLOAD_ONLY_EXACT_MEDIA_TYPES = Set.of(
+            DOCM_MEDIA_TYPE,
+            DOCX_MEDIA_TYPE,
             "application/x-zip-compressed",
             "application/zip",
+            PPTM_MEDIA_TYPE,
+            PPTX_MEDIA_TYPE,
+            XLSM_MEDIA_TYPE,
+            XLSX_MEDIA_TYPE,
             "video/webm");
     private static final Set<String> ZIP_MEDIA_TYPES = Set.of(
+            DOCM_MEDIA_TYPE,
+            DOCX_MEDIA_TYPE,
             "application/x-zip-compressed",
-            "application/zip");
+            "application/zip",
+            PPTM_MEDIA_TYPE,
+            PPTX_MEDIA_TYPE,
+            XLSM_MEDIA_TYPE,
+            XLSX_MEDIA_TYPE);
+    private static final Set<String> OFFICE_MACRO_ENABLED_MEDIA_TYPES = Set.of(
+            DOCM_MEDIA_TYPE,
+            PPTM_MEDIA_TYPE,
+            XLSM_MEDIA_TYPE);
     private static final Set<String> EXECUTABLE_ARCHIVE_EXTENSIONS = Set.of(
             "bat",
             "cmd",
@@ -236,6 +261,14 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                         true,
                         List.of("CONTENT_UNAVAILABLE"));
             }
+            String mediaType = normalizedMediaType(artifact.mediaType());
+            if (OFFICE_MACRO_ENABLED_MEDIA_TYPES.contains(mediaType)) {
+                return SandboxArtifactScanResult.blocked(
+                        ContextSensitivity.CONFIDENTIAL,
+                        "office macro artifact content",
+                        true,
+                        List.of("OFFICE_MACRO"));
+            }
             try (ZipFile archive = new ZipFile(path.toFile())) {
                 int inspectedEntries = 0;
                 Enumeration<? extends ZipEntry> entries = archive.entries();
@@ -259,6 +292,13 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                                 "unsafe archive entry",
                                 true,
                                 List.of("ARCHIVE_UNSAFE_ENTRY"));
+                    }
+                    if (hasOfficeMacroArchiveEntryName(entryName)) {
+                        return SandboxArtifactScanResult.blocked(
+                                ContextSensitivity.CONFIDENTIAL,
+                                "office macro artifact content",
+                                true,
+                                List.of("OFFICE_MACRO"));
                     }
                     if (hasExecutableArchiveEntryName(entryName)) {
                         return SandboxArtifactScanResult.blocked(
@@ -452,6 +492,14 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
 
     private static boolean hasPdfArchiveEntryName(String value) {
         return "pdf".equals(archiveEntryExtension(value));
+    }
+
+    private static boolean hasOfficeMacroArchiveEntryName(String value) {
+        if (!hasText(value)) {
+            return false;
+        }
+        String normalized = value.replace('\\', '/').toLowerCase(Locale.ROOT);
+        return normalized.equals("vbaproject.bin") || normalized.endsWith("/vbaproject.bin");
     }
 
     private static String archiveEntryExtension(String value) {

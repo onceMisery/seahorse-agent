@@ -47,6 +47,12 @@ public class KernelAgentArtifactQueryService implements AgentArtifactQueryInboun
             Map.entry("text/csv", ".csv"),
             Map.entry("application/json", ".json"),
             Map.entry("application/pdf", ".pdf"),
+            Map.entry("application/vnd.ms-excel.sheet.macroenabled.12", ".xlsm"),
+            Map.entry("application/vnd.ms-powerpoint.presentation.macroenabled.12", ".pptm"),
+            Map.entry("application/vnd.ms-word.document.macroenabled.12", ".docm"),
+            Map.entry("application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pptx"),
+            Map.entry("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx"),
+            Map.entry("application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx"),
             Map.entry("image/png", ".png"),
             Map.entry("image/jpeg", ".jpg"),
             Map.entry("image/svg+xml", ".svg"));

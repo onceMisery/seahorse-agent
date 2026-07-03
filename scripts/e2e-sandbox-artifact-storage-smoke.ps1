@@ -1113,6 +1113,195 @@ print('$escapedArchiveMarker')
         }
     } | Out-Null
 
+    $officeMarker = "$Marker-office-ooxml"
+    $escapedOfficeMarker = $officeMarker.Replace("\", "\\").Replace("'", "\'")
+    $officeMediaType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    $officeCode = @"
+import zipfile
+
+content_types = '''<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>'''
+document_xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body><w:p><w:r><w:t>safe office $escapedOfficeMarker</w:t></w:r></w:p></w:body>
+</w:document>'''
+with zipfile.ZipFile('safe-report.docx', 'w') as archive:
+    archive.writestr('[Content_Types].xml', content_types)
+    archive.writestr('word/document.xml', document_xml)
+with zipfile.ZipFile('macro-report.docx', 'w') as archive:
+    archive.writestr('[Content_Types].xml', content_types)
+    archive.writestr('word/document.xml', document_xml)
+    archive.writestr('word/vbaProject.bin', b'SEAHORSE-MACRO-MARKER')
+print('$officeMarker')
+"@
+    $officeObservation = Test-Step "Invoke sandbox_python with Office Open XML artifacts" {
+        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $headers -Body @{
+            runId = "sandbox-artifact-office-run-$suffix"
+            stepId = "sandbox-artifact-office-step-$suffix"
+            toolCallId = "sandbox-artifact-office-call-$suffix"
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{ code = $officeCode }
+            resourceRefs = @{}
+            idempotencyKey = "sandbox-artifact-office-run-${suffix}:sandbox-artifact-office-call-$suffix"
+            allowedToolIds = @("sandbox_python")
+        }
+        Assert-ApiOk $response "Invoke sandbox_python Office artifacts"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_python Office invocation failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        if ($content -notlike "*$officeMarker*") {
+            throw "sandbox_python Office content did not contain marker '$officeMarker': $content"
+        }
+        $parsed = $content | ConvertFrom-Json
+        if (@($parsed.artifacts).Count -ne 0) {
+            throw "Office artifacts should not be prompt-visible: $content"
+        }
+        if (-not "$($parsed.sessionId)") {
+            throw "sandbox_python observation did not include Office sessionId: $content"
+        }
+        $parsed
+    }
+    if (-not $officeObservation) { exit 1 }
+
+    $officeSessionId = "$($officeObservation.sessionId)"
+    $safeOffice = Test-Step "Verify clean Office Open XML artifact is governed download-only" {
+        $safeOfficeSessionId = $officeSessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeOfficeSessionId' AND object_uri LIKE '%safe-report.docx' ORDER BY created_at DESC LIMIT 1;"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 7) {
+            throw "Unexpected clean Office artifact row: $row"
+        }
+        if ($ExpectedObjectUriPrefix -and $parts[1] -notlike "$ExpectedObjectUriPrefix*") {
+            throw "Clean Office artifact was not copied to governed object storage: $($parts[1])"
+        }
+        if ($parts[2] -ne $officeMediaType -or $parts[3] -ne "CLEAN" -or $parts[4] -ne "INTERNAL") {
+            throw "Expected CLEAN INTERNAL Office artifact but got: $row"
+        }
+        if ($parts[5] -ne "metadata scan passed") {
+            throw "Expected clean Office scan summary metadata scan passed but got '$($parts[5])'"
+        }
+        if ($parts[6] -notlike '*"decision":"CLEAN"*' -or $parts[6] -notlike '*"contentScanned":true*') {
+            throw "Expected CLEAN content-scanned Office redaction summary but got '$($parts[6])'"
+        }
+        [pscustomobject]@{ ArtifactId = $parts[0]; ObjectUri = $parts[1] }
+    }
+    if (-not $safeOffice) { exit 1 }
+
+    Test-Step "Download governed clean Office Open XML artifact" {
+        Add-Type -AssemblyName System.IO.Compression
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $tempDocx = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "seahorse-office-$suffix.docx")
+        try {
+            Invoke-BinaryFile -Method GET -Path "/api/sandbox/artifacts/$($safeOffice.ArtifactId)/download" -Headers $headers -OutputPath $tempDocx
+            $archive = [System.IO.Compression.ZipFile]::OpenRead($tempDocx)
+            try {
+                $entry = $archive.GetEntry("word/document.xml")
+                if ($null -eq $entry) {
+                    throw "Downloaded clean Office artifact did not contain word/document.xml"
+                }
+                $stream = $entry.Open()
+                $reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8)
+                try {
+                    $content = $reader.ReadToEnd()
+                } finally {
+                    $reader.Dispose()
+                    $stream.Dispose()
+                }
+                if ($content -notlike "*$officeMarker*") {
+                    throw "Downloaded clean Office document did not contain marker '$officeMarker': $content"
+                }
+            } finally {
+                $archive.Dispose()
+            }
+        } finally {
+            Remove-Item -LiteralPath $tempDocx -ErrorAction SilentlyContinue
+        }
+    } | Out-Null
+
+    if ($safeOffice.ObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local clean Office object exists in backend storage volume" {
+            $key = $safeOffice.ObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'")) {
+                throw "Cannot safely shell-quote Office object key"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored clean Office object not found at $path"
+            }
+        } | Out-Null
+    }
+
+    $macroOfficeArtifactId = Test-Step "Verify Office Open XML macro artifact is blocked before object storage" {
+        $safeOfficeSessionId = $officeSessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeOfficeSessionId' AND object_uri LIKE '%/macro-report.docx' ORDER BY created_at DESC LIMIT 1;"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 7) {
+            throw "Unexpected Office macro artifact row: $row"
+        }
+        if ($parts[1] -like "$ExpectedObjectUriPrefix*") {
+            throw "Office macro artifact was copied to object storage: $($parts[1])"
+        }
+        if ($parts[2] -ne $officeMediaType -or $parts[3] -ne "BLOCKED" -or $parts[4] -ne "CONFIDENTIAL") {
+            throw "Expected BLOCKED CONFIDENTIAL Office macro artifact but got: $row"
+        }
+        if ($parts[5] -ne "office macro artifact content") {
+            throw "Expected Office macro scan summary office macro artifact content but got '$($parts[5])'"
+        }
+        if ($parts[6] -notlike '*"decision":"BLOCKED"*' -or $parts[6] -notlike '*"OFFICE_MACRO"*') {
+            throw "Expected BLOCKED OFFICE_MACRO redaction summary but got '$($parts[6])'"
+        }
+        if ($parts[6] -like "*vbaProject.bin*" -or $parts[6] -like "*SEAHORSE-MACRO-MARKER*") {
+            throw "Office macro redaction summary leaked macro details: $($parts[6])"
+        }
+        $parts[0]
+    }
+    if (-not $macroOfficeArtifactId) { exit 1 }
+
+    Test-Step "Verify Office artifact API exposes governed metadata" {
+        $response = Invoke-Json -Method GET -Path "/api/sandbox/sessions/$officeSessionId/artifacts" -Headers $headers
+        Assert-ApiOk $response "List Office sandbox artifacts"
+        $safeMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$($safeOffice.ArtifactId)" })
+        if ($safeMatched.Count -ne 1 -or $safeMatched[0].promptVisible -ne $false) {
+            throw "Expected clean Office artifact to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $macroMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$macroOfficeArtifactId" })
+        if ($macroMatched.Count -ne 1 -or $macroMatched[0].promptVisible -ne $false) {
+            throw "Expected Office macro artifact to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $artifactJson = $response.data | ConvertTo-Json -Depth 20 -Compress
+        if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|vbaProject.bin|SEAHORSE-MACRO-MARKER") {
+            throw "Office artifact API leaked storage or macro details: $artifactJson"
+        }
+
+        $safeDetail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$($safeOffice.ArtifactId)" -Headers $headers
+        Assert-ApiOk $safeDetail "Get clean Office artifact detail"
+        if ($safeDetail.data.downloadable -ne $true -or $safeDetail.data.promptVisible -ne $false) {
+            throw "Expected clean Office detail to be downloadable and prompt-hidden: $($safeDetail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+
+        $detail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$macroOfficeArtifactId" -Headers $headers
+        Assert-ApiOk $detail "Get Office macro artifact detail"
+        if ($detail.data.downloadable -ne $false -or $detail.data.promptVisible -ne $false) {
+            throw "Expected Office macro detail to be non-downloadable and prompt-hidden: $($detail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($detail.data.redactionSummaryJson)" -notlike '*"OFFICE_MACRO"*') {
+            throw "Expected Office macro detail category: $($detail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $detailJson = $detail.data | ConvertTo-Json -Depth 20 -Compress
+        if ($detailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|vbaProject.bin|SEAHORSE-MACRO-MARKER") {
+            throw "Office macro detail leaked storage or macro details: $detailJson"
+        }
+    } | Out-Null
+
     if ($VerifyCapacityAdmission) {
         Test-Step "Reject sandbox session when runtime capacity is saturated" {
             if ($ExpectedRuntimeActiveSessionLimit -le 0) {

@@ -40,6 +40,11 @@ class SandboxArtifactTests {
                 "video/webm",
                 SandboxArtifactScanStatus.CLEAN,
                 ContextSensitivity.INTERNAL);
+        SandboxArtifact officeArtifact = artifact(
+                "artifact-6",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                SandboxArtifactScanStatus.CLEAN,
+                ContextSensitivity.INTERNAL);
 
         assertTrue(publicArtifact.promptVisible());
         assertTrue(redactedArtifact.promptVisible());
@@ -47,6 +52,8 @@ class SandboxArtifactTests {
         assertFalse(secretArtifact.promptVisible());
         assertFalse(videoArtifact.promptVisible());
         assertTrue(videoArtifact.downloadable());
+        assertFalse(officeArtifact.promptVisible());
+        assertTrue(officeArtifact.downloadable());
     }
 
     @Test

@@ -535,6 +535,16 @@ Full compose exposes the setting as `SEAHORSE_AGENT_ADAPTERS_SANDBOX_CONTAINER_M
 
 This closes the low-risk workspace disk visibility slice. Real per-session disk quota enforcement, node-pool scheduling, node-level health checks, and stronger isolation remain follow-up production hardening work.
 
+### 2026-07-03 Update: sandbox artifact Office Open XML bounded scan
+
+`DefaultSandboxArtifactScannerPort` now treats Office Open XML packages as governed ZIP-family download-only artifacts. Clean DOCX/XLSX/PPTX files are scanned with the existing bounded archive path, copied to object storage, and downloadable through artifact APIs, but remain prompt-hidden and are not included in sandbox-backed tool observations. Macro-enabled DOCM/XLSM/PPTM media types are blocked before object-storage copy with the safe `OFFICE_MACRO` redaction category.
+
+For regular OOXML packages, the scanner still uses JDK `ZipFile`, inspects at most 128 entries, reads at most the first 256 KiB from each file entry, and never extracts the archive to the filesystem. Any package entry named `vbaProject.bin`, at the root or below any path, is blocked as `OFFICE_MACRO` without exposing the raw entry name or marker bytes in `redactionSummaryJson`, list/detail APIs, or tool observations. Runtime and artifact download filename mapping now preserves `.docx`, `.xlsx`, `.pptx`, `.docm`, `.xlsm`, and `.pptm`.
+
+Fresh full-Docker evidence: focused kernel/container tests passed 85/85, the full-compose backend rebuilt with an in-image Maven `BUILD SUCCESS`, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-office-ooxml-smoke` passed 33/33. The smoke verified a clean DOCX as governed download-only object storage content and a macro-containing DOCX as `BLOCKED|CONFIDENTIAL|OFFICE_MACRO` without storage-reference, `vbaProject.bin`, or marker leakage.
+
+This closes bounded OOXML package/macro governance only. Office rendering/editing, macro execution or parsing, LibreOffice/Tika conversion, recursive archive extraction, ClamAV or another external scanner engine, and richer scanner policy UX remain follow-up production hardening work.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。
