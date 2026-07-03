@@ -187,6 +187,13 @@ public class SeahorseSandboxController {
                 SandboxRuntimeInboundPort::inspectRuntimeHealth);
     }
 
+    @GetMapping("/api/sandbox/runtime/artifact-scanner-policy")
+    public ApiResponse<Object> inspectArtifactScannerPolicy() {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        return ApiResponses.requireService(sandboxRuntimePortProvider,
+                SandboxRuntimeInboundPort::inspectArtifactScannerPolicy);
+    }
+
     @GetMapping("/api/sandbox/runtime/profiles")
     public ApiResponse<Object> listRuntimeProfiles(
             @RequestParam(defaultValue = DEFAULT_TENANT_ID) String tenantId) {

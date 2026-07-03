@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditRedactionPol
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditWriteFailurePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
@@ -910,6 +911,25 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals(SandboxRuntimeHealth.CAPACITY_UNBOUNDED, health.capacityStatus());
         assertTrue(health.activeSessionCapacityAvailable());
         assertEquals("container", health.runtime());
+    }
+
+    @Test
+    void shouldExposeDefaultArtifactScannerPolicy() {
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                CLOCK);
+
+        SandboxArtifactScannerPolicy policy = service.inspectArtifactScannerPolicy();
+
+        assertEquals("default-local-bounded", policy.scannerId());
+        assertEquals("LOCAL_METADATA_AND_BOUNDED_CONTENT", policy.scannerMode());
+        assertTrue(policy.failClosed());
+        assertFalse(policy.rawFindingValuesPersisted());
+        assertEquals(128, policy.maxArchiveScanEntries());
+        assertTrue(policy.blockedCategories().contains("OFFICE_MACRO"));
+        assertTrue(policy.unsupportedCapabilities().contains("external virus scanning"));
     }
 
     @Test

@@ -17,7 +17,13 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerPolicy;
+
 public interface SandboxArtifactScannerPort {
 
     SandboxArtifactScanResult scan(SandboxArtifactScanRequest request);
+
+    default SandboxArtifactScannerPolicy describePolicy() {
+        return SandboxArtifactScannerPolicy.unavailable();
+    }
 }

@@ -20,6 +20,7 @@ import {
   listSandboxArtifacts,
   sweepExpiredSandboxSessions,
   sweepOrphanedSandboxRuntimeResources,
+  getSandboxArtifactScannerPolicy,
   getSandboxRuntimeHealth,
   getSandboxRuntimeProfiles,
   upsertSandboxRuntimeProfilePolicy,
@@ -31,6 +32,7 @@ import {
   type SandboxExecutionResult,
   type SandboxArtifact,
   type SandboxArtifactDetail,
+  type SandboxArtifactScannerPolicy,
   type SandboxRuntimeHealth,
   type SandboxRuntimeProfile,
   type SandboxRuntimeProfilesResponse,
@@ -138,6 +140,18 @@ function formatWorkspaceDisk(health?: SandboxRuntimeHealth | null) {
   return `${status} ${free}`;
 }
 
+function previewList(values?: string[], limit = 4) {
+  const items = (values || []).filter(Boolean);
+  if (items.length === 0) return "-";
+  if (items.length <= limit) return items.join(", ");
+  return `${items.slice(0, limit).join(", ")} +${items.length - limit}`;
+}
+
+function formatScannerWindow(policy?: SandboxArtifactScannerPolicy | null) {
+  if (!policy) return "-";
+  return `${formatBytes(policy.maxContentScanBytes)} text / ${policy.maxArchiveScanEntries ?? 0} entries`;
+}
+
 function optionalDraftNumber(value: string, label: string, options: { integer?: boolean; max?: number } = {}) {
   const trimmed = value.trim();
   if (!trimmed) return { value: undefined as number | undefined };
@@ -157,6 +171,7 @@ function optionalDraftNumber(value: string, label: string, options: { integer?: 
 function RuntimeGovernancePanel({
   health,
   profiles,
+  scannerPolicy,
   loading,
   error,
   onRefresh,
@@ -165,6 +180,7 @@ function RuntimeGovernancePanel({
 }: {
   health: SandboxRuntimeHealth | null;
   profiles: SandboxRuntimeProfilesResponse | null;
+  scannerPolicy: SandboxArtifactScannerPolicy | null;
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
@@ -203,7 +219,7 @@ function RuntimeGovernancePanel({
           </div>
         )}
 
-        {!error && loading && !health && !profiles && (
+        {!error && loading && !health && !profiles && !scannerPolicy && (
           <div className="grid gap-3 sm:grid-cols-3">
             {[0, 1, 2].map((item) => (
               <div key={item} className="h-20 animate-pulse rounded border border-slate-100 bg-slate-50" />
@@ -211,11 +227,11 @@ function RuntimeGovernancePanel({
           </div>
         )}
 
-        {!loading && !error && !health && !profiles && (
+        {!loading && !error && !health && !profiles && !scannerPolicy && (
           <div className="text-sm text-muted-foreground">No runtime governance data</div>
         )}
 
-        {(health || profiles) && (
+        {(health || profiles || scannerPolicy) && (
           <>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded border border-slate-100 bg-slate-50 p-3">
@@ -265,6 +281,57 @@ function RuntimeGovernancePanel({
                 </div>
               </div>
             </div>
+
+            {scannerPolicy && (
+              <div className="rounded border border-slate-100 bg-white p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      Artifact scanner
+                    </div>
+                    <div className="mt-1 truncate font-mono text-sm text-slate-800">
+                      {scannerPolicy.scannerId || "unknown"}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {scannerPolicy.scannerMode || "UNKNOWN"}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge variant={scannerPolicy.failClosed ? "default" : "destructive"}>
+                      {scannerPolicy.failClosed ? "FAIL CLOSED" : "OPEN"}
+                    </Badge>
+                    <Badge variant={scannerPolicy.rawFindingValuesPersisted ? "destructive" : "secondary"}>
+                      {scannerPolicy.rawFindingValuesPersisted ? "RAW VALUES" : "VALUE-FREE"}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+                  <div>
+                    <div className="uppercase text-muted-foreground">Window</div>
+                    <div className="mt-1 font-mono text-slate-700">{formatScannerWindow(scannerPolicy)}</div>
+                  </div>
+                  <div>
+                    <div className="uppercase text-muted-foreground">Download-only</div>
+                    <div className="mt-1 truncate font-mono text-slate-700">
+                      {previewList(scannerPolicy.downloadOnlyMediaTypes)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="uppercase text-muted-foreground">Blocked categories</div>
+                    <div className="mt-1 truncate font-mono text-slate-700">
+                      {previewList(scannerPolicy.blockedCategories, 5)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="uppercase text-muted-foreground">Unsupported</div>
+                    <div className="mt-1 truncate text-slate-700">
+                      {previewList(scannerPolicy.unsupportedCapabilities, 3)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               {profileRows.map((profile) => (
@@ -541,6 +608,7 @@ export function SandboxPage() {
   const [reapingOrphanedRuntimeContainers, setReapingOrphanedRuntimeContainers] = useState(false);
   const [runtimeHealth, setRuntimeHealth] = useState<SandboxRuntimeHealth | null>(null);
   const [runtimeProfiles, setRuntimeProfiles] = useState<SandboxRuntimeProfilesResponse | null>(null);
+  const [artifactScannerPolicy, setArtifactScannerPolicy] = useState<SandboxArtifactScannerPolicy | null>(null);
   const [loadingRuntimeGovernance, setLoadingRuntimeGovernance] = useState(false);
   const [runtimeGovernanceError, setRuntimeGovernanceError] = useState<string | null>(null);
   const [savingProfileRuntimeType, setSavingProfileRuntimeType] = useState<string | null>(null);
@@ -595,12 +663,14 @@ export function SandboxPage() {
       setLoadingRuntimeGovernance(true);
       setRuntimeGovernanceError(null);
       const tenantId = currentSandboxTenantId();
-      const [health, profiles] = await Promise.all([
+      const [health, profiles, scannerPolicy] = await Promise.all([
         getSandboxRuntimeHealth(),
-        getSandboxRuntimeProfiles(tenantId)
+        getSandboxRuntimeProfiles(tenantId),
+        getSandboxArtifactScannerPolicy()
       ]);
       setRuntimeHealth(health || null);
       setRuntimeProfiles(profiles || null);
+      setArtifactScannerPolicy(scannerPolicy || null);
       if (showToast) {
         toast.success(`Runtime ${health?.status || "UNKNOWN"} / ${profiles?.defaultNetworkPolicy || "DENY_ALL"}`);
       }
@@ -970,6 +1040,7 @@ export function SandboxPage() {
           <RuntimeGovernancePanel
             health={runtimeHealth}
             profiles={runtimeProfiles}
+            scannerPolicy={artifactScannerPolicy}
             loading={loadingRuntimeGovernance}
             error={runtimeGovernanceError}
             onRefresh={() => void refreshRuntimeGovernance(true)}

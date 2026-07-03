@@ -553,6 +553,39 @@ try {
         }
     } | Out-Null
 
+    Test-Step "Inspect sandbox artifact scanner policy" {
+        $response = Invoke-Json -Method GET -Path "/api/sandbox/runtime/artifact-scanner-policy" -Headers $headers
+        Assert-ApiOk $response "Inspect sandbox artifact scanner policy"
+        if ("$($response.data.scannerId)" -ne "default-local-bounded") {
+            throw "Expected default-local-bounded scanner policy: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($response.data.scannerMode)" -ne "LOCAL_METADATA_AND_BOUNDED_CONTENT") {
+            throw "Expected bounded local scanner mode: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($response.data.failClosed -ne $true -or $response.data.rawFindingValuesPersisted -ne $false) {
+            throw "Expected fail-closed value-free scanner policy: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ([int]$response.data.maxContentScanBytes -ne 262144 -or [int]$response.data.maxArchiveScanEntries -ne 128) {
+            throw "Expected scanner byte/entry limits: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $downloadOnlyMediaTypes = @($response.data.downloadOnlyMediaTypes)
+        if ($downloadOnlyMediaTypes -notcontains "application/zip" -or $downloadOnlyMediaTypes -notcontains "video/webm") {
+            throw "Expected governed download-only media types in scanner policy: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $blockedCategories = @($response.data.blockedCategories)
+        if ($blockedCategories -notcontains "OFFICE_MACRO" -or $blockedCategories -notcontains "PDF_ACTIVE_CONTENT") {
+            throw "Expected scanner policy blocked categories: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $unsupportedCapabilities = @($response.data.unsupportedCapabilities)
+        if ($unsupportedCapabilities -notcontains "external virus scanning" -or $unsupportedCapabilities -notcontains "full PDF rendering/OCR") {
+            throw "Expected scanner policy unsupported capability list: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $scannerPolicyJson = $response.data | ConvertTo-Json -Depth 20 -Compress
+        if ($scannerPolicyJson -match [regex]::Escape($SandboxWorkspaceRoot)) {
+            throw "Sandbox artifact scanner policy leaked workspace root path: $scannerPolicyJson"
+        }
+    } | Out-Null
+
     $expiredSweepStepName = if ($UseScheduledSweep) {
         "Wait for scheduled sandbox session sweep as TIMED_OUT"
     } else {

@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaPolicyStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
@@ -142,6 +143,7 @@ class SeahorseSandboxControllerTests {
                 List.of(),
                 List.of(),
                 List.of()));
+        when(port.inspectArtifactScannerPolicy()).thenReturn(defaultScannerPolicy());
         when(port.listRuntimeProfilePolicies("default")).thenReturn(List.of(
                 runtimeProfilePolicy("default", SandboxRuntimeType.CODE_INTERPRETER, SandboxRuntimeProfilePolicyStatus.ACTIVE, 3600),
                 runtimeProfilePolicy("default", SandboxRuntimeType.FILE_CONVERSION, SandboxRuntimeProfilePolicyStatus.ACTIVE, 3600),
@@ -305,6 +307,19 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data.capacityStatus").value("AVAILABLE"))
                 .andExpect(jsonPath("$.data.inspectedContainerCount").value(1));
         verify(port).inspectRuntimeHealth();
+
+        mvc.perform(get("/api/sandbox/runtime/artifact-scanner-policy"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.scannerId").value("default-local-bounded"))
+                .andExpect(jsonPath("$.data.scannerMode").value("LOCAL_METADATA_AND_BOUNDED_CONTENT"))
+                .andExpect(jsonPath("$.data.failClosed").value(true))
+                .andExpect(jsonPath("$.data.rawFindingValuesPersisted").value(false))
+                .andExpect(jsonPath("$.data.maxContentScanBytes").value(262144))
+                .andExpect(jsonPath("$.data.maxArchiveScanEntries").value(128))
+                .andExpect(jsonPath("$.data.downloadOnlyMediaTypes[0]").value("application/zip"))
+                .andExpect(jsonPath("$.data.blockedCategories[0]").value("OFFICE_MACRO"))
+                .andExpect(jsonPath("$.data.unsupportedCapabilities[0]").value("external virus scanning"));
+        verify(port).inspectArtifactScannerPolicy();
 
         mvc.perform(get("/api/sandbox/runtime/profiles"))
                 .andExpect(status().isOk())
@@ -499,6 +514,26 @@ class SeahorseSandboxControllerTests {
                 false,
                 NOW,
                 NOW);
+    }
+
+    private static SandboxArtifactScannerPolicy defaultScannerPolicy() {
+        return new SandboxArtifactScannerPolicy(
+                "default-local-bounded",
+                "LOCAL_METADATA_AND_BOUNDED_CONTENT",
+                true,
+                false,
+                262144,
+                262144,
+                128,
+                262144,
+                List.of("application/json", "text/*"),
+                List.of("application/zip", "video/webm"),
+                List.of("application/json", "text/*"),
+                List.of("application/pdf", "video/webm"),
+                List.of("application/zip"),
+                List.of("OFFICE_MACRO", "PDF_ACTIVE_CONTENT"),
+                List.of("CONFIDENTIAL_METADATA"),
+                List.of("external virus scanning"));
     }
 
     private static <T> ObjectProvider<T> provider(Class<T> type, T instance) {

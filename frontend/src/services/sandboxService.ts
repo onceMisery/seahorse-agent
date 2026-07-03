@@ -92,6 +92,25 @@ export interface SandboxRuntimeProfilesResponse {
   defaultTtlSeconds?: number;
 }
 
+export interface SandboxArtifactScannerPolicy {
+  scannerId?: string;
+  scannerMode?: string;
+  failClosed?: boolean;
+  rawFindingValuesPersisted?: boolean;
+  maxContentScanBytes?: number;
+  maxBinarySignatureScanBytes?: number;
+  maxArchiveScanEntries?: number;
+  maxArchiveEntryScanBytes?: number;
+  promptSafeMediaTypes?: string[];
+  downloadOnlyMediaTypes?: string[];
+  contentScannedMediaTypes?: string[];
+  binarySignatureScannedMediaTypes?: string[];
+  archiveScannedMediaTypes?: string[];
+  blockedCategories?: string[];
+  redactedCategories?: string[];
+  unsupportedCapabilities?: string[];
+}
+
 export interface SandboxToolQuotaPolicyPayload {
   policyId?: string;
   tenantId: string;
@@ -274,6 +293,10 @@ export function sweepOrphanedSandboxRuntimeResources() {
 
 export function getSandboxRuntimeHealth() {
   return api.get<SandboxRuntimeHealth>(`${SANDBOX_API_PREFIX}/runtime/health`);
+}
+
+export function getSandboxArtifactScannerPolicy() {
+  return api.get<SandboxArtifactScannerPolicy>(`${SANDBOX_API_PREFIX}/runtime/artifact-scanner-policy`);
 }
 
 export function getSandboxRuntimeProfiles(tenantId = currentTenantId()) {

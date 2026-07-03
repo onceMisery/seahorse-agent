@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanResult;
@@ -35,6 +36,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DefaultSandboxArtifactScannerPortTests {
 
@@ -44,6 +47,27 @@ class DefaultSandboxArtifactScannerPortTests {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private static final String DOCM_MEDIA_TYPE = "application/vnd.ms-word.document.macroenabled.12";
     private final DefaultSandboxArtifactScannerPort scanner = new DefaultSandboxArtifactScannerPort();
+
+    @Test
+    void shouldDescribeBoundedLocalScannerPolicyWithoutRawFindingPersistence() {
+        SandboxArtifactScannerPolicy policy = scanner.describePolicy();
+
+        assertEquals("default-local-bounded", policy.scannerId());
+        assertEquals("LOCAL_METADATA_AND_BOUNDED_CONTENT", policy.scannerMode());
+        assertTrue(policy.failClosed());
+        assertFalse(policy.rawFindingValuesPersisted());
+        assertEquals(256 * 1024, policy.maxContentScanBytes());
+        assertEquals(256 * 1024, policy.maxBinarySignatureScanBytes());
+        assertEquals(128, policy.maxArchiveScanEntries());
+        assertEquals(256 * 1024, policy.maxArchiveEntryScanBytes());
+        assertTrue(policy.promptSafeMediaTypes().contains("text/*"));
+        assertTrue(policy.downloadOnlyMediaTypes().contains("application/zip"));
+        assertTrue(policy.binarySignatureScannedMediaTypes().contains("application/pdf"));
+        assertTrue(policy.archiveScannedMediaTypes().contains(DOCX_MEDIA_TYPE));
+        assertTrue(policy.blockedCategories().contains("OFFICE_MACRO"));
+        assertTrue(policy.blockedCategories().contains("PDF_ACTIVE_CONTENT"));
+        assertTrue(policy.unsupportedCapabilities().contains("external virus scanning"));
+    }
 
     @Test
     void shouldPassCleanLocalTextArtifactWithStructuredSummary(@TempDir Path tempDir) throws Exception {

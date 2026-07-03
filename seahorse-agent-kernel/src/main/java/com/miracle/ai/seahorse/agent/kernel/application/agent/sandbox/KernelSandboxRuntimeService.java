@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactRedactionSummary;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
@@ -435,6 +436,11 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     public SandboxRuntimeHealth inspectRuntimeHealth() {
         Set<String> activeSessionIds = sessionRepositoryPort.listActiveSessionIds();
         return runtimePort.inspectHealth(activeSessionIds);
+    }
+
+    @Override
+    public SandboxArtifactScannerPolicy inspectArtifactScannerPolicy() {
+        return artifactScannerPort.describePolicy();
     }
 
     @Override

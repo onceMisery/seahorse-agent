@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanResult;
@@ -40,6 +41,8 @@ import java.util.zip.ZipFile;
 
 public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScannerPort {
 
+    private static final String SCANNER_ID = "default-local-bounded";
+    private static final String SCANNER_MODE = "LOCAL_METADATA_AND_BOUNDED_CONTENT";
     private static final int MAX_CONTENT_SCAN_BYTES = 256 * 1024;
     private static final int MAX_BINARY_SIGNATURE_SCAN_BYTES = 256 * 1024;
     private static final int MAX_ARCHIVE_SCAN_ENTRIES = 128;
@@ -182,6 +185,82 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
             return binarySignatureScan;
         }
         return SandboxArtifactScanResult.clean(artifact.sensitivity(), "metadata scan passed", false);
+    }
+
+    @Override
+    public SandboxArtifactScannerPolicy describePolicy() {
+        return new SandboxArtifactScannerPolicy(
+                SCANNER_ID,
+                SCANNER_MODE,
+                true,
+                false,
+                MAX_CONTENT_SCAN_BYTES,
+                MAX_BINARY_SIGNATURE_SCAN_BYTES,
+                MAX_ARCHIVE_SCAN_ENTRIES,
+                MAX_ARCHIVE_ENTRY_SCAN_BYTES,
+                promptSafeMediaTypes(),
+                sorted(DOWNLOAD_ONLY_EXACT_MEDIA_TYPES),
+                List.of(
+                        "application/json",
+                        "application/xml",
+                        "application/*+json",
+                        "text/*"),
+                List.of(
+                        "application/pdf",
+                        "application/zip",
+                        "application/x-zip-compressed",
+                        DOCM_MEDIA_TYPE,
+                        DOCX_MEDIA_TYPE,
+                        PPTM_MEDIA_TYPE,
+                        PPTX_MEDIA_TYPE,
+                        XLSM_MEDIA_TYPE,
+                        XLSX_MEDIA_TYPE,
+                        "image/gif",
+                        "image/jpeg",
+                        "image/png",
+                        "image/webp",
+                        "video/webm"),
+                sorted(ZIP_MEDIA_TYPES),
+                List.of(
+                        "ARCHIVE_EXECUTABLE_BINARY",
+                        "ARCHIVE_PDF_ACTIVE_CONTENT",
+                        "ARCHIVE_SCAN_ERROR",
+                        "ARCHIVE_SCAN_LIMIT",
+                        "ARCHIVE_UNSAFE_ENTRY",
+                        "BINARY_SIGNATURE_MISMATCH",
+                        "CONTENT_TOO_LARGE",
+                        "CONTENT_UNAVAILABLE",
+                        "EXECUTABLE_BINARY",
+                        "OFFICE_MACRO",
+                        "PDF_ACTIVE_CONTENT",
+                        "PERSONAL_DATA",
+                        "PRIVATE_KEY",
+                        "SCAN_ERROR",
+                        "SECRET",
+                        "SENSITIVE_METADATA",
+                        "STORAGE_COPY_FAILED",
+                        "UNSUPPORTED_MEDIA_TYPE"),
+                List.of("CONFIDENTIAL_METADATA"),
+                List.of(
+                        "external virus scanning",
+                        "recursive archive/container extraction",
+                        "full PDF rendering/OCR",
+                        "Office rendering/editing",
+                        "LibreOffice/Tika conversion",
+                        "macro execution or parsing",
+                        "general binary conversion"));
+    }
+
+    private static List<String> promptSafeMediaTypes() {
+        List<String> values = new java.util.ArrayList<>(PROMPT_SAFE_EXACT_MEDIA_TYPES);
+        values.add("application/*+json");
+        values.add("text/*");
+        values.sort(String::compareTo);
+        return List.copyOf(values);
+    }
+
+    private static List<String> sorted(Set<String> values) {
+        return values.stream().sorted().toList();
     }
 
     private static boolean isPromptSafeMediaType(String mediaType) {

@@ -555,6 +555,14 @@ Fresh full-Docker evidence: focused kernel/container/Web tests passed 69/69, Pow
 
 This closes the first disk admission guard. Real per-session disk quota enforcement, node-pool scheduling, node-level health checks, stronger isolation, and external scanner hardening remain follow-up production work.
 
+### 2026-07-03 Update: sandbox artifact scanner policy visibility
+
+The sandbox runtime now exposes a read-only artifact scanner policy through `GET /api/sandbox/runtime/artifact-scanner-policy`. The current policy is produced by the configured `SandboxArtifactScannerPort` and reports the active scanner id/mode, fail-closed posture, value-free finding storage, bounded content/binary/archive scan limits, prompt-safe and governed download-only media coverage, blocked/redacted categories, and unsupported production capabilities.
+
+Fresh full-Docker evidence: Docker image pulls recovered through the local proxy path; the full-compose backend rebuilt with in-image Maven `BUILD SUCCESS`; `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-scanner-policy-smoke` passed 34/34 against the recreated sandbox-overlay backend; cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and backend health `UP`; the live policy endpoint returned `scannerId=default-local-bounded`.
+
+The admin Sandbox Runtime governance panel loads this policy beside runtime health and runtime profiles, giving operators a stable place to inspect scanner coverage without opening individual artifacts. This is visibility only: it does not add ClamAV or another external scanner, recursive archive/container extraction, full PDF rendering/OCR, Office rendering/editing, LibreOffice/Tika conversion, macro parsing/execution, or general binary conversion.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。
