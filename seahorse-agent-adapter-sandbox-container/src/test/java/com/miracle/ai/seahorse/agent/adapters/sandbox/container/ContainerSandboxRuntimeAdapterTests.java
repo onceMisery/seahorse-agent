@@ -235,6 +235,40 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldRunMarkdownToHtmlFileConversionAndCollectHtmlOutputOnly() throws Exception {
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted markdown document to html\n", Duration.ofMillis(190)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("markdown_to_html", "source_format = \"markdown\"", "converted.html")
+                            .doesNotContain("Sandbox Document");
+                    assertThat(Files.readString(command.workingDirectory().resolve("input.md")))
+                            .isEqualTo("# Sandbox Document\n\nHello **Ada**\n");
+                    Files.writeString(command.workingDirectory().resolve("converted.html"),
+                            "<!doctype html>\n<html><body><h1>Sandbox Document</h1></body></html>\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"md","targetFormat":"html","content":"# Sandbox Document\\n\\nHello **Ada**\\n"}
+                        """,
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted markdown document to html");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.html");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/html");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.md"));
+    }
+
+    @Test
     void shouldRejectUnsupportedFileConversionPairBeforeRunningContainer() {
         RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
         ContainerSandboxRuntimeAdapter adapter = adapter(runner);
@@ -251,7 +285,7 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED);
         assertThat(result.execution().resultSummary())
-                .contains("supports csv/tsv to json and json to csv/tsv only");
+                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, and markdown/md to html/txt only");
         assertThat(runner.lastCommand).isNull();
     }
 

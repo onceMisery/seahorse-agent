@@ -56,7 +56,7 @@ class SandboxFileConvertToolPortAdapterTests {
     private final AgentToolJsonSupport jsonSupport = new AgentToolJsonSupport(objectMapper);
 
     @Test
-    void descriptorShouldAdvertiseSupportedTableConversions() {
+    void descriptorShouldAdvertiseSupportedConversions() {
         SandboxFileConvertToolPortAdapter adapter = new SandboxFileConvertToolPortAdapter(
                 new RecordingSandboxRuntime(null),
                 jsonSupport);
@@ -66,8 +66,13 @@ class SandboxFileConvertToolPortAdapterTests {
         assertTrue(schema.contains("\"csv\""));
         assertTrue(schema.contains("\"tsv\""));
         assertTrue(schema.contains("\"json\""));
+        assertTrue(schema.contains("\"txt\""));
+        assertTrue(schema.contains("\"html\""));
+        assertTrue(schema.contains("\"markdown\""));
+        assertTrue(schema.contains("\"md\""));
         assertTrue(adapter.descriptor().description().contains("CSV/TSV to JSON"));
         assertTrue(adapter.descriptor().description().contains("JSON to CSV/TSV"));
+        assertTrue(adapter.descriptor().description().contains("Markdown to HTML/text"));
     }
 
     @Test
@@ -218,6 +223,54 @@ class SandboxFileConvertToolPortAdapterTests {
         assertEquals("tsv", root.path("conversion").path("sourceFormat").asText());
         assertEquals("json", root.path("conversion").path("targetFormat").asText());
         assertEquals("application/json", root.path("artifacts").get(0).path("mediaType").asText());
+    }
+
+    @Test
+    void shouldExecuteMarkdownToHtmlThroughFileConversionRuntime() throws Exception {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
+                new SandboxExecution(
+                        "exec-1",
+                        "session-1",
+                        SandboxRuntimeType.FILE_CONVERSION,
+                        SandboxExecutionStatus.SUCCEEDED,
+                        "exitCode=0; stdout=converted markdown document to html",
+                        SandboxPolicyReasonCode.VALID_REQUEST,
+                        NOW,
+                        NOW),
+                List.of(new SandboxArtifact(
+                        "artifact-1",
+                        "session-1",
+                        "exec-1",
+                        "local://sandbox-artifacts/converted.html",
+                        "text/html",
+                        SandboxArtifactScanStatus.CLEAN,
+                        ContextSensitivity.INTERNAL,
+                        "metadata scan passed",
+                        NOW))));
+        SandboxFileConvertToolPortAdapter adapter = new SandboxFileConvertToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "sourceFormat", "md",
+                "targetFormat", "html",
+                "content", "# Sandbox Document\n\nHello **Ada**\n")));
+
+        assertTrue(result.success());
+        assertEquals(SandboxRuntimeType.FILE_CONVERSION, runtime.createCommand.runtimeType());
+        assertFalse(runtime.createCommand.networkRequested());
+        assertFalse(runtime.executeCommand.networkRequested());
+        assertEquals("session-1", runtime.closedSessionId);
+
+        JsonNode conversionInput = objectMapper.readTree(runtime.executeCommand.input());
+        assertEquals("markdown", conversionInput.path("sourceFormat").asText());
+        assertEquals("html", conversionInput.path("targetFormat").asText());
+        assertEquals("# Sandbox Document\n\nHello **Ada**\n", conversionInput.path("content").asText());
+
+        JsonNode root = objectMapper.readTree(result.content());
+        assertEquals("markdown", root.path("conversion").path("sourceFormat").asText());
+        assertEquals("html", root.path("conversion").path("targetFormat").asText());
+        assertEquals("text/html", root.path("artifacts").get(0).path("mediaType").asText());
+        assertEquals("metadata scan passed", root.path("artifacts").get(0).path("scanSummary").asText());
+        assertTrue(root.path("artifacts").get(0).path("promptVisible").asBoolean());
     }
 
     @Test

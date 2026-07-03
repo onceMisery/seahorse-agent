@@ -61,6 +61,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final String CSV_FORMAT = "csv";
     private static final String TSV_FORMAT = "tsv";
     private static final String JSON_FORMAT = "json";
+    private static final String TXT_FORMAT = "txt";
+    private static final String HTML_FORMAT = "html";
+    private static final String MARKDOWN_FORMAT = "markdown";
     private static final String CONTAINER_WORKSPACE = "/workspace";
     private static final String CONTAINER_NAME_PREFIX = "seahorse-sandbox-";
     private static final int MAX_FILE_CONVERSION_CONTENT_CHARS = 256 * 1024;
@@ -229,7 +232,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String targetFormat = normalizedFormat(root.path("targetFormat").asText());
         if (!isSupportedFileConversion(sourceFormat, targetFormat)) {
             throw new UnsupportedFileConversionException(
-                    "container file conversion supports csv/tsv to json and json to csv/tsv only");
+                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, and markdown/md to html/txt only");
         }
         String content = root.path("content").asText("");
         if (!hasText(content)) {
@@ -245,7 +248,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private String fileConversionScript(FileConversionRequest request) {
         return """
                 import csv
+                import html
                 import json
+                import re
+                from html.parser import HTMLParser
                 from pathlib import Path
 
                 source_format = "%s"
@@ -293,6 +299,99 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         normalized_rows.append(normalized)
                     return normalized_rows, fieldnames
 
+                class TextExtractor(HTMLParser):
+                    def __init__(self):
+                        super().__init__(convert_charrefs=True)
+                        self.parts = []
+
+                    def handle_starttag(self, tag, attrs):
+                        if tag == "li":
+                            self.parts.append("\\n- ")
+                        elif tag in ("br", "p", "div", "section", "article", "tr", "h1", "h2", "h3", "h4", "h5", "h6"):
+                            self.parts.append("\\n")
+
+                    def handle_endtag(self, tag):
+                        if tag in ("p", "div", "section", "article", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6"):
+                            self.parts.append("\\n")
+
+                    def handle_data(self, data):
+                        self.parts.append(data)
+
+                    def text(self):
+                        raw = "".join(self.parts)
+                        lines = []
+                        for line in raw.splitlines():
+                            collapsed = re.sub(r"[ \\t]+", " ", line).strip()
+                            if collapsed:
+                                lines.append(collapsed)
+                        return "\\n".join(lines) + ("\\n" if lines else "")
+
+                def html_to_text(value):
+                    parser = TextExtractor()
+                    parser.feed(value)
+                    parser.close()
+                    return parser.text()
+
+                def text_to_html(value):
+                    return "<!doctype html>\\n<html><body><pre>" + html.escape(value) + "</pre></body></html>\\n"
+
+                def inline_markdown(value):
+                    escaped = html.escape(value)
+                    escaped = re.sub(r"`([^`]+)`", r"<code>\\1</code>", escaped)
+                    escaped = re.sub(r"\\*\\*([^*]+)\\*\\*", r"<strong>\\1</strong>", escaped)
+                    return escaped
+
+                def markdown_to_html(value):
+                    lines = value.replace("\\r\\n", "\\n").replace("\\r", "\\n").split("\\n")
+                    output = ["<!doctype html>", "<html><body>"]
+                    in_list = False
+                    in_code = False
+                    code_lines = []
+
+                    def close_list():
+                        nonlocal in_list
+                        if in_list:
+                            output.append("</ul>")
+                            in_list = False
+
+                    for line in lines:
+                        stripped = line.strip()
+                        if stripped.startswith("```"):
+                            if in_code:
+                                output.append("<pre><code>" + html.escape("\\n".join(code_lines)) + "</code></pre>")
+                                code_lines = []
+                                in_code = False
+                            else:
+                                close_list()
+                                in_code = True
+                            continue
+                        if in_code:
+                            code_lines.append(line)
+                            continue
+                        if not stripped:
+                            close_list()
+                            continue
+                        heading_match = re.match(r"^(#{1,6})\\s+(.+)$", stripped)
+                        if heading_match:
+                            close_list()
+                            level = len(heading_match.group(1))
+                            output.append(f"<h{level}>" + inline_markdown(heading_match.group(2)) + f"</h{level}>")
+                            continue
+                        if stripped.startswith("- ") or stripped.startswith("* "):
+                            if not in_list:
+                                output.append("<ul>")
+                                in_list = True
+                            output.append("<li>" + inline_markdown(stripped[2:].strip()) + "</li>")
+                            continue
+                        close_list()
+                        output.append("<p>" + inline_markdown(stripped) + "</p>")
+
+                    if in_code:
+                        output.append("<pre><code>" + html.escape("\\n".join(code_lines)) + "</code></pre>")
+                    close_list()
+                    output.extend(["</body></html>", ""])
+                    return "\\n".join(output)
+
                 if target_format == "json" and source_format in ("csv", "tsv"):
                     with input_path.open("r", encoding="utf-8-sig", newline="") as source:
                         reader = csv.DictReader(source, delimiter=delimiter(source_format))
@@ -310,6 +409,22 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         writer.writeheader()
                         writer.writerows(rows)
                     print(f"converted {len(rows)} rows from json to {target_format}")
+                elif source_format == "txt" and target_format == "html":
+                    raw = input_path.read_text(encoding="utf-8-sig")
+                    output_path.write_text(text_to_html(raw), encoding="utf-8")
+                    print(f"converted text document to html")
+                elif source_format == "html" and target_format == "txt":
+                    raw = input_path.read_text(encoding="utf-8-sig")
+                    output_path.write_text(html_to_text(raw), encoding="utf-8")
+                    print(f"converted html document to text")
+                elif source_format == "markdown" and target_format == "html":
+                    raw = input_path.read_text(encoding="utf-8-sig")
+                    output_path.write_text(markdown_to_html(raw), encoding="utf-8")
+                    print(f"converted markdown document to html")
+                elif source_format == "markdown" and target_format == "txt":
+                    raw = input_path.read_text(encoding="utf-8-sig")
+                    output_path.write_text(html_to_text(markdown_to_html(raw)), encoding="utf-8")
+                    print(f"converted markdown document to text")
                 else:
                     raise ValueError(f"unsupported conversion: {source_format} to {target_format}")
                 """.formatted(
@@ -321,7 +436,11 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
     private boolean isSupportedFileConversion(String sourceFormat, String targetFormat) {
         return (isDelimitedFileFormat(sourceFormat) && JSON_FORMAT.equals(targetFormat))
-                || (JSON_FORMAT.equals(sourceFormat) && isDelimitedFileFormat(targetFormat));
+                || (JSON_FORMAT.equals(sourceFormat) && isDelimitedFileFormat(targetFormat))
+                || (TXT_FORMAT.equals(sourceFormat) && HTML_FORMAT.equals(targetFormat))
+                || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
+                || (MARKDOWN_FORMAT.equals(sourceFormat)
+                && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)));
     }
 
     private boolean isDelimitedFileFormat(String format) {
@@ -329,7 +448,13 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     }
 
     private String fileConversionInputName(String sourceFormat) {
-        return "input." + sourceFormat;
+        String extension = switch (sourceFormat) {
+            case MARKDOWN_FORMAT -> "md";
+            case TXT_FORMAT -> "txt";
+            case HTML_FORMAT -> "html";
+            default -> sourceFormat;
+        };
+        return "input." + extension;
     }
 
     private String fileConversionOutputName(String targetFormat) {
@@ -907,7 +1032,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     }
 
     private static String normalizedFormat(String value) {
-        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        return "md".equals(normalized) ? MARKDOWN_FORMAT : normalized;
     }
 
     private static boolean hasText(String value) {

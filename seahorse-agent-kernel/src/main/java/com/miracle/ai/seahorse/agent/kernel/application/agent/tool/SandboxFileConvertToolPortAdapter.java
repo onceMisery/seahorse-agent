@@ -49,13 +49,16 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
     private static final String CSV_FORMAT = "csv";
     private static final String TSV_FORMAT = "tsv";
     private static final String JSON_FORMAT = "json";
+    private static final String TXT_FORMAT = "txt";
+    private static final String HTML_FORMAT = "html";
+    private static final String MARKDOWN_FORMAT = "markdown";
     private static final Set<String> DELIMITED_FORMATS = Set.of(CSV_FORMAT, TSV_FORMAT);
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
             "Sandbox File Convert",
-            "Convert bounded file content through the Seahorse sandbox runtime. Supports CSV/TSV to JSON and JSON to CSV/TSV with network disabled.",
+            "Convert bounded file content through the Seahorse sandbox runtime. Supports CSV/TSV to JSON, JSON to CSV/TSV, text to HTML, HTML to text, and Markdown to HTML/text with network disabled.",
             """
-                    {"type":"object","required":["sourceFormat","targetFormat","content"],"properties":{"sourceFormat":{"type":"string","enum":["csv","tsv","json"]},"targetFormat":{"type":"string","enum":["json","csv","tsv"]},"content":{"type":"string","minLength":1,"maxLength":262144}}}
+                    {"type":"object","required":["sourceFormat","targetFormat","content"],"properties":{"sourceFormat":{"type":"string","enum":["csv","tsv","json","txt","html","markdown","md"]},"targetFormat":{"type":"string","enum":["json","csv","tsv","txt","html"]},"content":{"type":"string","minLength":1,"maxLength":262144}}}
                     """);
 
     private final SandboxRuntimeInboundPort sandboxRuntime;
@@ -100,7 +103,7 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
         String content = argumentStringPreservingWhitespace(safeRequest.arguments(), CONTENT_ARGUMENT);
         if (!isSupportedConversion(sourceFormat, targetFormat)) {
             return ToolInvocationResult.failed(
-                    "sandbox_file_convert failed: supported conversions are csv/tsv to json and json to csv/tsv");
+                    "sandbox_file_convert failed: supported conversions are csv/tsv to json, json to csv/tsv, txt to html, html to txt, and markdown/md to html/txt");
         }
         if (content.isBlank()) {
             return ToolInvocationResult.failed("sandbox_file_convert failed: content is required");
@@ -225,12 +228,17 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
     }
 
     private String normalizedFormat(String value) {
-        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        return "md".equals(normalized) ? MARKDOWN_FORMAT : normalized;
     }
 
     private boolean isSupportedConversion(String sourceFormat, String targetFormat) {
         return (DELIMITED_FORMATS.contains(sourceFormat) && JSON_FORMAT.equals(targetFormat))
-                || (JSON_FORMAT.equals(sourceFormat) && DELIMITED_FORMATS.contains(targetFormat));
+                || (JSON_FORMAT.equals(sourceFormat) && DELIMITED_FORMATS.contains(targetFormat))
+                || (TXT_FORMAT.equals(sourceFormat) && HTML_FORMAT.equals(targetFormat))
+                || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
+                || (MARKDOWN_FORMAT.equals(sourceFormat)
+                && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)));
     }
 
     private static boolean hasText(String value) {

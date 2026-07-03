@@ -478,6 +478,141 @@ try {
         } | Out-Null
     }
 
+    $markdownRunId = "sandbox-file-convert-markdown-html-run-$suffix"
+    $markdownToolCallId = "sandbox-file-convert-markdown-html-call-$suffix"
+    $markdownContent = "# Sandbox Document`n`nHello **$Marker** from markdown.`n- first item`n"
+
+    $markdownObservation = Test-Step "Invoke sandbox_file_convert Markdown to HTML through Tool Gateway" {
+        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_file_convert/invoke" -Headers $headers -Body @{
+            runId = $markdownRunId
+            stepId = "sandbox-file-convert-markdown-html-step-$suffix"
+            toolCallId = $markdownToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "markdown"
+                targetFormat = "html"
+                content = $markdownContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${markdownRunId}:${markdownToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        Assert-ApiOk $response "Invoke sandbox_file_convert Markdown to HTML"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert Markdown to HTML failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION") {
+            throw "Expected FILE_CONVERSION runtime for Markdown to HTML: $content"
+        }
+        if ("$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected SUCCEEDED Markdown to HTML execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "markdown" -or "$($parsed.conversion.targetFormat)" -ne "html") {
+            throw "Unexpected Markdown to HTML conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1) {
+            throw "Expected one Markdown to HTML artifact: $content"
+        }
+        if ("$($artifacts[0].mediaType)" -ne "text/html") {
+            throw "Expected HTML artifact mediaType: $content"
+        }
+        if ("$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected CLEAN Markdown to HTML artifact scan status: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed") {
+            throw "Expected Markdown to HTML metadata scan summary: $content"
+        }
+        if ($artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible Markdown to HTML artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $markdownObservation) { exit 1 }
+
+    $markdownSessionId = "$($markdownObservation.sessionId)"
+    $markdownArtifactId = "$(@($markdownObservation.artifacts)[0].artifactId)"
+
+    $markdownObjectUri = Test-Step "Verify persisted Markdown to HTML session and artifact" {
+        $safeSessionId = $markdownSessionId.Replace("'", "''")
+        $sessionRow = Invoke-PostgresScalar "SELECT runtime_type, profile_id, status FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
+        $sessionParts = $sessionRow -split "`t"
+        if ($sessionParts.Count -ne 3) {
+            throw "Unexpected Markdown to HTML sa_sandbox_session row: $sessionRow"
+        }
+        if ($sessionParts[0] -ne "FILE_CONVERSION") {
+            throw "Expected Markdown to HTML runtime_type FILE_CONVERSION but got '$($sessionParts[0])'"
+        }
+        if ($sessionParts[1] -ne "file-conversion") {
+            throw "Expected Markdown to HTML profile_id file-conversion but got '$($sessionParts[1])'"
+        }
+        if ($sessionParts[2] -ne "CANCELLED") {
+            throw "Expected Markdown to HTML closed session status CANCELLED but got '$($sessionParts[2])'"
+        }
+
+        $safeArtifactId = $markdownArtifactId.Replace("'", "''")
+        $artifactRow = Invoke-PostgresScalar "SELECT object_uri, media_type, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
+        $artifactParts = $artifactRow -split "`t"
+        if ($artifactParts.Count -ne 5) {
+            throw "Unexpected Markdown to HTML sa_sandbox_artifact row: $artifactRow"
+        }
+        if ($artifactParts[0] -like "file:*") {
+            throw "Markdown to HTML artifact still points at file URI: $($artifactParts[0])"
+        }
+        if ($ExpectedObjectUriPrefix -and $artifactParts[0] -notlike "$ExpectedObjectUriPrefix*") {
+            throw "Expected Markdown to HTML object_uri prefix '$ExpectedObjectUriPrefix' but got '$($artifactParts[0])'"
+        }
+        if ($artifactParts[1] -ne "text/html") {
+            throw "Expected Markdown to HTML media_type text/html but got '$($artifactParts[1])'"
+        }
+        if ($artifactParts[2] -ne "CLEAN") {
+            throw "Expected Markdown to HTML scan_status CLEAN but got '$($artifactParts[2])'"
+        }
+        if ($artifactParts[3] -ne "INTERNAL") {
+            throw "Expected Markdown to HTML sensitivity INTERNAL but got '$($artifactParts[3])'"
+        }
+        if ($artifactParts[4] -ne "metadata scan passed") {
+            throw "Expected Markdown to HTML scan_summary metadata scan passed but got '$($artifactParts[4])'"
+        }
+        $artifactParts[0]
+    }
+    if (-not $markdownObjectUri) { exit 1 }
+
+    Test-Step "Download converted HTML through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$markdownArtifactId/download" -Headers $headers
+        if ($content -notlike "*<h1>Sandbox Document</h1>*") {
+            throw "Downloaded HTML did not include heading: $content"
+        }
+        if ($content -notlike "*<strong>$Marker</strong>*") {
+            throw "Downloaded HTML did not include strong marker '$Marker': $content"
+        }
+        if ($content -notlike "*<li>first item</li>*") {
+            throw "Downloaded HTML did not include list item: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded HTML artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($markdownObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted HTML object exists in backend storage volume" {
+            $key = $markdownObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote Markdown to HTML key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored Markdown to HTML object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Host "Backend: $BaseUrl"
     Write-Host "Tool: sandbox_file_convert"
