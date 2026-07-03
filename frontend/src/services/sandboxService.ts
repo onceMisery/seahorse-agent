@@ -83,6 +83,31 @@ export interface SandboxRuntimeProfilesResponse {
   defaultTtlSeconds?: number;
 }
 
+export interface SandboxToolQuotaPolicyPayload {
+  policyId?: string;
+  tenantId: string;
+  toolId: "sandbox_python" | "sandbox_file_convert" | "sandbox_browser" | string;
+  status?: "ACTIVE" | "DISABLED" | string;
+  tokenLimit?: number;
+  callLimit?: number;
+  costLimit?: number;
+  warnRatio?: number;
+}
+
+export interface SandboxToolQuotaPolicy {
+  policyId?: string;
+  tenantId?: string;
+  scope?: string;
+  subjectId?: string;
+  status?: string;
+  tokenLimit?: number;
+  callLimit?: number;
+  costLimit?: number;
+  warnRatio?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface SandboxRuntimeContainerReapResult {
   reapedAt?: string;
   dryRun?: boolean;
@@ -217,6 +242,13 @@ export function getSandboxRuntimeHealth() {
 
 export function getSandboxRuntimeProfiles() {
   return api.get<SandboxRuntimeProfilesResponse>("/api/sandbox/runtime/profiles");
+}
+
+export function upsertSandboxToolQuotaPolicy(payload: SandboxToolQuotaPolicyPayload) {
+  return api.post<SandboxToolQuotaPolicy, SandboxToolQuotaPolicy>(
+    "/api/sandbox/runtime/tool-quota-policies",
+    payload
+  );
 }
 
 export function reapOrphanedSandboxRuntimeContainers(dryRun = true) {

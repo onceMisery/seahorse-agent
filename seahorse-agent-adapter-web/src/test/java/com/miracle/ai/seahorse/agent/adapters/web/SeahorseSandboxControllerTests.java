@@ -21,6 +21,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaPolicyStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
@@ -32,6 +35,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeC
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaPolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
@@ -160,6 +165,19 @@ class SeahorseSandboxControllerTests {
                 "text/plain",
                 "artifact-clean.txt",
                 "local://sandbox-artifacts/artifact-clean.txt"));
+        QuotaManagementInboundPort quotaPort = mock(QuotaManagementInboundPort.class);
+        when(quotaPort.upsertPolicy(any())).thenReturn(new QuotaPolicy(
+                "sandbox-tool-policy-1",
+                "tenant-a",
+                QuotaScope.TOOL,
+                "sandbox_python",
+                QuotaPolicyStatus.ACTIVE,
+                null,
+                3L,
+                null,
+                0.8,
+                NOW,
+                NOW));
         ObjectStoragePort storagePort = mock(ObjectStoragePort.class);
         when(storagePort.openStream("local://sandbox-artifacts/artifact-clean.txt"))
                 .thenReturn(new ByteArrayInputStream("download body".getBytes(StandardCharsets.UTF_8)));
@@ -167,7 +185,8 @@ class SeahorseSandboxControllerTests {
                 new SeahorseSandboxController(
                         provider(SandboxRuntimeInboundPort.class, port),
                         AdvancedFeatureGate.allEnabledForTests(),
-                        provider(ObjectStoragePort.class, storagePort)))
+                        provider(ObjectStoragePort.class, storagePort),
+                        provider(QuotaManagementInboundPort.class, quotaPort)))
                 .setMessageConverters(
                         new MappingJackson2HttpMessageConverter(objectMapper),
                         new ResourceHttpMessageConverter())
@@ -286,6 +305,27 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data.profiles[3].supportedByContainerRuntime").value(false))
                 .andExpect(jsonPath("$.data.profiles[3].networkAllowed").value(false))
                 .andExpect(jsonPath("$.data.profiles[3].status").value("PLANNED"));
+
+        mvc.perform(post("/api/sandbox/runtime/tool-quota-policies")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "policyId", "sandbox-tool-policy-1",
+                                "tenantId", "tenant-a",
+                                "toolId", "sandbox_python",
+                                "callLimit", 3,
+                                "warnRatio", 0.8))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.policyId").value("sandbox-tool-policy-1"))
+                .andExpect(jsonPath("$.data.tenantId").value("tenant-a"))
+                .andExpect(jsonPath("$.data.scope").value("TOOL"))
+                .andExpect(jsonPath("$.data.subjectId").value("sandbox_python"))
+                .andExpect(jsonPath("$.data.callLimit").value(3));
+        ArgumentCaptor<QuotaPolicyUpsertCommand> quotaCaptor =
+                ArgumentCaptor.forClass(QuotaPolicyUpsertCommand.class);
+        verify(quotaPort).upsertPolicy(quotaCaptor.capture());
+        assertThat(quotaCaptor.getValue().scope()).isEqualTo(QuotaScope.TOOL);
+        assertThat(quotaCaptor.getValue().subjectId()).isEqualTo("sandbox_python");
+        assertThat(quotaCaptor.getValue().callLimit()).isEqualTo(3L);
 
         mvc.perform(post("/api/sandbox/runtime/orphan-containers:reap")
                         .param("dryRun", "false"))

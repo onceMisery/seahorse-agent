@@ -34,7 +34,8 @@ import {
   listSandboxSessions,
   reapOrphanedSandboxRuntimeContainers,
   sweepExpiredSandboxSessions,
-  sweepOrphanedSandboxRuntimeResources
+  sweepOrphanedSandboxRuntimeResources,
+  upsertSandboxToolQuotaPolicy
 } from "@/services/sandboxService";
 
 const mockedApi = vi.mocked(api);
@@ -88,6 +89,7 @@ describe("frontend capability service contracts", () => {
     expect(backendEndpoints).toContain("POST /api/sandbox/runtime/orphan-containers:reap");
     expect(backendEndpoints).toContain("POST /api/sandbox/sessions/expired:sweep");
     expect(backendEndpoints).toContain("POST /api/sandbox/runtime/orphans:sweep");
+    expect(backendEndpoints).toContain("POST /api/sandbox/runtime/tool-quota-policies");
   });
 
   it("publishes agents with the backend publish payload", async () => {
@@ -306,6 +308,13 @@ describe("frontend capability service contracts", () => {
     await sweepExpiredSandboxSessions("default", 20);
     await sweepOrphanedSandboxRuntimeResources();
     await reapOrphanedSandboxRuntimeContainers(false);
+    await upsertSandboxToolQuotaPolicy({
+      policyId: "sandbox-tool-policy-1",
+      tenantId: "default",
+      toolId: "sandbox_python",
+      callLimit: 3,
+      warnRatio: 0.8
+    });
     await getSandboxRuntimeHealth();
     await getSandboxRuntimeProfiles();
     await listSandboxExecutions("session-1");
@@ -331,6 +340,13 @@ describe("frontend capability service contracts", () => {
     expect(mockedApi.post).toHaveBeenNthCalledWith(4, "/api/sandbox/runtime/orphans:sweep");
     expect(mockedApi.post).toHaveBeenNthCalledWith(5, "/api/sandbox/runtime/orphan-containers:reap", undefined, {
       params: { dryRun: false }
+    });
+    expect(mockedApi.post).toHaveBeenNthCalledWith(6, "/api/sandbox/runtime/tool-quota-policies", {
+      policyId: "sandbox-tool-policy-1",
+      tenantId: "default",
+      toolId: "sandbox_python",
+      callLimit: 3,
+      warnRatio: 0.8
     });
     expect(mockedApi.get).toHaveBeenNthCalledWith(1, "/api/sandbox/sessions", {
       params: { tenantId: "default", limit: 20 }

@@ -107,10 +107,16 @@ Seahorse Agent 的目标是形成一个可证据化、可治理、可持续演�
 
 Sandbox Runtime now exposes read-only runtime governance/profile visibility through `GET /api/sandbox/runtime/profiles` and the admin Sandbox Operations panel. The endpoint reports the kernel-owned default profile mapping, default `DENY_ALL` network posture, default TTL, and container-supported versus planned runtime types without touching Docker/Podman.
 
-This moves runtime profile/capacity visibility out of one-off health toasts and into the operator surface. Remaining Sandbox productionization work is profile/policy mutation, tenant/agent quota administration, browser automation, PDF/Office/binary conversion beyond the current conservative text conversions, deeper scanning/redaction, stronger isolation, and node-pool scheduling/health.
+This moves runtime profile/capacity visibility out of one-off health toasts and into the operator surface. Remaining Sandbox productionization work is profile/policy mutation, tenant/agent quota UX beyond the tool-level endpoint, browser automation, PDF/Office/binary conversion beyond the current conservative text conversions, deeper scanning/redaction, stronger isolation, and node-pool scheduling/health.
 
 ## 2026-07-03 Update: Sandbox Document Text Conversion
 
 `sandbox_file_convert` now supports conservative document text conversions on top of the existing CSV/TSV/JSON table path: `txt -> html`, `html -> txt`, and `markdown/md -> html/txt`. The implementation stays inside the no-network `FILE_CONVERSION` container runtime with a generated Python stdlib converter and collects only the converted output artifact.
 
 Fresh evidence: focused kernel/container/autoconfigure tests passed, and `.\scripts\e2e-sandbox-file-convert-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-doc-convert-smoke` passed 15/15 against the local full-Docker backend, including Markdown-to-HTML invoke, persisted `FILE_CONVERSION` session/profile metadata, governed HTML artifact download, and local object storage verification.
+
+## 2026-07-03 Update: Sandbox Tool Quota Governance
+
+Sandbox Operations now exposes `POST /api/sandbox/runtime/tool-quota-policies` for sandbox-backed tool quota policy writes. The endpoint is gated by both `SANDBOX` and `QUOTA_MANAGEMENT`, accepts only `sandbox_python`, `sandbox_file_convert`, and the planned `sandbox_browser`, then writes an existing `QuotaScope.TOOL` policy so Tool Gateway quota preflight remains the enforcement owner.
+
+Fresh evidence: focused Web tests and frontend capability contracts passed, the frontend build completed, the full-compose backend rebuilt with an in-image Maven `BUILD SUCCESS`, and `.\scripts\e2e-tool-gateway-quota-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-tool-quota-smoke-rerun` passed 4/4 by creating a zero-call sandbox tool policy and observing `QUOTA_HARD_LIMIT_EXCEEDED` through the real `sandbox_python` Tool Gateway invocation.

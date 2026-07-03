@@ -24,7 +24,11 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaPolicyStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaPolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
@@ -47,21 +51,31 @@ import org.springframework.web.bind.annotation.RestController;
 import java.io.InputStream;
 import java.util.List;
 import java.time.Instant;
+import java.util.Locale;
+import java.util.Set;
 
 @RestController
 public class SeahorseSandboxController {
 
+    private static final Set<String> SANDBOX_TOOL_IDS = Set.of(
+            "sandbox_python",
+            "sandbox_file_convert",
+            "sandbox_browser");
+
     private final ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider;
     private final ObjectProvider<ObjectStoragePort> objectStoragePortProvider;
+    private final ObjectProvider<QuotaManagementInboundPort> quotaManagementPortProvider;
     private final AdvancedFeatureGate advancedFeatureGate;
 
     @Autowired
     public SeahorseSandboxController(ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider,
                                      ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider,
-                                     ObjectProvider<ObjectStoragePort> objectStoragePortProvider) {
+                                     ObjectProvider<ObjectStoragePort> objectStoragePortProvider,
+                                     ObjectProvider<QuotaManagementInboundPort> quotaManagementPortProvider) {
         this(sandboxRuntimePortProvider,
                 advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults),
-                objectStoragePortProvider);
+                objectStoragePortProvider,
+                quotaManagementPortProvider);
     }
 
     public SeahorseSandboxController(ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider,
@@ -72,8 +86,16 @@ public class SeahorseSandboxController {
     public SeahorseSandboxController(ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider,
                                      AdvancedFeatureGate advancedFeatureGate,
                                      ObjectProvider<ObjectStoragePort> objectStoragePortProvider) {
+        this(sandboxRuntimePortProvider, advancedFeatureGate, objectStoragePortProvider, null);
+    }
+
+    public SeahorseSandboxController(ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider,
+                                     AdvancedFeatureGate advancedFeatureGate,
+                                     ObjectProvider<ObjectStoragePort> objectStoragePortProvider,
+                                     ObjectProvider<QuotaManagementInboundPort> quotaManagementPortProvider) {
         this.sandboxRuntimePortProvider = sandboxRuntimePortProvider;
         this.objectStoragePortProvider = objectStoragePortProvider;
+        this.quotaManagementPortProvider = quotaManagementPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
                 ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
@@ -151,6 +173,33 @@ public class SeahorseSandboxController {
     public ApiResponse<Object> listRuntimeProfiles() {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
         return ApiResponse.ok(runtimeProfilesResponse());
+    }
+
+    @PostMapping("/api/sandbox/runtime/tool-quota-policies")
+    public ApiResponse<Object> upsertToolQuotaPolicy(@RequestBody SandboxToolQuotaPolicyRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        advancedFeatureGate.requireEnabled(AdvancedFeature.QUOTA_MANAGEMENT);
+        SandboxToolQuotaPolicyRequest safeRequest = request == null
+                ? new SandboxToolQuotaPolicyRequest(null, null, null, null, null, null, null, null)
+                : request;
+        String tenantId = requireText(safeRequest.tenantId(), "tenantId must not be blank");
+        String toolId = normalizeToolId(safeRequest.toolId());
+        if (!SANDBOX_TOOL_IDS.contains(toolId)) {
+            throw new IllegalArgumentException("toolId must be a sandbox-backed tool");
+        }
+        return ApiResponses.requireService(quotaManagementPortProvider,
+                port -> port.upsertPolicy(new QuotaPolicyUpsertCommand(
+                        policyIdOrDefault(safeRequest.policyId(), tenantId, toolId),
+                        tenantId,
+                        QuotaScope.TOOL,
+                        toolId,
+                        safeRequest.status(),
+                        safeRequest.tokenLimit(),
+                        safeRequest.callLimit(),
+                        safeRequest.costLimit(),
+                        safeRequest.warnRatio(),
+                        null,
+                        null)));
     }
 
     @PostMapping("/api/sandbox/runtime/orphan-containers:reap")
@@ -277,6 +326,24 @@ public class SeahorseSandboxController {
                 supportedByContainerRuntime ? "SUPPORTED" : "PLANNED");
     }
 
+    private static String policyIdOrDefault(String policyId, String tenantId, String toolId) {
+        if (policyId != null && !policyId.trim().isEmpty()) {
+            return policyId.trim();
+        }
+        return "sandbox-tool-quota-" + tenantId.trim() + "-" + toolId.trim();
+    }
+
+    private static String normalizeToolId(String toolId) {
+        return requireText(toolId, "toolId must not be blank").toLowerCase(Locale.ROOT);
+    }
+
+    private static String requireText(String value, String message) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException(message);
+        }
+        return value.trim();
+    }
+
     public record SandboxSessionCreateRequest(String tenantId,
                                               String runId,
                                               SandboxRuntimeType runtimeType,
@@ -350,5 +417,15 @@ public class SeahorseSandboxController {
                                                 boolean supportedByContainerRuntime,
                                                 boolean networkAllowed,
                                                 String status) {
+    }
+
+    public record SandboxToolQuotaPolicyRequest(String policyId,
+                                                String tenantId,
+                                                String toolId,
+                                                QuotaPolicyStatus status,
+                                                Long tokenLimit,
+                                                Long callLimit,
+                                                Double costLimit,
+                                                Double warnRatio) {
     }
 }

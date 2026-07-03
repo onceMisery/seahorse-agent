@@ -132,19 +132,21 @@ try {
     $toolCallId = "quota-smoke-call-$suffix"
     $createdPolicyId = "quota-smoke-policy-$suffix"
 
-    Test-Step "Create run quota policy with zero calls" {
-        $response = Invoke-Json -Method POST -Path "/api/quotas/policies" -Headers $headers -Body @{
+    Test-Step "Create sandbox tool quota policy with zero calls" {
+        $response = Invoke-Json -Method POST -Path "/api/sandbox/runtime/tool-quota-policies" -Headers $headers -Body @{
             policyId = $createdPolicyId
             tenantId = "default"
-            scope = "RUN"
-            subjectId = $runId
+            toolId = "sandbox_python"
             status = "ACTIVE"
             callLimit = 0
             warnRatio = 1.0
         }
-        Assert-ApiOk $response "Create quota policy"
+        Assert-ApiOk $response "Create sandbox tool quota policy"
         if ($response.data.policyId -ne $createdPolicyId) {
             throw "Unexpected quota policy response: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($response.data.scope)" -ne "TOOL" -or "$($response.data.subjectId)" -ne "sandbox_python") {
+            throw "Expected sandbox TOOL quota policy but got: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
     } | Out-Null
 
