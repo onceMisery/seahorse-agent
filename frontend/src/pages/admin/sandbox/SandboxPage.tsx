@@ -157,7 +157,12 @@ function previewList(values?: string[], limit = 4) {
 
 function formatScannerWindow(policy?: SandboxArtifactScannerPolicy | null) {
   if (!policy) return "-";
-  return `${formatBytes(policy.maxContentScanBytes)} text / ${policy.maxArchiveScanEntries ?? 0} entries / ${formatBytes(policy.maxCompressedArchiveDecompressedBytes)} compressed`;
+  return [
+    `${formatBytes(policy.maxContentScanBytes)} text`,
+    `${formatBytes(policy.maxBinarySignatureScanBytes)} binary`,
+    `${policy.maxArchiveScanEntries ?? 0} entries x ${formatBytes(policy.maxArchiveEntryScanBytes)}`,
+    `${formatBytes(policy.maxCompressedArchiveDecompressedBytes)} compressed`
+  ].join(" / ");
 }
 
 function optionalDraftNumber(value: string, label: string, options: { integer?: boolean; max?: number } = {}) {

@@ -601,6 +601,14 @@ This is policy/API/operator visibility only. It does not change scanner behavior
 
 Fresh full-Docker evidence: focused Java/Web regression passed with reactor `BUILD SUCCESS`, frontend contracts passed 10/10, frontend build completed with existing warnings, compose overlay validation passed, the backend rebuilt through the local 7890 proxy path with an in-image Maven `BUILD SUCCESS`, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-scanner-compressed-budget-smoke` passed 43/43 with the live scanner-policy assertion for `maxCompressedArchiveDecompressedBytes=33554432`. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and backend health `UP`.
 
+### 2026-07-04 Update: sandbox artifact scanner full window visibility
+
+The admin Sandbox Runtime governance panel now shows the complete bounded scanner window from `SandboxArtifactScannerPolicy`: text content scan bytes, binary signature prefix bytes, archive entry count, per-entry archive prefix bytes, and compressed archive decompression bytes. The Web regression and full-Docker smoke now assert the binary prefix and per-entry archive prefix fields so operator UX stays aligned with the live policy payload.
+
+This is read-only scanner policy UX and verification only. It does not change scanner behavior, artifact decisions, byte budgets, mutable policy handling, recursive extraction, generic gzip scanning, external scanner integration, prompt visibility, or download eligibility.
+
+Fresh full-Docker evidence: focused Web regression passed 3/3 with reactor `BUILD SUCCESS`, frontend contracts passed 10/10, PowerShell parsing passed for the artifact-storage smoke, frontend build completed with existing warnings, backend health returned `UP`, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-scanner-window-ux-smoke-rerun` passed 43/43 with live scanner-policy assertions for `maxBinarySignatureScanBytes=262144`, `maxArchiveEntryScanBytes=262144`, and the existing text/archive/compressed limits. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and backend health `UP`.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

@@ -606,7 +606,11 @@ try {
         if ($response.data.failClosed -ne $true -or $response.data.rawFindingValuesPersisted -ne $false) {
             throw "Expected fail-closed value-free scanner policy: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
-        if ([int]$response.data.maxContentScanBytes -ne 262144 -or [int]$response.data.maxArchiveScanEntries -ne 128) {
+        $scannerWindowMatches = [int]$response.data.maxContentScanBytes -eq 262144 `
+            -and [int]$response.data.maxBinarySignatureScanBytes -eq 262144 `
+            -and [int]$response.data.maxArchiveScanEntries -eq 128 `
+            -and [int]$response.data.maxArchiveEntryScanBytes -eq 262144
+        if (-not $scannerWindowMatches) {
             throw "Expected scanner byte/entry limits: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         if ([int64]$response.data.maxCompressedArchiveDecompressedBytes -ne 33554432) {
