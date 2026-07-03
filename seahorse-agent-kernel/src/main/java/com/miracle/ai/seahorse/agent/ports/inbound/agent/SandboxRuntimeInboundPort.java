@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 
 import java.util.List;
@@ -44,6 +45,14 @@ public interface SandboxRuntimeInboundPort {
     SandboxRuntimeHealth inspectRuntimeHealth();
 
     SandboxRuntimeContainerReapResult reapOrphanedRuntimeContainers(boolean dryRun);
+
+    default List<SandboxRuntimeProfilePolicy> listRuntimeProfilePolicies(String tenantId) {
+        return List.of();
+    }
+
+    default SandboxRuntimeProfilePolicy upsertRuntimeProfilePolicy(SandboxRuntimeProfilePolicyUpsertCommand command) {
+        throw new UnsupportedOperationException("Sandbox runtime profile policy writes are not available");
+    }
 
     List<SandboxExecution> listExecutions(String sessionId);
 

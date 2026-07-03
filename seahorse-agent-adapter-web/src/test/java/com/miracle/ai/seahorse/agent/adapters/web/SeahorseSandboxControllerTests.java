@@ -33,6 +33,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyRe
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicyStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaManagementInboundPort;
@@ -41,6 +43,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDe
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeProfilePolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionSweepResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
@@ -131,6 +134,16 @@ class SeahorseSandboxControllerTests {
                 List.of(),
                 List.of(),
                 List.of()));
+        when(port.listRuntimeProfilePolicies("default")).thenReturn(List.of(
+                runtimeProfilePolicy("default", SandboxRuntimeType.CODE_INTERPRETER, SandboxRuntimeProfilePolicyStatus.ACTIVE, 3600),
+                runtimeProfilePolicy("default", SandboxRuntimeType.FILE_CONVERSION, SandboxRuntimeProfilePolicyStatus.ACTIVE, 3600),
+                runtimeProfilePolicy("default", SandboxRuntimeType.BROWSER_AUTOMATION, SandboxRuntimeProfilePolicyStatus.ACTIVE, 3600),
+                runtimeProfilePolicy("default", SandboxRuntimeType.SHELL, SandboxRuntimeProfilePolicyStatus.ACTIVE, 3600)));
+        when(port.upsertRuntimeProfilePolicy(any())).thenReturn(runtimeProfilePolicy(
+                "default",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                SandboxRuntimeProfilePolicyStatus.ACTIVE,
+                120));
         when(port.reapOrphanedRuntimeContainers(false)).thenReturn(new SandboxRuntimeContainerReapResult(
                 NOW,
                 false,
@@ -290,6 +303,9 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data.profiles[0].supportedByContainerRuntime").value(true))
                 .andExpect(jsonPath("$.data.profiles[0].networkAllowed").value(false))
                 .andExpect(jsonPath("$.data.profiles[0].status").value("SUPPORTED"))
+                .andExpect(jsonPath("$.data.profiles[0].policyId").value("sandbox-runtime-profile-default-code_interpreter"))
+                .andExpect(jsonPath("$.data.profiles[0].policyStatus").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.profiles[0].sessionTtlSeconds").value(3600))
                 .andExpect(jsonPath("$.data.profiles[1].runtimeType").value("FILE_CONVERSION"))
                 .andExpect(jsonPath("$.data.profiles[1].profileId").value("file-conversion"))
                 .andExpect(jsonPath("$.data.profiles[1].supportedByContainerRuntime").value(true))
@@ -305,6 +321,31 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data.profiles[3].supportedByContainerRuntime").value(false))
                 .andExpect(jsonPath("$.data.profiles[3].networkAllowed").value(false))
                 .andExpect(jsonPath("$.data.profiles[3].status").value("PLANNED"));
+        verify(port).listRuntimeProfilePolicies("default");
+
+        mvc.perform(post("/api/sandbox/runtime/profile-policies")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "default",
+                                "runtimeType", "CODE_INTERPRETER",
+                                "profileId", "python-small",
+                                "status", "ACTIVE",
+                                "sessionTtlSeconds", 120,
+                                "networkAllowed", false))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.policyId").value("sandbox-runtime-profile-default-code_interpreter"))
+                .andExpect(jsonPath("$.data.tenantId").value("default"))
+                .andExpect(jsonPath("$.data.runtimeType").value("CODE_INTERPRETER"))
+                .andExpect(jsonPath("$.data.profileId").value("python-small"))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.sessionTtlSeconds").value(120))
+                .andExpect(jsonPath("$.data.networkAllowed").value(false));
+        ArgumentCaptor<SandboxRuntimeProfilePolicyUpsertCommand> runtimePolicyCaptor =
+                ArgumentCaptor.forClass(SandboxRuntimeProfilePolicyUpsertCommand.class);
+        verify(port).upsertRuntimeProfilePolicy(runtimePolicyCaptor.capture());
+        assertThat(runtimePolicyCaptor.getValue().tenantId()).isEqualTo("default");
+        assertThat(runtimePolicyCaptor.getValue().runtimeType()).isEqualTo(SandboxRuntimeType.CODE_INTERPRETER);
+        assertThat(runtimePolicyCaptor.getValue().sessionTtlSeconds()).isEqualTo(120L);
 
         mvc.perform(post("/api/sandbox/runtime/tool-quota-policies")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -401,6 +442,22 @@ class SeahorseSandboxControllerTests {
                 SandboxArtifactScanStatus.CLEAN,
                 ContextSensitivity.INTERNAL,
                 "metadata scan passed",
+                NOW);
+    }
+
+    private static SandboxRuntimeProfilePolicy runtimeProfilePolicy(String tenantId,
+                                                                    SandboxRuntimeType runtimeType,
+                                                                    SandboxRuntimeProfilePolicyStatus status,
+                                                                    long ttlSeconds) {
+        return new SandboxRuntimeProfilePolicy(
+                null,
+                tenantId,
+                runtimeType,
+                null,
+                status,
+                ttlSeconds,
+                false,
+                NOW,
                 NOW);
     }
 

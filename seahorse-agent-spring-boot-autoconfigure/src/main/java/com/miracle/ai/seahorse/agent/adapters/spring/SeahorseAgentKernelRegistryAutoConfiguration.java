@@ -136,6 +136,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPo
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthContributorPort;
@@ -777,7 +778,8 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             SandboxSessionRepositoryPort.class,
             SandboxExecutionRepositoryPort.class,
             SandboxArtifactQueryPort.class,
-            SandboxArtifactScannerPort.class
+            SandboxArtifactScannerPort.class,
+            SandboxRuntimeProfilePolicyRepositoryPort.class
     })
     @ConditionalOnMissingBean(SandboxRuntimeInboundPort.class)
     public KernelSandboxRuntimeService seahorseSandboxRuntimeInboundPort(
@@ -788,6 +790,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             SandboxExecutionRepositoryPort sandboxExecutionRepositoryPort,
             SandboxArtifactQueryPort sandboxArtifactQueryPort,
             SandboxArtifactScannerPort sandboxArtifactScannerPort,
+            SandboxRuntimeProfilePolicyRepositoryPort sandboxRuntimeProfilePolicyRepositoryPort,
             ObjectProvider<ObjectStoragePort> objectStoragePort,
             ObjectProvider<KernelAuditLedgerService> auditLedgerService,
             ObjectProvider<Clock> clockProvider) {
@@ -800,6 +803,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 sandboxArtifactQueryPort,
                 sandboxArtifactScannerPort,
                 objectStoragePort.getIfAvailable(),
+                sandboxRuntimeProfilePolicyRepositoryPort,
                 auditLedgerService.getIfAvailable(),
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }

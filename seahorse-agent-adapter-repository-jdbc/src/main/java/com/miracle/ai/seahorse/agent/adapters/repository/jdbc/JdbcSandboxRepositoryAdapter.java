@@ -23,11 +23,14 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicyStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -45,7 +48,8 @@ import java.util.stream.Collectors;
 public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPort,
         SandboxExecutionRepositoryPort,
         SandboxArtifactPort,
-        SandboxArtifactQueryPort {
+        SandboxArtifactQueryPort,
+        SandboxRuntimeProfilePolicyRepositoryPort {
 
     private static final String SESSION_COLUMNS = """
             session_id, tenant_id, run_id, runtime_type, status, reason_code, profile_id, expires_at, created_at, updated_at
@@ -55,6 +59,10 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
             """;
     private static final String ARTIFACT_COLUMNS = """
             artifact_id, session_id, execution_id, object_uri, media_type, scan_status, sensitivity, scan_summary, created_at
+            """;
+    private static final String RUNTIME_PROFILE_POLICY_COLUMNS = """
+            policy_id, tenant_id, runtime_type, profile_id, status, session_ttl_seconds,
+            network_allowed, created_at, updated_at
             """;
 
     private static final String SQL_INSERT_SESSION = """
@@ -166,6 +174,43 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
               AND sensitivity <> ?
             ORDER BY created_at ASC, artifact_id ASC
             """.formatted(ARTIFACT_COLUMNS);
+    private static final String SQL_INSERT_RUNTIME_PROFILE_POLICY = """
+            INSERT INTO sa_sandbox_runtime_profile_policy
+            (policy_id, tenant_id, runtime_type, profile_id, status, session_ttl_seconds,
+             network_allowed, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """;
+    private static final String SQL_UPDATE_RUNTIME_PROFILE_POLICY = """
+            UPDATE sa_sandbox_runtime_profile_policy
+            SET tenant_id = ?,
+                runtime_type = ?,
+                profile_id = ?,
+                status = ?,
+                session_ttl_seconds = ?,
+                network_allowed = ?,
+                created_at = ?,
+                updated_at = ?
+            WHERE policy_id = ?
+            """;
+    private static final String SQL_FIND_RUNTIME_PROFILE_POLICY_BY_ID = """
+            SELECT %s
+            FROM sa_sandbox_runtime_profile_policy
+            WHERE policy_id = ?
+            """.formatted(RUNTIME_PROFILE_POLICY_COLUMNS);
+    private static final String SQL_FIND_RUNTIME_PROFILE_POLICY_BY_RUNTIME = """
+            SELECT %s
+            FROM sa_sandbox_runtime_profile_policy
+            WHERE tenant_id = ?
+              AND runtime_type = ?
+            ORDER BY updated_at DESC, policy_id DESC
+            LIMIT 1
+            """.formatted(RUNTIME_PROFILE_POLICY_COLUMNS);
+    private static final String SQL_LIST_RUNTIME_PROFILE_POLICIES_BY_TENANT = """
+            SELECT %s
+            FROM sa_sandbox_runtime_profile_policy
+            WHERE tenant_id = ?
+            ORDER BY runtime_type ASC, updated_at DESC, policy_id ASC
+            """.formatted(RUNTIME_PROFILE_POLICY_COLUMNS);
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -289,6 +334,50 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 ContextSensitivity.SECRET.name());
     }
 
+    @Override
+    public SandboxRuntimeProfilePolicy upsert(SandboxRuntimeProfilePolicy policy) {
+        SandboxRuntimeProfilePolicy safePolicy = Objects.requireNonNull(policy, "policy must not be null");
+        if (findById(safePolicy.policyId()).isPresent()) {
+            updateRuntimeProfilePolicy(safePolicy);
+            return safePolicy;
+        }
+        insertRuntimeProfilePolicy(safePolicy);
+        return safePolicy;
+    }
+
+    @Override
+    public Optional<SandboxRuntimeProfilePolicy> findById(String policyId) {
+        if (!hasText(policyId)) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query(SQL_FIND_RUNTIME_PROFILE_POLICY_BY_ID, this::mapRuntimeProfilePolicy,
+                policyId.trim()).stream().findFirst();
+    }
+
+    @Override
+    public Optional<SandboxRuntimeProfilePolicy> findByTenantAndRuntimeType(String tenantId,
+                                                                           SandboxRuntimeType runtimeType) {
+        if (!hasText(tenantId) || runtimeType == null) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query(SQL_FIND_RUNTIME_PROFILE_POLICY_BY_RUNTIME,
+                        this::mapRuntimeProfilePolicy,
+                        tenantId.trim(),
+                        runtimeType.name())
+                .stream()
+                .findFirst();
+    }
+
+    @Override
+    public List<SandboxRuntimeProfilePolicy> listByTenant(String tenantId) {
+        if (!hasText(tenantId)) {
+            return List.of();
+        }
+        return jdbcTemplate.query(SQL_LIST_RUNTIME_PROFILE_POLICIES_BY_TENANT,
+                this::mapRuntimeProfilePolicy,
+                tenantId.trim());
+    }
+
     private void insertSession(SandboxSession session) {
         jdbcTemplate.update(SQL_INSERT_SESSION,
                 session.sessionId(),
@@ -375,6 +464,32 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 artifact.artifactId());
     }
 
+    private void insertRuntimeProfilePolicy(SandboxRuntimeProfilePolicy policy) {
+        jdbcTemplate.update(SQL_INSERT_RUNTIME_PROFILE_POLICY,
+                policy.policyId(),
+                policy.tenantId(),
+                policy.runtimeType().name(),
+                policy.profileId(),
+                policy.status().name(),
+                policy.sessionTtlSeconds(),
+                policy.networkAllowed(),
+                toTimestamp(policy.createdAt()),
+                toTimestamp(policy.updatedAt()));
+    }
+
+    private void updateRuntimeProfilePolicy(SandboxRuntimeProfilePolicy policy) {
+        jdbcTemplate.update(SQL_UPDATE_RUNTIME_PROFILE_POLICY,
+                policy.tenantId(),
+                policy.runtimeType().name(),
+                policy.profileId(),
+                policy.status().name(),
+                policy.sessionTtlSeconds(),
+                policy.networkAllowed(),
+                toTimestamp(policy.createdAt()),
+                toTimestamp(policy.updatedAt()),
+                policy.policyId());
+    }
+
     private SandboxSession mapSession(ResultSet resultSet, int rowNum) throws SQLException {
         return new SandboxSession(
                 resultSet.getString("session_id"),
@@ -412,6 +527,19 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 ContextSensitivity.valueOf(resultSet.getString("sensitivity")),
                 resultSet.getString("scan_summary"),
                 toInstant(resultSet.getTimestamp("created_at")));
+    }
+
+    private SandboxRuntimeProfilePolicy mapRuntimeProfilePolicy(ResultSet resultSet, int rowNum) throws SQLException {
+        return new SandboxRuntimeProfilePolicy(
+                resultSet.getString("policy_id"),
+                resultSet.getString("tenant_id"),
+                SandboxRuntimeType.valueOf(resultSet.getString("runtime_type")),
+                resultSet.getString("profile_id"),
+                SandboxRuntimeProfilePolicyStatus.valueOf(resultSet.getString("status")),
+                resultSet.getLong("session_ttl_seconds"),
+                resultSet.getBoolean("network_allowed"),
+                toInstant(resultSet.getTimestamp("created_at")),
+                toInstant(resultSet.getTimestamp("updated_at")));
     }
 
     private Timestamp toTimestamp(Instant instant) {

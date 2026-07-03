@@ -22,6 +22,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicyStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaPolicyStatus;
@@ -33,6 +35,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDe
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeProfilePolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,6 +60,7 @@ import java.util.Set;
 @RestController
 public class SeahorseSandboxController {
 
+    private static final String DEFAULT_TENANT_ID = "default";
     private static final Set<String> SANDBOX_TOOL_IDS = Set.of(
             "sandbox_python",
             "sandbox_file_convert",
@@ -170,9 +174,30 @@ public class SeahorseSandboxController {
     }
 
     @GetMapping("/api/sandbox/runtime/profiles")
-    public ApiResponse<Object> listRuntimeProfiles() {
+    public ApiResponse<Object> listRuntimeProfiles(
+            @RequestParam(defaultValue = DEFAULT_TENANT_ID) String tenantId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
-        return ApiResponse.ok(runtimeProfilesResponse());
+        String safeTenantId = requireText(tenantId, "tenantId must not be blank");
+        return ApiResponses.requireService(sandboxRuntimePortProvider,
+                port -> runtimeProfilesResponse(port.listRuntimeProfilePolicies(safeTenantId)));
+    }
+
+    @PostMapping("/api/sandbox/runtime/profile-policies")
+    public ApiResponse<Object> upsertRuntimeProfilePolicy(
+            @RequestBody SandboxRuntimeProfilePolicyRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        SandboxRuntimeProfilePolicyRequest safeRequest = request == null
+                ? new SandboxRuntimeProfilePolicyRequest(null, null, null, null, null, null, null)
+                : request;
+        return ApiResponses.requireService(sandboxRuntimePortProvider,
+                port -> port.upsertRuntimeProfilePolicy(new SandboxRuntimeProfilePolicyUpsertCommand(
+                        safeRequest.policyId(),
+                        safeRequest.tenantId(),
+                        safeRequest.runtimeType(),
+                        safeRequest.profileId(),
+                        safeRequest.status(),
+                        safeRequest.sessionTtlSeconds(),
+                        safeRequest.networkAllowed())));
     }
 
     @PostMapping("/api/sandbox/runtime/tool-quota-policies")
@@ -304,27 +329,39 @@ public class SeahorseSandboxController {
                 artifact.createdAt());
     }
 
-    private static SandboxRuntimeProfilesResponse runtimeProfilesResponse() {
+    private static SandboxRuntimeProfilesResponse runtimeProfilesResponse(List<SandboxRuntimeProfilePolicy> policies) {
+        List<SandboxRuntimeProfilePolicy> safePolicies = policies == null ? List.of() : List.copyOf(policies);
         return new SandboxRuntimeProfilesResponse(
                 List.of(
-                        runtimeProfile(SandboxRuntimeType.CODE_INTERPRETER),
-                        runtimeProfile(SandboxRuntimeType.FILE_CONVERSION),
-                        runtimeProfile(SandboxRuntimeType.BROWSER_AUTOMATION),
-                        runtimeProfile(SandboxRuntimeType.SHELL)),
+                        runtimeProfile(SandboxRuntimeType.CODE_INTERPRETER, safePolicies),
+                        runtimeProfile(SandboxRuntimeType.FILE_CONVERSION, safePolicies),
+                        runtimeProfile(SandboxRuntimeType.BROWSER_AUTOMATION, safePolicies),
+                        runtimeProfile(SandboxRuntimeType.SHELL, safePolicies)),
                 "DENY_ALL",
-                SandboxSession.DEFAULT_SESSION_TTL.toSeconds());
+                SandboxRuntimeProfilePolicy.DEFAULT_SESSION_TTL_SECONDS);
     }
 
-    private static SandboxRuntimeProfileResponse runtimeProfile(SandboxRuntimeType runtimeType) {
+    private static SandboxRuntimeProfileResponse runtimeProfile(SandboxRuntimeType runtimeType,
+                                                                List<SandboxRuntimeProfilePolicy> policies) {
         boolean supportedByContainerRuntime = runtimeType == SandboxRuntimeType.CODE_INTERPRETER
                 || runtimeType == SandboxRuntimeType.FILE_CONVERSION
                 || runtimeType == SandboxRuntimeType.BROWSER_AUTOMATION;
+        SandboxRuntimeProfilePolicy policy = policies.stream()
+                .filter(candidate -> candidate.runtimeType() == runtimeType)
+                .findFirst()
+                .orElseGet(() -> SandboxRuntimeProfilePolicy.defaultPolicy("default", runtimeType, Instant.EPOCH));
+        String status = policy.status() == SandboxRuntimeProfilePolicyStatus.DISABLED
+                ? "BLOCKED"
+                : supportedByContainerRuntime ? "SUPPORTED" : "PLANNED";
         return new SandboxRuntimeProfileResponse(
                 runtimeType,
-                SandboxSession.profileIdOrDefault(null, runtimeType),
+                policy.profileId(),
                 supportedByContainerRuntime,
-                false,
-                supportedByContainerRuntime ? "SUPPORTED" : "PLANNED");
+                policy.networkAllowed(),
+                status,
+                policy.policyId(),
+                policy.status(),
+                policy.sessionTtlSeconds());
     }
 
     private static String policyIdOrDefault(String policyId, String tenantId, String toolId) {
@@ -417,7 +454,19 @@ public class SeahorseSandboxController {
                                                 String profileId,
                                                 boolean supportedByContainerRuntime,
                                                 boolean networkAllowed,
-                                                String status) {
+                                                String status,
+                                                String policyId,
+                                                SandboxRuntimeProfilePolicyStatus policyStatus,
+                                                long sessionTtlSeconds) {
+    }
+
+    public record SandboxRuntimeProfilePolicyRequest(String policyId,
+                                                     String tenantId,
+                                                     SandboxRuntimeType runtimeType,
+                                                     String profileId,
+                                                     SandboxRuntimeProfilePolicyStatus status,
+                                                     Long sessionTtlSeconds,
+                                                     Boolean networkAllowed) {
     }
 
     public record SandboxToolQuotaPolicyRequest(String policyId,

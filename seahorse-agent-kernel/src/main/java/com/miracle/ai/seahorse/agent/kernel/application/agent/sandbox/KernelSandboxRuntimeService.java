@@ -33,11 +33,15 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyRe
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicyStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeProfilePolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionSweepResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
@@ -49,6 +53,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionReposi
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
@@ -108,6 +113,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private final SandboxSessionRepositoryPort sessionRepositoryPort;
     private final SandboxExecutionRepositoryPort executionRepositoryPort;
     private final SandboxArtifactQueryPort artifactQueryPort;
+    private final SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort;
     private final KernelAuditLedgerService auditLedger;
     private final Clock clock;
     private final Map<String, SandboxSession> sessions = new ConcurrentHashMap<>();
@@ -123,6 +129,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 new InMemorySandboxExecutionRepository(),
                 new EmptySandboxArtifactQueryPort(),
                 new DefaultSandboxArtifactScannerPort(),
+                null,
+                new InMemorySandboxRuntimeProfilePolicyRepository(),
                 null,
                 clock);
     }
@@ -142,6 +150,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 artifactQueryPort,
                 new DefaultSandboxArtifactScannerPort(),
                 null,
+                new InMemorySandboxRuntimeProfilePolicyRepository(),
                 null,
                 clock);
     }
@@ -162,6 +171,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 artifactQueryPort,
                 new DefaultSandboxArtifactScannerPort(),
                 null,
+                new InMemorySandboxRuntimeProfilePolicyRepository(),
                 auditLedger,
                 clock);
     }
@@ -183,6 +193,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 artifactQueryPort,
                 artifactScannerPort,
                 null,
+                new InMemorySandboxRuntimeProfilePolicyRepository(),
                 auditLedger,
                 clock);
     }
@@ -197,6 +208,30 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                                        ObjectStoragePort artifactStoragePort,
                                        KernelAuditLedgerService auditLedger,
                                        Clock clock) {
+        this(policyPort,
+                runtimePort,
+                artifactPort,
+                sessionRepositoryPort,
+                executionRepositoryPort,
+                artifactQueryPort,
+                artifactScannerPort,
+                artifactStoragePort,
+                new InMemorySandboxRuntimeProfilePolicyRepository(),
+                auditLedger,
+                clock);
+    }
+
+    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
+                                       SandboxRuntimePort runtimePort,
+                                       SandboxArtifactPort artifactPort,
+                                       SandboxSessionRepositoryPort sessionRepositoryPort,
+                                       SandboxExecutionRepositoryPort executionRepositoryPort,
+                                       SandboxArtifactQueryPort artifactQueryPort,
+                                       SandboxArtifactScannerPort artifactScannerPort,
+                                       ObjectStoragePort artifactStoragePort,
+                                       SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort,
+                                       KernelAuditLedgerService auditLedger,
+                                       Clock clock) {
         this.policyPort = Objects.requireNonNull(policyPort, "policyPort must not be null");
         this.runtimePort = Objects.requireNonNull(runtimePort, "runtimePort must not be null");
         this.artifactPort = Objects.requireNonNull(artifactPort, "artifactPort must not be null");
@@ -208,6 +243,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         this.executionRepositoryPort = Objects.requireNonNull(executionRepositoryPort,
                 "executionRepositoryPort must not be null");
         this.artifactQueryPort = Objects.requireNonNull(artifactQueryPort, "artifactQueryPort must not be null");
+        this.runtimeProfilePolicyRepositoryPort = Objects.requireNonNull(runtimeProfilePolicyRepositoryPort,
+                "runtimeProfilePolicyRepositoryPort must not be null");
         this.auditLedger = auditLedger;
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
@@ -215,18 +252,43 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     @Override
     public SandboxSession createSession(SandboxSessionCreateCommand command) {
         SandboxSessionCreateCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
+        SandboxRuntimeProfilePolicy profilePolicy = effectiveRuntimeProfilePolicy(
+                safeCommand.tenantId(),
+                safeCommand.runtimeType());
+        Instant now = clock.instant();
+        String profileId = profilePolicy.profileId();
+        Instant expiresAt = profilePolicy.effectiveExpiresAt(safeCommand.expiresAt(), now);
+        if (!profilePolicy.allowsExecution()) {
+            SandboxSession denied = SandboxSession.failed(
+                    sessionId(),
+                    safeCommand.tenantId(),
+                    safeCommand.runId(),
+                    safeCommand.runtimeType(),
+                    SandboxPolicyReasonCode.RUNTIME_PROFILE_DISABLED,
+                    profileId,
+                    expiresAt,
+                    now);
+            return saveSession(denied, AuditEventType.SANDBOX_SESSION_CREATED);
+        }
+        if (!profilePolicy.networkAllowed() && safeCommand.networkRequested()) {
+            SandboxSession denied = SandboxSession.failed(
+                    sessionId(),
+                    safeCommand.tenantId(),
+                    safeCommand.runId(),
+                    safeCommand.runtimeType(),
+                    SandboxPolicyReasonCode.NETWORK_DENIED_BY_DEFAULT,
+                    profileId,
+                    expiresAt,
+                    now);
+            return saveSession(denied, AuditEventType.SANDBOX_SESSION_CREATED);
+        }
         SandboxPolicyDecision decision = policyPort.decide(new SandboxPolicyRequest(
                 safeCommand.tenantId(),
                 safeCommand.runId(),
                 safeCommand.runtimeType(),
                 safeCommand.networkRequested(),
                 safeCommand.requestedHosts()));
-        String profileId = SandboxSession.profileIdOrDefault(safeCommand.profileId(), safeCommand.runtimeType());
-        Instant expiresAt = safeCommand.expiresAt() == null
-                ? SandboxSession.defaultExpiresAt(clock.instant())
-                : safeCommand.expiresAt();
         if (!decision.allowsExecution()) {
-            Instant now = clock.instant();
             SandboxSession denied = SandboxSession.failed(
                     sessionId(),
                     safeCommand.tenantId(),
@@ -239,7 +301,6 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             return saveSession(denied, AuditEventType.SANDBOX_SESSION_CREATED);
         }
         if (runtimeCapacityExceeded()) {
-            Instant now = clock.instant();
             SandboxSession rejected = SandboxSession.failed(
                     sessionId(),
                     safeCommand.tenantId(),
@@ -374,6 +435,56 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     }
 
     @Override
+    public List<SandboxRuntimeProfilePolicy> listRuntimeProfilePolicies(String tenantId) {
+        String safeTenantId = requireText(tenantId, "tenantId must not be blank");
+        Map<SandboxRuntimeType, SandboxRuntimeProfilePolicy> configured = runtimeProfilePolicyRepositoryPort
+                .listByTenant(safeTenantId)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        SandboxRuntimeProfilePolicy::runtimeType,
+                        policy -> policy,
+                        (left, right) -> left.updatedAt().isAfter(right.updatedAt()) ? left : right));
+        Instant now = clock.instant();
+        return List.of(SandboxRuntimeType.CODE_INTERPRETER,
+                        SandboxRuntimeType.FILE_CONVERSION,
+                        SandboxRuntimeType.BROWSER_AUTOMATION,
+                        SandboxRuntimeType.SHELL)
+                .stream()
+                .map(runtimeType -> configured.getOrDefault(
+                        runtimeType,
+                        SandboxRuntimeProfilePolicy.defaultPolicy(safeTenantId, runtimeType, now)))
+                .toList();
+    }
+
+    @Override
+    public SandboxRuntimeProfilePolicy upsertRuntimeProfilePolicy(SandboxRuntimeProfilePolicyUpsertCommand command) {
+        SandboxRuntimeProfilePolicyUpsertCommand safeCommand =
+                Objects.requireNonNull(command, "command must not be null");
+        String profileId = SandboxSession.profileIdOrDefault(safeCommand.profileId(), safeCommand.runtimeType());
+        String supportedProfileId = SandboxSession.profileIdOrDefault(null, safeCommand.runtimeType());
+        if (!supportedProfileId.equals(profileId)) {
+            throw new IllegalArgumentException("profileId must match the supported sandbox runtime profile");
+        }
+        long ttlSeconds = safeCommand.sessionTtlSeconds() == null
+                ? SandboxRuntimeProfilePolicy.DEFAULT_SESSION_TTL_SECONDS
+                : safeCommand.sessionTtlSeconds();
+        Instant now = clock.instant();
+        Optional<SandboxRuntimeProfilePolicy> existing = existingRuntimeProfilePolicy(safeCommand);
+        Instant createdAt = existing.map(SandboxRuntimeProfilePolicy::createdAt).orElse(now);
+        SandboxRuntimeProfilePolicy policy = new SandboxRuntimeProfilePolicy(
+                existing.map(SandboxRuntimeProfilePolicy::policyId).orElse(safeCommand.policyId()),
+                safeCommand.tenantId(),
+                safeCommand.runtimeType(),
+                profileId,
+                safeCommand.status() == null ? SandboxRuntimeProfilePolicyStatus.ACTIVE : safeCommand.status(),
+                ttlSeconds,
+                Boolean.TRUE.equals(safeCommand.networkAllowed()),
+                createdAt,
+                now);
+        return runtimeProfilePolicyRepositoryPort.upsert(policy);
+    }
+
+    @Override
     public List<SandboxExecution> listExecutions(String sessionId) {
         String safeSessionId = requireText(sessionId, "sessionId must not be blank");
         findSessionOrThrow(safeSessionId);
@@ -443,6 +554,26 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 runtimePort.inspectHealth(activeSessionIds),
                 "runtime health result must not be null");
         return !health.activeSessionCapacityAvailable();
+    }
+
+    private SandboxRuntimeProfilePolicy effectiveRuntimeProfilePolicy(String tenantId,
+                                                                      SandboxRuntimeType runtimeType) {
+        return runtimeProfilePolicyRepositoryPort.findByTenantAndRuntimeType(tenantId, runtimeType)
+                .orElseGet(() -> SandboxRuntimeProfilePolicy.defaultPolicy(tenantId, runtimeType, clock.instant()));
+    }
+
+    private Optional<SandboxRuntimeProfilePolicy> existingRuntimeProfilePolicy(
+            SandboxRuntimeProfilePolicyUpsertCommand command) {
+        if (hasText(command.policyId())) {
+            Optional<SandboxRuntimeProfilePolicy> byId =
+                    runtimeProfilePolicyRepositoryPort.findById(command.policyId());
+            if (byId.isPresent()) {
+                return byId;
+            }
+        }
+        return runtimeProfilePolicyRepositoryPort.findByTenantAndRuntimeType(
+                command.tenantId(),
+                command.runtimeType());
     }
 
     private SandboxSession saveSession(SandboxSession session, AuditEventType auditEventType) {
@@ -685,6 +816,55 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
 
         private static SandboxArtifactDownloadPolicy blocked(String reason) {
             return new SandboxArtifactDownloadPolicy(false, reason);
+        }
+    }
+
+    private static final class InMemorySandboxRuntimeProfilePolicyRepository
+            implements SandboxRuntimeProfilePolicyRepositoryPort {
+
+        private final Map<String, SandboxRuntimeProfilePolicy> store = new ConcurrentHashMap<>();
+
+        @Override
+        public SandboxRuntimeProfilePolicy upsert(SandboxRuntimeProfilePolicy policy) {
+            SandboxRuntimeProfilePolicy safePolicy = Objects.requireNonNull(policy, "policy must not be null");
+            store.put(safePolicy.policyId(), safePolicy);
+            return safePolicy;
+        }
+
+        @Override
+        public Optional<SandboxRuntimeProfilePolicy> findById(String policyId) {
+            if (!hasText(policyId)) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(store.get(policyId.trim()));
+        }
+
+        @Override
+        public Optional<SandboxRuntimeProfilePolicy> findByTenantAndRuntimeType(String tenantId,
+                                                                                SandboxRuntimeType runtimeType) {
+            if (!hasText(tenantId) || runtimeType == null) {
+                return Optional.empty();
+            }
+            String safeTenantId = tenantId.trim();
+            return store.values().stream()
+                    .filter(policy -> policy.tenantId().equals(safeTenantId))
+                    .filter(policy -> policy.runtimeType() == runtimeType)
+                    .max(Comparator.comparing(SandboxRuntimeProfilePolicy::updatedAt)
+                            .thenComparing(SandboxRuntimeProfilePolicy::policyId));
+        }
+
+        @Override
+        public List<SandboxRuntimeProfilePolicy> listByTenant(String tenantId) {
+            if (!hasText(tenantId)) {
+                return List.of();
+            }
+            String safeTenantId = tenantId.trim();
+            return store.values().stream()
+                    .filter(policy -> policy.tenantId().equals(safeTenantId))
+                    .sorted(Comparator.comparing(SandboxRuntimeProfilePolicy::runtimeType)
+                            .thenComparing(SandboxRuntimeProfilePolicy::updatedAt)
+                            .thenComparing(SandboxRuntimeProfilePolicy::policyId))
+                    .toList();
         }
     }
 

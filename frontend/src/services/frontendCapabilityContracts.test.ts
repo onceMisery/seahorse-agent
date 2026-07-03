@@ -35,6 +35,7 @@ import {
   reapOrphanedSandboxRuntimeContainers,
   sweepExpiredSandboxSessions,
   sweepOrphanedSandboxRuntimeResources,
+  upsertSandboxRuntimeProfilePolicy,
   upsertSandboxToolQuotaPolicy
 } from "@/services/sandboxService";
 
@@ -89,6 +90,7 @@ describe("frontend capability service contracts", () => {
     expect(backendEndpoints).toContain("POST /api/sandbox/runtime/orphan-containers:reap");
     expect(backendEndpoints).toContain("POST /api/sandbox/sessions/expired:sweep");
     expect(backendEndpoints).toContain("POST /api/sandbox/runtime/orphans:sweep");
+    expect(backendEndpoints).toContain("POST /api/sandbox/runtime/profile-policies");
     expect(backendEndpoints).toContain("POST /api/sandbox/runtime/tool-quota-policies");
   });
 
@@ -315,6 +317,15 @@ describe("frontend capability service contracts", () => {
       callLimit: 3,
       warnRatio: 0.8
     });
+    await upsertSandboxRuntimeProfilePolicy({
+      policyId: "sandbox-runtime-profile-default-code_interpreter",
+      tenantId: "default",
+      runtimeType: "CODE_INTERPRETER",
+      profileId: "python-small",
+      status: "ACTIVE",
+      sessionTtlSeconds: 120,
+      networkAllowed: false
+    });
     await getSandboxRuntimeHealth();
     await getSandboxRuntimeProfiles();
     await listSandboxExecutions("session-1");
@@ -348,11 +359,22 @@ describe("frontend capability service contracts", () => {
       callLimit: 3,
       warnRatio: 0.8
     });
+    expect(mockedApi.post).toHaveBeenNthCalledWith(7, "/api/sandbox/runtime/profile-policies", {
+      policyId: "sandbox-runtime-profile-default-code_interpreter",
+      tenantId: "default",
+      runtimeType: "CODE_INTERPRETER",
+      profileId: "python-small",
+      status: "ACTIVE",
+      sessionTtlSeconds: 120,
+      networkAllowed: false
+    });
     expect(mockedApi.get).toHaveBeenNthCalledWith(1, "/api/sandbox/sessions", {
       params: { tenantId: "default", limit: 20 }
     });
     expect(mockedApi.get).toHaveBeenNthCalledWith(2, "/api/sandbox/runtime/health");
-    expect(mockedApi.get).toHaveBeenNthCalledWith(3, "/api/sandbox/runtime/profiles");
+    expect(mockedApi.get).toHaveBeenNthCalledWith(3, "/api/sandbox/runtime/profiles", {
+      params: { tenantId: "default" }
+    });
     expect(mockedApi.get).toHaveBeenNthCalledWith(4, "/api/sandbox/sessions/session-1/executions");
     expect(mockedApi.get).toHaveBeenNthCalledWith(5, "/api/sandbox/sessions/session-1/artifacts");
     expect(mockedApi.get).toHaveBeenNthCalledWith(6, "/api/sandbox/artifacts/artifact-1");

@@ -1744,6 +1744,33 @@ CREATE TABLE IF NOT EXISTS sa_sandbox_artifact (
 CREATE INDEX IF NOT EXISTS idx_sa_sandbox_artifact_session
   ON sa_sandbox_artifact(session_id, created_at);
 
+CREATE TABLE IF NOT EXISTS sa_sandbox_runtime_profile_policy (
+  pk_id BIGSERIAL PRIMARY KEY,
+  policy_id VARCHAR(96) NOT NULL UNIQUE,
+  tenant_id VARCHAR(64) NOT NULL,
+  runtime_type VARCHAR(32) NOT NULL,
+  profile_id VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+  session_ttl_seconds BIGINT NOT NULL DEFAULT 3600,
+  network_allowed BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL,
+  CONSTRAINT chk_sa_sandbox_runtime_profile_policy_runtime
+    CHECK (runtime_type IN ('CODE_INTERPRETER', 'FILE_CONVERSION', 'BROWSER_AUTOMATION', 'SHELL')),
+  CONSTRAINT chk_sa_sandbox_runtime_profile_policy_status
+    CHECK (status IN ('ACTIVE', 'DISABLED')),
+  CONSTRAINT chk_sa_sandbox_runtime_profile_policy_ttl
+    CHECK (session_ttl_seconds >= 60 AND session_ttl_seconds <= 7200),
+  CONSTRAINT chk_sa_sandbox_runtime_profile_policy_network
+    CHECK (network_allowed = FALSE)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_sa_sandbox_runtime_profile_policy_runtime
+  ON sa_sandbox_runtime_profile_policy(tenant_id, runtime_type);
+
+CREATE INDEX IF NOT EXISTS idx_sa_sandbox_runtime_profile_policy_tenant
+  ON sa_sandbox_runtime_profile_policy(tenant_id, updated_at DESC, policy_id DESC);
+
 CREATE TABLE IF NOT EXISTS sa_audit_event (
   pk_id BIGSERIAL PRIMARY KEY,
   audit_id VARCHAR(64) NOT NULL UNIQUE,
@@ -2456,6 +2483,7 @@ ALTER TABLE t_rag_trace_node ENABLE ROW LEVEL SECURITY;
 ALTER TABLE t_sample_question ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sa_agent_definition ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sa_quota_policy ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sa_sandbox_runtime_profile_policy ENABLE ROW LEVEL SECURITY;
 
 -- Force RLS for table owners
 ALTER TABLE t_user FORCE ROW LEVEL SECURITY;
@@ -2481,6 +2509,7 @@ ALTER TABLE t_rag_trace_node FORCE ROW LEVEL SECURITY;
 ALTER TABLE t_sample_question FORCE ROW LEVEL SECURITY;
 ALTER TABLE sa_agent_definition FORCE ROW LEVEL SECURITY;
 ALTER TABLE sa_quota_policy FORCE ROW LEVEL SECURITY;
+ALTER TABLE sa_sandbox_runtime_profile_policy FORCE ROW LEVEL SECURITY;
 
 -- RLS policies
 CREATE POLICY rls_tenant_isolation ON t_user
@@ -2528,6 +2557,8 @@ CREATE POLICY rls_tenant_isolation ON t_sample_question
 CREATE POLICY rls_tenant_isolation ON sa_agent_definition
     USING (tenant_id = current_setting('app.current_tenant_id', true));
 CREATE POLICY rls_tenant_isolation ON sa_quota_policy
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON sa_sandbox_runtime_profile_policy
     USING (tenant_id = current_setting('app.current_tenant_id', true));
 
 -- ---- V3: User Trial ----

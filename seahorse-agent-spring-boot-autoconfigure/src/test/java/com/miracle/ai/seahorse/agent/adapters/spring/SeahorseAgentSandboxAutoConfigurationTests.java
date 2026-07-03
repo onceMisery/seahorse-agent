@@ -28,6 +28,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPo
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
@@ -61,6 +62,7 @@ class SeahorseAgentSandboxAutoConfigurationTests {
                     assertThat(context).hasSingleBean(SandboxExecutionRepositoryPort.class);
                     assertThat(context).hasSingleBean(SandboxArtifactPort.class);
                     assertThat(context).hasSingleBean(SandboxArtifactQueryPort.class);
+                    assertThat(context).hasSingleBean(SandboxRuntimeProfilePolicyRepositoryPort.class);
                     assertThat(context).hasSingleBean(SandboxArtifactScannerPort.class);
                     assertThat(context.getBean(SandboxArtifactScannerPort.class))
                             .isInstanceOf(DefaultSandboxArtifactScannerPort.class);
@@ -79,6 +81,9 @@ class SeahorseAgentSandboxAutoConfigurationTests {
                             .isSameAs(context.getBean(SandboxArtifactScannerPort.class));
                     assertThat(field(context.getBean(KernelSandboxRuntimeService.class), "artifactStoragePort"))
                             .isSameAs(context.getBean(ObjectStoragePort.class));
+                    assertThat(field(context.getBean(KernelSandboxRuntimeService.class),
+                            "runtimeProfilePolicyRepositoryPort"))
+                            .isSameAs(context.getBean(SandboxRuntimeProfilePolicyRepositoryPort.class));
                 });
     }
 

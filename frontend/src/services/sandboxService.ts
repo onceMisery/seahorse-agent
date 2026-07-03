@@ -75,6 +75,9 @@ export interface SandboxRuntimeProfile {
   supportedByContainerRuntime?: boolean;
   networkAllowed?: boolean;
   status?: string;
+  policyId?: string;
+  policyStatus?: "ACTIVE" | "DISABLED" | string;
+  sessionTtlSeconds?: number;
 }
 
 export interface SandboxRuntimeProfilesResponse {
@@ -92,6 +95,28 @@ export interface SandboxToolQuotaPolicyPayload {
   callLimit?: number;
   costLimit?: number;
   warnRatio?: number;
+}
+
+export interface SandboxRuntimeProfilePolicyPayload {
+  policyId?: string;
+  tenantId: string;
+  runtimeType: "CODE_INTERPRETER" | "FILE_CONVERSION" | "BROWSER_AUTOMATION" | "SHELL" | string;
+  profileId?: string;
+  status?: "ACTIVE" | "DISABLED" | string;
+  sessionTtlSeconds?: number;
+  networkAllowed?: boolean;
+}
+
+export interface SandboxRuntimeProfilePolicy {
+  policyId?: string;
+  tenantId?: string;
+  runtimeType?: string;
+  profileId?: string;
+  status?: string;
+  sessionTtlSeconds?: number;
+  networkAllowed?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SandboxToolQuotaPolicy {
@@ -187,6 +212,10 @@ function currentTenantId() {
   return user?.tenantId?.trim() || DEFAULT_TENANT_ID;
 }
 
+export function currentSandboxTenantId() {
+  return currentTenantId();
+}
+
 function createRunId() {
   return `sandbox-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -240,8 +269,17 @@ export function getSandboxRuntimeHealth() {
   return api.get<SandboxRuntimeHealth>("/api/sandbox/runtime/health");
 }
 
-export function getSandboxRuntimeProfiles() {
-  return api.get<SandboxRuntimeProfilesResponse>("/api/sandbox/runtime/profiles");
+export function getSandboxRuntimeProfiles(tenantId = currentTenantId()) {
+  return api.get<SandboxRuntimeProfilesResponse>("/api/sandbox/runtime/profiles", {
+    params: { tenantId }
+  });
+}
+
+export function upsertSandboxRuntimeProfilePolicy(payload: SandboxRuntimeProfilePolicyPayload) {
+  return api.post<SandboxRuntimeProfilePolicy, SandboxRuntimeProfilePolicy>(
+    "/api/sandbox/runtime/profile-policies",
+    payload
+  );
 }
 
 export function upsertSandboxToolQuotaPolicy(payload: SandboxToolQuotaPolicyPayload) {

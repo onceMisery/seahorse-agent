@@ -1449,6 +1449,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/api/sandbox/runtime/profile-policies"
+  },
+  {
+    "method": "POST",
     "path": "/api/sandbox/runtime/tool-quota-policies"
   },
   {

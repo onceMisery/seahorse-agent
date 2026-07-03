@@ -77,6 +77,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.EnterprisePilotReadine
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ProductionGateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.QuotaPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAclRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;

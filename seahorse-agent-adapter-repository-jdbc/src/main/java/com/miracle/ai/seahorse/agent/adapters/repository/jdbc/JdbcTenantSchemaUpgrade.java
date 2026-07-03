@@ -81,7 +81,8 @@ public class JdbcTenantSchemaUpgrade {
             "t_rag_trace_node",
             "t_sample_question",
             "sa_agent_definition",
-            "sa_quota_policy"
+            "sa_quota_policy",
+            "sa_sandbox_runtime_profile_policy"
     );
 
     public JdbcTenantSchemaUpgrade(DataSource dataSource) {
@@ -100,6 +101,7 @@ public class JdbcTenantSchemaUpgrade {
         upgradeAuthRefreshTokenColumns();
         upgradeSandboxSessionRuntimeGovernance();
         upgradeSandboxArtifactScanSummary();
+        upgradeSandboxRuntimeProfilePolicy();
         upgradeAiModelConfigUniqueness();
         enableRowLevelSecurity();
         log.info("[TenantSchema] 多租户 schema 升级完成");
@@ -192,6 +194,43 @@ public class JdbcTenantSchemaUpgrade {
             return;
         }
         addColumnIfMissing("sa_sandbox_artifact", "scan_summary", "VARCHAR(256)");
+    }
+
+    private void upgradeSandboxRuntimeProfilePolicy() {
+        try {
+            jdbcTemplate.execute("""
+                    CREATE TABLE IF NOT EXISTS sa_sandbox_runtime_profile_policy (
+                      pk_id BIGSERIAL PRIMARY KEY,
+                      policy_id VARCHAR(96) NOT NULL UNIQUE,
+                      tenant_id VARCHAR(64) NOT NULL,
+                      runtime_type VARCHAR(32) NOT NULL,
+                      profile_id VARCHAR(64) NOT NULL,
+                      status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                      session_ttl_seconds BIGINT NOT NULL DEFAULT 3600,
+                      network_allowed BOOLEAN NOT NULL DEFAULT FALSE,
+                      created_at TIMESTAMP NOT NULL,
+                      updated_at TIMESTAMP NOT NULL,
+                      CONSTRAINT chk_sa_sandbox_runtime_profile_policy_runtime
+                        CHECK (runtime_type IN ('CODE_INTERPRETER', 'FILE_CONVERSION', 'BROWSER_AUTOMATION', 'SHELL')),
+                      CONSTRAINT chk_sa_sandbox_runtime_profile_policy_status
+                        CHECK (status IN ('ACTIVE', 'DISABLED')),
+                      CONSTRAINT chk_sa_sandbox_runtime_profile_policy_ttl
+                        CHECK (session_ttl_seconds >= 60 AND session_ttl_seconds <= 7200),
+                      CONSTRAINT chk_sa_sandbox_runtime_profile_policy_network
+                        CHECK (network_allowed = FALSE)
+                    )
+                    """);
+            jdbcTemplate.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS uk_sa_sandbox_runtime_profile_policy_runtime
+                      ON sa_sandbox_runtime_profile_policy(tenant_id, runtime_type)
+                    """);
+            jdbcTemplate.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_sa_sandbox_runtime_profile_policy_tenant
+                      ON sa_sandbox_runtime_profile_policy(tenant_id, updated_at DESC, policy_id DESC)
+                    """);
+        } catch (Exception e) {
+            log.warn("[TenantSchema] 升级 sa_sandbox_runtime_profile_policy 失败: {}", e.getMessage());
+        }
     }
 
     private void backfillSandboxSessionExpiresAt() {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, Download, FolderX, Gauge, History, Info, Play, RefreshCw, Server, ShieldCheck, Square, TimerReset, Trash2 } from "lucide-react";
+import { Activity, Download, FolderX, Gauge, History, Info, Play, RefreshCw, Save, Server, ShieldCheck, Square, TimerReset, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -22,13 +22,16 @@ import {
   sweepOrphanedSandboxRuntimeResources,
   getSandboxRuntimeHealth,
   getSandboxRuntimeProfiles,
+  upsertSandboxRuntimeProfilePolicy,
   reapOrphanedSandboxRuntimeContainers,
+  currentSandboxTenantId,
   type SandboxSession,
   type SandboxExecution,
   type SandboxExecutionResult,
   type SandboxArtifact,
   type SandboxArtifactDetail,
   type SandboxRuntimeHealth,
+  type SandboxRuntimeProfile,
   type SandboxRuntimeProfilesResponse
 } from "@/services/sandboxService";
 import { getErrorMessage } from "@/utils/error";
@@ -92,16 +95,22 @@ function RuntimeGovernancePanel({
   profiles,
   loading,
   error,
-  onRefresh
+  onRefresh,
+  onSavePolicy,
+  savingProfileRuntimeType
 }: {
   health: SandboxRuntimeHealth | null;
   profiles: SandboxRuntimeProfilesResponse | null;
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
+  onSavePolicy: (profile: SandboxRuntimeProfile, ttlSeconds: number, status: string) => void;
+  savingProfileRuntimeType: string | null;
 }) {
   const profileRows = profiles?.profiles || [];
   const checkedAt = health?.checkedAt ? formatTimestamp(health.checkedAt) : "-";
+  const [ttlDrafts, setTtlDrafts] = useState<Record<string, string>>({});
+  const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({});
 
   return (
     <Card>
@@ -194,7 +203,7 @@ function RuntimeGovernancePanel({
               {profileRows.map((profile) => (
                 <div
                   key={profile.runtimeType || profile.profileId}
-                  className="grid gap-2 rounded border border-slate-100 bg-white p-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto_auto]"
+                  className="grid gap-3 rounded border border-slate-100 bg-white p-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto]"
                 >
                   <div className="min-w-0">
                     <div className="truncate font-mono text-xs text-slate-600">
@@ -203,6 +212,9 @@ function RuntimeGovernancePanel({
                     <div className="truncate text-sm font-medium text-slate-800">
                       {profile.profileId || "-"}
                     </div>
+                    <div className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                      TTL {profile.sessionTtlSeconds || profiles?.defaultTtlSeconds || 3600}s
+                    </div>
                   </div>
                   <Badge variant={runtimeProfileBadgeVariant(profile.status)}>
                     {profile.status || "UNKNOWN"}
@@ -210,6 +222,53 @@ function RuntimeGovernancePanel({
                   <Badge variant={profile.networkAllowed ? "destructive" : "secondary"}>
                     {profile.networkAllowed ? "NETWORK" : "NO NETWORK"}
                   </Badge>
+                  <select
+                    className="h-8 rounded border border-slate-200 bg-white px-2 text-xs"
+                    value={statusDrafts[profile.runtimeType || ""] || profile.policyStatus || "ACTIVE"}
+                    onChange={(event) =>
+                      setStatusDrafts((prev) => ({
+                        ...prev,
+                        [profile.runtimeType || ""]: event.target.value
+                      }))
+                    }
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="DISABLED">DISABLED</option>
+                  </select>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min={60}
+                      max={7200}
+                      step={60}
+                      className="h-8 w-24 font-mono text-xs"
+                      value={
+                        ttlDrafts[profile.runtimeType || ""]
+                          ?? String(profile.sessionTtlSeconds || profiles?.defaultTtlSeconds || 3600)
+                      }
+                      onChange={(event) =>
+                        setTtlDrafts((prev) => ({
+                          ...prev,
+                          [profile.runtimeType || ""]: event.target.value
+                        }))
+                      }
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      title="Save runtime profile policy"
+                      disabled={!profile.runtimeType || savingProfileRuntimeType === profile.runtimeType}
+                      onClick={() => {
+                        const key = profile.runtimeType || "";
+                        const ttlSeconds = Number(ttlDrafts[key] ?? profile.sessionTtlSeconds ?? profiles?.defaultTtlSeconds ?? 3600);
+                        const status = statusDrafts[key] || profile.policyStatus || "ACTIVE";
+                        onSavePolicy(profile, ttlSeconds, status);
+                      }}
+                    >
+                      <Save className={`h-4 w-4 ${savingProfileRuntimeType === profile.runtimeType ? "animate-pulse" : ""}`} />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -246,6 +305,7 @@ export function SandboxPage() {
   const [runtimeProfiles, setRuntimeProfiles] = useState<SandboxRuntimeProfilesResponse | null>(null);
   const [loadingRuntimeGovernance, setLoadingRuntimeGovernance] = useState(false);
   const [runtimeGovernanceError, setRuntimeGovernanceError] = useState<string | null>(null);
+  const [savingProfileRuntimeType, setSavingProfileRuntimeType] = useState<string | null>(null);
 
   const clearArtifactSelection = () => {
     setSelectedArtifactId(null);
@@ -294,9 +354,10 @@ export function SandboxPage() {
     try {
       setLoadingRuntimeGovernance(true);
       setRuntimeGovernanceError(null);
+      const tenantId = currentSandboxTenantId();
       const [health, profiles] = await Promise.all([
         getSandboxRuntimeHealth(),
-        getSandboxRuntimeProfiles()
+        getSandboxRuntimeProfiles(tenantId)
       ]);
       setRuntimeHealth(health || null);
       setRuntimeProfiles(profiles || null);
@@ -587,6 +648,37 @@ export function SandboxPage() {
     }
   };
 
+  const handleSaveRuntimeProfilePolicy = async (
+    profile: SandboxRuntimeProfile,
+    ttlSeconds: number,
+    status: string
+  ) => {
+    if (!profile.runtimeType) return;
+    if (!Number.isFinite(ttlSeconds) || ttlSeconds < 60 || ttlSeconds > 7200) {
+      toast.error("Runtime profile TTL must be between 60 and 7200 seconds");
+      return;
+    }
+    try {
+      setSavingProfileRuntimeType(profile.runtimeType);
+      await upsertSandboxRuntimeProfilePolicy({
+        policyId: profile.policyId,
+        tenantId: currentSandboxTenantId(),
+        runtimeType: profile.runtimeType,
+        profileId: profile.profileId,
+        status,
+        sessionTtlSeconds: Math.trunc(ttlSeconds),
+        networkAllowed: false
+      });
+      await refreshRuntimeGovernance();
+      toast.success(`Runtime profile ${profile.runtimeType} policy saved`);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Runtime profile policy save failed"));
+      console.error(error);
+    } finally {
+      setSavingProfileRuntimeType(null);
+    }
+  };
+
   if (!featureState.enabled) {
     return <FeatureUnavailableState featureState={featureState} featureName="沙箱" />;
   }
@@ -608,6 +700,10 @@ export function SandboxPage() {
             loading={loadingRuntimeGovernance}
             error={runtimeGovernanceError}
             onRefresh={() => void refreshRuntimeGovernance(true)}
+            onSavePolicy={(profile, ttlSeconds, status) =>
+              void handleSaveRuntimeProfilePolicy(profile, ttlSeconds, status)
+            }
+            savingProfileRuntimeType={savingProfileRuntimeType}
           />
 
           <Card>

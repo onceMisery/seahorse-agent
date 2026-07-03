@@ -424,6 +424,17 @@ The browser runtime image is project-owned at `resources/docker/Dockerfile.sandb
 
 Fresh full-Docker evidence: `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-smoke` passed 10/10. The smoke verified built-in catalog exposure, Tool Gateway invocation, persisted `BROWSER_AUTOMATION` session/profile metadata, governed JSON and PNG artifacts, governed result download, local object storage files, no leftover managed sandbox containers, and zero non-terminal sandbox sessions.
 
+### 2026-07-03 Update: sandbox runtime profile policy writes
+
+Sandbox Runtime now exposes a bounded Operations write path for existing runtime profile policies:
+`POST /api/sandbox/runtime/profile-policies`. The endpoint accepts only existing kernel-owned profile ids, supports `ACTIVE` and `DISABLED`, allows `sessionTtlSeconds` from 60 to 7200, and keeps `networkAllowed=false`.
+
+`GET /api/sandbox/runtime/profiles?tenantId=default` returns persisted policy metadata so the admin Runtime governance panel can show `policyId`, `policyStatus`, and the effective TTL. New session creation applies the policy before runtime allocation: disabled profiles persist a failed session with `RUNTIME_PROFILE_DISABLED`, while active TTL overrides update `expiresAt`.
+
+The policy table is persisted as `sa_sandbox_runtime_profile_policy` through migration `V48__sandbox_runtime_profile_policy.sql`, fresh init schema, and startup tenant schema upgrade/RLS repair. This slice does not add arbitrary profile creation, network egress/allowlists, tenant/agent quota UX, gVisor/Firecracker, or broader resource policy modeling.
+
+Fresh full-Docker evidence: `.\scripts\e2e-sandbox-runtime-profile-policy-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-runtime-profile-policy-smoke` passed 12/12. The smoke verified TTL policy persistence, runtime profile API policy metadata, `RUNTIME_PROFILE_DISABLED` rejection, PostgreSQL records, restore to `CODE_INTERPRETER|ACTIVE|3600|false`, no leftover managed sandbox containers, and zero non-terminal sandbox sessions.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

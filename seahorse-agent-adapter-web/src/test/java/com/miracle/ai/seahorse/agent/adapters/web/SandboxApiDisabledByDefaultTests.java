@@ -79,6 +79,15 @@ class SandboxApiDisabledByDefaultTests {
         mvc.perform(get("/api/sandbox/runtime/profiles"))
                 .andExpect(status().isForbidden());
 
+        mvc.perform(post("/api/sandbox/runtime/profile-policies")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-a",
+                                "runtimeType", "CODE_INTERPRETER",
+                                "profileId", "python-small",
+                                "sessionTtlSeconds", 120))))
+                .andExpect(status().isForbidden());
+
         mvc.perform(post("/api/sandbox/runtime/orphan-containers:reap"))
                 .andExpect(status().isForbidden());
 

@@ -17,15 +17,11 @@
 
 package com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox;
 
-public enum SandboxPolicyReasonCode {
-    VALID_REQUEST,
-    DEFAULT_DENY,
-    NETWORK_DENIED_BY_DEFAULT,
-    NETWORK_HOST_NOT_ALLOWLISTED,
-    RUNTIME_UNSUPPORTED,
-    RUNTIME_PROFILE_DISABLED,
-    RUNTIME_CAPACITY_EXCEEDED,
-    RUNTIME_EXECUTION_FAILED,
-    RUNTIME_TIMED_OUT,
-    SESSION_NOT_FOUND
+public enum SandboxRuntimeProfilePolicyStatus {
+    ACTIVE,
+    DISABLED;
+
+    public boolean allowsExecution() {
+        return this == ACTIVE;
+    }
 }

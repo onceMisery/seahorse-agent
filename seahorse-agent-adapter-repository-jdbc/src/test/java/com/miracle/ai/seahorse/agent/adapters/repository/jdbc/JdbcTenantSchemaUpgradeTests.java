@@ -109,6 +109,40 @@ class JdbcTenantSchemaUpgradeTests {
         assertThat(isNullable(jdbcTemplate, "sa_sandbox_artifact", "scan_summary")).isEqualTo("YES");
     }
 
+    @Test
+    void shouldCreateSandboxRuntimeProfilePolicyTableWhenMissing() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:tenant-schema-upgrade-sandbox-runtime-profile-" + System.nanoTime()
+                        + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+                "sa",
+                "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+
+        JdbcTenantSchemaUpgrade upgrade = new JdbcTenantSchemaUpgrade(dataSource);
+        upgrade.upgrade();
+        upgrade.upgrade();
+
+        assertThat(tableExists(jdbcTemplate, "sa_sandbox_runtime_profile_policy")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_sandbox_runtime_profile_policy", "runtime_type")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_sandbox_runtime_profile_policy", "session_ttl_seconds")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_sandbox_runtime_profile_policy", "network_allowed")).isTrue();
+        assertThat(indexExists(jdbcTemplate,
+                "sa_sandbox_runtime_profile_policy",
+                "uk_sa_sandbox_runtime_profile_policy_runtime")).isTrue();
+    }
+
+    private static boolean tableExists(JdbcTemplate jdbcTemplate, String tableName) {
+        Integer count = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE lower(table_name) = lower(?)
+                """,
+                Integer.class,
+                tableName);
+        return count != null && count > 0;
+    }
+
     private static boolean columnExists(JdbcTemplate jdbcTemplate, String tableName, String columnName) {
         Integer count = jdbcTemplate.queryForObject(
                 """

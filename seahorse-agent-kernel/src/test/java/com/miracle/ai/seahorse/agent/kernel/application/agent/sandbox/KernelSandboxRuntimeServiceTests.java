@@ -33,11 +33,14 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyRe
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicyStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeProfilePolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionSweepResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
@@ -178,6 +181,86 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals(NOW.plusSeconds(3600), session.expiresAt());
         assertEquals("python-small", runtime.createSessionRequest.profileId());
         assertEquals(NOW.plusSeconds(3600), runtime.createSessionRequest.expiresAt());
+    }
+
+    @Test
+    void shouldApplyRuntimeProfilePolicyTtlWhenCreatingSession() {
+        RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                runtime,
+                new MemoryArtifactPort(),
+                CLOCK);
+        SandboxRuntimeProfilePolicy policy = service.upsertRuntimeProfilePolicy(
+                new SandboxRuntimeProfilePolicyUpsertCommand(
+                        null,
+                        "tenant-1",
+                        SandboxRuntimeType.CODE_INTERPRETER,
+                        "python-small",
+                        SandboxRuntimeProfilePolicyStatus.ACTIVE,
+                        120L,
+                        false));
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        assertEquals("sandbox-runtime-profile-tenant-1-code_interpreter", policy.policyId());
+        assertEquals(NOW.plusSeconds(120), session.expiresAt());
+        assertEquals(NOW.plusSeconds(120), runtime.createSessionRequest.expiresAt());
+        assertEquals("python-small", runtime.createSessionRequest.profileId());
+    }
+
+    @Test
+    void shouldDenySessionBeforeCallingRuntimeWhenRuntimeProfilePolicyIsDisabled() {
+        RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                runtime,
+                new MemoryArtifactPort(),
+                CLOCK);
+        service.upsertRuntimeProfilePolicy(new SandboxRuntimeProfilePolicyUpsertCommand(
+                null,
+                "tenant-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                "python-small",
+                SandboxRuntimeProfilePolicyStatus.DISABLED,
+                120L,
+                false));
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertEquals(SandboxPolicyReasonCode.RUNTIME_PROFILE_DISABLED, session.reasonCode());
+        assertEquals(NOW.plusSeconds(120), session.expiresAt());
+        assertFalse(runtime.createSessionCalled);
+    }
+
+    @Test
+    void shouldRejectRuntimeProfilePolicyThatEnablesNetwork() {
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                CLOCK);
+
+        assertThrows(IllegalArgumentException.class, () -> service.upsertRuntimeProfilePolicy(
+                new SandboxRuntimeProfilePolicyUpsertCommand(
+                        null,
+                        "tenant-1",
+                        SandboxRuntimeType.CODE_INTERPRETER,
+                        "python-small",
+                        SandboxRuntimeProfilePolicyStatus.ACTIVE,
+                        120L,
+                        true)));
     }
 
     @Test

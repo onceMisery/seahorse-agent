@@ -15,17 +15,22 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox;
+package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
-public enum SandboxPolicyReasonCode {
-    VALID_REQUEST,
-    DEFAULT_DENY,
-    NETWORK_DENIED_BY_DEFAULT,
-    NETWORK_HOST_NOT_ALLOWLISTED,
-    RUNTIME_UNSUPPORTED,
-    RUNTIME_PROFILE_DISABLED,
-    RUNTIME_CAPACITY_EXCEEDED,
-    RUNTIME_EXECUTION_FAILED,
-    RUNTIME_TIMED_OUT,
-    SESSION_NOT_FOUND
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface SandboxRuntimeProfilePolicyRepositoryPort {
+
+    SandboxRuntimeProfilePolicy upsert(SandboxRuntimeProfilePolicy policy);
+
+    Optional<SandboxRuntimeProfilePolicy> findById(String policyId);
+
+    Optional<SandboxRuntimeProfilePolicy> findByTenantAndRuntimeType(String tenantId,
+                                                                     SandboxRuntimeType runtimeType);
+
+    List<SandboxRuntimeProfilePolicy> listByTenant(String tenantId);
 }

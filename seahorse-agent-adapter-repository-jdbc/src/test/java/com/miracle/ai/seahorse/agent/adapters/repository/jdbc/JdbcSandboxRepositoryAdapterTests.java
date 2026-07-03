@@ -23,6 +23,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicyStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import org.junit.jupiter.api.Test;
@@ -128,6 +130,31 @@ class JdbcSandboxRepositoryAdapterTests {
         assertThat(adapter.findArtifactById("artifact-clean").orElseThrow().scanSummary())
                 .isEqualTo("scan summary for artifact-clean");
         assertThat(adapter.findArtifactById(" ")).isEmpty();
+
+        SandboxRuntimeProfilePolicy runtimeProfilePolicy = adapter.upsert(new SandboxRuntimeProfilePolicy(
+                null,
+                "tenant-a",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                "python-small",
+                SandboxRuntimeProfilePolicyStatus.ACTIVE,
+                120,
+                false,
+                NOW,
+                NOW));
+        SandboxRuntimeProfilePolicy updatedRuntimeProfilePolicy = adapter.upsert(new SandboxRuntimeProfilePolicy(
+                runtimeProfilePolicy.policyId(),
+                "tenant-a",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                "python-small",
+                SandboxRuntimeProfilePolicyStatus.DISABLED,
+                300,
+                false,
+                runtimeProfilePolicy.createdAt(),
+                NOW.plusSeconds(10)));
+        assertThat(adapter.findById(runtimeProfilePolicy.policyId())).contains(updatedRuntimeProfilePolicy);
+        assertThat(adapter.findByTenantAndRuntimeType("tenant-a", SandboxRuntimeType.CODE_INTERPRETER))
+                .contains(updatedRuntimeProfilePolicy);
+        assertThat(adapter.listByTenant("tenant-a")).containsExactly(updatedRuntimeProfilePolicy);
     }
 
     @Test
@@ -258,9 +285,23 @@ class JdbcSandboxRepositoryAdapterTests {
                     created_at TIMESTAMP NOT NULL
                 )
                 """);
+        jdbcTemplate.execute("""
+                CREATE TABLE sa_sandbox_runtime_profile_policy (
+                    policy_id VARCHAR(96) PRIMARY KEY,
+                    tenant_id VARCHAR(64) NOT NULL,
+                    runtime_type VARCHAR(32) NOT NULL,
+                    profile_id VARCHAR(64) NOT NULL,
+                    status VARCHAR(32) NOT NULL,
+                    session_ttl_seconds BIGINT NOT NULL,
+                    network_allowed BOOLEAN NOT NULL,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL
+                )
+                """);
         jdbcTemplate.execute("CREATE INDEX idx_sa_sandbox_execution_session ON sa_sandbox_execution(session_id, created_at)");
         jdbcTemplate.execute("CREATE INDEX idx_sa_sandbox_session_tenant_updated ON sa_sandbox_session(tenant_id, updated_at, created_at)");
         jdbcTemplate.execute("CREATE INDEX idx_sa_sandbox_session_expires ON sa_sandbox_session(tenant_id, expires_at)");
         jdbcTemplate.execute("CREATE INDEX idx_sa_sandbox_artifact_session ON sa_sandbox_artifact(session_id, created_at)");
+        jdbcTemplate.execute("CREATE UNIQUE INDEX uk_sa_sandbox_runtime_profile_policy_runtime ON sa_sandbox_runtime_profile_policy(tenant_id, runtime_type)");
     }
 }
