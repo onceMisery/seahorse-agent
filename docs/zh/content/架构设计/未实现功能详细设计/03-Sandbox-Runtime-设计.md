@@ -573,6 +573,16 @@ The admin Sandbox Runtime governance panel renders runtime node rows beside runt
 
 This closes the first single-node runtime node health visibility slice. Real node-pool scheduling, distributed runtime registration, placement policy, per-session disk quotas, stronger isolation, and deeper scanner hardening remain follow-up production work.
 
+### 2026-07-04 Update: sandbox artifact TAR archive introspection
+
+`DefaultSandboxArtifactScannerPort` now adds conservative TAR archive introspection for local `file://` artifacts with `application/x-tar` media type. TAR artifacts are governed download-only artifacts: clean archives can be copied to object storage and downloaded through artifact APIs, but they remain prompt-hidden and are not included in tool observations.
+
+The scanner walks 512-byte TAR headers directly, validates checksums, supports only regular file and directory entries, inspects at most 128 entries, reads at most the first 256 KiB from each regular file, and never extracts archive content to the filesystem. It blocks unsafe paths, non-regular/link/special/extended metadata entries, executable entry extensions or PE/ELF signatures, and embedded PDF active-content markers. Malformed, truncated, or bad-checksum TAR content fails closed as `ARCHIVE_SCAN_ERROR`.
+
+Runtime artifact media detection now maps `.tar` to `application/x-tar`, artifact download filename mapping preserves `.tar`, and the scanner policy reports `application/x-tar` as download-only, binary-signature-scanned, and archive-scanned. This slice does not add `tar.gz`, recursive extraction, PAX/GNU long-name support, ClamAV or another external scanner engine, general archive/container extraction, or general binary conversion.
+
+Fresh full-Docker evidence: focused kernel/container regression passed 98/98 with reactor `BUILD SUCCESS`, `git diff --check` passed, compose overlay validation passed, the backend rebuilt through the local 7890 proxy path with an in-image Maven `BUILD SUCCESS`, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-tar-archive-smoke` passed 39/39. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and backend health `UP`.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

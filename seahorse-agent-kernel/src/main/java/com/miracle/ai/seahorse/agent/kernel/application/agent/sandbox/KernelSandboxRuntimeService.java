@@ -104,6 +104,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             Map.entry("text/csv", ".csv"),
             Map.entry("application/json", ".json"),
             Map.entry("application/pdf", ".pdf"),
+            Map.entry("application/x-tar", ".tar"),
             Map.entry("application/vnd.ms-excel.sheet.macroenabled.12", ".xlsm"),
             Map.entry("application/vnd.ms-powerpoint.presentation.macroenabled.12", ".pptm"),
             Map.entry("application/vnd.ms-word.document.macroenabled.12", ".docm"),

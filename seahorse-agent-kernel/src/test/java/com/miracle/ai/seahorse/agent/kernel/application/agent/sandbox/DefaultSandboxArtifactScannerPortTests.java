@@ -28,6 +28,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -62,8 +63,11 @@ class DefaultSandboxArtifactScannerPortTests {
         assertEquals(256 * 1024, policy.maxArchiveEntryScanBytes());
         assertTrue(policy.promptSafeMediaTypes().contains("text/*"));
         assertTrue(policy.downloadOnlyMediaTypes().contains("application/zip"));
+        assertTrue(policy.downloadOnlyMediaTypes().contains("application/x-tar"));
         assertTrue(policy.binarySignatureScannedMediaTypes().contains("application/pdf"));
+        assertTrue(policy.binarySignatureScannedMediaTypes().contains("application/x-tar"));
         assertTrue(policy.archiveScannedMediaTypes().contains(DOCX_MEDIA_TYPE));
+        assertTrue(policy.archiveScannedMediaTypes().contains("application/x-tar"));
         assertTrue(policy.blockedCategories().contains("OFFICE_MACRO"));
         assertTrue(policy.blockedCategories().contains("PDF_ACTIVE_CONTENT"));
         assertTrue(policy.unsupportedCapabilities().contains("external virus scanning"));
@@ -324,6 +328,95 @@ class DefaultSandboxArtifactScannerPortTests {
     }
 
     @Test
+    void shouldBlockZipArchiveWithUnsafeDirectoryPath(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.zip");
+        writeZipDirectory(output, "../outside/");
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/zip")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("unsafe archive entry", result.summary());
+        assertEquals("ARCHIVE_UNSAFE_ENTRY", redactionSummary(result).path("categories").get(0).asText());
+    }
+
+    @Test
+    void shouldPassCleanTarArchiveAsDownloadOnlyArtifact(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.tar");
+        writeTar(output, "docs/readme.txt", "safe tar marker".getBytes(StandardCharsets.UTF_8));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/x-tar")));
+
+        assertEquals(SandboxArtifactScanStatus.CLEAN, result.scanStatus());
+        assertEquals(ContextSensitivity.INTERNAL, result.sensitivity());
+        assertEquals("metadata scan passed", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("CLEAN", redactionSummary.path("decision").asText());
+        assertEquals(true, redactionSummary.path("contentScanned").asBoolean());
+    }
+
+    @Test
+    void shouldBlockTarArchiveWithExecutableEntryName(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.tar");
+        writeTar(output, "bin/payload.exe", "not actually executed".getBytes(StandardCharsets.UTF_8));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/x-tar")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("archive executable content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("ARCHIVE_EXECUTABLE_BINARY", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("payload.exe"));
+    }
+
+    @Test
+    void shouldBlockTarArchiveWithEmbeddedPdfActiveContent(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.tar");
+        writeTar(output,
+                "docs/report.pdf",
+                "%PDF-1.7\n1 0 obj\n<< /OpenAction 2 0 R >>\nendobj".getBytes(StandardCharsets.ISO_8859_1));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/x-tar")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("archive pdf active content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("ARCHIVE_PDF_ACTIVE_CONTENT", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("OpenAction"));
+    }
+
+    @Test
+    void shouldBlockTarArchiveWithUnsafeDirectoryPath(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.tar");
+        writeTar(output, "../outside/", new byte[0], (byte) '5');
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/x-tar")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("unsafe archive entry", result.summary());
+        assertEquals("ARCHIVE_UNSAFE_ENTRY", redactionSummary(result).path("categories").get(0).asText());
+    }
+
+    @Test
+    void shouldFailClosedWhenTarHeaderChecksumIsInvalid(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.tar");
+        writeTar(output, "docs/readme.txt", "safe tar marker".getBytes(StandardCharsets.UTF_8));
+        byte[] content = Files.readAllBytes(output);
+        content[148] = (byte) '1';
+        Files.write(output, content);
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/x-tar")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.SECRET, result.sensitivity());
+        assertEquals("archive content scan failed", result.summary());
+        assertEquals("ARCHIVE_SCAN_ERROR", redactionSummary(result).path("categories").get(0).asText());
+    }
+
+    @Test
     void shouldFailClosedWhenLocalTextArtifactCannotBeRead(@TempDir Path tempDir) throws Exception {
         Path missing = tempDir.resolve("missing.txt");
 
@@ -345,6 +438,57 @@ class DefaultSandboxArtifactScannerPortTests {
             output.write(content);
             output.closeEntry();
         }
+    }
+
+    private static void writeZipDirectory(Path path, String entryName) throws Exception {
+        try (ZipOutputStream output = new ZipOutputStream(Files.newOutputStream(path))) {
+            output.putNextEntry(new ZipEntry(entryName));
+            output.closeEntry();
+        }
+    }
+
+    private static void writeTar(Path path, String entryName, byte[] content) throws Exception {
+        writeTar(path, entryName, content, (byte) '0');
+    }
+
+    private static void writeTar(Path path, String entryName, byte[] content, byte typeFlag) throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] header = new byte[512];
+        writeAscii(header, 0, 100, entryName);
+        writeOctal(header, 100, 8, 0644);
+        writeOctal(header, 108, 8, 0);
+        writeOctal(header, 116, 8, 0);
+        writeOctal(header, 124, 12, content.length);
+        writeOctal(header, 136, 12, 0);
+        for (int index = 148; index < 156; index++) {
+            header[index] = (byte) ' ';
+        }
+        header[156] = typeFlag;
+        writeAscii(header, 257, 6, "ustar");
+        writeAscii(header, 263, 2, "00");
+        int checksum = 0;
+        for (byte value : header) {
+            checksum += value & 0xFF;
+        }
+        writeAscii(header, 148, 6, String.format("%06o", checksum));
+        header[154] = 0;
+        header[155] = (byte) ' ';
+        output.write(header);
+        output.write(content);
+        int padding = (512 - (content.length % 512)) % 512;
+        output.write(new byte[padding]);
+        output.write(new byte[1024]);
+        Files.write(path, output.toByteArray());
+    }
+
+    private static void writeAscii(byte[] target, int offset, int length, String value) {
+        byte[] source = value.getBytes(StandardCharsets.US_ASCII);
+        int bytesToCopy = Math.min(source.length, length);
+        System.arraycopy(source, 0, target, offset, bytesToCopy);
+    }
+
+    private static void writeOctal(byte[] target, int offset, int length, long value) {
+        writeAscii(target, offset, length - 1, String.format("%0" + (length - 1) + "o", value));
     }
 
     private static SandboxArtifact fileArtifact(Path path) {

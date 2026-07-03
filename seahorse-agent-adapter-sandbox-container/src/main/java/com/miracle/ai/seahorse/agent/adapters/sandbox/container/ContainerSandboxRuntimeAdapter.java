@@ -1844,6 +1844,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             case "har" -> "application/har+json";
             case "xml" -> "application/xml";
             case "pdf" -> "application/pdf";
+            case "tar" -> "application/x-tar";
             case "zip" -> "application/zip";
             case "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
             case "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";

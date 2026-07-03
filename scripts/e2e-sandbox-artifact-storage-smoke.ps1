@@ -610,7 +610,7 @@ try {
             throw "Expected scanner byte/entry limits: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $downloadOnlyMediaTypes = @($response.data.downloadOnlyMediaTypes)
-        if ($downloadOnlyMediaTypes -notcontains "application/zip" -or $downloadOnlyMediaTypes -notcontains "video/webm") {
+        if ($downloadOnlyMediaTypes -notcontains "application/zip" -or $downloadOnlyMediaTypes -notcontains "application/x-tar" -or $downloadOnlyMediaTypes -notcontains "video/webm") {
             throw "Expected governed download-only media types in scanner policy: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $blockedCategories = @($response.data.blockedCategories)
@@ -1102,12 +1102,24 @@ try {
     $archiveMarker = "$Marker-archive-introspection"
     $escapedArchiveMarker = $archiveMarker.Replace("\", "\\").Replace("'", "\'")
     $archiveCode = @"
+import io
+import tarfile
 import zipfile
 
 with zipfile.ZipFile('safe-bundle.zip', 'w') as archive:
     archive.writestr('docs/readme.txt', 'safe archive $escapedArchiveMarker')
 with zipfile.ZipFile('unsafe-bundle.zip', 'w') as archive:
     archive.writestr('bin/payload.exe', b'MZ\x00\x00seahorse')
+safe_tar_data = b'safe tar archive $escapedArchiveMarker'
+with tarfile.open('safe-bundle.tar', 'w', format=tarfile.USTAR_FORMAT) as archive:
+    entry = tarfile.TarInfo('docs/readme.txt')
+    entry.size = len(safe_tar_data)
+    archive.addfile(entry, io.BytesIO(safe_tar_data))
+unsafe_tar_data = b'MZ\x00\x00seahorse'
+with tarfile.open('unsafe-bundle.tar', 'w', format=tarfile.USTAR_FORMAT) as archive:
+    entry = tarfile.TarInfo('bin/payload.exe')
+    entry.size = len(unsafe_tar_data)
+    archive.addfile(entry, io.BytesIO(unsafe_tar_data))
 print('$escapedArchiveMarker')
 "@
     $archiveObservation = Test-Step "Invoke sandbox_python with archive artifacts" {
@@ -1167,6 +1179,29 @@ print('$escapedArchiveMarker')
     }
     if (-not $safeArchive) { exit 1 }
 
+    $safeTarArchive = Test-Step "Verify clean TAR archive is governed download-only" {
+        $safeArchiveSessionId = $archiveSessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeArchiveSessionId' AND object_uri LIKE '%-safe-bundle.tar' ORDER BY created_at DESC LIMIT 1;"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 7) {
+            throw "Unexpected clean TAR artifact row: $row"
+        }
+        if ($ExpectedObjectUriPrefix -and $parts[1] -notlike "$ExpectedObjectUriPrefix*") {
+            throw "Clean TAR archive was not copied to governed object storage: $($parts[1])"
+        }
+        if ($parts[2] -ne "application/x-tar" -or $parts[3] -ne "CLEAN" -or $parts[4] -ne "INTERNAL") {
+            throw "Expected CLEAN INTERNAL application/x-tar archive but got: $row"
+        }
+        if ($parts[5] -ne "metadata scan passed") {
+            throw "Expected clean TAR scan summary metadata scan passed but got '$($parts[5])'"
+        }
+        if ($parts[6] -notlike '*"decision":"CLEAN"*' -or $parts[6] -notlike '*"contentScanned":true*') {
+            throw "Expected CLEAN content-scanned TAR redaction summary but got '$($parts[6])'"
+        }
+        [pscustomobject]@{ ArtifactId = $parts[0]; ObjectUri = $parts[1] }
+    }
+    if (-not $safeTarArchive) { exit 1 }
+
     Test-Step "Download governed clean ZIP archive" {
         Add-Type -AssemblyName System.IO.Compression
         Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -1198,6 +1233,19 @@ print('$escapedArchiveMarker')
         }
     } | Out-Null
 
+    Test-Step "Download governed clean TAR archive" {
+        $tempTar = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "seahorse-archive-$suffix.tar")
+        try {
+            Invoke-BinaryFile -Method GET -Path "/api/sandbox/artifacts/$($safeTarArchive.ArtifactId)/download" -Headers $headers -OutputPath $tempTar
+            $content = [System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes($tempTar))
+            if (-not $content.Contains($archiveMarker)) {
+                throw "Downloaded clean TAR did not contain marker '$archiveMarker'"
+            }
+        } finally {
+            Remove-Item -LiteralPath $tempTar -ErrorAction SilentlyContinue
+        }
+    } | Out-Null
+
     if ($safeArchive.ObjectUri.StartsWith("local://sandbox-artifacts/")) {
         Test-Step "Verify local clean ZIP object exists in backend storage volume" {
             $key = $safeArchive.ObjectUri.Substring("local://sandbox-artifacts/".Length)
@@ -1208,6 +1256,20 @@ print('$escapedArchiveMarker')
             & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$archiveMarker' '$path'"
             if ($LASTEXITCODE -ne 0) {
                 throw "Stored clean ZIP object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
+    if ($safeTarArchive.ObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local clean TAR object exists in backend storage volume" {
+            $key = $safeTarArchive.ObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $archiveMarker.Contains("'")) {
+                throw "Cannot safely shell-quote TAR archive key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$archiveMarker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored clean TAR object not found or marker missing at $path"
             }
         } | Out-Null
     }
@@ -1238,6 +1300,32 @@ print('$escapedArchiveMarker')
     }
     if (-not $unsafeArchiveArtifactId) { exit 1 }
 
+    $unsafeTarArchiveArtifactId = Test-Step "Verify unsafe TAR archive is blocked before object storage" {
+        $safeArchiveSessionId = $archiveSessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeArchiveSessionId' AND object_uri LIKE '%/unsafe-bundle.tar' ORDER BY created_at DESC LIMIT 1;"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 7) {
+            throw "Unexpected unsafe TAR artifact row: $row"
+        }
+        if ($parts[1] -like "$ExpectedObjectUriPrefix*") {
+            throw "Unsafe TAR archive was copied to object storage: $($parts[1])"
+        }
+        if ($parts[2] -ne "application/x-tar" -or $parts[3] -ne "BLOCKED" -or $parts[4] -ne "CONFIDENTIAL") {
+            throw "Expected BLOCKED CONFIDENTIAL application/x-tar archive but got: $row"
+        }
+        if ($parts[5] -ne "archive executable content") {
+            throw "Expected unsafe TAR scan summary archive executable content but got '$($parts[5])'"
+        }
+        if ($parts[6] -notlike '*"decision":"BLOCKED"*' -or $parts[6] -notlike '*"ARCHIVE_EXECUTABLE_BINARY"*') {
+            throw "Expected BLOCKED ARCHIVE_EXECUTABLE_BINARY TAR redaction summary but got '$($parts[6])'"
+        }
+        if ($parts[6] -like "*payload.exe*") {
+            throw "Unsafe TAR redaction summary leaked entry name: $($parts[6])"
+        }
+        $parts[0]
+    }
+    if (-not $unsafeTarArchiveArtifactId) { exit 1 }
+
     Test-Step "Verify archive artifact API exposes governed metadata" {
         $response = Invoke-Json -Method GET -Path "/api/sandbox/sessions/$archiveSessionId/artifacts" -Headers $headers
         Assert-ApiOk $response "List archive sandbox artifacts"
@@ -1245,9 +1333,17 @@ print('$escapedArchiveMarker')
         if ($safeMatched.Count -ne 1 -or $safeMatched[0].promptVisible -ne $false) {
             throw "Expected clean ZIP to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
+        $safeTarMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$($safeTarArchive.ArtifactId)" })
+        if ($safeTarMatched.Count -ne 1 -or $safeTarMatched[0].promptVisible -ne $false) {
+            throw "Expected clean TAR to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
         $unsafeMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$unsafeArchiveArtifactId" })
         if ($unsafeMatched.Count -ne 1 -or $unsafeMatched[0].promptVisible -ne $false) {
             throw "Expected unsafe ZIP to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $unsafeTarMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$unsafeTarArchiveArtifactId" })
+        if ($unsafeTarMatched.Count -ne 1 -or $unsafeTarMatched[0].promptVisible -ne $false) {
+            throw "Expected unsafe TAR to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $artifactJson = $response.data | ConvertTo-Json -Depth 20 -Compress
         if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|payload.exe") {
@@ -1258,6 +1354,12 @@ print('$escapedArchiveMarker')
         Assert-ApiOk $safeDetail "Get clean ZIP artifact detail"
         if ($safeDetail.data.downloadable -ne $true -or $safeDetail.data.promptVisible -ne $false) {
             throw "Expected clean ZIP detail to be downloadable and prompt-hidden: $($safeDetail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+
+        $safeTarDetail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$($safeTarArchive.ArtifactId)" -Headers $headers
+        Assert-ApiOk $safeTarDetail "Get clean TAR artifact detail"
+        if ($safeTarDetail.data.downloadable -ne $true -or $safeTarDetail.data.promptVisible -ne $false) {
+            throw "Expected clean TAR detail to be downloadable and prompt-hidden: $($safeTarDetail.data | ConvertTo-Json -Depth 20 -Compress)"
         }
 
         $detail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$unsafeArchiveArtifactId" -Headers $headers
@@ -1271,6 +1373,19 @@ print('$escapedArchiveMarker')
         $detailJson = $detail.data | ConvertTo-Json -Depth 20 -Compress
         if ($detailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|payload.exe") {
             throw "Unsafe ZIP detail leaked storage or unsafe entry details: $detailJson"
+        }
+
+        $tarDetail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$unsafeTarArchiveArtifactId" -Headers $headers
+        Assert-ApiOk $tarDetail "Get unsafe TAR artifact detail"
+        if ($tarDetail.data.downloadable -ne $false -or $tarDetail.data.promptVisible -ne $false) {
+            throw "Expected unsafe TAR detail to be non-downloadable and prompt-hidden: $($tarDetail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($tarDetail.data.redactionSummaryJson)" -notlike '*"ARCHIVE_EXECUTABLE_BINARY"*') {
+            throw "Expected unsafe TAR detail archive category: $($tarDetail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $tarDetailJson = $tarDetail.data | ConvertTo-Json -Depth 20 -Compress
+        if ($tarDetailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|payload.exe") {
+            throw "Unsafe TAR detail leaked storage or unsafe entry details: $tarDetailJson"
         }
     } | Out-Null
 

@@ -56,6 +56,8 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
     private static final String DOCM_MEDIA_TYPE = "application/vnd.ms-word.document.macroenabled.12";
     private static final String XLSM_MEDIA_TYPE = "application/vnd.ms-excel.sheet.macroenabled.12";
     private static final String PPTM_MEDIA_TYPE = "application/vnd.ms-powerpoint.presentation.macroenabled.12";
+    private static final String TAR_MEDIA_TYPE = "application/x-tar";
+    private static final int TAR_BLOCK_BYTES = 512;
     private static final Set<String> PROMPT_SAFE_EXACT_MEDIA_TYPES = Set.of(
             "application/json",
             "application/pdf",
@@ -67,6 +69,7 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
     private static final Set<String> DOWNLOAD_ONLY_EXACT_MEDIA_TYPES = Set.of(
             DOCM_MEDIA_TYPE,
             DOCX_MEDIA_TYPE,
+            TAR_MEDIA_TYPE,
             "application/x-zip-compressed",
             "application/zip",
             PPTM_MEDIA_TYPE,
@@ -83,6 +86,7 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
             PPTX_MEDIA_TYPE,
             XLSM_MEDIA_TYPE,
             XLSX_MEDIA_TYPE);
+    private static final Set<String> TAR_MEDIA_TYPES = Set.of(TAR_MEDIA_TYPE);
     private static final Set<String> OFFICE_MACRO_ENABLED_MEDIA_TYPES = Set.of(
             DOCM_MEDIA_TYPE,
             PPTM_MEDIA_TYPE,
@@ -207,6 +211,7 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                         "text/*"),
                 List.of(
                         "application/pdf",
+                        TAR_MEDIA_TYPE,
                         "application/zip",
                         "application/x-zip-compressed",
                         DOCM_MEDIA_TYPE,
@@ -220,7 +225,7 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                         "image/png",
                         "image/webp",
                         "video/webm"),
-                sorted(ZIP_MEDIA_TYPES),
+                archiveScannedMediaTypes(),
                 List.of(
                         "ARCHIVE_EXECUTABLE_BINARY",
                         "ARCHIVE_PDF_ACTIVE_CONTENT",
@@ -261,6 +266,13 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
 
     private static List<String> sorted(Set<String> values) {
         return values.stream().sorted().toList();
+    }
+
+    private static List<String> archiveScannedMediaTypes() {
+        java.util.ArrayList<String> values = new java.util.ArrayList<>(ZIP_MEDIA_TYPES);
+        values.addAll(TAR_MEDIA_TYPES);
+        values.sort(String::compareTo);
+        return List.copyOf(values);
     }
 
     private static boolean isPromptSafeMediaType(String mediaType) {
@@ -348,61 +360,11 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                         true,
                         List.of("OFFICE_MACRO"));
             }
-            try (ZipFile archive = new ZipFile(path.toFile())) {
-                int inspectedEntries = 0;
-                Enumeration<? extends ZipEntry> entries = archive.entries();
-                while (entries.hasMoreElements()) {
-                    if (inspectedEntries >= MAX_ARCHIVE_SCAN_ENTRIES) {
-                        return SandboxArtifactScanResult.blocked(
-                                ContextSensitivity.CONFIDENTIAL,
-                                "archive scan limit exceeded",
-                                true,
-                                List.of("ARCHIVE_SCAN_LIMIT"));
-                    }
-                    ZipEntry entry = entries.nextElement();
-                    inspectedEntries++;
-                    if (entry.isDirectory()) {
-                        continue;
-                    }
-                    String entryName = entry.getName();
-                    if (hasUnsafeArchivePath(entryName)) {
-                        return SandboxArtifactScanResult.blocked(
-                                ContextSensitivity.CONFIDENTIAL,
-                                "unsafe archive entry",
-                                true,
-                                List.of("ARCHIVE_UNSAFE_ENTRY"));
-                    }
-                    if (hasOfficeMacroArchiveEntryName(entryName)) {
-                        return SandboxArtifactScanResult.blocked(
-                                ContextSensitivity.CONFIDENTIAL,
-                                "office macro artifact content",
-                                true,
-                                List.of("OFFICE_MACRO"));
-                    }
-                    if (hasExecutableArchiveEntryName(entryName)) {
-                        return SandboxArtifactScanResult.blocked(
-                                ContextSensitivity.CONFIDENTIAL,
-                                "archive executable content",
-                                true,
-                                List.of("ARCHIVE_EXECUTABLE_BINARY"));
-                    }
-                    byte[] prefix = readArchiveEntryPrefix(archive, entry, MAX_ARCHIVE_ENTRY_SCAN_BYTES);
-                    if (hasExecutableSignature(prefix)) {
-                        return SandboxArtifactScanResult.blocked(
-                                ContextSensitivity.CONFIDENTIAL,
-                                "archive executable content",
-                                true,
-                                List.of("ARCHIVE_EXECUTABLE_BINARY"));
-                    }
-                    if ((hasPdfSignature(prefix) || hasPdfArchiveEntryName(entryName))
-                            && containsPdfActiveContent(prefix)) {
-                        return SandboxArtifactScanResult.blocked(
-                                ContextSensitivity.CONFIDENTIAL,
-                                "archive pdf active content",
-                                true,
-                                List.of("ARCHIVE_PDF_ACTIVE_CONTENT"));
-                    }
-                }
+            SandboxArtifactScanResult result = isTarMediaType(mediaType)
+                    ? scanTarArchive(path)
+                    : scanZipArchive(path);
+            if (result != null) {
+                return result;
             }
             return SandboxArtifactScanResult.clean(artifact.sensitivity(), "metadata scan passed", true);
         } catch (IOException | RuntimeException ex) {
@@ -412,6 +374,154 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                     true,
                     List.of("ARCHIVE_SCAN_ERROR"));
         }
+    }
+
+    private static SandboxArtifactScanResult scanZipArchive(Path path) throws IOException {
+        try (ZipFile archive = new ZipFile(path.toFile())) {
+            int inspectedEntries = 0;
+            Enumeration<? extends ZipEntry> entries = archive.entries();
+            while (entries.hasMoreElements()) {
+                if (inspectedEntries >= MAX_ARCHIVE_SCAN_ENTRIES) {
+                    return archiveScanLimit();
+                }
+                ZipEntry entry = entries.nextElement();
+                inspectedEntries++;
+                String entryName = entry.getName();
+                SandboxArtifactScanResult pathDecision = scanArchiveEntryPathMetadata(entryName);
+                if (pathDecision != null) {
+                    return pathDecision;
+                }
+                if (entry.isDirectory()) {
+                    continue;
+                }
+                SandboxArtifactScanResult metadataDecision = scanArchiveRegularEntryMetadata(entryName);
+                if (metadataDecision != null) {
+                    return metadataDecision;
+                }
+                byte[] prefix = readArchiveEntryPrefix(archive, entry, MAX_ARCHIVE_ENTRY_SCAN_BYTES);
+                SandboxArtifactScanResult contentDecision = scanArchiveEntryContent(entryName, prefix);
+                if (contentDecision != null) {
+                    return contentDecision;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static SandboxArtifactScanResult scanTarArchive(Path path) throws IOException {
+        try (InputStream input = Files.newInputStream(path)) {
+            int inspectedEntries = 0;
+            byte[] header = new byte[TAR_BLOCK_BYTES];
+            while (readFullBlock(input, header)) {
+                if (isZeroBlock(header)) {
+                    return null;
+                }
+                if (inspectedEntries >= MAX_ARCHIVE_SCAN_ENTRIES) {
+                    return archiveScanLimit();
+                }
+                inspectedEntries++;
+                if (!hasValidTarChecksum(header)) {
+                    return archiveScanError();
+                }
+                String entryName = tarEntryName(header);
+                byte typeFlag = header[156];
+                long size = tarEntrySize(header);
+                if (size < 0) {
+                    return archiveScanError();
+                }
+                SandboxArtifactScanResult pathDecision = scanArchiveEntryPathMetadata(entryName);
+                if (pathDecision != null) {
+                    return pathDecision;
+                }
+                if (isTarDirectory(typeFlag, entryName)) {
+                    skipTarEntry(input, size);
+                    continue;
+                }
+                if (!isTarRegularFile(typeFlag) || isTarExtendedMetadata(typeFlag)) {
+                    return SandboxArtifactScanResult.blocked(
+                            ContextSensitivity.CONFIDENTIAL,
+                            "unsafe archive entry",
+                            true,
+                            List.of("ARCHIVE_UNSAFE_ENTRY"));
+                }
+                SandboxArtifactScanResult metadataDecision = scanArchiveRegularEntryMetadata(entryName);
+                if (metadataDecision != null) {
+                    return metadataDecision;
+                }
+                int bytesToRead = (int) Math.min(size, MAX_ARCHIVE_ENTRY_SCAN_BYTES);
+                byte[] prefix = input.readNBytes(bytesToRead);
+                SandboxArtifactScanResult contentDecision = scanArchiveEntryContent(entryName, prefix);
+                if (contentDecision != null) {
+                    return contentDecision;
+                }
+                skipTarEntryRemainder(input, size, bytesToRead);
+            }
+        }
+        return archiveScanError();
+    }
+
+    private static SandboxArtifactScanResult scanArchiveEntryPathMetadata(String entryName) {
+        if (hasUnsafeArchivePath(entryName)) {
+            return SandboxArtifactScanResult.blocked(
+                    ContextSensitivity.CONFIDENTIAL,
+                    "unsafe archive entry",
+                    true,
+                    List.of("ARCHIVE_UNSAFE_ENTRY"));
+        }
+        return null;
+    }
+
+    private static SandboxArtifactScanResult scanArchiveRegularEntryMetadata(String entryName) {
+        if (hasOfficeMacroArchiveEntryName(entryName)) {
+            return SandboxArtifactScanResult.blocked(
+                    ContextSensitivity.CONFIDENTIAL,
+                    "office macro artifact content",
+                    true,
+                    List.of("OFFICE_MACRO"));
+        }
+        if (hasExecutableArchiveEntryName(entryName)) {
+            return SandboxArtifactScanResult.blocked(
+                    ContextSensitivity.CONFIDENTIAL,
+                    "archive executable content",
+                    true,
+                    List.of("ARCHIVE_EXECUTABLE_BINARY"));
+        }
+        return null;
+    }
+
+    private static SandboxArtifactScanResult scanArchiveEntryContent(String entryName, byte[] prefix) {
+        if (hasExecutableSignature(prefix)) {
+            return SandboxArtifactScanResult.blocked(
+                    ContextSensitivity.CONFIDENTIAL,
+                    "archive executable content",
+                    true,
+                    List.of("ARCHIVE_EXECUTABLE_BINARY"));
+        }
+        if ((hasPdfSignature(prefix) || hasPdfArchiveEntryName(entryName))
+                && containsPdfActiveContent(prefix)) {
+            return SandboxArtifactScanResult.blocked(
+                    ContextSensitivity.CONFIDENTIAL,
+                    "archive pdf active content",
+                    true,
+                    List.of("ARCHIVE_PDF_ACTIVE_CONTENT"));
+        }
+        return null;
+    }
+
+    private static SandboxArtifactScanResult archiveScanLimit() {
+        return SandboxArtifactScanResult.blocked(
+                ContextSensitivity.CONFIDENTIAL,
+                "archive scan limit exceeded",
+                true,
+                List.of("ARCHIVE_SCAN_LIMIT"));
+    }
+
+    private static SandboxArtifactScanResult archiveScanError() {
+        return SandboxArtifactScanResult.blocked(
+                ContextSensitivity.SECRET,
+                "archive content scan failed",
+                true,
+                List.of("ARCHIVE_SCAN_ERROR"));
     }
 
     private static byte[] readPrefix(Path path, int maxBytes) throws IOException {
@@ -424,6 +534,115 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
         try (InputStream input = archive.getInputStream(entry)) {
             return input.readNBytes(maxBytes);
         }
+    }
+
+    private static boolean readFullBlock(InputStream input, byte[] block) throws IOException {
+        int offset = 0;
+        while (offset < block.length) {
+            int read = input.read(block, offset, block.length - offset);
+            if (read < 0) {
+                if (offset == 0) {
+                    return false;
+                }
+                throw new IOException("truncated tar archive");
+            }
+            offset += read;
+        }
+        return true;
+    }
+
+    private static boolean isZeroBlock(byte[] block) {
+        for (byte value : block) {
+            if (value != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static String tarEntryName(byte[] header) {
+        String name = tarString(header, 0, 100);
+        String prefix = tarString(header, 345, 155);
+        if (!hasText(prefix)) {
+            return name;
+        }
+        if (!hasText(name)) {
+            return prefix;
+        }
+        return prefix + "/" + name;
+    }
+
+    private static long tarEntrySize(byte[] header) {
+        return tarOctal(header, 124, 12);
+    }
+
+    private static boolean hasValidTarChecksum(byte[] header) {
+        long expected = tarOctal(header, 148, 8);
+        if (expected < 0) {
+            return false;
+        }
+        long actual = 0L;
+        for (int index = 0; index < header.length; index++) {
+            actual += (index >= 148 && index < 156) ? (byte) ' ' : (header[index] & 0xFF);
+        }
+        return expected == actual;
+    }
+
+    private static String tarString(byte[] header, int offset, int length) {
+        int end = offset;
+        int max = Math.min(header.length, offset + length);
+        while (end < max && header[end] != 0) {
+            end++;
+        }
+        return new String(header, offset, end - offset, StandardCharsets.UTF_8).trim();
+    }
+
+    private static long tarOctal(byte[] header, int offset, int length) {
+        long value = 0L;
+        boolean foundDigit = false;
+        int max = Math.min(header.length, offset + length);
+        for (int index = offset; index < max; index++) {
+            byte current = header[index];
+            if (current == 0 || current == (byte) ' ') {
+                if (foundDigit) {
+                    continue;
+                }
+                continue;
+            }
+            if (current < (byte) '0' || current > (byte) '7') {
+                return -1L;
+            }
+            foundDigit = true;
+            value = (value << 3) + (current - (byte) '0');
+        }
+        return foundDigit ? value : 0L;
+    }
+
+    private static boolean isTarDirectory(byte typeFlag, String entryName) {
+        return typeFlag == (byte) '5' || (hasText(entryName) && entryName.endsWith("/"));
+    }
+
+    private static boolean isTarRegularFile(byte typeFlag) {
+        return typeFlag == 0 || typeFlag == (byte) '0';
+    }
+
+    private static boolean isTarExtendedMetadata(byte typeFlag) {
+        return typeFlag == (byte) 'x' || typeFlag == (byte) 'g' || typeFlag == (byte) 'L' || typeFlag == (byte) 'K';
+    }
+
+    private static void skipTarEntry(InputStream input, long size) throws IOException {
+        skipTarEntryRemainder(input, size, 0);
+    }
+
+    private static void skipTarEntryRemainder(InputStream input, long size, long alreadyRead) throws IOException {
+        long remaining = Math.max(size - alreadyRead, 0L);
+        long padding = tarPadding(size);
+        input.skipNBytes(remaining + padding);
+    }
+
+    private static long tarPadding(long size) {
+        long remainder = size % TAR_BLOCK_BYTES;
+        return remainder == 0 ? 0 : TAR_BLOCK_BYTES - remainder;
     }
 
     private static SandboxArtifactScanResult scanLocalTextContent(SandboxArtifact artifact) {
@@ -513,7 +732,7 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
     }
 
     private static boolean isArchiveScannableMediaType(String mediaType) {
-        return hasText(mediaType) && isZipMediaType(normalizedMediaType(mediaType));
+        return hasText(mediaType) && isArchiveMediaType(normalizedMediaType(mediaType));
     }
 
     private static boolean hasExecutableSignature(byte[] content) {
@@ -627,5 +846,13 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
 
     private static boolean isZipMediaType(String mediaType) {
         return ZIP_MEDIA_TYPES.contains(mediaType);
+    }
+
+    private static boolean isTarMediaType(String mediaType) {
+        return TAR_MEDIA_TYPES.contains(mediaType);
+    }
+
+    private static boolean isArchiveMediaType(String mediaType) {
+        return isZipMediaType(mediaType) || isTarMediaType(mediaType);
     }
 }

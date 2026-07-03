@@ -1100,6 +1100,37 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldDescribeDownloadOnlyTarArtifactWithStableFilename() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        SandboxSession session = sessionRepository.saveSession(SandboxSession.created(
+                "session-1",
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW));
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new MemorySandboxArtifactQueryPort(storedArtifact(
+                        "artifact-tar",
+                        "local://sandbox-artifacts/safe-bundle.tar",
+                        "application/x-tar")),
+                CLOCK);
+
+        SandboxArtifactDetailDecision decision = service.describeArtifact("artifact-tar");
+
+        assertEquals(session.sessionId(), decision.artifact().sessionId());
+        assertEquals("application/x-tar", decision.contentType());
+        assertEquals("artifact-tar.tar", decision.filename());
+        assertFalse(decision.artifact().promptVisible());
+        assertTrue(decision.downloadable());
+        assertNull(decision.downloadBlockedReason());
+    }
+
+    @Test
     void shouldDescribeSecretSandboxArtifactAsBlockedForDownload() {
         MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
         sessionRepository.saveSession(SandboxSession.created(

@@ -149,6 +149,27 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldClassifyTarArtifactsWithStableMediaType() throws Exception {
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("created tar archive\n", Duration.ofMillis(180)),
+                command -> Files.write(command.workingDirectory().resolve("bundle.tar"),
+                        new byte[]{'u', 's', 't', 'a', 'r'}));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.CODE_INTERPRETER));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                "print('created tar archive')",
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("bundle.tar");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("application/x-tar");
+    }
+
+    @Test
     void shouldRunFileConversionWithGeneratedConverterAndCollectOnlyOutputArtifact() throws Exception {
         RecordingRunner runner = new RecordingRunner(
                 ContainerCommandResult.succeeded("converted 1 rows from csv to json\n", Duration.ofMillis(210)),
