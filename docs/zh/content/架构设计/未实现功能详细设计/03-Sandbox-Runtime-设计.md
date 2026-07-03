@@ -609,6 +609,14 @@ This is read-only scanner policy UX and verification only. It does not change sc
 
 Fresh full-Docker evidence: focused Web regression passed 3/3 with reactor `BUILD SUCCESS`, frontend contracts passed 10/10, PowerShell parsing passed for the artifact-storage smoke, frontend build completed with existing warnings, backend health returned `UP`, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-scanner-window-ux-smoke-rerun` passed 43/43 with live scanner-policy assertions for `maxBinarySignatureScanBytes=262144`, `maxArchiveEntryScanBytes=262144`, and the existing text/archive/compressed limits. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and backend health `UP`.
 
+### 2026-07-04 Update: sandbox TAR.GZ decompression budget E2E guard
+
+The artifact-storage smoke now verifies the TAR.GZ decompression budget through the real sandbox runtime. The sandbox run creates an `overbudget-bundle.tar.gz` whose compressed artifact is small but whose decompressed TAR stream exceeds the scanner's 32 MiB budget. The scanner blocks it before object storage copy as `application/gzip|BLOCKED|SECRET`, with summary `archive content scan failed` and value-free `ARCHIVE_SCAN_ERROR` metadata.
+
+The artifact list/detail API checks also verify that the over-budget TAR.GZ remains prompt-hidden, non-downloadable, and does not leak storage references or the inner `large.bin` entry name. This is runtime verification hardening only; it does not change scanner behavior, byte budgets, generic gzip scanning, recursive extraction, or external scanner integration.
+
+Fresh full-Docker evidence: PowerShell parsing passed for the artifact-storage smoke, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-targz-budget-failclosed-smoke` passed 44/44 against the local full-Docker backend. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and backend health `UP`.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。
