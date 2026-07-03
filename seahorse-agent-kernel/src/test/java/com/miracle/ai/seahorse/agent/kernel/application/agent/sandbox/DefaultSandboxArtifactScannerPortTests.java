@@ -104,6 +104,21 @@ class DefaultSandboxArtifactScannerPortTests {
     }
 
     @Test
+    void shouldPassWebmVideoArtifactAsDownloadOnlyMetadataScan(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("browser-video.webm");
+        Files.write(output, new byte[]{0x1A, 0x45, (byte) 0xDF, (byte) 0xA3});
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "video/webm")));
+
+        assertEquals(SandboxArtifactScanStatus.CLEAN, result.scanStatus());
+        assertEquals(ContextSensitivity.INTERNAL, result.sensitivity());
+        assertEquals("metadata scan passed", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("CLEAN", redactionSummary.path("decision").asText());
+        assertEquals(false, redactionSummary.path("contentScanned").asBoolean());
+    }
+
+    @Test
     void shouldFailClosedWhenLocalTextArtifactCannotBeRead(@TempDir Path tempDir) throws Exception {
         Path missing = tempDir.resolve("missing.txt");
 

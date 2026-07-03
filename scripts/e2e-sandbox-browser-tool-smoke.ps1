@@ -307,6 +307,7 @@ try {
                 viewportHeight = 640
                 screenshot = $true
                 har = $true
+                video = $true
             }
             resourceRefs = @{}
             idempotencyKey = "${runId}:${toolCallId}"
@@ -327,9 +328,12 @@ try {
         if ("$($parsed.browser.action)" -ne "snapshot" -or "$($parsed.browser.networkAllowed)" -ne "False") {
             throw "Unexpected browser metadata: $content"
         }
+        if ($parsed.browser.video -ne $true) {
+            throw "Expected browser video flag in observation: $content"
+        }
         $artifacts = @($parsed.artifacts)
         if ($artifacts.Count -ne 3) {
-            throw "Expected browser result JSON, screenshot, and HAR artifacts: $content"
+            throw "Expected prompt-visible browser result JSON, screenshot, and HAR artifacts: $content"
         }
         $jsonArtifact = @($artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" })
         $pngArtifact = @($artifacts | Where-Object { "$($_.mediaType)" -eq "image/png" })
@@ -349,7 +353,7 @@ try {
     $pngArtifactId = "$(@($observation.artifacts | Where-Object { "$($_.mediaType)" -eq "image/png" })[0].artifactId)"
     $harArtifactId = "$(@($observation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/har+json" })[0].artifactId)"
 
-    $objectUris = Test-Step "Verify persisted BROWSER_AUTOMATION session and artifacts" {
+    $artifactEvidence = Test-Step "Verify persisted BROWSER_AUTOMATION session and artifacts" {
         $safeSessionId = $sessionId.Replace("'", "''")
         $sessionRow = Invoke-PostgresScalar "SELECT runtime_type, profile_id, status FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
         $sessionParts = $sessionRow -split "`t"
@@ -395,9 +399,23 @@ try {
         if ($harParts[0] -like "file:*") {
             throw "browser HAR artifact still points at file URI: $($harParts[0])"
         }
-        @($jsonParts[0], $pngParts[0], $harParts[0])
+
+        $videoRow = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE session_id = '$safeSessionId' AND media_type = 'video/webm' ORDER BY created_at DESC LIMIT 1;"
+        $videoParts = $videoRow -split "`t"
+        if ($videoParts.Count -ne 6 -or $videoParts[2] -ne "video/webm" -or $videoParts[3] -ne "CLEAN" -or $videoParts[4] -ne "INTERNAL") {
+            throw "Unexpected browser video artifact row: $videoRow"
+        }
+        if ($videoParts[1] -like "file:*") {
+            throw "browser video artifact still points at file URI: $($videoParts[1])"
+        }
+        [pscustomobject]@{
+            ObjectUris = @($jsonParts[0], $pngParts[0], $harParts[0], $videoParts[1])
+            VideoArtifactId = $videoParts[0]
+        }
     }
-    if (-not $objectUris) { exit 1 }
+    if (-not $artifactEvidence) { exit 1 }
+    $objectUris = @($artifactEvidence.ObjectUris)
+    $videoArtifactId = "$($artifactEvidence.VideoArtifactId)"
 
     Test-Step "Download governed browser result artifact" {
         $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$jsonArtifactId/download" -Headers $headers
@@ -428,7 +446,39 @@ try {
         }
     } | Out-Null
 
-    if ($objectUris[0].StartsWith($ExpectedObjectUriPrefix) -or $objectUris[1].StartsWith($ExpectedObjectUriPrefix)) {
+    Test-Step "Verify governed browser video detail and download" {
+        $detail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$videoArtifactId" -Headers $headers
+        Assert-ApiOk $detail "Get browser video artifact"
+        if ($detail.data.promptVisible -ne $false) {
+            throw "Expected video artifact to stay prompt blocked: $($detail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($detail.data.downloadable -ne $true -or "$($detail.data.contentType)" -ne "video/webm") {
+            throw "Expected downloadable video/webm artifact detail: $($detail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $tempVideo = New-TemporaryFile
+        try {
+            $raw = & curl.exe -sS -w "`n%{http_code}" -H "Authorization: Bearer $($login.data.token)" -o $tempVideo.FullName "$BaseUrl/api/sandbox/artifacts/$videoArtifactId/download"
+            if ($LASTEXITCODE -ne 0) {
+                throw "curl exited with $LASTEXITCODE for video download"
+            }
+            $lines = @($raw)
+            $status = [int]$lines[-1]
+            if ($status -ne 200) {
+                throw "Expected HTTP 200 for video download but got $status"
+            }
+            $bytes = [System.IO.File]::ReadAllBytes($tempVideo.FullName)
+            if ($bytes.Length -lt 4) {
+                throw "Downloaded browser video was too small"
+            }
+            if (-not ($bytes[0] -eq 0x1A -and $bytes[1] -eq 0x45 -and $bytes[2] -eq 0xDF -and $bytes[3] -eq 0xA3)) {
+                throw "Downloaded browser video did not start with a WebM EBML header"
+            }
+        } finally {
+            Remove-Item -LiteralPath $tempVideo.FullName -ErrorAction SilentlyContinue
+        }
+    } | Out-Null
+
+    if (@($objectUris | Where-Object { $_.StartsWith($ExpectedObjectUriPrefix) }).Count -gt 0) {
         Test-Step "Verify browser artifact objects exist in backend storage" {
             foreach ($objectUri in $objectUris) {
                 if (-not $objectUri.StartsWith($ExpectedObjectUriPrefix)) {
@@ -468,6 +518,7 @@ try {
     Write-Host "JSON Artifact: $jsonArtifactId"
     Write-Host "Screenshot Artifact: $pngArtifactId"
     Write-Host "HAR Artifact: $harArtifactId"
+    Write-Host "Video Artifact: $videoArtifactId"
 } catch {
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Error $_.Exception.Message

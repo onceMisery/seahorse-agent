@@ -77,6 +77,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -424,6 +425,48 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals("metadata scan passed", artifactPort.saved.get(0).scanSummary());
         assertTrue(artifactPort.saved.get(0).redactionSummaryJson().contains("\"contentScanned\":true"));
         assertEquals("local://sandbox-artifacts/answer.txt", result.artifacts().get(0).objectUri());
+    }
+
+    @Test
+    void shouldCopyDownloadOnlyVideoArtifactToObjectStorageWithoutPromptExposure(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("browser-video.webm");
+        Files.write(output, new byte[]{0x1A, 0x45, (byte) 0xDF, (byte) 0xA3});
+        MemoryArtifactPort artifactPort = new MemoryArtifactPort();
+        RecordingObjectStoragePort objectStorage = new RecordingObjectStoragePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(List.of(fileArtifact("artifact-video", output, "video/webm"))),
+                artifactPort,
+                new MemorySandboxSessionRepository(),
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                new DefaultSandboxArtifactScannerPort(),
+                objectStorage,
+                null,
+                CLOCK);
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.BROWSER_AUTOMATION,
+                false,
+                List.of()));
+
+        SandboxExecutionResult result = service.execute(new SandboxExecutionCommand(
+                session.sessionId(),
+                "{}",
+                false,
+                List.of()));
+
+        assertEquals(0, result.artifacts().size());
+        assertEquals(1, artifactPort.saved.size());
+        SandboxArtifact saved = artifactPort.saved.get(0);
+        assertEquals(SandboxArtifactScanStatus.CLEAN, saved.scanStatus());
+        assertEquals("video/webm", saved.mediaType());
+        assertFalse(saved.promptVisible());
+        assertTrue(saved.downloadable());
+        assertEquals(1, objectStorage.uploadCount);
+        assertArrayEquals(new byte[]{0x1A, 0x45, (byte) 0xDF, (byte) 0xA3}, objectStorage.uploadedBytes);
+        assertEquals("local://sandbox-artifacts/browser-video.webm", saved.objectUri());
     }
 
     @Test
@@ -840,6 +883,37 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldDescribeDownloadOnlyVideoArtifactWithDownloadPolicy() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        SandboxSession session = sessionRepository.saveSession(SandboxSession.created(
+                "session-1",
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.BROWSER_AUTOMATION,
+                NOW));
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new MemorySandboxArtifactQueryPort(storedArtifact(
+                        "artifact-video",
+                        "local://sandbox-artifacts/browser-video.webm",
+                        "video/webm")),
+                CLOCK);
+
+        SandboxArtifactDetailDecision decision = service.describeArtifact("artifact-video");
+
+        assertEquals(session.sessionId(), decision.artifact().sessionId());
+        assertEquals("video/webm", decision.contentType());
+        assertEquals("artifact-video.webm", decision.filename());
+        assertFalse(decision.artifact().promptVisible());
+        assertTrue(decision.downloadable());
+        assertNull(decision.downloadBlockedReason());
+    }
+
+    @Test
     void shouldDescribeSecretSandboxArtifactAsBlockedForDownload() {
         MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
         sessionRepository.saveSession(SandboxSession.created(
@@ -1202,24 +1276,32 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     private static SandboxArtifact fileArtifact(String artifactId, Path path) {
+        return fileArtifact(artifactId, path, "text/plain");
+    }
+
+    private static SandboxArtifact fileArtifact(String artifactId, Path path, String mediaType) {
         return new SandboxArtifact(
                 artifactId,
                 "session-1",
                 "exec-1",
                 path.toUri().toString(),
-                "text/plain",
+                mediaType,
                 SandboxArtifactScanStatus.PENDING,
                 ContextSensitivity.INTERNAL,
                 NOW);
     }
 
     private static SandboxArtifact storedArtifact(String artifactId, String objectUri) {
+        return storedArtifact(artifactId, objectUri, "text/plain");
+    }
+
+    private static SandboxArtifact storedArtifact(String artifactId, String objectUri, String mediaType) {
         return new SandboxArtifact(
                 artifactId,
                 "session-1",
                 "exec-1",
                 objectUri,
-                "text/plain",
+                mediaType,
                 SandboxArtifactScanStatus.CLEAN,
                 ContextSensitivity.INTERNAL,
                 NOW);

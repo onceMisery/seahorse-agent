@@ -104,7 +104,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             Map.entry("application/pdf", ".pdf"),
             Map.entry("image/png", ".png"),
             Map.entry("image/jpeg", ".jpg"),
-            Map.entry("image/svg+xml", ".svg"));
+            Map.entry("image/svg+xml", ".svg"),
+            Map.entry("video/webm", ".webm"));
 
     private final SandboxPolicyPort policyPort;
     private final SandboxRuntimePort runtimePort;
@@ -534,7 +535,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     }
 
     private SandboxArtifactDownloadPolicy downloadPolicy(SandboxArtifact artifact) {
-        if (!artifact.promptVisible()) {
+        if (!artifact.downloadable()) {
             return SandboxArtifactDownloadPolicy.blocked(DOWNLOAD_BLOCKED);
         }
         if (isUnsafeDownloadReference(artifact.objectUri())) {
@@ -631,7 +632,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
 
     private SandboxArtifact persistArtifact(SandboxArtifact artifact) {
         SandboxArtifact scanned = scanArtifact(artifact);
-        SandboxArtifact prepared = copyPromptVisibleFileArtifact(scanned);
+        SandboxArtifact prepared = copyDownloadableFileArtifact(scanned);
         try {
             return artifactPort.save(prepared);
         } catch (RuntimeException ex) {
@@ -640,8 +641,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         }
     }
 
-    private SandboxArtifact copyPromptVisibleFileArtifact(SandboxArtifact artifact) {
-        if (artifactStoragePort == null || !artifact.promptVisible() || !isFileUri(artifact.objectUri())) {
+    private SandboxArtifact copyDownloadableFileArtifact(SandboxArtifact artifact) {
+        if (artifactStoragePort == null || !artifact.downloadable() || !isFileUri(artifact.objectUri())) {
             return artifact;
         }
         try {

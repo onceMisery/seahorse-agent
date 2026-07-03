@@ -71,6 +71,7 @@ class SandboxBrowserToolPortAdapterTests {
         assertTrue(schema.contains("\"viewportWidth\""));
         assertTrue(schema.contains("\"screenshot\""));
         assertTrue(schema.contains("\"har\""));
+        assertTrue(schema.contains("\"video\""));
     }
 
     @Test
@@ -115,6 +116,16 @@ class SandboxBrowserToolPortAdapterTests {
                                 SandboxArtifactScanStatus.CLEAN,
                                 ContextSensitivity.INTERNAL,
                                 "metadata scan passed",
+                                NOW),
+                        new SandboxArtifact(
+                                "artifact-video",
+                                "session-1",
+                                "exec-1",
+                                "local://sandbox-artifacts/browser-video.webm",
+                                "video/webm",
+                                SandboxArtifactScanStatus.CLEAN,
+                                ContextSensitivity.INTERNAL,
+                                "metadata scan passed",
                                 NOW))));
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
 
@@ -124,7 +135,8 @@ class SandboxBrowserToolPortAdapterTests {
                 "viewportWidth", 1024,
                 "viewportHeight", 640,
                 "screenshot", true,
-                "har", true)));
+                "har", true,
+                "video", true)));
 
         assertTrue(result.success());
         assertEquals("tenant-1", runtime.createCommand.tenantId());
@@ -143,6 +155,7 @@ class SandboxBrowserToolPortAdapterTests {
         assertEquals(640, browserInput.path("viewportHeight").asInt());
         assertTrue(browserInput.path("screenshot").asBoolean());
         assertTrue(browserInput.path("har").asBoolean());
+        assertTrue(browserInput.path("video").asBoolean());
         assertTrue(browserInput.path("html").asText().contains("browser marker"));
 
         JsonNode root = objectMapper.readTree(result.content());
@@ -152,11 +165,14 @@ class SandboxBrowserToolPortAdapterTests {
         assertEquals("snapshot", root.path("browser").path("action").asText());
         assertFalse(root.path("browser").path("networkAllowed").asBoolean());
         assertTrue(root.path("browser").path("har").asBoolean());
+        assertTrue(root.path("browser").path("video").asBoolean());
         assertEquals("application/json", root.path("artifacts").get(0).path("mediaType").asText());
         assertEquals("image/png", root.path("artifacts").get(1).path("mediaType").asText());
         assertEquals("application/har+json", root.path("artifacts").get(2).path("mediaType").asText());
+        assertEquals("video/webm", root.path("artifacts").get(3).path("mediaType").asText());
         assertEquals("metadata scan passed", root.path("artifacts").get(0).path("scanSummary").asText());
         assertTrue(root.path("artifacts").get(0).path("promptVisible").asBoolean());
+        assertFalse(root.path("artifacts").get(3).path("promptVisible").asBoolean());
     }
 
     @Test
@@ -192,6 +208,7 @@ class SandboxBrowserToolPortAdapterTests {
         assertEquals("extract_text", browserInput.path("action").asText());
         assertFalse(browserInput.path("screenshot").asBoolean());
         assertFalse(browserInput.path("har").asBoolean());
+        assertFalse(browserInput.path("video").asBoolean());
     }
 
     @Test

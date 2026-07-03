@@ -301,7 +301,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 ? BROWSER_ACTION_SNAPSHOT.equals(action)
                 : root.path("screenshot").asBoolean(BROWSER_ACTION_SNAPSHOT.equals(action));
         boolean har = root.path("har").asBoolean(false);
-        return new BrowserAutomationRequest(action, html, viewportWidth, viewportHeight, screenshot, har);
+        boolean video = root.path("video").asBoolean(false);
+        return new BrowserAutomationRequest(action, html, viewportWidth, viewportHeight, screenshot, har, video);
     }
 
     private String browserAutomationScript(BrowserAutomationRequest request) {
@@ -316,10 +317,13 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 viewport_height = %d
                 screenshot_enabled = %s
                 har_enabled = %s
+                video_enabled = %s
                 input_path = Path("/workspace/%s")
                 result_path = Path("/workspace/%s")
                 screenshot_path = Path("/workspace/%s")
                 har_path = Path("/workspace/%s")
+                video_dir = Path("/workspace/browser-video-recordings")
+                video_path = Path("/workspace/%s")
 
                 def compact_text(value, limit=12000):
                     normalized = "\\n".join(line.strip() for line in value.replace("\\r", "\\n").split("\\n") if line.strip())
@@ -389,16 +393,27 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 html = input_path.read_text(encoding="utf-8-sig")
                 network_events = []
                 network_event_index = {}
+                video_file = None
 
                 with sync_playwright() as playwright:
                     browser = playwright.chromium.launch(
                         headless=True,
                         args=["--no-sandbox", "--disable-dev-shm-usage"],
                     )
+                    context = None
                     try:
-                        page = browser.new_page(
-                            viewport={"width": viewport_width, "height": viewport_height}
-                        )
+                        if video_enabled:
+                            video_dir.mkdir(parents=True, exist_ok=True)
+                            context = browser.new_context(
+                                viewport={"width": viewport_width, "height": viewport_height},
+                                record_video_dir=str(video_dir),
+                                record_video_size={"width": viewport_width, "height": viewport_height},
+                            )
+                            page = context.new_page()
+                        else:
+                            page = browser.new_page(
+                                viewport={"width": viewport_width, "height": viewport_height}
+                            )
 
                         def on_request(request):
                             event = {
@@ -462,6 +477,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             },
                             "screenshot": screenshot_file,
                             "har": har_path.name if har_enabled else None,
+                            "video": video_path.name if video_enabled else None,
                         }
                         result_path.write_text(
                             json.dumps(result, ensure_ascii=False, indent=2),
@@ -472,20 +488,35 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                                 json.dumps(build_har(network_events), ensure_ascii=False, indent=2),
                                 encoding="utf-8",
                             )
+                        if video_enabled:
+                            context.close()
+                            context = None
+                            videos = sorted(
+                                video_dir.glob("*.webm"),
+                                key=lambda item: item.stat().st_mtime_ns,
+                                reverse=True,
+                            )
+                            if not videos:
+                                raise RuntimeError("browser video recording was not created")
+                            videos[0].replace(video_path)
                     finally:
+                        if context is not None:
+                            context.close()
                         browser.close()
 
-                print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}; har={har_enabled}")
+                print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}; har={har_enabled}; video={video_enabled}")
                 """.formatted(
                 request.action(),
                 request.viewportWidth(),
                 request.viewportHeight(),
                 request.screenshot() ? "True" : "False",
                 request.har() ? "True" : "False",
+                request.video() ? "True" : "False",
                 browserInputName(),
                 browserResultName(),
                 browserScreenshotName(),
-                browserHarName());
+                browserHarName(),
+                browserVideoName());
     }
 
     private String fileConversionScript(FileConversionRequest request) {
@@ -722,6 +753,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
     private String browserHarName() {
         return "browser-network.har";
+    }
+
+    private String browserVideoName() {
+        return "browser-video.webm";
     }
 
     private int boundedInt(JsonNode root, String name, int defaultValue, int min, int max) {
@@ -1145,6 +1180,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             case "jpg", "jpeg" -> "image/jpeg";
             case "png" -> "image/png";
             case "webp" -> "image/webp";
+            case "webm" -> "video/webm";
             default -> null;
         };
     }
@@ -1364,7 +1400,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                                             int viewportWidth,
                                             int viewportHeight,
                                             boolean screenshot,
-                                            boolean har) {}
+                                            boolean har,
+                                            boolean video) {}
 
     private static final class UnsupportedFileConversionException extends RuntimeException {
 

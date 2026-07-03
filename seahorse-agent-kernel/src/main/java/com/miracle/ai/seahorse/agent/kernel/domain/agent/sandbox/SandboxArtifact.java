@@ -20,7 +20,9 @@ package com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
 public record SandboxArtifact(String artifactId,
                               String sessionId,
@@ -34,6 +36,14 @@ public record SandboxArtifact(String artifactId,
                               Instant createdAt) {
 
     private static final int MAX_SCAN_SUMMARY_LENGTH = 256;
+    private static final Set<String> PROMPT_VISIBLE_EXACT_MEDIA_TYPES = Set.of(
+            "application/json",
+            "application/pdf",
+            "application/xml",
+            "image/gif",
+            "image/jpeg",
+            "image/png",
+            "image/webp");
 
     public SandboxArtifact {
         artifactId = requireText(artifactId, "artifactId must not be blank");
@@ -92,6 +102,10 @@ public record SandboxArtifact(String artifactId,
     }
 
     public boolean promptVisible() {
+        return downloadable() && isPromptVisibleMediaType(mediaType);
+    }
+
+    public boolean downloadable() {
         return (scanStatus == SandboxArtifactScanStatus.CLEAN
                 || scanStatus == SandboxArtifactScanStatus.REDACTED)
                 && sensitivity != ContextSensitivity.SECRET;
@@ -155,5 +169,15 @@ public record SandboxArtifact(String artifactId,
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private static boolean isPromptVisibleMediaType(String mediaType) {
+        if (!hasText(mediaType)) {
+            return false;
+        }
+        String normalized = mediaType.toLowerCase(Locale.ROOT).split(";", 2)[0].trim();
+        return normalized.startsWith("text/")
+                || normalized.endsWith("+json")
+                || PROMPT_VISIBLE_EXACT_MEDIA_TYPES.contains(normalized);
     }
 }

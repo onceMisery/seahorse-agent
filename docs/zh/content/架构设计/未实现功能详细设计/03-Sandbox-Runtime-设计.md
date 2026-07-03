@@ -4,11 +4,11 @@
 
 ## 1. 结论
 
-Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端口、artifact 端口、JDBC 存储、Web API、前端页面骨架、opt-in 的 Docker/Podman CLI 容器 adapter、full-compose backend Docker host-socket/CLI opt-in 接入、orphan workspace 清理、live container 只读巡检、runtime health 只读检查、active session capacity 只读信号与受控 orphan container 回收，以及第一个 Agent 工具 `sandbox_python`：配置 `seahorse-agent.adapters.sandbox.runtime=container` 后，`CODE_INTERPRETER` 可以在无网络容器中执行 Python 最小闭环。默认 `SandboxRuntimePort` 仍是 `unsupported()`，不配置真实 adapter 时继续 fail closed。
+Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端口、artifact 端口、JDBC 存储、Web API、前端页面骨架、opt-in 的 Docker/Podman CLI 容器 adapter、full-compose backend Docker host-socket/CLI opt-in 接入、orphan workspace 清理、live container 只读巡检、runtime health 只读检查、active session capacity 只读信号与受控 orphan container 回收，以及 `sandbox_python`、`sandbox_file_convert` 和受限 `sandbox_browser` Agent 工具链路：配置 `seahorse-agent.adapters.sandbox.runtime=container` 后，`CODE_INTERPRETER`、`FILE_CONVERSION` 和 inline no-network `BROWSER_AUTOMATION` 可以在无网络容器中完成最小闭环。默认 `SandboxRuntimePort` 仍是 `unsupported()`，不配置真实 adapter 时继续 fail closed。
 
-因此它的现状应定义为“控制面、审计基础、Code Interpreter 容器 runtime 最小闭环、full-compose host-socket opt-in 接入、runtime 巡检/受控回收基础和 `sandbox_python` 工具链路已实现，生产级 sandbox 还需要补齐 profile/配额、更完整 Agent 工具化和强隔离加固”。
+因此它的现状应定义为“控制面、审计基础、Code Interpreter/File Conversion/受限 Browser Automation 容器 runtime 最小闭环、full-compose host-socket opt-in 接入、runtime 巡检/受控回收基础和 sandbox-backed 工具链路已实现，生产级 sandbox 还需要补齐更广格式/外联/会话场景、profile/配额和强隔离加固”。
 
-剩余设计重点是：补齐 runtime profile、磁盘/TTL/网络 allowlist、病毒/二进制深扫/redaction summary、artifact preview 治理，并把更广 sandbox 执行接入 Agent 工具和运行记录。
+剩余设计重点是：补齐磁盘/网络 allowlist、tenant/agent 配额、病毒/二进制深扫、PDF/Office/二进制转换、browser egress/URL policy 与 auth/session state capture，并继续加固运行隔离和审计可视化。
 
 ## 2. 当前实现状态
 
@@ -27,21 +27,21 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 | 存储 | 已有 `sa_sandbox_session`、`sa_sandbox_execution`、`sa_sandbox_artifact` 对应 JDBC adapter | `JdbcSandboxRepositoryAdapter.java` |
 | Web API | 已有创建 session、execute、close、list executions、list artifacts API | `SeahorseSandboxController.java` |
 | 前端页面 | 已有 `/admin/sandbox`，可创建 session、输入参数、执行、查看结果、execution history 和 artifact | `frontend/src/pages/admin/sandbox/SandboxPage.tsx` |
-| Agent 工具 | 已有 `sandbox_python` 最小工具链路，经过 Tool Gateway policy/audit/redaction，并调用 `SandboxRuntimeInboundPort` 执行 `CODE_INTERPRETER` | `SandboxPythonToolPortAdapter.java` |
+| Agent 工具 | 已有 `sandbox_python`、`sandbox_file_convert` 和受限 inline no-network `sandbox_browser` 工具链路，经过 Tool Gateway policy/audit/redaction，并调用 `SandboxRuntimeInboundPort` 执行对应 sandbox runtime | `SandboxPythonToolPortAdapter.java`、`SandboxFileConvertToolPortAdapter.java`、`SandboxBrowserToolPortAdapter.java` |
 | artifact scanner | 已有 `SandboxArtifactScannerPort`、默认保守 scanner、`REDACTED` 状态、prompt visibility gate，以及 file:// 文本类 artifact 的 secret/PII 内容扫描；scanner 失败 fail closed | `DefaultSandboxArtifactScannerPort.java`、`KernelSandboxRuntimeService.java` |
 
 ### 2.2 真实缺口
 
 | 缺口 | 影响 | 设计处理 |
 | --- | --- | --- |
-| 真实隔离 runtime 覆盖仍窄 | Code Interpreter Python 最小容器闭环与 full-compose backend Docker host-socket opt-in 接入已落地；File Conversion 已有 CSV/TSV/JSON 表格转换与 txt/html/markdown 文本文档转换闭环；Browser Automation、Shell 和 PDF/Office/二进制转换仍未完成 | 扩展 Docker/Podman adapter 的 profile 覆盖，P1/P2 可替换为 gVisor 或 Firecracker |
+| 真实隔离 runtime 覆盖仍窄 | Code Interpreter Python 最小容器闭环与 full-compose backend Docker host-socket opt-in 接入已落地；File Conversion 已有 CSV/TSV/JSON 表格转换与 txt/html/markdown 文本文档转换闭环；Browser Automation 已有 inline no-network 截图/HAR/download-only 视频 artifact；Shell、PDF/Office/二进制转换、外部 URL/egress 和 auth/session capture 仍未完成 | 扩展 Docker/Podman adapter 的 profile 覆盖，P1/P2 可替换为 gVisor 或 Firecracker |
 | 真实 runtime 清理仍需生产化 | 当前 adapter 使用 `--rm` 并在 close 时删除 per-session workspace；session TTL metadata 已持久化，管理员手动 expired session sweep 与后台定时 TTL sweep 均可将过期未终态 session 释放并标记为 `TIMED_OUT`；orphan workspace sweep 会保守删除旧 workspace 并只读巡检 `seahorse-sandbox-*` live/exited container；runtime health API 已暴露 engine/workspace/container 与 active session capacity 只读健康信号且不暴露 workspace root；orphan container reap 已提供默认 dry-run 的显式管理员操作并保护非终态 session container；仍缺 runtime pool 调度和节点级健康检查 | 接入 runtime 节点健康检查、调度/admission control 和更完整的自动化回收策略 |
 | 资源配额仍不完整 | 当前 adapter 有固定 CPU、内存、pids、timeout、stdout/stderr limit，session `profileId`/`expiresAt` 已持久化；仍缺磁盘配额和按 tenant/agent/tool 的资源策略联动 | 新增 `SandboxResourcePolicy` 和更完整 runtime profile policy |
 | 真实 artifact 产物已进入最小闭环 | Code Interpreter adapter 已收集 workspace 文件，kernel 已将 prompt-visible file:// artifact 写入 object storage，并通过治理 API 下载/查看详情 | 后续补齐 preview、生命周期和更广运行时产物 |
-| 内容级 artifact 扫描仍需加固 | 基础 metadata scanner、file:// 文本类 secret/PII 内容阻断和 prompt visibility gate 已落地；仍缺病毒扫描、二进制/PDF 深度扫描、redaction summary | 后续接入专业扫描引擎和可审计 redaction summary |
+| 内容级 artifact 扫描仍需加固 | 基础 metadata scanner、file:// 文本类 secret/PII 内容阻断、prompt visibility gate、scan summary 和结构化 redaction summary 已落地；仍缺病毒扫描、二进制/PDF 深度扫描 | 后续接入专业扫描引擎和更深内容扫描 |
 | 网络策略只有默认 deny 与 allowlist 基础 | 当前容器 adapter 强制 `--network none`；仍缺按 tenant/agent/tool 的网络 profile、DNS/IP 限制、egress proxy 和审计可视化 | 引入 policy profile、egress proxy 和 network decision log |
 | UI 偏 demo | execution history 已补齐；仍缺 session 列表、artifact 详情、policy preview | 升级为 Sandbox Operations 页面 |
-| Agent 工具化未完整 | `sandbox_python` 已接入 Tool Gateway；`sandbox_file_convert` 已有 CSV/TSV/JSON 表格转换与 txt/html/markdown 文本文档转换闭环；browser automation、PDF/Office/二进制格式转换和 Inspector 展示仍未完成 | 继续补齐更广 sandbox-backed tool adapters |
+| Agent 工具化未完整 | `sandbox_python` 已接入 Tool Gateway；`sandbox_file_convert` 已有 CSV/TSV/JSON 表格转换与 txt/html/markdown 文本文档转换闭环；`sandbox_browser` 已有 inline no-network 截图/HAR/download-only 视频 artifact；PDF/Office/二进制格式转换、browser egress/session capture 和 Inspector 展示仍未完成 | 继续补齐更广 sandbox-backed tool adapters |
 
 ## 3. 目标架构
 
@@ -77,7 +77,7 @@ flowchart TD
 | 类型 | P0 行为 | P1/P2 扩展 |
 | --- | --- | --- |
 | `CODE_INTERPRETER` | Python/Node 受限执行 | 预装数据分析包、图表产物 |
-| `BROWSER_AUTOMATION` | Playwright 受限浏览器 | 视频录制、HAR、截图 artifact |
+| `BROWSER_AUTOMATION` | Playwright 受限浏览器 | 截图、HAR、download-only 视频 artifact；外部 URL/egress 与会话 capture 后续 |
 | `SHELL` | 只允许 allowlisted command | 交互式 shell 不进入 P0 |
 | `FILE_CONVERSION` | 文档转换、OCR、压缩解压 | 与 Tika/LibreOffice adapter 隔离运行 |
 
@@ -268,7 +268,7 @@ P0 profile：
 | Tool | Runtime | 说明 |
 | --- | --- | --- |
 | `sandbox_python` | `CODE_INTERPRETER` | 已有最小闭环：执行 Python 片段并返回 execution summary；artifact 收集后续补齐 |
-| `sandbox_browser` | `BROWSER_AUTOMATION` | 受限 Playwright 浏览，返回截图/HAR/summary |
+| `sandbox_browser` | `BROWSER_AUTOMATION` | 受限 Playwright 浏览，返回 summary、截图、HAR 和 download-only 视频 artifact；外部 URL/egress 与 auth/session capture 后续 |
 | `sandbox_file_convert` | `FILE_CONVERSION` | 已有 CSV/TSV -> JSON、JSON -> CSV/TSV、txt -> html、html -> txt、markdown/md -> html/txt 转换闭环，返回 governed artifact；PDF/Office/二进制格式后续补齐 |
 
 集成规则：
@@ -309,7 +309,7 @@ P0 profile：
 
 ### P2：Agent 工具化
 
-1. 新增 `sandbox_python`、`sandbox_browser`、`sandbox_file_convert` tool adapters。（`sandbox_python` 与 `sandbox_file_convert` CSV/TSV/JSON 表格转换和 txt/html/markdown 文本文档转换闭环已补齐；browser、PDF/Office/二进制转换格式后续）
+1. 新增 `sandbox_python`、`sandbox_browser`、`sandbox_file_convert` tool adapters。（`sandbox_python`、`sandbox_file_convert` CSV/TSV/JSON 表格转换和 txt/html/markdown 文本文档转换、受限 inline no-network `sandbox_browser` 截图/HAR/download-only 视频 artifact 已补齐；browser 外部 URL/egress、auth/session capture、PDF/Office/二进制转换格式后续）
 2. Tool Gateway policy 中区分 sandbox-backed tool。（`sandbox_python` 与 `sandbox_file_convert` 已注册为 HIGH / EXECUTE / SANDBOX）
 3. Agent Inspector 展示 sandbox execution 与 artifact。
 4. 加入审批与配额联动。
@@ -452,6 +452,16 @@ This completes the structured summary payload for the current conservative scann
 The runtime security boundary is unchanged: the tool still accepts bounded inline HTML only, runs the browser container with network disabled, aborts non-`about:`/`blob:`/`data:` requests at the page route layer, and exposes artifacts only through the existing scanner/object-storage/governed-download path. This update does not add external URL browsing, egress allowlists or proxying, credentials, video recording, session/auth capture, or broader browser workflow automation.
 
 Fresh full-Docker evidence: `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-har-smoke` passed 11/11, verifying real Tool Gateway invocation, three governed artifacts (`browser-result.json`, `screenshot.png`, `browser-network.har`), PostgreSQL `application/har+json` metadata, blocked external request markers in the downloaded HAR, no storage-reference leakage, object storage files, no leftover managed sandbox containers, and zero non-terminal sandbox sessions.
+
+### 2026-07-03 Update: sandbox browser download-only video capture
+
+`sandbox_browser` now supports an optional `video=true` argument on the existing inline no-network browser automation path. The container adapter records the Playwright context and emits `browser-video.webm` as `video/webm`, while keeping bounded inline HTML input, container `--network none`, and the route-level block for non-inline requests.
+
+This update splits governed download eligibility from prompt visibility. `SandboxArtifact.downloadable()` now controls clean/redacted non-secret artifact storage copy and download; `promptVisible()` additionally requires a prompt-safe media type. Therefore WebM video is copied to object storage and can be downloaded through artifact detail/download APIs, but remains prompt-blocked and is not included in tool observations.
+
+Fresh full-Docker evidence: `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-video-smoke` passed 12/12 after rebuilding the full-compose backend. The smoke verified real Tool Gateway invocation with `video=true`, prompt-visible JSON/PNG/HAR artifacts only, persisted clean/internal `video/webm` metadata, prompt-blocked but downloadable video detail, WebM download with EBML header, object storage, no leftover managed sandbox containers, and zero non-terminal sandbox sessions.
+
+This completes download-only browser video artifact capture for inline no-network browser automation. External URL browsing, egress allowlists/proxying, credentials, auth/session state capture, richer browser workflows, stronger isolation, PDF/Office/binary conversion, virus/binary/PDF deep scanning, and broader A2A/cross-provider Tool Gateway hardening remain follow-up work.
 
 ## 13. 非目标
 

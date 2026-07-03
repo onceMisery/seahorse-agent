@@ -37,7 +37,7 @@ import java.util.regex.Pattern;
 public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScannerPort {
 
     private static final int MAX_CONTENT_SCAN_BYTES = 256 * 1024;
-    private static final Set<String> SAFE_EXACT_MEDIA_TYPES = Set.of(
+    private static final Set<String> PROMPT_SAFE_EXACT_MEDIA_TYPES = Set.of(
             "application/json",
             "application/pdf",
             "application/xml",
@@ -45,6 +45,8 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
             "image/jpeg",
             "image/png",
             "image/webp");
+    private static final Set<String> DOWNLOAD_ONLY_EXACT_MEDIA_TYPES = Set.of(
+            "video/webm");
     private static final Set<String> SENSITIVE_MARKERS = Set.of(
             "api_key",
             "credential",
@@ -79,6 +81,9 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                     List.of("SENSITIVE_METADATA"));
         }
         if (!isPromptSafeMediaType(artifact.mediaType())) {
+            if (isDownloadOnlyMediaType(artifact.mediaType())) {
+                return SandboxArtifactScanResult.clean(artifact.sensitivity(), "metadata scan passed", false);
+            }
             return SandboxArtifactScanResult.blocked(
                     artifact.sensitivity(),
                     "unsupported prompt media type",
@@ -107,7 +112,17 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
             return false;
         }
         String normalized = mediaType.toLowerCase(Locale.ROOT).split(";", 2)[0].trim();
-        return normalized.startsWith("text/") || normalized.endsWith("+json") || SAFE_EXACT_MEDIA_TYPES.contains(normalized);
+        return normalized.startsWith("text/")
+                || normalized.endsWith("+json")
+                || PROMPT_SAFE_EXACT_MEDIA_TYPES.contains(normalized);
+    }
+
+    private static boolean isDownloadOnlyMediaType(String mediaType) {
+        if (!hasText(mediaType)) {
+            return false;
+        }
+        String normalized = mediaType.toLowerCase(Locale.ROOT).split(";", 2)[0].trim();
+        return DOWNLOAD_ONLY_EXACT_MEDIA_TYPES.contains(normalized);
     }
 
     private static SandboxArtifactScanResult scanLocalTextContent(SandboxArtifact artifact) {

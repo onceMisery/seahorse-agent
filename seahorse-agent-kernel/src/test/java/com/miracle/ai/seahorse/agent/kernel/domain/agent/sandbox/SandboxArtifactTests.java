@@ -36,11 +36,17 @@ class SandboxArtifactTests {
         SandboxArtifact redactedArtifact = artifact("artifact-4",
                 SandboxArtifactScanStatus.REDACTED,
                 ContextSensitivity.CONFIDENTIAL);
+        SandboxArtifact videoArtifact = artifact("artifact-5",
+                "video/webm",
+                SandboxArtifactScanStatus.CLEAN,
+                ContextSensitivity.INTERNAL);
 
         assertTrue(publicArtifact.promptVisible());
         assertTrue(redactedArtifact.promptVisible());
         assertFalse(unscannedArtifact.promptVisible());
         assertFalse(secretArtifact.promptVisible());
+        assertFalse(videoArtifact.promptVisible());
+        assertTrue(videoArtifact.downloadable());
     }
 
     @Test
@@ -69,6 +75,21 @@ class SandboxArtifactTests {
                 "exec-1",
                 "object://sandbox/" + artifactId,
                 "text/plain",
+                scanStatus,
+                sensitivity,
+                Instant.parse("2026-05-26T00:00:00Z"));
+    }
+
+    private static SandboxArtifact artifact(String artifactId,
+                                            String mediaType,
+                                            SandboxArtifactScanStatus scanStatus,
+                                            ContextSensitivity sensitivity) {
+        return new SandboxArtifact(
+                artifactId,
+                "session-1",
+                "exec-1",
+                "object://sandbox/" + artifactId,
+                mediaType,
                 scanStatus,
                 sensitivity,
                 Instant.parse("2026-05-26T00:00:00Z"));

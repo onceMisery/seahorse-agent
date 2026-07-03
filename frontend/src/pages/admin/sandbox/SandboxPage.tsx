@@ -921,7 +921,7 @@ export function SandboxPage() {
                 <div className="space-y-2">
                   {artifacts.map((art) => {
                     const detailForArtifact = artifactDetail?.artifactId === art.artifactId ? artifactDetail : null;
-                    const downloadBlocked = art.promptVisible === false || detailForArtifact?.downloadable === false;
+                    const downloadBlocked = detailForArtifact?.downloadable === false;
                     return (
                       <div key={art.artifactId} className="p-2 bg-slate-50 rounded text-sm">
                         <div className="flex items-center justify-between gap-2">
@@ -983,7 +983,6 @@ export function SandboxPage() {
                           variant="outline"
                           size="sm"
                           disabled={
-                            selectedArtifact.promptVisible === false ||
                             selectedArtifact.downloadable === false ||
                             loadingArtifactDetailId === selectedArtifact.artifactId ||
                             downloadingArtifactId === selectedArtifact.artifactId

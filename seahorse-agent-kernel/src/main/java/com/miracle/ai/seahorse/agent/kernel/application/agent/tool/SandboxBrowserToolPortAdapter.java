@@ -47,6 +47,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private static final String HTML_ARGUMENT = "html";
     private static final String SCREENSHOT_ARGUMENT = "screenshot";
     private static final String HAR_ARGUMENT = "har";
+    private static final String VIDEO_ARGUMENT = "video";
     private static final String VIEWPORT_WIDTH_ARGUMENT = "viewportWidth";
     private static final String VIEWPORT_HEIGHT_ARGUMENT = "viewportHeight";
     private static final String ACTION_SNAPSHOT = "snapshot";
@@ -55,9 +56,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
             "Sandbox Browser",
-            "Render bounded inline HTML through a no-network Playwright browser sandbox. Supports page snapshots, text extraction, and governed screenshot/result/HAR artifacts.",
+            "Render bounded inline HTML through a no-network Playwright browser sandbox. Supports page snapshots, text extraction, and governed screenshot/result/HAR/video artifacts.",
             """
-                    {"type":"object","required":["html"],"properties":{"html":{"type":"string","minLength":1,"maxLength":262144},"action":{"type":"string","enum":["snapshot","extract_text"],"default":"snapshot"},"screenshot":{"type":"boolean","default":true},"har":{"type":"boolean","default":false},"viewportWidth":{"type":"integer","minimum":320,"maximum":2400,"default":1280},"viewportHeight":{"type":"integer","minimum":320,"maximum":2400,"default":720}}}
+                    {"type":"object","required":["html"],"properties":{"html":{"type":"string","minLength":1,"maxLength":262144},"action":{"type":"string","enum":["snapshot","extract_text"],"default":"snapshot"},"screenshot":{"type":"boolean","default":true},"har":{"type":"boolean","default":false},"video":{"type":"boolean","default":false},"viewportWidth":{"type":"integer","minimum":320,"maximum":2400,"default":1280},"viewportHeight":{"type":"integer","minimum":320,"maximum":2400,"default":720}}}
                     """);
 
     private final SandboxRuntimeInboundPort sandboxRuntime;
@@ -129,6 +130,10 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                 safeRequest.arguments(),
                 HAR_ARGUMENT,
                 false);
+        boolean video = booleanArgument(
+                safeRequest.arguments(),
+                VIDEO_ARGUMENT,
+                false);
         SandboxSession session = null;
         try {
             session = sandboxRuntime.createSession(new SandboxSessionCreateCommand(
@@ -138,12 +143,12 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                     false,
                     List.of()));
             if (session.status().isTerminal()) {
-                return failed(observation(session, null, List.of(), action, viewportWidth, viewportHeight, har),
+                return failed(observation(session, null, List.of(), action, viewportWidth, viewportHeight, har, video),
                         "sandbox browser session did not start: " + session.reasonCode());
             }
             SandboxExecutionResult result = sandboxRuntime.execute(new SandboxExecutionCommand(
                     session.sessionId(),
-                    browserInput(action, html, viewportWidth, viewportHeight, screenshot, har),
+                    browserInput(action, html, viewportWidth, viewportHeight, screenshot, har, video),
                     false,
                     List.of()));
             Map<String, Object> observation = observation(
@@ -153,7 +158,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                     action,
                     viewportWidth,
                     viewportHeight,
-                    har);
+                    har,
+                    video);
             if (result.execution().status() == SandboxExecutionStatus.SUCCEEDED) {
                 return ToolInvocationResult.ok(jsonSupport.write(observation));
             }
@@ -171,7 +177,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                 int viewportWidth,
                                 int viewportHeight,
                                 boolean screenshot,
-                                boolean har) {
+                                boolean har,
+                                boolean video) {
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("action", action);
         input.put("html", html);
@@ -179,6 +186,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         input.put("viewportHeight", viewportHeight);
         input.put("screenshot", screenshot);
         input.put("har", har);
+        input.put("video", video);
         return jsonSupport.write(input);
     }
 
@@ -193,7 +201,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                             String action,
                                             int viewportWidth,
                                             int viewportHeight,
-                                            boolean har) {
+                                            boolean har,
+                                            boolean video) {
         Map<String, Object> observation = new LinkedHashMap<>();
         observation.put("toolId", TOOL_ID);
         observation.put("sessionId", session == null ? null : session.sessionId());
@@ -204,18 +213,19 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         observation.put("executionStatus", execution == null ? null : execution.status().name());
         observation.put("reasonCode", execution == null ? null : execution.reasonCode().name());
         observation.put("resultSummary", execution == null ? null : execution.resultSummary());
-        observation.put("browser", browser(action, viewportWidth, viewportHeight, har));
+        observation.put("browser", browser(action, viewportWidth, viewportHeight, har, video));
         observation.put("artifacts", artifacts(artifacts));
         return observation;
     }
 
-    private Map<String, Object> browser(String action, int viewportWidth, int viewportHeight, boolean har) {
+    private Map<String, Object> browser(String action, int viewportWidth, int viewportHeight, boolean har, boolean video) {
         Map<String, Object> browser = new LinkedHashMap<>();
         browser.put("action", action);
         browser.put("viewportWidth", viewportWidth);
         browser.put("viewportHeight", viewportHeight);
         browser.put("networkAllowed", false);
         browser.put("har", har);
+        browser.put("video", video);
         return browser;
     }
 
