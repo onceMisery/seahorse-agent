@@ -416,6 +416,14 @@ This closes the immediate operator path for sandbox-backed tool quotas without a
 
 Fresh full-Docker evidence: `.\scripts\e2e-tool-gateway-quota-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-tool-quota-smoke-rerun` passed 4/4. The smoke created a zero-call sandbox tool quota policy through the Sandbox API, invoked `sandbox_python` through Tool Gateway, and observed `QUOTA_HARD_LIMIT_EXCEEDED`; cleanup confirmed no leftover managed sandbox containers and zero non-terminal sandbox sessions.
 
+### 2026-07-03 Update: sandbox browser automation
+
+`sandbox_browser` now covers the first browser automation minimum path. The tool accepts bounded inline HTML and supports `snapshot` plus `extract_text`; it creates a `BROWSER_AUTOMATION` session with network disabled, invokes the container runtime through `SandboxRuntimeInboundPort`, and closes the session after execution. The runtime writes `browser-input.html`, generates a Python Playwright script, runs it in `seahorse-sandbox-browser:playwright-1.48.0`, and collects only `browser-result.json` plus optional `screenshot.png` as governed artifacts.
+
+The browser runtime image is project-owned at `resources/docker/Dockerfile.sandbox-browser-runtime`, based on the upstream Playwright Python image with the matching Python `playwright` package installed. This keeps the runtime reproducible for local full-Docker validation while preserving the no-network execution posture. This slice does not add external URL browsing, egress allowlists, HAR/video recording, auth/session capture, or broad browser workflow building.
+
+Fresh full-Docker evidence: `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-smoke` passed 10/10. The smoke verified built-in catalog exposure, Tool Gateway invocation, persisted `BROWSER_AUTOMATION` session/profile metadata, governed JSON and PNG artifacts, governed result download, local object storage files, no leftover managed sandbox containers, and zero non-terminal sandbox sessions.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

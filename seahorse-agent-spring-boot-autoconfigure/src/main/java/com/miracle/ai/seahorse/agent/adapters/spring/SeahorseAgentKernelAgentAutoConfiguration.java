@@ -61,6 +61,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryWriteTo
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.NewsletterGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.PptGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.QueryMetadataToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxBrowserToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxFileConvertToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxPythonToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
@@ -611,6 +612,17 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             SandboxRuntimeInboundPort sandboxRuntimeInboundPort,
             AgentToolJsonSupport jsonSupport) {
         return new SandboxFileConvertToolPortAdapter(sandboxRuntimeInboundPort, jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean(SandboxRuntimeInboundPort.class)
+    @ConditionalOnProperty(name = PROP_SANDBOX_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public SandboxBrowserToolPortAdapter seahorseSandboxBrowserToolPortAdapter(
+            SandboxRuntimeInboundPort sandboxRuntimeInboundPort,
+            AgentToolJsonSupport jsonSupport) {
+        return new SandboxBrowserToolPortAdapter(sandboxRuntimeInboundPort, jsonSupport);
     }
 
     @Bean

@@ -269,6 +269,58 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldRunBrowserAutomationWithGeneratedPlaywrightScriptAndCollectOnlyOutputs() throws Exception {
+        String html = "<!doctype html><html><head><title>Browser Smoke</title></head><body><main>browser marker</main></body></html>";
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded(
+                        "browser snapshot completed; textLength=14; screenshot=True\n",
+                        Duration.ofMillis(320)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("sync_playwright", "page.set_content", "screenshot.png")
+                            .doesNotContain("browser marker");
+                    assertThat(Files.readString(command.workingDirectory().resolve("browser-input.html")))
+                            .isEqualTo(html);
+                    Files.writeString(command.workingDirectory().resolve("browser-result.json"),
+                            """
+                                    {"action":"snapshot","title":"Browser Smoke","text":"browser marker"}
+                                    """);
+                    Files.write(command.workingDirectory().resolve("screenshot.png"), new byte[]{1, 2, 3});
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","html":"<!doctype html><html><head><title>Browser Smoke</title></head><body><main>browser marker</main></body></html>","viewportWidth":1024,"viewportHeight":640,"screenshot":true}
+                        """,
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().reasonCode()).isEqualTo(SandboxPolicyReasonCode.VALID_REQUEST);
+        assertThat(result.execution().resultSummary()).contains("browser snapshot completed");
+        assertThat(result.artifacts()).hasSize(2);
+        assertThat(result.artifacts())
+                .anySatisfy(artifact -> {
+                    assertThat(artifact.objectUri()).contains("browser-result.json");
+                    assertThat(artifact.mediaType()).isEqualTo("application/json");
+                })
+                .anySatisfy(artifact -> {
+                    assertThat(artifact.objectUri()).contains("screenshot.png");
+                    assertThat(artifact.mediaType()).isEqualTo("image/png");
+                })
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("browser-input.html"));
+        assertThat(runner.lastCommand.commandLine())
+                .containsSubsequence("docker", "run", "--rm")
+                .containsSubsequence("--network", "none")
+                .containsSubsequence("--memory", "768m")
+                .containsSubsequence("seahorse-sandbox-browser:playwright-1.48.0", "python", "/workspace/main.py");
+    }
+
+    @Test
     void shouldRejectUnsupportedFileConversionPairBeforeRunningContainer() {
         RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
         ContainerSandboxRuntimeAdapter adapter = adapter(runner);

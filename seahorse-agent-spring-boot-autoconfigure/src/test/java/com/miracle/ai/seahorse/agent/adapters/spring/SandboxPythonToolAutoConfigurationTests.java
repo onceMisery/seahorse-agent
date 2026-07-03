@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxFileConvertToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxBrowserToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxPythonToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
@@ -61,6 +62,7 @@ class SandboxPythonToolAutoConfigurationTests {
             assertThat(context).hasNotFailed();
             assertThat(context).hasSingleBean(SandboxPythonToolPortAdapter.class);
             assertThat(context).hasSingleBean(SandboxFileConvertToolPortAdapter.class);
+            assertThat(context).hasSingleBean(SandboxBrowserToolPortAdapter.class);
         });
     }
 
@@ -71,6 +73,7 @@ class SandboxPythonToolAutoConfigurationTests {
                     assertThat(context).hasNotFailed();
                     assertThat(context).doesNotHaveBean(SandboxPythonToolPortAdapter.class);
                     assertThat(context).doesNotHaveBean(SandboxFileConvertToolPortAdapter.class);
+                    assertThat(context).doesNotHaveBean(SandboxBrowserToolPortAdapter.class);
                 });
     }
 
@@ -85,6 +88,7 @@ class SandboxPythonToolAutoConfigurationTests {
                     assertThat(context).hasSingleBean(SandboxRuntimeInboundPort.class);
                     assertThat(context).hasSingleBean(SandboxPythonToolPortAdapter.class);
                     assertThat(context).hasSingleBean(SandboxFileConvertToolPortAdapter.class);
+                    assertThat(context).hasSingleBean(SandboxBrowserToolPortAdapter.class);
                 });
     }
 

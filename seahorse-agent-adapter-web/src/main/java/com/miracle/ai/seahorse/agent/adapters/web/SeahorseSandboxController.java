@@ -317,7 +317,8 @@ public class SeahorseSandboxController {
 
     private static SandboxRuntimeProfileResponse runtimeProfile(SandboxRuntimeType runtimeType) {
         boolean supportedByContainerRuntime = runtimeType == SandboxRuntimeType.CODE_INTERPRETER
-                || runtimeType == SandboxRuntimeType.FILE_CONVERSION;
+                || runtimeType == SandboxRuntimeType.FILE_CONVERSION
+                || runtimeType == SandboxRuntimeType.BROWSER_AUTOMATION;
         return new SandboxRuntimeProfileResponse(
                 runtimeType,
                 SandboxSession.profileIdOrDefault(null, runtimeType),

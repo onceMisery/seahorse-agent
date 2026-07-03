@@ -399,8 +399,8 @@ try {
             throw "Expected supported file-conversion no-network profile: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $browserProfile = @($profiles | Where-Object { "$($_.runtimeType)" -eq "BROWSER_AUTOMATION" -and "$($_.profileId)" -eq "browser-readonly" })
-        if ($browserProfile.Count -ne 1 -or $browserProfile[0].supportedByContainerRuntime -ne $false -or "$($browserProfile[0].status)" -ne "PLANNED" -or $browserProfile[0].networkAllowed -ne $false) {
-            throw "Expected planned browser-readonly no-network profile: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        if ($browserProfile.Count -ne 1 -or $browserProfile[0].supportedByContainerRuntime -ne $true -or "$($browserProfile[0].status)" -ne "SUPPORTED" -or $browserProfile[0].networkAllowed -ne $false) {
+            throw "Expected supported browser-readonly no-network profile: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $shellProfile = @($profiles | Where-Object { "$($_.runtimeType)" -eq "SHELL" -and "$($_.profileId)" -eq "shell-restricted" })
         if ($shellProfile.Count -ne 1 -or $shellProfile[0].supportedByContainerRuntime -ne $false -or "$($shellProfile[0].status)" -ne "PLANNED" -or $shellProfile[0].networkAllowed -ne $false) {

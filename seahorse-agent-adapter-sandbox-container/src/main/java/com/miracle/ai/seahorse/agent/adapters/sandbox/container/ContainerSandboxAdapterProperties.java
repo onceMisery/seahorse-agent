@@ -29,6 +29,8 @@ public class ContainerSandboxAdapterProperties {
 
     private String pythonImage = "python:3.11-alpine";
 
+    private String browserImage = "seahorse-sandbox-browser:playwright-1.48.0";
+
     private String workspaceRoot = "";
 
     private String workspaceMountSourceRoot = "";
@@ -40,6 +42,8 @@ public class ContainerSandboxAdapterProperties {
     private int stderrLimitBytes = 16 * 1024;
 
     private String memory = "256m";
+
+    private String browserMemory = "768m";
 
     private String cpus = "1.0";
 
@@ -63,6 +67,16 @@ public class ContainerSandboxAdapterProperties {
 
     public void setPythonImage(String pythonImage) {
         this.pythonImage = requireTextOrDefault(pythonImage, "python:3.11-alpine");
+    }
+
+    public String getBrowserImage() {
+        return browserImage;
+    }
+
+    public void setBrowserImage(String browserImage) {
+        this.browserImage = requireTextOrDefault(
+                browserImage,
+                "seahorse-sandbox-browser:playwright-1.48.0");
     }
 
     public String getWorkspaceRoot() {
@@ -115,6 +129,14 @@ public class ContainerSandboxAdapterProperties {
 
     public void setMemory(String memory) {
         this.memory = requireTextOrDefault(memory, "256m");
+    }
+
+    public String getBrowserMemory() {
+        return browserMemory;
+    }
+
+    public void setBrowserMemory(String browserMemory) {
+        this.browserMemory = requireTextOrDefault(browserMemory, "768m");
     }
 
     public String getCpus() {

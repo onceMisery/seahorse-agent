@@ -1,0 +1,310 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionSweepResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
+import org.junit.jupiter.api.Test;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class SandboxBrowserToolPortAdapterTests {
+
+    private static final Instant NOW = Instant.parse("2026-07-03T00:00:00Z");
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final AgentToolJsonSupport jsonSupport = new AgentToolJsonSupport(objectMapper);
+
+    @Test
+    void descriptorShouldAdvertiseNoNetworkBrowserSnapshotInputs() {
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(
+                new RecordingSandboxRuntime(null),
+                jsonSupport);
+
+        String schema = adapter.descriptor().jsonSchema();
+
+        assertEquals(SandboxBrowserToolPortAdapter.TOOL_ID, adapter.descriptor().toolId());
+        assertTrue(adapter.descriptor().description().contains("no-network Playwright"));
+        assertTrue(schema.contains("\"html\""));
+        assertTrue(schema.contains("\"snapshot\""));
+        assertTrue(schema.contains("\"extract_text\""));
+        assertTrue(schema.contains("\"viewportWidth\""));
+        assertTrue(schema.contains("\"screenshot\""));
+    }
+
+    @Test
+    void shouldExecuteSnapshotThroughBrowserRuntime() throws Exception {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
+                new SandboxExecution(
+                        "exec-1",
+                        "session-1",
+                        SandboxRuntimeType.BROWSER_AUTOMATION,
+                        SandboxExecutionStatus.SUCCEEDED,
+                        "exitCode=0; stdout=browser snapshot completed",
+                        SandboxPolicyReasonCode.VALID_REQUEST,
+                        NOW,
+                        NOW),
+                List.of(
+                        new SandboxArtifact(
+                                "artifact-json",
+                                "session-1",
+                                "exec-1",
+                                "local://sandbox-artifacts/browser-result.json",
+                                "application/json",
+                                SandboxArtifactScanStatus.CLEAN,
+                                ContextSensitivity.INTERNAL,
+                                "metadata scan passed",
+                                NOW),
+                        new SandboxArtifact(
+                                "artifact-png",
+                                "session-1",
+                                "exec-1",
+                                "local://sandbox-artifacts/screenshot.png",
+                                "image/png",
+                                SandboxArtifactScanStatus.CLEAN,
+                                ContextSensitivity.INTERNAL,
+                                "metadata scan passed",
+                                NOW))));
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "html", "<!doctype html><title>Browser Smoke</title><main>browser marker</main>",
+                "viewportWidth", 1024,
+                "viewportHeight", 640,
+                "screenshot", true)));
+
+        assertTrue(result.success());
+        assertEquals("tenant-1", runtime.createCommand.tenantId());
+        assertEquals("run-1", runtime.createCommand.runId());
+        assertEquals(SandboxRuntimeType.BROWSER_AUTOMATION, runtime.createCommand.runtimeType());
+        assertFalse(runtime.createCommand.networkRequested());
+        assertEquals(List.of(), runtime.createCommand.requestedHosts());
+        assertEquals("session-1", runtime.executeCommand.sessionId());
+        assertFalse(runtime.executeCommand.networkRequested());
+        assertEquals(List.of(), runtime.executeCommand.requestedHosts());
+        assertEquals("session-1", runtime.closedSessionId);
+
+        JsonNode browserInput = objectMapper.readTree(runtime.executeCommand.input());
+        assertEquals("snapshot", browserInput.path("action").asText());
+        assertEquals(1024, browserInput.path("viewportWidth").asInt());
+        assertEquals(640, browserInput.path("viewportHeight").asInt());
+        assertTrue(browserInput.path("screenshot").asBoolean());
+        assertTrue(browserInput.path("html").asText().contains("browser marker"));
+
+        JsonNode root = objectMapper.readTree(result.content());
+        assertEquals(SandboxBrowserToolPortAdapter.TOOL_ID, root.path("toolId").asText());
+        assertEquals("BROWSER_AUTOMATION", root.path("runtimeType").asText());
+        assertEquals("SUCCEEDED", root.path("executionStatus").asText());
+        assertEquals("snapshot", root.path("browser").path("action").asText());
+        assertFalse(root.path("browser").path("networkAllowed").asBoolean());
+        assertEquals("application/json", root.path("artifacts").get(0).path("mediaType").asText());
+        assertEquals("image/png", root.path("artifacts").get(1).path("mediaType").asText());
+        assertEquals("metadata scan passed", root.path("artifacts").get(0).path("scanSummary").asText());
+        assertTrue(root.path("artifacts").get(0).path("promptVisible").asBoolean());
+    }
+
+    @Test
+    void shouldNormalizeExtractTextActionAndDisableDefaultScreenshot() throws Exception {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
+                new SandboxExecution(
+                        "exec-1",
+                        "session-1",
+                        SandboxRuntimeType.BROWSER_AUTOMATION,
+                        SandboxExecutionStatus.SUCCEEDED,
+                        "exitCode=0; stdout=browser extract_text completed",
+                        SandboxPolicyReasonCode.VALID_REQUEST,
+                        NOW,
+                        NOW),
+                List.of(new SandboxArtifact(
+                        "artifact-json",
+                        "session-1",
+                        "exec-1",
+                        "local://sandbox-artifacts/browser-result.json",
+                        "application/json",
+                        SandboxArtifactScanStatus.CLEAN,
+                        ContextSensitivity.INTERNAL,
+                        "metadata scan passed",
+                        NOW))));
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "extract-text",
+                "html", "<main>plain text</main>")));
+
+        assertTrue(result.success());
+        JsonNode browserInput = objectMapper.readTree(runtime.executeCommand.input());
+        assertEquals("extract_text", browserInput.path("action").asText());
+        assertFalse(browserInput.path("screenshot").asBoolean());
+    }
+
+    @Test
+    void shouldRejectUnsupportedActionBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "goto",
+                "html", "<main>nope</main>")));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("supported actions"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
+    void shouldRejectBlankHtmlBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "html", " ")));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("html is required"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    private ToolInvocationRequest request(Map<String, Object> arguments) {
+        return new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "rollout-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                SandboxBrowserToolPortAdapter.TOOL_ID,
+                arguments,
+                Map.of(),
+                "run-1:call-1",
+                List.of(SandboxBrowserToolPortAdapter.TOOL_ID));
+    }
+
+    private static final class RecordingSandboxRuntime implements SandboxRuntimeInboundPort {
+
+        private final SandboxExecutionResult executionResult;
+        private SandboxSession session;
+        private SandboxSessionCreateCommand createCommand;
+        private SandboxExecutionCommand executeCommand;
+        private String closedSessionId;
+        private int createCalls;
+
+        private RecordingSandboxRuntime(SandboxExecutionResult executionResult) {
+            this.executionResult = executionResult;
+        }
+
+        @Override
+        public SandboxSession createSession(SandboxSessionCreateCommand command) {
+            createCalls++;
+            createCommand = command;
+            session = SandboxSession.created(
+                    "session-1",
+                    command.tenantId(),
+                    command.runId(),
+                    command.runtimeType(),
+                    NOW);
+            return session;
+        }
+
+        @Override
+        public SandboxExecutionResult execute(SandboxExecutionCommand command) {
+            executeCommand = command;
+            return executionResult;
+        }
+
+        @Override
+        public SandboxSession close(String sessionId) {
+            closedSessionId = sessionId;
+            return session.closed(NOW);
+        }
+
+        @Override
+        public List<SandboxSession> listSessions(String tenantId, int limit) {
+            return List.of();
+        }
+
+        @Override
+        public SandboxSessionSweepResult sweepExpiredSessions(String tenantId, int limit) {
+            return new SandboxSessionSweepResult(tenantId, NOW, 0, 0, 0, List.of());
+        }
+
+        @Override
+        public SandboxRuntimeCleanupResult sweepOrphanedRuntimeResources() {
+            return SandboxRuntimeCleanupResult.empty(NOW, 0);
+        }
+
+        @Override
+        public SandboxRuntimeHealth inspectRuntimeHealth() {
+            return SandboxRuntimeHealth.unsupported(NOW, 0);
+        }
+
+        @Override
+        public SandboxRuntimeContainerReapResult reapOrphanedRuntimeContainers(boolean dryRun) {
+            return SandboxRuntimeContainerReapResult.empty(NOW, dryRun, 0);
+        }
+
+        @Override
+        public List<SandboxExecution> listExecutions(String sessionId) {
+            return List.of();
+        }
+
+        @Override
+        public List<SandboxArtifact> listArtifacts(String sessionId) {
+            return List.of();
+        }
+
+        @Override
+        public SandboxArtifactDetailDecision describeArtifact(String artifactId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public SandboxArtifactDownloadDecision downloadArtifact(String artifactId) {
+            throw new UnsupportedOperationException();
+        }
+    }
+}

@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualiz
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.NewsletterGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.PptGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxBrowserToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxFileConvertToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxPythonToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
@@ -137,7 +138,9 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
             case GitHubRepositoryReaderToolPortAdapter.TOOL_ID -> "GITHUB";
             case LoadSkillResourceToolPortAdapter.TOOL_ID -> "SKILL";
             case ToolSearchToolPortAdapter.TOOL_ID -> "TOOL";
-            case SandboxPythonToolPortAdapter.TOOL_ID, SandboxFileConvertToolPortAdapter.TOOL_ID -> "SANDBOX";
+            case SandboxPythonToolPortAdapter.TOOL_ID,
+                    SandboxFileConvertToolPortAdapter.TOOL_ID,
+                    SandboxBrowserToolPortAdapter.TOOL_ID -> "SANDBOX";
             case ImageGenerationToolPortAdapter.TOOL_ID,
                     NewsletterGenerationToolPortAdapter.TOOL_ID,
                     PptGenerationToolPortAdapter.TOOL_ID,
@@ -157,6 +160,7 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
 
     private boolean isSandboxTool(String toolId) {
         return SandboxPythonToolPortAdapter.TOOL_ID.equals(toolId)
-                || SandboxFileConvertToolPortAdapter.TOOL_ID.equals(toolId);
+                || SandboxFileConvertToolPortAdapter.TOOL_ID.equals(toolId)
+                || SandboxBrowserToolPortAdapter.TOOL_ID.equals(toolId);
     }
 }

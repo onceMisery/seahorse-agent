@@ -64,9 +64,16 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final String TXT_FORMAT = "txt";
     private static final String HTML_FORMAT = "html";
     private static final String MARKDOWN_FORMAT = "markdown";
+    private static final String BROWSER_ACTION_SNAPSHOT = "snapshot";
+    private static final String BROWSER_ACTION_EXTRACT_TEXT = "extract_text";
     private static final String CONTAINER_WORKSPACE = "/workspace";
     private static final String CONTAINER_NAME_PREFIX = "seahorse-sandbox-";
     private static final int MAX_FILE_CONVERSION_CONTENT_CHARS = 256 * 1024;
+    private static final int MAX_BROWSER_HTML_CHARS = 256 * 1024;
+    private static final int DEFAULT_BROWSER_VIEWPORT_WIDTH = 1280;
+    private static final int DEFAULT_BROWSER_VIEWPORT_HEIGHT = 720;
+    private static final int MIN_BROWSER_VIEWPORT_SIZE = 320;
+    private static final int MAX_BROWSER_VIEWPORT_SIZE = 2400;
 
     private final ContainerSandboxAdapterProperties properties;
     private final ContainerCommandRunner commandRunner;
@@ -120,13 +127,14 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         Instant startedAt = clock.instant();
         String executionId = EXECUTION_ID_PREFIX + SnowflakeIds.nextIdString();
         if (session.runtimeType() != SandboxRuntimeType.CODE_INTERPRETER
-                && session.runtimeType() != SandboxRuntimeType.FILE_CONVERSION) {
+                && session.runtimeType() != SandboxRuntimeType.FILE_CONVERSION
+                && session.runtimeType() != SandboxRuntimeType.BROWSER_AUTOMATION) {
             return failedResult(
                     executionId,
                     session,
                     startedAt,
                     SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED,
-                    "container sandbox supports CODE_INTERPRETER and FILE_CONVERSION only");
+                    "container sandbox supports CODE_INTERPRETER, FILE_CONVERSION, and BROWSER_AUTOMATION only");
         }
         try {
             Path workspace = workspaceForSession(session.sessionId());
@@ -180,6 +188,13 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     startedAt,
                     SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED,
                     ex.getMessage());
+        } catch (UnsupportedBrowserAutomationException ex) {
+            return failedResult(
+                    executionId,
+                    session,
+                    startedAt,
+                    SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED,
+                    ex.getMessage());
         } catch (IllegalArgumentException ex) {
             return failedResult(
                     executionId,
@@ -223,6 +238,18 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     safeWorkspace.resolve(SCRIPT_NAME),
                     inputPath);
         }
+        if (runtimeType == SandboxRuntimeType.BROWSER_AUTOMATION) {
+            BrowserAutomationRequest request = parseBrowserAutomationRequest(input);
+            Path inputPath = safeWorkspace.resolve(browserInputName());
+            Files.writeString(safeWorkspace.resolve(SCRIPT_NAME), browserAutomationScript(request), StandardCharsets.UTF_8);
+            Files.writeString(
+                    inputPath,
+                    request.html(),
+                    StandardCharsets.UTF_8);
+            return Set.of(
+                    safeWorkspace.resolve(SCRIPT_NAME),
+                    inputPath);
+        }
         throw new IllegalArgumentException("unsupported sandbox runtime type: " + runtimeType);
     }
 
@@ -243,6 +270,115 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     "file conversion content exceeds " + MAX_FILE_CONVERSION_CONTENT_CHARS + " chars");
         }
         return new FileConversionRequest(sourceFormat, targetFormat, content);
+    }
+
+    private BrowserAutomationRequest parseBrowserAutomationRequest(String input) throws IOException {
+        JsonNode root = objectMapper.readTree(nullToEmpty(input));
+        String action = normalizedBrowserAction(root.path("action").asText(BROWSER_ACTION_SNAPSHOT));
+        if (!isSupportedBrowserAction(action)) {
+            throw new UnsupportedBrowserAutomationException(
+                    "container browser automation supports snapshot and extract_text actions only");
+        }
+        String html = root.path("html").asText("");
+        if (!hasText(html)) {
+            throw new IllegalArgumentException("browser automation html is required");
+        }
+        if (html.length() > MAX_BROWSER_HTML_CHARS) {
+            throw new IllegalArgumentException(
+                    "browser automation html exceeds " + MAX_BROWSER_HTML_CHARS + " chars");
+        }
+        int viewportWidth = boundedInt(root,
+                "viewportWidth",
+                DEFAULT_BROWSER_VIEWPORT_WIDTH,
+                MIN_BROWSER_VIEWPORT_SIZE,
+                MAX_BROWSER_VIEWPORT_SIZE);
+        int viewportHeight = boundedInt(root,
+                "viewportHeight",
+                DEFAULT_BROWSER_VIEWPORT_HEIGHT,
+                MIN_BROWSER_VIEWPORT_SIZE,
+                MAX_BROWSER_VIEWPORT_SIZE);
+        boolean screenshot = root.path("screenshot").isMissingNode()
+                ? BROWSER_ACTION_SNAPSHOT.equals(action)
+                : root.path("screenshot").asBoolean(BROWSER_ACTION_SNAPSHOT.equals(action));
+        return new BrowserAutomationRequest(action, html, viewportWidth, viewportHeight, screenshot);
+    }
+
+    private String browserAutomationScript(BrowserAutomationRequest request) {
+        return """
+                import json
+                from pathlib import Path
+                from playwright.sync_api import sync_playwright
+
+                action = "%s"
+                viewport_width = %d
+                viewport_height = %d
+                screenshot_enabled = %s
+                input_path = Path("/workspace/%s")
+                result_path = Path("/workspace/%s")
+                screenshot_path = Path("/workspace/%s")
+
+                def compact_text(value, limit=12000):
+                    normalized = "\\n".join(line.strip() for line in value.replace("\\r", "\\n").split("\\n") if line.strip())
+                    return normalized[:limit]
+
+                html = input_path.read_text(encoding="utf-8-sig")
+
+                with sync_playwright() as playwright:
+                    browser = playwright.chromium.launch(
+                        headless=True,
+                        args=["--no-sandbox", "--disable-dev-shm-usage"],
+                    )
+                    try:
+                        page = browser.new_page(
+                            viewport={"width": viewport_width, "height": viewport_height}
+                        )
+
+                        def block_external(route):
+                            url = route.request.url
+                            if url.startswith(("about:", "blob:", "data:")):
+                                route.continue_()
+                            else:
+                                route.abort()
+
+                        page.route("**/*", block_external)
+                        page.set_content(html, wait_until="load", timeout=10000)
+                        title = page.title()
+                        try:
+                            body_text = page.locator("body").inner_text(timeout=3000)
+                        except Exception:
+                            body_text = page.content()
+                        screenshot_file = None
+                        if screenshot_enabled:
+                            page.screenshot(path=str(screenshot_path), full_page=True)
+                            screenshot_file = screenshot_path.name
+                        result = {
+                            "action": action,
+                            "title": title,
+                            "url": page.url,
+                            "text": compact_text(body_text),
+                            "textLength": len(body_text),
+                            "viewport": {
+                                "width": viewport_width,
+                                "height": viewport_height,
+                            },
+                            "screenshot": screenshot_file,
+                        }
+                        result_path.write_text(
+                            json.dumps(result, ensure_ascii=False, indent=2),
+                            encoding="utf-8",
+                        )
+                    finally:
+                        browser.close()
+
+                print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}")
+                """.formatted(
+                request.action(),
+                request.viewportWidth(),
+                request.viewportHeight(),
+                request.screenshot() ? "True" : "False",
+                browserInputName(),
+                browserResultName(),
+                browserScreenshotName());
     }
 
     private String fileConversionScript(FileConversionRequest request) {
@@ -461,6 +597,37 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return "converted." + targetFormat;
     }
 
+    private boolean isSupportedBrowserAction(String action) {
+        return BROWSER_ACTION_SNAPSHOT.equals(action) || BROWSER_ACTION_EXTRACT_TEXT.equals(action);
+    }
+
+    private String browserInputName() {
+        return "browser-input.html";
+    }
+
+    private String browserResultName() {
+        return "browser-result.json";
+    }
+
+    private String browserScreenshotName() {
+        return "screenshot.png";
+    }
+
+    private int boundedInt(JsonNode root, String name, int defaultValue, int min, int max) {
+        int parsed = defaultValue;
+        JsonNode value = root.path(name);
+        if (value.isNumber()) {
+            parsed = value.asInt(defaultValue);
+        } else if (value.isTextual() && hasText(value.asText())) {
+            try {
+                parsed = Integer.parseInt(value.asText().trim());
+            } catch (NumberFormatException ignored) {
+                parsed = defaultValue;
+            }
+        }
+        return Math.max(min, Math.min(max, parsed));
+    }
+
     @Override
     public SandboxSession closeSession(SandboxSession session) {
         SandboxSession safeSession = Objects.requireNonNull(session, "session must not be null");
@@ -631,7 +798,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         commandLine.add("--network");
         commandLine.add("none");
         commandLine.add("--memory");
-        commandLine.add(properties.getMemory());
+        commandLine.add(memoryForRuntime(session.runtimeType()));
         commandLine.add("--cpus");
         commandLine.add(properties.getCpus());
         commandLine.add("--pids-limit");
@@ -640,7 +807,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         commandLine.add(mountSourceForSession(session.sessionId(), workspace) + ":" + CONTAINER_WORKSPACE + ":rw");
         commandLine.add("-w");
         commandLine.add(CONTAINER_WORKSPACE);
-        commandLine.add(properties.getPythonImage());
+        commandLine.add(imageForRuntime(session.runtimeType()));
         commandLine.add("python");
         commandLine.add(CONTAINER_WORKSPACE + "/" + SCRIPT_NAME);
         return new ContainerCommand(
@@ -649,6 +816,20 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 properties.getExecutionTimeout(),
                 properties.getStdoutLimitBytes(),
                 properties.getStderrLimitBytes());
+    }
+
+    private String imageForRuntime(SandboxRuntimeType runtimeType) {
+        if (runtimeType == SandboxRuntimeType.BROWSER_AUTOMATION) {
+            return properties.getBrowserImage();
+        }
+        return properties.getPythonImage();
+    }
+
+    private String memoryForRuntime(SandboxRuntimeType runtimeType) {
+        if (runtimeType == SandboxRuntimeType.BROWSER_AUTOMATION) {
+            return properties.getBrowserMemory();
+        }
+        return properties.getMemory();
     }
 
     private ContainerCommand containerInspectionCommand() {
@@ -1036,6 +1217,12 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return "md".equals(normalized) ? MARKDOWN_FORMAT : normalized;
     }
 
+    private static String normalizedBrowserAction(String value) {
+        return value == null
+                ? ""
+                : value.trim().toLowerCase(Locale.ROOT).replace('-', '_');
+    }
+
     private static boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
     }
@@ -1060,9 +1247,22 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
     private record FileConversionRequest(String sourceFormat, String targetFormat, String content) {}
 
+    private record BrowserAutomationRequest(String action,
+                                            String html,
+                                            int viewportWidth,
+                                            int viewportHeight,
+                                            boolean screenshot) {}
+
     private static final class UnsupportedFileConversionException extends RuntimeException {
 
         private UnsupportedFileConversionException(String message) {
+            super(message);
+        }
+    }
+
+    private static final class UnsupportedBrowserAutomationException extends RuntimeException {
+
+        private UnsupportedBrowserAutomationException(String message) {
             super(message);
         }
     }

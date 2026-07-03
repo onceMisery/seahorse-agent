@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerati
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.NewsletterGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.PptGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxBrowserToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxFileConvertToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxPythonToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
@@ -99,6 +100,8 @@ class BuiltInAgentToolRegistrarTests {
                 () -> new SandboxPythonToolPortAdapter(new NoopSandboxRuntime(), jsonSupport));
         context.registerBean(SandboxFileConvertToolPortAdapter.class,
                 () -> new SandboxFileConvertToolPortAdapter(new NoopSandboxRuntime(), jsonSupport));
+        context.registerBean(SandboxBrowserToolPortAdapter.class,
+                () -> new SandboxBrowserToolPortAdapter(new NoopSandboxRuntime(), jsonSupport));
         context.refresh();
 
         BuiltInAgentToolRegistrar registrar = new BuiltInAgentToolRegistrar(
@@ -118,7 +121,8 @@ class BuiltInAgentToolRegistrarTests {
         assertThat(registry.find(ToolSearchToolPortAdapter.TOOL_ID)).isPresent();
         assertThat(registry.find(SandboxPythonToolPortAdapter.TOOL_ID)).isPresent();
         assertThat(registry.find(SandboxFileConvertToolPortAdapter.TOOL_ID)).isPresent();
-        assertThat(catalog.savedEntries()).hasSize(10);
+        assertThat(registry.find(SandboxBrowserToolPortAdapter.TOOL_ID)).isPresent();
+        assertThat(catalog.savedEntries()).hasSize(11);
         assertThat(catalog.findById(GitHubRepositoryReaderToolPortAdapter.TOOL_ID)).hasValueSatisfying(entry -> {
             assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
             assertThat(entry.actionType()).isEqualTo(ToolActionType.READ);
@@ -156,6 +160,14 @@ class BuiltInAgentToolRegistrarTests {
             assertThat(entry.requiresApproval()).isFalse();
         });
         assertThat(catalog.findById(SandboxFileConvertToolPortAdapter.TOOL_ID)).hasValueSatisfying(entry -> {
+            assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
+            assertThat(entry.actionType()).isEqualTo(ToolActionType.EXECUTE);
+            assertThat(entry.resourceType()).isEqualTo("SANDBOX");
+            assertThat(entry.riskLevel()).isEqualTo(ToolRiskLevel.HIGH);
+            assertThat(entry.enabled()).isTrue();
+            assertThat(entry.requiresApproval()).isFalse();
+        });
+        assertThat(catalog.findById(SandboxBrowserToolPortAdapter.TOOL_ID)).hasValueSatisfying(entry -> {
             assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
             assertThat(entry.actionType()).isEqualTo(ToolActionType.EXECUTE);
             assertThat(entry.resourceType()).isEqualTo("SANDBOX");
