@@ -514,7 +514,7 @@ Seahorse Agent 希望成为一个“可解释、可治理、可演进”的智�
 
 - [部署指南](DEPLOY.md)
 - [用户指南](docs/USER_GUIDE.md)
-- [截图版使用指南](docs/SEAHORSE_GUIDE.md)
+- [使用指南](docs/SEAHORSE_GUIDE.md)
 - [架构路线图与未来展望](docs/roadmap/architecture-roadmap-and-vision.md)
 - [故障排查指南](docs/TROUBLESHOOTING_GUIDE.md)
 - [本地 Embedding 模型指南](docs/deployment/local-embedding-model-guide.md)
