@@ -412,9 +412,13 @@ Fresh full-Docker evidence: `.\scripts\e2e-sandbox-file-convert-tool-smoke.ps1 -
 Sandbox Runtime now exposes a narrow Operations write path for sandbox-backed tool quota policy:
 `POST /api/sandbox/runtime/tool-quota-policies`. The endpoint is intentionally scoped to Tool Gateway-owned enforcement. It requires both `SANDBOX` and `QUOTA_MANAGEMENT`, accepts only `sandbox_python`, `sandbox_file_convert`, and the planned `sandbox_browser`, normalizes the tool id, and writes the existing quota model as `QuotaScope.TOOL` with `subjectId=<toolId>`.
 
-This closes the immediate operator path for sandbox-backed tool quotas without adding a separate `SandboxResourcePolicy`, runtime profile mutation, or tenant/agent quota UI. Runtime profile policy writes, tenant/agent quota UX, browser automation, PDF/Office/binary conversion, virus scanning, binary/PDF deep scanning, and stronger isolation remain follow-up hardening work.
+The admin Sandbox page now includes a compact Tool quota panel for policy id, sandbox tool id, status, calls, tokens, cost, and warn ratio. The frontend sandbox service uses the browser proxy path required by the packaged Nginx/Vite proxy so UI calls reach backend `/api/sandbox/...` routes correctly.
+
+This closes the immediate operator path for sandbox-backed tool quotas without adding a separate `SandboxResourcePolicy`, runtime profile mutation, or broad tenant/agent quota UI. Tenant/agent quota UX, PDF/Office/binary conversion, virus scanning, binary/PDF deep scanning, and stronger isolation remain follow-up hardening work.
 
 Fresh full-Docker evidence: `.\scripts\e2e-tool-gateway-quota-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-tool-quota-smoke-rerun` passed 4/4. The smoke created a zero-call sandbox tool quota policy through the Sandbox API, invoked `sandbox_python` through Tool Gateway, and observed `QUOTA_HARD_LIMIT_EXCEEDED`; cleanup confirmed no leftover managed sandbox containers and zero non-terminal sandbox sessions.
+
+Fresh UX evidence: `npm test -- src/services/frontendCapabilityContracts.test.ts` passed 10/10, `npm run build` completed with only existing warnings, and `.\scripts\e2e-sandbox-tool-quota-page-smoke.ps1 -BaseUrl http://127.0.0.1 -Password admin123 -Marker seahorse-sandbox-tool-quota-ux-smoke` passed against the local full-Docker frontend. Cleanup confirmed the page-smoke `sandbox-tool-quota-page-*` policies were disabled, no leftover managed sandbox containers, and zero non-terminal sandbox sessions. A fresh Tool Gateway quota rerun with marker `seahorse-sandbox-tool-quota-ux-smoke` also passed 4/4.
 
 ### 2026-07-03 Update: sandbox browser automation
 

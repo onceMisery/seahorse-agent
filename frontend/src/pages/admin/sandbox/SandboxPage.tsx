@@ -23,6 +23,7 @@ import {
   getSandboxRuntimeHealth,
   getSandboxRuntimeProfiles,
   upsertSandboxRuntimeProfilePolicy,
+  upsertSandboxToolQuotaPolicy,
   reapOrphanedSandboxRuntimeContainers,
   currentSandboxTenantId,
   type SandboxSession,
@@ -32,9 +33,26 @@ import {
   type SandboxArtifactDetail,
   type SandboxRuntimeHealth,
   type SandboxRuntimeProfile,
-  type SandboxRuntimeProfilesResponse
+  type SandboxRuntimeProfilesResponse,
+  type SandboxToolQuotaPolicy
 } from "@/services/sandboxService";
 import { getErrorMessage } from "@/utils/error";
+
+const SANDBOX_TOOL_QUOTA_TOOLS = [
+  { toolId: "sandbox_python", label: "sandbox_python" },
+  { toolId: "sandbox_file_convert", label: "sandbox_file_convert" },
+  { toolId: "sandbox_browser", label: "sandbox_browser" }
+];
+
+type SandboxToolQuotaDraft = {
+  policyId: string;
+  toolId: string;
+  status: string;
+  callLimit: string;
+  tokenLimit: string;
+  costLimit: string;
+  warnRatio: string;
+};
 
 function isTerminalSessionStatus(status?: string) {
   return ["CANCELLED", "FAILED", "SUCCEEDED", "TIMED_OUT", "CLOSED"].includes(status || "");
@@ -75,6 +93,12 @@ function runtimeProfileBadgeVariant(status?: string): "default" | "secondary" | 
   return "secondary";
 }
 
+function quotaPolicyBadgeVariant(status?: string): "default" | "secondary" | "destructive" {
+  if (status === "ACTIVE") return "default";
+  if (status === "DISABLED") return "secondary";
+  return "destructive";
+}
+
 function formatDurationSeconds(value?: number) {
   if (!value || value < 0) return "-";
   if (value % 3600 === 0) return `${value / 3600}h`;
@@ -88,6 +112,22 @@ function formatRuntimeCapacity(health?: SandboxRuntimeHealth | null) {
   const active = health.activeSessionCount ?? 0;
   if (limit <= 0) return health.capacityStatus || "UNBOUNDED";
   return `${health.capacityStatus || "UNKNOWN"} ${active}/${limit}`;
+}
+
+function optionalDraftNumber(value: string, label: string, options: { integer?: boolean; max?: number } = {}) {
+  const trimmed = value.trim();
+  if (!trimmed) return { value: undefined as number | undefined };
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return { error: `${label} must be 0 or greater` };
+  }
+  if (options.integer && !Number.isInteger(parsed)) {
+    return { error: `${label} must be a whole number` };
+  }
+  if (options.max !== undefined && parsed > options.max) {
+    return { error: `${label} must be ${options.max} or less` };
+  }
+  return { value: parsed };
 }
 
 function RuntimeGovernancePanel({
@@ -279,6 +319,177 @@ function RuntimeGovernancePanel({
   );
 }
 
+function SandboxToolQuotaPanel({
+  saving,
+  lastPolicy,
+  onSave
+}: {
+  saving: boolean;
+  lastPolicy: SandboxToolQuotaPolicy | null;
+  onSave: (draft: SandboxToolQuotaDraft) => void;
+}) {
+  const [draft, setDraft] = useState<SandboxToolQuotaDraft>({
+    policyId: "",
+    toolId: "sandbox_python",
+    status: "ACTIVE",
+    callLimit: "10",
+    tokenLimit: "",
+    costLimit: "",
+    warnRatio: "0.8"
+  });
+
+  const updateDraft = (key: keyof SandboxToolQuotaDraft, value: string) => {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  return (
+    <Card data-testid="sandbox-tool-quota-panel">
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2">
+            <Gauge className="h-4 w-4" />
+            Tool quota
+          </span>
+          {lastPolicy?.status && (
+            <Badge variant={quotaPolicyBadgeVariant(lastPolicy.status)}>
+              {lastPolicy.status}
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Policy ID</label>
+            <Input
+              data-testid="sandbox-tool-quota-policy-id"
+              className="font-mono text-sm"
+              value={draft.policyId}
+              onChange={(event) => updateDraft("policyId", event.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Tool</label>
+            <select
+              data-testid="sandbox-tool-quota-tool"
+              className="h-9 w-full rounded border border-slate-200 bg-white px-2 text-sm"
+              value={draft.toolId}
+              onChange={(event) => updateDraft("toolId", event.target.value)}
+            >
+              {SANDBOX_TOOL_QUOTA_TOOLS.map((tool) => (
+                <option key={tool.toolId} value={tool.toolId}>
+                  {tool.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Status</label>
+            <select
+              data-testid="sandbox-tool-quota-status"
+              className="h-9 w-full rounded border border-slate-200 bg-white px-2 text-sm"
+              value={draft.status}
+              onChange={(event) => updateDraft("status", event.target.value)}
+            >
+              <option value="ACTIVE">ACTIVE</option>
+              <option value="DISABLED">DISABLED</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Calls</label>
+            <Input
+              data-testid="sandbox-tool-quota-call-limit"
+              type="number"
+              min={0}
+              step={1}
+              className="font-mono text-sm"
+              value={draft.callLimit}
+              onChange={(event) => updateDraft("callLimit", event.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Tokens</label>
+            <Input
+              data-testid="sandbox-tool-quota-token-limit"
+              type="number"
+              min={0}
+              step={1}
+              className="font-mono text-sm"
+              value={draft.tokenLimit}
+              onChange={(event) => updateDraft("tokenLimit", event.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Cost</label>
+            <Input
+              data-testid="sandbox-tool-quota-cost-limit"
+              type="number"
+              min={0}
+              step={0.01}
+              className="font-mono text-sm"
+              value={draft.costLimit}
+              onChange={(event) => updateDraft("costLimit", event.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Warn</label>
+            <Input
+              data-testid="sandbox-tool-quota-warn-ratio"
+              type="number"
+              min={0}
+              max={1}
+              step={0.05}
+              className="font-mono text-sm"
+              value={draft.warnRatio}
+              onChange={(event) => updateDraft("warnRatio", event.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 truncate font-mono text-xs text-muted-foreground">
+            {lastPolicy?.policyId || "sandbox-tool-quota-default"}
+          </div>
+          <Button
+            data-testid="sandbox-tool-quota-save"
+            variant="outline"
+            size="sm"
+            disabled={saving}
+            onClick={() => onSave(draft)}
+          >
+            <Save className={`h-4 w-4 ${saving ? "animate-pulse" : ""}`} />
+            Save
+          </Button>
+        </div>
+
+        {lastPolicy && (
+          <div className="grid gap-2 rounded border border-slate-100 bg-slate-50 p-3 text-xs sm:grid-cols-2">
+            <div>
+              <div className="uppercase text-muted-foreground">Scope</div>
+              <div className="font-mono text-slate-700">{lastPolicy.scope || "-"}</div>
+            </div>
+            <div>
+              <div className="uppercase text-muted-foreground">Subject</div>
+              <div className="font-mono text-slate-700">{lastPolicy.subjectId || "-"}</div>
+            </div>
+            <div>
+              <div className="uppercase text-muted-foreground">Calls</div>
+              <div className="font-mono text-slate-700">{lastPolicy.callLimit ?? "-"}</div>
+            </div>
+            <div>
+              <div className="uppercase text-muted-foreground">Warn</div>
+              <div className="font-mono text-slate-700">{lastPolicy.warnRatio ?? "-"}</div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function SandboxPage() {
   const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.SANDBOX);
 
@@ -306,6 +517,8 @@ export function SandboxPage() {
   const [loadingRuntimeGovernance, setLoadingRuntimeGovernance] = useState(false);
   const [runtimeGovernanceError, setRuntimeGovernanceError] = useState<string | null>(null);
   const [savingProfileRuntimeType, setSavingProfileRuntimeType] = useState<string | null>(null);
+  const [savingToolQuota, setSavingToolQuota] = useState(false);
+  const [lastToolQuotaPolicy, setLastToolQuotaPolicy] = useState<SandboxToolQuotaPolicy | null>(null);
 
   const clearArtifactSelection = () => {
     setSelectedArtifactId(null);
@@ -679,6 +892,38 @@ export function SandboxPage() {
     }
   };
 
+  const handleSaveToolQuotaPolicy = async (draft: SandboxToolQuotaDraft) => {
+    const callLimit = optionalDraftNumber(draft.callLimit, "Call limit", { integer: true });
+    const tokenLimit = optionalDraftNumber(draft.tokenLimit, "Token limit", { integer: true });
+    const costLimit = optionalDraftNumber(draft.costLimit, "Cost limit");
+    const warnRatio = optionalDraftNumber(draft.warnRatio, "Warn ratio", { max: 1 });
+    const error = callLimit.error || tokenLimit.error || costLimit.error || warnRatio.error;
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    try {
+      setSavingToolQuota(true);
+      const policy = await upsertSandboxToolQuotaPolicy({
+        policyId: draft.policyId.trim() || undefined,
+        tenantId: currentSandboxTenantId(),
+        toolId: draft.toolId,
+        status: draft.status,
+        callLimit: callLimit.value,
+        tokenLimit: tokenLimit.value,
+        costLimit: costLimit.value,
+        warnRatio: warnRatio.value
+      });
+      setLastToolQuotaPolicy(policy || null);
+      toast.success(`Tool quota ${draft.toolId} policy saved`);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Tool quota policy save failed"));
+      console.error(error);
+    } finally {
+      setSavingToolQuota(false);
+    }
+  };
+
   if (!featureState.enabled) {
     return <FeatureUnavailableState featureState={featureState} featureName="沙箱" />;
   }
@@ -704,6 +949,12 @@ export function SandboxPage() {
               void handleSaveRuntimeProfilePolicy(profile, ttlSeconds, status)
             }
             savingProfileRuntimeType={savingProfileRuntimeType}
+          />
+
+          <SandboxToolQuotaPanel
+            saving={savingToolQuota}
+            lastPolicy={lastToolQuotaPolicy}
+            onSave={(draft) => void handleSaveToolQuotaPolicy(draft)}
           />
 
           <Card>

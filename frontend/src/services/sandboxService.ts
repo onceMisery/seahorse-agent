@@ -3,6 +3,7 @@ import { storage } from "@/utils/storage";
 
 const DEFAULT_TENANT_ID = "default";
 const DEFAULT_RUNTIME_TYPE = "CODE_INTERPRETER";
+const SANDBOX_API_PREFIX = "/api/api/sandbox";
 
 export interface SandboxSession {
   sessionId?: string;
@@ -236,11 +237,11 @@ export function createSandboxSession(payload: SandboxSessionCreatePayload = {}) 
   if (payload.expiresAt?.trim()) {
     request.expiresAt = payload.expiresAt.trim();
   }
-  return api.post<SandboxSession, SandboxSession>("/api/sandbox/sessions", request);
+  return api.post<SandboxSession, SandboxSession>(`${SANDBOX_API_PREFIX}/sessions`, request);
 }
 
 export function listSandboxSessions(tenantId = currentTenantId(), limit = 20) {
-  return api.get<SandboxSession[]>("/api/sandbox/sessions", {
+  return api.get<SandboxSession[]>(`${SANDBOX_API_PREFIX}/sessions`, {
     params: {
       tenantId,
       limit
@@ -250,7 +251,7 @@ export function listSandboxSessions(tenantId = currentTenantId(), limit = 20) {
 
 export function sweepExpiredSandboxSessions(tenantId = currentTenantId(), limit = 20) {
   return api.post<SandboxSessionSweepResult, SandboxSessionSweepResult>(
-    "/api/sandbox/sessions/expired:sweep",
+    `${SANDBOX_API_PREFIX}/sessions/expired:sweep`,
     undefined,
     {
       params: {
@@ -263,37 +264,37 @@ export function sweepExpiredSandboxSessions(tenantId = currentTenantId(), limit 
 
 export function sweepOrphanedSandboxRuntimeResources() {
   return api.post<SandboxRuntimeCleanupResult, SandboxRuntimeCleanupResult>(
-    "/api/sandbox/runtime/orphans:sweep"
+    `${SANDBOX_API_PREFIX}/runtime/orphans:sweep`
   );
 }
 
 export function getSandboxRuntimeHealth() {
-  return api.get<SandboxRuntimeHealth>("/api/sandbox/runtime/health");
+  return api.get<SandboxRuntimeHealth>(`${SANDBOX_API_PREFIX}/runtime/health`);
 }
 
 export function getSandboxRuntimeProfiles(tenantId = currentTenantId()) {
-  return api.get<SandboxRuntimeProfilesResponse>("/api/sandbox/runtime/profiles", {
+  return api.get<SandboxRuntimeProfilesResponse>(`${SANDBOX_API_PREFIX}/runtime/profiles`, {
     params: { tenantId }
   });
 }
 
 export function upsertSandboxRuntimeProfilePolicy(payload: SandboxRuntimeProfilePolicyPayload) {
   return api.post<SandboxRuntimeProfilePolicy, SandboxRuntimeProfilePolicy>(
-    "/api/sandbox/runtime/profile-policies",
+    `${SANDBOX_API_PREFIX}/runtime/profile-policies`,
     payload
   );
 }
 
 export function upsertSandboxToolQuotaPolicy(payload: SandboxToolQuotaPolicyPayload) {
   return api.post<SandboxToolQuotaPolicy, SandboxToolQuotaPolicy>(
-    "/api/sandbox/runtime/tool-quota-policies",
+    `${SANDBOX_API_PREFIX}/runtime/tool-quota-policies`,
     payload
   );
 }
 
 export function reapOrphanedSandboxRuntimeContainers(dryRun = true) {
   return api.post<SandboxRuntimeContainerReapResult, SandboxRuntimeContainerReapResult>(
-    "/api/sandbox/runtime/orphan-containers:reap",
+    `${SANDBOX_API_PREFIX}/runtime/orphan-containers:reap`,
     undefined,
     {
       params: { dryRun }
@@ -304,7 +305,7 @@ export function reapOrphanedSandboxRuntimeContainers(dryRun = true) {
 export function executeInSandbox(sessionId: string, payload: SandboxExecutePayload) {
   const input = payload.input ?? payload.argumentsJson ?? "";
   return api.post<SandboxExecutionResult, SandboxExecutionResult>(
-    `/api/sandbox/sessions/${encodeURIComponent(sessionId)}/execute`,
+    `${SANDBOX_API_PREFIX}/sessions/${encodeURIComponent(sessionId)}/execute`,
     {
       input,
       networkRequested: payload.networkRequested ?? false,
@@ -315,30 +316,30 @@ export function executeInSandbox(sessionId: string, payload: SandboxExecutePaylo
 
 export function closeSandboxSession(sessionId: string) {
   return api.post<SandboxSession, SandboxSession>(
-    `/api/sandbox/sessions/${encodeURIComponent(sessionId)}/close`
+    `${SANDBOX_API_PREFIX}/sessions/${encodeURIComponent(sessionId)}/close`
   );
 }
 
 export function listSandboxExecutions(sessionId: string) {
   return api.get<SandboxExecution[]>(
-    `/api/sandbox/sessions/${encodeURIComponent(sessionId)}/executions`
+    `${SANDBOX_API_PREFIX}/sessions/${encodeURIComponent(sessionId)}/executions`
   );
 }
 
 export function listSandboxArtifacts(sessionId: string) {
   return api.get<SandboxArtifact[]>(
-    `/api/sandbox/sessions/${encodeURIComponent(sessionId)}/artifacts`
+    `${SANDBOX_API_PREFIX}/sessions/${encodeURIComponent(sessionId)}/artifacts`
   );
 }
 
 export function getSandboxArtifact(artifactId: string) {
   return api.get<SandboxArtifactDetail>(
-    `/api/sandbox/artifacts/${encodeURIComponent(artifactId)}`
+    `${SANDBOX_API_PREFIX}/artifacts/${encodeURIComponent(artifactId)}`
   );
 }
 
 export function downloadSandboxArtifact(artifactId: string) {
-  return api.get(`/api/sandbox/artifacts/${encodeURIComponent(artifactId)}/download`, {
+  return api.get(`${SANDBOX_API_PREFIX}/artifacts/${encodeURIComponent(artifactId)}/download`, {
     responseType: "blob"
   });
 }
