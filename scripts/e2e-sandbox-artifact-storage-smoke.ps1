@@ -121,6 +121,35 @@ function Invoke-Text {
     return $content
 }
 
+function Invoke-BinaryFile {
+    param(
+        [string]$Method,
+        [string]$Path,
+        [hashtable]$Headers = @{},
+        [string]$OutputPath,
+        [int]$ExpectedStatus = 200
+    )
+
+    $args = @("-sS", "-w", "`n%{http_code}", "-X", $Method, "$BaseUrl$Path", "-o", $OutputPath)
+    foreach ($key in $Headers.Keys) {
+        $args += @("-H", "${key}: $($Headers[$key])")
+    }
+
+    $raw = & curl.exe @args
+    if ($LASTEXITCODE -ne 0) {
+        throw "curl exited with $LASTEXITCODE for $Method $Path"
+    }
+    $lines = @($raw)
+    if ($lines.Count -eq 0) {
+        throw "empty curl status output for $Method $Path"
+    }
+    $status = [int]$lines[-1]
+    if ($status -ne $ExpectedStatus) {
+        $body = if (Test-Path -LiteralPath $OutputPath) { Get-Content -Raw -LiteralPath $OutputPath -ErrorAction SilentlyContinue } else { "" }
+        throw "Expected HTTP $ExpectedStatus but got $status for $Method $Path body=$body"
+    }
+}
+
 function Assert-ApiOk {
     param([object]$Response, [string]$Name)
     if ($null -eq $Response -or "$($Response.code)" -ne "0") {
@@ -884,6 +913,181 @@ try {
         $detailJson = $detail.data | ConvertTo-Json -Depth 20 -Compress
         if ($detailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
             throw "Executable masquerading detail leaked storage metadata: $detailJson"
+        }
+    } | Out-Null
+
+    $archiveMarker = "$Marker-archive-introspection"
+    $escapedArchiveMarker = $archiveMarker.Replace("\", "\\").Replace("'", "\'")
+    $archiveCode = @"
+import zipfile
+
+with zipfile.ZipFile('safe-bundle.zip', 'w') as archive:
+    archive.writestr('docs/readme.txt', 'safe archive $escapedArchiveMarker')
+with zipfile.ZipFile('unsafe-bundle.zip', 'w') as archive:
+    archive.writestr('bin/payload.exe', b'MZ\x00\x00seahorse')
+print('$escapedArchiveMarker')
+"@
+    $archiveObservation = Test-Step "Invoke sandbox_python with archive artifacts" {
+        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $headers -Body @{
+            runId = "sandbox-artifact-archive-run-$suffix"
+            stepId = "sandbox-artifact-archive-step-$suffix"
+            toolCallId = "sandbox-artifact-archive-call-$suffix"
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{ code = $archiveCode }
+            resourceRefs = @{}
+            idempotencyKey = "sandbox-artifact-archive-run-${suffix}:sandbox-artifact-archive-call-$suffix"
+            allowedToolIds = @("sandbox_python")
+        }
+        Assert-ApiOk $response "Invoke sandbox_python archive artifacts"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_python archive invocation failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        if ($content -notlike "*$archiveMarker*") {
+            throw "sandbox_python archive content did not contain marker '$archiveMarker': $content"
+        }
+        $parsed = $content | ConvertFrom-Json
+        if (@($parsed.artifacts).Count -ne 0) {
+            throw "Archive artifacts should not be prompt-visible: $content"
+        }
+        if (-not "$($parsed.sessionId)") {
+            throw "sandbox_python observation did not include archive sessionId: $content"
+        }
+        $parsed
+    }
+    if (-not $archiveObservation) { exit 1 }
+
+    $archiveSessionId = "$($archiveObservation.sessionId)"
+    $safeArchive = Test-Step "Verify clean ZIP archive is governed download-only" {
+        $safeArchiveSessionId = $archiveSessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeArchiveSessionId' AND object_uri LIKE '%-safe-bundle.zip' ORDER BY created_at DESC LIMIT 1;"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 7) {
+            throw "Unexpected clean ZIP artifact row: $row"
+        }
+        if ($ExpectedObjectUriPrefix -and $parts[1] -notlike "$ExpectedObjectUriPrefix*") {
+            throw "Clean ZIP archive was not copied to governed object storage: $($parts[1])"
+        }
+        if ($parts[2] -ne "application/zip" -or $parts[3] -ne "CLEAN" -or $parts[4] -ne "INTERNAL") {
+            throw "Expected CLEAN INTERNAL application/zip archive but got: $row"
+        }
+        if ($parts[5] -ne "metadata scan passed") {
+            throw "Expected clean ZIP scan summary metadata scan passed but got '$($parts[5])'"
+        }
+        if ($parts[6] -notlike '*"decision":"CLEAN"*' -or $parts[6] -notlike '*"contentScanned":true*') {
+            throw "Expected CLEAN content-scanned ZIP redaction summary but got '$($parts[6])'"
+        }
+        [pscustomobject]@{ ArtifactId = $parts[0]; ObjectUri = $parts[1] }
+    }
+    if (-not $safeArchive) { exit 1 }
+
+    Test-Step "Download governed clean ZIP archive" {
+        Add-Type -AssemblyName System.IO.Compression
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $tempZip = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "seahorse-archive-$suffix.zip")
+        try {
+            Invoke-BinaryFile -Method GET -Path "/api/sandbox/artifacts/$($safeArchive.ArtifactId)/download" -Headers $headers -OutputPath $tempZip
+            $archive = [System.IO.Compression.ZipFile]::OpenRead($tempZip)
+            try {
+                $entry = $archive.GetEntry("docs/readme.txt")
+                if ($null -eq $entry) {
+                    throw "Downloaded clean ZIP did not contain docs/readme.txt"
+                }
+                $stream = $entry.Open()
+                $reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8)
+                try {
+                    $content = $reader.ReadToEnd()
+                } finally {
+                    $reader.Dispose()
+                    $stream.Dispose()
+                }
+                if ($content -notlike "*$archiveMarker*") {
+                    throw "Downloaded clean ZIP entry did not contain marker '$archiveMarker': $content"
+                }
+            } finally {
+                $archive.Dispose()
+            }
+        } finally {
+            Remove-Item -LiteralPath $tempZip -ErrorAction SilentlyContinue
+        }
+    } | Out-Null
+
+    if ($safeArchive.ObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local clean ZIP object exists in backend storage volume" {
+            $key = $safeArchive.ObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $archiveMarker.Contains("'")) {
+                throw "Cannot safely shell-quote archive key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$archiveMarker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored clean ZIP object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
+    $unsafeArchiveArtifactId = Test-Step "Verify unsafe ZIP archive is blocked before object storage" {
+        $safeArchiveSessionId = $archiveSessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeArchiveSessionId' AND object_uri LIKE '%/unsafe-bundle.zip' ORDER BY created_at DESC LIMIT 1;"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 7) {
+            throw "Unexpected unsafe ZIP artifact row: $row"
+        }
+        if ($parts[1] -like "$ExpectedObjectUriPrefix*") {
+            throw "Unsafe ZIP archive was copied to object storage: $($parts[1])"
+        }
+        if ($parts[2] -ne "application/zip" -or $parts[3] -ne "BLOCKED" -or $parts[4] -ne "CONFIDENTIAL") {
+            throw "Expected BLOCKED CONFIDENTIAL application/zip archive but got: $row"
+        }
+        if ($parts[5] -ne "archive executable content") {
+            throw "Expected unsafe ZIP scan summary archive executable content but got '$($parts[5])'"
+        }
+        if ($parts[6] -notlike '*"decision":"BLOCKED"*' -or $parts[6] -notlike '*"ARCHIVE_EXECUTABLE_BINARY"*') {
+            throw "Expected BLOCKED ARCHIVE_EXECUTABLE_BINARY redaction summary but got '$($parts[6])'"
+        }
+        if ($parts[6] -like "*payload.exe*") {
+            throw "Unsafe ZIP redaction summary leaked entry name: $($parts[6])"
+        }
+        $parts[0]
+    }
+    if (-not $unsafeArchiveArtifactId) { exit 1 }
+
+    Test-Step "Verify archive artifact API exposes governed metadata" {
+        $response = Invoke-Json -Method GET -Path "/api/sandbox/sessions/$archiveSessionId/artifacts" -Headers $headers
+        Assert-ApiOk $response "List archive sandbox artifacts"
+        $safeMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$($safeArchive.ArtifactId)" })
+        if ($safeMatched.Count -ne 1 -or $safeMatched[0].promptVisible -ne $false) {
+            throw "Expected clean ZIP to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $unsafeMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$unsafeArchiveArtifactId" })
+        if ($unsafeMatched.Count -ne 1 -or $unsafeMatched[0].promptVisible -ne $false) {
+            throw "Expected unsafe ZIP to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $artifactJson = $response.data | ConvertTo-Json -Depth 20 -Compress
+        if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|payload.exe") {
+            throw "Archive artifact API leaked storage or unsafe entry details: $artifactJson"
+        }
+
+        $safeDetail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$($safeArchive.ArtifactId)" -Headers $headers
+        Assert-ApiOk $safeDetail "Get clean ZIP artifact detail"
+        if ($safeDetail.data.downloadable -ne $true -or $safeDetail.data.promptVisible -ne $false) {
+            throw "Expected clean ZIP detail to be downloadable and prompt-hidden: $($safeDetail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+
+        $detail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$unsafeArchiveArtifactId" -Headers $headers
+        Assert-ApiOk $detail "Get unsafe ZIP artifact detail"
+        if ($detail.data.downloadable -ne $false -or $detail.data.promptVisible -ne $false) {
+            throw "Expected unsafe ZIP detail to be non-downloadable and prompt-hidden: $($detail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($detail.data.redactionSummaryJson)" -notlike '*"ARCHIVE_EXECUTABLE_BINARY"*') {
+            throw "Expected unsafe ZIP detail archive category: $($detail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $detailJson = $detail.data | ConvertTo-Json -Depth 20 -Compress
+        if ($detailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|payload.exe") {
+            throw "Unsafe ZIP detail leaked storage or unsafe entry details: $detailJson"
         }
     } | Out-Null
 

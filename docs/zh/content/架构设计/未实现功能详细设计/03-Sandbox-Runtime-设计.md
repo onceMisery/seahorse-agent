@@ -28,7 +28,7 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 | Web API | 已有创建 session、execute、close、list executions、list artifacts API | `SeahorseSandboxController.java` |
 | 前端页面 | 已有 `/admin/sandbox`，可创建 session、输入参数、执行、查看结果、execution history 和 artifact | `frontend/src/pages/admin/sandbox/SandboxPage.tsx` |
 | Agent 工具 | 已有 `sandbox_python`、`sandbox_file_convert` 和受限 inline no-network `sandbox_browser` 工具链路，经过 Tool Gateway policy/audit/redaction，并调用 `SandboxRuntimeInboundPort` 执行对应 sandbox runtime | `SandboxPythonToolPortAdapter.java`、`SandboxFileConvertToolPortAdapter.java`、`SandboxBrowserToolPortAdapter.java` |
-| artifact scanner | 已有 `SandboxArtifactScannerPort`、默认保守 scanner、`REDACTED` 状态、prompt visibility gate，以及 file:// 文本类 artifact 的 secret/PII 内容扫描；scanner 失败 fail closed | `DefaultSandboxArtifactScannerPort.java`、`KernelSandboxRuntimeService.java` |
+| artifact scanner | 已有 `SandboxArtifactScannerPort`、默认保守 scanner、`REDACTED` 状态、prompt visibility gate、file:// 文本类 artifact 的 secret/PII 内容扫描、二进制/PDF 头部扫描，以及 ZIP archive 有界内容扫描；scanner 失败 fail closed | `DefaultSandboxArtifactScannerPort.java`、`KernelSandboxRuntimeService.java` |
 
 ### 2.2 真实缺口
 
@@ -38,7 +38,7 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 | 真实 runtime 清理仍需生产化 | 当前 adapter 使用 `--rm` 并在 close 时删除 per-session workspace；session TTL metadata 已持久化，管理员手动 expired session sweep 与后台定时 TTL sweep 均可将过期未终态 session 释放并标记为 `TIMED_OUT`；orphan workspace sweep 会保守删除旧 workspace 并只读巡检 `seahorse-sandbox-*` live/exited container；runtime health API 已暴露 engine/workspace/container 与 active session capacity 只读健康信号且不暴露 workspace root；orphan container reap 已提供默认 dry-run 的显式管理员操作并保护非终态 session container；仍缺 runtime pool 调度和节点级健康检查 | 接入 runtime 节点健康检查、调度/admission control 和更完整的自动化回收策略 |
 | 资源配额仍不完整 | 当前 adapter 有固定 CPU、内存、pids、timeout、stdout/stderr limit，session `profileId`/`expiresAt` 已持久化；仍缺磁盘配额和按 tenant/agent/tool 的资源策略联动 | 新增 `SandboxResourcePolicy` 和更完整 runtime profile policy |
 | 真实 artifact 产物已进入最小闭环 | Code Interpreter adapter 已收集 workspace 文件，kernel 已将 prompt-visible file:// artifact 写入 object storage，并通过治理 API 下载/查看详情 | 后续补齐 preview、生命周期和更广运行时产物 |
-| 内容级 artifact 扫描仍需加固 | 基础 metadata scanner、file:// 文本类 secret/PII 内容阻断、prompt visibility gate、scan summary 和结构化 redaction summary 已落地；仍缺病毒扫描、二进制/PDF 深度扫描 | 后续接入专业扫描引擎和更深内容扫描 |
+| 内容级 artifact 扫描仍需加固 | 基础 metadata scanner、file:// 文本类 secret/PII 内容阻断、prompt visibility gate、scan summary、结构化 redaction summary、二进制/PDF 头部扫描和 ZIP archive 有界内容扫描已落地；仍缺病毒扫描、二进制/PDF 深度扫描和超出非递归 ZIP 的 archive/container 深度内省 | 后续接入专业扫描引擎和更深内容扫描 |
 | 网络策略只有默认 deny 与 allowlist 基础 | 当前容器 adapter 强制 `--network none`；仍缺按 tenant/agent/tool 的网络 profile、DNS/IP 限制、egress proxy 和审计可视化 | 引入 policy profile、egress proxy 和 network decision log |
 | UI 偏 demo | execution history 已补齐；仍缺 session 列表、artifact 详情、policy preview | 升级为 Sandbox Operations 页面 |
 | Agent 工具化未完整 | `sandbox_python` 已接入 Tool Gateway；`sandbox_file_convert` 已有 CSV/TSV/JSON 表格转换、txt/html/markdown 文本文档转换与 base64 `docx -> txt`/`pdf -> txt` 保守文档文本提取闭环；`sandbox_browser` 已有 inline no-network 截图/HAR/download-only 视频 artifact；PDF 渲染/OCR、Office 渲染/编辑、LibreOffice/Tika、二进制格式转换、browser egress/session capture 和 Inspector 展示仍未完成 | 继续补齐更广 sandbox-backed tool adapters |
@@ -186,7 +186,7 @@ SandboxArtifactScannerPort
 2. 命中 secret、token、private key、PII 的 artifact 默认 blocked 或 redacted。
 3. 二进制文件除图片/PDF 预览外默认不进入 prompt。
 4. scanner 失败时 fail closed，`promptVisible=false`。
-5. file:// 文本类 artifact 会读取小窗口内容并阻断 secret、token、private key、email、SSN 等高置信命中；后续补齐病毒扫描、二进制/PDF 深度扫描和 redaction summary。
+5. file:// 文本类 artifact 会读取小窗口内容并阻断 secret、token、private key、email、SSN 等高置信命中；file:// ZIP artifact 会做非递归、有界 entry/prefix 扫描并阻断危险路径、可执行内容和内嵌 PDF active content；后续补齐病毒扫描、二进制/PDF 深度扫描和超出 bounded ZIP 的 archive/container 深度内省。
 
 ## 6. 运行时适配器设计
 
@@ -302,7 +302,7 @@ P0 profile：
 
 ### P1：artifact 安全闭环
 
-1. 新增 artifact scanner port。（已补齐基础 metadata scanner 和 file:// 文本内容 secret/PII 阻断）
+1. 新增 artifact scanner port。（已补齐基础 metadata scanner、file:// 文本内容 secret/PII 阻断、二进制/PDF 头部扫描和 bounded ZIP archive 扫描）
 2. 只有 scan clean/redacted 的 artifact 可 prompt visible。（已补齐）
 3. UI 增加 artifact scan 状态和预览。（scan 状态已补齐；详情/预览/下载仍后续）
 4. 增加 scanner fail-closed 测试。（已补齐）
@@ -513,7 +513,17 @@ New structured redaction categories are value-free: `EXECUTABLE_BINARY`, `PDF_AC
 
 Fresh full-Docker evidence: focused scanner tests passed 10/10, broader kernel artifact governance tests passed 46/46, the full-compose backend rebuilt with an in-image Maven `BUILD SUCCESS`, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-binary-signature-smoke` passed 21/21. The smoke verified real `sandbox_python` PDF active-content and executable-masquerading artifacts are persisted as `BLOCKED|CONFIDENTIAL`, not copied to object storage, not prompt-visible, not downloadable, and exposed through APIs only as blocked metadata without raw `OpenAction` or storage-reference leakage.
 
-This completes the first bounded binary/PDF signature scan slice. External virus scanning, richer PDF/binary deep scanning with a dedicated scanner engine, archive/container introspection, PDF rendering/OCR plus Office/binary conversion beyond conservative text extraction, stronger runtime isolation, node-pool health, and broader Tool Gateway hardening remain follow-up production work.
+This completes the first bounded binary/PDF signature scan slice. External virus scanning, richer PDF/binary deep scanning with a dedicated scanner engine, richer archive/container introspection beyond bounded ZIP, PDF rendering/OCR plus Office/binary conversion beyond conservative text extraction, stronger runtime isolation, node-pool health, and broader Tool Gateway hardening remain follow-up production work.
+
+### 2026-07-03 Update: sandbox artifact ZIP archive introspection
+
+`DefaultSandboxArtifactScannerPort` now adds conservative ZIP archive introspection for local `file://` artifacts with `application/zip` or `application/x-zip-compressed` media types. ZIP artifacts are governed download-only artifacts: clean archives can be copied to object storage and downloaded through artifact APIs, but they remain prompt-hidden and are not included in tool observations.
+
+The scanner uses JDK `ZipFile`, inspects at most 128 entries, reads at most the first 256 KiB from each file entry, and never extracts the archive to the filesystem. It blocks unsafe paths, executable entry extensions or PE/ELF signatures, and embedded PDF active-content markers. Structured categories are value-free: `ARCHIVE_SCAN_LIMIT`, `ARCHIVE_UNSAFE_ENTRY`, `ARCHIVE_EXECUTABLE_BINARY`, `ARCHIVE_PDF_ACTIVE_CONTENT`, and `ARCHIVE_SCAN_ERROR`.
+
+Fresh full-Docker evidence: focused kernel/container tests passed 45/45 with reactor `BUILD SUCCESS`, compose overlay validation passed, the full-compose backend rebuilt with an in-image Maven `BUILD SUCCESS`, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-archive-introspection-smoke-final` passed 27/27. The smoke verified clean ZIP artifacts are `application/zip|CLEAN|INTERNAL`, `contentScanned=true`, prompt-hidden, copied to governed object storage, downloadable, and preserve expected entry content; unsafe ZIP artifacts are `application/zip|BLOCKED|CONFIDENTIAL` with `ARCHIVE_EXECUTABLE_BINARY`, not copied to object storage, not downloadable, prompt-hidden, and exposed through APIs without raw entry-name or storage-reference leakage.
+
+This slice does not add ClamAV, another scanner engine, recursive decompression, general archive/container extraction, full PDF rendering/parsing, Office parsing, or general binary conversion.
 
 ## 13. 非目标
 

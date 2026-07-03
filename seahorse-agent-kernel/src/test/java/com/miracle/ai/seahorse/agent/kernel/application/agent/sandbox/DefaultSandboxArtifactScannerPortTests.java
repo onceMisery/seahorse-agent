@@ -31,6 +31,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -180,6 +182,78 @@ class DefaultSandboxArtifactScannerPortTests {
     }
 
     @Test
+    void shouldPassCleanZipArchiveAsDownloadOnlyArtifact(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.zip");
+        writeZip(output, "docs/readme.txt", "safe archive marker".getBytes(StandardCharsets.UTF_8));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/zip")));
+
+        assertEquals(SandboxArtifactScanStatus.CLEAN, result.scanStatus());
+        assertEquals(ContextSensitivity.INTERNAL, result.sensitivity());
+        assertEquals("metadata scan passed", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("CLEAN", redactionSummary.path("decision").asText());
+        assertEquals(true, redactionSummary.path("contentScanned").asBoolean());
+    }
+
+    @Test
+    void shouldBlockZipArchiveWithExecutableEntryName(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.zip");
+        writeZip(output, "bin/payload.exe", "not actually executed".getBytes(StandardCharsets.UTF_8));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/zip")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("archive executable content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("ARCHIVE_EXECUTABLE_BINARY", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("payload.exe"));
+    }
+
+    @Test
+    void shouldBlockZipArchiveWithEmbeddedExecutableSignature(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.zip");
+        writeZip(output, "docs/report.bin", new byte[]{'M', 'Z', 0, 0, 0});
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/zip")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("ARCHIVE_EXECUTABLE_BINARY", redactionSummary(result).path("categories").get(0).asText());
+    }
+
+    @Test
+    void shouldBlockZipArchiveWithEmbeddedPdfActiveContent(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.zip");
+        writeZip(output,
+                "docs/report.pdf",
+                "%PDF-1.7\n1 0 obj\n<< /OpenAction 2 0 R >>\nendobj".getBytes(StandardCharsets.ISO_8859_1));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/zip")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("archive pdf active content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("ARCHIVE_PDF_ACTIVE_CONTENT", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("OpenAction"));
+    }
+
+    @Test
+    void shouldBlockZipArchiveWithUnsafeEntryPath(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.zip");
+        writeZip(output, "../outside.txt", "unsafe path".getBytes(StandardCharsets.UTF_8));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/zip")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("unsafe archive entry", result.summary());
+        assertEquals("ARCHIVE_UNSAFE_ENTRY", redactionSummary(result).path("categories").get(0).asText());
+    }
+
+    @Test
     void shouldFailClosedWhenLocalTextArtifactCannotBeRead(@TempDir Path tempDir) throws Exception {
         Path missing = tempDir.resolve("missing.txt");
 
@@ -193,6 +267,14 @@ class DefaultSandboxArtifactScannerPortTests {
 
     private static JsonNode redactionSummary(SandboxArtifactScanResult result) throws Exception {
         return OBJECT_MAPPER.readTree(result.redactionSummaryJson());
+    }
+
+    private static void writeZip(Path path, String entryName, byte[] content) throws Exception {
+        try (ZipOutputStream output = new ZipOutputStream(Files.newOutputStream(path))) {
+            output.putNextEntry(new ZipEntry(entryName));
+            output.write(content);
+            output.closeEntry();
+        }
     }
 
     private static SandboxArtifact fileArtifact(Path path) {

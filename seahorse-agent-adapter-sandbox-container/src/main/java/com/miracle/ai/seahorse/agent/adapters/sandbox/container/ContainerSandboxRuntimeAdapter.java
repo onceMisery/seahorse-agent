@@ -1782,6 +1782,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             case "har" -> "application/har+json";
             case "xml" -> "application/xml";
             case "pdf" -> "application/pdf";
+            case "zip" -> "application/zip";
             case "gif" -> "image/gif";
             case "jpg", "jpeg" -> "image/jpeg";
             case "png" -> "image/png";

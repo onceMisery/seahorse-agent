@@ -128,6 +128,27 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldClassifyZipArtifactsWithStableMediaType() throws Exception {
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("created archive\n", Duration.ofMillis(180)),
+                command -> Files.write(command.workingDirectory().resolve("bundle.zip"),
+                        new byte[]{'P', 'K', 0x03, 0x04, 0, 0}));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.CODE_INTERPRETER));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                "print('created archive')",
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("bundle.zip");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("application/zip");
+    }
+
+    @Test
     void shouldRunFileConversionWithGeneratedConverterAndCollectOnlyOutputArtifact() throws Exception {
         RecordingRunner runner = new RecordingRunner(
                 ContainerCommandResult.succeeded("converted 1 rows from csv to json\n", Duration.ofMillis(210)),

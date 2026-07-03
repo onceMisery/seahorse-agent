@@ -30,15 +30,20 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScannerPort {
 
     private static final int MAX_CONTENT_SCAN_BYTES = 256 * 1024;
     private static final int MAX_BINARY_SIGNATURE_SCAN_BYTES = 256 * 1024;
+    private static final int MAX_ARCHIVE_SCAN_ENTRIES = 128;
+    private static final int MAX_ARCHIVE_ENTRY_SCAN_BYTES = 256 * 1024;
     private static final Set<String> PROMPT_SAFE_EXACT_MEDIA_TYPES = Set.of(
             "application/json",
             "application/pdf",
@@ -48,7 +53,27 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
             "image/png",
             "image/webp");
     private static final Set<String> DOWNLOAD_ONLY_EXACT_MEDIA_TYPES = Set.of(
+            "application/x-zip-compressed",
+            "application/zip",
             "video/webm");
+    private static final Set<String> ZIP_MEDIA_TYPES = Set.of(
+            "application/x-zip-compressed",
+            "application/zip");
+    private static final Set<String> EXECUTABLE_ARCHIVE_EXTENSIONS = Set.of(
+            "bat",
+            "cmd",
+            "com",
+            "dll",
+            "dylib",
+            "elf",
+            "exe",
+            "jar",
+            "msi",
+            "ps1",
+            "scr",
+            "sh",
+            "so",
+            "vbs");
     private static final Set<String> SENSITIVE_MARKERS = Set.of(
             "api_key",
             "credential",
@@ -93,12 +118,17 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                 && binarySignatureScan.scanStatus() == SandboxArtifactScanStatus.BLOCKED) {
             return binarySignatureScan;
         }
+        SandboxArtifactScanResult archiveScan = scanLocalArchiveContent(artifact);
+        if (archiveScan != null
+                && archiveScan.scanStatus() == SandboxArtifactScanStatus.BLOCKED) {
+            return archiveScan;
+        }
         if (!isPromptSafeMediaType(artifact.mediaType())) {
             if (isDownloadOnlyMediaType(artifact.mediaType())) {
                 return SandboxArtifactScanResult.clean(
                         artifact.sensitivity(),
                         "metadata scan passed",
-                        binarySignatureScan != null);
+                        binarySignatureScan != null || archiveScan != null);
             }
             return SandboxArtifactScanResult.blocked(
                     artifact.sensitivity(),
@@ -119,6 +149,9 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
         }
         if (contentScan != null) {
             return contentScan;
+        }
+        if (archiveScan != null) {
+            return archiveScan;
         }
         if (binarySignatureScan != null) {
             return binarySignatureScan;
@@ -190,8 +223,86 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
         }
     }
 
+    private static SandboxArtifactScanResult scanLocalArchiveContent(SandboxArtifact artifact) {
+        if (!isLocalFileReference(artifact.objectUri()) || !isArchiveScannableMediaType(artifact.mediaType())) {
+            return null;
+        }
+        try {
+            Path path = Path.of(URI.create(artifact.objectUri())).toAbsolutePath().normalize();
+            if (!Files.isRegularFile(path)) {
+                return SandboxArtifactScanResult.blocked(
+                        ContextSensitivity.SECRET,
+                        "artifact content unavailable",
+                        true,
+                        List.of("CONTENT_UNAVAILABLE"));
+            }
+            try (ZipFile archive = new ZipFile(path.toFile())) {
+                int inspectedEntries = 0;
+                Enumeration<? extends ZipEntry> entries = archive.entries();
+                while (entries.hasMoreElements()) {
+                    if (inspectedEntries >= MAX_ARCHIVE_SCAN_ENTRIES) {
+                        return SandboxArtifactScanResult.blocked(
+                                ContextSensitivity.CONFIDENTIAL,
+                                "archive scan limit exceeded",
+                                true,
+                                List.of("ARCHIVE_SCAN_LIMIT"));
+                    }
+                    ZipEntry entry = entries.nextElement();
+                    inspectedEntries++;
+                    if (entry.isDirectory()) {
+                        continue;
+                    }
+                    String entryName = entry.getName();
+                    if (hasUnsafeArchivePath(entryName)) {
+                        return SandboxArtifactScanResult.blocked(
+                                ContextSensitivity.CONFIDENTIAL,
+                                "unsafe archive entry",
+                                true,
+                                List.of("ARCHIVE_UNSAFE_ENTRY"));
+                    }
+                    if (hasExecutableArchiveEntryName(entryName)) {
+                        return SandboxArtifactScanResult.blocked(
+                                ContextSensitivity.CONFIDENTIAL,
+                                "archive executable content",
+                                true,
+                                List.of("ARCHIVE_EXECUTABLE_BINARY"));
+                    }
+                    byte[] prefix = readArchiveEntryPrefix(archive, entry, MAX_ARCHIVE_ENTRY_SCAN_BYTES);
+                    if (hasExecutableSignature(prefix)) {
+                        return SandboxArtifactScanResult.blocked(
+                                ContextSensitivity.CONFIDENTIAL,
+                                "archive executable content",
+                                true,
+                                List.of("ARCHIVE_EXECUTABLE_BINARY"));
+                    }
+                    if ((hasPdfSignature(prefix) || hasPdfArchiveEntryName(entryName))
+                            && containsPdfActiveContent(prefix)) {
+                        return SandboxArtifactScanResult.blocked(
+                                ContextSensitivity.CONFIDENTIAL,
+                                "archive pdf active content",
+                                true,
+                                List.of("ARCHIVE_PDF_ACTIVE_CONTENT"));
+                    }
+                }
+            }
+            return SandboxArtifactScanResult.clean(artifact.sensitivity(), "metadata scan passed", true);
+        } catch (IOException | RuntimeException ex) {
+            return SandboxArtifactScanResult.blocked(
+                    ContextSensitivity.SECRET,
+                    "archive content scan failed",
+                    true,
+                    List.of("ARCHIVE_SCAN_ERROR"));
+        }
+    }
+
     private static byte[] readPrefix(Path path, int maxBytes) throws IOException {
         try (InputStream input = Files.newInputStream(path)) {
+            return input.readNBytes(maxBytes);
+        }
+    }
+
+    private static byte[] readArchiveEntryPrefix(ZipFile archive, ZipEntry entry, int maxBytes) throws IOException {
+        try (InputStream input = archive.getInputStream(entry)) {
             return input.readNBytes(maxBytes);
         }
     }
@@ -277,8 +388,13 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
         }
         String normalized = normalizedMediaType(mediaType);
         return "application/pdf".equals(normalized)
+                || isZipMediaType(normalized)
                 || (normalized.startsWith("image/") && PROMPT_SAFE_EXACT_MEDIA_TYPES.contains(normalized))
                 || DOWNLOAD_ONLY_EXACT_MEDIA_TYPES.contains(normalized);
+    }
+
+    private static boolean isArchiveScannableMediaType(String mediaType) {
+        return hasText(mediaType) && isZipMediaType(normalizedMediaType(mediaType));
     }
 
     private static boolean hasExecutableSignature(byte[] content) {
@@ -287,7 +403,7 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
     }
 
     private static boolean hasMismatchedBinarySignature(String mediaType, byte[] content) {
-        return (hasZipSignature(content) && !"application/zip".equals(mediaType))
+        return (hasZipSignature(content) && !isZipMediaType(mediaType))
                 || (hasPdfSignature(content) && !"application/pdf".equals(mediaType))
                 || (hasEbmlSignature(content) && !"video/webm".equals(mediaType))
                 || hasScriptLikePrefix(content);
@@ -313,6 +429,45 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
 
     private static boolean containsPdfActiveContent(byte[] content) {
         return PDF_ACTIVE_CONTENT_PATTERN.matcher(new String(content, StandardCharsets.ISO_8859_1)).find();
+    }
+
+    private static boolean hasUnsafeArchivePath(String value) {
+        if (!hasText(value) || value.indexOf('\0') >= 0) {
+            return true;
+        }
+        String normalized = value.replace('\\', '/');
+        String lower = normalized.toLowerCase(Locale.ROOT);
+        return normalized.startsWith("/")
+                || lower.matches("^[a-z]:/.*")
+                || normalized.equals("..")
+                || normalized.startsWith("../")
+                || normalized.endsWith("/..")
+                || normalized.contains("/../");
+    }
+
+    private static boolean hasExecutableArchiveEntryName(String value) {
+        String extension = archiveEntryExtension(value);
+        return EXECUTABLE_ARCHIVE_EXTENSIONS.contains(extension);
+    }
+
+    private static boolean hasPdfArchiveEntryName(String value) {
+        return "pdf".equals(archiveEntryExtension(value));
+    }
+
+    private static String archiveEntryExtension(String value) {
+        if (!hasText(value)) {
+            return "";
+        }
+        String filename = value.replace('\\', '/');
+        int slash = filename.lastIndexOf('/');
+        if (slash >= 0) {
+            filename = filename.substring(slash + 1);
+        }
+        int dot = filename.lastIndexOf('.');
+        if (dot < 0 || dot == filename.length() - 1) {
+            return "";
+        }
+        return filename.substring(dot + 1).toLowerCase(Locale.ROOT);
     }
 
     private static boolean startsWith(byte[] content, byte... signature) {
@@ -341,5 +496,9 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
 
     private static String normalizedMediaType(String mediaType) {
         return mediaType.toLowerCase(Locale.ROOT).split(";", 2)[0].trim();
+    }
+
+    private static boolean isZipMediaType(String mediaType) {
+        return ZIP_MEDIA_TYPES.contains(mediaType);
     }
 }
