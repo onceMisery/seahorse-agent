@@ -282,3 +282,11 @@ The artifact-storage full-Docker smoke now verifies the TAR.GZ decompression bud
 The archive artifact API check also verifies that the over-budget artifact stays prompt-hidden, non-downloadable, and does not leak the inner `large.bin` entry name or any storage reference. This is verification hardening only; it does not change scanner limits, TAR.GZ parsing, generic gzip support, recursive extraction, or external scanner integration.
 
 Fresh evidence: PowerShell parsing returned `PSParser OK`; `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-targz-budget-failclosed-smoke` passed 44/44 against the local full-Docker backend, including the new "Verify over-budget TAR.GZ archive is blocked before object storage" step. Cleanup confirmed no `seahorse-sandbox-*` containers, PostgreSQL reported zero non-terminal sandbox sessions, and backend health remained `UP`.
+
+## 2026-07-04 Update: Sandbox Plain GZIP Fail-Closed E2E Guard
+
+The artifact-storage full-Docker smoke now verifies the generic `.gz` non-goal as a real fail-closed path. The sandbox run creates `plain-bundle.gz`; runtime media detection records it as `application/gzip`, but the scanner rejects it because only `.tar.gz` and `.tgz` gzip-wrapped TAR archives are supported.
+
+The new smoke step verifies `BLOCKED|SECRET`, summary `archive content scan failed`, and value-free `ARCHIVE_SCAN_ERROR` metadata before any object-storage copy. The archive artifact API check also verifies that the plain GZIP artifact stays prompt-hidden, non-downloadable, and does not leak storage references or compressed content markers. This is verification hardening only; it does not add generic gzip scanning, recursive extraction, or external scanner integration.
+
+Fresh evidence: PowerShell parsing returned `PSParser OK`; backend health returned `{"status":"UP"}` before the run; `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-plain-gzip-failclosed-smoke-rerun` passed 45/45 against the local full-Docker backend, including the new "Verify plain GZIP archive is blocked before object storage" step. Cleanup confirmed no `seahorse-sandbox-*` containers, PostgreSQL reported zero non-terminal sandbox sessions, and backend health remained `UP`.

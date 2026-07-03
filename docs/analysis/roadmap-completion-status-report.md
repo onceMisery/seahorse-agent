@@ -931,6 +931,14 @@ The smoke verifies PostgreSQL state for the artifact as `application/gzip|BLOCKE
 
 Fresh evidence: PowerShell parsing passed for `scripts/e2e-sandbox-artifact-storage-smoke.ps1`; `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-targz-budget-failclosed-smoke` passed 44/44 against the local full-Docker backend. Cleanup confirmed no `seahorse-sandbox-*` containers, PostgreSQL reported zero non-terminal sandbox sessions, and backend health returned `{"status":"UP"}`.
 
+### 2026-07-04 Sandbox Plain GZIP Fail-Closed E2E Guard Evidence Update
+
+The artifact-storage smoke now also exercises the intentionally unsupported plain `.gz` path through the real sandbox runtime. The test-created `plain-bundle.gz` is detected as `application/gzip`, but because its filename is not `.tar.gz` or `.tgz`, the scanner must fail closed instead of treating generic gzip content as a supported archive format.
+
+The smoke verifies PostgreSQL state for the artifact as `application/gzip|BLOCKED|SECRET`, scan summary `archive content scan failed`, and redaction summary containing `ARCHIVE_SCAN_ERROR` without the compressed content marker. The sandbox artifact list/detail APIs must keep it prompt-hidden, non-downloadable, and free of storage references or compressed content leakage. This is verification hardening only; it does not add generic gzip scanning, recursive extraction, external scanner integration, or new download eligibility.
+
+Fresh evidence: PowerShell parsing passed for `scripts/e2e-sandbox-artifact-storage-smoke.ps1`; backend health returned `{"status":"UP"}` before the run; `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-plain-gzip-failclosed-smoke-rerun` passed 45/45 against the local full-Docker backend, including the new "Verify plain GZIP archive is blocked before object storage" step. Cleanup confirmed no `seahorse-sandbox-*` containers, PostgreSQL reported zero non-terminal sandbox sessions, and backend health remained `{"status":"UP"}`.
+
 ### 2026-07-04 Sandbox Artifact TAR.GZ Archive Introspection Evidence Update
 
 The default sandbox artifact scanner now performs conservative TAR.GZ archive introspection for local `file://` artifacts whose media type is `application/gzip` or `application/x-gzip` and whose filename ends with `.tar.gz` or `.tgz`. These artifacts are governed download-only media: clean archives are copied to object storage and downloadable through artifact APIs, but remain prompt-hidden and are not returned in sandbox-backed tool observations.

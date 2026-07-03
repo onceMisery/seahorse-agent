@@ -1107,9 +1107,11 @@ try {
     } | Out-Null
 
     $archiveMarker = "$Marker-archive-introspection"
+    $archiveMarkerPattern = [regex]::Escape($archiveMarker)
     $escapedArchiveMarker = $archiveMarker.Replace("\", "\\").Replace("'", "\'")
     $archiveCode = @"
 import io
+import gzip
 import tarfile
 import zipfile
 
@@ -1154,6 +1156,8 @@ with tarfile.open('overbudget-bundle.tar.gz', 'w:gz', format=tarfile.USTAR_FORMA
     entry = tarfile.TarInfo('docs/large.bin')
     entry.size = 33 * 1024 * 1024
     archive.addfile(entry, ZeroStream(entry.size))
+with gzip.open('plain-bundle.gz', 'wb') as archive:
+    archive.write(b'plain gzip archive $escapedArchiveMarker')
 print('$escapedArchiveMarker')
 "@
     $archiveObservation = Test-Step "Invoke sandbox_python with archive artifacts" {
@@ -1472,6 +1476,32 @@ print('$escapedArchiveMarker')
     }
     if (-not $overBudgetGzipTarArchiveArtifactId) { exit 1 }
 
+    $plainGzipArtifactId = Test-Step "Verify plain GZIP archive is blocked before object storage" {
+        $safeArchiveSessionId = $archiveSessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeArchiveSessionId' AND object_uri LIKE '%/plain-bundle.gz' ORDER BY created_at DESC LIMIT 1;"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 7) {
+            throw "Unexpected plain GZIP artifact row: $row"
+        }
+        if ($parts[1] -like "$ExpectedObjectUriPrefix*") {
+            throw "Plain GZIP archive was copied to object storage: $($parts[1])"
+        }
+        if ($parts[2] -ne "application/gzip" -or $parts[3] -ne "BLOCKED" -or $parts[4] -ne "SECRET") {
+            throw "Expected BLOCKED SECRET application/gzip plain archive but got: $row"
+        }
+        if ($parts[5] -ne "archive content scan failed") {
+            throw "Expected plain GZIP scan summary archive content scan failed but got '$($parts[5])'"
+        }
+        if ($parts[6] -notlike '*"decision":"BLOCKED"*' -or $parts[6] -notlike '*"ARCHIVE_SCAN_ERROR"*') {
+            throw "Expected BLOCKED ARCHIVE_SCAN_ERROR plain GZIP redaction summary but got '$($parts[6])'"
+        }
+        if ($parts[6].Contains($archiveMarker)) {
+            throw "Plain GZIP redaction summary leaked content marker: $($parts[6])"
+        }
+        $parts[0]
+    }
+    if (-not $plainGzipArtifactId) { exit 1 }
+
     Test-Step "Verify archive artifact API exposes governed metadata" {
         $response = Invoke-Json -Method GET -Path "/api/sandbox/sessions/$archiveSessionId/artifacts" -Headers $headers
         Assert-ApiOk $response "List archive sandbox artifacts"
@@ -1503,8 +1533,12 @@ print('$escapedArchiveMarker')
         if ($overBudgetGzipTarMatched.Count -ne 1 -or $overBudgetGzipTarMatched[0].promptVisible -ne $false) {
             throw "Expected over-budget TAR.GZ to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
+        $plainGzipMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$plainGzipArtifactId" })
+        if ($plainGzipMatched.Count -ne 1 -or $plainGzipMatched[0].promptVisible -ne $false) {
+            throw "Expected plain GZIP to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
         $artifactJson = $response.data | ConvertTo-Json -Depth 20 -Compress
-        if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|payload.exe|large.bin") {
+        if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|payload.exe|large.bin|$archiveMarkerPattern") {
             throw "Archive artifact API leaked storage or unsafe entry details: $artifactJson"
         }
 
@@ -1576,6 +1610,19 @@ print('$escapedArchiveMarker')
         $overBudgetGzipTarDetailJson = $overBudgetGzipTarDetail.data | ConvertTo-Json -Depth 20 -Compress
         if ($overBudgetGzipTarDetailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|large.bin") {
             throw "Over-budget TAR.GZ detail leaked storage or unsafe entry details: $overBudgetGzipTarDetailJson"
+        }
+
+        $plainGzipDetail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$plainGzipArtifactId" -Headers $headers
+        Assert-ApiOk $plainGzipDetail "Get plain GZIP artifact detail"
+        if ($plainGzipDetail.data.downloadable -ne $false -or $plainGzipDetail.data.promptVisible -ne $false) {
+            throw "Expected plain GZIP detail to be non-downloadable and prompt-hidden: $($plainGzipDetail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($plainGzipDetail.data.redactionSummaryJson)" -notlike '*"ARCHIVE_SCAN_ERROR"*') {
+            throw "Expected plain GZIP detail archive scan error category: $($plainGzipDetail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $plainGzipDetailJson = $plainGzipDetail.data | ConvertTo-Json -Depth 20 -Compress
+        if ($plainGzipDetailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|$archiveMarkerPattern") {
+            throw "Plain GZIP detail leaked storage or content details: $plainGzipDetailJson"
         }
     } | Out-Null
 

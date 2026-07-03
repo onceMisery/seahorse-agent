@@ -617,6 +617,14 @@ The artifact list/detail API checks also verify that the over-budget TAR.GZ rema
 
 Fresh full-Docker evidence: PowerShell parsing passed for the artifact-storage smoke, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-targz-budget-failclosed-smoke` passed 44/44 against the local full-Docker backend. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and backend health `UP`.
 
+### 2026-07-04 Update: sandbox plain GZIP fail-closed E2E guard
+
+The artifact-storage smoke now verifies the intentionally unsupported plain `.gz` path through the real sandbox runtime. The sandbox run creates `plain-bundle.gz`; media detection records it as `application/gzip`, but the scanner rejects it because only `.tar.gz` and `.tgz` gzip-wrapped TAR archives are supported.
+
+The artifact is blocked before object storage copy as `application/gzip|BLOCKED|SECRET`, with summary `archive content scan failed` and value-free `ARCHIVE_SCAN_ERROR` metadata. The artifact list/detail API checks also verify that the plain GZIP remains prompt-hidden, non-downloadable, and does not leak storage references or compressed content markers. This is runtime verification hardening only; it does not add generic gzip scanning, recursive extraction, new download eligibility, or external scanner integration.
+
+Fresh full-Docker evidence: PowerShell parsing passed for the artifact-storage smoke, backend health returned `UP`, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-plain-gzip-failclosed-smoke-rerun` passed 45/45 against the local full-Docker backend. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and backend health `UP`.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。
