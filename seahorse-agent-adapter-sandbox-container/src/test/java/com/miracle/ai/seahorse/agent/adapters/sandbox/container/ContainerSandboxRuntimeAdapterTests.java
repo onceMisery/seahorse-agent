@@ -170,6 +170,27 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldClassifyGzipTarArtifactsWithStableMediaType() throws Exception {
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("created gzip tar archive\n", Duration.ofMillis(180)),
+                command -> Files.write(command.workingDirectory().resolve("bundle.tar.gz"),
+                        new byte[]{0x1F, (byte) 0x8B, 0x08}));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.CODE_INTERPRETER));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                "print('created gzip tar archive')",
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("bundle.tar.gz");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("application/gzip");
+    }
+
+    @Test
     void shouldRunFileConversionWithGeneratedConverterAndCollectOnlyOutputArtifact() throws Exception {
         RecordingRunner runner = new RecordingRunner(
                 ContainerCommandResult.succeeded("converted 1 rows from csv to json\n", Duration.ofMillis(210)),

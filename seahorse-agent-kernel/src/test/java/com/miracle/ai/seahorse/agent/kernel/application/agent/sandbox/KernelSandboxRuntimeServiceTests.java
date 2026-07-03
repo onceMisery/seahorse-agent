@@ -1131,6 +1131,37 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldDescribeDownloadOnlyGzipTarArtifactWithStableFilename() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        SandboxSession session = sessionRepository.saveSession(SandboxSession.created(
+                "session-1",
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW));
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new MemorySandboxArtifactQueryPort(storedArtifact(
+                        "artifact-targz",
+                        "local://sandbox-artifacts/safe-bundle.tar.gz",
+                        "application/gzip")),
+                CLOCK);
+
+        SandboxArtifactDetailDecision decision = service.describeArtifact("artifact-targz");
+
+        assertEquals(session.sessionId(), decision.artifact().sessionId());
+        assertEquals("application/gzip", decision.contentType());
+        assertEquals("artifact-targz.tar.gz", decision.filename());
+        assertFalse(decision.artifact().promptVisible());
+        assertTrue(decision.downloadable());
+        assertNull(decision.downloadBlockedReason());
+    }
+
+    @Test
     void shouldDescribeSecretSandboxArtifactAsBlockedForDownload() {
         MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
         sessionRepository.saveSession(SandboxSession.created(

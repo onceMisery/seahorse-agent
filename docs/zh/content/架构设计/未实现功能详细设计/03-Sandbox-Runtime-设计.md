@@ -28,7 +28,7 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 | Web API | 已有创建 session、execute、close、list executions、list artifacts API | `SeahorseSandboxController.java` |
 | 前端页面 | 已有 `/admin/sandbox`，可创建 session、输入参数、执行、查看结果、execution history 和 artifact | `frontend/src/pages/admin/sandbox/SandboxPage.tsx` |
 | Agent 工具 | 已有 `sandbox_python`、`sandbox_file_convert` 和受限 inline no-network `sandbox_browser` 工具链路，经过 Tool Gateway policy/audit/redaction，并调用 `SandboxRuntimeInboundPort` 执行对应 sandbox runtime | `SandboxPythonToolPortAdapter.java`、`SandboxFileConvertToolPortAdapter.java`、`SandboxBrowserToolPortAdapter.java` |
-| artifact scanner | 已有 `SandboxArtifactScannerPort`、默认保守 scanner、`REDACTED` 状态、prompt visibility gate、file:// 文本类 artifact 的 secret/PII 内容扫描、二进制/PDF 头部扫描，以及 ZIP archive 有界内容扫描；scanner 失败 fail closed | `DefaultSandboxArtifactScannerPort.java`、`KernelSandboxRuntimeService.java` |
+| artifact scanner | 已有 `SandboxArtifactScannerPort`、默认保守 scanner、`REDACTED` 状态、prompt visibility gate、file:// 文本类 artifact 的 secret/PII 内容扫描、二进制/PDF 头部扫描，以及 ZIP/TAR/TAR.GZ archive 有界内容扫描；scanner 失败 fail closed | `DefaultSandboxArtifactScannerPort.java`、`KernelSandboxRuntimeService.java` |
 
 ### 2.2 真实缺口
 
@@ -38,7 +38,7 @@ Sandbox Runtime 当前已经具备 kernel 编排、策略端口、运行时端�
 | 真实 runtime 清理仍需生产化 | 当前 adapter 使用 `--rm` 并在 close 时删除 per-session workspace；session TTL metadata 已持久化，管理员手动 expired session sweep 与后台定时 TTL sweep 均可将过期未终态 session 释放并标记为 `TIMED_OUT`；orphan workspace sweep 会保守删除旧 workspace 并只读巡检 `seahorse-sandbox-*` live/exited container；runtime health API 已暴露 engine/workspace/container 与 active session capacity 只读健康信号且不暴露 workspace root；orphan container reap 已提供默认 dry-run 的显式管理员操作并保护非终态 session container；仍缺 runtime pool 调度和节点级健康检查 | 接入 runtime 节点健康检查、调度/admission control 和更完整的自动化回收策略 |
 | 资源配额仍不完整 | 当前 adapter 有固定 CPU、内存、pids、timeout、stdout/stderr limit，session `profileId`/`expiresAt` 已持久化；仍缺磁盘配额和按 tenant/agent/tool 的资源策略联动 | 新增 `SandboxResourcePolicy` 和更完整 runtime profile policy |
 | 真实 artifact 产物已进入最小闭环 | Code Interpreter adapter 已收集 workspace 文件，kernel 已将 prompt-visible file:// artifact 写入 object storage，并通过治理 API 下载/查看详情 | 后续补齐 preview、生命周期和更广运行时产物 |
-| 内容级 artifact 扫描仍需加固 | 基础 metadata scanner、file:// 文本类 secret/PII 内容阻断、prompt visibility gate、scan summary、结构化 redaction summary、二进制/PDF 头部扫描和 ZIP archive 有界内容扫描已落地；仍缺病毒扫描、二进制/PDF 深度扫描和超出非递归 ZIP 的 archive/container 深度内省 | 后续接入专业扫描引擎和更深内容扫描 |
+| 内容级 artifact 扫描仍需加固 | 基础 metadata scanner、file:// 文本类 secret/PII 内容阻断、prompt visibility gate、scan summary、结构化 redaction summary、二进制/PDF 头部扫描和 ZIP/TAR/TAR.GZ archive 有界内容扫描已落地；仍缺病毒扫描、二进制/PDF 深度扫描和超出非递归 ZIP/TAR/TAR.GZ 的 archive/container 深度内省 | 后续接入专业扫描引擎和更深内容扫描 |
 | 网络策略只有默认 deny 与 allowlist 基础 | 当前容器 adapter 强制 `--network none`；仍缺按 tenant/agent/tool 的网络 profile、DNS/IP 限制、egress proxy 和审计可视化 | 引入 policy profile、egress proxy 和 network decision log |
 | UI 偏 demo | execution history 已补齐；仍缺 session 列表、artifact 详情、policy preview | 升级为 Sandbox Operations 页面 |
 | Agent 工具化未完整 | `sandbox_python` 已接入 Tool Gateway；`sandbox_file_convert` 已有 CSV/TSV/JSON 表格转换、txt/html/markdown 文本文档转换与 base64 `docx -> txt`/`pdf -> txt` 保守文档文本提取闭环；`sandbox_browser` 已有 inline no-network 截图/HAR/download-only 视频 artifact；PDF 渲染/OCR、Office 渲染/编辑、LibreOffice/Tika、二进制格式转换、browser egress/session capture 和 Inspector 展示仍未完成 | 继续补齐更广 sandbox-backed tool adapters |
@@ -186,7 +186,7 @@ SandboxArtifactScannerPort
 2. 命中 secret、token、private key、PII 的 artifact 默认 blocked 或 redacted。
 3. 二进制文件除图片/PDF 预览外默认不进入 prompt。
 4. scanner 失败时 fail closed，`promptVisible=false`。
-5. file:// 文本类 artifact 会读取小窗口内容并阻断 secret、token、private key、email、SSN 等高置信命中；file:// ZIP artifact 会做非递归、有界 entry/prefix 扫描并阻断危险路径、可执行内容和内嵌 PDF active content；后续补齐病毒扫描、二进制/PDF 深度扫描和超出 bounded ZIP 的 archive/container 深度内省。
+5. file:// 文本类 artifact 会读取小窗口内容并阻断 secret、token、private key、email、SSN 等高置信命中；file:// ZIP/TAR/TAR.GZ artifact 会做非递归、有界 entry/prefix 扫描并阻断危险路径、可执行内容和内嵌 PDF active content；后续补齐病毒扫描、二进制/PDF 深度扫描和超出 bounded ZIP/TAR/TAR.GZ 的 archive/container 深度内省。
 
 ## 6. 运行时适配器设计
 
@@ -582,6 +582,16 @@ The scanner walks 512-byte TAR headers directly, validates checksums, supports o
 Runtime artifact media detection now maps `.tar` to `application/x-tar`, artifact download filename mapping preserves `.tar`, and the scanner policy reports `application/x-tar` as download-only, binary-signature-scanned, and archive-scanned. This slice does not add `tar.gz`, recursive extraction, PAX/GNU long-name support, ClamAV or another external scanner engine, general archive/container extraction, or general binary conversion.
 
 Fresh full-Docker evidence: focused kernel/container regression passed 98/98 with reactor `BUILD SUCCESS`, `git diff --check` passed, compose overlay validation passed, the backend rebuilt through the local 7890 proxy path with an in-image Maven `BUILD SUCCESS`, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-tar-archive-smoke` passed 39/39. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and backend health `UP`.
+
+### 2026-07-04 Update: sandbox artifact TAR.GZ archive introspection
+
+`DefaultSandboxArtifactScannerPort` now adds conservative TAR.GZ archive introspection for local `file://` artifacts with `application/gzip` or `application/x-gzip` media type only when the filename ends with `.tar.gz` or `.tgz`. TAR.GZ artifacts are governed download-only artifacts: clean archives can be copied to object storage and downloaded through artifact APIs, but they remain prompt-hidden and are not included in tool observations.
+
+The scanner uses `GZIPInputStream` with a 32 MiB decompressed-byte budget, then reuses the existing bounded TAR header walker. It validates checksums, supports only regular file and directory entries, inspects at most 128 entries, reads at most the first 256 KiB from each regular file, and never extracts archive content to the filesystem. It blocks unsafe paths, non-regular/link/special/extended metadata entries, executable entry extensions or PE/ELF signatures, and embedded PDF active-content markers. Plain `.gz`, malformed gzip/TAR content, truncated streams, and decompressed content beyond the budget fail closed as `ARCHIVE_SCAN_ERROR`.
+
+Runtime artifact media detection now maps `.tar.gz` and `.tgz` to `application/gzip`, artifact download filename mapping preserves `.tar.gz`, and the scanner policy reports gzip TAR media as download-only, binary-signature-scanned, and archive-scanned. This slice does not add generic gzip scanning, recursive extraction, PAX/GNU long-name support, ClamAV or another external scanner engine, general archive/container extraction, or general binary conversion.
+
+Fresh full-Docker evidence: focused kernel/container regression passed 106/106 with reactor `BUILD SUCCESS`, compose overlay validation passed, the backend rebuilt through the local 7890 proxy path with an in-image Maven `BUILD SUCCESS` after one transient proxy TLS EOF retry, and `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-targz-archive-smoke-review` passed 43/43. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and backend health `UP`.
 
 ## 13. 非目标
 

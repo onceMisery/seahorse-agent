@@ -29,10 +29,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -62,11 +64,17 @@ class DefaultSandboxArtifactScannerPortTests {
         assertEquals(128, policy.maxArchiveScanEntries());
         assertEquals(256 * 1024, policy.maxArchiveEntryScanBytes());
         assertTrue(policy.promptSafeMediaTypes().contains("text/*"));
+        assertTrue(policy.downloadOnlyMediaTypes().contains("application/gzip"));
+        assertTrue(policy.downloadOnlyMediaTypes().contains("application/x-gzip"));
         assertTrue(policy.downloadOnlyMediaTypes().contains("application/zip"));
         assertTrue(policy.downloadOnlyMediaTypes().contains("application/x-tar"));
         assertTrue(policy.binarySignatureScannedMediaTypes().contains("application/pdf"));
+        assertTrue(policy.binarySignatureScannedMediaTypes().contains("application/gzip"));
+        assertTrue(policy.binarySignatureScannedMediaTypes().contains("application/x-gzip"));
         assertTrue(policy.binarySignatureScannedMediaTypes().contains("application/x-tar"));
         assertTrue(policy.archiveScannedMediaTypes().contains(DOCX_MEDIA_TYPE));
+        assertTrue(policy.archiveScannedMediaTypes().contains("application/gzip"));
+        assertTrue(policy.archiveScannedMediaTypes().contains("application/x-gzip"));
         assertTrue(policy.archiveScannedMediaTypes().contains("application/x-tar"));
         assertTrue(policy.blockedCategories().contains("OFFICE_MACRO"));
         assertTrue(policy.blockedCategories().contains("PDF_ACTIVE_CONTENT"));
@@ -417,6 +425,90 @@ class DefaultSandboxArtifactScannerPortTests {
     }
 
     @Test
+    void shouldPassCleanGzipTarArchiveAsDownloadOnlyArtifact(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.tar.gz");
+        writeTarGzip(output, "docs/readme.txt", "safe gzip tar marker".getBytes(StandardCharsets.UTF_8));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/gzip")));
+
+        assertEquals(SandboxArtifactScanStatus.CLEAN, result.scanStatus());
+        assertEquals(ContextSensitivity.INTERNAL, result.sensitivity());
+        assertEquals("metadata scan passed", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("CLEAN", redactionSummary.path("decision").asText());
+        assertEquals(true, redactionSummary.path("contentScanned").asBoolean());
+    }
+
+    @Test
+    void shouldPassCleanXGzipTarArchiveAsDownloadOnlyArtifact(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.tar.gz");
+        writeTarGzip(output, "docs/readme.txt", "safe x-gzip tar marker".getBytes(StandardCharsets.UTF_8));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/x-gzip")));
+
+        assertEquals(SandboxArtifactScanStatus.CLEAN, result.scanStatus());
+        assertEquals(ContextSensitivity.INTERNAL, result.sensitivity());
+        assertEquals("metadata scan passed", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("CLEAN", redactionSummary.path("decision").asText());
+        assertEquals(true, redactionSummary.path("contentScanned").asBoolean());
+    }
+
+    @Test
+    void shouldBlockGzipTarArchiveWithExecutableEntryName(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.tgz");
+        writeTarGzip(output, "bin/payload.exe", "not actually executed".getBytes(StandardCharsets.UTF_8));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/gzip")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("archive executable content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("ARCHIVE_EXECUTABLE_BINARY", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("payload.exe"));
+    }
+
+    @Test
+    void shouldFailClosedWhenGzipMediaDoesNotUseTarGzipFilename(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.gz");
+        writeTarGzip(output, "docs/readme.txt", "safe gzip marker".getBytes(StandardCharsets.UTF_8));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/gzip")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.SECRET, result.sensitivity());
+        assertEquals("archive content scan failed", result.summary());
+        assertEquals("ARCHIVE_SCAN_ERROR", redactionSummary(result).path("categories").get(0).asText());
+    }
+
+    @Test
+    void shouldFailClosedWhenGzipTarArchiveIsMalformed(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.tar.gz");
+        Files.writeString(output, "not gzip content", StandardCharsets.UTF_8);
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/gzip")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.SECRET, result.sensitivity());
+        assertEquals("archive content scan failed", result.summary());
+        assertEquals("ARCHIVE_SCAN_ERROR", redactionSummary(result).path("categories").get(0).asText());
+    }
+
+    @Test
+    void shouldFailClosedWhenGzipTarDecompressedContentExceedsLimit(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.tar.gz");
+        writeTarGzipWithZeroEntry(output, "docs/large.bin", 33L * 1024L * 1024L);
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/gzip")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.SECRET, result.sensitivity());
+        assertEquals("archive content scan failed", result.summary());
+        assertEquals("ARCHIVE_SCAN_ERROR", redactionSummary(result).path("categories").get(0).asText());
+    }
+
+    @Test
     void shouldFailClosedWhenLocalTextArtifactCannotBeRead(@TempDir Path tempDir) throws Exception {
         Path missing = tempDir.resolve("missing.txt");
 
@@ -448,17 +540,47 @@ class DefaultSandboxArtifactScannerPortTests {
     }
 
     private static void writeTar(Path path, String entryName, byte[] content) throws Exception {
-        writeTar(path, entryName, content, (byte) '0');
+        Files.write(path, tarBytes(entryName, content, (byte) '0'));
     }
 
     private static void writeTar(Path path, String entryName, byte[] content, byte typeFlag) throws Exception {
+        Files.write(path, tarBytes(entryName, content, typeFlag));
+    }
+
+    private static void writeTarGzip(Path path, String entryName, byte[] content) throws Exception {
+        try (GZIPOutputStream gzip = new GZIPOutputStream(Files.newOutputStream(path))) {
+            gzip.write(tarBytes(entryName, content, (byte) '0'));
+        }
+    }
+
+    private static void writeTarGzipWithZeroEntry(Path path, String entryName, long size) throws Exception {
+        try (GZIPOutputStream gzip = new GZIPOutputStream(Files.newOutputStream(path))) {
+            byte[] header = tarHeader(entryName, size, (byte) '0');
+            gzip.write(header);
+            writeZeroBytes(gzip, size);
+            long padding = (512 - (size % 512)) % 512;
+            writeZeroBytes(gzip, padding);
+            gzip.write(new byte[1024]);
+        }
+    }
+
+    private static byte[] tarBytes(String entryName, byte[] content, byte typeFlag) throws Exception {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
+        output.write(tarHeader(entryName, content.length, typeFlag));
+        output.write(content);
+        int padding = (512 - (content.length % 512)) % 512;
+        output.write(new byte[padding]);
+        output.write(new byte[1024]);
+        return output.toByteArray();
+    }
+
+    private static byte[] tarHeader(String entryName, long size, byte typeFlag) {
         byte[] header = new byte[512];
         writeAscii(header, 0, 100, entryName);
         writeOctal(header, 100, 8, 0644);
         writeOctal(header, 108, 8, 0);
         writeOctal(header, 116, 8, 0);
-        writeOctal(header, 124, 12, content.length);
+        writeOctal(header, 124, 12, size);
         writeOctal(header, 136, 12, 0);
         for (int index = 148; index < 156; index++) {
             header[index] = (byte) ' ';
@@ -473,12 +595,17 @@ class DefaultSandboxArtifactScannerPortTests {
         writeAscii(header, 148, 6, String.format("%06o", checksum));
         header[154] = 0;
         header[155] = (byte) ' ';
-        output.write(header);
-        output.write(content);
-        int padding = (512 - (content.length % 512)) % 512;
-        output.write(new byte[padding]);
-        output.write(new byte[1024]);
-        Files.write(path, output.toByteArray());
+        return header;
+    }
+
+    private static void writeZeroBytes(OutputStream output, long count) throws Exception {
+        byte[] buffer = new byte[8192];
+        long remaining = count;
+        while (remaining > 0) {
+            int bytes = (int) Math.min(buffer.length, remaining);
+            output.write(buffer, 0, bytes);
+            remaining -= bytes;
+        }
     }
 
     private static void writeAscii(byte[] target, int offset, int length, String value) {

@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.zip.GZIPInputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -47,6 +48,7 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
     private static final int MAX_BINARY_SIGNATURE_SCAN_BYTES = 256 * 1024;
     private static final int MAX_ARCHIVE_SCAN_ENTRIES = 128;
     private static final int MAX_ARCHIVE_ENTRY_SCAN_BYTES = 256 * 1024;
+    private static final long MAX_COMPRESSED_ARCHIVE_DECOMPRESSED_BYTES = 32L * 1024L * 1024L;
     private static final String DOCX_MEDIA_TYPE =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private static final String XLSX_MEDIA_TYPE =
@@ -57,6 +59,8 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
     private static final String XLSM_MEDIA_TYPE = "application/vnd.ms-excel.sheet.macroenabled.12";
     private static final String PPTM_MEDIA_TYPE = "application/vnd.ms-powerpoint.presentation.macroenabled.12";
     private static final String TAR_MEDIA_TYPE = "application/x-tar";
+    private static final String GZIP_MEDIA_TYPE = "application/gzip";
+    private static final String X_GZIP_MEDIA_TYPE = "application/x-gzip";
     private static final int TAR_BLOCK_BYTES = 512;
     private static final Set<String> PROMPT_SAFE_EXACT_MEDIA_TYPES = Set.of(
             "application/json",
@@ -69,7 +73,9 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
     private static final Set<String> DOWNLOAD_ONLY_EXACT_MEDIA_TYPES = Set.of(
             DOCM_MEDIA_TYPE,
             DOCX_MEDIA_TYPE,
+            GZIP_MEDIA_TYPE,
             TAR_MEDIA_TYPE,
+            X_GZIP_MEDIA_TYPE,
             "application/x-zip-compressed",
             "application/zip",
             PPTM_MEDIA_TYPE,
@@ -87,6 +93,7 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
             XLSM_MEDIA_TYPE,
             XLSX_MEDIA_TYPE);
     private static final Set<String> TAR_MEDIA_TYPES = Set.of(TAR_MEDIA_TYPE);
+    private static final Set<String> GZIP_TAR_MEDIA_TYPES = Set.of(GZIP_MEDIA_TYPE, X_GZIP_MEDIA_TYPE);
     private static final Set<String> OFFICE_MACRO_ENABLED_MEDIA_TYPES = Set.of(
             DOCM_MEDIA_TYPE,
             PPTM_MEDIA_TYPE,
@@ -211,7 +218,9 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                         "text/*"),
                 List.of(
                         "application/pdf",
+                        GZIP_MEDIA_TYPE,
                         TAR_MEDIA_TYPE,
+                        X_GZIP_MEDIA_TYPE,
                         "application/zip",
                         "application/x-zip-compressed",
                         DOCM_MEDIA_TYPE,
@@ -271,6 +280,7 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
     private static List<String> archiveScannedMediaTypes() {
         java.util.ArrayList<String> values = new java.util.ArrayList<>(ZIP_MEDIA_TYPES);
         values.addAll(TAR_MEDIA_TYPES);
+        values.addAll(GZIP_TAR_MEDIA_TYPES);
         values.sort(String::compareTo);
         return List.copyOf(values);
     }
@@ -360,9 +370,14 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                         true,
                         List.of("OFFICE_MACRO"));
             }
-            SandboxArtifactScanResult result = isTarMediaType(mediaType)
-                    ? scanTarArchive(path)
-                    : scanZipArchive(path);
+            SandboxArtifactScanResult result;
+            if (isGzipTarMediaType(mediaType)) {
+                result = scanGzipTarArchive(path, artifact.objectUri());
+            } else if (isTarMediaType(mediaType)) {
+                result = scanTarArchive(path);
+            } else {
+                result = scanZipArchive(path);
+            }
             if (result != null) {
                 return result;
             }
@@ -410,52 +425,67 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
 
     private static SandboxArtifactScanResult scanTarArchive(Path path) throws IOException {
         try (InputStream input = Files.newInputStream(path)) {
-            int inspectedEntries = 0;
-            byte[] header = new byte[TAR_BLOCK_BYTES];
-            while (readFullBlock(input, header)) {
-                if (isZeroBlock(header)) {
-                    return null;
-                }
-                if (inspectedEntries >= MAX_ARCHIVE_SCAN_ENTRIES) {
-                    return archiveScanLimit();
-                }
-                inspectedEntries++;
-                if (!hasValidTarChecksum(header)) {
-                    return archiveScanError();
-                }
-                String entryName = tarEntryName(header);
-                byte typeFlag = header[156];
-                long size = tarEntrySize(header);
-                if (size < 0) {
-                    return archiveScanError();
-                }
-                SandboxArtifactScanResult pathDecision = scanArchiveEntryPathMetadata(entryName);
-                if (pathDecision != null) {
-                    return pathDecision;
-                }
-                if (isTarDirectory(typeFlag, entryName)) {
-                    skipTarEntry(input, size);
-                    continue;
-                }
-                if (!isTarRegularFile(typeFlag) || isTarExtendedMetadata(typeFlag)) {
-                    return SandboxArtifactScanResult.blocked(
-                            ContextSensitivity.CONFIDENTIAL,
-                            "unsafe archive entry",
-                            true,
-                            List.of("ARCHIVE_UNSAFE_ENTRY"));
-                }
-                SandboxArtifactScanResult metadataDecision = scanArchiveRegularEntryMetadata(entryName);
-                if (metadataDecision != null) {
-                    return metadataDecision;
-                }
-                int bytesToRead = (int) Math.min(size, MAX_ARCHIVE_ENTRY_SCAN_BYTES);
-                byte[] prefix = input.readNBytes(bytesToRead);
-                SandboxArtifactScanResult contentDecision = scanArchiveEntryContent(entryName, prefix);
-                if (contentDecision != null) {
-                    return contentDecision;
-                }
-                skipTarEntryRemainder(input, size, bytesToRead);
+            return scanTarArchive(input);
+        }
+    }
+
+    private static SandboxArtifactScanResult scanGzipTarArchive(Path path, String objectUri) throws IOException {
+        if (!hasGzipTarFilename(objectUri)) {
+            return archiveScanError();
+        }
+        try (InputStream fileInput = Files.newInputStream(path);
+             InputStream gzipInput = new GZIPInputStream(fileInput);
+             InputStream boundedInput = new BoundedInputStream(gzipInput, MAX_COMPRESSED_ARCHIVE_DECOMPRESSED_BYTES)) {
+            return scanTarArchive(boundedInput);
+        }
+    }
+
+    private static SandboxArtifactScanResult scanTarArchive(InputStream input) throws IOException {
+        int inspectedEntries = 0;
+        byte[] header = new byte[TAR_BLOCK_BYTES];
+        while (readFullBlock(input, header)) {
+            if (isZeroBlock(header)) {
+                return null;
             }
+            if (inspectedEntries >= MAX_ARCHIVE_SCAN_ENTRIES) {
+                return archiveScanLimit();
+            }
+            inspectedEntries++;
+            if (!hasValidTarChecksum(header)) {
+                return archiveScanError();
+            }
+            String entryName = tarEntryName(header);
+            byte typeFlag = header[156];
+            long size = tarEntrySize(header);
+            if (size < 0) {
+                return archiveScanError();
+            }
+            SandboxArtifactScanResult pathDecision = scanArchiveEntryPathMetadata(entryName);
+            if (pathDecision != null) {
+                return pathDecision;
+            }
+            if (isTarDirectory(typeFlag, entryName)) {
+                skipTarEntry(input, size);
+                continue;
+            }
+            if (!isTarRegularFile(typeFlag) || isTarExtendedMetadata(typeFlag)) {
+                return SandboxArtifactScanResult.blocked(
+                        ContextSensitivity.CONFIDENTIAL,
+                        "unsafe archive entry",
+                        true,
+                        List.of("ARCHIVE_UNSAFE_ENTRY"));
+            }
+            SandboxArtifactScanResult metadataDecision = scanArchiveRegularEntryMetadata(entryName);
+            if (metadataDecision != null) {
+                return metadataDecision;
+            }
+            int bytesToRead = (int) Math.min(size, MAX_ARCHIVE_ENTRY_SCAN_BYTES);
+            byte[] prefix = input.readNBytes(bytesToRead);
+            SandboxArtifactScanResult contentDecision = scanArchiveEntryContent(entryName, prefix);
+            if (contentDecision != null) {
+                return contentDecision;
+            }
+            skipTarEntryRemainder(input, size, bytesToRead);
         }
         return archiveScanError();
     }
@@ -643,6 +673,22 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
     private static long tarPadding(long size) {
         long remainder = size % TAR_BLOCK_BYTES;
         return remainder == 0 ? 0 : TAR_BLOCK_BYTES - remainder;
+    }
+
+    private static boolean hasGzipTarFilename(String objectUri) {
+        if (!hasText(objectUri)) {
+            return false;
+        }
+        try {
+            String path = URI.create(objectUri).getPath();
+            if (!hasText(path)) {
+                return false;
+            }
+            String normalized = path.toLowerCase(Locale.ROOT);
+            return normalized.endsWith(".tar.gz") || normalized.endsWith(".tgz");
+        } catch (RuntimeException ex) {
+            return false;
+        }
     }
 
     private static SandboxArtifactScanResult scanLocalTextContent(SandboxArtifact artifact) {
@@ -852,7 +898,70 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
         return TAR_MEDIA_TYPES.contains(mediaType);
     }
 
+    private static boolean isGzipTarMediaType(String mediaType) {
+        return GZIP_TAR_MEDIA_TYPES.contains(mediaType);
+    }
+
     private static boolean isArchiveMediaType(String mediaType) {
-        return isZipMediaType(mediaType) || isTarMediaType(mediaType);
+        return isZipMediaType(mediaType) || isTarMediaType(mediaType) || isGzipTarMediaType(mediaType);
+    }
+
+    private static final class BoundedInputStream extends InputStream {
+
+        private final InputStream delegate;
+        private long remaining;
+
+        private BoundedInputStream(InputStream delegate, long limit) {
+            this.delegate = delegate;
+            this.remaining = limit;
+        }
+
+        @Override
+        public int read() throws IOException {
+            ensureRemaining();
+            int value = delegate.read();
+            if (value >= 0) {
+                remaining--;
+            }
+            return value;
+        }
+
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            if (length == 0) {
+                return 0;
+            }
+            ensureRemaining();
+            int allowed = (int) Math.min(length, remaining);
+            int read = delegate.read(buffer, offset, allowed);
+            if (read > 0) {
+                remaining -= read;
+            }
+            return read;
+        }
+
+        @Override
+        public long skip(long bytes) throws IOException {
+            if (bytes <= 0) {
+                return 0L;
+            }
+            ensureRemaining();
+            long skipped = delegate.skip(Math.min(bytes, remaining));
+            if (skipped > 0) {
+                remaining -= skipped;
+            }
+            return skipped;
+        }
+
+        @Override
+        public void close() throws IOException {
+            delegate.close();
+        }
+
+        private void ensureRemaining() throws IOException {
+            if (remaining <= 0) {
+                throw new IOException("compressed archive scan limit exceeded");
+            }
+        }
     }
 }

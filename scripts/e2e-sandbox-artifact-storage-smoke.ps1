@@ -610,7 +610,7 @@ try {
             throw "Expected scanner byte/entry limits: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $downloadOnlyMediaTypes = @($response.data.downloadOnlyMediaTypes)
-        if ($downloadOnlyMediaTypes -notcontains "application/zip" -or $downloadOnlyMediaTypes -notcontains "application/x-tar" -or $downloadOnlyMediaTypes -notcontains "video/webm") {
+        if ($downloadOnlyMediaTypes -notcontains "application/gzip" -or $downloadOnlyMediaTypes -notcontains "application/x-gzip" -or $downloadOnlyMediaTypes -notcontains "application/zip" -or $downloadOnlyMediaTypes -notcontains "application/x-tar" -or $downloadOnlyMediaTypes -notcontains "video/webm") {
             throw "Expected governed download-only media types in scanner policy: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $blockedCategories = @($response.data.blockedCategories)
@@ -1120,6 +1120,16 @@ with tarfile.open('unsafe-bundle.tar', 'w', format=tarfile.USTAR_FORMAT) as arch
     entry = tarfile.TarInfo('bin/payload.exe')
     entry.size = len(unsafe_tar_data)
     archive.addfile(entry, io.BytesIO(unsafe_tar_data))
+safe_targz_data = b'safe gzip tar archive $escapedArchiveMarker'
+with tarfile.open('safe-bundle.tar.gz', 'w:gz', format=tarfile.USTAR_FORMAT) as archive:
+    entry = tarfile.TarInfo('docs/readme.txt')
+    entry.size = len(safe_targz_data)
+    archive.addfile(entry, io.BytesIO(safe_targz_data))
+unsafe_targz_data = b'MZ\x00\x00seahorse'
+with tarfile.open('unsafe-bundle.tar.gz', 'w:gz', format=tarfile.USTAR_FORMAT) as archive:
+    entry = tarfile.TarInfo('bin/payload.exe')
+    entry.size = len(unsafe_targz_data)
+    archive.addfile(entry, io.BytesIO(unsafe_targz_data))
 print('$escapedArchiveMarker')
 "@
     $archiveObservation = Test-Step "Invoke sandbox_python with archive artifacts" {
@@ -1202,6 +1212,29 @@ print('$escapedArchiveMarker')
     }
     if (-not $safeTarArchive) { exit 1 }
 
+    $safeGzipTarArchive = Test-Step "Verify clean TAR.GZ archive is governed download-only" {
+        $safeArchiveSessionId = $archiveSessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeArchiveSessionId' AND object_uri LIKE '%-safe-bundle.tar.gz' ORDER BY created_at DESC LIMIT 1;"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 7) {
+            throw "Unexpected clean TAR.GZ artifact row: $row"
+        }
+        if ($ExpectedObjectUriPrefix -and $parts[1] -notlike "$ExpectedObjectUriPrefix*") {
+            throw "Clean TAR.GZ archive was not copied to governed object storage: $($parts[1])"
+        }
+        if ($parts[2] -ne "application/gzip" -or $parts[3] -ne "CLEAN" -or $parts[4] -ne "INTERNAL") {
+            throw "Expected CLEAN INTERNAL application/gzip archive but got: $row"
+        }
+        if ($parts[5] -ne "metadata scan passed") {
+            throw "Expected clean TAR.GZ scan summary metadata scan passed but got '$($parts[5])'"
+        }
+        if ($parts[6] -notlike '*"decision":"CLEAN"*' -or $parts[6] -notlike '*"contentScanned":true*') {
+            throw "Expected CLEAN content-scanned TAR.GZ redaction summary but got '$($parts[6])'"
+        }
+        [pscustomobject]@{ ArtifactId = $parts[0]; ObjectUri = $parts[1] }
+    }
+    if (-not $safeGzipTarArchive) { exit 1 }
+
     Test-Step "Download governed clean ZIP archive" {
         Add-Type -AssemblyName System.IO.Compression
         Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -1246,6 +1279,29 @@ print('$escapedArchiveMarker')
         }
     } | Out-Null
 
+    Test-Step "Download governed clean TAR.GZ archive" {
+        Add-Type -AssemblyName System.IO.Compression
+        $tempGzipTar = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "seahorse-archive-$suffix.tar.gz")
+        $source = $null
+        $gzip = $null
+        $reader = $null
+        try {
+            Invoke-BinaryFile -Method GET -Path "/api/sandbox/artifacts/$($safeGzipTarArchive.ArtifactId)/download" -Headers $headers -OutputPath $tempGzipTar
+            $source = [System.IO.File]::OpenRead($tempGzipTar)
+            $gzip = [System.IO.Compression.GZipStream]::new($source, [System.IO.Compression.CompressionMode]::Decompress)
+            $reader = [System.IO.StreamReader]::new($gzip, [System.Text.Encoding]::UTF8)
+            $content = $reader.ReadToEnd()
+            if (-not $content.Contains($archiveMarker)) {
+                throw "Downloaded clean TAR.GZ did not contain marker '$archiveMarker'"
+            }
+        } finally {
+            if ($reader) { $reader.Dispose() }
+            elseif ($gzip) { $gzip.Dispose() }
+            elseif ($source) { $source.Dispose() }
+            Remove-Item -LiteralPath $tempGzipTar -ErrorAction SilentlyContinue
+        }
+    } | Out-Null
+
     if ($safeArchive.ObjectUri.StartsWith("local://sandbox-artifacts/")) {
         Test-Step "Verify local clean ZIP object exists in backend storage volume" {
             $key = $safeArchive.ObjectUri.Substring("local://sandbox-artifacts/".Length)
@@ -1270,6 +1326,20 @@ print('$escapedArchiveMarker')
             & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$archiveMarker' '$path'"
             if ($LASTEXITCODE -ne 0) {
                 throw "Stored clean TAR object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
+    if ($safeGzipTarArchive.ObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local clean TAR.GZ object exists in backend storage volume" {
+            $key = $safeGzipTarArchive.ObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'")) {
+                throw "Cannot safely shell-quote TAR.GZ archive key"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -s '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored clean TAR.GZ object not found at $path"
             }
         } | Out-Null
     }
@@ -1326,6 +1396,32 @@ print('$escapedArchiveMarker')
     }
     if (-not $unsafeTarArchiveArtifactId) { exit 1 }
 
+    $unsafeGzipTarArchiveArtifactId = Test-Step "Verify unsafe TAR.GZ archive is blocked before object storage" {
+        $safeArchiveSessionId = $archiveSessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeArchiveSessionId' AND object_uri LIKE '%/unsafe-bundle.tar.gz' ORDER BY created_at DESC LIMIT 1;"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 7) {
+            throw "Unexpected unsafe TAR.GZ artifact row: $row"
+        }
+        if ($parts[1] -like "$ExpectedObjectUriPrefix*") {
+            throw "Unsafe TAR.GZ archive was copied to object storage: $($parts[1])"
+        }
+        if ($parts[2] -ne "application/gzip" -or $parts[3] -ne "BLOCKED" -or $parts[4] -ne "CONFIDENTIAL") {
+            throw "Expected BLOCKED CONFIDENTIAL application/gzip archive but got: $row"
+        }
+        if ($parts[5] -ne "archive executable content") {
+            throw "Expected unsafe TAR.GZ scan summary archive executable content but got '$($parts[5])'"
+        }
+        if ($parts[6] -notlike '*"decision":"BLOCKED"*' -or $parts[6] -notlike '*"ARCHIVE_EXECUTABLE_BINARY"*') {
+            throw "Expected BLOCKED ARCHIVE_EXECUTABLE_BINARY TAR.GZ redaction summary but got '$($parts[6])'"
+        }
+        if ($parts[6] -like "*payload.exe*") {
+            throw "Unsafe TAR.GZ redaction summary leaked entry name: $($parts[6])"
+        }
+        $parts[0]
+    }
+    if (-not $unsafeGzipTarArchiveArtifactId) { exit 1 }
+
     Test-Step "Verify archive artifact API exposes governed metadata" {
         $response = Invoke-Json -Method GET -Path "/api/sandbox/sessions/$archiveSessionId/artifacts" -Headers $headers
         Assert-ApiOk $response "List archive sandbox artifacts"
@@ -1337,6 +1433,10 @@ print('$escapedArchiveMarker')
         if ($safeTarMatched.Count -ne 1 -or $safeTarMatched[0].promptVisible -ne $false) {
             throw "Expected clean TAR to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
+        $safeGzipTarMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$($safeGzipTarArchive.ArtifactId)" })
+        if ($safeGzipTarMatched.Count -ne 1 -or $safeGzipTarMatched[0].promptVisible -ne $false) {
+            throw "Expected clean TAR.GZ to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
         $unsafeMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$unsafeArchiveArtifactId" })
         if ($unsafeMatched.Count -ne 1 -or $unsafeMatched[0].promptVisible -ne $false) {
             throw "Expected unsafe ZIP to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
@@ -1344,6 +1444,10 @@ print('$escapedArchiveMarker')
         $unsafeTarMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$unsafeTarArchiveArtifactId" })
         if ($unsafeTarMatched.Count -ne 1 -or $unsafeTarMatched[0].promptVisible -ne $false) {
             throw "Expected unsafe TAR to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $unsafeGzipTarMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$unsafeGzipTarArchiveArtifactId" })
+        if ($unsafeGzipTarMatched.Count -ne 1 -or $unsafeGzipTarMatched[0].promptVisible -ne $false) {
+            throw "Expected unsafe TAR.GZ to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $artifactJson = $response.data | ConvertTo-Json -Depth 20 -Compress
         if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|payload.exe") {
@@ -1360,6 +1464,12 @@ print('$escapedArchiveMarker')
         Assert-ApiOk $safeTarDetail "Get clean TAR artifact detail"
         if ($safeTarDetail.data.downloadable -ne $true -or $safeTarDetail.data.promptVisible -ne $false) {
             throw "Expected clean TAR detail to be downloadable and prompt-hidden: $($safeTarDetail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+
+        $safeGzipTarDetail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$($safeGzipTarArchive.ArtifactId)" -Headers $headers
+        Assert-ApiOk $safeGzipTarDetail "Get clean TAR.GZ artifact detail"
+        if ($safeGzipTarDetail.data.downloadable -ne $true -or $safeGzipTarDetail.data.promptVisible -ne $false) {
+            throw "Expected clean TAR.GZ detail to be downloadable and prompt-hidden: $($safeGzipTarDetail.data | ConvertTo-Json -Depth 20 -Compress)"
         }
 
         $detail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$unsafeArchiveArtifactId" -Headers $headers
@@ -1386,6 +1496,19 @@ print('$escapedArchiveMarker')
         $tarDetailJson = $tarDetail.data | ConvertTo-Json -Depth 20 -Compress
         if ($tarDetailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|payload.exe") {
             throw "Unsafe TAR detail leaked storage or unsafe entry details: $tarDetailJson"
+        }
+
+        $gzipTarDetail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$unsafeGzipTarArchiveArtifactId" -Headers $headers
+        Assert-ApiOk $gzipTarDetail "Get unsafe TAR.GZ artifact detail"
+        if ($gzipTarDetail.data.downloadable -ne $false -or $gzipTarDetail.data.promptVisible -ne $false) {
+            throw "Expected unsafe TAR.GZ detail to be non-downloadable and prompt-hidden: $($gzipTarDetail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($gzipTarDetail.data.redactionSummaryJson)" -notlike '*"ARCHIVE_EXECUTABLE_BINARY"*') {
+            throw "Expected unsafe TAR.GZ detail archive category: $($gzipTarDetail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $gzipTarDetailJson = $gzipTarDetail.data | ConvertTo-Json -Depth 20 -Compress
+        if ($gzipTarDetailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|payload.exe") {
+            throw "Unsafe TAR.GZ detail leaked storage or unsafe entry details: $gzipTarDetailJson"
         }
     } | Out-Null
 

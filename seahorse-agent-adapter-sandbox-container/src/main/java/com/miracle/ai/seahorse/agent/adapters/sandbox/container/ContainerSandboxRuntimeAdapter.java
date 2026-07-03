@@ -1830,6 +1830,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String name = path.getFileName() == null
                 ? ""
                 : path.getFileName().toString().toLowerCase(Locale.ROOT);
+        if (name.endsWith(".tar.gz") || name.endsWith(".tgz")) {
+            return "application/gzip";
+        }
         int dot = name.lastIndexOf('.');
         String extension = dot >= 0 ? name.substring(dot + 1) : "";
         return switch (extension) {
