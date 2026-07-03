@@ -101,6 +101,7 @@ public class JdbcTenantSchemaUpgrade {
         upgradeAuthRefreshTokenColumns();
         upgradeSandboxSessionRuntimeGovernance();
         upgradeSandboxArtifactScanSummary();
+        upgradeSandboxArtifactRedactionSummary();
         upgradeSandboxRuntimeProfilePolicy();
         upgradeAiModelConfigUniqueness();
         enableRowLevelSecurity();
@@ -194,6 +195,13 @@ public class JdbcTenantSchemaUpgrade {
             return;
         }
         addColumnIfMissing("sa_sandbox_artifact", "scan_summary", "VARCHAR(256)");
+    }
+
+    private void upgradeSandboxArtifactRedactionSummary() {
+        if (!tableExists("sa_sandbox_artifact")) {
+            return;
+        }
+        addColumnIfMissing("sa_sandbox_artifact", "redaction_summary_json", "VARCHAR(2048)");
     }
 
     private void upgradeSandboxRuntimeProfilePolicy() {

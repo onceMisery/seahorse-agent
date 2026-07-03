@@ -30,6 +30,7 @@ public record SandboxArtifact(String artifactId,
                               SandboxArtifactScanStatus scanStatus,
                               ContextSensitivity sensitivity,
                               String scanSummary,
+                              String redactionSummaryJson,
                               Instant createdAt) {
 
     private static final int MAX_SCAN_SUMMARY_LENGTH = 256;
@@ -43,7 +44,32 @@ public record SandboxArtifact(String artifactId,
         scanStatus = Objects.requireNonNullElse(scanStatus, SandboxArtifactScanStatus.PENDING);
         sensitivity = Objects.requireNonNullElse(sensitivity, ContextSensitivity.SECRET);
         scanSummary = normalizeScanSummary(scanSummary, scanStatus);
+        redactionSummaryJson = SandboxArtifactRedactionSummary.normalize(
+                redactionSummaryJson,
+                scanStatus,
+                scanSummary);
         createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
+    }
+
+    public SandboxArtifact(String artifactId,
+                           String sessionId,
+                           String executionId,
+                           String objectUri,
+                           String mediaType,
+                           SandboxArtifactScanStatus scanStatus,
+                           ContextSensitivity sensitivity,
+                           String scanSummary,
+                           Instant createdAt) {
+        this(artifactId,
+                sessionId,
+                executionId,
+                objectUri,
+                mediaType,
+                scanStatus,
+                sensitivity,
+                scanSummary,
+                null,
+                createdAt);
     }
 
     public SandboxArtifact(String artifactId,
@@ -78,6 +104,13 @@ public record SandboxArtifact(String artifactId,
     public SandboxArtifact withScanDecision(SandboxArtifactScanStatus scanStatus,
                                             ContextSensitivity sensitivity,
                                             String scanSummary) {
+        return withScanDecision(scanStatus, sensitivity, scanSummary, null);
+    }
+
+    public SandboxArtifact withScanDecision(SandboxArtifactScanStatus scanStatus,
+                                            ContextSensitivity sensitivity,
+                                            String scanSummary,
+                                            String redactionSummaryJson) {
         return new SandboxArtifact(
                 artifactId,
                 sessionId,
@@ -87,6 +120,7 @@ public record SandboxArtifact(String artifactId,
                 scanStatus,
                 sensitivity,
                 scanSummary,
+                redactionSummaryJson,
                 createdAt);
     }
 
@@ -100,6 +134,7 @@ public record SandboxArtifact(String artifactId,
                 scanStatus,
                 sensitivity,
                 scanSummary,
+                redactionSummaryJson,
                 createdAt);
     }
 

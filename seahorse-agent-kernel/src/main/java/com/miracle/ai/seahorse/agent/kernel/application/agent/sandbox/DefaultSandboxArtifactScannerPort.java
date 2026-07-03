@@ -29,6 +29,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -71,19 +72,34 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
         if (artifact.scanStatus() == SandboxArtifactScanStatus.BLOCKED
                 || artifact.sensitivity() == ContextSensitivity.SECRET
                 || containsSensitiveMarker(artifact.objectUri())) {
-            return SandboxArtifactScanResult.blocked(ContextSensitivity.SECRET, "sensitive artifact metadata");
+            return SandboxArtifactScanResult.blocked(
+                    ContextSensitivity.SECRET,
+                    "sensitive artifact metadata",
+                    false,
+                    List.of("SENSITIVE_METADATA"));
         }
         if (!isPromptSafeMediaType(artifact.mediaType())) {
-            return SandboxArtifactScanResult.blocked(artifact.sensitivity(), "unsupported prompt media type");
+            return SandboxArtifactScanResult.blocked(
+                    artifact.sensitivity(),
+                    "unsupported prompt media type",
+                    false,
+                    List.of("UNSUPPORTED_MEDIA_TYPE"));
         }
         SandboxArtifactScanResult contentScan = scanLocalTextContent(artifact);
-        if (contentScan != null) {
+        if (contentScan != null && contentScan.scanStatus() == SandboxArtifactScanStatus.BLOCKED) {
             return contentScan;
         }
         if (artifact.sensitivity() == ContextSensitivity.CONFIDENTIAL) {
-            return SandboxArtifactScanResult.redacted(ContextSensitivity.CONFIDENTIAL, "confidential artifact metadata");
+            return SandboxArtifactScanResult.redacted(
+                    ContextSensitivity.CONFIDENTIAL,
+                    "confidential artifact metadata",
+                    contentScan != null,
+                    List.of("CONFIDENTIAL_METADATA"));
         }
-        return SandboxArtifactScanResult.clean(artifact.sensitivity(), "metadata scan passed");
+        if (contentScan != null) {
+            return contentScan;
+        }
+        return SandboxArtifactScanResult.clean(artifact.sensitivity(), "metadata scan passed", false);
     }
 
     private static boolean isPromptSafeMediaType(String mediaType) {
@@ -101,25 +117,49 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
         try {
             Path path = Path.of(URI.create(artifact.objectUri())).toAbsolutePath().normalize();
             if (!Files.isRegularFile(path)) {
-                return SandboxArtifactScanResult.blocked(ContextSensitivity.SECRET, "artifact content unavailable");
+                return SandboxArtifactScanResult.blocked(
+                        ContextSensitivity.SECRET,
+                        "artifact content unavailable",
+                        true,
+                        List.of("CONTENT_UNAVAILABLE"));
             }
             if (Files.size(path) > MAX_CONTENT_SCAN_BYTES) {
                 return SandboxArtifactScanResult.blocked(
                         ContextSensitivity.CONFIDENTIAL,
-                        "artifact content exceeds scanner limit");
+                        "artifact content exceeds scanner limit",
+                        true,
+                        List.of("CONTENT_TOO_LARGE"));
             }
             String content = Files.readString(path, StandardCharsets.UTF_8);
-            if (PRIVATE_KEY_PATTERN.matcher(content).find()
-                    || ASSIGNED_SECRET_PATTERN.matcher(content).find()
+            if (PRIVATE_KEY_PATTERN.matcher(content).find()) {
+                return SandboxArtifactScanResult.blocked(
+                        ContextSensitivity.SECRET,
+                        "sensitive artifact content",
+                        true,
+                        List.of("PRIVATE_KEY"));
+            }
+            if (ASSIGNED_SECRET_PATTERN.matcher(content).find()
                     || OPENAI_STYLE_TOKEN_PATTERN.matcher(content).find()) {
-                return SandboxArtifactScanResult.blocked(ContextSensitivity.SECRET, "sensitive artifact content");
+                return SandboxArtifactScanResult.blocked(
+                        ContextSensitivity.SECRET,
+                        "sensitive artifact content",
+                        true,
+                        List.of("SECRET"));
             }
             if (EMAIL_PATTERN.matcher(content).find() || US_SSN_PATTERN.matcher(content).find()) {
-                return SandboxArtifactScanResult.blocked(ContextSensitivity.CONFIDENTIAL, "personal data artifact content");
+                return SandboxArtifactScanResult.blocked(
+                        ContextSensitivity.CONFIDENTIAL,
+                        "personal data artifact content",
+                        true,
+                        List.of("PERSONAL_DATA"));
             }
-            return null;
+            return SandboxArtifactScanResult.clean(artifact.sensitivity(), "metadata scan passed", true);
         } catch (IOException | RuntimeException ex) {
-            return SandboxArtifactScanResult.blocked(ContextSensitivity.SECRET, "artifact content scan failed");
+            return SandboxArtifactScanResult.blocked(
+                    ContextSensitivity.SECRET,
+                    "artifact content scan failed",
+                    true,
+                    List.of("SCAN_ERROR"));
         }
     }
 

@@ -22,6 +22,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanResult;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -35,10 +37,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class DefaultSandboxArtifactScannerPortTests {
 
     private static final Instant NOW = Instant.parse("2026-05-26T00:00:00Z");
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private final DefaultSandboxArtifactScannerPort scanner = new DefaultSandboxArtifactScannerPort();
 
     @Test
-    void shouldPassCleanLocalTextArtifact(@TempDir Path tempDir) throws Exception {
+    void shouldPassCleanLocalTextArtifactWithStructuredSummary(@TempDir Path tempDir) throws Exception {
         Path output = tempDir.resolve("answer.txt");
         Files.writeString(output, "plain artifact marker", StandardCharsets.UTF_8);
 
@@ -47,10 +50,14 @@ class DefaultSandboxArtifactScannerPortTests {
         assertEquals(SandboxArtifactScanStatus.CLEAN, result.scanStatus());
         assertEquals(ContextSensitivity.INTERNAL, result.sensitivity());
         assertEquals("metadata scan passed", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("CLEAN", redactionSummary.path("decision").asText());
+        assertEquals(true, redactionSummary.path("contentScanned").asBoolean());
+        assertEquals(0, redactionSummary.path("categories").size());
     }
 
     @Test
-    void shouldBlockLocalTextArtifactWithAssignedSecret(@TempDir Path tempDir) throws Exception {
+    void shouldBlockLocalTextArtifactWithAssignedSecretAndStructuredSummary(@TempDir Path tempDir) throws Exception {
         Path output = tempDir.resolve("answer.txt");
         Files.writeString(output, "api_key = 'sk-seahorse-secret-1234567890'", StandardCharsets.UTF_8);
 
@@ -59,10 +66,16 @@ class DefaultSandboxArtifactScannerPortTests {
         assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
         assertEquals(ContextSensitivity.SECRET, result.sensitivity());
         assertEquals("sensitive artifact content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("BLOCKED", redactionSummary.path("decision").asText());
+        assertEquals(true, redactionSummary.path("blocked").asBoolean());
+        assertEquals(true, redactionSummary.path("contentScanned").asBoolean());
+        assertEquals("SECRET", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("sk-seahorse-secret"));
     }
 
     @Test
-    void shouldBlockLocalTextArtifactWithPersonalData(@TempDir Path tempDir) throws Exception {
+    void shouldBlockLocalTextArtifactWithPersonalDataAndStructuredSummary(@TempDir Path tempDir) throws Exception {
         Path output = tempDir.resolve("profile.txt");
         Files.writeString(output, "owner email: user@example.com", StandardCharsets.UTF_8);
 
@@ -71,10 +84,13 @@ class DefaultSandboxArtifactScannerPortTests {
         assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
         assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
         assertEquals("personal data artifact content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("PERSONAL_DATA", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("user@example.com"));
     }
 
     @Test
-    void shouldFailClosedWhenLocalTextArtifactCannotBeRead(@TempDir Path tempDir) {
+    void shouldFailClosedWhenLocalTextArtifactCannotBeRead(@TempDir Path tempDir) throws Exception {
         Path missing = tempDir.resolve("missing.txt");
 
         SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(missing)));
@@ -82,6 +98,11 @@ class DefaultSandboxArtifactScannerPortTests {
         assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
         assertEquals(ContextSensitivity.SECRET, result.sensitivity());
         assertEquals("artifact content unavailable", result.summary());
+        assertEquals("CONTENT_UNAVAILABLE", redactionSummary(result).path("categories").get(0).asText());
+    }
+
+    private static JsonNode redactionSummary(SandboxArtifactScanResult result) throws Exception {
+        return OBJECT_MAPPER.readTree(result.redactionSummaryJson());
     }
 
     private static SandboxArtifact fileArtifact(Path path) {

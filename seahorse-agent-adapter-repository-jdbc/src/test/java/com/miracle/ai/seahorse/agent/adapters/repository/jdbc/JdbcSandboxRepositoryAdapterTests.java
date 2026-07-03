@@ -129,6 +129,8 @@ class JdbcSandboxRepositoryAdapterTests {
         assertThat(adapter.findArtifactById("artifact-clean")).contains(clean);
         assertThat(adapter.findArtifactById("artifact-clean").orElseThrow().scanSummary())
                 .isEqualTo("scan summary for artifact-clean");
+        assertThat(adapter.findArtifactById("artifact-clean").orElseThrow().redactionSummaryJson())
+                .contains("\"decision\":\"CLEAN\"");
         assertThat(adapter.findArtifactById(" ")).isEmpty();
 
         SandboxRuntimeProfilePolicy runtimeProfilePolicy = adapter.upsert(new SandboxRuntimeProfilePolicy(
@@ -282,6 +284,7 @@ class JdbcSandboxRepositoryAdapterTests {
                     scan_status VARCHAR(32) NOT NULL,
                     sensitivity VARCHAR(32) NOT NULL,
                     scan_summary VARCHAR(256),
+                    redaction_summary_json VARCHAR(2048),
                     created_at TIMESTAMP NOT NULL
                 )
                 """);

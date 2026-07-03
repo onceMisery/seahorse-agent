@@ -37,6 +37,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -62,6 +63,7 @@ class SandboxArtifactToAgentArtifactPolicyTests {
                 .andExpect(jsonPath("$.data[0].scanStatus").value("CLEAN"))
                 .andExpect(jsonPath("$.data[0].sensitivity").value("INTERNAL"))
                 .andExpect(jsonPath("$.data[0].scanSummary").value("metadata scan passed"))
+                .andExpect(jsonPath("$.data[0].redactionSummaryJson").value(containsString("\"decision\":\"CLEAN\"")))
                 .andExpect(jsonPath("$.data[0].promptVisible").value(true))
                 .andExpect(jsonPath("$.data[0].objectUri").doesNotExist());
     }
@@ -95,6 +97,7 @@ class SandboxArtifactToAgentArtifactPolicyTests {
                 .andExpect(jsonPath("$.data.execution.executionId").value("exec-1"))
                 .andExpect(jsonPath("$.data.artifacts[0].artifactId").value("artifact-clean"))
                 .andExpect(jsonPath("$.data.artifacts[0].scanSummary").value("metadata scan passed"))
+                .andExpect(jsonPath("$.data.artifacts[0].redactionSummaryJson").value(containsString("\"decision\":\"CLEAN\"")))
                 .andExpect(jsonPath("$.data.artifacts[0].promptVisible").value(true))
                 .andExpect(jsonPath("$.data.artifacts[0].objectUri").doesNotExist());
     }

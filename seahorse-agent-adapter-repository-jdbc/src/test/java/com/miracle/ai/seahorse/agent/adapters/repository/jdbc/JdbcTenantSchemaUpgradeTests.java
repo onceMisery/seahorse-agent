@@ -81,7 +81,7 @@ class JdbcTenantSchemaUpgradeTests {
     }
 
     @Test
-    void shouldAddSandboxArtifactScanSummaryForExistingTable() {
+    void shouldAddSandboxArtifactScanSummariesForExistingTable() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:tenant-schema-upgrade-sandbox-artifact-" + System.nanoTime()
                         + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
@@ -106,7 +106,9 @@ class JdbcTenantSchemaUpgradeTests {
         upgrade.upgrade();
 
         assertThat(columnExists(jdbcTemplate, "sa_sandbox_artifact", "scan_summary")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_sandbox_artifact", "redaction_summary_json")).isTrue();
         assertThat(isNullable(jdbcTemplate, "sa_sandbox_artifact", "scan_summary")).isEqualTo("YES");
+        assertThat(isNullable(jdbcTemplate, "sa_sandbox_artifact", "redaction_summary_json")).isEqualTo("YES");
     }
 
     @Test

@@ -1738,6 +1738,7 @@ CREATE TABLE IF NOT EXISTS sa_sandbox_artifact (
   scan_status VARCHAR(32) NOT NULL,
   sensitivity VARCHAR(32) NOT NULL,
   scan_summary VARCHAR(256),
+  redaction_summary_json VARCHAR(2048),
   created_at TIMESTAMP NOT NULL
 );
 

@@ -181,6 +181,7 @@ export interface SandboxArtifact {
   scanStatus?: string;
   sensitivity?: string;
   scanSummary?: string;
+  redactionSummaryJson?: string;
   promptVisible?: boolean;
   downloadable?: boolean;
   downloadBlockedReason?: string | null;

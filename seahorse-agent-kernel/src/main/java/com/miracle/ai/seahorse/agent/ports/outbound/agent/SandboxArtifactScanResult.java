@@ -18,13 +18,17 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactRedactionSummary;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 
 public record SandboxArtifactScanResult(SandboxArtifactScanStatus scanStatus,
                                         ContextSensitivity sensitivity,
-                                        String summary) {
+                                        String summary,
+                                        String redactionSummaryJson) {
 
     public SandboxArtifactScanResult {
         scanStatus = Objects.requireNonNullElse(scanStatus, SandboxArtifactScanStatus.BLOCKED);
@@ -33,18 +37,60 @@ public record SandboxArtifactScanResult(SandboxArtifactScanStatus scanStatus,
         }
         sensitivity = Objects.requireNonNullElse(sensitivity, ContextSensitivity.SECRET);
         summary = hasText(summary) ? summary.trim() : scanStatus.name();
+        redactionSummaryJson = SandboxArtifactRedactionSummary.normalize(
+                redactionSummaryJson,
+                scanStatus,
+                summary);
+    }
+
+    public SandboxArtifactScanResult(SandboxArtifactScanStatus scanStatus,
+                                     ContextSensitivity sensitivity,
+                                     String summary) {
+        this(scanStatus, sensitivity, summary, null);
     }
 
     public static SandboxArtifactScanResult clean(ContextSensitivity sensitivity, String summary) {
         return new SandboxArtifactScanResult(SandboxArtifactScanStatus.CLEAN, sensitivity, summary);
     }
 
+    public static SandboxArtifactScanResult clean(ContextSensitivity sensitivity,
+                                                  String summary,
+                                                  boolean contentScanned) {
+        return new SandboxArtifactScanResult(
+                SandboxArtifactScanStatus.CLEAN,
+                sensitivity,
+                summary,
+                SandboxArtifactRedactionSummary.clean(summary, contentScanned));
+    }
+
     public static SandboxArtifactScanResult redacted(ContextSensitivity sensitivity, String summary) {
         return new SandboxArtifactScanResult(SandboxArtifactScanStatus.REDACTED, sensitivity, summary);
     }
 
+    public static SandboxArtifactScanResult redacted(ContextSensitivity sensitivity,
+                                                     String summary,
+                                                     boolean contentScanned,
+                                                     Collection<String> categories) {
+        return new SandboxArtifactScanResult(
+                SandboxArtifactScanStatus.REDACTED,
+                sensitivity,
+                summary,
+                SandboxArtifactRedactionSummary.redacted(summary, contentScanned, categories));
+    }
+
     public static SandboxArtifactScanResult blocked(ContextSensitivity sensitivity, String summary) {
         return new SandboxArtifactScanResult(SandboxArtifactScanStatus.BLOCKED, sensitivity, summary);
+    }
+
+    public static SandboxArtifactScanResult blocked(ContextSensitivity sensitivity,
+                                                    String summary,
+                                                    boolean contentScanned,
+                                                    Collection<String> categories) {
+        return new SandboxArtifactScanResult(
+                SandboxArtifactScanStatus.BLOCKED,
+                sensitivity,
+                summary,
+                SandboxArtifactRedactionSummary.blocked(summary, contentScanned, categories == null ? List.of() : categories));
     }
 
     private static boolean hasText(String value) {

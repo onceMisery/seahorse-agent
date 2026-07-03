@@ -56,6 +56,8 @@ class SandboxArtifactTests {
 
         assertEquals("CLEAN", defaultSummary.scanSummary());
         assertEquals("sensitive artifact content", explicitSummary.scanSummary());
+        assertTrue(defaultSummary.redactionSummaryJson().contains("\"decision\":\"CLEAN\""));
+        assertTrue(explicitSummary.redactionSummaryJson().contains("\"decision\":\"BLOCKED\""));
     }
 
     private static SandboxArtifact artifact(String artifactId,

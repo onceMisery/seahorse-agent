@@ -1009,6 +1009,10 @@ export function SandboxPage() {
                         <div className="truncate">{selectedArtifact.scanSummary || selectedArtifact.scanStatus || "UNKNOWN"}</div>
                       </div>
                       <div>
+                        <div className="text-xs uppercase text-muted-foreground">Redaction JSON</div>
+                        <div className="truncate font-mono text-xs">{selectedArtifact.redactionSummaryJson || "not recorded"}</div>
+                      </div>
+                      <div>
                         <div className="text-xs uppercase text-muted-foreground">Filename</div>
                         <div className="truncate">{selectedArtifact.filename || artifactDisplayName(selectedArtifact)}</div>
                       </div>

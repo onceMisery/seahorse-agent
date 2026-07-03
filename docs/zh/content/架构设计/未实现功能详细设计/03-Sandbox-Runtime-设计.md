@@ -435,6 +435,16 @@ The policy table is persisted as `sa_sandbox_runtime_profile_policy` through mig
 
 Fresh full-Docker evidence: `.\scripts\e2e-sandbox-runtime-profile-policy-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-runtime-profile-policy-smoke` passed 12/12. The smoke verified TTL policy persistence, runtime profile API policy metadata, `RUNTIME_PROFILE_DISABLED` rejection, PostgreSQL records, restore to `CODE_INTERPRETER|ACTIVE|3600|false`, no leftover managed sandbox containers, and zero non-terminal sandbox sessions.
 
+### 2026-07-03 Update: sandbox artifact structured redaction summary
+
+Sandbox artifacts now store and expose a bounded structured `redactionSummaryJson` payload in addition to the human-readable `scanSummary`. The schema records `schemaVersion`, scanner id, decision, blocked/redacted booleans, `contentScanned`, categories, and a safe reason. Category values cover current metadata/text scanner and fail-closed decisions such as `SECRET`, `PERSONAL_DATA`, `PRIVATE_KEY`, `CONTENT_UNAVAILABLE`, `CONTENT_TOO_LARGE`, `UNSUPPORTED_MEDIA_TYPE`, `SCAN_ERROR`, and `STORAGE_COPY_FAILED`.
+
+`sa_sandbox_artifact.redaction_summary_json VARCHAR(2048)` is covered by migration `V49__sandbox_artifact_redaction_summary.sql`, the fresh init schema, startup tenant schema upgrade, JDBC persistence, sandbox list/detail APIs, sandbox-backed tool artifact metadata, and the admin Sandbox artifact detail. The payload deliberately avoids raw secret/PII values and storage references.
+
+Fresh full-Docker evidence: `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-redaction-summary-smoke` passed 17/17 after rebuilding the full-compose backend. Cleanup confirmed no leftover managed sandbox containers, zero non-terminal sandbox sessions, and PostgreSQL column metadata `redaction_summary_json|character varying|2048`.
+
+This completes the structured summary payload for the current conservative scanner. Virus scanning, PDF/binary deep scanning, external scanner engines, browser egress/URL policy, HAR/video capture, stronger isolation, and node-pool health remain follow-up production hardening work.
+
 ## 13. 非目标
 
 1. 不在主 JVM 内运行任意脚本。

@@ -64,6 +64,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -392,6 +393,7 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data[0].scanStatus").value("CLEAN"))
                 .andExpect(jsonPath("$.data[0].sensitivity").value("INTERNAL"))
                 .andExpect(jsonPath("$.data[0].scanSummary").value("metadata scan passed"))
+                .andExpect(jsonPath("$.data[0].redactionSummaryJson").value(containsString("\"decision\":\"CLEAN\"")))
                 .andExpect(jsonPath("$.data[0].promptVisible").value(true));
         verify(port).listArtifacts("session-1");
 
@@ -402,6 +404,7 @@ class SeahorseSandboxControllerTests {
                 .andExpect(jsonPath("$.data.contentType").value("text/plain"))
                 .andExpect(jsonPath("$.data.filename").value("artifact-clean.txt"))
                 .andExpect(jsonPath("$.data.scanSummary").value("metadata scan passed"))
+                .andExpect(jsonPath("$.data.redactionSummaryJson").value(containsString("\"decision\":\"CLEAN\"")))
                 .andExpect(jsonPath("$.data.downloadable").value(true))
                 .andExpect(jsonPath("$.data.objectUri").doesNotExist())
                 .andExpect(jsonPath("$.data.storageRef").doesNotExist());

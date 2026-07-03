@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactRedactionSummary;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
@@ -611,12 +612,20 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             SandboxArtifactScanResult result = Objects.requireNonNull(
                     artifactScannerPort.scan(new SandboxArtifactScanRequest(artifact)),
                     "artifact scan result must not be null");
-            return artifact.withScanDecision(result.scanStatus(), result.sensitivity(), result.summary());
+            return artifact.withScanDecision(
+                    result.scanStatus(),
+                    result.sensitivity(),
+                    result.summary(),
+                    result.redactionSummaryJson());
         } catch (RuntimeException ex) {
             return artifact.withScanDecision(
                     SandboxArtifactScanStatus.BLOCKED,
                     ContextSensitivity.SECRET,
-                    ARTIFACT_SCAN_FAILED_SUMMARY);
+                    ARTIFACT_SCAN_FAILED_SUMMARY,
+                    SandboxArtifactRedactionSummary.blocked(
+                            ARTIFACT_SCAN_FAILED_SUMMARY,
+                            false,
+                            List.of("SCAN_ERROR")));
         }
     }
 
@@ -641,7 +650,11 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 return artifact.withScanDecision(
                         SandboxArtifactScanStatus.BLOCKED,
                         ContextSensitivity.SECRET,
-                        ARTIFACT_FILE_UNAVAILABLE_SUMMARY);
+                        ARTIFACT_FILE_UNAVAILABLE_SUMMARY,
+                        SandboxArtifactRedactionSummary.blocked(
+                                ARTIFACT_FILE_UNAVAILABLE_SUMMARY,
+                                false,
+                                List.of("CONTENT_UNAVAILABLE")));
             }
             long size = Files.size(path);
             artifactStoragePort.ensureBucket(SANDBOX_ARTIFACT_BUCKET);
@@ -658,7 +671,11 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             return artifact.withScanDecision(
                     SandboxArtifactScanStatus.BLOCKED,
                     ContextSensitivity.SECRET,
-                    ARTIFACT_STORAGE_COPY_FAILED_SUMMARY);
+                    ARTIFACT_STORAGE_COPY_FAILED_SUMMARY,
+                    SandboxArtifactRedactionSummary.blocked(
+                            ARTIFACT_STORAGE_COPY_FAILED_SUMMARY,
+                            false,
+                            List.of("STORAGE_COPY_FAILED")));
         }
     }
 

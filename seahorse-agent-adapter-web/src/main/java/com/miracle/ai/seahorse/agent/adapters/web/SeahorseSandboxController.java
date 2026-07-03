@@ -307,6 +307,7 @@ public class SeahorseSandboxController {
                 artifact.scanStatus(),
                 artifact.sensitivity(),
                 artifact.scanSummary(),
+                artifact.redactionSummaryJson(),
                 artifact.promptVisible(),
                 artifact.createdAt());
     }
@@ -323,6 +324,7 @@ public class SeahorseSandboxController {
                 artifact.scanStatus(),
                 artifact.sensitivity(),
                 artifact.scanSummary(),
+                artifact.redactionSummaryJson(),
                 artifact.promptVisible(),
                 decision.downloadable(),
                 decision.downloadBlockedReason(),
@@ -422,6 +424,7 @@ public class SeahorseSandboxController {
                                           SandboxArtifactScanStatus scanStatus,
                                           ContextSensitivity sensitivity,
                                           String scanSummary,
+                                          String redactionSummaryJson,
                                           boolean promptVisible,
                                           Instant createdAt) {
     }
@@ -435,6 +438,7 @@ public class SeahorseSandboxController {
                                                 SandboxArtifactScanStatus scanStatus,
                                                 ContextSensitivity sensitivity,
                                                 String scanSummary,
+                                                String redactionSummaryJson,
                                                 boolean promptVisible,
                                                 boolean downloadable,
                                                 String downloadBlockedReason,

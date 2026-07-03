@@ -345,6 +345,8 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals("metadata scan passed", artifactPort.saved.get(0).scanSummary());
         assertEquals(SandboxArtifactScanStatus.BLOCKED, artifactPort.saved.get(1).scanStatus());
         assertEquals("sensitive artifact metadata", artifactPort.saved.get(1).scanSummary());
+        assertTrue(artifactPort.saved.get(0).redactionSummaryJson().contains("\"decision\":\"CLEAN\""));
+        assertTrue(artifactPort.saved.get(1).redactionSummaryJson().contains("SENSITIVE_METADATA"));
     }
 
     @Test
@@ -380,6 +382,8 @@ class KernelSandboxRuntimeServiceTests {
                 .allMatch(artifact -> artifact.scanStatus() == SandboxArtifactScanStatus.BLOCKED));
         assertTrue(artifactPort.saved.stream()
                 .allMatch(artifact -> "artifact scanner failed".equals(artifact.scanSummary())));
+        assertTrue(artifactPort.saved.stream()
+                .allMatch(artifact -> artifact.redactionSummaryJson().contains("SCAN_ERROR")));
     }
 
     @Test
@@ -418,6 +422,7 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals("artifact marker", new String(objectStorage.uploadedBytes, StandardCharsets.UTF_8));
         assertEquals("local://sandbox-artifacts/answer.txt", artifactPort.saved.get(0).objectUri());
         assertEquals("metadata scan passed", artifactPort.saved.get(0).scanSummary());
+        assertTrue(artifactPort.saved.get(0).redactionSummaryJson().contains("\"contentScanned\":true"));
         assertEquals("local://sandbox-artifacts/answer.txt", result.artifacts().get(0).objectUri());
     }
 
@@ -457,6 +462,7 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals(SandboxArtifactScanStatus.BLOCKED, artifactPort.saved.get(0).scanStatus());
         assertEquals(ContextSensitivity.SECRET, artifactPort.saved.get(0).sensitivity());
         assertEquals("artifact storage copy failed", artifactPort.saved.get(0).scanSummary());
+        assertTrue(artifactPort.saved.get(0).redactionSummaryJson().contains("STORAGE_COPY_FAILED"));
     }
 
     @Test
@@ -495,6 +501,8 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals(SandboxArtifactScanStatus.BLOCKED, artifactPort.saved.get(0).scanStatus());
         assertEquals(ContextSensitivity.SECRET, artifactPort.saved.get(0).sensitivity());
         assertEquals("sensitive artifact content", artifactPort.saved.get(0).scanSummary());
+        assertTrue(artifactPort.saved.get(0).redactionSummaryJson().contains("SECRET"));
+        assertFalse(artifactPort.saved.get(0).redactionSummaryJson().contains("sk-seahorse-secret"));
     }
 
     @Test

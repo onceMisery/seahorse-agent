@@ -161,6 +161,8 @@ public class SandboxPythonToolPortAdapter implements DescribedToolPort, ToolInvo
                     item.put("mediaType", artifact.mediaType());
                     item.put("scanStatus", artifact.scanStatus().name());
                     item.put("sensitivity", artifact.sensitivity().name());
+                    item.put("scanSummary", artifact.scanSummary());
+                    item.put("redactionSummaryJson", artifact.redactionSummaryJson());
                     item.put("promptVisible", artifact.promptVisible());
                     return item;
                 })

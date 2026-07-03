@@ -271,9 +271,9 @@ try {
     $sessionId = "$($observation.sessionId)"
     $objectUri = Test-Step "Verify persisted sandbox artifact uses object storage URI" {
         $safeArtifactId = $artifactId.Replace("'", "''")
-        $row = Invoke-PostgresScalar "SELECT object_uri, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
+        $row = Invoke-PostgresScalar "SELECT object_uri, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
         $parts = $row -split "`t"
-        if ($parts.Count -ne 4) {
+        if ($parts.Count -ne 5) {
             throw "Unexpected sa_sandbox_artifact row: $row"
         }
         if ($parts[0] -like "file:*") {
@@ -290,6 +290,9 @@ try {
         }
         if ($parts[3] -ne "metadata scan passed") {
             throw "Expected metadata scan summary but got '$($parts[3])'"
+        }
+        if ($parts[4] -notlike '*"decision":"CLEAN"*' -or $parts[4] -notlike '*"contentScanned":true*') {
+            throw "Expected CLEAN content-scanned redaction summary but got '$($parts[4])'"
         }
         $parts[0]
     }
@@ -605,6 +608,9 @@ try {
         if ("$($matched[0].scanSummary)" -ne "metadata scan passed") {
             throw "Expected sandbox artifact API scanSummary=metadata scan passed: $artifactJson"
         }
+        if ("$($matched[0].redactionSummaryJson)" -notlike '*"decision":"CLEAN"*') {
+            throw "Expected sandbox artifact API redactionSummaryJson decision CLEAN: $artifactJson"
+        }
     } | Out-Null
 
     Test-Step "Verify sandbox artifact detail exposes download policy without storage URI" {
@@ -627,6 +633,9 @@ try {
         }
         if ("$($response.data.scanSummary)" -ne "metadata scan passed") {
             throw "Expected artifact detail scanSummary=metadata scan passed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($response.data.redactionSummaryJson)" -notlike '*"decision":"CLEAN"*') {
+            throw "Expected artifact detail redactionSummaryJson decision CLEAN: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $detailJson = $response.data | ConvertTo-Json -Depth 20 -Compress
         if ($detailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
@@ -700,9 +709,9 @@ try {
     $secretSessionId = "$($secretObservation.sessionId)"
     $secretArtifactId = Test-Step "Verify content-sensitive sandbox artifact is blocked before object storage" {
         $safeSecretSessionId = $secretSessionId.Replace("'", "''")
-        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE session_id = '$safeSecretSessionId' ORDER BY created_at DESC LIMIT 1;"
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeSecretSessionId' ORDER BY created_at DESC LIMIT 1;"
         $parts = $row -split "`t"
-        if ($parts.Count -ne 5) {
+        if ($parts.Count -ne 6) {
             throw "Unexpected secret artifact row: $row"
         }
         if ($parts[1] -like "$ExpectedObjectUriPrefix*") {
@@ -716,6 +725,12 @@ try {
         }
         if ($parts[4] -ne "sensitive artifact content") {
             throw "Expected sensitive artifact scan summary but got '$($parts[4])'"
+        }
+        if ($parts[5] -notlike '*"decision":"BLOCKED"*' -or $parts[5] -notlike '*"SECRET"*') {
+            throw "Expected BLOCKED SECRET redaction summary but got '$($parts[5])'"
+        }
+        if ($parts[5] -like "*$secretToken*") {
+            throw "Redaction summary leaked secret token: $($parts[5])"
         }
         $parts[0]
     }
@@ -737,6 +752,9 @@ try {
         if ("$($matched[0].scanSummary)" -ne "sensitive artifact content") {
             throw "Expected content-sensitive artifact scanSummary=sensitive artifact content: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
         }
+        if ("$($matched[0].redactionSummaryJson)" -notlike '*"decision":"BLOCKED"*' -or "$($matched[0].redactionSummaryJson)" -notlike '*"SECRET"*') {
+            throw "Expected content-sensitive artifact redactionSummaryJson BLOCKED/SECRET: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
+        }
         $artifactJson = $matched[0] | ConvertTo-Json -Depth 20 -Compress
         if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|$secretToken") {
             throw "Content-sensitive artifact API leaked storage or secret content: $artifactJson"
@@ -749,6 +767,9 @@ try {
         }
         if ("$($detail.data.scanSummary)" -ne "sensitive artifact content") {
             throw "Expected content-sensitive artifact detail scanSummary=sensitive artifact content: $($detail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($detail.data.redactionSummaryJson)" -notlike '*"decision":"BLOCKED"*' -or "$($detail.data.redactionSummaryJson)" -notlike '*"SECRET"*') {
+            throw "Expected content-sensitive artifact detail redactionSummaryJson BLOCKED/SECRET: $($detail.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $detailJson = $detail.data | ConvertTo-Json -Depth 20 -Compress
         if ($detailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|$secretToken") {
