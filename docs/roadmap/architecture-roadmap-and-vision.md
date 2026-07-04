@@ -49,7 +49,6 @@ Seahorse Agent 的目标是形成一个可证据化、可治理、可持续演�
 |---|---|---|---|
 | P1 | MCP stdio 安全治理第一阶段 | 已落地：命令 allowlist、近端 runner 环境隔离、MCP 工具 HIGH/需审批默认标记、blocked stdio stderr 诊断、诊断审批直达入口、MCP 诊断执行网关 fail-closed、OpenAPI enabled operation 动态注册到 Tool Gateway 并具备真实 HTTP invoke/audit、Sandbox runtime close lifecycle 透传与关闭审计、Sandbox execution history API/UI、Sandbox artifact scanner/prompt visibility gate、Docker/Podman Code Interpreter 容器 adapter 最小闭环、`sandbox_python` Tool Gateway 工具链路、`sandbox_file_convert` CSV/TSV/JSON 表格转换、txt/html/markdown 文本文档转换与 base64 `docx -> txt`/`pdf -> txt` 保守文档文本提取工具链路、受限 inline no-network `sandbox_browser` 与 HAR/download-only video artifact capture、full-compose backend 容器内 Docker host-socket/CLI opt-in 接入、真实容器执行 artifact collection；剩余：browser egress/URL policy、auth/session state capture、PDF 渲染/OCR、Office 渲染/编辑、LibreOffice/Tika、二进制格式转换、更广 A2A/跨 provider Tool Gateway 审计硬化 | 非 allowlist stdio 命令无法启动；高风险 MCP 工具默认进入审批/网关治理 |
 | P1 | AgentScope 生产硬化第一阶段 | 已落地：release gate、A2A 失败降级、Studio trace runId 反查快照、真实模型 AgentScope/kernel SSE 等价；剩余：直接 Studio/OTEL 生产联调 | AgentScope 失败不影响 kernel 普通聊天 |
-| P2 | 已有部署能力补验证 | S3 adapter 切换、Pulsar 消费闭环、promote rollout 完整流程 | full compose 下有可重复脚本和结果证据 |
 
 ## 中期路线（1-3 个月）
 
@@ -338,3 +337,9 @@ AgentScope run-profile chat now enters `ChatMode.AGENT` by default, and the fron
 The root-cause fix for the real-model failure keeps AgentScope's auto-configured model bridge from treating `executor.agentName` as a chat model id. When no run/profile model is specified, the bridge now leaves `modelId` empty so the configured model adapter can use its default chat model, matching kernel behavior.
 
 Fresh evidence: focused model bridge and auto-configuration regressions passed 23/23, `.\scripts\agentscope-release-gate.ps1` passed with AgentScope adapter tests 111/111, kernel run contract 19/19, bootstrap package success, and final `AGENTSCOPE_RELEASE_GATE=PASS`. After rebuilding and redeploying the local full-Docker backend, `.\scripts\e2e-agentscope-smoke.ps1 -BaseUrl http://127.0.0.1:9090` passed 11/11 with AgentScope run `run_331647956607971328`, kernel run `run_331648011163283456`, parsed AgentScope events `agent.timeline,done,finish,message,meta,run_started,step_progress,stream_event`, and parsed kernel events `agent.timeline,done,finish,message,meta,run_started,step_finished,step_started,stream_event`.
+
+## 2026-07-04 Update: Deployment Evidence Gate
+
+The P2 deployment verification item is now closed by `scripts/deployment-evidence-gate.ps1`, which aggregates the existing full-Docker deployment smokes for S3 storage switching, Pulsar consume-loop processing, RAG strategy promotion, and Agent rollout promotion. The gate runs each smoke in an isolated PowerShell process, records per-step exit codes and durations, and fails closed when no steps are selected or when any child smoke fails.
+
+Fresh evidence: PowerShell parsing returned `PSParser OK`; the script contract regression passed 1/1; and `.\scripts\deployment-evidence-gate.ps1 -BackendBaseUrl http://127.0.0.1:9090 -FrontendBaseUrl http://127.0.0.1 -Password admin123 -BackendImage seahorse-agent-backend` passed with `DEPLOYMENT_EVIDENCE_GATE=PASS`. The run verified S3 attachment upload/list/delete against MinIO and PostgreSQL, Pulsar publish/consume/ack counters and document materialization, RAG strategy promotion with audit evidence, and Agent rollout missing-gate failure plus successful full promotion with audit evidence. The temporary S3 smoke backend was removed after the run.
