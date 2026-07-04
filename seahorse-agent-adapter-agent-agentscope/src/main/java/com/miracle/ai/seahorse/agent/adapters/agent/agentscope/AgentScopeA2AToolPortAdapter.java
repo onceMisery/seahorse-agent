@@ -58,16 +58,30 @@ public class AgentScopeA2AToolPortAdapter implements DescribedToolPort {
             Map<String, Object> safeArguments = arguments == null ? Map.of() : arguments;
             String agentName = requiredText(safeArguments, "agentName");
             String prompt = requiredText(safeArguments, "prompt");
-            A2AAgentResult result = connector.invoke(new A2AAgentRequest(
-                    TenantContext.get(),
-                    agentName,
-                    prompt,
-                    metadata(safeArguments.get("metadata"))));
+            A2AAgentResult result;
+            try {
+                result = connector.invoke(new A2AAgentRequest(
+                        TenantContext.get(),
+                        agentName,
+                        prompt,
+                        metadata(safeArguments.get("metadata"))));
+            } catch (Exception ex) {
+                return ToolInvocationResult.failed("invoke_remote_a2a_agent failed for agentName="
+                        + agentName + ": " + safeErrorMessage(ex, prompt));
+            }
             return ToolInvocationResult.ok(Objects.requireNonNullElse(result.content(), ""));
         } catch (Exception ex) {
             return ToolInvocationResult.failed("invoke_remote_a2a_agent failed: "
                     + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
         }
+    }
+
+    private String safeErrorMessage(Exception ex, String prompt) {
+        String message = Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName());
+        if (prompt == null || prompt.isBlank()) {
+            return message;
+        }
+        return message.replace(prompt, "[redacted-prompt]");
     }
 
     private String requiredText(Map<String, Object> arguments, String key) {

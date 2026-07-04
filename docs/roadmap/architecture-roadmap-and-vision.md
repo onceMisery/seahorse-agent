@@ -314,3 +314,11 @@ The container sandbox runtime now rejects `networkRequested=true` for non-browse
 Browser URL mode remains the only container network path for now because it has the additional Playwright route allowlist and `allowedHosts` to `requestedHosts` runtime binding guard. Python host allowlist enforcement, proxy-based egress control, stronger runtime isolation, and node-level network policy remain follow-up production hardening work.
 
 Fresh evidence: the new regression first failed as `expected: FAILED but was: SUCCEEDED`; after the guard, the focused regression passed 1/1, the full container adapter suite passed 35/35, and kernel sandbox/tool regressions passed 43/43.
+
+## 2026-07-04 Update: AgentScope A2A Failure Degradation
+
+`invoke_remote_a2a_agent` now turns remote connector failures into a governed tool failure that includes the target `agentName` while redacting the request prompt if it appears in the upstream exception message. This makes A2A remote failures easier to diagnose without leaking user prompt content into the failure summary.
+
+This is a narrow P1 failure-degradation hardening slice. It does not add retry policy, alternate remote-agent fallback, live A2A deployment recovery, Studio trace lookup, or real-model SSE equivalence evidence.
+
+Fresh evidence: the new regression first failed because the failure lacked `agentName=planner`; after the fix, the focused regression passed 1/1. The default AgentScope release gate also passed: adapter tests 107/107, kernel run contract 18/18, application smoke 1/1, bootstrap package success, and final `AGENTSCOPE_RELEASE_GATE=PASS`.

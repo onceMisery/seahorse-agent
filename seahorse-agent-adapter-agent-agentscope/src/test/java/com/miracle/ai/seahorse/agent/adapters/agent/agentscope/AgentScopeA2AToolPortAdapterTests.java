@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AgentScopeA2AToolPortAdapterTests {
@@ -59,8 +60,27 @@ class AgentScopeA2AToolPortAdapterTests {
         assertEquals("agent-loop", captured.metadata().get("source"));
     }
 
+    @Test
+    void degradesRemoteInvocationFailuresWithoutLeakingPrompt() {
+        TenantContext.set("tenant-a");
+        CapturingConnector connector = new CapturingConnector();
+        connector.failure = new IllegalStateException("remote unavailable for draft a confidential launch plan");
+        AgentScopeA2AToolPortAdapter adapter = new AgentScopeA2AToolPortAdapter(connector);
+
+        var result = adapter.invoke("call-1", AgentScopeA2AToolPortAdapter.TOOL_ID, Map.of(
+                "agentName", "planner",
+                "prompt", "draft a confidential launch plan"));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("agentName=planner"));
+        assertTrue(result.error().contains("remote unavailable"));
+        assertTrue(result.error().contains("[redacted-prompt]"));
+        assertFalse(result.error().contains("confidential launch plan"));
+    }
+
     private static final class CapturingConnector implements A2AAgentConnectorPort {
         private final AtomicReference<A2AAgentRequest> request = new AtomicReference<>();
+        private RuntimeException failure;
 
         @Override
         public RemoteAgentCard resolve(A2AAgentResolveRequest request) {
@@ -70,6 +90,9 @@ class AgentScopeA2AToolPortAdapterTests {
 
         @Override
         public A2AAgentResult invoke(A2AAgentRequest request) {
+            if (failure != null) {
+                throw failure;
+            }
             this.request.set(request);
             return new A2AAgentResult(request.tenantId(), request.agentName(), "remote answer", Map.of());
         }
