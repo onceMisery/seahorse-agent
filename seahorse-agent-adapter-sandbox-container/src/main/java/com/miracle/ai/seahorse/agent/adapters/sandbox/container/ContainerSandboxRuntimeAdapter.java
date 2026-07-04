@@ -159,7 +159,12 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         try {
             Path workspace = workspaceForSession(session.sessionId());
             Files.createDirectories(workspace);
-            Set<Path> excludedArtifacts = prepareWorkspace(session.runtimeType(), safeRequest.input(), workspace);
+            Set<Path> excludedArtifacts = prepareWorkspace(
+                    session.runtimeType(),
+                    safeRequest.input(),
+                    workspace,
+                    safeRequest.networkRequested(),
+                    safeRequest.requestedHosts());
             ContainerCommandResult commandResult = commandRunner.run(
                     containerCommand(session, workspace, safeRequest.networkRequested()));
             Instant finishedAt = clock.instant();
@@ -241,7 +246,11 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
     }
 
-    private Set<Path> prepareWorkspace(SandboxRuntimeType runtimeType, String input, Path workspace) throws IOException {
+    private Set<Path> prepareWorkspace(SandboxRuntimeType runtimeType,
+                                       String input,
+                                       Path workspace,
+                                       boolean networkRequested,
+                                       List<String> requestedHosts) throws IOException {
         Path safeWorkspace = workspace.toAbsolutePath().normalize();
         if (runtimeType == SandboxRuntimeType.CODE_INTERPRETER) {
             Files.writeString(safeWorkspace.resolve(SCRIPT_NAME), input, StandardCharsets.UTF_8);
@@ -265,6 +274,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
         if (runtimeType == SandboxRuntimeType.BROWSER_AUTOMATION) {
             BrowserAutomationRequest request = parseBrowserAutomationRequest(input);
+            validateBrowserNetworkBoundary(request, networkRequested, requestedHosts);
             Path inputPath = safeWorkspace.resolve(browserInputName());
             Path cookiesPath = safeWorkspace.resolve(browserCookiesName());
             Path sessionStateInputPath = safeWorkspace.resolve(browserSessionStateInputName());
@@ -377,6 +387,32 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 video,
                 captureSessionState,
                 sessionStateJson);
+    }
+
+    private void validateBrowserNetworkBoundary(BrowserAutomationRequest request,
+                                                boolean networkRequested,
+                                                List<String> requestedHosts) {
+        if (request.allowedHosts().isEmpty()) {
+            return;
+        }
+        if (!networkRequested) {
+            throw new IllegalArgumentException(
+                    "browser automation allowedHosts requires networkRequested=true");
+        }
+        Set<String> authorizedHosts = normalizedBrowserRequestedHosts(requestedHosts);
+        if (!authorizedHosts.containsAll(request.allowedHosts())) {
+            throw new IllegalArgumentException(
+                    "browser automation allowedHosts must be included in requestedHosts");
+        }
+    }
+
+    private Set<String> normalizedBrowserRequestedHosts(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return Set.of();
+        }
+        LinkedHashSet<String> hosts = new LinkedHashSet<>();
+        values.forEach(value -> addNormalizedBrowserHost(hosts, value));
+        return Set.copyOf(hosts);
     }
 
     private String browserAutomationScript(BrowserAutomationRequest request) {
