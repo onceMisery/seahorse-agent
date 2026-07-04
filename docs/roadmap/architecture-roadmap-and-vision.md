@@ -48,7 +48,7 @@ Seahorse Agent 的目标是形成一个可证据化、可治理、可持续演�
 | 优先级 | 工作项 | 范围 | 验收 |
 |---|---|---|---|
 | P1 | MCP stdio 安全治理第一阶段 | 已落地：命令 allowlist、近端 runner 环境隔离、MCP 工具 HIGH/需审批默认标记、blocked stdio stderr 诊断、诊断审批直达入口、MCP 诊断执行网关 fail-closed、OpenAPI enabled operation 动态注册到 Tool Gateway 并具备真实 HTTP invoke/audit、Sandbox runtime close lifecycle 透传与关闭审计、Sandbox execution history API/UI、Sandbox artifact scanner/prompt visibility gate、Docker/Podman Code Interpreter 容器 adapter 最小闭环、`sandbox_python` Tool Gateway 工具链路、`sandbox_file_convert` CSV/TSV/JSON 表格转换、txt/html/markdown 文本文档转换与 base64 `docx -> txt`/`pdf -> txt` 保守文档文本提取工具链路、受限 inline no-network `sandbox_browser` 与 HAR/download-only video artifact capture、full-compose backend 容器内 Docker host-socket/CLI opt-in 接入、真实容器执行 artifact collection；剩余：browser egress/URL policy、auth/session state capture、PDF 渲染/OCR、Office 渲染/编辑、LibreOffice/Tika、二进制格式转换、更广 A2A/跨 provider Tool Gateway 审计硬化 | 非 allowlist stdio 命令无法启动；高风险 MCP 工具默认进入审批/网关治理 |
-| P1 | AgentScope 生产硬化第一阶段 | release gate、真实模型 SSE 等价、A2A 失败降级、Studio trace 反查 | AgentScope 失败不影响 kernel 普通聊天 |
+| P1 | AgentScope 生产硬化第一阶段 | 已落地：release gate、A2A 失败降级、Studio trace runId 反查快照；剩余：真实模型 SSE 等价与直接 Studio/OTEL 生产联调 | AgentScope 失败不影响 kernel 普通聊天 |
 | P2 | 已有部署能力补验证 | S3 adapter 切换、Pulsar 消费闭环、promote rollout 完整流程 | full compose 下有可重复脚本和结果证据 |
 
 ## 中期路线（1-3 个月）
@@ -322,3 +322,11 @@ Fresh evidence: the new regression first failed as `expected: FAILED but was: SU
 This is a narrow P1 failure-degradation hardening slice. It does not add retry policy, alternate remote-agent fallback, live A2A deployment recovery, Studio trace lookup, or real-model SSE equivalence evidence.
 
 Fresh evidence: the new regression first failed because the failure lacked `agentName=planner`; after the fix, the focused regression passed 1/1. The default AgentScope release gate also passed: adapter tests 107/107, kernel run contract 18/18, application smoke 1/1, bootstrap package success, and final `AGENTSCOPE_RELEASE_GATE=PASS`.
+
+## 2026-07-04 Update: AgentScope Studio Trace Lookup Snapshot
+
+AgentScope Studio-enabled runs now contribute immutable `agentScope` metadata even when Nacos config-center is disabled. The latest chat `RunContextSnapshot` includes that `agentScope` block and writes `studioUrl`, `tracingUrl`, and a derived `studioTraceUrl` into `traceContextJson` beside the Seahorse `traceId`, so `/api/run-context-snapshots/by-run/{runId}` can reverse lookup the Studio trace entry from the run id.
+
+This is a narrow P1 runId trace-link snapshot hardening slice. It does not add dynamic AgentScope Studio SDK runId binding, a direct OTEL exporter, Jaeger/Tempo production联调, or real-model SSE equivalence evidence.
+
+Fresh evidence: the new regressions first failed because Studio-only AgentScope auto-configuration produced no `AgentRunMetadataContributor`, the contributor returned empty metadata when config-center was disabled, and the latest chat snapshot lacked `agentScope`/Studio URL fields. After the fix, the focused AgentScope regressions passed 2/2 and the focused kernel chat snapshot regression passed 1/1. The default AgentScope release gate also passed: adapter tests 108/108, kernel run contract 19/19, application smoke package success, and final `AGENTSCOPE_RELEASE_GATE=PASS`.

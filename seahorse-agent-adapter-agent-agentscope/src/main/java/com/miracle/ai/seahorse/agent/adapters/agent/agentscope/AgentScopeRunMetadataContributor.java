@@ -35,17 +35,23 @@ public class AgentScopeRunMetadataContributor implements AgentRunMetadataContrib
     @Override
     public Map<String, Object> metadata(StreamChatCommand command) {
         AgentScopeProperties.ConfigCenter config = properties.getConfigCenter();
-        if (!config.isEnabled()) {
-            return Map.of();
-        }
         Map<String, Object> metadata = new LinkedHashMap<>();
-        Map<String, Object> prompt = promptMetadata(config);
-        if (!prompt.isEmpty()) {
-            metadata.put("prompt", prompt);
+        if (config.isEnabled()) {
+            Map<String, Object> prompt = promptMetadata(config);
+            if (!prompt.isEmpty()) {
+                metadata.put("prompt", prompt);
+            }
+            Map<String, Object> skillRepository = skillRepositoryMetadata(config);
+            if (!skillRepository.isEmpty()) {
+                metadata.put("skillRepository", skillRepository);
+            }
         }
-        Map<String, Object> skillRepository = skillRepositoryMetadata(config);
-        if (!skillRepository.isEmpty()) {
-            metadata.put("skillRepository", skillRepository);
+        Map<String, Object> agentScope = agentScopeMetadata(config, properties.getStudio());
+        if (!agentScope.isEmpty()) {
+            metadata.put("agentScope", agentScope);
+        }
+        if (metadata.isEmpty()) {
+            return Map.of();
         }
         return Map.copyOf(metadata);
     }
@@ -83,6 +89,31 @@ public class AgentScopeRunMetadataContributor implements AgentRunMetadataContrib
         }
         putIfPresent(metadata, "revision", revision);
         return metadata;
+    }
+
+    private Map<String, Object> agentScopeMetadata(
+            AgentScopeProperties.ConfigCenter config,
+            AgentScopeProperties.Studio studio) {
+        boolean includeNacos = config.isEnabled() || studio.isEnabled();
+        if (!includeNacos && !studio.isEnabled()) {
+            return Map.of();
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (studio.isEnabled()) {
+            metadata.put("studioTraceEnabled", true);
+            putIfPresent(metadata, "studioUrl", studio.getStudioUrl());
+            putIfPresent(metadata, "tracingUrl", studio.getTracingUrl());
+            putIfPresent(metadata, "project", studio.getProject());
+            putIfPresent(metadata, "runName", studio.getRunName());
+        }
+        if (includeNacos) {
+            putIfPresent(metadata, "nacosNamespace", properties.getNacos().getNamespace());
+            putIfPresent(metadata, "nacosGroup", properties.getNacos().getGroup());
+        }
+        if (metadata.isEmpty()) {
+            return Map.of();
+        }
+        return Map.copyOf(metadata);
     }
 
     private void putIfPresent(Map<String, Object> target, String key, String value) {

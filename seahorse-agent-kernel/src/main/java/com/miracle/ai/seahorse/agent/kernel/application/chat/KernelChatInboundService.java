@@ -501,8 +501,9 @@ public class KernelChatInboundService implements ChatInboundPort {
             if (safeCommand.chatMode() == ChatMode.AGENT) {
                 if (agentLoop.isPresent()) {
                     validateAgentVersionSelection(safeCommand);
-                    AgentRun run = startAgentRun(safeCommand, traceRunScope, agentRunMetadataJson(safeCommand));
-                    saveRunContextSnapshot(safeCommand, run, traceRunScope);
+                    String metadataJson = agentRunMetadataJson(safeCommand);
+                    AgentRun run = startAgentRun(safeCommand, traceRunScope, metadataJson);
+                    saveRunContextSnapshot(safeCommand, run, traceRunScope, metadataJson);
                     if (run != null) {
                         safeCallback.onRunStarted(run.runId());
                     }
@@ -823,7 +824,11 @@ public class KernelChatInboundService implements ChatInboundPort {
                 command.currentUser()));
     }
 
-    private void saveRunContextSnapshot(StreamChatCommand command, AgentRun run, TraceRunScope traceRunScope) {
+    private void saveRunContextSnapshot(
+            StreamChatCommand command,
+            AgentRun run,
+            TraceRunScope traceRunScope,
+            String metadataJson) {
         if (run == null || runContextSnapshotRepository.isEmpty()) {
             return;
         }
@@ -837,8 +842,8 @@ public class KernelChatInboundService implements ChatInboundPort {
             record.setRunProfileId(effectiveRunProfileId(command));
             record.setExecutorEngine(effectiveExecutorEngine(command));
             record.setExecutorConfigJson(effectiveExecutorConfigJson(command));
-            record.setTraceContextJson(traceContextJson(traceRunScope, run));
-            record.setSnapshotJson(runContextSnapshotJson(command, run, record.getExecutorEngine()));
+            record.setTraceContextJson(traceContextJson(traceRunScope, run, metadataJson));
+            record.setSnapshotJson(runContextSnapshotJson(command, run, record.getExecutorEngine(), metadataJson));
             runContextSnapshotRepository.get().save(record);
         } catch (Exception ex) {
             LOG.warn("Failed to save run context snapshot: runId={}, conversationId={}",
@@ -860,7 +865,7 @@ public class KernelChatInboundService implements ChatInboundPort {
             record.setRunProfileId(effectiveRunProfileId(command));
             record.setExecutorEngine(effectiveExecutorEngine(command));
             record.setExecutorConfigJson(effectiveExecutorConfigJson(command));
-            record.setTraceContextJson(traceContextJson(traceRunScope, null));
+            record.setTraceContextJson(traceContextJson(traceRunScope, null, null));
             record.setSnapshotJson(runContextSnapshotJson(command, record.getExecutorEngine()));
             runContextSnapshotRepository.get().save(record);
         } catch (Exception ex) {
@@ -869,7 +874,11 @@ public class KernelChatInboundService implements ChatInboundPort {
         }
     }
 
-    private String runContextSnapshotJson(StreamChatCommand command, AgentRun run, String executorEngine)
+    private String runContextSnapshotJson(
+            StreamChatCommand command,
+            AgentRun run,
+            String executorEngine,
+            String metadataJson)
             throws JsonProcessingException {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("conversationId", command.conversationId());
@@ -888,6 +897,7 @@ public class KernelChatInboundService implements ChatInboundPort {
         snapshot.put("knowledgeBaseIds", command.knowledgeBaseIds());
         snapshot.put("modelConfig",
                 modelConfigSnapshot(effectiveModelExecutionConfig(command, run.agentId(), run.versionId())));
+        appendAgentScopeSnapshot(snapshot, metadataJson);
         appendRunProfileSnapshot(snapshot, command);
         ResolvedRoleCard roleCard = resolveRoleCard(command.userId(), effectiveRoleCardId(command));
         if (roleCard != null) {
@@ -1033,14 +1043,88 @@ public class KernelChatInboundService implements ChatInboundPort {
         return snapshot;
     }
 
-    private String traceContextJson(TraceRunScope traceRunScope, AgentRun run) throws JsonProcessingException {
+    private String traceContextJson(TraceRunScope traceRunScope, AgentRun run, String metadataJson)
+            throws JsonProcessingException {
         String traceId = traceRunScope != null && hasText(traceRunScope.traceId())
                 ? traceRunScope.traceId()
                 : run == null ? null : run.traceId();
-        if (!hasText(traceId)) {
+        Map<String, Object> traceContext = new LinkedHashMap<>();
+        putTextIfPresent(traceContext, "traceId", traceId);
+        appendAgentScopeTraceContext(traceContext, agentScopeMetadata(metadataJson), traceId);
+        if (traceContext.isEmpty()) {
             return null;
         }
-        return OBJECT_MAPPER.writeValueAsString(Map.of("traceId", traceId));
+        return OBJECT_MAPPER.writeValueAsString(traceContext);
+    }
+
+    private void appendAgentScopeSnapshot(Map<String, Object> snapshot, String metadataJson) {
+        Map<String, Object> agentScope = agentScopeMetadata(metadataJson);
+        if (!agentScope.isEmpty()) {
+            snapshot.put("agentScope", agentScope);
+        }
+    }
+
+    private void appendAgentScopeTraceContext(
+            Map<String, Object> traceContext,
+            Map<String, Object> agentScope,
+            String traceId) {
+        if (agentScope.isEmpty()) {
+            return;
+        }
+        String studioUrl = stringValue(agentScope.get("studioUrl"));
+        String tracingUrl = stringValue(agentScope.get("tracingUrl"));
+        putTextIfPresent(traceContext, "studioUrl", studioUrl);
+        putTextIfPresent(traceContext, "tracingUrl", tracingUrl);
+        putTextIfPresent(traceContext, "studioTraceUrl", studioTraceUrl(firstText(studioUrl, tracingUrl), traceId));
+    }
+
+    private Map<String, Object> agentScopeMetadata(String metadataJson) {
+        if (!hasText(metadataJson)) {
+            return Map.of();
+        }
+        try {
+            JsonNode root = OBJECT_MAPPER.readTree(metadataJson);
+            JsonNode agentScope = root.get("agentScope");
+            if (agentScope == null || !agentScope.isObject()) {
+                return Map.of();
+            }
+            return OBJECT_MAPPER.convertValue(
+                    agentScope,
+                    new com.fasterxml.jackson.core.type.TypeReference<LinkedHashMap<String, Object>>() {
+                    });
+        } catch (IllegalArgumentException | JsonProcessingException ex) {
+            LOG.warn("AgentScope metadata is not valid JSON, ignoring trace lookup metadata", ex);
+            return Map.of();
+        }
+    }
+
+    private String studioTraceUrl(String url, String traceId) {
+        if (!hasText(url) || !hasText(traceId)) {
+            return null;
+        }
+        String safeUrl = url.trim();
+        String encodedTraceId = java.net.URLEncoder.encode(traceId.trim(), java.nio.charset.StandardCharsets.UTF_8);
+        if (safeUrl.contains("{traceId}")) {
+            return safeUrl.replace("{traceId}", encodedTraceId);
+        }
+        return safeUrl.replaceAll("/+$", "") + "/traces/" + encodedTraceId;
+    }
+
+    private String firstText(String primary, String fallback) {
+        return hasText(primary) ? primary.trim() : hasText(fallback) ? fallback.trim() : null;
+    }
+
+    private String stringValue(Object value) {
+        if (value instanceof String text && hasText(text)) {
+            return text.trim();
+        }
+        return null;
+    }
+
+    private void putTextIfPresent(Map<String, Object> target, String key, String value) {
+        if (hasText(value)) {
+            target.put(key, value.trim());
+        }
     }
 
     private Long parseLong(String value) {

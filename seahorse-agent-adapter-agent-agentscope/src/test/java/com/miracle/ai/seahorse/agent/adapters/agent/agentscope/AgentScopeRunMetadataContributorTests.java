@@ -70,6 +70,31 @@ class AgentScopeRunMetadataContributorTests {
         assertThat(contributor.metadata(null)).isEmpty();
     }
 
+    @Test
+    void contributesAgentScopeStudioTraceLookupMetadataWhenStudioIsEnabled() {
+        AgentScopeProperties properties = new AgentScopeProperties();
+        properties.getNacos().setNamespace("prod-ns");
+        properties.getNacos().setGroup("AGENT_GROUP");
+        properties.getStudio().setEnabled(true);
+        properties.getStudio().setStudioUrl(" http://studio.local ");
+        properties.getStudio().setTracingUrl(" http://trace.local/{traceId} ");
+        properties.getStudio().setProject(" seahorse-prod ");
+        properties.getStudio().setRunName(" agent-chat ");
+        AgentScopeRunMetadataContributor contributor = new AgentScopeRunMetadataContributor(properties);
+
+        Map<String, Object> metadata = contributor.metadata(null);
+
+        assertThat(metadata).containsKey("agentScope");
+        assertThat(mapValue(metadata, "agentScope"))
+                .containsEntry("studioTraceEnabled", true)
+                .containsEntry("studioUrl", "http://studio.local")
+                .containsEntry("tracingUrl", "http://trace.local/{traceId}")
+                .containsEntry("project", "seahorse-prod")
+                .containsEntry("runName", "agent-chat")
+                .containsEntry("nacosNamespace", "prod-ns")
+                .containsEntry("nacosGroup", "AGENT_GROUP");
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> mapValue(Map<String, Object> metadata, String key) {
         assertThat(metadata.get(key)).isInstanceOf(Map.class);

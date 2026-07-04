@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolExecutionPort;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
+import com.miracle.ai.seahorse.agent.kernel.application.chat.AgentRunMetadataContributor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import io.agentscope.core.ReActAgent;
@@ -46,6 +47,13 @@ import org.springframework.context.annotation.Conditional;
 @EnableConfigurationProperties(AgentScopeProperties.class)
 @SuppressWarnings("removal")
 public class AgentScopeCoreAutoConfiguration {
+
+    @Bean
+    @Conditional(AgentScopeAutoConfigurationSupport.AgentScopeRunMetadataEnabledCondition.class)
+    @ConditionalOnMissingBean(name = "seahorseAgentScopeRunMetadataContributor")
+    public AgentRunMetadataContributor seahorseAgentScopeRunMetadataContributor(AgentScopeProperties properties) {
+        return new AgentScopeRunMetadataContributor(properties);
+    }
 
     @Bean
     @ConditionalOnBean(StreamingChatModelPort.class)

@@ -32,6 +32,7 @@ final class AgentScopeAutoConfigurationSupport {
     static final String PROP_A2A_ENABLED = "seahorse.agentscope.a2a.enabled";
     static final String PROP_CONFIG_CENTER_ENABLED = "seahorse.agentscope.config-center.enabled";
     static final String PROP_CONFIG_CENTER_STRICT_STARTUP = "seahorse.agentscope.config-center.strict-startup";
+    static final String PROP_STUDIO_ENABLED = "seahorse.agentscope.studio.enabled";
     static final String PROP_A2A_NACOS_SERVER = "seahorse.agentscope.a2a.nacos-server";
     static final String PROP_NACOS_SERVER = "seahorse.agentscope.nacos.server-addr";
 
@@ -44,6 +45,19 @@ final class AgentScopeAutoConfigurationSupport {
             Environment environment = context.getEnvironment();
             return Boolean.TRUE.equals(environment.getProperty(PROP_EXECUTOR_ENABLED, Boolean.class, false))
                     || "agentscope".equalsIgnoreCase(environment.getProperty(PROP_EXECUTOR_ENGINE, ""));
+        }
+    }
+
+    static final class AgentScopeRunMetadataEnabledCondition implements Condition {
+        @Override
+        public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+            Environment environment = context.getEnvironment();
+            boolean executorEnabled = Boolean.TRUE.equals(environment.getProperty(PROP_EXECUTOR_ENABLED, Boolean.class,
+                    false)) || "agentscope".equalsIgnoreCase(environment.getProperty(PROP_EXECUTOR_ENGINE, ""));
+            boolean metadataSourceEnabled = Boolean.TRUE.equals(environment.getProperty(PROP_CONFIG_CENTER_ENABLED,
+                    Boolean.class, false)) || Boolean.TRUE.equals(environment.getProperty(PROP_STUDIO_ENABLED,
+                    Boolean.class, false));
+            return executorEnabled && metadataSourceEnabled;
         }
     }
 

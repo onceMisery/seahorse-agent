@@ -304,6 +304,90 @@ class KernelChatAgentRunStoreTests {
     }
 
     @Test
+    void shouldPersistAgentScopeTraceLookupMetadataInLatestChatSnapshot() {
+        AgentRun run = new AgentRun(
+                "run-agentscope-trace-1",
+                "ops-agent",
+                "ops-agent-v1",
+                null,
+                "tenant-a",
+                "user-1",
+                "101",
+                AgentRunTriggerType.CHAT,
+                "Use Studio trace",
+                AgentRunStatus.RUNNING,
+                "trace-studio-1",
+                0L,
+                0L,
+                BigDecimal.ZERO,
+                null,
+                null,
+                FIXED_CLOCK.instant(),
+                null);
+        RecordingAgentRunInboundPort runPort = new RecordingAgentRunInboundPort(run);
+        UsageEmittingAgentLoop agentLoop = new UsageEmittingAgentLoop(new ChatTokenUsage(0, 0));
+        RecordingRunContextSnapshotRepository snapshotRepository = new RecordingRunContextSnapshotRepository();
+        AgentRunMetadataContributor metadataContributor = command -> Map.of(
+                "agentScope", Map.of(
+                        "studioTraceEnabled", true,
+                        "studioUrl", "http://studio.local",
+                        "tracingUrl", "http://trace.local/{traceId}",
+                        "project", "seahorse-prod",
+                        "runName", "agent-chat"));
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.of(agentLoop),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.of(runPort),
+                Optional.empty(),
+                Optional.empty(),
+                ConversationAttachmentContextAssembler.noop(),
+                Optional.empty(),
+                KernelAgentLoopOptions.defaults(),
+                Optional.empty(),
+                true,
+                null,
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(snapshotRepository),
+                List.of(metadataContributor));
+
+        service.streamChat(new StreamChatCommand(
+                "Use Studio trace",
+                "101",
+                "task-agentscope-trace-1",
+                "user-1",
+                false,
+                ChatMode.AGENT,
+                "ops-agent",
+                "ops-agent-v1"), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertEquals(1, snapshotRepository.records.size());
+        assertTrue(runPort.startCommand.metadataJson().contains("\"agentScope\""),
+                runPort.startCommand.metadataJson());
+        RunContextSnapshotRecord snapshot = snapshotRepository.records.get(0);
+        assertEquals("run-agentscope-trace-1", snapshot.getRunId());
+        assertTrue(snapshot.getSnapshotJson().contains("\"agentScope\""), snapshot.getSnapshotJson());
+        assertTrue(snapshot.getSnapshotJson().contains("\"studioUrl\":\"http://studio.local\""),
+                snapshot.getSnapshotJson());
+        assertTrue(snapshot.getSnapshotJson().contains("\"tracingUrl\":\"http://trace.local/{traceId}\""),
+                snapshot.getSnapshotJson());
+        assertTrue(snapshot.getTraceContextJson().contains("\"traceId\":\"trace-studio-1\""),
+                snapshot.getTraceContextJson());
+        assertTrue(snapshot.getTraceContextJson().contains("\"studioUrl\":\"http://studio.local\""),
+                snapshot.getTraceContextJson());
+        assertTrue(snapshot.getTraceContextJson().contains("\"tracingUrl\":\"http://trace.local/{traceId}\""),
+                snapshot.getTraceContextJson());
+        assertTrue(snapshot.getTraceContextJson().contains("\"studioTraceUrl\":\"http://studio.local/traces/trace-studio-1\""),
+                snapshot.getTraceContextJson());
+    }
+
+    @Test
     void shouldSaveRunContextSnapshotForRagChat() {
         RecordingRunContextSnapshotRepository snapshotRepository = new RecordingRunContextSnapshotRepository();
         RecordingCallback callback = new RecordingCallback();

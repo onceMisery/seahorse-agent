@@ -222,11 +222,19 @@ class AgentScopeReActAutoConfigurationTests {
                 .withPropertyValues(
                         "seahorse.agent.executor.engine=agentscope",
                         "seahorse.agentscope.studio.enabled=true",
-                        "seahorse.agentscope.studio.auto-initialize=false")
+                        "seahorse.agentscope.studio.auto-initialize=false",
+                        "seahorse.agentscope.studio.studio-url=http://studio.local",
+                        "seahorse.agentscope.studio.tracing-url=http://trace.local/{traceId}")
                 .run(context -> {
                     assertThat(context).hasSingleBean(AgentScopeStudioLifecycle.class);
                     assertThat(context).hasSingleBean(StudioMessageHook.class);
                     assertThat(context).hasSingleBean(AgentScopeAgentClient.class);
+                    assertThat(context).hasSingleBean(AgentRunMetadataContributor.class);
+                    assertThat(mapValue(context.getBean(AgentRunMetadataContributor.class).metadata(null),
+                            "agentScope"))
+                            .containsEntry("studioTraceEnabled", true)
+                            .containsEntry("studioUrl", "http://studio.local")
+                            .containsEntry("tracingUrl", "http://trace.local/{traceId}");
                 });
     }
 
