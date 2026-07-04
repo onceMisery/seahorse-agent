@@ -159,6 +159,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         try {
             Path workspace = workspaceForSession(session.sessionId());
             Files.createDirectories(workspace);
+            validateContainerNetworkBoundary(session.runtimeType(), safeRequest.networkRequested());
             Set<Path> excludedArtifacts = prepareWorkspace(
                     session.runtimeType(),
                     safeRequest.input(),
@@ -300,6 +301,14 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             return Set.copyOf(excluded);
         }
         throw new IllegalArgumentException("unsupported sandbox runtime type: " + runtimeType);
+    }
+
+    private void validateContainerNetworkBoundary(SandboxRuntimeType runtimeType, boolean networkRequested) {
+        if (!networkRequested || runtimeType == SandboxRuntimeType.BROWSER_AUTOMATION) {
+            return;
+        }
+        throw new IllegalArgumentException(
+                "container runtime network egress is only supported for browser automation");
     }
 
     private FileConversionRequest parseFileConversionRequest(String input) throws IOException {

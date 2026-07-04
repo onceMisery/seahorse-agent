@@ -85,6 +85,25 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldFailClosedWhenCodeInterpreterNetworkIsRequested() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.CODE_INTERPRETER));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                "print('network should not start')",
+                true,
+                List.of("example.test")));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary())
+                .contains("network egress is only supported for browser automation");
+        assertThat(runner.lastCommand).isNull();
+    }
+
+    @Test
     void shouldCollectArtifactsCreatedBySuccessfulExecution() throws Exception {
         RecordingRunner runner = new RecordingRunner(
                 ContainerCommandResult.succeeded("created artifacts\n", Duration.ofMillis(180)),

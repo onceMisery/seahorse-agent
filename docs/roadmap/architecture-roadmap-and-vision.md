@@ -306,3 +306,11 @@ The artifact-storage full-Docker smoke now verifies unsafe TAR entry paths throu
 The archive artifact API check also verifies that the path-traversal TAR artifact stays prompt-hidden, non-downloadable, and does not leak the raw entry name or any storage reference. This is verification hardening only; it does not change TAR parsing, add extraction, add recursive scanning, or introduce an external scanner engine.
 
 Fresh evidence: PowerShell parsing returned `PSParser OK`; `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-tar-path-guard-smoke` passed 47/47 against the local full-Docker backend, including the new "Verify path-traversal TAR archive is blocked before object storage" step. Cleanup confirmed no `seahorse-sandbox-*` containers, PostgreSQL reported zero non-terminal sandbox sessions, and backend health remained `UP`.
+
+## 2026-07-04 Update: Sandbox Container Network Fail-Closed Guard
+
+The container sandbox runtime now rejects `networkRequested=true` for non-browser runtimes before starting Docker. This closes a P1 policy/runtime gap: arbitrary Python and file-conversion containers do not yet have host-level egress filtering, so honoring `requestedHosts` there would otherwise grant unrestricted container networking after a policy allowlist check.
+
+Browser URL mode remains the only container network path for now because it has the additional Playwright route allowlist and `allowedHosts` to `requestedHosts` runtime binding guard. Python host allowlist enforcement, proxy-based egress control, stronger runtime isolation, and node-level network policy remain follow-up production hardening work.
+
+Fresh evidence: the new regression first failed as `expected: FAILED but was: SUCCEEDED`; after the guard, the focused regression passed 1/1, the full container adapter suite passed 35/35, and kernel sandbox/tool regressions passed 43/43.
