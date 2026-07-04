@@ -340,6 +340,7 @@ describe("chatStore snapshot hydration", () => {
     const url = new URL(streamStarts[0], "http://localhost");
     expect(url.pathname).toBe("/api/rag/v3/chat");
     expect(url.searchParams.get("runProfileId")).toBe("77");
+    expect(url.searchParams.get("chatMode")).toBe("agent");
   });
 
   it("passes the current persisted branch leaf to the chat stream request", async () => {

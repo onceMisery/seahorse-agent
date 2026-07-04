@@ -22,9 +22,14 @@ Required evidence:
 
 - Upstream kernel tests and AgentScope adapter tests pass in the same reactor.
 - `AgentScopeA2aE2eScriptContractTests` passes.
+- `AgentScopeE2eSmokeScriptContractTests` passes and keeps the full-Docker smoke checking parsed SSE events,
+  AgentScope/kernel stream contract equivalence, runId-to-snapshot matching, and trace snapshot fields.
 - `AgentScopeA2ALiveSmokeTest` is skipped unless explicitly enabled.
 - `KernelChatInboundServiceAgentScopeEngineSmokeTests` passes and proves `ChatMode.AGENT` can route through
   a real `AgentScopeReActExecutor` while preserving StreamCallback output, task handle binding, and RAG bypass.
+- `AgentScopeModelBridgeTests` and `AgentScopeReActAutoConfigurationTests` cover that an auto-configured AgentScope
+  model bridge does not use the AgentScope agent name as the chat model id; blank model ids must flow through so the
+  configured model adapter can apply its default chat model.
 - `AgentScopeModelBridgeTests` covers Seahorse model `onThinking(...)` preservation through AgentScope `ThinkingBlock`.
 - `AgentScopeReActExecutorTests` covers AgentScope thinking events flowing back to Seahorse `StreamCallback.onThinking(...)`.
 - `OpenAiCompatibleModelAdapterTests` covers streaming token usage request/parse:
@@ -111,6 +116,9 @@ Before marking an AgentScope release healthy, collect evidence for:
 - Nacos resolver finds the remote Agent Card.
 - Remote JSON-RPC `message/send` succeeds.
 - Agent mode token usage is persisted in the cost usage repository for run-level cost and quota summaries.
+- `scripts/e2e-agentscope-smoke.ps1` verifies both AgentScope and kernel chat streams expose `meta`,
+  `message`, `finish`, `done`, non-empty response text, `stream_event` envelopes, matching SSE/snapshot
+  `runId`, and non-empty snapshot `traceId`.
 - Temporary E2E containers are cleaned.
 
 ## Tenant-Signed Gate

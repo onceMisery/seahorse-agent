@@ -327,6 +327,7 @@ export const useChatStore = create<ChatState>()(
       const versionId = options?.versionId || undefined;
       const roleCardId = options?.roleCardId ?? undefined;
       const runProfileId = options?.runProfileId ?? undefined;
+      const shouldUseAgentMode = Boolean(agentId || runProfileId);
       const assistantParentMessageId = normalizePersistedMessageId(options?.assistantParentMessageId);
       const branchLeafMessageId = normalizePersistedMessageId(options?.branchLeafMessageId)
         ?? currentBranchLeafMessageId(get().messages);
@@ -334,7 +335,7 @@ export const useChatStore = create<ChatState>()(
         question: trimmed,
         conversationId: conversationId || undefined,
         deepThinking: deepThinkingEnabled ? true : undefined,
-        chatMode: agentId ? "agent" : chatModeForTaskTemplate(selectedTaskTemplateId as TaskTemplateId | undefined),
+        chatMode: shouldUseAgentMode ? "agent" : chatModeForTaskTemplate(selectedTaskTemplateId as TaskTemplateId | undefined),
         agentId,
         versionId,
         roleCardId,

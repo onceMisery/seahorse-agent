@@ -251,7 +251,7 @@ class SeahorseChatControllerTests {
                         (emitter, conversationId, taskId) -> new NoopStreamCallback(),
                         streamTaskPort,
                         1_000L,
-                        provider(AgentRunSnapshotInboundPort.class, null))).build();
+                        AdvancedFeatureGate.allEnabledForTests())).build();
 
         mvc.perform(get("/rag/v3/chat")
                         .param("question", "Use this run profile")
@@ -264,6 +264,32 @@ class SeahorseChatControllerTests {
         ArgumentCaptor<StreamChatCommand> captor = ArgumentCaptor.forClass(StreamChatCommand.class);
         verify(chatPort).streamChat(captor.capture(), org.mockito.ArgumentMatchers.any());
         assertThat(captor.getValue().runProfileId()).isEqualTo(77L);
+    }
+
+    @Test
+    void runProfileChatShouldEnterAgentModeWhenChatModeIsNotExplicit() throws Exception {
+        ChatInboundPort chatPort = mock(ChatInboundPort.class);
+        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseChatController(
+                        provider(ChatInboundPort.class, chatPort),
+                        (emitter, conversationId, taskId) -> new NoopStreamCallback(),
+                        streamTaskPort,
+                        1_000L,
+                        AdvancedFeatureGate.allEnabledForTests())).build();
+
+        mvc.perform(get("/rag/v3/chat")
+                        .param("question", "Use this run profile")
+                        .param("conversationId", "conversation-1")
+                        .param("userId", "user-1")
+                        .param("runProfileId", "77"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+
+        ArgumentCaptor<StreamChatCommand> captor = ArgumentCaptor.forClass(StreamChatCommand.class);
+        verify(chatPort).streamChat(captor.capture(), org.mockito.ArgumentMatchers.any());
+        assertThat(captor.getValue().chatMode()).isEqualTo(ChatMode.AGENT);
     }
 
     @Test

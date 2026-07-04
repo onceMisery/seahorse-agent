@@ -204,7 +204,7 @@ public class SeahorseChatController {
         }
         checkChatRateLimit(actualUserId);
         checkTaskTemplateRateLimit(taskTemplateId);
-        ChatMode resolvedChatMode = resolveChatMode(chatMode, taskTemplateId);
+        ChatMode resolvedChatMode = resolveChatMode(chatMode, taskTemplateId, runProfileId);
         requireChatModeAllowed(chatMode, resolvedChatMode, taskTemplateId, agentId, versionId);
         if (question == null || question.isBlank()) {
             SseEmitter errorEmitter = new SseEmitter(sseTimeoutMs);
@@ -388,9 +388,12 @@ public class SeahorseChatController {
         }
     }
 
-    private ChatMode resolveChatMode(String requestedChatMode, String taskTemplateId) {
+    private ChatMode resolveChatMode(String requestedChatMode, String taskTemplateId, Long runProfileId) {
         if (hasText(requestedChatMode)) {
             return parseChatMode(requestedChatMode);
+        }
+        if (runProfileId != null) {
+            return ChatMode.AGENT;
         }
         return isControlledWebAgentTemplate(taskTemplateId) ? ChatMode.AGENT : ChatMode.RAG;
     }

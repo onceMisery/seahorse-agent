@@ -68,14 +68,14 @@ public class AgentScopeModelBridge implements Model {
             ChatSamplingOptions samplingOptions,
             ObjectMapper objectMapper) {
         this.modelPort = Objects.requireNonNull(modelPort, "modelPort must not be null");
-        this.modelName = textOrDefault(modelName, "seahorse-model");
+        this.modelName = trimToNull(modelName);
         this.samplingOptions = samplingOptions;
         this.objectMapper = Objects.requireNonNullElseGet(objectMapper, ObjectMapper::new);
     }
 
     public AgentScopeModelBridge forRequest(AgentLoopRequest request) {
         AgentLoopRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        return new AgentScopeModelBridge(modelPort, textOrDefault(safeRequest.modelId(), modelName),
+        return new AgentScopeModelBridge(modelPort, firstText(safeRequest.modelId(), modelName),
                 safeRequest.samplingOptions(), objectMapper);
     }
 
@@ -140,7 +140,7 @@ public class AgentScopeModelBridge implements Model {
 
     @Override
     public String getModelName() {
-        return modelName;
+        return Objects.requireNonNullElse(modelName, "");
     }
 
     private List<ChatMessage> toChatMessages(List<Msg> messages) {
@@ -229,7 +229,7 @@ public class AgentScopeModelBridge implements Model {
     }
 
     private String modelId(GenerateOptions options) {
-        return options == null ? modelName : textOrDefault(options.getModelName(), modelName);
+        return options == null ? modelName : firstText(options.getModelName(), modelName);
     }
 
     private ChatSamplingOptions samplingOptions(GenerateOptions options) {
@@ -253,7 +253,12 @@ public class AgentScopeModelBridge implements Model {
         return value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) value;
     }
 
-    private static String textOrDefault(String value, String fallback) {
-        return value == null || value.isBlank() ? fallback : value.trim();
+    private static String firstText(String value, String fallback) {
+        String trimmed = trimToNull(value);
+        return trimmed == null ? trimToNull(fallback) : trimmed;
+    }
+
+    private static String trimToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

@@ -138,6 +138,30 @@ class AgentScopeReActAutoConfigurationTests {
     }
 
     @Test
+    void autoConfiguredModelFactoryLeavesDefaultChatModelToModelPort() {
+        contextRunner
+                .withUserConfiguration(StreamingModelConfiguration.class)
+                .withPropertyValues(
+                        "seahorse.agentscope.executor.enabled=true",
+                        "seahorse.agentscope.executor.agent-name=seahorse-agent")
+                .run(context -> {
+                    AgentScopeModelFactory modelFactory = context.getBean(AgentScopeModelFactory.class);
+                    CapturingStreamingModelPort modelPort = context.getBean(CapturingStreamingModelPort.class);
+
+                    modelFactory.modelFor(AgentLoopRequest.builder()
+                                    .question("draft")
+                                    .samplingOptions(ChatSamplingOptions.builder().build())
+                                    .build())
+                            .stream(List.of(Msg.builder().role(MsgRole.USER).textContent("draft").build()),
+                                    List.of(),
+                                    null)
+                            .blockLast();
+
+                    assertThat(modelPort.request.get().getModelId()).isNull();
+                });
+    }
+
+    @Test
     void coreOnlyExecutorDoesNotCreateOptionalIntegrationBeans() {
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(
@@ -392,15 +416,21 @@ class AgentScopeReActAutoConfigurationTests {
     @Configuration(proxyBeanMethods = false)
     static class StreamingModelConfiguration {
         @Bean
-        StreamingChatModelPort streamingChatModelPort() {
-            return new StreamingChatModelPort() {
-                @Override
-                public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
-                    callback.onContent("ok");
-                    callback.onComplete();
-                    return () -> { };
-                }
-            };
+        CapturingStreamingModelPort streamingChatModelPort() {
+            return new CapturingStreamingModelPort();
+        }
+    }
+
+    static class CapturingStreamingModelPort implements StreamingChatModelPort {
+        private final java.util.concurrent.atomic.AtomicReference<ChatRequest> request =
+                new java.util.concurrent.atomic.AtomicReference<>();
+
+        @Override
+        public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
+            this.request.set(request);
+            callback.onContent("ok");
+            callback.onComplete();
+            return () -> { };
         }
     }
 

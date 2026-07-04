@@ -46,6 +46,180 @@ function Assert-Equal {
     }
 }
 
+function Assert-NotBlank {
+    param([string]$Value, [string]$Name)
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        throw "$Name was blank"
+    }
+}
+
+function Get-JsonValue {
+    param([object]$Value, [string]$Name)
+    if ($null -eq $Value -or $Value -is [string]) {
+        return $null
+    }
+    $property = $Value.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        return $null
+    }
+    return $property.Value
+}
+
+function New-SseEvent {
+    param([string]$Name, [string[]]$DataLines)
+    $raw = [string]::Join("`n", @($DataLines))
+    $payload = $raw
+    $trimmed = $raw.TrimStart()
+    if ($trimmed.StartsWith("{") -or ($trimmed.StartsWith("[") -and $trimmed -ne "[DONE]")) {
+        try {
+            $payload = $raw | ConvertFrom-Json
+        } catch {
+            $payload = $raw
+        }
+    }
+    return [PSCustomObject]@{
+        Name = $Name
+        RawData = $raw
+        Payload = $payload
+    }
+}
+
+function ConvertFrom-SseContent {
+    param([string]$Content)
+    $events = @()
+    $eventName = "message"
+    $dataLines = @()
+    foreach ($line in ($Content -split "\r?\n")) {
+        if ([string]::IsNullOrEmpty($line)) {
+            if ($dataLines.Count -gt 0) {
+                $events += New-SseEvent -Name $eventName -DataLines $dataLines
+            }
+            $eventName = "message"
+            $dataLines = @()
+            continue
+        }
+        if ($line.StartsWith(":")) {
+            continue
+        }
+        if ($line.StartsWith("event:")) {
+            $eventName = $line.Substring(6).Trim()
+            continue
+        }
+        if ($line.StartsWith("data:")) {
+            $dataLines += $line.Substring(5).Trim()
+        }
+    }
+    if ($dataLines.Count -gt 0) {
+        $events += New-SseEvent -Name $eventName -DataLines $dataLines
+    }
+    return @($events)
+}
+
+function Get-SseRunId {
+    param([object[]]$Events)
+    foreach ($event in $Events) {
+        $runId = Get-JsonValue $event.Payload "runId"
+        if (-not [string]::IsNullOrWhiteSpace("$runId")) {
+            return "$runId"
+        }
+        $typedPayload = Get-JsonValue $event.Payload "typedPayload"
+        $runId = Get-JsonValue $typedPayload "runId"
+        if (-not [string]::IsNullOrWhiteSpace("$runId")) {
+            return "$runId"
+        }
+    }
+    return ""
+}
+
+function Get-MessageDelta {
+    param([object]$Payload)
+    $type = Get-JsonValue $Payload "type"
+    $delta = Get-JsonValue $Payload "delta"
+    if ("$type" -eq "response" -and -not [string]::IsNullOrWhiteSpace("$delta")) {
+        return "$delta"
+    }
+    return ""
+}
+
+function Get-SseResponseText {
+    param([object[]]$Events)
+    $chunks = @()
+    foreach ($event in @($Events | Where-Object { $_.Name -eq "message" })) {
+        $delta = Get-MessageDelta $event.Payload
+        if (-not [string]::IsNullOrWhiteSpace($delta)) {
+            $chunks += $delta
+        }
+    }
+    if ($chunks.Count -eq 0) {
+        foreach ($event in @($Events | Where-Object { $_.Name -eq "stream_event" })) {
+            $eventType = Get-JsonValue $event.Payload "eventType"
+            if ("$eventType" -ne "message") {
+                continue
+            }
+            $delta = Get-MessageDelta (Get-JsonValue $event.Payload "typedPayload")
+            if (-not [string]::IsNullOrWhiteSpace($delta)) {
+                $chunks += $delta
+            }
+        }
+    }
+    return ($chunks -join "")
+}
+
+function Assert-ChatSseContract {
+    param([string]$Name, [object]$Chat)
+    $events = @($Chat.Events)
+    if ($events.Count -eq 0) {
+        throw "$Name SSE had no parseable events"
+    }
+    $eventNames = @($events | ForEach-Object { $_.Name } | Sort-Object -Unique)
+    foreach ($required in @("meta", "message", "finish", "done")) {
+        if ($eventNames -notcontains $required) {
+            throw "$Name SSE missing '$required' event. Events: $($eventNames -join ',')"
+        }
+    }
+    $errorEvents = @($events | Where-Object { $_.Name -eq "error" -or $_.Name -eq "recoverable_error" })
+    if ($errorEvents.Count -gt 0) {
+        throw "$Name SSE included error events: $($errorEvents | ConvertTo-Json -Depth 20 -Compress)"
+    }
+    if (-not ($events | Where-Object { $_.RawData -eq "[DONE]" })) {
+        throw "$Name SSE did not include [DONE] payload"
+    }
+    Assert-NotBlank $Chat.RunId "$Name SSE runId"
+    Assert-NotBlank $Chat.ResponseText "$Name SSE response text"
+}
+
+function Assert-SseEquivalentContract {
+    param([object]$AgentScopeChat, [object]$KernelChat)
+    foreach ($required in @("meta", "message", "finish", "done")) {
+        if (@($AgentScopeChat.EventNames) -notcontains $required) {
+            throw "AgentScope SSE missing required event '$required'"
+        }
+        if (@($KernelChat.EventNames) -notcontains $required) {
+            throw "Kernel SSE missing required event '$required'"
+        }
+    }
+    if ($AgentScopeChat.ResponseChars -le 0 -or $KernelChat.ResponseChars -le 0) {
+        throw "AgentScope/kernel SSE response text must both be non-empty"
+    }
+    if ($AgentScopeChat.StreamEventCount -le 0 -or $KernelChat.StreamEventCount -le 0) {
+        throw "AgentScope/kernel SSE must both include stream_event envelopes"
+    }
+}
+
+function Assert-SnapshotMatchesChat {
+    param([string]$Name, [object]$Snapshot, [object]$Chat)
+    Assert-Equal $Snapshot.runId $Chat.RunId "$Name SSE/snapshot run_id"
+    Assert-NotBlank $Snapshot.traceId "$Name snapshot traceId"
+}
+
+function Assert-AgentScopeSnapshotTraceContext {
+    param([object]$Snapshot)
+    if ("$($Snapshot.agentScopeTraceEnabled)" -eq "true") {
+        Assert-NotBlank $Snapshot.agentScopeStudioUrl "AgentScope snapshot agentScope.studioUrl"
+        Assert-NotBlank $Snapshot.studioTraceUrl "AgentScope trace_context studioTraceUrl"
+    }
+}
+
 function Invoke-DbScalarRow {
     param([string]$Sql)
     $raw = & docker.exe exec $PostgresContainer psql -U $PostgresUser -d $PostgresDatabase -t -A -F "|" -c $Sql
@@ -72,10 +246,19 @@ function Invoke-Chat {
     param(
         [string]$ConversationId,
         [hashtable]$Headers,
-        [string]$Question
+        [string]$Question,
+        [long]$RunProfileId = 0,
+        [string]$ChatMode = ""
     )
     $encodedQuestion = [System.Uri]::EscapeDataString($Question)
-    $response = Invoke-WebRequest -Uri "$BaseUrl/rag/v3/chat?conversationId=$ConversationId&question=$encodedQuestion" `
+    $query = "conversationId=$ConversationId&question=$encodedQuestion"
+    if ($RunProfileId -ne 0) {
+        $query = "$query&runProfileId=$RunProfileId"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ChatMode)) {
+        $query = "$query&chatMode=$([System.Uri]::EscapeDataString($ChatMode))"
+    }
+    $response = Invoke-WebRequest -Uri "$BaseUrl/rag/v3/chat?$query" `
         -Headers $Headers -UseBasicParsing -TimeoutSec 180
     if ([int]$response.StatusCode -ne 200) {
         throw "Chat returned HTTP $($response.StatusCode)"
@@ -87,10 +270,24 @@ function Invoke-Chat {
     if ($response.Content -notlike "*[DONE]*") {
         throw "Chat SSE did not include [DONE]"
     }
-    return @{
+    $events = ConvertFrom-SseContent $response.Content
+    $responseText = Get-SseResponseText $events
+    $eventNames = @($events | ForEach-Object { $_.Name } | Sort-Object -Unique)
+    $chat = [PSCustomObject]@{
         ContentType = $contentType
         Length = $response.Content.Length
+        Events = @($events)
+        EventNames = $eventNames
+        DataEventCount = @($events).Count
+        StreamEventCount = @($events | Where-Object { $_.Name -eq "stream_event" }).Count
+        MessageEventCount = @($events | Where-Object { $_.Name -eq "message" }).Count
+        ResponseText = $responseText
+        ResponseChars = $responseText.Length
+        RunId = Get-SseRunId $events
     }
+    Assert-ChatSseContract "Chat" $chat
+    $chat | ConvertTo-Json -Depth 6 -Compress | Write-Host
+    return $chat
 }
 
 function Get-LatestSnapshot {
@@ -101,7 +298,13 @@ select run_id,
        coalesce(role_card_id::text, ''),
        coalesce(run_profile_id::text, ''),
        executor_engine,
-       coalesce(snapshot_json::jsonb #>> '{runProfile,name}', '') as run_profile_name
+       coalesce(snapshot_json::jsonb #>> '{runProfile,name}', '') as run_profile_name,
+       coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'traceId', '') as trace_id,
+       coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'studioUrl', '') as studio_url,
+       coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'tracingUrl', '') as tracing_url,
+       coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'studioTraceUrl', '') as studio_trace_url,
+       coalesce(snapshot_json::jsonb #>> '{agentScope,studioTraceEnabled}', '') as agent_scope_trace_enabled,
+       coalesce(snapshot_json::jsonb #>> '{agentScope,studioUrl}', '') as agent_scope_studio_url
 from t_run_context_snapshot
 where conversation_id = $ConversationId
   and deleted = 0
@@ -112,8 +315,8 @@ limit 1;
     if (-not $row) {
         throw "No t_run_context_snapshot row found for conversation $ConversationId"
     }
-    $parts = $row -split "\|", 5
-    if ($parts.Count -lt 5) {
+    $parts = $row -split "\|", 11
+    if ($parts.Count -lt 11) {
         throw "Unexpected snapshot row format: $row"
     }
     return [PSCustomObject]@{
@@ -122,6 +325,12 @@ limit 1;
         runProfileId = $parts[2]
         executorEngine = $parts[3]
         runProfileName = $parts[4]
+        traceId = $parts[5]
+        studioUrl = $parts[6]
+        tracingUrl = $parts[7]
+        studioTraceUrl = $parts[8]
+        agentScopeTraceEnabled = $parts[9]
+        agentScopeStudioUrl = $parts[10]
     }
 }
 
@@ -183,6 +392,7 @@ if (-not $agentScopeConversationId) { exit 1 }
 
 $agentScopeChat = Test-Step "Chat through AgentScope run profile" {
     Invoke-Chat -ConversationId $agentScopeConversationId -Headers $headers `
+        -RunProfileId $AgentScopeRunProfileId -ChatMode "agent" `
         -Question "AgentScope smoke $(Get-Date -Format yyyyMMddHHmmss): answer with one short sentence."
 }
 
@@ -190,6 +400,8 @@ $agentScopeSnapshot = Test-Step "Verify AgentScope run context snapshot" {
     $snapshot = Get-LatestSnapshot -ConversationId $agentScopeConversationId
     Assert-Equal $snapshot.runProfileId $AgentScopeRunProfileId "AgentScope snapshot run_profile_id"
     Assert-Equal $snapshot.executorEngine "agentscope" "AgentScope snapshot executor_engine"
+    Assert-SnapshotMatchesChat "AgentScope" $snapshot $agentScopeChat
+    Assert-AgentScopeSnapshotTraceContext $snapshot
     $snapshot | ConvertTo-Json -Compress | Write-Host
     $snapshot
 }
@@ -232,6 +444,7 @@ $kernelConversationId = Test-Step "Create kernel conversation and apply profile"
 
 $kernelChat = Test-Step "Chat still works through kernel run profile" {
     Invoke-Chat -ConversationId $kernelConversationId -Headers $headers `
+        -RunProfileId $KernelRunProfileId -ChatMode "agent" `
         -Question "Kernel smoke after AgentScope $(Get-Date -Format yyyyMMddHHmmss): answer with one short sentence."
 }
 
@@ -239,17 +452,26 @@ $kernelSnapshot = Test-Step "Verify kernel run context snapshot" {
     $snapshot = Get-LatestSnapshot -ConversationId $kernelConversationId
     Assert-Equal $snapshot.runProfileId $KernelRunProfileId "Kernel snapshot run_profile_id"
     Assert-Equal $snapshot.executorEngine "kernel" "Kernel snapshot executor_engine"
+    Assert-SnapshotMatchesChat "Kernel" $snapshot $kernelChat
     $snapshot | ConvertTo-Json -Compress | Write-Host
     $snapshot
+}
+
+Test-Step "Verify AgentScope and kernel SSE contract equivalence" {
+    Assert-SseEquivalentContract $agentScopeChat $kernelChat
+    Write-Host "AgentScope events: $($agentScopeChat.EventNames -join ',')"
+    Write-Host "Kernel events: $($kernelChat.EventNames -join ',')"
 }
 
 Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
 Write-Host "AgentScope conversation ID: $agentScopeConversationId"
 Write-Host "AgentScope run ID: $($agentScopeSnapshot.runId)"
 Write-Host "AgentScope chat bytes: $($agentScopeChat.Length)"
+Write-Host "AgentScope SSE events: $($agentScopeChat.DataEventCount), stream envelopes: $($agentScopeChat.StreamEventCount), response chars: $($agentScopeChat.ResponseChars)"
 Write-Host "Kernel conversation ID: $kernelConversationId"
 Write-Host "Kernel run ID: $($kernelSnapshot.runId)"
 Write-Host "Kernel chat bytes: $($kernelChat.Length)"
+Write-Host "Kernel SSE events: $($kernelChat.DataEventCount), stream envelopes: $($kernelChat.StreamEventCount), response chars: $($kernelChat.ResponseChars)"
 
 if ($failed -gt 0) {
     exit 1

@@ -29,6 +29,7 @@ $agentScopeUnitTests = @(
     "AgentScopeAgentCardFactoryTests",
     "AgentScopeAgentCardRegistrarTests",
     "AgentScopeA2aE2eScriptContractTests",
+    "AgentScopeE2eSmokeScriptContractTests",
     "AgentScopeReleaseGateScriptContractTests",
     "NacosPropertiesFactoryTests",
     "AgentScopeA2AToolPortAdapterTests",

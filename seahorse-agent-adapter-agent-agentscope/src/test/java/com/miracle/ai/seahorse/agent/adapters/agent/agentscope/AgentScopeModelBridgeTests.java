@@ -44,6 +44,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class AgentScopeModelBridgeTests {
 
@@ -103,6 +104,22 @@ class AgentScopeModelBridgeTests {
         assertEquals(0.9D, captured.getTopP());
         assertEquals(20, captured.getTopK());
         assertEquals(128, captured.getMaxTokens());
+    }
+
+    @Test
+    void blankDefaultModelLeavesProviderDefaultModelAvailable() {
+        CapturingStreamingModelPort modelPort = new CapturingStreamingModelPort();
+        AgentLoopRequest request = AgentLoopRequest.builder()
+                .question("draft")
+                .samplingOptions(ChatSamplingOptions.builder().build())
+                .build();
+
+        new AgentScopeModelBridge(modelPort, null)
+                .forRequest(request)
+                .stream(List.of(Msg.builder().role(MsgRole.USER).textContent("draft").build()), List.of(), null)
+                .blockLast();
+
+        assertNull(modelPort.request.get().getModelId());
     }
 
     @Test

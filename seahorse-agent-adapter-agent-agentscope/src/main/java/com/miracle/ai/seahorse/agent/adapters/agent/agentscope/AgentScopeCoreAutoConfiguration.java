@@ -65,7 +65,7 @@ public class AgentScopeCoreAutoConfiguration {
             AgentScopeProperties properties) {
         AgentScopeModelBridge bridge = new AgentScopeModelBridge(
                 modelPort,
-                properties.getExecutor().getAgentName(),
+                null,
                 objectMapperProvider.getIfAvailable(ObjectMapper::new));
         return bridge::forRequest;
     }
