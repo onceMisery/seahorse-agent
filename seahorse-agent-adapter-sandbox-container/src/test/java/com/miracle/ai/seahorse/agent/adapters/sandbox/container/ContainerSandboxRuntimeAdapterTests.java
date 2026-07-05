@@ -914,6 +914,28 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldFailClosedWhenBrowserUrlUsesSemicolonCredentialQueryBeforeRunningContainer() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","url":"http://example.test/admin?q=roadmap;access_token=secret","allowedHosts":["example.test"]}
+                        """,
+                true,
+                List.of("example.test")));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("url query must not include credential parameters");
+        assertThat(result.execution().resultSummary()).doesNotContain("access_token=secret");
+        assertThat(result.execution().resultSummary()).doesNotContain("secret");
+        assertThat(runner.lastCommand).isNull();
+    }
+
+    @Test
     void shouldAllowBrowserUrlWithNonCredentialQueryBeforeRunningContainer() {
         RecordingRunner runner = new RecordingRunner(
                 ContainerCommandResult.succeeded("browser snapshot completed\n", Duration.ofMillis(100)),

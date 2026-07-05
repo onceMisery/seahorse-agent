@@ -1202,7 +1202,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         if (!hasText(rawQuery)) {
             return;
         }
-        for (String parameter : rawQuery.split("&")) {
+        for (String parameter : rawQuery.split("[&;]")) {
             if (!hasText(parameter)) {
                 continue;
             }

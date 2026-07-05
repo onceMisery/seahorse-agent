@@ -456,7 +456,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         if (!hasText(rawQuery)) {
             return;
         }
-        for (String parameter : rawQuery.split("&")) {
+        for (String parameter : rawQuery.split("[&;]")) {
             if (!hasText(parameter)) {
                 continue;
             }
