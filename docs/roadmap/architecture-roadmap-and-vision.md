@@ -465,6 +465,14 @@ This remains a narrow SSRF/container-network probing guard. It does not add DNS 
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 15/15; `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 39/39.
 
+## 2026-07-06 Update: Sandbox Browser IPv6 Literal Egress Guard
+
+The sandbox browser URL guard now rejects IPv6 literal targets such as `http://[::1]:8080/...` before session creation and before container execution. The policy remains DNS-host based: URL mode must use a valid dotted DNS host that passes allowedHosts, runtime profile, and global sandbox policy checks.
+
+This is a narrow SSRF/container-network probing guard. It does not add DNS pinning, CIDR/private-network egress classification, a general outbound proxy, mutable operator URL policy UX, or browser credential governance.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 20/20; `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 44/44.
+
 ## 2026-07-06 Update: Sandbox Browser URL Userinfo Credential Guard
 
 The sandbox browser URL path now rejects HTTP/HTTPS URLs containing `userinfo` credentials such as `user:password@host` before session creation and before container execution. This prevents URL-embedded secrets from entering generated browser scripts, observations, HAR/event metadata, or target URL summaries while the broader credential/session governance model remains explicit-cookie and explicit-session-state only.

@@ -408,6 +408,21 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldRejectIpv6LiteralBrowserUrlBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://[::1]:8080/admin",
+                "allowedHosts", List.of("example.test"))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("not localhost or an IP literal"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
     void shouldRejectSingleLabelBrowserUrlBeforeCreatingSession() {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);

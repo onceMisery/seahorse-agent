@@ -754,6 +754,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         if (!hasText(host)
                 || "localhost".equals(host)
                 || host.endsWith(".localhost")
+                || host.contains(":")
                 || !host.contains(".")
                 || !hasValidDnsLabels(host)
                 || isIpv4Literal(host)
