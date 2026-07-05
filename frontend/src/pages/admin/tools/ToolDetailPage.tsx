@@ -9,7 +9,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdvancedFeatureState, ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
-import { getTool, enableTool, disableTool, listToolInvocations, type ToolItem, type ToolInvocation } from "@/services/toolCatalogService";
+import {
+  getTool,
+  getToolGateResult,
+  enableTool,
+  disableTool,
+  listToolInvocations,
+  type GateResult,
+  type ToolItem,
+  type ToolInvocation
+} from "@/services/toolCatalogService";
 import { ToolRiskBadge } from "./components/ToolRiskBadge";
 import { getErrorMessage } from "@/utils/error";
 
@@ -20,6 +29,8 @@ export function ToolDetailPage() {
 
   const [tool, setTool] = useState<ToolItem | null>(null);
   const [loading, setLoading] = useState(true);
+  const [gateResult, setGateResult] = useState<GateResult | null>(null);
+  const [gateLoading, setGateLoading] = useState(false);
   const [invocations, setInvocations] = useState<ToolInvocation[]>([]);
   const [toggling, setToggling] = useState(false);
 
@@ -47,9 +58,23 @@ export function ToolDetailPage() {
     }
   };
 
+  const loadGateResult = async () => {
+    if (!toolId) return;
+    try {
+      setGateLoading(true);
+      setGateResult(await getToolGateResult(toolId));
+    } catch (error) {
+      setGateResult(null);
+      console.error(error);
+    } finally {
+      setGateLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!featureState.enabled) return;
     loadTool();
+    loadGateResult();
     loadInvocations();
   }, [toolId]);
 
@@ -127,7 +152,7 @@ export function ToolDetailPage() {
           >
             {toggling ? "操作中..." : tool.enabled ? "禁用" : "启用"}
           </Button>
-          <Button variant="outline" onClick={() => { loadTool(); loadInvocations(); }}>
+          <Button variant="outline" onClick={() => { loadTool(); loadGateResult(); loadInvocations(); }}>
             <RefreshCw className="w-4 h-4 mr-1" />
             刷新
           </Button>
@@ -168,6 +193,70 @@ export function ToolDetailPage() {
               <div className="text-xs text-slate-500">描述</div>
               <div className="mt-1 text-sm text-slate-700">{tool.description}</div>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle>GateResult</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {gateLoading ? (
+            <div className="text-sm text-muted-foreground">Loading...</div>
+          ) : gateResult ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div>
+                  <div className="text-xs text-slate-500">Subject</div>
+                  <div className="mt-1 font-medium">{gateResult.subjectType}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500">Status</div>
+                  <div className="mt-1">
+                    <Badge variant={gateResult.passed ? "default" : "destructive"}>{gateResult.status}</Badge>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500">Blocking</div>
+                  <div className="mt-1 font-medium">{gateResult.blockingCodes?.length ?? 0}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500">Source</div>
+                  <div className="mt-1 font-medium">{gateResult.sourceType || "-"}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500">Checked</div>
+                  <div className="mt-1">{formatTime(gateResult.checkedAt)}</div>
+                </div>
+              </div>
+
+              {gateResult.blockingCodes?.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {gateResult.blockingCodes.map((code) => (
+                    <Badge key={code} variant="destructive">{code}</Badge>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="space-y-2">
+                {(gateResult.items || []).map((item) => (
+                  <div key={item.code} className="rounded-md border border-border p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-mono text-sm">{item.code}</span>
+                      <Badge variant={item.status === "FAIL" ? "destructive" : item.status === "WARN" ? "secondary" : "default"}>
+                        {item.status}
+                      </Badge>
+                    </div>
+                    {item.message ? (
+                      <div className="mt-1 text-sm text-muted-foreground">{item.message}</div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">No GateResult</div>
           )}
         </CardContent>
       </Card>

@@ -449,6 +449,10 @@ The Web API exposes this projection through `GET /api/tools/{toolId}/gate-result
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=GateResultsTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 13/13 projection tests; `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseAgentControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 17/17 Web contract tests; and `npm test -- src/services/frontendCapabilityContracts.test.ts src/services/serviceEndpointCoverage.test.ts` passed 17/17 frontend manifest/coverage tests.
 
+The admin Tool Detail page now renders the Tool GateResult evidence directly beside the catalog metadata, including status, blocking code count, source, checked time, blocking codes, and individual check items. This keeps the unified evidence projection visible to operators without changing tool enable/disable behavior or runtime Tool Gateway policy enforcement.
+
+Fresh UX evidence: `npm test -- src/pages/admin/tools/ToolDetailPage.test.tsx src/pages/admin/tools/ToolCatalogPage.test.tsx src/services/frontendCapabilityContracts.test.ts src/services/serviceEndpointCoverage.test.ts` passed 25/25 focused frontend tests.
+
 ## 2026-07-05 Update: Sandbox Browser Localhost/IP Egress Guard
 
 The sandbox browser URL path now rejects localhost-style and IPv4-literal targets before creating a browser sandbox session, even when the caller includes those values in `allowedHosts`. The same guard is duplicated in the container runtime adapter input parser so direct runtime calls also fail closed before a Docker command is built. This tightens the P1 browser egress policy from "caller-listed host" to "caller-listed DNS host plus runtime profile/global sandbox policy".
