@@ -497,6 +497,8 @@ This is a narrow URL/auth hygiene guard. It does not add a secret manager-backed
 
 The credential-query guard now also treats semicolon-delimited query components as separate parameters, so URLs such as `?q=roadmap;access_token=...` fail closed before session creation and before container execution without echoing the credential-bearing query.
 
+The same guard now canonicalizes bracketed query parameter names before matching, so structured forms such as `access_token[]=...` and `session[id]=...` inherit the same fail-closed credential-query behavior.
+
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 23/23; `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 47/47; `git diff --check` passed.
 
 ## 2026-07-06 Update: Sandbox Browser URL Route Same-Origin Guard

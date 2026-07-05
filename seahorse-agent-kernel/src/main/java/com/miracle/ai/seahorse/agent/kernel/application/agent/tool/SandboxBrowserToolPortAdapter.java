@@ -461,12 +461,21 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                 continue;
             }
             String rawName = parameter.split("=", 2)[0];
-            String normalizedName = decodedQueryParameterName(rawName).toLowerCase(Locale.ROOT);
+            String normalizedName = normalizedQueryParameterName(rawName);
             if (SENSITIVE_QUERY_PARAMETER_NAMES.contains(normalizedName)) {
                 throw new IllegalArgumentException(
                         "sandbox_browser failed: url query must not include credential parameters");
             }
         }
+    }
+
+    private String normalizedQueryParameterName(String value) {
+        String decodedName = decodedQueryParameterName(value).toLowerCase(Locale.ROOT);
+        int bracketIndex = decodedName.indexOf('[');
+        if (bracketIndex > 0) {
+            return decodedName.substring(0, bracketIndex);
+        }
+        return decodedName;
     }
 
     private String decodedQueryParameterName(String value) {

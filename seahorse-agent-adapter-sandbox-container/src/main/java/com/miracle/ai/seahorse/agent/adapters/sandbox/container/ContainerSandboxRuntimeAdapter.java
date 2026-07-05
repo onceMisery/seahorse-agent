@@ -1207,12 +1207,21 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 continue;
             }
             String rawName = parameter.split("=", 2)[0];
-            String normalizedName = decodedBrowserQueryParameterName(rawName).toLowerCase(Locale.ROOT);
+            String normalizedName = normalizedBrowserQueryParameterName(rawName);
             if (SENSITIVE_BROWSER_QUERY_PARAMETER_NAMES.contains(normalizedName)) {
                 throw new IllegalArgumentException(
                         "browser automation url query must not include credential parameters");
             }
         }
+    }
+
+    private String normalizedBrowserQueryParameterName(String value) {
+        String decodedName = decodedBrowserQueryParameterName(value).toLowerCase(Locale.ROOT);
+        int bracketIndex = decodedName.indexOf('[');
+        if (bracketIndex > 0) {
+            return decodedName.substring(0, bracketIndex);
+        }
+        return decodedName;
     }
 
     private String decodedBrowserQueryParameterName(String value) {
