@@ -232,6 +232,14 @@ This is a narrow production hardening slice for the existing tenant-signed A2A p
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-agent-agentscope -am "-Dtest=AgentScopeA2aServerControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 15/15, including malformed body-hash and over-boundary nonce rejection while preserving normal shared-secret and tenant-signed flows.
 
+## 2026-07-06 Update: Governed Tool Approval Preview Key Guard
+
+Tool approval previews now filter `argumentKeys` before persisting `ApprovalRequest.argumentsPreviewJson`. The preview only exposes short safe key names using alphanumeric, `_`, `-`, and `.` characters, while retaining `argumentCount` and the full canonical argument hash so approval matching and audit correlation remain stable without echoing malicious pre-validation key names.
+
+This is a narrow approval-record hardening slice. It does not change tool adapter validation, policy decisions, approval status semantics, argument hashing, or runtime invocation behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalGovernedToolExecutionPortTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 2/2, including regression coverage that unsafe argument key names carrying secret markers or control characters are excluded from the approval preview.
+
 ## 2026-07-03 Update: Sandbox Artifact Binary/PDF Signature Scan
 
 `DefaultSandboxArtifactScannerPort` now performs a bounded local-file signature scan for existing prompt-safe binary artifacts (`application/pdf`, supported image media types) and download-only `video/webm` artifacts. The scanner reads only the first 256 KiB, blocks PE/ELF executable signatures, blocks ZIP/PDF/EBML/script-like masquerading when the media type does not match, and blocks PDF active-content markers such as `/JavaScript`, `/JS`, `/OpenAction`, and `/AA`.

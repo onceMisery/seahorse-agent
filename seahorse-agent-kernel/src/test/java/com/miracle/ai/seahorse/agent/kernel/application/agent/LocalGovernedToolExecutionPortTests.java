@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
@@ -43,6 +44,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class LocalGovernedToolExecutionPortTests {
@@ -81,6 +83,42 @@ class LocalGovernedToolExecutionPortTests {
         assertEquals("agent-1", approval.agentId());
         assertEquals("weather", approval.toolId());
         assertEquals(ApprovalRequestStatus.PENDING, approval.status());
+    }
+
+    @Test
+    void approvalPreviewFiltersUnsafeArgumentKeyNames() throws Exception {
+        CountingGateway gateway = new CountingGateway();
+        CapturingApprovalRepository approvals = new CapturingApprovalRepository();
+        ToolPolicyPort policy = request -> PolicyDecision.approvalRequired(
+                "decision-1",
+                ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED,
+                "approval required");
+        LocalGovernedToolExecutionPort port = new LocalGovernedToolExecutionPort(
+                new SingleToolRegistry(),
+                gateway,
+                policy,
+                approvals,
+                ApprovalRequestQueryPort.empty(),
+                new ObjectMapper(),
+                FIXED_CLOCK);
+
+        port.preflight(request("weather", Map.of(
+                "city", "Hangzhou",
+                "sessionToken=secret-marker", "x",
+                "line\nbreak", "y",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "z")));
+
+        ApprovalRequest approval = approvals.request.get();
+        assertNotNull(approval);
+        JsonNode preview = new ObjectMapper().readTree(approval.argumentsPreviewJson());
+        assertEquals(4, preview.path("argumentCount").asInt());
+        assertNotNull(preview.path("argumentHash").textValue());
+        assertEquals(List.of("city"), new ObjectMapper().convertValue(
+                preview.path("argumentKeys"),
+                new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
+                }));
+        assertFalse(approval.argumentsPreviewJson().contains("secret-marker"));
+        assertFalse(approval.argumentsPreviewJson().contains("line\\nbreak"));
     }
 
     private static ToolInvocationRequest request(String toolId, Map<String, Object> arguments) {

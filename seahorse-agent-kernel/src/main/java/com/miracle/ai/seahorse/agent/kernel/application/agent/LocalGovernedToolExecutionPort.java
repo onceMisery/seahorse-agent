@@ -54,6 +54,7 @@ public class LocalGovernedToolExecutionPort implements GovernedToolExecutionPort
     private static final String APPROVAL_ID_PREFIX = "approval:";
     private static final String LEGACY_RUN_ID_PREFIX = "legacy-run:";
     private static final String LEGACY_USER_ID = "legacy-user";
+    private static final int MAX_PREVIEW_ARGUMENT_KEY_LENGTH = 64;
 
     private final ToolRegistryPort toolRegistry;
     private final ToolGatewayPort toolGateway;
@@ -208,8 +209,29 @@ public class LocalGovernedToolExecutionPort implements GovernedToolExecutionPort
     private List<String> sortedKeys(Map<String, Object> arguments) {
         return arguments.keySet().stream()
                 .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(this::isSafePreviewArgumentKey)
                 .sorted()
                 .toList();
+    }
+
+    private boolean isSafePreviewArgumentKey(String key) {
+        if (key == null || key.isBlank() || key.length() > MAX_PREVIEW_ARGUMENT_KEY_LENGTH) {
+            return false;
+        }
+        for (int i = 0; i < key.length(); i++) {
+            char ch = key.charAt(i);
+            boolean safe = (ch >= 'a' && ch <= 'z')
+                    || (ch >= 'A' && ch <= 'Z')
+                    || (ch >= '0' && ch <= '9')
+                    || ch == '_'
+                    || ch == '-'
+                    || ch == '.';
+            if (!safe) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String canonicalJson(Object value) throws JsonProcessingException {
