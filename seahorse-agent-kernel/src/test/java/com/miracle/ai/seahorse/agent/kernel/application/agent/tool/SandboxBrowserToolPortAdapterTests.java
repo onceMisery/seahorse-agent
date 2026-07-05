@@ -485,6 +485,48 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldRejectCredentialQueryBrowserUrlBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/admin?access_token=secret",
+                "allowedHosts", List.of("example.test"))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("url query must not include credential parameters"));
+        assertFalse(result.error().contains("access_token=secret"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
+    void shouldAllowNonCredentialQueryBrowserUrlBeforeCreatingSession() throws Exception {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
+                new SandboxExecution(
+                        "exec-1",
+                        "session-1",
+                        SandboxRuntimeType.BROWSER_AUTOMATION,
+                        SandboxExecutionStatus.SUCCEEDED,
+                        "exitCode=0; stdout=browser snapshot completed",
+                        SandboxPolicyReasonCode.VALID_REQUEST,
+                        NOW,
+                        NOW),
+                List.of()));
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/search?q=roadmap",
+                "allowedHosts", List.of("example.test"))));
+
+        assertTrue(result.success());
+        assertEquals(1, runtime.createCalls);
+        JsonNode browserInput = objectMapper.readTree(runtime.executeCommand.input());
+        assertEquals("http://example.test/search?q=roadmap", browserInput.path("url").asText());
+    }
+
+    @Test
     void shouldRejectCookieWhenDomainIsNotAllowlistedBeforeCreatingSession() {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);

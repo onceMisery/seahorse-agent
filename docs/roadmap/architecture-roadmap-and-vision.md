@@ -489,6 +489,14 @@ This is a narrow URL/auth hygiene guard. It does not add a secret manager-backed
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 21/21; `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 45/45; `git diff --check` passed.
 
+## 2026-07-06 Update: Sandbox Browser URL Credential Query Guard
+
+The sandbox browser URL path now rejects HTTP/HTTPS URLs whose query parameter names are credential-shaped, including `access_token`, `client_secret`, `password`, `api_key`, `session_id`, and related token/secret names. The guard runs before session creation and before container execution, checks URL-decoded parameter names, and keeps ordinary non-credential queries such as `?q=roadmap` valid.
+
+This is a narrow URL/auth hygiene guard. It does not add a secret manager-backed browser credential flow, stored browser sessions, proxy-rich egress audit, DNS pinning, CIDR/private-network classification, or mutable operator URL policy UX.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 23/23; `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 47/47; `git diff --check` passed.
+
 ## 2026-07-06 Update: Sandbox Browser URL Route Same-Origin Guard
 
 The sandbox browser URL runtime route guard now allows network requests only to the initial target URL origin, including scheme, host, and effective port. `allowedHosts` remains the policy/profile authorization input, but the generated Playwright route no longer treats that host allowlist as permission to probe every port on the same host after navigation, redirect, or subresource loading.

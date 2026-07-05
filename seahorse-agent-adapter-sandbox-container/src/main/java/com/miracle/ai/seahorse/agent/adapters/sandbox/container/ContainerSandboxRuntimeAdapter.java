@@ -39,6 +39,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileStore;
 import java.nio.file.Files;
@@ -94,6 +95,22 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final int DEFAULT_BROWSER_VIEWPORT_HEIGHT = 720;
     private static final int MIN_BROWSER_VIEWPORT_SIZE = 320;
     private static final int MAX_BROWSER_VIEWPORT_SIZE = 2400;
+    private static final Set<String> SENSITIVE_BROWSER_QUERY_PARAMETER_NAMES = Set.of(
+            "access_token",
+            "api_key",
+            "apikey",
+            "auth_token",
+            "client_secret",
+            "credential",
+            "credentials",
+            "id_token",
+            "password",
+            "refresh_token",
+            "secret",
+            "session",
+            "session_id",
+            "sessionid",
+            "token");
 
     private final ContainerSandboxAdapterProperties properties;
     private final ContainerCommandRunner commandRunner;
@@ -1173,9 +1190,36 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             if (hasText(uri.getRawFragment())) {
                 throw new IllegalArgumentException("browser automation url must not include fragment identifiers");
             }
+            validateBrowserUrlQuery(uri);
             return uri.normalize().toString();
         } catch (URISyntaxException ex) {
             throw new IllegalArgumentException("browser automation url is not valid", ex);
+        }
+    }
+
+    private void validateBrowserUrlQuery(URI uri) {
+        String rawQuery = uri.getRawQuery();
+        if (!hasText(rawQuery)) {
+            return;
+        }
+        for (String parameter : rawQuery.split("&")) {
+            if (!hasText(parameter)) {
+                continue;
+            }
+            String rawName = parameter.split("=", 2)[0];
+            String normalizedName = decodedBrowserQueryParameterName(rawName).toLowerCase(Locale.ROOT);
+            if (SENSITIVE_BROWSER_QUERY_PARAMETER_NAMES.contains(normalizedName)) {
+                throw new IllegalArgumentException(
+                        "browser automation url query must not include credential parameters");
+            }
+        }
+    }
+
+    private String decodedBrowserQueryParameterName(String value) {
+        try {
+            return URLDecoder.decode(value, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException ex) {
+            return value;
         }
     }
 

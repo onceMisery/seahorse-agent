@@ -34,6 +34,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
@@ -73,6 +75,22 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private static final String ACTION_SNAPSHOT = "snapshot";
     private static final String ACTION_EXTRACT_TEXT = "extract_text";
     private static final Set<String> SUPPORTED_ACTIONS = Set.of(ACTION_SNAPSHOT, ACTION_EXTRACT_TEXT);
+    private static final Set<String> SENSITIVE_QUERY_PARAMETER_NAMES = Set.of(
+            "access_token",
+            "api_key",
+            "apikey",
+            "auth_token",
+            "client_secret",
+            "credential",
+            "credentials",
+            "id_token",
+            "password",
+            "refresh_token",
+            "secret",
+            "session",
+            "session_id",
+            "sessionid",
+            "token");
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
             "Sandbox Browser",
@@ -426,9 +444,36 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             if (hasText(uri.getRawFragment())) {
                 throw new IllegalArgumentException("sandbox_browser failed: url must not include fragment identifiers");
             }
+            validateUrlQuery(uri);
             return uri.normalize().toString();
         } catch (URISyntaxException ex) {
             throw new IllegalArgumentException("sandbox_browser failed: url is not valid", ex);
+        }
+    }
+
+    private void validateUrlQuery(URI uri) {
+        String rawQuery = uri.getRawQuery();
+        if (!hasText(rawQuery)) {
+            return;
+        }
+        for (String parameter : rawQuery.split("&")) {
+            if (!hasText(parameter)) {
+                continue;
+            }
+            String rawName = parameter.split("=", 2)[0];
+            String normalizedName = decodedQueryParameterName(rawName).toLowerCase(Locale.ROOT);
+            if (SENSITIVE_QUERY_PARAMETER_NAMES.contains(normalizedName)) {
+                throw new IllegalArgumentException(
+                        "sandbox_browser failed: url query must not include credential parameters");
+            }
+        }
+    }
+
+    private String decodedQueryParameterName(String value) {
+        try {
+            return URLDecoder.decode(value, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException ex) {
+            return value;
         }
     }
 
