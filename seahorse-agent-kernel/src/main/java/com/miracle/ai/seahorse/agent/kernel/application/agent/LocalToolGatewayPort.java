@@ -65,6 +65,17 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     private static final String LEGACY_RUN_ID_PREFIX = "legacy-run:";
     private static final String LEGACY_USER_ID = "legacy-user";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final List<String> SANDBOX_FILE_FORMATS = List.of(
+            "csv",
+            "tsv",
+            "json",
+            "txt",
+            "html",
+            "markdown",
+            "md",
+            "docx",
+            "pdf");
+    private static final List<String> SANDBOX_FILE_CONTENT_ENCODINGS = List.of("plain", "base64");
     private static final List<String> SANDBOX_BROWSER_ARGUMENT_KEYS = List.of(
             "html",
             "url",
@@ -439,7 +450,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("runtimeType", "CODE_INTERPRETER");
         summary.put("codeLength", argumentString(arguments, "code").length());
         summary.put("networkRequested", booleanArgument(arguments, "networkRequested"));
-        summary.put("requestedHosts", requestedHosts);
+        summary.put("requestedHostsPresent", !requestedHosts.isEmpty());
         summary.put("requestedHostCount", requestedHosts.size());
         summary.put("argumentKeys", safeArgumentKeys(arguments));
         try {
@@ -448,7 +459,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             return truncate("toolId=sandbox_python, runtimeType=CODE_INTERPRETER"
                     + ", codeLength=" + argumentString(arguments, "code").length()
                     + ", networkRequested=" + booleanArgument(arguments, "networkRequested")
-                    + ", requestedHosts=" + requestedHosts
+                    + ", requestedHostsPresent=" + !requestedHosts.isEmpty()
                     + ", requestedHostCount=" + requestedHosts.size());
         }
     }
@@ -458,23 +469,38 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         String sourceFormat = argumentString(arguments, "sourceFormat");
         String targetFormat = argumentString(arguments, "targetFormat");
         String contentEncoding = argumentString(arguments, "contentEncoding", "plain");
+        String safeSourceFormat = safeKnownValue(sourceFormat, SANDBOX_FILE_FORMATS);
+        String safeTargetFormat = safeKnownValue(targetFormat, SANDBOX_FILE_FORMATS);
+        String safeContentEncoding = safeKnownValue(contentEncoding, SANDBOX_FILE_CONTENT_ENCODINGS);
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("toolId", request.toolId());
         summary.put("runtimeType", "FILE_CONVERSION");
-        summary.put("sourceFormat", sourceFormat);
-        summary.put("targetFormat", targetFormat);
-        summary.put("contentEncoding", contentEncoding);
+        summary.put("sourceFormat", safeSourceFormat);
+        summary.put("sourceFormatPresent", hasText(sourceFormat));
+        summary.put("sourceFormatLength", sourceFormat.length());
+        summary.put("targetFormat", safeTargetFormat);
+        summary.put("targetFormatPresent", hasText(targetFormat));
+        summary.put("targetFormatLength", targetFormat.length());
+        summary.put("contentEncoding", safeContentEncoding);
+        summary.put("contentEncodingPresent", hasText(contentEncoding));
+        summary.put("contentEncodingLength", contentEncoding.length());
         summary.put("contentLength", argumentString(arguments, "content").length());
-        summary.put("binaryInput", "base64".equalsIgnoreCase(contentEncoding));
+        summary.put("binaryInput", "base64".equals(safeContentEncoding));
         summary.put("networkRequested", false);
         summary.put("argumentKeys", safeArgumentKeys(arguments));
         try {
             return truncate(OBJECT_MAPPER.writeValueAsString(summary));
         } catch (JsonProcessingException ex) {
             return truncate("toolId=sandbox_file_convert, runtimeType=FILE_CONVERSION"
-                    + ", sourceFormat=" + sourceFormat
-                    + ", targetFormat=" + targetFormat
-                    + ", contentEncoding=" + contentEncoding
+                    + ", sourceFormat=" + safeSourceFormat
+                    + ", sourceFormatPresent=" + hasText(sourceFormat)
+                    + ", sourceFormatLength=" + sourceFormat.length()
+                    + ", targetFormat=" + safeTargetFormat
+                    + ", targetFormatPresent=" + hasText(targetFormat)
+                    + ", targetFormatLength=" + targetFormat.length()
+                    + ", contentEncoding=" + safeContentEncoding
+                    + ", contentEncodingPresent=" + hasText(contentEncoding)
+                    + ", contentEncodingLength=" + contentEncoding.length()
                     + ", contentLength=" + argumentString(arguments, "content").length());
         }
     }
@@ -589,6 +615,17 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         String action = argumentString(arguments, "action", "snapshot");
         if ("snapshot".equals(action) || "extract_text".equals(action) || "extract-text".equals(action)) {
             return action;
+        }
+        return "unsupported";
+    }
+
+    private String safeKnownValue(String value, List<String> allowedValues) {
+        if (!hasText(value)) {
+            return "absent";
+        }
+        String normalized = value.trim().toLowerCase();
+        if (allowedValues.contains(normalized)) {
+            return normalized;
         }
         return "unsupported";
     }

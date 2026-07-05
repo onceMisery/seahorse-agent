@@ -477,10 +477,49 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"runtimeType\":\"CODE_INTERPRETER\""));
         assertTrue(summary.contains("\"codeLength\":27"));
         assertTrue(summary.contains("\"networkRequested\":true"));
-        assertTrue(summary.contains("\"requestedHosts\":[\"example.test\"]"));
+        assertTrue(summary.contains("\"requestedHostsPresent\":true"));
         assertTrue(summary.contains("\"requestedHostCount\":1"));
+        assertFalse(summary.contains("example.test"));
         assertFalse(summary.contains("secret-code-marker"));
         assertFalse(summary.contains("print("));
+    }
+
+    @Test
+    void shouldSummarizeSandboxPythonAuditWithoutPrevalidatedHostValues() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "sandbox_python",
+                Map.of(
+                        "code", "print('secret-code-marker')",
+                        "networkRequested", true,
+                        "requestedHosts", List.of("example.test?access_token=host-secret")),
+                Map.of(),
+                "run-1:call-1",
+                List.of("sandbox_python")));
+
+        assertTrue(result.success());
+        String summary = audit.requested.get(0).argumentsSummary();
+        assertTrue(summary.contains("\"toolId\":\"sandbox_python\""));
+        assertTrue(summary.contains("\"requestedHostsPresent\":true"));
+        assertTrue(summary.contains("\"requestedHostCount\":1"));
+        assertFalse(summary.contains("example.test"));
+        assertFalse(summary.contains("access_token=host-secret"));
+        assertFalse(summary.contains("secret-code-marker"));
     }
 
     @Test
@@ -517,11 +556,66 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"toolId\":\"sandbox_file_convert\""));
         assertTrue(summary.contains("\"runtimeType\":\"FILE_CONVERSION\""));
         assertTrue(summary.contains("\"sourceFormat\":\"docx\""));
+        assertTrue(summary.contains("\"sourceFormatPresent\":true"));
+        assertTrue(summary.contains("\"sourceFormatLength\":4"));
         assertTrue(summary.contains("\"targetFormat\":\"txt\""));
+        assertTrue(summary.contains("\"targetFormatPresent\":true"));
+        assertTrue(summary.contains("\"targetFormatLength\":3"));
         assertTrue(summary.contains("\"contentEncoding\":\"base64\""));
+        assertTrue(summary.contains("\"contentEncodingPresent\":true"));
+        assertTrue(summary.contains("\"contentEncodingLength\":6"));
         assertTrue(summary.contains("\"contentLength\":26"));
         assertTrue(summary.contains("\"binaryInput\":true"));
         assertTrue(summary.contains("\"networkRequested\":false"));
+        assertFalse(summary.contains("UEsDBAo="));
+        assertFalse(summary.contains("secret-docx-marker"));
+    }
+
+    @Test
+    void shouldSummarizeSandboxFileConvertAuditWithoutPrevalidatedFormatValues() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.failed("unsupported conversion"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "sandbox_file_convert",
+                Map.of(
+                        "sourceFormat", "docx-secret-marker",
+                        "targetFormat", "txt-secret-marker",
+                        "contentEncoding", "base64-secret-marker",
+                        "content", "UEsDBAo=secret-docx-marker"),
+                Map.of(),
+                "run-1:call-1",
+                List.of("sandbox_file_convert")));
+
+        assertFalse(result.success());
+        String summary = audit.requested.get(0).argumentsSummary();
+        assertTrue(summary.contains("\"toolId\":\"sandbox_file_convert\""));
+        assertTrue(summary.contains("\"sourceFormat\":\"unsupported\""));
+        assertTrue(summary.contains("\"sourceFormatPresent\":true"));
+        assertTrue(summary.contains("\"sourceFormatLength\":18"));
+        assertTrue(summary.contains("\"targetFormat\":\"unsupported\""));
+        assertTrue(summary.contains("\"targetFormatPresent\":true"));
+        assertTrue(summary.contains("\"targetFormatLength\":17"));
+        assertTrue(summary.contains("\"contentEncoding\":\"unsupported\""));
+        assertTrue(summary.contains("\"contentEncodingPresent\":true"));
+        assertTrue(summary.contains("\"contentEncodingLength\":20"));
+        assertTrue(summary.contains("\"binaryInput\":false"));
+        assertFalse(summary.contains("docx-secret-marker"));
+        assertFalse(summary.contains("txt-secret-marker"));
+        assertFalse(summary.contains("base64-secret-marker"));
         assertFalse(summary.contains("UEsDBAo="));
         assertFalse(summary.contains("secret-docx-marker"));
     }

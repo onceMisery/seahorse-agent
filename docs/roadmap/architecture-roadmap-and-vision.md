@@ -729,19 +729,19 @@ Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-D
 
 ## 2026-07-06 Update: Sandbox File Conversion Tool Gateway Audit Summary
 
-Tool Gateway request audit now emits a `sandbox_file_convert`-specific value-free argument summary. The summary records `FILE_CONVERSION` runtime posture, source/target formats, content encoding, input content length, binary-input classification, network posture, and argument keys while excluding raw file content and base64 values from `argumentsSummary`.
+Tool Gateway request audit now emits a `sandbox_file_convert`-specific value-free argument summary. The summary records `FILE_CONVERSION` runtime posture, source/target format presence and length, supported-format classification, content-encoding presence and length, supported-encoding classification, input content length, binary-input classification, network posture, and argument keys while excluding raw file content, base64 values, and pre-validation format/encoding values from `argumentsSummary`.
 
 This is a narrow cross-tool audit hardening slice. It does not change file conversion execution semantics, artifact scanning, approval policy, quota policy, or add broader binary conversion formats.
 
-Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 16/16, including regression coverage that `sandbox_file_convert` audit summaries include governance metadata while excluding raw base64/content markers.
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 23/23, including regression coverage that `sandbox_file_convert` audit summaries include governance metadata while excluding raw base64/content markers and caller-controlled pre-validation format/encoding values.
 
 ## 2026-07-06 Update: Sandbox Python Tool Gateway Audit Summary
 
-Tool Gateway request audit now emits a `sandbox_python`-specific value-free argument summary. The summary records `CODE_INTERPRETER` runtime posture, code length, network request posture, requested host metadata, requested host count, and argument keys while excluding raw Python code from `argumentsSummary`.
+Tool Gateway request audit now emits a `sandbox_python`-specific value-free argument summary. The summary records `CODE_INTERPRETER` runtime posture, code length, network request posture, requested-host presence, requested-host count, and argument keys while excluding raw Python code and pre-validation requested host values from `argumentsSummary`.
 
 This is a narrow Tool Gateway audit hardening slice for the existing Code Interpreter path. It does not change sandbox execution, network enforcement, artifact scanning, approval policy, or quota policy.
 
-Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed after adding regression coverage that `sandbox_python` audit summaries include governance metadata while excluding raw code markers.
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 23/23 after adding regression coverage that `sandbox_python` audit summaries include governance metadata while excluding raw code markers and caller-controlled pre-validation host values.
 
 ## 2026-07-06 Update: Sandbox Built-in Tool Catalog Approval Defaults
 
