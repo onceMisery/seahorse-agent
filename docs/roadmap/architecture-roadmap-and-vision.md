@@ -684,3 +684,11 @@ Tool Gateway request audit now emits a `sandbox_file_convert`-specific value-fre
 This is a narrow cross-tool audit hardening slice. It does not change file conversion execution semantics, artifact scanning, approval policy, quota policy, or add broader binary conversion formats.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 16/16, including regression coverage that `sandbox_file_convert` audit summaries include governance metadata while excluding raw base64/content markers.
+
+## 2026-07-06 Update: Sandbox Python Tool Gateway Audit Summary
+
+Tool Gateway request audit now emits a `sandbox_python`-specific value-free argument summary. The summary records `CODE_INTERPRETER` runtime posture, code length, network request posture, requested host metadata, requested host count, and argument keys while excluding raw Python code from `argumentsSummary`.
+
+This is a narrow Tool Gateway audit hardening slice for the existing Code Interpreter path. It does not change sandbox execution, network enforcement, artifact scanning, approval policy, or quota policy.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed after adding regression coverage that `sandbox_python` audit summaries include governance metadata while excluding raw code markers.

@@ -357,6 +357,9 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         if ("sandbox_browser".equals(request.toolId())) {
             return summarizeSandboxBrowserArguments(request);
         }
+        if ("sandbox_python".equals(request.toolId())) {
+            return summarizeSandboxPythonArguments(request);
+        }
         if ("sandbox_file_convert".equals(request.toolId())) {
             return summarizeSandboxFileConvertArguments(request);
         }
@@ -364,6 +367,28 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             return summarizeRemoteA2aArguments(request);
         }
         return truncate("keys=" + request.arguments().keySet() + ", size=" + request.arguments().size());
+    }
+
+    private String summarizeSandboxPythonArguments(ToolInvocationRequest request) {
+        Map<String, Object> arguments = request.arguments();
+        List<String> requestedHosts = argumentStringList(arguments.get("requestedHosts"));
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("toolId", request.toolId());
+        summary.put("runtimeType", "CODE_INTERPRETER");
+        summary.put("codeLength", argumentString(arguments, "code").length());
+        summary.put("networkRequested", booleanArgument(arguments, "networkRequested"));
+        summary.put("requestedHosts", requestedHosts);
+        summary.put("requestedHostCount", requestedHosts.size());
+        summary.put("argumentKeys", arguments.keySet());
+        try {
+            return truncate(OBJECT_MAPPER.writeValueAsString(summary));
+        } catch (JsonProcessingException ex) {
+            return truncate("toolId=sandbox_python, runtimeType=CODE_INTERPRETER"
+                    + ", codeLength=" + argumentString(arguments, "code").length()
+                    + ", networkRequested=" + booleanArgument(arguments, "networkRequested")
+                    + ", requestedHosts=" + requestedHosts
+                    + ", requestedHostCount=" + requestedHosts.size());
+        }
     }
 
     private String summarizeSandboxFileConvertArguments(ToolInvocationRequest request) {

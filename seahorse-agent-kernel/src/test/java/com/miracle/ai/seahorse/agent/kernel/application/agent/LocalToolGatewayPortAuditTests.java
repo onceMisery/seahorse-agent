@@ -358,6 +358,46 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldSummarizeSandboxPythonGovernanceMetadataWithoutCodeValues() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "sandbox_python",
+                Map.of(
+                        "code", "print('secret-code-marker')",
+                        "networkRequested", true,
+                        "requestedHosts", List.of("example.test")),
+                Map.of(),
+                "run-1:call-1",
+                List.of("sandbox_python")));
+
+        assertTrue(result.success());
+        String summary = audit.requested.get(0).argumentsSummary();
+        assertTrue(summary.contains("\"toolId\":\"sandbox_python\""));
+        assertTrue(summary.contains("\"runtimeType\":\"CODE_INTERPRETER\""));
+        assertTrue(summary.contains("\"codeLength\":27"));
+        assertTrue(summary.contains("\"networkRequested\":true"));
+        assertTrue(summary.contains("\"requestedHosts\":[\"example.test\"]"));
+        assertTrue(summary.contains("\"requestedHostCount\":1"));
+        assertFalse(summary.contains("secret-code-marker"));
+        assertFalse(summary.contains("print("));
+    }
+
+    @Test
     void shouldSummarizeSandboxFileConvertGovernanceMetadataWithoutContentValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
