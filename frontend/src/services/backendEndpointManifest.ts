@@ -773,6 +773,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/knowledge-base/{}/retrieval-evaluation-datasets/{}/comparisons/{}/gate-result"
+  },
+  {
+    "method": "GET",
     "path": "/knowledge-base/{}/retrieval-evaluation-datasets/{}/runs"
   },
   {

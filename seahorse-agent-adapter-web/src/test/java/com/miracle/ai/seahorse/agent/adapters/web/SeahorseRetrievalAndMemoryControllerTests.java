@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseDiagnostics;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationChunkDiagnostic;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
@@ -58,6 +59,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentCaptor.forClass;
@@ -199,6 +201,40 @@ class SeahorseRetrievalAndMemoryControllerTests {
         assertThat(captor.getValue().cases().get(0).expectedDocIds()).containsExactly("doc-1");
         assertThat(captor.getValue().cases().get(0).expectedChunkIds()).containsExactly("chunk-1");
         assertThat(captor.getValue().cases().get(0).tags()).containsExactly("smoke");
+    }
+
+    @Test
+    void shouldExposeRetrievalComparisonGateResult() throws Exception {
+        RetrievalEvaluationDatasetInboundPort port = mock(RetrievalEvaluationDatasetInboundPort.class);
+        when(port.getComparison("kb-1", "dataset-1", "comparison-1")).thenReturn(
+                new RetrievalEvaluationComparisonRecord(
+                        "comparison-1",
+                        "kb-1",
+                        "dataset-1",
+                        new RetrievalEvaluationComparisonReport(
+                                "baseline",
+                                "candidate",
+                                List.of(
+                                        retrievalReport("baseline", 4, 4, 0.6D, 0.4D, 0.5D, 0.55D, 0.1D),
+                                        retrievalReport("candidate", 4, 4, 0.7D, 0.5D, 0.6D, 0.65D, 0.05D)),
+                                List.of()),
+                        Instant.parse("2026-07-05T01:00:00Z")));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseRetrievalEvaluationDatasetController(
+                        provider(RetrievalEvaluationDatasetInboundPort.class, port))).build();
+
+        mvc.perform(get("/knowledge-base/kb-1/retrieval-evaluation-datasets/dataset-1/comparisons/comparison-1/gate-result"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.subjectType").value("RAG_STRATEGY"))
+                .andExpect(jsonPath("$.data.subjectId").value("kb-1:candidate"))
+                .andExpect(jsonPath("$.data.status").value("PASS"))
+                .andExpect(jsonPath("$.data.passed").value(true))
+                .andExpect(jsonPath("$.data.sourceType").value("RetrievalEvaluationComparisonRecord"))
+                .andExpect(jsonPath("$.data.sourceId").value("comparison-1"))
+                .andExpect(jsonPath("$.data.items[0].code").value("RAG_BASELINE_PRESENT"));
+
+        verify(port).getComparison("kb-1", "dataset-1", "comparison-1");
     }
 
     // --- RetrievalStrategyTemplate ---
@@ -523,5 +559,28 @@ class SeahorseRetrievalAndMemoryControllerTests {
         StaticListableBeanFactory beanFactory = new StaticListableBeanFactory();
         beanFactory.addBean(type.getName(), instance);
         return beanFactory.getBeanProvider(type);
+    }
+
+    private static RetrievalEvaluationReport retrievalReport(String strategyName,
+                                                             int caseCount,
+                                                             int evaluableCaseCount,
+                                                             double recallAtK,
+                                                             double precisionAtK,
+                                                             double mrr,
+                                                             double ndcgAtK,
+                                                             double emptyRecallRate) {
+        return new RetrievalEvaluationReport(
+                strategyName,
+                5,
+                caseCount,
+                evaluableCaseCount,
+                recallAtK,
+                precisionAtK,
+                mrr,
+                ndcgAtK,
+                emptyRecallRate,
+                10D,
+                20D,
+                List.of());
     }
 }

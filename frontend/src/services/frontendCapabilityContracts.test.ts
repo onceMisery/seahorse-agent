@@ -117,6 +117,9 @@ describe("frontend capability service contracts", () => {
     expect(backendEndpoints).toContain("POST /api/agent-handoffs/{}/cancel");
     expect(backendEndpoints).toContain("GET /api/agents/{}/production-gate/gate-result");
     expect(backendEndpoints).toContain("POST /api/run-profiles/{}/production-gate/gate-result");
+    expect(backendEndpoints).toContain(
+      "GET /knowledge-base/{}/retrieval-evaluation-datasets/{}/comparisons/{}/gate-result"
+    );
   });
 
   it("publishes agents with the backend publish payload", async () => {

@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResults;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetPayload;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCase;
@@ -143,6 +144,15 @@ public class SeahorseRetrievalEvaluationDatasetController {
                                              @PathVariable("comparison-id") String comparisonId) {
         return ApiResponses.requireServiceOrError(datasetPortProvider,
                 port -> port.getComparison(kbId, datasetId, comparisonId));
+    }
+
+    @GetMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/comparisons/{comparison-id}/gate-result")
+    public ApiResponse<Object> getComparisonGateResult(@PathVariable("kb-id") String kbId,
+                                                       @PathVariable("dataset-id") String datasetId,
+                                                       @PathVariable("comparison-id") String comparisonId) {
+        return ApiResponses.requireServiceOrError(datasetPortProvider,
+                port -> GateResults.fromRetrievalStrategyComparison(
+                        port.getComparison(kbId, datasetId, comparisonId)));
     }
 
     @GetMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/runs")

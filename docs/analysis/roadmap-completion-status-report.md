@@ -1071,3 +1071,13 @@ The Web API exposes the shared shape at `GET /api/agents/{agentId}/production-ga
 This is the first GateResult adapter slice only. It does not persist unified gate rows, does not retire the existing object-specific gate models, and does not yet cover RAG Strategy, Model Config, Tool/Skill, or Ingestion Pipeline gates.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel,seahorse-agent-adapter-web -am "-Dtest=GateResultsTests,SeahorseProductionGateControllerTests,SeahorseRunProfileControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with 2/2 projection tests and 14/14 Web contract tests. The frontend backend endpoint manifest also records both unified gate-result API paths.
+
+### 2026-07-05 RAG Strategy GateResult Adapter Evidence Update
+
+The unified GateResult projection now includes RAG Strategy comparison evidence. `GateResults.fromRetrievalStrategyComparison` maps `RetrievalEvaluationComparisonRecord` into the shared evidence envelope and reuses the existing promotion gate semantics from `KernelRetrievalStrategyTemplateService`: baseline and winner must be present, baseline/winner metrics must exist, winner must have evaluable cases, recall/precision/MRR/NDCG must not regress, and empty recall rate must not regress.
+
+The Web API exposes the projection at `GET /knowledge-base/{kbId}/retrieval-evaluation-datasets/{datasetId}/comparisons/{comparisonId}/gate-result`. Existing comparison detail and promotion endpoints remain compatible.
+
+This extends GateResult beyond Agent and Run Profile to the first RAG Strategy adapter. It does not persist unified gate rows, and Model Config, Tool/Skill, and Ingestion Pipeline adapters remain follow-up work.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=GateResultsTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 4/4 projection tests; `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseRetrievalAndMemoryControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 20/20 Web contract tests; and `npm test -- src/services/frontendCapabilityContracts.test.ts src/services/serviceEndpointCoverage.test.ts` passed 15/15 frontend manifest/coverage tests.
