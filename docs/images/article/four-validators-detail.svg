@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800">
+  <defs>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.1"/>
+    </filter>
+    <linearGradient id="tealGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#14B8A6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2DD4BF;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="navyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#1E3A5F;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2D4A6F;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="800" fill="#F8FAFC"/>
+  
+  <!-- Grid pattern -->
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#E2E8F0" stroke-width="0.5"/>
+  </pattern>
+  <rect width="1200" height="800" fill="url(#grid)"/>
+  
+  <!-- Title -->
+  <text x="600" y="60" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="#1E293B" text-anchor="middle">四大输出验证器详解</text>
+  
+  <!-- Card 1: JSON Schema Validator (top-left) -->
+  <g filter="url(#shadow)">
+    <rect x="50" y="100" width="540" height="280" rx="12" fill="white"/>
+    <rect x="50" y="100" width="540" height="50" rx="12" fill="url(#tealGrad)"/>
+    <rect x="50" y="138" width="540" height="12" fill="url(#tealGrad)"/>
+    
+    <!-- Icon -->
+    <text x="75" y="132" font-family="monospace" font-size="24" fill="white">{}</text>
+    <text x="110" y="132" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="white">JSON Schema Validator</text>
+    
+    <!-- Content -->
+    <text x="75" y="180" font-family="Arial, sans-serif" font-size="16" fill="#334155">JSON 解析 → required 字段 → 字段类型匹配</text>
+    
+    <text x="75" y="215" font-family="monospace" font-size="14" fill="#475569">JSON_PARSE_FAILED, JSON_REQUIRED_FIELD_MISSING,</text>
+    <text x="75" y="235" font-family="monospace" font-size="14" fill="#475569">JSON_FIELD_TYPE_MISMATCH</text>
+    
+    <circle cx="80" cy="265" r="5" fill="#14B8A6"/>
+    <text x="95" y="270" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#1E293B">BLOCK on failure</text>
+    
+    <text x="75" y="300" font-family="Arial, sans-serif" font-size="14" fill="#64748B">支持 string/number/integer/boolean/object/array</text>
+  </g>
+  
+  <!-- Card 2: DDL Safety Validator (top-right) -->
+  <g filter="url(#shadow)">
+    <rect x="610" y="100" width="540" height="280" rx="12" fill="white"/>
+    <rect x="610" y="100" width="540" height="50" rx="12" fill="url(#navyGrad)"/>
+    <rect x="610" y="138" width="540" height="12" fill="url(#navyGrad)"/>
+    
+    <!-- Icon -->
+    <text x="635" y="132" font-family="Arial, sans-serif" font-size="24" fill="white">🗄️</text>
+    <text x="670" y="132" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="white">DDL Safety Validator</text>
+    
+    <!-- Content -->
+    <text x="635" y="180" font-family="monospace" font-size="14" fill="#334155">DROP TABLE/DATABASE, TRUNCATE TABLE</text>
+    <text x="635" y="200" font-family="monospace" font-size="14" fill="#334155">DELETE FROM, ALTER TABLE...DROP, GRANT...TO</text>
+    
+    <text x="635" y="235" font-family="monospace" font-size="13" fill="#475569">DDL_DROP_FORBIDDEN, DDL_TRUNCATE_FORBIDDEN,</text>
+    <text x="635" y="255" font-family="monospace" font-size="13" fill="#475569">DDL_DELETE_FORBIDDEN, etc.</text>
+    
+    <circle cx="640" cy="285" r="5" fill="#1E3A5F"/>
+    <text x="655" y="290" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#1E293B">BLOCK or match</text>
+    
+    <text x="635" y="320" font-family="Arial, sans-serif" font-size="14" fill="#64748B">正则黑名单扫描，非完整 SQL 解析器</text>
+  </g>
+  
+  <!-- Card 3: Markdown Structure Validator (bottom-left) -->
+  <g filter="url(#shadow)">
+    <rect x="50" y="420" width="540" height="280" rx="12" fill="white"/>
+    <rect x="50" y="420" width="540" height="50" rx="12" fill="url(#tealGrad)"/>
+    <rect x="50" y="458" width="540" height="12" fill="url(#tealGrad)"/>
+    
+    <!-- Icon -->
+    <text x="75" y="452" font-family="Arial, sans-serif" font-size="24" fill="white">📄</text>
+    <text x="110" y="452" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="white">Markdown Structure Validator</text>
+    
+    <!-- Content -->
+    <text x="75" y="500" font-family="Arial, sans-serif" font-size="16" fill="#334155">schemaJson 中定义的必需标题</text>
+    
+    <text x="75" y="535" font-family="monospace" font-size="14" fill="#475569">MARKDOWN_REQUIRED_SECTION_MISSING</text>
+    
+    <circle cx="80" cy="565" r="5" fill="#14B8A6"/>
+    <text x="95" y="570" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#1E293B">BLOCK (默认) / WARN (structuralStrict=false)</text>
+    
+    <text x="75" y="605" font-family="Arial, sans-serif" font-size="14" fill="#64748B">逐行扫描 # 标题行</text>
+  </g>
+  
+  <!-- Card 4: Mermaid Syntax Validator (bottom-right) -->
+  <g filter="url(#shadow)">
+    <rect x="610" y="420" width="540" height="280" rx="12" fill="white"/>
+    <rect x="610" y="420" width="540" height="50" rx="12" fill="url(#navyGrad)"/>
+    <rect x="610" y="458" width="540" height="12" fill="url(#navyGrad)"/>
+    
+    <!-- Icon -->
+    <text x="635" y="452" font-family="Arial, sans-serif" font-size="24" fill="white">🔀</text>
+    <text x="670" y="452" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="white">Mermaid Syntax Validator</text>
+    
+    <!-- Content -->
+    <text x="635" y="500" font-family="Arial, sans-serif" font-size="16" fill="#334155">代码围栏去除 → 首行图表类型识别</text>
+    
+    <text x="635" y="535" font-family="monospace" font-size="13" fill="#475569">graph, flowchart, sequenceDiagram, classDiagram,</text>
+    <text x="635" y="555" font-family="monospace" font-size="13" fill="#475569">stateDiagram, erDiagram, gantt, pie, mindmap... (19 types)</text>
+    
+    <text x="635" y="590" font-family="monospace" font-size="14" fill="#475569">MERMAID_INVALID_DIAGRAM_TYPE</text>
+    
+    <circle cx="640" cy="620" r="5" fill="#1E3A5F"/>
+    <text x="655" y="625" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#1E293B">BLOCK (默认) / WARN (structuralStrict=false)</text>
+  </g>
+  
+  <!-- Footer -->
+  <text x="1150" y="780" font-family="Arial, sans-serif" font-size="12" fill="#94A3B8" text-anchor="end">OutputGovernanceService · 四大验证器</text>
+</svg>

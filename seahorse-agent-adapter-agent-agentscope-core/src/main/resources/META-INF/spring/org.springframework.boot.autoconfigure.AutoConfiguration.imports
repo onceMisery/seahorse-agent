@@ -1,0 +1,3 @@
+com.miracle.ai.seahorse.agent.adapters.agent.agentscope.AgentScopeObservationAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.agent.agentscope.AgentScopeCoreAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.agent.agentscope.AgentScopeReActAutoConfiguration
