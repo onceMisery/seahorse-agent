@@ -416,6 +416,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             if (!Set.of("http", "https").contains(scheme) || !hasText(uri.getHost())) {
                 throw new IllegalArgumentException("sandbox_browser failed: url must be an HTTP/HTTPS URL with a host");
             }
+            if (hasText(uri.getUserInfo())) {
+                throw new IllegalArgumentException("sandbox_browser failed: url must not include userinfo credentials");
+            }
             return uri.normalize().toString();
         } catch (URISyntaxException ex) {
             throw new IllegalArgumentException("sandbox_browser failed: url is not valid", ex);

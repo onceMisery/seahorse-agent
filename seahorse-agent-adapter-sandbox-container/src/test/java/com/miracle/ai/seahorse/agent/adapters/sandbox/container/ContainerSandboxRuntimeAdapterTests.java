@@ -755,6 +755,27 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldFailClosedWhenBrowserUrlUsesUserinfoBeforeRunningContainer() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","url":"http://alice:secret@example.test/admin","allowedHosts":["example.test"]}
+                        """,
+                true,
+                List.of("example.test")));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("must not include userinfo credentials");
+        assertThat(result.execution().resultSummary()).doesNotContain("alice:secret");
+        assertThat(runner.lastCommand).isNull();
+    }
+
+    @Test
     void shouldFailClosedWhenBrowserCookieDomainIsNotAllowlistedBeforeRunningContainer() {
         RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
         ContainerSandboxRuntimeAdapter adapter = adapter(runner);

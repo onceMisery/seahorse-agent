@@ -1130,6 +1130,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             if (!Set.of("http", "https").contains(scheme) || !hasText(uri.getHost())) {
                 throw new IllegalArgumentException("browser automation url must be an HTTP/HTTPS URL with a host");
             }
+            if (hasText(uri.getUserInfo())) {
+                throw new IllegalArgumentException("browser automation url must not include userinfo credentials");
+            }
             return uri.normalize().toString();
         } catch (URISyntaxException ex) {
             throw new IllegalArgumentException("browser automation url is not valid", ex);

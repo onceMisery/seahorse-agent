@@ -440,3 +440,11 @@ The sandbox browser URL guard now rejects malformed dotted DNS hosts before sess
 This remains a narrow SSRF/container-network probing guard. It does not add DNS pinning, CIDR/private-network egress classification, IPv6 handling, a general outbound proxy, mutable operator URL policy UX, or browser credential governance.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 15/15; `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 39/39.
+
+## 2026-07-06 Update: Sandbox Browser URL Userinfo Credential Guard
+
+The sandbox browser URL path now rejects HTTP/HTTPS URLs containing `userinfo` credentials such as `user:password@host` before session creation and before container execution. This prevents URL-embedded secrets from entering generated browser scripts, observations, HAR/event metadata, or target URL summaries while the broader credential/session governance model remains explicit-cookie and explicit-session-state only.
+
+This is a narrow URL/auth hygiene guard. It does not add a secret manager-backed browser credential flow, stored browser sessions, proxy-rich egress audit, DNS pinning, CIDR/private-network classification, or mutable operator URL policy UX.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 16/16; `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 40/40.

@@ -438,6 +438,22 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldRejectUserinfoBrowserUrlBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://alice:secret@example.test/admin",
+                "allowedHosts", List.of("example.test"))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("must not include userinfo credentials"));
+        assertFalse(result.error().contains("alice:secret"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
     void shouldRejectCookieWhenDomainIsNotAllowlistedBeforeCreatingSession() {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
