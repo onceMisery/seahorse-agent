@@ -504,3 +504,11 @@ The sandbox browser URL path now requires replayed `sessionState.origins[].origi
 This is a narrow request-scoped session replay hardening slice. It does not add stored browser profiles, credential vault integration, replay from previously captured SECRET/BLOCKED artifacts, proxy-rich egress audit, or operator-managed URL policy UX.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 19/19; `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 43/43.
+
+## 2026-07-06 Update: Sandbox Browser SessionState Capture Budget Guard
+
+The sandbox browser URL runtime script now bounds captured Playwright storage-state output to 128 KiB before reporting the `browser-session-state.json` artifact. Over-budget captures delete the full state and summary files and fail closed with a value-free runtime error instead of collecting an unbounded SECRET artifact from page-controlled storage.
+
+This is a narrow resource-boundary guard for request-scoped session capture. It does not add stored browser profiles, credential vault integration, replay from previously captured SECRET/BLOCKED artifacts, proxy-rich egress audit, or operator-managed URL policy UX.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 44/44; `git diff --check` passed.

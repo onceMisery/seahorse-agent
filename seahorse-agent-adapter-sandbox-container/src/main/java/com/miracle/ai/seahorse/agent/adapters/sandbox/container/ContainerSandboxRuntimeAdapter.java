@@ -453,6 +453,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 video_path = Path("/workspace/%s")
                 session_state_path = Path("/workspace/%s")
                 session_summary_path = Path("/workspace/%s")
+                max_session_state_bytes = %d
 
                 def compact_text(value, limit=12000):
                     normalized = "\\n".join(line.strip() for line in value.replace("\\r", "\\n").split("\\n") if line.strip())
@@ -646,6 +647,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         session_replay_summary = build_session_summary(browser_session_state, target_url) if browser_session_state is not None else None
                         if capture_session_state:
                             state = context.storage_state(path=str(session_state_path))
+                            if session_state_path.stat().st_size > max_session_state_bytes:
+                                session_state_path.unlink(missing_ok=True)
+                                session_summary_path.unlink(missing_ok=True)
+                                raise RuntimeError("browser session state capture exceeds storage budget")
                             session_summary_path.write_text(
                                 json.dumps(build_session_summary(state, page.url), ensure_ascii=False, indent=2),
                                 encoding="utf-8",
@@ -724,7 +729,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 browserHarName(),
                 browserVideoName(),
                 browserSessionStateName(),
-                browserSessionSummaryName());
+                browserSessionSummaryName(),
+                MAX_BROWSER_SESSION_STATE_CHARS);
     }
 
     private String fileConversionScript(FileConversionRequest request) {
