@@ -296,6 +296,68 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldSummarizeSandboxBrowserGovernanceMetadataWithoutSessionValues() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "sandbox_browser",
+                Map.of(
+                        "url", "https://example.test/page",
+                        "allowedHosts", List.of("example.test"),
+                        "cookies", List.of(Map.of(
+                                "name", "seahorse_session",
+                                "value", "cookie-secret-value",
+                                "domain", "example.test")),
+                        "sessionState", Map.of(
+                                "cookies", List.of(Map.of(
+                                        "name", "restored_session",
+                                        "value", "restored-secret-value",
+                                        "domain", "example.test")),
+                                "origins", List.of(Map.of(
+                                        "origin", "https://example.test",
+                                        "localStorage", List.of(Map.of(
+                                                "name", "seahorse_session_marker",
+                                                "value", "storage-secret-value"))))),
+                        "captureSessionState", true,
+                        "har", true,
+                        "video", true),
+                Map.of(),
+                "run-1:call-1",
+                List.of("sandbox_browser")));
+
+        assertTrue(result.success());
+        String summary = audit.requested.get(0).argumentsSummary();
+        assertTrue(summary.contains("\"toolId\":\"sandbox_browser\""));
+        assertTrue(summary.contains("\"mode\":\"url\""));
+        assertTrue(summary.contains("\"networkRequested\":true"));
+        assertTrue(summary.contains("\"allowedHosts\":[\"example.test\"]"));
+        assertTrue(summary.contains("\"cookieCount\":1"));
+        assertTrue(summary.contains("\"sessionStateReplayRequested\":true"));
+        assertTrue(summary.contains("\"sessionStateCookieCount\":1"));
+        assertTrue(summary.contains("\"sessionStateOriginCount\":1"));
+        assertTrue(summary.contains("\"captureSessionState\":true"));
+        assertTrue(summary.contains("\"har\":true"));
+        assertTrue(summary.contains("\"video\":true"));
+        assertFalse(summary.contains("cookie-secret-value"));
+        assertFalse(summary.contains("restored-secret-value"));
+        assertFalse(summary.contains("storage-secret-value"));
+    }
+
+    @Test
     void shouldPublishArtifactsFromSuccessfulToolResultWithFullRequestContext() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
                 "{\"artifactType\":\"REPORT\",\"b64Json\":\"raw-image-bytes\"}"));

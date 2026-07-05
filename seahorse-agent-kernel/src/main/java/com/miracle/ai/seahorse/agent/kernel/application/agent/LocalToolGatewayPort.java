@@ -48,6 +48,10 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -350,7 +354,108 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     }
 
     private String summarizeArguments(ToolInvocationRequest request) {
+        if ("sandbox_browser".equals(request.toolId())) {
+            return summarizeSandboxBrowserArguments(request);
+        }
         return truncate("keys=" + request.arguments().keySet() + ", size=" + request.arguments().size());
+    }
+
+    private String summarizeSandboxBrowserArguments(ToolInvocationRequest request) {
+        Map<String, Object> arguments = request.arguments();
+        boolean urlMode = hasText(argumentString(arguments, "url"));
+        List<String> allowedHosts = argumentStringList(arguments.get("allowedHosts"));
+        int cookieCount = listSize(arguments.get("cookies"));
+        Map<String, Object> sessionState = mapValue(arguments.get("sessionState"));
+        int sessionCookieCount = listSize(sessionState.get("cookies"));
+        int sessionOriginCount = listSize(sessionState.get("origins"));
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("toolId", request.toolId());
+        summary.put("mode", urlMode ? "url" : "inline");
+        summary.put("action", argumentString(arguments, "action", "snapshot"));
+        summary.put("networkRequested", urlMode);
+        summary.put("allowedHosts", allowedHosts);
+        summary.put("cookieCount", cookieCount);
+        summary.put("sessionStateReplayRequested", !sessionState.isEmpty());
+        summary.put("sessionStateCookieCount", sessionCookieCount);
+        summary.put("sessionStateOriginCount", sessionOriginCount);
+        summary.put("captureSessionState", booleanArgument(arguments, "captureSessionState"));
+        summary.put("har", booleanArgument(arguments, "har"));
+        summary.put("video", booleanArgument(arguments, "video"));
+        summary.put("argumentKeys", arguments.keySet());
+        try {
+            return truncate(OBJECT_MAPPER.writeValueAsString(summary));
+        } catch (JsonProcessingException ex) {
+            return truncate("toolId=sandbox_browser, mode=" + (urlMode ? "url" : "inline")
+                    + ", allowedHosts=" + allowedHosts
+                    + ", cookieCount=" + cookieCount
+                    + ", sessionStateReplayRequested=" + !sessionState.isEmpty()
+                    + ", sessionStateCookieCount=" + sessionCookieCount
+                    + ", sessionStateOriginCount=" + sessionOriginCount);
+        }
+    }
+
+    private String argumentString(Map<String, Object> arguments, String name) {
+        return argumentString(arguments, name, "");
+    }
+
+    private String argumentString(Map<String, Object> arguments, String name, String defaultValue) {
+        Object value = arguments == null ? null : arguments.get(name);
+        if (value == null || value.toString().isBlank()) {
+            return defaultValue;
+        }
+        return value.toString().trim();
+    }
+
+    private boolean booleanArgument(Map<String, Object> arguments, String name) {
+        Object value = arguments == null ? null : arguments.get(name);
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        return value != null && Boolean.parseBoolean(value.toString());
+    }
+
+    private int listSize(Object value) {
+        if (value instanceof Collection<?> collection) {
+            return collection.size();
+        }
+        return 0;
+    }
+
+    private List<String> argumentStringList(Object value) {
+        if (value instanceof Collection<?> collection) {
+            return collection.stream()
+                    .filter(Objects::nonNull)
+                    .map(item -> item.toString().trim())
+                    .filter(LocalToolGatewayPort::hasText)
+                    .toList();
+        }
+        if (value instanceof String text && hasText(text)) {
+            List<String> items = new ArrayList<>();
+            for (String item : text.split(",")) {
+                if (hasText(item)) {
+                    items.add(item.trim());
+                }
+            }
+            return items;
+        }
+        return List.of();
+    }
+
+    private Map<String, Object> mapValue(Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return Map.of();
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        map.forEach((key, item) -> {
+            if (key != null) {
+                result.put(key.toString(), item);
+            }
+        });
+        return result;
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
     private String summarizeResult(ToolInvocationResult result) {
