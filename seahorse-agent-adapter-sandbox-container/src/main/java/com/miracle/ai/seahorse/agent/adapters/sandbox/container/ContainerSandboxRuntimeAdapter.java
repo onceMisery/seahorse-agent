@@ -880,9 +880,12 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 def docx_to_text(path):
                     with zipfile.ZipFile(path) as archive:
                         try:
-                            document_xml = archive.read("word/document.xml")
+                            document_info = archive.getinfo("word/document.xml")
                         except KeyError as exc:
                             raise ValueError("docx word/document.xml not found") from exc
+                        if document_info.file_size > 1048576:
+                            raise ValueError("docx word/document.xml exceeds extraction budget")
+                        document_xml = archive.read(document_info)
                     root = ET.fromstring(document_xml)
                     ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
                     paragraphs = []

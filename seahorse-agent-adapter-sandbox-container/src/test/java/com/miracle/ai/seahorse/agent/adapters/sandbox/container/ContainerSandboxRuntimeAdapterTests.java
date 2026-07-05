@@ -358,7 +358,10 @@ class ContainerSandboxRuntimeAdapterTests {
                 ContainerCommandResult.succeeded("converted docx document to text\n", Duration.ofMillis(190)),
                 command -> {
                     assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
-                            .contains("docx_to_text", "source_format = \"docx\"", "converted.txt")
+                            .contains("docx_to_text",
+                                    "source_format = \"docx\"",
+                                    "docx word/document.xml exceeds extraction budget",
+                                    "converted.txt")
                             .doesNotContain(docxBase64);
                     assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.docx")))
                             .isEqualTo("fake-docx-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8));

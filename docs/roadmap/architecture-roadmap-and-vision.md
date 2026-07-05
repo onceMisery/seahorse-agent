@@ -130,6 +130,14 @@ This is a narrow resource-boundary guard for the existing PDF literal-text path.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 43/43.
 
+## 2026-07-06 Update: Sandbox DOCX Text Conversion Document XML Budget Guard
+
+The conservative `sandbox_file_convert` DOCX-to-text runtime script now checks the uncompressed `word/document.xml` ZIP entry size before XML parsing and rejects entries over 1 MiB with a value-free error. This keeps the stdlib-only DOCX path bounded to the intended small document-text extraction scope instead of reading arbitrary package XML into memory.
+
+This is a narrow DOCX resource-boundary guard. It does not add Office rendering/editing, macro parsing, LibreOffice/Tika integration, recursive package extraction, or a general binary conversion engine.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 43/43; `git diff --check` passed.
+
 ## 2026-07-03 Update: Sandbox Tool Quota Governance
 
 Sandbox Operations now exposes `POST /api/sandbox/runtime/tool-quota-policies` for sandbox-backed tool quota policy writes. The endpoint is gated by both `SANDBOX` and `QUOTA_MANAGEMENT`, accepts only `sandbox_python`, `sandbox_file_convert`, and the planned `sandbox_browser`, then writes an existing `QuotaScope.TOOL` policy so Tool Gateway quota preflight remains the enforcement owner.
