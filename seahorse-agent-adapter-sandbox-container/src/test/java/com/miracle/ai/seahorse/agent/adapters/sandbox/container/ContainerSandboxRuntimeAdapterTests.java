@@ -463,8 +463,14 @@ class ContainerSandboxRuntimeAdapterTests {
 
     @Test
     void shouldRejectPdfWithActiveContentBeforeRunningContainer() {
+        shouldRejectPdfActiveContentMarkerBeforeRunningContainer("/OpenAction");
+        shouldRejectPdfActiveContentMarkerBeforeRunningContainer("/ImportData");
+    }
+
+    private void shouldRejectPdfActiveContentMarkerBeforeRunningContainer(String marker) {
         String pdfBase64 = Base64.getEncoder().encodeToString(
-                "%PDF-1.4\n1 0 obj\n<< /OpenAction 2 0 R >>\nendobj".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+                ("%PDF-1.4\n1 0 obj\n<< " + marker + " 2 0 R >>\nendobj")
+                        .getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
         RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
         ContainerSandboxRuntimeAdapter adapter = adapter(runner);
         SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));

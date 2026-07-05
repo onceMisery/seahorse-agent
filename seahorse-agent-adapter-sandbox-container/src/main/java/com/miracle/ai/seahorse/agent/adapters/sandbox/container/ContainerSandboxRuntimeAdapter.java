@@ -418,7 +418,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         if (prefixText.contains("/Encrypt")) {
             throw new IllegalArgumentException("encrypted pdf is not supported");
         }
-        if (java.util.regex.Pattern.compile("/(JavaScript|JS|OpenAction|AA)\\b",
+        if (java.util.regex.Pattern.compile(
+                "/(AA|EmbeddedFile|GoToE|GoToR|ImportData|JavaScript|JS|Launch|OpenAction|Rendition|RichMedia|SubmitForm)\\b",
                 java.util.regex.Pattern.CASE_INSENSITIVE).matcher(prefixText).find()) {
             throw new IllegalArgumentException("pdf active content is not supported");
         }
