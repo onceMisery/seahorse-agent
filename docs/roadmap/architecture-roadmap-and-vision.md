@@ -220,6 +220,10 @@ The sandbox browser audit summary now also avoids echoing pre-validation `allowe
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 19/19.
 
+The sandbox browser audit summary now also filters `argumentKeys` through the supported browser-tool argument set while recording total argument count. Unknown pre-validation parameter names are no longer echoed into audit metadata, so malicious key names cannot smuggle secret markers before adapter validation rejects or ignores them.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 19/19.
+
 ## 2026-07-06 Update: AgentScope A2A Signed Header Boundary Guard
 
 AgentScope inbound A2A `tenant-signed` authentication now rejects malformed signed headers before signature comparison and nonce-cache mutation. Tenant, agent, timestamp, and nonce headers have bounded lengths and control-character rejection; body-hash and signature headers must be 64-character SHA-256 hex strings.

@@ -64,6 +64,19 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     private static final String LEGACY_RUN_ID_PREFIX = "legacy-run:";
     private static final String LEGACY_USER_ID = "legacy-user";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final List<String> SANDBOX_BROWSER_ARGUMENT_KEYS = List.of(
+            "html",
+            "url",
+            "allowedHosts",
+            "cookies",
+            "sessionState",
+            "captureSessionState",
+            "action",
+            "screenshot",
+            "har",
+            "video",
+            "viewportWidth",
+            "viewportHeight");
 
     private final ToolRegistryPort toolRegistry;
     private final ToolPolicyPort toolPolicy;
@@ -511,7 +524,8 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("captureSessionState", booleanArgument(arguments, "captureSessionState"));
         summary.put("har", booleanArgument(arguments, "har"));
         summary.put("video", booleanArgument(arguments, "video"));
-        summary.put("argumentKeys", arguments.keySet());
+        summary.put("argumentKeys", safeSandboxBrowserArgumentKeys(arguments));
+        summary.put("argumentCount", arguments.size());
         try {
             return truncate(OBJECT_MAPPER.writeValueAsString(summary));
         } catch (JsonProcessingException ex) {
@@ -522,6 +536,12 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     + ", sessionStateCookieCount=" + sessionCookieCount
                     + ", sessionStateOriginCount=" + sessionOriginCount);
         }
+    }
+
+    private List<String> safeSandboxBrowserArgumentKeys(Map<String, Object> arguments) {
+        return SANDBOX_BROWSER_ARGUMENT_KEYS.stream()
+                .filter(arguments::containsKey)
+                .toList();
     }
 
     private String safeSandboxBrowserAction(Map<String, Object> arguments) {

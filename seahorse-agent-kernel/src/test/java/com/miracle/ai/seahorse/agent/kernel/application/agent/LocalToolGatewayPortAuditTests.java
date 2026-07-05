@@ -353,6 +353,8 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"captureSessionState\":true"));
         assertTrue(summary.contains("\"har\":true"));
         assertTrue(summary.contains("\"video\":true"));
+        assertTrue(summary.contains("\"argumentKeys\":[\"url\",\"allowedHosts\",\"cookies\",\"sessionState\",\"captureSessionState\",\"har\",\"video\"]"));
+        assertTrue(summary.contains("\"argumentCount\":7"));
         assertFalse(summary.contains("cookie-secret-value"));
         assertFalse(summary.contains("restored-secret-value"));
         assertFalse(summary.contains("storage-secret-value"));
@@ -381,7 +383,8 @@ class LocalToolGatewayPortAuditTests {
                 Map.of(
                         "url", "https://example.test/page",
                         "allowedHosts", List.of("example.test?access_token=host-secret"),
-                        "action", "snapshot-secret-action"),
+                        "action", "snapshot-secret-action",
+                        "token-secret-argument-key", "present"),
                 Map.of(),
                 "run-1:call-1",
                 List.of("sandbox_browser")));
@@ -393,8 +396,11 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"action\":\"unsupported\""));
         assertTrue(summary.contains("\"allowedHostCount\":1"));
         assertTrue(summary.contains("\"allowedHostsPresent\":true"));
+        assertTrue(summary.contains("\"argumentKeys\":[\"url\",\"allowedHosts\",\"action\"]"));
+        assertTrue(summary.contains("\"argumentCount\":4"));
         assertFalse(summary.contains("access_token=host-secret"));
         assertFalse(summary.contains("snapshot-secret-action"));
+        assertFalse(summary.contains("token-secret-argument-key"));
     }
 
     @Test
