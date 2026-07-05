@@ -17,6 +17,9 @@ import {
 } from "@/services/agentArtifactService";
 import { backendEndpointManifest } from "@/services/backendEndpointManifest";
 import * as agentDefinitionService from "@/services/agentDefinitionService";
+import {
+  getAiModelConfigGateResult
+} from "@/services/aiConfigService";
 import * as skillService from "@/services/skillService";
 import {
   cleanupExpiredContextPackItems,
@@ -96,6 +99,7 @@ describe("frontend capability service contracts", () => {
     expect(backendEndpoints).toContain("GET /api/agents/{}/skills/snapshot");
     expect(backendEndpoints).toContain("GET /api/agent-runs/{}/snapshot");
     expect(backendEndpoints).toContain("GET /admin/ai-config");
+    expect(backendEndpoints).toContain("GET /admin/ai-config/{}/gate-result");
     expect(backendEndpoints).toContain("POST /admin/ai-config");
     expect(backendEndpoints).toContain("GET /admin/dashboard/overview");
     expect(backendEndpoints).toContain("GET /admin/dashboard/performance");
@@ -272,6 +276,14 @@ describe("frontend capability service contracts", () => {
     await getIngestionPipelineGateResult("pipeline-1");
 
     expect(mockedApi.get).toHaveBeenCalledWith("/ingestion/pipelines/pipeline-1/gate-result");
+  });
+
+  it("queries AI model config gate result with backend path", async () => {
+    await getAiModelConfigGateResult("openai.apiKey", "tenant-a");
+
+    expect(mockedApi.get).toHaveBeenCalledWith("/admin/ai-config/openai.apiKey/gate-result", {
+      params: { tenantId: "tenant-a" }
+    });
   });
 
   it("rolls back agents with the backend rollback payload", async () => {

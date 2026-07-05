@@ -408,3 +408,11 @@ The unified GateResult route now covers Ingestion Pipeline structure evidence. `
 The Web API exposes this projection through `GET /ingestion/pipelines/{id}/gate-result`, reusing the existing ingestion pipeline management port. Existing pipeline CRUD and ingestion task execution endpoints remain unchanged. This is a projection adapter slice only; it does not execute the pipeline, validate plugin availability for each node type, persist unified gate rows, or add the Model Config adapter.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=GateResultsTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 8/8 projection tests; `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseIngestionAndIntentControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 16/16 Web contract tests; and `npm test -- src/services/frontendCapabilityContracts.test.ts src/services/serviceEndpointCoverage.test.ts` passed 16/16 frontend manifest/coverage tests.
+
+## 2026-07-05 Update: Model Config GateResult Adapter
+
+The unified GateResult route now covers Model Config integrity evidence. `GateResults.fromAiModelConfig` projects an `AiModelConfig` into `subjectType=MODEL_CONFIG`, checking that the config key, value, and type are present, JSON-typed values parse as JSON, and sensitive config keys such as API keys, secrets, tokens, passwords, or credentials are encrypted before production use.
+
+The Web API exposes this projection through `GET /admin/ai-config/{key}/gate-result?tenantId=...`, reusing the existing AI model config repository and login guard. Existing AI config CRUD endpoints remain unchanged. This is a configuration integrity projection only; it does not execute provider health checks, run model quality evaluation, or persist unified gate rows.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=GateResultsTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 10/10 projection tests; `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=AiModelConfigControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 1/1 Web contract test; and `npm test -- src/services/frontendCapabilityContracts.test.ts src/services/serviceEndpointCoverage.test.ts` passed 17/17 frontend manifest/coverage tests.

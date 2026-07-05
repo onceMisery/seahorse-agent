@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateRepo
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillRevision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillScanDecision;
+import com.miracle.ai.seahorse.agent.kernel.model.AiModelConfig;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
@@ -32,6 +33,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineR
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -201,6 +203,39 @@ class GateResultsTests {
                 result.blockingCodes());
     }
 
+    @Test
+    void shouldProjectPassingAiModelConfigGateResult() {
+        AiModelConfig config = aiModelConfig("cfg-1", "tenant-a", "chat.model.options",
+                "{\"temperature\":0.2}", AiModelConfig.ConfigType.JSON, false);
+
+        GateResult result = GateResults.fromAiModelConfig(config);
+
+        assertEquals("MODEL_CONFIG", result.subjectType());
+        assertEquals("tenant-a:chat.model.options", result.subjectId());
+        assertEquals("PASS", result.status());
+        assertTrue(result.passed());
+        assertEquals(List.of(), result.blockingCodes());
+        assertEquals(Instant.parse("2026-07-05T04:00:00Z"), result.checkedAt());
+        assertEquals("AiModelConfig", result.sourceType());
+        assertEquals("cfg-1", result.sourceId());
+        assertEquals("MODEL_CONFIG_JSON_VALUE_VALID", result.items().get(3).code());
+        assertEquals("PASS", result.items().get(3).status());
+    }
+
+    @Test
+    void shouldProjectFailingAiModelConfigGateResult() {
+        AiModelConfig config = aiModelConfig("cfg-2", "tenant-a", "openai.apiKey",
+                "{not-json", AiModelConfig.ConfigType.JSON, false);
+
+        GateResult result = GateResults.fromAiModelConfig(config);
+
+        assertEquals("FAIL", result.status());
+        assertFalse(result.passed());
+        assertEquals(
+                List.of("MODEL_CONFIG_JSON_VALUE_VALID", "MODEL_CONFIG_SENSITIVE_VALUE_ENCRYPTED"),
+                result.blockingCodes());
+    }
+
     private static RetrievalEvaluationComparisonRecord comparison(
             Instant checkedAt,
             RetrievalEvaluationReport baseline,
@@ -264,5 +299,23 @@ class GateResultsTests {
         pipeline.setUpdateTime(Instant.parse("2026-07-05T03:00:00Z"));
         pipeline.setNodes(List.of(nodes));
         return pipeline;
+    }
+
+    private static AiModelConfig aiModelConfig(String id,
+                                               String tenantId,
+                                               String configKey,
+                                               String configValue,
+                                               AiModelConfig.ConfigType configType,
+                                               boolean encrypted) {
+        AiModelConfig config = new AiModelConfig();
+        config.setId(id);
+        config.setTenantId(tenantId);
+        config.setConfigKey(configKey);
+        config.setConfigValue(configValue);
+        config.setConfigType(configType);
+        config.setEncrypted(encrypted);
+        config.setCreatedAt(LocalDateTime.parse("2026-07-05T03:30:00"));
+        config.setUpdatedAt(LocalDateTime.parse("2026-07-05T04:00:00"));
+        return config;
     }
 }

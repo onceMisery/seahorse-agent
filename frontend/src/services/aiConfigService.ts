@@ -15,8 +15,30 @@ export interface AiModelConfigItem {
   updatedAt: string;
 }
 
+export interface GateResultItem {
+  code: string;
+  status: string;
+  message?: string;
+}
+
+export interface GateResult {
+  subjectType: string;
+  subjectId: string;
+  status: string;
+  passed: boolean;
+  blockingCodes?: string[];
+  items?: GateResultItem[];
+  checkedAt?: string;
+  sourceType?: string;
+  sourceId?: string;
+}
+
 export async function getAiModelConfigs(params?: { tenantId?: string }): Promise<AiModelConfigItem[]> {
   return api.get<AiModelConfigItem[], AiModelConfigItem[]>("/admin/ai-config", { params });
+}
+
+export async function getAiModelConfigGateResult(key: string, tenantId?: string): Promise<GateResult> {
+  return api.get<GateResult, GateResult>(`/admin/ai-config/${key}/gate-result`, { params: { tenantId } });
 }
 
 export async function updateAiModelConfig(key: string, value: string, tenantId?: string): Promise<void> {

@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 import cn.dev33.satoken.stp.StpUtil;
 import com.miracle.ai.seahorse.agent.kernel.model.AiModelConfig;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
+import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResults;
 import com.miracle.ai.seahorse.agent.ports.outbound.config.AiModelConfigRepositoryPort;
 import org.springframework.web.bind.annotation.*;
 
@@ -58,7 +59,7 @@ public class AiModelConfigController {
                     .collect(Collectors.toList());
             return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, data);
         } catch (Exception e) {
-            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "获取配置失败: " + e.getMessage());
+            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Failed to list configs: " + e.getMessage());
         }
     }
 
@@ -69,9 +70,22 @@ public class AiModelConfigController {
             StpUtil.checkLogin();
             return configRepository.findByKey(normalizeTenantId(tenantId), key)
                     .map(config -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, toResponseMap(config)))
-                    .orElse(Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "配置不存在"));
+                    .orElse(Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Config not found"));
         } catch (Exception e) {
-            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "获取配置失败: " + e.getMessage());
+            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Failed to get config: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/{key}/gate-result")
+    public Map<String, Object> gateResult(@PathVariable("key") String key,
+                                          @RequestParam(value = "tenantId", required = false) String tenantId) {
+        try {
+            StpUtil.checkLogin();
+            return configRepository.findByKey(normalizeTenantId(tenantId), key)
+                    .map(config -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, GateResults.fromAiModelConfig(config)))
+                    .orElse(Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Config not found"));
+        } catch (Exception e) {
+            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Failed to get config gate result: " + e.getMessage());
         }
     }
 
@@ -84,14 +98,14 @@ public class AiModelConfigController {
 
             String value = request.get("value");
             if (value == null || value.trim().isEmpty()) {
-                return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "配置值不能为空");
+                return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Config value must not be blank");
             }
 
             configRepository.update(normalizeTenantId(request.get("tenantId")), key, value, userId);
 
-            return Map.of(KEY_CODE, SUCCESS_CODE, KEY_MESSAGE, "配置更新成功");
+            return Map.of(KEY_CODE, SUCCESS_CODE, KEY_MESSAGE, "Config updated successfully");
         } catch (Exception e) {
-            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "更新配置失败: " + e.getMessage());
+            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Failed to update config: " + e.getMessage());
         }
     }
 
@@ -116,9 +130,9 @@ public class AiModelConfigController {
 
             configRepository.save(config);
 
-            return Map.of(KEY_CODE, SUCCESS_CODE, KEY_MESSAGE, "配置创建成功", KEY_DATA, toResponseMap(config));
+            return Map.of(KEY_CODE, SUCCESS_CODE, KEY_MESSAGE, "Config created successfully", KEY_DATA, toResponseMap(config));
         } catch (Exception e) {
-            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "创建配置失败: " + e.getMessage());
+            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Failed to create config: " + e.getMessage());
         }
     }
 
@@ -128,9 +142,9 @@ public class AiModelConfigController {
         try {
             StpUtil.checkLogin();
             configRepository.delete(normalizeTenantId(tenantId), key);
-            return Map.of(KEY_CODE, SUCCESS_CODE, KEY_MESSAGE, "配置删除成功");
+            return Map.of(KEY_CODE, SUCCESS_CODE, KEY_MESSAGE, "Config deleted successfully");
         } catch (Exception e) {
-            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "删除配置失败: " + e.getMessage());
+            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Failed to delete config: " + e.getMessage());
         }
     }
 

@@ -129,6 +129,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/admin/ai-config/{}/gate-result"
+  },
+  {
+    "method": "GET",
     "path": "/admin/dashboard/overview"
   },
   {

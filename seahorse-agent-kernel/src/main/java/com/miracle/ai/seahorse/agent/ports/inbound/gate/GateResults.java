@@ -17,11 +17,13 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.gate;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateCheckItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillRevision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillScanDecision;
+import com.miracle.ai.seahorse.agent.kernel.model.AiModelConfig;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
@@ -30,6 +32,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineN
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineRecord;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -38,6 +42,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public final class GateResults {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private GateResults() {
     }
@@ -146,6 +152,25 @@ public final class GateResults {
                 Objects.requireNonNullElse(pipeline.getUpdateTime(), pipeline.getCreateTime()),
                 "IngestionPipelineRecord",
                 pipeline.getId());
+    }
+
+    public static GateResult fromAiModelConfig(AiModelConfig config) {
+        Objects.requireNonNull(config, "config must not be null");
+        List<GateResultItem> items = aiModelConfigItems(config);
+        List<String> blockingCodes = items.stream()
+                .filter(item -> "FAIL".equals(item.status()))
+                .map(GateResultItem::code)
+                .toList();
+        return new GateResult(
+                "MODEL_CONFIG",
+                tenantId(config) + ":" + Objects.requireNonNullElse(config.getConfigKey(), "unknown"),
+                blockingCodes.isEmpty() ? "PASS" : "FAIL",
+                blockingCodes.isEmpty(),
+                blockingCodes,
+                items,
+                instant(config.getUpdatedAt(), config.getCreatedAt()),
+                "AiModelConfig",
+                config.getId());
     }
 
     private static GateResultItem fromAgentItem(ProductionGateCheckItem item) {
@@ -307,6 +332,68 @@ public final class GateResults {
             }
         }
         return false;
+    }
+
+    private static List<GateResultItem> aiModelConfigItems(AiModelConfig config) {
+        java.util.ArrayList<GateResultItem> items = new java.util.ArrayList<>();
+        String configKey = trimToNull(config.getConfigKey());
+        String configValue = trimToNull(config.getConfigValue());
+        AiModelConfig.ConfigType configType = config.getConfigType();
+        items.add(metricItem("MODEL_CONFIG_KEY_PRESENT",
+                configKey != null,
+                configKey == null ? "Model config key is missing" : "Model config key is " + configKey));
+        items.add(metricItem("MODEL_CONFIG_VALUE_PRESENT",
+                configValue != null,
+                configValue == null ? "Model config value is missing" : "Model config value is present"));
+        items.add(metricItem("MODEL_CONFIG_TYPE_PRESENT",
+                configType != null,
+                configType == null ? "Model config type is missing" : "Model config type is " + configType.name()));
+        boolean jsonValid = configType != AiModelConfig.ConfigType.JSON || validJson(configValue);
+        items.add(metricItem("MODEL_CONFIG_JSON_VALUE_VALID",
+                jsonValid,
+                configType == AiModelConfig.ConfigType.JSON
+                        ? (jsonValid ? "JSON model config value is valid" : "JSON model config value is invalid")
+                        : "Model config type does not require JSON parsing"));
+        boolean sensitiveEncrypted = !sensitiveConfigKey(configKey) || config.isEncrypted();
+        items.add(metricItem("MODEL_CONFIG_SENSITIVE_VALUE_ENCRYPTED",
+                sensitiveEncrypted,
+                sensitiveEncrypted
+                        ? "Sensitive model config encryption requirement is satisfied"
+                        : "Sensitive model config keys must be encrypted"));
+        return List.copyOf(items);
+    }
+
+    private static boolean validJson(String value) {
+        if (value == null) {
+            return false;
+        }
+        try {
+            OBJECT_MAPPER.readTree(value);
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private static boolean sensitiveConfigKey(String value) {
+        if (value == null) {
+            return false;
+        }
+        String lower = value.toLowerCase();
+        return lower.contains("key")
+                || lower.contains("secret")
+                || lower.contains("token")
+                || lower.contains("password")
+                || lower.contains("credential");
+    }
+
+    private static String tenantId(AiModelConfig config) {
+        return Objects.requireNonNullElse(trimToNull(config.getTenantId()), "default");
+    }
+
+    private static Instant instant(LocalDateTime updatedAt, LocalDateTime createdAt) {
+        LocalDateTime value = updatedAt != null ? updatedAt : createdAt;
+        return value == null ? null : value.toInstant(ZoneOffset.UTC);
     }
 
     private static RetrievalEvaluationReport reportFor(RetrievalEvaluationComparisonReport report, String strategyName) {

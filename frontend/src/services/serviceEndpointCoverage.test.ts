@@ -89,6 +89,7 @@ const KNOWN_GAPS = new Set([
   "GET /admin/dashboard/trends",
   // aiConfigService — admin AI config (non-/api/ prefix)
   "GET /admin/ai-config",
+  "GET /admin/ai-config/{}/gate-result",
   "PUT /admin/ai-config/{}",
   "POST /admin/ai-config",
   "DELETE /admin/ai-config/{}"
