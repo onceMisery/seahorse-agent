@@ -297,6 +297,36 @@ class DefaultSandboxArtifactScannerPortTests {
     }
 
     @Test
+    void shouldBlockOfficeOpenXmlArchiveWithActiveXContent(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("activex-report.docx");
+        writeZip(output, "word/activeX/activeX1.xml", "<xml/>".getBytes(StandardCharsets.UTF_8));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, DOCX_MEDIA_TYPE)));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("office macro artifact content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("OFFICE_MACRO", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("activeX1.xml"));
+    }
+
+    @Test
+    void shouldBlockOfficeOpenXmlArchiveWithEmbeddedObjectContent(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("embedded-report.docx");
+        writeZip(output, "word/embeddings/oleObject1.bin", "embedded object".getBytes(StandardCharsets.UTF_8));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, DOCX_MEDIA_TYPE)));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("office macro artifact content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("OFFICE_MACRO", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("oleObject1.bin"));
+    }
+
+    @Test
     void shouldBlockMacroEnabledOfficeArchiveByMediaType(@TempDir Path tempDir) throws Exception {
         Path output = tempDir.resolve("macro-report.docm");
         writeZip(output, "word/document.xml", "<w:t>macro-enabled office document</w:t>".getBytes(StandardCharsets.UTF_8));

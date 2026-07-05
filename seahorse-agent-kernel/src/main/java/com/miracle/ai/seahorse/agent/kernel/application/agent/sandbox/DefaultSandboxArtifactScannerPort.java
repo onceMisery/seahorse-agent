@@ -844,7 +844,12 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
             return false;
         }
         String normalized = value.replace('\\', '/').toLowerCase(Locale.ROOT);
-        return normalized.equals("vbaproject.bin") || normalized.endsWith("/vbaproject.bin");
+        return normalized.equals("vbaproject.bin")
+                || normalized.endsWith("/vbaproject.bin")
+                || normalized.contains("/activex/")
+                || normalized.contains("/embeddings/")
+                || normalized.contains("/externallinks/")
+                || normalized.contains("/oleobject");
     }
 
     private static String archiveEntryExtension(String value) {
