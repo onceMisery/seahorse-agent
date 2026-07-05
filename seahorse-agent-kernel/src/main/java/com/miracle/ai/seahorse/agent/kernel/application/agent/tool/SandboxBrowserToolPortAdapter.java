@@ -60,6 +60,11 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private static final int MAX_SESSION_STATE_LOCAL_STORAGE_ITEMS = 128;
     private static final int MAX_SESSION_STATE_NAME_CHARS = 256;
     private static final int MAX_SESSION_STATE_VALUE_CHARS = 8192;
+    private static final Set<String> SESSION_STATE_KEYS = Set.of("cookies", "origins");
+    private static final Set<String> SESSION_STATE_COOKIE_KEYS = Set.of(
+            "name", "value", "domain", "path", "expires", "httpOnly", "secure", "sameSite");
+    private static final Set<String> SESSION_STATE_ORIGIN_KEYS = Set.of("origin", "localStorage");
+    private static final Set<String> SESSION_STATE_LOCAL_STORAGE_KEYS = Set.of("name", "value");
     private static final String ACTION_ARGUMENT = "action";
     private static final String HTML_ARGUMENT = "html";
     private static final String URL_ARGUMENT = "url";
@@ -573,6 +578,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         if (!(value instanceof Map<?, ?> state)) {
             throw new IllegalArgumentException("sandbox_browser failed: sessionState must be an object");
         }
+        validateKnownKeys(state, SESSION_STATE_KEYS, "sessionState");
         validateSessionStateCookies(state.get("cookies"), allowedHosts, urlHost);
         validateSessionStateOrigins(state.get("origins"), allowedHosts, urlHost, urlOrigin);
         if (jsonSupport.write(value).length() > MAX_SESSION_STATE_CHARS) {
@@ -597,6 +603,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             if (!(rawCookie instanceof Map<?, ?> cookie)) {
                 throw new IllegalArgumentException("sandbox_browser failed: sessionState cookie must be an object");
             }
+            validateKnownKeys(cookie, SESSION_STATE_COOKIE_KEYS, "sessionState cookie");
             normalizedCookieName(mapString(cookie, "name"));
             normalizedCookieValue(mapStringPreservingWhitespace(cookie, "value"));
             String domain = normalizedCookieDomain(mapString(cookie, "domain"));
@@ -631,6 +638,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             if (!(rawOrigin instanceof Map<?, ?> origin)) {
                 throw new IllegalArgumentException("sandbox_browser failed: sessionState origin must be an object");
             }
+            validateKnownKeys(origin, SESSION_STATE_ORIGIN_KEYS, "sessionState origin");
             String originValue = mapString(origin, "origin");
             String host = sessionStateOriginHost(originValue);
             if (!allowedHosts.contains(host)) {
@@ -665,6 +673,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                 throw new IllegalArgumentException(
                         "sandbox_browser failed: sessionState localStorage item must be an object");
             }
+            validateKnownKeys(entry, SESSION_STATE_LOCAL_STORAGE_KEYS, "sessionState localStorage item");
             boundedSessionStateText(mapStringPreservingWhitespace(entry, "name"),
                     "sessionState localStorage name",
                     MAX_SESSION_STATE_NAME_CHARS,
@@ -682,6 +691,15 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             throw new IllegalArgumentException("sandbox_browser failed: " + label + " is invalid");
         }
         return text;
+    }
+
+    private void validateKnownKeys(Map<?, ?> value, Set<String> allowedKeys, String label) {
+        for (Object rawKey : value.keySet()) {
+            String key = rawKey == null ? "" : rawKey.toString();
+            if (!allowedKeys.contains(key)) {
+                throw new IllegalArgumentException("sandbox_browser failed: " + label + " contains unsupported fields");
+            }
+        }
     }
 
     private String cookieDomainHost(String domain) {

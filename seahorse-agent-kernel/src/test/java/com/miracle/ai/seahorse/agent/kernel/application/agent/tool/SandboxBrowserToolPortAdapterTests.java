@@ -638,6 +638,30 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldRejectSessionStateWithUnsupportedFieldsBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/page",
+                "allowedHosts", List.of("example.test"),
+                "sessionState", Map.of(
+                        "cookies", List.of(Map.of(
+                                "name", "restored_session",
+                                "value", "restored-secret-value",
+                                "domain", "example.test",
+                                "path", "/",
+                                "storageRef", "secret-storage-ref"))))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("sessionState cookie contains unsupported fields"));
+        assertFalse(result.error().contains("restored-secret-value"));
+        assertFalse(result.error().contains("secret-storage-ref"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
     void shouldRejectSessionStateOriginWhenHostIsNotAllowlistedBeforeCreatingSession() {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);

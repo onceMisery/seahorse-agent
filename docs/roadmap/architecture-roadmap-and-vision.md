@@ -571,6 +571,14 @@ This is a narrow consistency hardening slice for request-scoped session replay. 
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 28/28; `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 54/54; `git diff --check` passed with only CRLF warnings.
 
+## 2026-07-06 Update: Sandbox Browser SessionState Replay Schema Guard
+
+The sandbox browser request-scoped `sessionState` replay path now rejects unsupported fields at the top level, cookie level, origin level, and localStorage item level before kernel session creation and before container execution. Replay input is limited to the Playwright storage-state fields the runtime actually needs, so callers cannot smuggle extra storage references or ungoverned metadata into the transient `browser-session-state-input.json`.
+
+This is a narrow request-scoped replay schema hardening slice. It does not add stored browser profiles, credential vault integration, replay from previously captured SECRET/BLOCKED artifacts, proxy-rich egress audit, or operator-managed URL policy UX.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 29/29; `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 55/55.
+
 ## 2026-07-06 Update: Sandbox Browser SessionState Capture Budget Guard
 
 The sandbox browser URL runtime script now bounds captured Playwright storage-state output to 128 KiB before reporting the `browser-session-state.json` artifact. Over-budget captures delete the full state and summary files and fail closed with a value-free runtime error instead of collecting an unbounded SECRET artifact from page-controlled storage.

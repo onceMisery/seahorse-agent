@@ -96,6 +96,11 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final int MAX_BROWSER_SESSION_STATE_LOCAL_STORAGE_ITEMS = 128;
     private static final int MAX_BROWSER_SESSION_STATE_NAME_CHARS = 256;
     private static final int MAX_BROWSER_SESSION_STATE_VALUE_CHARS = 8192;
+    private static final Set<String> BROWSER_SESSION_STATE_KEYS = Set.of("cookies", "origins");
+    private static final Set<String> BROWSER_SESSION_STATE_COOKIE_KEYS = Set.of(
+            "name", "value", "domain", "path", "expires", "httpOnly", "secure", "sameSite");
+    private static final Set<String> BROWSER_SESSION_STATE_ORIGIN_KEYS = Set.of("origin", "localStorage");
+    private static final Set<String> BROWSER_SESSION_STATE_LOCAL_STORAGE_KEYS = Set.of("name", "value");
     private static final int DEFAULT_BROWSER_VIEWPORT_WIDTH = 1280;
     private static final int DEFAULT_BROWSER_VIEWPORT_HEIGHT = 720;
     private static final int MIN_BROWSER_VIEWPORT_SIZE = 320;
@@ -1474,6 +1479,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         if (state == null || !state.isObject()) {
             throw new IllegalArgumentException("browser automation sessionState must be an object");
         }
+        validateKnownBrowserSessionStateKeys(state, BROWSER_SESSION_STATE_KEYS, "sessionState");
         validateBrowserSessionStateCookies(state.get("cookies"), allowedHosts, urlHost);
         validateBrowserSessionStateOrigins(state.get("origins"), allowedHosts, urlHost, urlOrigin);
         String serialized = objectMapper.writeValueAsString(state);
@@ -1499,6 +1505,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             if (!cookieNode.isObject()) {
                 throw new IllegalArgumentException("browser automation sessionState cookie must be an object");
             }
+            validateKnownBrowserSessionStateKeys(cookieNode, BROWSER_SESSION_STATE_COOKIE_KEYS, "sessionState cookie");
             normalizedBrowserCookieName(cookieNode.path("name").asText(""));
             normalizedBrowserCookieValue(cookieNode.path("value").asText(""));
             String domain = normalizedBrowserCookieDomain(cookieNode.path("domain").asText(""));
@@ -1533,6 +1540,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             if (!originNode.isObject()) {
                 throw new IllegalArgumentException("browser automation sessionState origin must be an object");
             }
+            validateKnownBrowserSessionStateKeys(originNode, BROWSER_SESSION_STATE_ORIGIN_KEYS, "sessionState origin");
             String originValue = originNode.path("origin").asText("");
             String host = browserSessionStateOriginHost(originValue);
             if (!allowedHosts.contains(host)) {
@@ -1566,6 +1574,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             if (!item.isObject()) {
                 throw new IllegalArgumentException("browser automation sessionState localStorage item must be an object");
             }
+            validateKnownBrowserSessionStateKeys(
+                    item,
+                    BROWSER_SESSION_STATE_LOCAL_STORAGE_KEYS,
+                    "sessionState localStorage item");
             boundedBrowserSessionStateText(item.path("name").asText(""),
                     "sessionState localStorage name",
                     MAX_BROWSER_SESSION_STATE_NAME_CHARS,
@@ -1583,6 +1595,14 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             throw new IllegalArgumentException("browser automation " + label + " is invalid");
         }
         return text;
+    }
+
+    private void validateKnownBrowserSessionStateKeys(JsonNode value, Set<String> allowedKeys, String label) {
+        value.fieldNames().forEachRemaining(key -> {
+            if (!allowedKeys.contains(key)) {
+                throw new IllegalArgumentException("browser automation " + label + " contains unsupported fields");
+            }
+        });
     }
 
     private String browserCookieDomainHost(String domain) {
