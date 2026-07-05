@@ -123,7 +123,51 @@ class LocalGovernedToolExecutionPortTests {
         assertFalse(approval.argumentsPreviewJson().contains("line\\nbreak"));
     }
 
+    @Test
+    void approvalPreviewMinimizesResourceRefValues() throws Exception {
+        CountingGateway gateway = new CountingGateway();
+        CapturingApprovalRepository approvals = new CapturingApprovalRepository();
+        ToolPolicyPort policy = request -> PolicyDecision.approvalRequired(
+                "decision-1",
+                ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED,
+                "approval required");
+        LocalGovernedToolExecutionPort port = new LocalGovernedToolExecutionPort(
+                new SingleToolRegistry(),
+                gateway,
+                policy,
+                approvals,
+                ApprovalRequestQueryPort.empty(),
+                new ObjectMapper(),
+                FIXED_CLOCK);
+
+        port.preflight(request(
+                "weather",
+                Map.of("city", "Hangzhou"),
+                Map.of(
+                        "knowledgeBaseId", "kb-secret-ref",
+                        "secretResourceKey", "resource-secret-value")));
+
+        ApprovalRequest approval = approvals.request.get();
+        assertNotNull(approval);
+        JsonNode preview = new ObjectMapper().readTree(approval.argumentsPreviewJson());
+        assertEquals(2, preview.path("resourceRefCount").asInt());
+        assertNotNull(preview.path("resourceRefHash").textValue());
+        assertEquals(List.of("knowledgeBaseId"), new ObjectMapper().convertValue(
+                preview.path("resourceRefKeys"),
+                new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
+                }));
+        assertFalse(approval.argumentsPreviewJson().contains("kb-secret-ref"));
+        assertFalse(approval.argumentsPreviewJson().contains("secretResourceKey"));
+        assertFalse(approval.argumentsPreviewJson().contains("resource-secret-value"));
+    }
+
     private static ToolInvocationRequest request(String toolId, Map<String, Object> arguments) {
+        return request(toolId, arguments, Map.of());
+    }
+
+    private static ToolInvocationRequest request(String toolId,
+                                                 Map<String, Object> arguments,
+                                                 Map<String, String> resourceRefs) {
         return new ToolInvocationRequest(
                 "run-1",
                 "agentscope-step",
@@ -136,7 +180,7 @@ class LocalGovernedToolExecutionPortTests {
                 "identity-1",
                 toolId,
                 arguments,
-                Map.of(),
+                resourceRefs,
                 "run-1:call-1",
                 List.of(toolId));
     }

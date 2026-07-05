@@ -196,7 +196,7 @@ class LocalToolGatewayPortAuditTests {
                 Map.of(
                         "prompt", "x".repeat(2_000),
                         "apiKey", "plain-secret"),
-                Map.of("knowledgeBaseId", "kb-1"),
+                Map.of("knowledgeBaseId", "kb-secret-ref"),
                 "run-1:call-1",
                 List.of("memory-forget")));
 
@@ -204,8 +204,11 @@ class LocalToolGatewayPortAuditTests {
         String preview = approvals.saved.get(0).argumentsPreviewJson();
         assertTrue(preview.contains("argumentKeys"));
         assertTrue(preview.contains("argumentCount"));
-        assertTrue(preview.contains("resourceRefs"));
+        assertTrue(preview.contains("\"resourceRefKeys\":[\"knowledgeBaseId\"]"));
+        assertTrue(preview.contains("\"resourceRefCount\":1"));
+        assertTrue(preview.contains("resourceRefHash"));
         assertFalse(preview.contains("plain-secret"));
+        assertFalse(preview.contains("kb-secret-ref"));
         assertFalse(preview.contains("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"));
         assertTrue(preview.length() < 500);
     }

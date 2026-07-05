@@ -198,15 +198,18 @@ public class LocalGovernedToolExecutionPort implements GovernedToolExecutionPort
             preview.put("argumentKeys", sortedKeys(invocationRequest.arguments()));
             preview.put("argumentCount", invocationRequest.arguments().size());
             preview.put("argumentHash", sha256(canonicalJson(invocationRequest.arguments())));
-            preview.put("resourceRefs", invocationRequest.resourceRefs());
+            preview.put("resourceRefKeys", sortedKeys(invocationRequest.resourceRefs()));
+            preview.put("resourceRefCount", invocationRequest.resourceRefs().size());
+            preview.put("resourceRefHash", sha256(canonicalJson(invocationRequest.resourceRefs())));
             return truncate(objectMapper.writeValueAsString(preview));
         } catch (JsonProcessingException ex) {
             return truncate("keys=" + invocationRequest.arguments().keySet()
-                    + ", size=" + invocationRequest.arguments().size());
+                    + ", size=" + invocationRequest.arguments().size()
+                    + ", resourceRefCount=" + invocationRequest.resourceRefs().size());
         }
     }
 
-    private List<String> sortedKeys(Map<String, Object> arguments) {
+    private List<String> sortedKeys(Map<String, ?> arguments) {
         return arguments.keySet().stream()
                 .filter(Objects::nonNull)
                 .map(String::trim)

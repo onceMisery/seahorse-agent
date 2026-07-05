@@ -46,10 +46,14 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -338,9 +342,13 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             return truncate(OBJECT_MAPPER.writeValueAsString(Map.of(
                     "argumentKeys", safeArgumentKeys(request.arguments()),
                     "argumentCount", request.arguments().size(),
-                    "resourceRefs", request.resourceRefs())));
+                    "resourceRefKeys", safeResourceRefKeys(request.resourceRefs()),
+                    "resourceRefCount", request.resourceRefs().size(),
+                    "resourceRefHash", sha256(canonicalResourceRefs(request.resourceRefs())))));
         } catch (JsonProcessingException ex) {
-            return truncate("keys=" + safeArgumentKeys(request.arguments()) + ", size=" + request.arguments().size());
+            return truncate("keys=" + safeArgumentKeys(request.arguments())
+                    + ", size=" + request.arguments().size()
+                    + ", resourceRefCount=" + request.resourceRefs().size());
         }
     }
 
@@ -588,6 +596,18 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                 .toList();
     }
 
+    private List<String> safeResourceRefKeys(Map<String, String> resourceRefs) {
+        if (resourceRefs == null || resourceRefs.isEmpty()) {
+            return List.of();
+        }
+        return resourceRefs.keySet().stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(this::isSafePreviewArgumentKey)
+                .sorted()
+                .toList();
+    }
+
     private boolean isSafePreviewArgumentKey(String key) {
         if (key == null || key.isBlank() || key.length() > MAX_PREVIEW_ARGUMENT_KEY_LENGTH) {
             return false;
@@ -628,6 +648,29 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             return normalized;
         }
         return "unsupported";
+    }
+
+    private String canonicalResourceRefs(Map<String, String> resourceRefs) throws JsonProcessingException {
+        Map<String, String> canonical = new LinkedHashMap<>();
+        Objects.requireNonNullElse(resourceRefs, Map.<String, String>of()).entrySet().stream()
+                .filter(entry -> entry.getKey() != null)
+                .sorted(Comparator.comparing(Map.Entry::getKey))
+                .forEach(entry -> canonical.put(entry.getKey(), entry.getValue()));
+        return OBJECT_MAPPER.writeValueAsString(canonical);
+    }
+
+    private String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest(Objects.requireNonNullElse(value, "").getBytes(StandardCharsets.UTF_8));
+            StringBuilder result = new StringBuilder(bytes.length * 2);
+            for (byte item : bytes) {
+                result.append(String.format("%02x", item));
+            }
+            return result.toString();
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is not available", ex);
+        }
     }
 
     private String argumentString(Map<String, Object> arguments, String name) {
