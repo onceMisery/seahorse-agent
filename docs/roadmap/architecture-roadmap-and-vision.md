@@ -676,3 +676,11 @@ Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-agent-agentscope -am "-Dt
 This keeps the existing conservative text-extraction path aligned with its no-render/no-edit scope. It does not add LibreOffice/Tika, PDF rendering/OCR, Office rendering/editing, password handling, or general binary conversion.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 53/53, including regressions that DOCX/PDF active content is rejected before container command execution and before `main.py` or decoded input files are written.
+
+## 2026-07-06 Update: Sandbox File Conversion Tool Gateway Audit Summary
+
+Tool Gateway request audit now emits a `sandbox_file_convert`-specific value-free argument summary. The summary records `FILE_CONVERSION` runtime posture, source/target formats, content encoding, input content length, binary-input classification, network posture, and argument keys while excluding raw file content and base64 values from `argumentsSummary`.
+
+This is a narrow cross-tool audit hardening slice. It does not change file conversion execution semantics, artifact scanning, approval policy, quota policy, or add broader binary conversion formats.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 16/16, including regression coverage that `sandbox_file_convert` audit summaries include governance metadata while excluding raw base64/content markers.

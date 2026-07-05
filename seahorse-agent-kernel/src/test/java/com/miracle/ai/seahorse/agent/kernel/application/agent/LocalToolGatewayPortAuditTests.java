@@ -358,6 +358,49 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldSummarizeSandboxFileConvertGovernanceMetadataWithoutContentValues() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "sandbox_file_convert",
+                Map.of(
+                        "sourceFormat", "docx",
+                        "targetFormat", "txt",
+                        "contentEncoding", "base64",
+                        "content", "UEsDBAo=secret-docx-marker"),
+                Map.of(),
+                "run-1:call-1",
+                List.of("sandbox_file_convert")));
+
+        assertTrue(result.success());
+        String summary = audit.requested.get(0).argumentsSummary();
+        assertTrue(summary.contains("\"toolId\":\"sandbox_file_convert\""));
+        assertTrue(summary.contains("\"runtimeType\":\"FILE_CONVERSION\""));
+        assertTrue(summary.contains("\"sourceFormat\":\"docx\""));
+        assertTrue(summary.contains("\"targetFormat\":\"txt\""));
+        assertTrue(summary.contains("\"contentEncoding\":\"base64\""));
+        assertTrue(summary.contains("\"contentLength\":26"));
+        assertTrue(summary.contains("\"binaryInput\":true"));
+        assertTrue(summary.contains("\"networkRequested\":false"));
+        assertFalse(summary.contains("UEsDBAo="));
+        assertFalse(summary.contains("secret-docx-marker"));
+    }
+
+    @Test
     void shouldSummarizeRemoteA2aGovernanceMetadataWithoutPromptOrMetadataValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();

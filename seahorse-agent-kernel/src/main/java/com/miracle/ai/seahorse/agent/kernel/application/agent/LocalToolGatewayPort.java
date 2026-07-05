@@ -357,10 +357,39 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         if ("sandbox_browser".equals(request.toolId())) {
             return summarizeSandboxBrowserArguments(request);
         }
+        if ("sandbox_file_convert".equals(request.toolId())) {
+            return summarizeSandboxFileConvertArguments(request);
+        }
         if ("invoke_remote_a2a_agent".equals(request.toolId())) {
             return summarizeRemoteA2aArguments(request);
         }
         return truncate("keys=" + request.arguments().keySet() + ", size=" + request.arguments().size());
+    }
+
+    private String summarizeSandboxFileConvertArguments(ToolInvocationRequest request) {
+        Map<String, Object> arguments = request.arguments();
+        String sourceFormat = argumentString(arguments, "sourceFormat");
+        String targetFormat = argumentString(arguments, "targetFormat");
+        String contentEncoding = argumentString(arguments, "contentEncoding", "plain");
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("toolId", request.toolId());
+        summary.put("runtimeType", "FILE_CONVERSION");
+        summary.put("sourceFormat", sourceFormat);
+        summary.put("targetFormat", targetFormat);
+        summary.put("contentEncoding", contentEncoding);
+        summary.put("contentLength", argumentString(arguments, "content").length());
+        summary.put("binaryInput", "base64".equalsIgnoreCase(contentEncoding));
+        summary.put("networkRequested", false);
+        summary.put("argumentKeys", arguments.keySet());
+        try {
+            return truncate(OBJECT_MAPPER.writeValueAsString(summary));
+        } catch (JsonProcessingException ex) {
+            return truncate("toolId=sandbox_file_convert, runtimeType=FILE_CONVERSION"
+                    + ", sourceFormat=" + sourceFormat
+                    + ", targetFormat=" + targetFormat
+                    + ", contentEncoding=" + contentEncoding
+                    + ", contentLength=" + argumentString(arguments, "content").length());
+        }
     }
 
     private String summarizeRemoteA2aArguments(ToolInvocationRequest request) {
