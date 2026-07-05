@@ -189,6 +189,30 @@ class KernelApprovalManagementServiceTests {
     }
 
     @Test
+    void shouldRejectMalformedModifiedApprovalPreview() {
+        MemoryApprovalRepository repository = new MemoryApprovalRepository(
+                List.of(approval("approval-1", ApprovalRequestStatus.PENDING)));
+        ApprovalManagementInboundPort service = new KernelApprovalManagementService(
+                repository,
+                repository,
+                adminUser(),
+                FIXED_CLOCK);
+
+        IllegalArgumentException invalidJson = assertThrows(IllegalArgumentException.class,
+                () -> service.modify("approval-1", new ApprovalModifyCommand("not-json", "bad")));
+        IllegalArgumentException unsupportedField = assertThrows(IllegalArgumentException.class,
+                () -> service.modify("approval-1",
+                        new ApprovalModifyCommand("{\"argumentKeys\":[\"input\"],\"rawSecret\":\"value\"}", "bad")));
+        IllegalArgumentException nonObjectArguments = assertThrows(IllegalArgumentException.class,
+                () -> service.modify("approval-1",
+                        new ApprovalModifyCommand("{\"arguments\":[\"input\"]}", "bad")));
+
+        assertEquals("argumentsPreviewJson must be valid JSON", invalidJson.getMessage());
+        assertEquals("argumentsPreviewJson contains unsupported fields", unsupportedField.getMessage());
+        assertEquals("argumentsPreviewJson.arguments must be a JSON object", nonObjectArguments.getMessage());
+    }
+
+    @Test
     void shouldRejectDecisionWhenApprovalIsNotPending() {
         MemoryApprovalRepository repository = new MemoryApprovalRepository(
                 List.of(approval("approval-1", ApprovalRequestStatus.APPROVED)));

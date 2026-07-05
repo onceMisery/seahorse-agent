@@ -17,6 +17,9 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.approval;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalDecisionCommand;
@@ -34,6 +37,7 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 审批管理应用服务。只负责编排鉴权、状态流转和仓储端口调用，不执行真实工具。
@@ -46,11 +50,20 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
     private static final String APPROVAL_NOT_PENDING = "审批请求不是待处理状态";
     private static final String APPROVAL_STATE_CHANGED = "审批请求状态已变更";
     private static final long RUN_PENDING_APPROVAL_PAGE_SIZE = 50L;
+    private static final int MAX_ARGUMENTS_PREVIEW_JSON_LENGTH = 4_000;
+    private static final Set<String> ALLOWED_ARGUMENTS_PREVIEW_FIELDS = Set.of(
+            "argumentKeys",
+            "argumentCount",
+            "argumentHash",
+            "resourceRefs",
+            "modified",
+            "arguments");
 
     private final ApprovalRequestQueryPort queryPort;
     private final ApprovalRequestDecisionPort decisionPort;
     private final CurrentUserPort currentUserPort;
     private final Clock clock;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public KernelApprovalManagementService(ApprovalRequestQueryPort queryPort,
                                            ApprovalRequestDecisionPort decisionPort,
@@ -119,6 +132,9 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
         if (current.status() != ApprovalRequestStatus.PENDING) {
             throw new IllegalStateException(APPROVAL_NOT_PENDING);
         }
+        String safeArgumentsPreviewJson = toStatus == ApprovalRequestStatus.MODIFIED
+                ? validatedArgumentsPreviewJson(argumentsPreviewJson)
+                : argumentsPreviewJson;
         ApprovalRequestDecision decision = new ApprovalRequestDecision(
                 safeApprovalId,
                 ApprovalRequestStatus.PENDING,
@@ -126,9 +142,34 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
                 currentUser.userId(),
                 clock.instant(),
                 decisionComment,
-                argumentsPreviewJson);
+                safeArgumentsPreviewJson);
         return decisionPort.decide(decision)
                 .orElseThrow(() -> new IllegalStateException(APPROVAL_STATE_CHANGED));
+    }
+
+    private String validatedArgumentsPreviewJson(String value) {
+        String json = requireText(value, "argumentsPreviewJson must not be blank");
+        if (json.length() > MAX_ARGUMENTS_PREVIEW_JSON_LENGTH) {
+            throw new IllegalArgumentException("argumentsPreviewJson exceeds maximum length");
+        }
+        JsonNode root;
+        try {
+            root = objectMapper.readTree(json);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("argumentsPreviewJson must be valid JSON", ex);
+        }
+        if (!root.isObject()) {
+            throw new IllegalArgumentException("argumentsPreviewJson must be a JSON object");
+        }
+        root.fieldNames().forEachRemaining(field -> {
+            if (!ALLOWED_ARGUMENTS_PREVIEW_FIELDS.contains(field)) {
+                throw new IllegalArgumentException("argumentsPreviewJson contains unsupported fields");
+            }
+        });
+        if (root.has("arguments") && !root.path("arguments").isObject()) {
+            throw new IllegalArgumentException("argumentsPreviewJson.arguments must be a JSON object");
+        }
+        return json;
     }
 
     private CurrentUser requireAdmin() {

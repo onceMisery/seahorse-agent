@@ -244,6 +244,10 @@ The same safe-key boundary now also applies inside `LocalToolGatewayPort` approv
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,LocalGovernedToolExecutionPortTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 23/23, including regression coverage for unsafe approval-preview keys and cross-provider audit key filtering.
 
+Approval `MODIFIED` decisions now validate `argumentsPreviewJson` before persisting the replacement payload that resume can use as tool arguments. The payload must be a bounded JSON object, may only contain the established preview fields plus optional `arguments`, and requires `arguments` to be an object when present.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelApprovalManagementServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 10/10, including malformed JSON, unsupported field, and non-object `arguments` rejection.
+
 ## 2026-07-03 Update: Sandbox Artifact Binary/PDF Signature Scan
 
 `DefaultSandboxArtifactScannerPort` now performs a bounded local-file signature scan for existing prompt-safe binary artifacts (`application/pdf`, supported image media types) and download-only `video/webm` artifacts. The scanner reads only the first 256 KiB, blocks PE/ELF executable signatures, blocks ZIP/PDF/EBML/script-like masquerading when the media type does not match, and blocks PDF active-content markers such as `/JavaScript`, `/JS`, `/OpenAction`, and `/AA`.
