@@ -29,6 +29,7 @@ public class KernelAgentCheckpointQueryService implements AgentCheckpointQueryIn
 
     private final AgentCheckpointRepositoryPort checkpointRepository;
     private final CurrentUserPort currentUserPort;
+    private final AgentCheckpointViewSanitizer checkpointViewSanitizer;
 
     public KernelAgentCheckpointQueryService(AgentCheckpointRepositoryPort checkpointRepository,
                                              CurrentUserPort currentUserPort) {
@@ -36,12 +37,15 @@ public class KernelAgentCheckpointQueryService implements AgentCheckpointQueryIn
                 checkpointRepository,
                 "checkpointRepository must not be null");
         this.currentUserPort = Objects.requireNonNull(currentUserPort, "currentUserPort must not be null");
+        this.checkpointViewSanitizer = new AgentCheckpointViewSanitizer(null);
     }
 
     @Override
     public List<AgentCheckpoint> listByRunId(String runId) {
         currentUserPort.requireCurrentUser();
-        return checkpointRepository.listByRunId(requireText(runId, "runId must not be blank"));
+        return checkpointRepository.listByRunId(requireText(runId, "runId must not be blank")).stream()
+                .map(checkpointViewSanitizer::checkpointForView)
+                .toList();
     }
 
     private String requireText(String value, String message) {

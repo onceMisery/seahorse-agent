@@ -786,3 +786,11 @@ The bounded sandbox artifact scanner now treats additional PDF action and embedd
 This is a narrow scanner hardening slice. It does not add PDF rendering/OCR, full PDF parsing, attachment extraction, external scanner engines, recursive archive scanning, or new artifact policy semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=DefaultSandboxArtifactScannerPortTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 35/35 after adding regression coverage that direct `/Launch` and `/ImportData` PDFs plus ZIP-embedded `/EmbeddedFile` and `/GoToE` PDFs fail closed without persisting raw marker values in redaction summaries.
+
+## 2026-07-06 Update: Checkpoint Query Resource Reference Minimization
+
+Agent checkpoint query results now share the same pending-tool-call view sanitizer used by run snapshots. External checkpoint reads replace raw `resourceRefs` with safe `resourceRefKeys`, `resourceRefCount`, and `resourceRefHash`, and malformed/non-object pending-tool payloads fail closed instead of echoing raw JSON. Internal checkpoint repository storage and run resume continue to use the original resumable payload.
+
+This is a narrow checkpoint boundary hardening slice. It does not change approval wait persistence, resume semantics, checkpoint storage schema, or tool execution behavior.
+
+Fresh evidence: the regression first failed because `KernelAgentCheckpointQueryService.listByRunId` returned raw `resourceRefs`; after the fix, `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentCheckpointQueryServiceTests,KernelAgentRunSnapshotServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 6/6, covering checkpoint query redaction, malformed payload fail-closed behavior, and existing snapshot redaction behavior.
