@@ -1,5 +1,5 @@
 import { useRef, useEffect, useMemo, useState } from "react";
-import { AlertCircle, BookOpen, Check, FileUp, History, PackagePlus, Pencil, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
+import { AlertCircle, BookOpen, Check, FileUp, History, PackagePlus, Pencil, Plus, RefreshCw, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
@@ -16,13 +16,15 @@ import {
   deleteCustomSkill,
   disableSkill,
   enableSkill,
+  getSkillGateResult,
   installSkill,
   listSkillHistory,
   listSkills,
   rollbackCustomSkill,
   updateCustomSkill,
   type AgentSkill,
-  type AgentSkillRevision
+  type AgentSkillRevision,
+  type GateResult
 } from "@/services/skillService";
 import { getErrorMessage } from "@/utils/error";
 
@@ -85,6 +87,13 @@ function validateSkillFrontmatter(content: string): string | null {
   return null;
 }
 
+const formatDate = (value?: string | null) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("zh-CN");
+};
+
 export function SkillManagementPage() {
   const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.SKILL_MANAGEMENT);
   const [skills, setSkills] = useState<AgentSkill[]>([]);
@@ -105,6 +114,12 @@ export function SkillManagementPage() {
   const [markdown, setMarkdown] = useState(EMPTY_MARKDOWN);
   const [historySkill, setHistorySkill] = useState<AgentSkill | null>(null);
   const [revisions, setRevisions] = useState<AgentSkillRevision[]>([]);
+  const [gateDialog, setGateDialog] = useState<{
+    open: boolean;
+    skill: AgentSkill | null;
+    gateResult: GateResult | null;
+    loading: boolean;
+  }>({ open: false, skill: null, gateResult: null, loading: false });
 
   const filtered = useMemo(() => {
     const key = keyword.trim().toLowerCase();
@@ -270,6 +285,17 @@ export function SkillManagementPage() {
     }
   };
 
+  const openGateResult = async (skill: AgentSkill) => {
+    setGateDialog({ open: true, skill, gateResult: null, loading: true });
+    try {
+      const gateResult = await getSkillGateResult(skill.name, skill.tenantId);
+      setGateDialog({ open: true, skill, gateResult, loading: false });
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Load skill GateResult failed"));
+      setGateDialog({ open: true, skill, gateResult: null, loading: false });
+    }
+  };
+
   const rollback = async (revisionId: string) => {
     if (!historySkill) return;
     try {
@@ -394,6 +420,10 @@ export function SkillManagementPage() {
                     <Button variant="outline" size="sm" onClick={() => openHistory(skill)}>
                       <History className="mr-1 h-4 w-4" />
                       历史
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => openGateResult(skill)}>
+                      <ShieldCheck className="mr-1 h-4 w-4" />
+                      Gate
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => openEdit(skill)} disabled={skill.category !== "CUSTOM"}>
                       <Pencil className="mr-1 h-4 w-4" />
@@ -563,6 +593,130 @@ export function SkillManagementPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <SkillGateResultDialog
+        open={gateDialog.open}
+        skill={gateDialog.skill}
+        gateResult={gateDialog.gateResult}
+        loading={gateDialog.loading}
+        onOpenChange={(open) =>
+          setGateDialog((prev) => ({
+            ...prev,
+            open
+          }))
+        }
+      />
     </div>
+  );
+}
+
+interface SkillGateResultDialogProps {
+  open: boolean;
+  skill: AgentSkill | null;
+  gateResult: GateResult | null;
+  loading: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+function SkillGateResultDialog({
+  open,
+  skill,
+  gateResult,
+  loading,
+  onOpenChange
+}: SkillGateResultDialogProps) {
+  const items = gateResult?.items || [];
+  const blockingCodes = gateResult?.blockingCodes || [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sidebar-scroll sm:max-w-[760px]"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
+        <DialogHeader>
+          <DialogTitle>Skill GateResult</DialogTitle>
+          <DialogDescription>{skill?.name || ""}</DialogDescription>
+        </DialogHeader>
+        {loading ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">Loading GateResult...</div>
+        ) : gateResult ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-md border p-3">
+                <div className="text-xs uppercase text-muted-foreground">Subject</div>
+                <div className="mt-1 font-mono text-sm">
+                  {gateResult.subjectType}:{gateResult.subjectId}
+                </div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs uppercase text-muted-foreground">Status</div>
+                <div className="mt-1 flex items-center gap-2">
+                  <Badge variant={gateResult.passed ? "default" : "destructive"}>{gateResult.status}</Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {gateResult.passed ? "passed" : "blocked"}
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs uppercase text-muted-foreground">Source</div>
+                <div className="mt-1 font-mono text-sm">{gateResult.sourceType || "-"}</div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs uppercase text-muted-foreground">Checked</div>
+                <div className="mt-1 text-sm">{formatDate(gateResult.checkedAt)}</div>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-sm font-medium">Blocking Codes</div>
+              {blockingCodes.length === 0 ? (
+                <div className="rounded-md border p-3 text-sm text-muted-foreground">None</div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {blockingCodes.map((code) => (
+                    <Badge key={code} variant="destructive">
+                      {code}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-2 text-sm font-medium">Check Items</div>
+              {items.length === 0 ? (
+                <div className="rounded-md border p-3 text-sm text-muted-foreground">No check items</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                        <th className="w-[220px] px-2 py-2 font-medium">Code</th>
+                        <th className="w-[100px] px-2 py-2 font-medium">Status</th>
+                        <th className="px-2 py-2 font-medium">Message</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item) => (
+                        <tr key={`${item.code}-${item.status}`} className="border-b last:border-0">
+                          <td className="px-2 py-2 font-mono text-xs">{item.code}</td>
+                          <td className="px-2 py-2">
+                            <Badge variant={item.status === "PASS" ? "default" : "secondary"}>{item.status}</Badge>
+                          </td>
+                          <td className="px-2 py-2 text-muted-foreground">{item.message || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="py-8 text-center text-sm text-muted-foreground">No GateResult</div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

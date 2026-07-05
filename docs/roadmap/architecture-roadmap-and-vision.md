@@ -602,3 +602,11 @@ The Ingestion Pipeline admin table now exposes the existing unified `GateResult`
 This is a narrow unified GateResult productization slice. It does not add new ingestion gate rules, persisted gate-result rows, release approval workflows, or full-Docker UI smoke coverage.
 
 Fresh UX evidence: `npm test -- src/pages/admin/ingestion/IngestionPage.test.tsx` passed 1/1 focused frontend test, covering row action invocation of `getIngestionPipelineGateResult` and rendering of `INGESTION_PIPELINE`, blocking code, source, and check-message evidence. `npm run build` completed successfully with the existing Browserslist/chunk-size warnings.
+
+## 2026-07-06 Update: Skill GateResult UX
+
+The Skill Management admin page now exposes the existing unified `GateResult` projection directly from each skill row. Operators can open a read-only `Skill GateResult` dialog to inspect subject, status, source, checked time, blocking codes, and per-check evidence from `GET /api/skills/{name}/gate-result` without leaving skill management.
+
+This is a narrow unified GateResult productization slice. It does not add new skill gate rules, persisted gate-result rows, release approval workflows, or full-Docker UI smoke coverage.
+
+Fresh UX evidence: `npm test -- src/pages/admin/skills/SkillManagementPage.test.tsx` passed 2/2 focused frontend tests, covering row action invocation of `getSkillGateResult` and rendering of `SKILL`, blocking code, source, and check-message evidence.
