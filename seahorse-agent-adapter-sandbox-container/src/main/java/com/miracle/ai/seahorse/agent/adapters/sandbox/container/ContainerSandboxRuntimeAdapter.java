@@ -448,7 +448,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 import json
                 from datetime import datetime, timezone
                 from pathlib import Path
-                from urllib.parse import urlparse
+                from urllib.parse import unquote_plus, urlparse
                 from playwright.sync_api import sync_playwright
 
                 action = "%s"
@@ -493,11 +493,50 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         port = 443 if scheme == "https" else 80
                     return f"{scheme}://{host}:{port}"
 
+                sensitive_query_parameter_names = {
+                    "access_token",
+                    "api_key",
+                    "apikey",
+                    "auth_token",
+                    "client_secret",
+                    "credential",
+                    "credentials",
+                    "id_token",
+                    "password",
+                    "refresh_token",
+                    "secret",
+                    "session",
+                    "session_id",
+                    "sessionid",
+                    "token",
+                }
+
+                def normalized_query_parameter_name(value):
+                    name = unquote_plus(value).lower()
+                    bracket_index = name.find("[")
+                    if bracket_index > 0:
+                        return name[:bracket_index]
+                    return name
+
+                def has_credential_url_parts(url):
+                    parsed = urlparse(url)
+                    if parsed.username or parsed.password or parsed.fragment:
+                        return True
+                    for parameter in parsed.query.replace(";", "&").split("&"):
+                        if not parameter:
+                            continue
+                        name = parameter.split("=", 1)[0]
+                        if normalized_query_parameter_name(name) in sensitive_query_parameter_names:
+                            return True
+                    return False
+
                 target_origin = origin_key(target_url) if target_url else None
 
                 def allowed_url(url):
                     if url.startswith(("about:", "blob:", "data:")):
                         return True
+                    if has_credential_url_parts(url):
+                        return False
                     if target_origin:
                         return origin_key(url) == target_origin
                     return False
