@@ -28,6 +28,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.IntStream;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -76,6 +78,41 @@ class AgentScopeA2AToolPortAdapterTests {
         assertTrue(result.error().contains("remote unavailable"));
         assertTrue(result.error().contains("[redacted-prompt]"));
         assertFalse(result.error().contains("confidential launch plan"));
+    }
+
+    @Test
+    void rejectsOversizedMetadataBeforeInvokingConnector() {
+        TenantContext.set("tenant-a");
+        CapturingConnector connector = new CapturingConnector();
+        AgentScopeA2AToolPortAdapter adapter = new AgentScopeA2AToolPortAdapter(connector);
+        Map<String, String> metadata = IntStream.range(0, 17)
+                .boxed()
+                .collect(Collectors.toMap(index -> "key-" + index, index -> "value-" + index));
+
+        var result = adapter.invoke("call-1", AgentScopeA2AToolPortAdapter.TOOL_ID, Map.of(
+                "agentName", "planner",
+                "prompt", "draft a plan",
+                "metadata", metadata));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("metadata exceeds max entries"));
+        assertEquals(null, connector.request.get());
+    }
+
+    @Test
+    void rejectsMetadataControlCharactersBeforeInvokingConnector() {
+        TenantContext.set("tenant-a");
+        CapturingConnector connector = new CapturingConnector();
+        AgentScopeA2AToolPortAdapter adapter = new AgentScopeA2AToolPortAdapter(connector);
+
+        var result = adapter.invoke("call-1", AgentScopeA2AToolPortAdapter.TOOL_ID, Map.of(
+                "agentName", "planner",
+                "prompt", "draft a plan",
+                "metadata", Map.of("source", "agent\u0000loop")));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("metadata contains control characters"));
+        assertEquals(null, connector.request.get());
     }
 
     private static final class CapturingConnector implements A2AAgentConnectorPort {

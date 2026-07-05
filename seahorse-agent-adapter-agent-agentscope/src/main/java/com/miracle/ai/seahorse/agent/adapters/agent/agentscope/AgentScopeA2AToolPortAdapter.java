@@ -32,6 +32,11 @@ import java.util.Objects;
 public class AgentScopeA2AToolPortAdapter implements DescribedToolPort {
 
     public static final String TOOL_ID = "invoke_remote_a2a_agent";
+    private static final int MAX_AGENT_NAME_LENGTH = 128;
+    private static final int MAX_PROMPT_LENGTH = 32_000;
+    private static final int MAX_METADATA_ENTRIES = 16;
+    private static final int MAX_METADATA_KEY_LENGTH = 64;
+    private static final int MAX_METADATA_VALUE_LENGTH = 512;
 
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
@@ -89,19 +94,48 @@ public class AgentScopeA2AToolPortAdapter implements DescribedToolPort {
         if (!(value instanceof String text) || text.isBlank()) {
             throw new IllegalArgumentException(key + " is required");
         }
-        return text.trim();
+        String result = text.trim();
+        int maxLength = "prompt".equals(key) ? MAX_PROMPT_LENGTH : MAX_AGENT_NAME_LENGTH;
+        if (result.length() > maxLength) {
+            throw new IllegalArgumentException(key + " exceeds max length " + maxLength);
+        }
+        if (hasDisallowedControlCharacters(result, "prompt".equals(key))) {
+            throw new IllegalArgumentException(key + " contains control characters");
+        }
+        return result;
     }
 
     private Map<String, String> metadata(Object value) {
         if (!(value instanceof Map<?, ?> raw) || raw.isEmpty()) {
             return Map.of();
         }
+        if (raw.size() > MAX_METADATA_ENTRIES) {
+            throw new IllegalArgumentException("metadata exceeds max entries " + MAX_METADATA_ENTRIES);
+        }
         Map<String, String> result = new LinkedHashMap<>();
         raw.forEach((key, metadataValue) -> {
             if (key instanceof String textKey && !textKey.isBlank() && metadataValue != null) {
-                result.put(textKey.trim(), String.valueOf(metadataValue));
+                String normalizedKey = textKey.trim();
+                String normalizedValue = String.valueOf(metadataValue).trim();
+                if (normalizedKey.length() > MAX_METADATA_KEY_LENGTH) {
+                    throw new IllegalArgumentException("metadata key exceeds max length " + MAX_METADATA_KEY_LENGTH);
+                }
+                if (normalizedValue.length() > MAX_METADATA_VALUE_LENGTH) {
+                    throw new IllegalArgumentException(
+                            "metadata value exceeds max length " + MAX_METADATA_VALUE_LENGTH);
+                }
+                if (hasDisallowedControlCharacters(normalizedKey, false)
+                        || hasDisallowedControlCharacters(normalizedValue, false)) {
+                    throw new IllegalArgumentException("metadata contains control characters");
+                }
+                result.put(normalizedKey, normalizedValue);
             }
         });
         return Map.copyOf(result);
+    }
+
+    private boolean hasDisallowedControlCharacters(String value, boolean allowWhitespaceControls) {
+        return value.chars().anyMatch(ch -> Character.isISOControl(ch)
+                && (!allowWhitespaceControls || !Character.isWhitespace(ch)));
     }
 }

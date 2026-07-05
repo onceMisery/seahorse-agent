@@ -357,7 +357,34 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         if ("sandbox_browser".equals(request.toolId())) {
             return summarizeSandboxBrowserArguments(request);
         }
+        if ("invoke_remote_a2a_agent".equals(request.toolId())) {
+            return summarizeRemoteA2aArguments(request);
+        }
         return truncate("keys=" + request.arguments().keySet() + ", size=" + request.arguments().size());
+    }
+
+    private String summarizeRemoteA2aArguments(ToolInvocationRequest request) {
+        Map<String, Object> arguments = request.arguments();
+        Map<String, Object> metadata = mapValue(arguments.get("metadata"));
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("toolId", request.toolId());
+        summary.put("agentName", argumentString(arguments, "agentName"));
+        summary.put("promptLength", argumentString(arguments, "prompt").length());
+        summary.put("metadataKeys", metadata.keySet());
+        summary.put("metadataCount", metadata.size());
+        if (hasText(argumentString(metadata, "version"))) {
+            summary.put("version", argumentString(metadata, "version"));
+        }
+        summary.put("argumentKeys", arguments.keySet());
+        try {
+            return truncate(OBJECT_MAPPER.writeValueAsString(summary));
+        } catch (JsonProcessingException ex) {
+            return truncate("toolId=invoke_remote_a2a_agent, agentName="
+                    + argumentString(arguments, "agentName")
+                    + ", promptLength=" + argumentString(arguments, "prompt").length()
+                    + ", metadataKeys=" + metadata.keySet()
+                    + ", metadataCount=" + metadata.size());
+        }
     }
 
     private String summarizeSandboxBrowserArguments(ToolInvocationRequest request) {

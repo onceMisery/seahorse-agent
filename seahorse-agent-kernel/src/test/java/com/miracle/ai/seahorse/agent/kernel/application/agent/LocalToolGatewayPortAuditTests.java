@@ -358,6 +358,50 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldSummarizeRemoteA2aGovernanceMetadataWithoutPromptOrMetadataValues() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "invoke_remote_a2a_agent",
+                Map.of(
+                        "agentName", "planner",
+                        "prompt", "draft a confidential launch plan",
+                        "metadata", Map.of(
+                                "version", "1.2.3",
+                                "source", "secret-source-marker")),
+                Map.of(),
+                "run-1:call-1",
+                List.of("invoke_remote_a2a_agent")));
+
+        assertTrue(result.success());
+        String summary = audit.requested.get(0).argumentsSummary();
+        assertTrue(summary.contains("\"toolId\":\"invoke_remote_a2a_agent\""));
+        assertTrue(summary.contains("\"agentName\":\"planner\""));
+        assertTrue(summary.contains("\"promptLength\":32"));
+        assertTrue(summary.contains("\"metadataKeys\":["));
+        assertTrue(summary.contains("version"));
+        assertTrue(summary.contains("source"));
+        assertTrue(summary.contains("\"metadataCount\":2"));
+        assertTrue(summary.contains("\"version\":\"1.2.3\""));
+        assertFalse(summary.contains("confidential launch plan"));
+        assertFalse(summary.contains("secret-source-marker"));
+    }
+
+    @Test
     void shouldPublishArtifactsFromSuccessfulToolResultWithFullRequestContext() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
                 "{\"artifactType\":\"REPORT\",\"b64Json\":\"raw-image-bytes\"}"));
