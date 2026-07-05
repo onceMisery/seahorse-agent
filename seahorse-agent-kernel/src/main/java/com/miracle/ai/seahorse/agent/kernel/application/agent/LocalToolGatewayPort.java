@@ -500,9 +500,10 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("toolId", request.toolId());
         summary.put("mode", urlMode ? "url" : "inline");
-        summary.put("action", argumentString(arguments, "action", "snapshot"));
+        summary.put("action", safeSandboxBrowserAction(arguments));
         summary.put("networkRequested", urlMode);
-        summary.put("allowedHosts", allowedHosts);
+        summary.put("allowedHostCount", allowedHosts.size());
+        summary.put("allowedHostsPresent", !allowedHosts.isEmpty());
         summary.put("cookieCount", cookieCount);
         summary.put("sessionStateReplayRequested", !sessionState.isEmpty());
         summary.put("sessionStateCookieCount", sessionCookieCount);
@@ -515,12 +516,20 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             return truncate(OBJECT_MAPPER.writeValueAsString(summary));
         } catch (JsonProcessingException ex) {
             return truncate("toolId=sandbox_browser, mode=" + (urlMode ? "url" : "inline")
-                    + ", allowedHosts=" + allowedHosts
+                    + ", allowedHostCount=" + allowedHosts.size()
                     + ", cookieCount=" + cookieCount
                     + ", sessionStateReplayRequested=" + !sessionState.isEmpty()
                     + ", sessionStateCookieCount=" + sessionCookieCount
                     + ", sessionStateOriginCount=" + sessionOriginCount);
         }
+    }
+
+    private String safeSandboxBrowserAction(Map<String, Object> arguments) {
+        String action = argumentString(arguments, "action", "snapshot");
+        if ("snapshot".equals(action) || "extract_text".equals(action) || "extract-text".equals(action)) {
+            return action;
+        }
+        return "unsupported";
     }
 
     private String argumentString(Map<String, Object> arguments, String name) {

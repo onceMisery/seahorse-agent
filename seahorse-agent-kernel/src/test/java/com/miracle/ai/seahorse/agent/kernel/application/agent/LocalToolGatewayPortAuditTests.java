@@ -344,7 +344,8 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"toolId\":\"sandbox_browser\""));
         assertTrue(summary.contains("\"mode\":\"url\""));
         assertTrue(summary.contains("\"networkRequested\":true"));
-        assertTrue(summary.contains("\"allowedHosts\":[\"example.test\"]"));
+        assertTrue(summary.contains("\"allowedHostCount\":1"));
+        assertTrue(summary.contains("\"allowedHostsPresent\":true"));
         assertTrue(summary.contains("\"cookieCount\":1"));
         assertTrue(summary.contains("\"sessionStateReplayRequested\":true"));
         assertTrue(summary.contains("\"sessionStateCookieCount\":1"));
@@ -355,6 +356,45 @@ class LocalToolGatewayPortAuditTests {
         assertFalse(summary.contains("cookie-secret-value"));
         assertFalse(summary.contains("restored-secret-value"));
         assertFalse(summary.contains("storage-secret-value"));
+    }
+
+    @Test
+    void shouldSummarizeSandboxBrowserAuditWithoutPrevalidatedHostOrActionValues() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.failed("sandbox_browser failed"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "sandbox_browser",
+                Map.of(
+                        "url", "https://example.test/page",
+                        "allowedHosts", List.of("example.test?access_token=host-secret"),
+                        "action", "snapshot-secret-action"),
+                Map.of(),
+                "run-1:call-1",
+                List.of("sandbox_browser")));
+
+        assertFalse(result.success());
+        String summary = audit.requested.get(0).argumentsSummary();
+        assertTrue(summary.contains("\"toolId\":\"sandbox_browser\""));
+        assertTrue(summary.contains("\"mode\":\"url\""));
+        assertTrue(summary.contains("\"action\":\"unsupported\""));
+        assertTrue(summary.contains("\"allowedHostCount\":1"));
+        assertTrue(summary.contains("\"allowedHostsPresent\":true"));
+        assertFalse(summary.contains("access_token=host-secret"));
+        assertFalse(summary.contains("snapshot-secret-action"));
     }
 
     @Test

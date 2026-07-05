@@ -210,11 +210,15 @@ This closes explicit one-run session-state replay. Replaying the previously capt
 
 ## 2026-07-06 Update: Sandbox Browser Tool Gateway Audit Summary
 
-Tool Gateway request audit now emits a `sandbox_browser`-specific argument summary for browser governance evidence. The summary records value-free execution posture fields such as `mode`, `networkRequested`, `allowedHosts`, cookie count, session-state replay/capture flags, session-state cookie/origin counts, HAR, and video flags.
+Tool Gateway request audit now emits a `sandbox_browser`-specific argument summary for browser governance evidence. The summary records value-free execution posture fields such as `mode`, `networkRequested`, allowed-host count/presence, cookie count, session-state replay/capture flags, session-state cookie/origin counts, HAR, and video flags.
 
 The audit summary deliberately omits URL credential material, cookie values, and session-state/localStorage values; those remain governed by the existing request/runtime validation and transient input handling. This is a narrow audit-hardening slice only. It does not add durable credential storage, replaying previously captured SECRET/BLOCKED artifacts, operator approval UX, long-lived browser profiles, or broader cross-provider audit schema changes.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 14/14, including regression coverage that sandbox browser audit summaries include URL/egress/session governance metadata while excluding cookie and localStorage secret values.
+
+The sandbox browser audit summary now also avoids echoing pre-validation `allowedHosts` and unsupported `action` values. It records only allowed-host count/presence and maps unknown actions to `unsupported`, so malformed host strings or action markers cannot enter request audit before the tool adapter performs its stricter URL/action validation.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 19/19.
 
 ## 2026-07-06 Update: AgentScope A2A Signed Header Boundary Guard
 
