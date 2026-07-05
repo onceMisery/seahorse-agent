@@ -248,6 +248,10 @@ Approval `MODIFIED` decisions now validate `argumentsPreviewJson` before persist
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelApprovalManagementServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 10/10, including malformed JSON, unsupported field, and non-object `arguments` rejection.
 
+Agent run resume now also fails closed for legacy or externally written `MODIFIED` approvals that do not carry an `arguments` object. Approved approvals still resume from the checkpoint arguments, while modified approvals must provide explicit replacement arguments and no longer silently fall back to the original pending tool call.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunResumeServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 4/4, covering normal approved resume, modified replacement arguments, rejected approval, and malformed modified approval rejection without tool invocation.
+
 ## 2026-07-03 Update: Sandbox Artifact Binary/PDF Signature Scan
 
 `DefaultSandboxArtifactScannerPort` now performs a bounded local-file signature scan for existing prompt-safe binary artifacts (`application/pdf`, supported image media types) and download-only `video/webm` artifacts. The scanner reads only the first 256 KiB, blocks PE/ELF executable signatures, blocks ZIP/PDF/EBML/script-like masquerading when the media type does not match, and blocks PDF active-content markers such as `/JavaScript`, `/JS`, `/OpenAction`, and `/AA`.

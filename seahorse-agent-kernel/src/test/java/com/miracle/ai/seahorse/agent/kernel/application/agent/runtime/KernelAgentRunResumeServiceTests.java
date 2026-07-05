@@ -59,6 +59,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class KernelAgentRunResumeServiceTests {
 
@@ -96,6 +97,55 @@ class KernelAgentRunResumeServiceTests {
         assertEquals(2, runRepository.listSteps("run-1").size());
         assertEquals(AgentStepType.TOOL_CALL, runRepository.listSteps("run-1").get(0).stepType());
         assertEquals(AgentStepType.MODEL_TURN, runRepository.listSteps("run-1").get(1).stepType());
+    }
+
+    @Test
+    void shouldResumeModifiedRunWithReplacementArguments() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(waitingRun());
+        MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();
+        checkpointRepository.save(waitingCheckpoint());
+        MemoryApprovalQueryPort approvals = new MemoryApprovalQueryPort(
+                approval(ApprovalRequestStatus.MODIFIED, "{\"arguments\":{\"memoryId\":\"mem-2\"}}"));
+        RecordingToolGateway toolGateway = new RecordingToolGateway(ToolInvocationResult.ok("{\"deleted\":true}"));
+        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+                runRepository,
+                checkpointRepository,
+                approvals,
+                toolGateway,
+                new SingleTurnModel("Memory deleted"),
+                currentUser(),
+                FIXED_CLOCK);
+
+        AgentRun resumed = service.resume("run-1");
+
+        assertEquals(AgentRunStatus.SUCCEEDED, resumed.status());
+        assertEquals(1, toolGateway.requests.size());
+        assertEquals("mem-2", toolGateway.requests.get(0).arguments().get("memoryId"));
+    }
+
+    @Test
+    void shouldRejectModifiedApprovalWithoutReplacementArguments() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(waitingRun());
+        MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();
+        checkpointRepository.save(waitingCheckpoint());
+        MemoryApprovalQueryPort approvals = new MemoryApprovalQueryPort(
+                approval(ApprovalRequestStatus.MODIFIED, "{\"argumentKeys\":[\"memoryId\"],\"modified\":true}"));
+        RecordingToolGateway toolGateway = new RecordingToolGateway(ToolInvocationResult.ok("should-not-run"));
+        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+                runRepository,
+                checkpointRepository,
+                approvals,
+                toolGateway,
+                new SingleTurnModel("should-not-run"),
+                currentUser(),
+                FIXED_CLOCK);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> service.resume("run-1"));
+
+        assertEquals("Modified approval arguments must be an object", error.getMessage());
+        assertEquals(0, toolGateway.requests.size());
     }
 
     @Test

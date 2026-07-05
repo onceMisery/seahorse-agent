@@ -194,13 +194,16 @@ public class KernelAgentRunResumeService implements AgentRunResumeInboundPort {
     }
 
     private Optional<Map<String, Object>> modifiedArguments(ApprovalRequest approval) {
-        if (approval.status() != ApprovalRequestStatus.MODIFIED || isBlank(approval.argumentsPreviewJson())) {
+        if (approval.status() != ApprovalRequestStatus.MODIFIED) {
             return Optional.empty();
+        }
+        if (isBlank(approval.argumentsPreviewJson())) {
+            throw new IllegalStateException("Modified approval arguments are missing");
         }
         JsonNode root = readTree(approval.argumentsPreviewJson(), "argumentsPreviewJson");
         JsonNode arguments = root.path("arguments");
         if (!arguments.isObject()) {
-            return Optional.empty();
+            throw new IllegalStateException("Modified approval arguments must be an object");
         }
         return Optional.of(objectMap(arguments));
     }
