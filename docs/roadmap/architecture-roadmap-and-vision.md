@@ -114,6 +114,14 @@ This moves runtime profile/capacity visibility out of one-off health toasts and 
 
 Fresh evidence: focused kernel/container tests passed, the full-compose backend rebuilt with an in-image Maven `BUILD SUCCESS`, and `.\scripts\e2e-sandbox-file-convert-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-pdf-convert-smoke` passed 23/23 against the local full-Docker backend, including CSV/JSON conversions, Markdown-to-HTML invoke, DOCX-to-TXT and PDF-to-TXT invokes, persisted `FILE_CONVERSION` session/profile metadata, governed artifact downloads, local object storage verification, no leftover managed sandbox containers, and zero non-terminal sandbox sessions.
 
+## 2026-07-06 Update: Sandbox PDF Text Conversion Encrypted-PDF Guard
+
+The conservative `sandbox_file_convert` PDF-to-text runtime script now explicitly rejects PDFs with an `/Encrypt` marker in the bounded prefix before attempting literal text extraction. This keeps the stdlib-only converter aligned with its documented non-encrypted PDF scope and fails closed instead of producing misleading partial text for encrypted documents.
+
+This is a narrow document-conversion guard. It does not add PDF rendering, OCR, password handling, full PDF parsing, LibreOffice/Tika integration, or a general binary conversion engine.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 43/43.
+
 ## 2026-07-03 Update: Sandbox Tool Quota Governance
 
 Sandbox Operations now exposes `POST /api/sandbox/runtime/tool-quota-policies` for sandbox-backed tool quota policy writes. The endpoint is gated by both `SANDBOX` and `QUOTA_MANAGEMENT`, accepts only `sandbox_python`, `sandbox_file_convert`, and the planned `sandbox_browser`, then writes an existing `QuotaScope.TOOL` policy so Tool Gateway quota preflight remains the enforcement owner.

@@ -393,7 +393,11 @@ class ContainerSandboxRuntimeAdapterTests {
                 ContainerCommandResult.succeeded("converted pdf document to text\n", Duration.ofMillis(190)),
                 command -> {
                     assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
-                            .contains("pdf_to_text", "source_format = \"pdf\"", "b\"%PDF-\"", "converted.txt")
+                            .contains("pdf_to_text",
+                                    "source_format = \"pdf\"",
+                                    "b\"%PDF-\"",
+                                    "encrypted pdf is not supported",
+                                    "converted.txt")
                             .doesNotContain(pdfBase64);
                     assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.pdf")))
                             .isEqualTo("%PDF-1.4\nfake-pdf-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8));

@@ -988,6 +988,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     content = path.read_bytes()
                     if not content.startswith(b"%%PDF-"):
                         raise ValueError("pdf header not found")
+                    if b"/Encrypt" in content[:262144]:
+                        raise ValueError("encrypted pdf is not supported")
                     texts = []
                     for stream in pdf_streams(content):
                         if b"BT" not in stream or b"ET" not in stream:
