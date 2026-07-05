@@ -570,3 +570,11 @@ The Run Experiment admin page now keeps the latest exported report visible after
 This is a narrow productization slice for the existing report export workflow. It does not add persisted report metadata, server-side report history, PDF/HTML report formats, or a new report editor.
 
 Fresh UX evidence: `npm test -- src/pages/admin/run-profiles/RunExperimentPage.test.tsx` passed 3/3 focused frontend tests, covering experiment creation, trial actions, report download, and the new report preview metadata/content rendering. `git diff --check` passed with only CRLF warnings.
+
+## 2026-07-06 Update: Run Experiment Branch Evidence Report
+
+Run Experiment report export now includes resolved message-branch evidence for trial outputs. The Evidence Index and Trial Export tables include a `Message Branch` column, each output comparison entry lists the output leaf branch position, and the reproduction appendix summarizes trial branch leaves with leaf message id, parent id, branch root id, and sibling sequence.
+
+This is a narrow report-evidence slice for the existing Markdown export. It does not add a new branch graph API, frontend branch visualization, persisted report history, or full-Docker report export rerun.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=KernelRunExperimentServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 7/7, including assertions for `Message Branch`, `leaf=301 parent=202 root=202 sibling=1`, and `Trial branch leaves`. `git diff --check` passed with only CRLF warnings.

@@ -216,11 +216,11 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         report.append("- Generated at: ").append(Instant.now()).append("\n\n");
 
         appendExecutiveSummary(report, trials, outputMessages);
-        appendEvidenceIndex(report, trials, snapshots);
-        appendTrialExport(report, trials, snapshots);
+        appendEvidenceIndex(report, trials, snapshots, outputMessages);
+        appendTrialExport(report, trials, snapshots, outputMessages);
         appendOutputComparison(report, trials, outputMessages);
         appendFailures(report, trials);
-        appendReproductionAppendix(report, experiment, trials);
+        appendReproductionAppendix(report, experiment, trials, outputMessages);
         return report.toString();
     }
 
@@ -246,12 +246,14 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
     private void appendEvidenceIndex(
             StringBuilder report,
             List<RunExperimentTrialRecord> trials,
-            Map<String, RunContextSnapshotRecord> snapshots) {
+            Map<String, RunContextSnapshotRecord> snapshots,
+            Map<Long, ConversationMessageRecord> outputMessages) {
         report.append("## Evidence Index\n\n");
-        report.append("| Trial | Run ID | Studio Trace | Cost Source | Fork Target |\n");
-        report.append("|---|---|---|---|---|\n");
+        report.append("| Trial | Run ID | Studio Trace | Cost Source | Fork Target | Message Branch |\n");
+        report.append("|---|---|---|---|---|---|\n");
         for (RunExperimentTrialRecord trial : trials) {
             RunContextSnapshotRecord snapshot = snapshots.get(trial.getRunId());
+            ConversationMessageRecord outputMessage = outputMessage(outputMessages, trial.getOutputMessageId());
             report.append("| ")
                     .append(tableCell(trial.getId()))
                     .append(" | ")
@@ -262,6 +264,8 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                     .append(tableCell(costEvidence(trial, snapshot)))
                     .append(" | ")
                     .append(tableCell(forkTarget(trial)))
+                    .append(" | ")
+                    .append(tableCell(branchEvidence(outputMessage)))
                     .append(" |\n");
         }
         report.append("\n");
@@ -270,12 +274,14 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
     private void appendTrialExport(
             StringBuilder report,
             List<RunExperimentTrialRecord> trials,
-            Map<String, RunContextSnapshotRecord> snapshots) {
+            Map<String, RunContextSnapshotRecord> snapshots,
+            Map<Long, ConversationMessageRecord> outputMessages) {
         report.append("## Trial Export\n\n");
-        report.append("| Trial | Run Profile | Status | Run ID | Output Message | Score | Metrics | Studio Trace | Cost Source | Fork Target |\n");
-        report.append("|---|---|---|---|---|---|---|---|---|---|\n");
+        report.append("| Trial | Run Profile | Status | Run ID | Output Message | Message Branch | Score | Metrics | Studio Trace | Cost Source | Fork Target |\n");
+        report.append("|---|---|---|---|---|---|---|---|---|---|---|\n");
         for (RunExperimentTrialRecord trial : trials) {
             RunContextSnapshotRecord snapshot = snapshots.get(trial.getRunId());
+            ConversationMessageRecord outputMessage = outputMessage(outputMessages, trial.getOutputMessageId());
             String metrics = valueOrDash(trial.getMetricJson());
             report.append("| ")
                     .append(tableCell(trial.getId()))
@@ -287,6 +293,8 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                     .append(tableCell(trial.getRunId()))
                     .append(" | ")
                     .append(tableCell(trial.getOutputMessageId()))
+                    .append(" | ")
+                    .append(tableCell(branchEvidence(outputMessage)))
                     .append(" | ")
                     .append(tableCell(trial.getScoreJson()))
                     .append(" | ")
@@ -315,6 +323,7 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
             report.append("- Run profile: ").append(valueOrDash(trial.getRunProfileId())).append("\n");
             report.append("- Run ID: ").append(valueOrDash(trial.getRunId())).append("\n");
             report.append("- Output message ID: ").append(valueOrDash(trial.getOutputMessageId())).append("\n");
+            report.append("- Message branch: ").append(branchEvidence(message)).append("\n");
             report.append("- Diff vs first trial: ").append(diffAgainstBaseline(baseline, content)).append("\n");
             if (trial.getErrorMessage() != null && !trial.getErrorMessage().isBlank()) {
                 report.append("- Failure: ").append(markdownText(trial.getErrorMessage())).append("\n");
@@ -355,7 +364,8 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
     private void appendReproductionAppendix(
             StringBuilder report,
             RunExperimentRecord experiment,
-            List<RunExperimentTrialRecord> trials) {
+            List<RunExperimentTrialRecord> trials,
+            Map<Long, ConversationMessageRecord> outputMessages) {
         report.append("## Reproduction Appendix\n\n");
         report.append("- Experiment ID: ").append(valueOrDash(experiment.getId())).append("\n");
         report.append("- Conversation ID: ").append(valueOrDash(experiment.getConversationId())).append("\n");
@@ -366,6 +376,12 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                 .filter(value -> value != null && !value.isBlank())
                 .toList();
         report.append(runIds.isEmpty() ? "-" : String.join(", ", runIds)).append("\n");
+        report.append("- Trial branch leaves: ");
+        List<String> branchLeaves = trials.stream()
+                .map(trial -> branchLeafEvidence(trial, outputMessage(outputMessages, trial.getOutputMessageId())))
+                .filter(value -> value != null && !value.isBlank())
+                .toList();
+        report.append(branchLeaves.isEmpty() ? "-" : String.join("; ", branchLeaves)).append("\n");
     }
 
     private Map<Long, ConversationMessageRecord> loadOutputMessages(String userId, RunExperimentRecord experiment) {
@@ -543,6 +559,23 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
 
     private String forkTarget(RunExperimentTrialRecord trial) {
         return trial.getOutputMessageId() == null ? "not available" : "message:" + trial.getOutputMessageId();
+    }
+
+    private String branchEvidence(ConversationMessageRecord message) {
+        if (message == null) {
+            return "not resolved";
+        }
+        return "leaf=" + valueOrDash(message.getId())
+                + " parent=" + valueOrDash(message.getParentId())
+                + " root=" + valueOrDash(message.getBranchRootId())
+                + " sibling=" + valueOrDash(message.getSiblingSeq());
+    }
+
+    private String branchLeafEvidence(RunExperimentTrialRecord trial, ConversationMessageRecord message) {
+        if (trial == null || trial.getOutputMessageId() == null) {
+            return null;
+        }
+        return "trial " + valueOrDash(trial.getId()) + " -> " + branchEvidence(message);
     }
 
     private String jsonScalar(String json, String key) {

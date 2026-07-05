@@ -236,7 +236,8 @@ class KernelRunExperimentServiceTests {
                 {"traceId":"trace-success","studioTraceId":"studio-success","studioUrl":"http://studio.local"}
                 """);
         snapshotRepository.snapshots.put("run-exp-1-trial-10", snapshot);
-        branchRepository.add(message("301", "101", "100", "assistant", "Kernel output with audit trail"));
+        branchRepository.add(message("301", "101", "100", "assistant", "Kernel output with audit trail",
+                202L, 202L, 1));
         service.scoreTrial("100", details.getExperiment().getId(), details.getTrials().get(0).getId(),
                 "{\"rating\":4,\"verdict\":\"smoke-pass\"}");
 
@@ -252,6 +253,9 @@ class KernelRunExperimentServiceTests {
         assertTrue(report.markdown().contains("## Reproduction Appendix"));
         assertTrue(report.markdown().contains("run-exp-1-trial-10"));
         assertTrue(report.markdown().contains("message:301"));
+        assertTrue(report.markdown().contains("Message Branch"));
+        assertTrue(report.markdown().contains("leaf=301 parent=202 root=202 sibling=1"));
+        assertTrue(report.markdown().contains("Trial branch leaves: trial 10 -> leaf=301 parent=202 root=202 sibling=1"));
         assertTrue(report.markdown().contains("smoke-pass"));
         assertTrue(report.markdown().contains("studio=[studio-success](http://studio.local/traces/studio-success)"));
         assertTrue(report.markdown().contains("sa_cost_usage_record cost=0.42 tokens=123 calls=2 records=1"));
@@ -444,12 +448,21 @@ class KernelRunExperimentServiceTests {
 
     private static ConversationMessageRecord message(String id, String conversationId, String userId,
                                                      String role, String content) {
+        return message(id, conversationId, userId, role, content, null, null, null);
+    }
+
+    private static ConversationMessageRecord message(String id, String conversationId, String userId,
+                                                     String role, String content, Long parentId,
+                                                     Long branchRootId, Integer siblingSeq) {
         ConversationMessageRecord record = new ConversationMessageRecord();
         record.setId(id);
         record.setConversationId(conversationId);
         record.setUserId(userId);
         record.setRole(role);
         record.setContent(content);
+        record.setParentId(parentId);
+        record.setBranchRootId(branchRootId);
+        record.setSiblingSeq(siblingSeq);
         return record;
     }
 }
