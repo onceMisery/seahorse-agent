@@ -1391,10 +1391,11 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         if (!hasText(host)
                 || "localhost".equals(host)
                 || host.endsWith(".localhost")
+                || !host.contains(".")
                 || isIpv4Literal(host)
                 || host.chars().allMatch(Character::isDigit)) {
             throw new IllegalArgumentException("browser automation " + label
-                    + " must be a DNS host, not localhost or an IP literal");
+                    + " must be a dotted DNS host, not localhost or an IP literal");
         }
     }
 

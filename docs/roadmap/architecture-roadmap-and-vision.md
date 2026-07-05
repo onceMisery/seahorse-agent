@@ -424,3 +424,11 @@ The sandbox browser URL path now rejects localhost-style and IPv4-literal target
 This is a narrow SSRF/host-probing guard only. It does not add a general outbound proxy, DNS pinning, CIDR/private-network egress classification, IPv6 handling, mutable operator URL policy UX, or browser credential governance.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 13/13; `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 37/37; and `git diff --check` passed with only CRLF warnings.
+
+## 2026-07-06 Update: Sandbox Browser Single-Label Host Egress Guard
+
+The sandbox browser URL guard now also rejects single-label DNS names such as `metadata` or `backend` in URL mode. Browser URL egress must use a dotted DNS host that is also present in `allowedHosts`, approved by the runtime profile/global sandbox policy, and rechecked by the container runtime parser before Docker execution.
+
+This is a narrow SSRF/container-network probing guard. It preserves existing dotted test and full-Docker paths such as `example.test` and `host.docker.internal`, and still does not add a general outbound proxy, DNS pinning, CIDR/private-network egress classification, IPv6 handling, mutable operator URL policy UX, or browser credential governance.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 14/14; `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 38/38.

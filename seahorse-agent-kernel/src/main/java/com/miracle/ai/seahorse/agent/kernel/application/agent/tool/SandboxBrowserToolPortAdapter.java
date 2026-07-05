@@ -706,10 +706,11 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         if (!hasText(host)
                 || "localhost".equals(host)
                 || host.endsWith(".localhost")
+                || !host.contains(".")
                 || isIpv4Literal(host)
                 || host.chars().allMatch(Character::isDigit)) {
             throw new IllegalArgumentException("sandbox_browser failed: " + label
-                    + " must be a DNS host, not localhost or an IP literal");
+                    + " must be a dotted DNS host, not localhost or an IP literal");
         }
     }
 

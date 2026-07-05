@@ -408,6 +408,21 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldRejectSingleLabelBrowserUrlBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://metadata/admin",
+                "allowedHosts", List.of("metadata"))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("dotted DNS host"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
     void shouldRejectCookieWhenDomainIsNotAllowlistedBeforeCreatingSession() {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
