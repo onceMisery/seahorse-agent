@@ -559,7 +559,7 @@ The credential-query guard now also treats semicolon-delimited query components 
 
 The same guard now canonicalizes bracketed query parameter names before matching, so structured forms such as `access_token[]=...` and `session[id]=...` inherit the same fail-closed credential-query behavior.
 
-The adapter-side and container-runtime query guards now also canonicalize common credential parameter variants by removing separators before matching, so forms such as `sessionToken=...`, `client-secret=...`, `auth-token=...`, and `oauth_token=...` fail closed before sandbox session creation or Docker command construction without echoing the credential values.
+The adapter-side, container-runtime input, and generated Playwright route/HAR query guards now also canonicalize common credential parameter variants by removing separators before matching, so forms such as `sessionToken=...`, `client-secret=...`, `auth-token=...`, and `oauth_token=...` fail closed before sandbox session creation, Docker command construction, or page-initiated route continuation without echoing the credential values.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 30/30; `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 56/56; `git diff --check` passed.
 

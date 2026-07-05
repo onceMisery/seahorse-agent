@@ -592,20 +592,23 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     return f"{scheme}://{host}:{port}"
 
                 sensitive_query_parameter_names = {
-                    "access_token",
-                    "api_key",
+                    "accesstoken",
                     "apikey",
-                    "auth_token",
-                    "client_secret",
+                    "authorization",
+                    "authtoken",
+                    "bearer",
+                    "bearertoken",
+                    "clientsecret",
                     "credential",
                     "credentials",
-                    "id_token",
+                    "idtoken",
+                    "oauthtoken",
                     "password",
-                    "refresh_token",
+                    "refreshtoken",
                     "secret",
                     "session",
-                    "session_id",
                     "sessionid",
+                    "sessiontoken",
                     "token",
                 }
 
@@ -613,8 +616,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     name = unquote_plus(value).lower()
                     bracket_index = name.find("[")
                     if bracket_index > 0:
-                        return name[:bracket_index]
-                    return name
+                        name = name[:bracket_index]
+                    return "".join(ch for ch in name if ch.isalnum())
 
                 def has_credential_url_parts(url):
                     parsed = urlparse(url)
