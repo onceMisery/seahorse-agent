@@ -252,6 +252,10 @@ Agent run resume now also fails closed for legacy or externally written `MODIFIE
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunResumeServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 4/4, covering normal approved resume, modified replacement arguments, rejected approval, and malformed modified approval rejection without tool invocation.
 
+Audit redaction now also scans string values under otherwise safe keys for obvious credential shapes such as `Bearer ...`, `access_token=...`, `api_key=...`, `client_secret=...`, `password=...`, and `session_id=...`. Matching values are replaced wholesale with `[REDACTED]`, closing the case where upstream errors or URLs carried credential material in generic fields such as `message` or array entries.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=AuditRedactionPolicyTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 3/3, including nested field-name redaction, invalid JSON fail-closed behavior, and credential-shaped string-value redaction.
+
 ## 2026-07-03 Update: Sandbox Artifact Binary/PDF Signature Scan
 
 `DefaultSandboxArtifactScannerPort` now performs a bounded local-file signature scan for existing prompt-safe binary artifacts (`application/pdf`, supported image media types) and download-only `video/webm` artifacts. The scanner reads only the first 256 KiB, blocks PE/ELF executable signatures, blocks ZIP/PDF/EBML/script-like masquerading when the media type does not match, and blocks PDF active-content markers such as `/JavaScript`, `/JS`, `/OpenAction`, and `/AA`.

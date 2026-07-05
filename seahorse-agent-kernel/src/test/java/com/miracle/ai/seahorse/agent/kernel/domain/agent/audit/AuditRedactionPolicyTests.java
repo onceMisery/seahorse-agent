@@ -55,4 +55,25 @@ class AuditRedactionPolicyTests {
         assertTrue(redacted.contains(AuditRedactionPolicy.REDACTED_VALUE));
         assertFalse(redacted.contains("not-json-token-secret"));
     }
+
+    @Test
+    void shouldRedactCredentialShapedStringValuesUnderSafeKeys() {
+        AuditRedactionPolicy policy = new AuditRedactionPolicy();
+
+        String redacted = policy.redact("""
+                {
+                  "message":"upstream failed with Bearer abcdefghijklmnop",
+                  "url":"https://example.test/callback?access_token=token-secret-value",
+                  "notes":["safe note","api_key=secret-api-key-value","password=hunter2"],
+                  "safe":"ordinary business text"
+                }
+                """);
+
+        assertTrue(redacted.contains("ordinary business text"));
+        assertTrue(redacted.contains(AuditRedactionPolicy.REDACTED_VALUE));
+        assertFalse(redacted.contains("abcdefghijklmnop"));
+        assertFalse(redacted.contains("token-secret-value"));
+        assertFalse(redacted.contains("secret-api-key-value"));
+        assertFalse(redacted.contains("hunter2"));
+    }
 }

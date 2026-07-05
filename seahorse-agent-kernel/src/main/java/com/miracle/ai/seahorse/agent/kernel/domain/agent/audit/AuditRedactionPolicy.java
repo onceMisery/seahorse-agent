@@ -22,11 +22,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public class AuditRedactionPolicy {
 
@@ -40,6 +42,10 @@ public class AuditRedactionPolicy {
             "password",
             "apikey",
             "authorization");
+    private static final Pattern CREDENTIAL_VALUE_PATTERN = Pattern.compile(
+            "(?i)(bearer\\s+[a-z0-9._~+/=-]{8,}"
+                    + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id)"
+                    + "\\s*=\\s*[^\\s&;]+)");
 
     private final ObjectMapper objectMapper;
 
@@ -71,6 +77,8 @@ public class AuditRedactionPolicy {
                 Map.Entry<String, JsonNode> field = fields.next();
                 if (sensitive(field.getKey())) {
                     objectNode.put(field.getKey(), REDACTED_VALUE);
+                } else if (credentialValue(field.getValue())) {
+                    objectNode.put(field.getKey(), REDACTED_VALUE);
                 } else {
                     redact(field.getValue());
                 }
@@ -78,8 +86,21 @@ public class AuditRedactionPolicy {
             return;
         }
         if (node instanceof ArrayNode arrayNode) {
-            arrayNode.forEach(this::redact);
+            for (int i = 0; i < arrayNode.size(); i++) {
+                JsonNode item = arrayNode.get(i);
+                if (credentialValue(item)) {
+                    arrayNode.set(i, TextNode.valueOf(REDACTED_VALUE));
+                } else {
+                    redact(item);
+                }
+            }
         }
+    }
+
+    private boolean credentialValue(JsonNode node) {
+        return node != null
+                && node.isTextual()
+                && CREDENTIAL_VALUE_PATTERN.matcher(node.asText("")).find();
     }
 
     private boolean sensitive(String key) {
