@@ -219,6 +219,10 @@ public class LocalGovernedToolExecutionPort implements GovernedToolExecutionPort
         if (key == null || key.isBlank() || key.length() > MAX_PREVIEW_ARGUMENT_KEY_LENGTH) {
             return false;
         }
+        String lower = key.toLowerCase();
+        if (lower.contains("secret") || lower.contains("token") || lower.contains("password")) {
+            return false;
+        }
         for (int i = 0; i < key.length(); i++) {
             char ch = key.charAt(i);
             boolean safe = (ch >= 'a' && ch <= 'z')

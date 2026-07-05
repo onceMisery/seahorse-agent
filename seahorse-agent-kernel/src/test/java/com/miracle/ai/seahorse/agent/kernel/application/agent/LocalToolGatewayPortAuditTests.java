@@ -211,6 +211,46 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldFilterUnsafeArgumentKeyNamesFromApprovalPreview() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
+        RecordingToolApprovalRequestRepositoryPort approvals = new RecordingToolApprovalRequestRepositoryPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
+                        ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED,
+                        "Tool requires approval")),
+                ToolInvocationAuditPort.noop(),
+                approvals,
+                FIXED_CLOCK);
+
+        gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "memory-forget",
+                Map.of(
+                        "input", "value",
+                        "sessionToken=secret-marker", "x",
+                        "line\nbreak", "y",
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "z"),
+                Map.of(),
+                "run-1:call-1",
+                List.of("memory-forget")));
+
+        assertEquals(1, approvals.saved.size());
+        String preview = approvals.saved.get(0).argumentsPreviewJson();
+        assertTrue(preview.contains("\"argumentKeys\":[\"input\"]"));
+        assertTrue(preview.contains("\"argumentCount\":4"));
+        assertFalse(preview.contains("secret-marker"));
+        assertFalse(preview.contains("line\\nbreak"));
+    }
+
+    @Test
     void shouldExecuteToolWhenApprovalWasAlreadyApprovedForRunStep() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
@@ -579,14 +619,61 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"requestBodyType\":\"object\""));
         assertTrue(summary.contains("\"requestBodyKeys\":["));
         assertTrue(summary.contains("email"));
-        assertTrue(summary.contains("token"));
         assertTrue(summary.contains("\"requestBodyFieldCount\":2"));
         assertFalse(summary.contains("cust-secret-marker"));
         assertFalse(summary.contains("active-secret-marker"));
         assertFalse(summary.contains("page-secret-marker"));
         assertFalse(summary.contains("header-secret-marker"));
         assertFalse(summary.contains("customer-secret@example.test"));
+        assertFalse(summary.contains("token"));
         assertFalse(summary.contains("body-secret-marker"));
+    }
+
+    @Test
+    void shouldFilterUnsafeKeyNamesFromCrossProviderAuditSummaries() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "openapi_customers",
+                Map.of(
+                        "path", Map.of("customerId", "cust-1"),
+                        "query", Map.of("access_token_secret_marker", "secret-query-value"),
+                        "header", Map.of("x\napi-key", "secret-header-value"),
+                        "requestBody", Map.of(
+                                "email", "customer@example.test",
+                                "sessionToken=secret-marker", "secret-body-value"),
+                        "line\nbreak", "unsafe-key-value"),
+                Map.of(),
+                "run-1:call-1",
+                List.of("openapi_customers")));
+
+        assertTrue(result.success());
+        String summary = audit.requested.get(0).argumentsSummary();
+        assertTrue(summary.contains("\"argumentCount\":5"));
+        assertTrue(summary.contains("\"pathKeys\":[\"customerId\"]"));
+        assertTrue(summary.contains("\"queryKeys\":[]"));
+        assertTrue(summary.contains("\"headerKeys\":[]"));
+        assertTrue(summary.contains("\"requestBodyKeys\":[\"email\"]"));
+        assertFalse(summary.contains("access_token_secret_marker"));
+        assertFalse(summary.contains("sessionToken=secret-marker"));
+        assertFalse(summary.contains("secret-query-value"));
+        assertFalse(summary.contains("secret-header-value"));
+        assertFalse(summary.contains("secret-body-value"));
+        assertFalse(summary.contains("unsafe-key-value"));
     }
 
     @Test

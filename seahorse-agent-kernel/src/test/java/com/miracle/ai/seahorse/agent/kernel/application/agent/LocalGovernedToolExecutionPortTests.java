@@ -104,6 +104,7 @@ class LocalGovernedToolExecutionPortTests {
 
         port.preflight(request("weather", Map.of(
                 "city", "Hangzhou",
+                "sessionToken", "plain-secret",
                 "sessionToken=secret-marker", "x",
                 "line\nbreak", "y",
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "z")));
@@ -111,13 +112,14 @@ class LocalGovernedToolExecutionPortTests {
         ApprovalRequest approval = approvals.request.get();
         assertNotNull(approval);
         JsonNode preview = new ObjectMapper().readTree(approval.argumentsPreviewJson());
-        assertEquals(4, preview.path("argumentCount").asInt());
+        assertEquals(5, preview.path("argumentCount").asInt());
         assertNotNull(preview.path("argumentHash").textValue());
         assertEquals(List.of("city"), new ObjectMapper().convertValue(
                 preview.path("argumentKeys"),
                 new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
                 }));
         assertFalse(approval.argumentsPreviewJson().contains("secret-marker"));
+        assertFalse(approval.argumentsPreviewJson().contains("sessionToken"));
         assertFalse(approval.argumentsPreviewJson().contains("line\\nbreak"));
     }
 

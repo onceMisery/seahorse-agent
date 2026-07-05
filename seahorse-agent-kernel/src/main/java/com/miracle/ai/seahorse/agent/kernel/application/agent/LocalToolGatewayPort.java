@@ -60,6 +60,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
 
     private static final Logger log = LoggerFactory.getLogger(LocalToolGatewayPort.class);
     private static final int SUMMARY_MAX_LENGTH = 1000;
+    private static final int MAX_PREVIEW_ARGUMENT_KEY_LENGTH = 64;
     private static final String APPROVAL_ID_PREFIX = "approval:";
     private static final String LEGACY_RUN_ID_PREFIX = "legacy-run:";
     private static final String LEGACY_USER_ID = "legacy-user";
@@ -324,11 +325,11 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     private String argumentsPreviewJson(ToolInvocationRequest request) {
         try {
             return truncate(OBJECT_MAPPER.writeValueAsString(Map.of(
-                    "argumentKeys", request.arguments().keySet(),
+                    "argumentKeys", safeArgumentKeys(request.arguments()),
                     "argumentCount", request.arguments().size(),
                     "resourceRefs", request.resourceRefs())));
         } catch (JsonProcessingException ex) {
-            return truncate("keys=" + request.arguments().keySet() + ", size=" + request.arguments().size());
+            return truncate("keys=" + safeArgumentKeys(request.arguments()) + ", size=" + request.arguments().size());
         }
     }
 
@@ -382,7 +383,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         if (request.toolId() != null && request.toolId().startsWith("openapi_")) {
             return summarizeOpenApiArguments(request);
         }
-        return truncate("keys=" + request.arguments().keySet() + ", size=" + request.arguments().size());
+        return truncate("keys=" + safeArgumentKeys(request.arguments()) + ", size=" + request.arguments().size());
     }
 
     private String summarizeOpenApiArguments(ToolInvocationRequest request) {
@@ -396,22 +397,22 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("toolId", request.toolId());
         summary.put("provider", "OPENAPI");
-        summary.put("argumentKeys", arguments.keySet());
+        summary.put("argumentKeys", safeArgumentKeys(arguments));
         summary.put("argumentCount", arguments.size());
-        summary.put("pathKeys", path.keySet());
+        summary.put("pathKeys", safeArgumentKeys(path));
         summary.put("pathCount", path.size());
-        summary.put("queryKeys", query.keySet());
+        summary.put("queryKeys", safeArgumentKeys(query));
         summary.put("queryCount", query.size());
-        summary.put("parameterKeys", parameters.keySet());
+        summary.put("parameterKeys", safeArgumentKeys(parameters));
         summary.put("parameterCount", parameters.size());
-        summary.put("headerKeys", headers.keySet());
+        summary.put("headerKeys", safeArgumentKeys(headers));
         summary.put("headerCount", headers.size());
         summary.put("requestBodyPresent", body != null);
         summary.put("requestBodyType", valueType(body));
         if (body instanceof String text) {
             summary.put("requestBodyLength", text.length());
         } else if (!bodyMap.isEmpty()) {
-            summary.put("requestBodyKeys", bodyMap.keySet());
+            summary.put("requestBodyKeys", safeArgumentKeys(bodyMap));
             summary.put("requestBodyFieldCount", bodyMap.size());
         }
         try {
@@ -419,12 +420,12 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         } catch (JsonProcessingException ex) {
             return truncate("toolId=" + request.toolId()
                     + ", provider=OPENAPI"
-                    + ", argumentKeys=" + arguments.keySet()
+                    + ", argumentKeys=" + safeArgumentKeys(arguments)
                     + ", argumentCount=" + arguments.size()
-                    + ", pathKeys=" + path.keySet()
-                    + ", queryKeys=" + query.keySet()
-                    + ", parameterKeys=" + parameters.keySet()
-                    + ", headerKeys=" + headers.keySet()
+                    + ", pathKeys=" + safeArgumentKeys(path)
+                    + ", queryKeys=" + safeArgumentKeys(query)
+                    + ", parameterKeys=" + safeArgumentKeys(parameters)
+                    + ", headerKeys=" + safeArgumentKeys(headers)
                     + ", requestBodyPresent=" + (body != null)
                     + ", requestBodyType=" + valueType(body));
         }
@@ -440,7 +441,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("networkRequested", booleanArgument(arguments, "networkRequested"));
         summary.put("requestedHosts", requestedHosts);
         summary.put("requestedHostCount", requestedHosts.size());
-        summary.put("argumentKeys", arguments.keySet());
+        summary.put("argumentKeys", safeArgumentKeys(arguments));
         try {
             return truncate(OBJECT_MAPPER.writeValueAsString(summary));
         } catch (JsonProcessingException ex) {
@@ -466,7 +467,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("contentLength", argumentString(arguments, "content").length());
         summary.put("binaryInput", "base64".equalsIgnoreCase(contentEncoding));
         summary.put("networkRequested", false);
-        summary.put("argumentKeys", arguments.keySet());
+        summary.put("argumentKeys", safeArgumentKeys(arguments));
         try {
             return truncate(OBJECT_MAPPER.writeValueAsString(summary));
         } catch (JsonProcessingException ex) {
@@ -485,19 +486,19 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("toolId", request.toolId());
         summary.put("agentName", argumentString(arguments, "agentName"));
         summary.put("promptLength", argumentString(arguments, "prompt").length());
-        summary.put("metadataKeys", metadata.keySet());
+        summary.put("metadataKeys", safeArgumentKeys(metadata));
         summary.put("metadataCount", metadata.size());
         if (hasText(argumentString(metadata, "version"))) {
             summary.put("version", argumentString(metadata, "version"));
         }
-        summary.put("argumentKeys", arguments.keySet());
+        summary.put("argumentKeys", safeArgumentKeys(arguments));
         try {
             return truncate(OBJECT_MAPPER.writeValueAsString(summary));
         } catch (JsonProcessingException ex) {
             return truncate("toolId=invoke_remote_a2a_agent, agentName="
                     + argumentString(arguments, "agentName")
                     + ", promptLength=" + argumentString(arguments, "prompt").length()
-                    + ", metadataKeys=" + metadata.keySet()
+                    + ", metadataKeys=" + safeArgumentKeys(metadata)
                     + ", metadataCount=" + metadata.size());
         }
     }
@@ -542,6 +543,41 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         return SANDBOX_BROWSER_ARGUMENT_KEYS.stream()
                 .filter(arguments::containsKey)
                 .toList();
+    }
+
+    private List<String> safeArgumentKeys(Map<String, Object> arguments) {
+        if (arguments == null || arguments.isEmpty()) {
+            return List.of();
+        }
+        return arguments.keySet().stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(this::isSafePreviewArgumentKey)
+                .sorted()
+                .toList();
+    }
+
+    private boolean isSafePreviewArgumentKey(String key) {
+        if (key == null || key.isBlank() || key.length() > MAX_PREVIEW_ARGUMENT_KEY_LENGTH) {
+            return false;
+        }
+        String lower = key.toLowerCase();
+        if (lower.contains("secret") || lower.contains("token") || lower.contains("password")) {
+            return false;
+        }
+        for (int i = 0; i < key.length(); i++) {
+            char ch = key.charAt(i);
+            boolean safe = (ch >= 'a' && ch <= 'z')
+                    || (ch >= 'A' && ch <= 'Z')
+                    || (ch >= '0' && ch <= '9')
+                    || ch == '_'
+                    || ch == '-'
+                    || ch == '.';
+            if (!safe) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String safeSandboxBrowserAction(Map<String, Object> arguments) {
