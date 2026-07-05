@@ -7,6 +7,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  ShieldCheck,
   Trash2
 } from "lucide-react";
 import { toast } from "sonner";
@@ -31,6 +32,7 @@ import type {
   IngestionTask,
   IngestionTaskCreatePayload,
   IngestionTaskNode,
+  GateResult,
   PageResult
 } from "@/services/ingestionService";
 import {
@@ -38,6 +40,7 @@ import {
   createIngestionTask,
   deleteIngestionPipeline,
   getIngestionPipeline,
+  getIngestionPipelineGateResult,
   getIngestionPipelines,
   getIngestionTask,
   getIngestionTaskNodes,
@@ -225,6 +228,12 @@ export function IngestionPage() {
     open: boolean;
     pipeline: IngestionPipeline | null;
   }>({ open: false, pipeline: null });
+  const [pipelineGateDialog, setPipelineGateDialog] = useState<{
+    open: boolean;
+    pipeline: IngestionPipeline | null;
+    gateResult: GateResult | null;
+    loading: boolean;
+  }>({ open: false, pipeline: null, gateResult: null, loading: false });
   const [pipelineDeleteTarget, setPipelineDeleteTarget] = useState<IngestionPipeline | null>(null);
 
   const [pipelineOptions, setPipelineOptions] = useState<IngestionPipeline[]>([]);
@@ -349,6 +358,18 @@ export function IngestionPage() {
     }
   };
 
+  const openPipelineGateResult = async (pipeline: IngestionPipeline) => {
+    setPipelineGateDialog({ open: true, pipeline, gateResult: null, loading: true });
+    try {
+      const gateResult = await getIngestionPipelineGateResult(pipeline.id);
+      setPipelineGateDialog({ open: true, pipeline, gateResult, loading: false });
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Load pipeline GateResult failed"));
+      setPipelineGateDialog({ open: true, pipeline, gateResult: null, loading: false });
+      console.error(error);
+    }
+  };
+
   const taskStatusLabel = (status?: string | null) =>
     status ? status.toLowerCase() : "unknown";
 
@@ -442,6 +463,14 @@ export function IngestionPage() {
                         <div className="flex justify-end gap-2">
                           <Button size="sm" variant="outline" onClick={() => openPipelineNodes(pipeline)}>
                             查看节点
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openPipelineGateResult(pipeline)}
+                          >
+                            <ShieldCheck className="mr-0.1 h-4 w-4" />
+                            Gate
                           </Button>
                           <Button
                             size="sm"
@@ -606,6 +635,22 @@ export function IngestionPage() {
         open={pipelineNodesDialog.open}
         pipeline={pipelineNodesDialog.pipeline}
         onOpenChange={(open) => setPipelineNodesDialog({ open, pipeline: open ? pipelineNodesDialog.pipeline : null })}
+      />
+
+      <PipelineGateResultDialog
+        open={pipelineGateDialog.open}
+        pipeline={pipelineGateDialog.pipeline}
+        gateResult={pipelineGateDialog.gateResult}
+        loading={pipelineGateDialog.loading}
+        onOpenChange={(open) =>
+          setPipelineGateDialog((prev) => ({
+            ...prev,
+            open,
+            pipeline: open ? prev.pipeline : null,
+            gateResult: open ? prev.gateResult : null,
+            loading: open ? prev.loading : false
+          }))
+        }
       />
 
       <AlertDialog open={Boolean(pipelineDeleteTarget)} onOpenChange={(open) => (!open ? setPipelineDeleteTarget(null) : null)}>
@@ -1823,6 +1868,110 @@ function PipelineNodesDialog({ open, pipeline, onOpenChange }: PipelineNodesDial
               ))}
             </TableBody>
           </Table>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface PipelineGateResultDialogProps {
+  open: boolean;
+  pipeline: IngestionPipeline | null;
+  gateResult: GateResult | null;
+  loading: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+function PipelineGateResultDialog({
+  open,
+  pipeline,
+  gateResult,
+  loading,
+  onOpenChange
+}: PipelineGateResultDialogProps) {
+  const items = gateResult?.items || [];
+  const blockingCodes = gateResult?.blockingCodes || [];
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sidebar-scroll sm:max-w-[760px]"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
+        <DialogHeader>
+          <DialogTitle>Pipeline GateResult</DialogTitle>
+          <DialogDescription>{pipeline?.name || pipeline?.id || ""}</DialogDescription>
+        </DialogHeader>
+        {loading ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">Loading GateResult...</div>
+        ) : gateResult ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-md border p-3">
+                <div className="text-xs uppercase text-muted-foreground">Subject</div>
+                <div className="mt-1 font-mono text-sm">{gateResult.subjectType}:{gateResult.subjectId}</div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs uppercase text-muted-foreground">Status</div>
+                <div className="mt-1 flex items-center gap-2">
+                  <Badge variant={gateResult.passed ? "default" : "destructive"}>{gateResult.status}</Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {gateResult.passed ? "passed" : "blocked"}
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs uppercase text-muted-foreground">Source</div>
+                <div className="mt-1 font-mono text-sm">{gateResult.sourceType || "-"}</div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs uppercase text-muted-foreground">Checked</div>
+                <div className="mt-1 text-sm">{formatDate(gateResult.checkedAt)}</div>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-sm font-medium">Blocking Codes</div>
+              {blockingCodes.length === 0 ? (
+                <div className="rounded-md border p-3 text-sm text-muted-foreground">None</div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {blockingCodes.map((code) => (
+                    <Badge key={code} variant="destructive">{code}</Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-2 text-sm font-medium">Check Items</div>
+              {items.length === 0 ? (
+                <div className="rounded-md border p-3 text-sm text-muted-foreground">No check items</div>
+              ) : (
+                <Table className="min-w-[640px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[220px]">Code</TableHead>
+                      <TableHead className="w-[100px]">Status</TableHead>
+                      <TableHead>Message</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((item) => (
+                      <TableRow key={`${item.code}-${item.status}`}>
+                        <TableCell className="font-mono text-xs">{item.code}</TableCell>
+                        <TableCell>
+                          <Badge variant={item.status === "PASS" ? "default" : "secondary"}>{item.status}</Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{item.message || "-"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="py-8 text-center text-sm text-muted-foreground">No GateResult</div>
         )}
       </DialogContent>
     </Dialog>

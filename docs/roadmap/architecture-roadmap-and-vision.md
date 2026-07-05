@@ -594,3 +594,11 @@ Fresh evidence: the new regression first failed with a report export `NullPointe
 The full-Docker run experiment smoke now also covers this negative path. After the normal multi-profile happy path report export, the smoke creates a second experiment with a missing `baseLeafMessageId`, asserts the experiment and trial become `FAILED`, exports the failure report, and checks that the Markdown includes `base leaf message not found`, `Output message ID: -`, and `Message branch: not resolved`.
 
 Fresh full-Docker evidence: `docker compose -f docker-compose.full.yml build --build-arg HTTP_PROXY=http://192.168.1.9:7890 --build-arg HTTPS_PROXY=http://192.168.1.9:7890 backend` rebuilt the backend image with in-image Maven `BUILD SUCCESS`; recreating backend returned healthy; and `.\scripts\e2e-run-experiment-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123` passed 12/12 with report `e2e-run-experiment-20260706032945-332241664076988416.md` and missing-leaf report `e2e-run-experiment-missing-leaf-20260706033002-332241734428049408.md`.
+
+## 2026-07-06 Update: Ingestion Pipeline GateResult UX
+
+The Ingestion Pipeline admin table now exposes the existing unified `GateResult` projection directly from each pipeline row. Operators can open a read-only `Pipeline GateResult` dialog to inspect subject, status, source, checked time, blocking codes, and per-check evidence from `GET /ingestion/pipelines/{id}/gate-result` without leaving the ingestion management page.
+
+This is a narrow unified GateResult productization slice. It does not add new ingestion gate rules, persisted gate-result rows, release approval workflows, or full-Docker UI smoke coverage.
+
+Fresh UX evidence: `npm test -- src/pages/admin/ingestion/IngestionPage.test.tsx` passed 1/1 focused frontend test, covering row action invocation of `getIngestionPipelineGateResult` and rendering of `INGESTION_PIPELINE`, blocking code, source, and check-message evidence. `npm run build` completed successfully with the existing Browserslist/chunk-size warnings.
