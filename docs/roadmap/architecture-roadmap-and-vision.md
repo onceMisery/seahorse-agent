@@ -794,3 +794,11 @@ Agent checkpoint query results now share the same pending-tool-call view sanitiz
 This is a narrow checkpoint boundary hardening slice. It does not change approval wait persistence, resume semantics, checkpoint storage schema, or tool execution behavior.
 
 Fresh evidence: the regression first failed because `KernelAgentCheckpointQueryService.listByRunId` returned raw `resourceRefs`; after the fix, `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentCheckpointQueryServiceTests,KernelAgentRunSnapshotServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 6/6, covering checkpoint query redaction, malformed payload fail-closed behavior, and existing snapshot redaction behavior.
+
+## 2026-07-06 Update: Checkpoint Query Run Ownership Guard
+
+Agent checkpoint query results now require the requested run to be readable by the current user before loading checkpoint rows. Owners can read their own checkpoint history, admins can read across users, unrelated users receive `权限不足`, and missing runs fail closed with `Agent run not found`.
+
+This closes a checkpoint API authorization gap adjacent to the resource-reference minimization work. It does not change checkpoint persistence, resume behavior, worker access to internal checkpoints, or the sanitized checkpoint response shape.
+
+Fresh evidence: the new regression first failed because `KernelAgentCheckpointQueryService` had no run repository dependency or owner/admin gate. After the fix, `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentCheckpointQueryServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 5/5, and `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-DskipTests" compile` completed with reactor `BUILD SUCCESS` after the Spring auto-configuration was updated to inject `AgentRunRepositoryPort`.

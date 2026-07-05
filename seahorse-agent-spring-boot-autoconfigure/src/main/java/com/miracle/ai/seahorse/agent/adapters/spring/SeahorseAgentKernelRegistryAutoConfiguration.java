@@ -275,12 +275,14 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean({AgentCheckpointRepositoryPort.class, CurrentUserPort.class})
+    @ConditionalOnBean({AgentRunRepositoryPort.class, AgentCheckpointRepositoryPort.class, CurrentUserPort.class})
     @ConditionalOnMissingBean(AgentCheckpointQueryInboundPort.class)
     public KernelAgentCheckpointQueryService seahorseAgentCheckpointQueryInboundPort(
+            AgentRunRepositoryPort agentRunRepositoryPort,
             AgentCheckpointRepositoryPort agentCheckpointRepositoryPort,
             CurrentUserPort currentUserPort) {
-        return new KernelAgentCheckpointQueryService(agentCheckpointRepositoryPort, currentUserPort);
+        return new KernelAgentCheckpointQueryService(agentRunRepositoryPort, agentCheckpointRepositoryPort,
+                currentUserPort);
     }
 
     @Bean
