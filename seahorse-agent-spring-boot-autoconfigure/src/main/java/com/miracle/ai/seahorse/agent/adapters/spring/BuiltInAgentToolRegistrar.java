@@ -56,6 +56,7 @@ import java.util.Objects;
 public class BuiltInAgentToolRegistrar implements ApplicationRunner {
 
     private static final Logger LOG = LoggerFactory.getLogger(BuiltInAgentToolRegistrar.class);
+    private static final String REMOTE_A2A_TOOL_ID = "invoke_remote_a2a_agent";
 
     private final ToolRegistryPort toolRegistry;
     private final ObjectProvider<DescribedToolPort> toolPorts;
@@ -116,7 +117,7 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
     }
 
     private ToolRiskLevel riskLevel(String toolId) {
-        if (isSandboxTool(toolId)) {
+        if (isSandboxTool(toolId) || isRemoteA2aTool(toolId)) {
             return ToolRiskLevel.HIGH;
         }
         if (isModelGenerationTool(toolId)) {
@@ -126,7 +127,7 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
     }
 
     private ToolActionType actionType(String toolId) {
-        if (isModelGenerationTool(toolId) || isSandboxTool(toolId)) {
+        if (isModelGenerationTool(toolId) || isSandboxTool(toolId) || isRemoteA2aTool(toolId)) {
             return ToolActionType.EXECUTE;
         }
         return ToolActionType.READ;
@@ -141,6 +142,7 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
             case SandboxPythonToolPortAdapter.TOOL_ID,
                     SandboxFileConvertToolPortAdapter.TOOL_ID,
                     SandboxBrowserToolPortAdapter.TOOL_ID -> "SANDBOX";
+            case REMOTE_A2A_TOOL_ID -> "REMOTE_AGENT";
             case ImageGenerationToolPortAdapter.TOOL_ID,
                     NewsletterGenerationToolPortAdapter.TOOL_ID,
                     PptGenerationToolPortAdapter.TOOL_ID,
@@ -165,6 +167,10 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
     }
 
     private boolean requiresApproval(String toolId) {
-        return isSandboxTool(toolId);
+        return isSandboxTool(toolId) || isRemoteA2aTool(toolId);
+    }
+
+    private boolean isRemoteA2aTool(String toolId) {
+        return REMOTE_A2A_TOOL_ID.equals(toolId);
     }
 }

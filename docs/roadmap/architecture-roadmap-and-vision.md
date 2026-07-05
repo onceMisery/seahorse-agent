@@ -700,3 +700,11 @@ Built-in sandbox tools now enter the Tool Catalog with `requiresApproval=true` w
 This is a catalog-registration hardening slice only. It does not change sandbox execution behavior, per-agent binding limits, quota policy semantics, MCP/OpenAPI registration, or non-sandbox built-in tool defaults.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-Dtest=BuiltInAgentToolRegistrarTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed after updating regression coverage that all three built-in sandbox tools are saved with `requiresApproval=true`.
+
+## 2026-07-06 Update: Remote A2A Built-in Tool Catalog Approval Defaults
+
+The built-in Tool Catalog registrar now recognizes `invoke_remote_a2a_agent` as a remote-agent execution tool when the AgentScope A2A adapter contributes it as a `DescribedToolPort`. It is saved as `HIGH` risk, `EXECUTE`, `REMOTE_AGENT`, and `requiresApproval=true`, instead of falling back to the generic low-risk built-in metadata.
+
+This closes a cross-provider governance gap at registration time only. It does not change AgentScope discovery, request signing, connector invocation, Tool Gateway audit summaries, or approval decision semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-Dtest=BuiltInAgentToolRegistrarTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed after adding regression coverage for the remote A2A catalog projection.

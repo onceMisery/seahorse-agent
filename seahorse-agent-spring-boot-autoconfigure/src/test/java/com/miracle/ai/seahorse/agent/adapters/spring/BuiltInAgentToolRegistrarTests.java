@@ -48,7 +48,10 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionSweepResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.source.GitHubRepositorySnapshot;
@@ -102,6 +105,7 @@ class BuiltInAgentToolRegistrarTests {
                 () -> new SandboxFileConvertToolPortAdapter(new NoopSandboxRuntime(), jsonSupport));
         context.registerBean(SandboxBrowserToolPortAdapter.class,
                 () -> new SandboxBrowserToolPortAdapter(new NoopSandboxRuntime(), jsonSupport));
+        context.registerBean(RemoteA2AToolPort.class, RemoteA2AToolPort::new);
         context.refresh();
 
         BuiltInAgentToolRegistrar registrar = new BuiltInAgentToolRegistrar(
@@ -122,7 +126,8 @@ class BuiltInAgentToolRegistrarTests {
         assertThat(registry.find(SandboxPythonToolPortAdapter.TOOL_ID)).isPresent();
         assertThat(registry.find(SandboxFileConvertToolPortAdapter.TOOL_ID)).isPresent();
         assertThat(registry.find(SandboxBrowserToolPortAdapter.TOOL_ID)).isPresent();
-        assertThat(catalog.savedEntries()).hasSize(11);
+        assertThat(registry.find(RemoteA2AToolPort.TOOL_ID)).isPresent();
+        assertThat(catalog.savedEntries()).hasSize(12);
         assertThat(catalog.findById(GitHubRepositoryReaderToolPortAdapter.TOOL_ID)).hasValueSatisfying(entry -> {
             assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
             assertThat(entry.actionType()).isEqualTo(ToolActionType.READ);
@@ -171,6 +176,14 @@ class BuiltInAgentToolRegistrarTests {
             assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
             assertThat(entry.actionType()).isEqualTo(ToolActionType.EXECUTE);
             assertThat(entry.resourceType()).isEqualTo("SANDBOX");
+            assertThat(entry.riskLevel()).isEqualTo(ToolRiskLevel.HIGH);
+            assertThat(entry.enabled()).isTrue();
+            assertThat(entry.requiresApproval()).isTrue();
+        });
+        assertThat(catalog.findById(RemoteA2AToolPort.TOOL_ID)).hasValueSatisfying(entry -> {
+            assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
+            assertThat(entry.actionType()).isEqualTo(ToolActionType.EXECUTE);
+            assertThat(entry.resourceType()).isEqualTo("REMOTE_AGENT");
             assertThat(entry.riskLevel()).isEqualTo(ToolRiskLevel.HIGH);
             assertThat(entry.enabled()).isTrue();
             assertThat(entry.requiresApproval()).isTrue();
@@ -262,6 +275,25 @@ class BuiltInAgentToolRegistrarTests {
         @Override
         public SandboxArtifactDownloadDecision downloadArtifact(String artifactId) {
             throw new UnsupportedOperationException();
+        }
+    }
+
+    private static final class RemoteA2AToolPort implements DescribedToolPort {
+        private static final String TOOL_ID = "invoke_remote_a2a_agent";
+        private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
+                TOOL_ID,
+                "Invoke Remote A2A Agent",
+                "Invoke a remote agent discovered through AgentScope A2A/Nacos within the current tenant.",
+                "{}");
+
+        @Override
+        public ToolDescriptor descriptor() {
+            return DESCRIPTOR;
+        }
+
+        @Override
+        public ToolInvocationResult invoke(String toolCallId, String toolId, Map<String, Object> arguments) {
+            return ToolInvocationResult.ok("{}");
         }
     }
 }
