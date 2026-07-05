@@ -78,6 +78,7 @@ describe("frontend capability service contracts", () => {
     expect(backendEndpoints).toContain("POST /api/agents/{}/publish");
     expect(backendEndpoints).toContain("GET /api/skills");
     expect(backendEndpoints).toContain("GET /api/skills/{}");
+    expect(backendEndpoints).toContain("GET /api/skills/{}/gate-result");
     expect(backendEndpoints).toContain("POST /api/skills/custom");
     expect(backendEndpoints).toContain("PUT /api/skills/custom/{}");
     expect(backendEndpoints).toContain("DELETE /api/skills/custom/{}");
@@ -150,6 +151,7 @@ describe("frontend capability service contracts", () => {
   it("manages skills with backend skill endpoints", async () => {
     await skillService.listSkills({ current: 1, size: 20, keyword: "research" });
     await skillService.getSkill("research");
+    await skillService.getSkillGateResult("research");
     await skillService.createCustomSkill({ content: "---\nname: research\n---\nbody" });
     await skillService.updateCustomSkill("research", { content: "---\nname: research\n---\nupdated" });
     await skillService.installSkill({ content: "---\nname: research\n---\nbody" });
@@ -170,6 +172,9 @@ describe("frontend capability service contracts", () => {
     expect(mockedApi.get).toHaveBeenNthCalledWith(2, "/api/skills/research", {
       params: { tenantId: undefined }
     });
+    expect(mockedApi.get).toHaveBeenNthCalledWith(3, "/api/skills/research/gate-result", {
+      params: { tenantId: undefined }
+    });
     expect(mockedApi.post).toHaveBeenCalledWith("/api/skills/custom", {
       content: "---\nname: research\n---\nbody"
     });
@@ -185,7 +190,7 @@ describe("frontend capability service contracts", () => {
     expect(mockedApi.post).toHaveBeenCalledWith("/api/skills/research/disable", {
       tenantId: undefined
     });
-    expect(mockedApi.get).toHaveBeenNthCalledWith(3, "/api/skills/custom/research/history", {
+    expect(mockedApi.get).toHaveBeenNthCalledWith(4, "/api/skills/custom/research/history", {
       params: { tenantId: undefined }
     });
     expect(mockedApi.post).toHaveBeenCalledWith("/api/skills/custom/research/rollback", {
@@ -197,7 +202,7 @@ describe("frontend capability service contracts", () => {
     expect(mockedApi.put).toHaveBeenCalledWith("/api/agents/agent-1/skills", {
       bindings: [{ skillName: "research", revisionId: "rev-1", injectMode: "METADATA_AND_BODY" }]
     });
-    expect(mockedApi.get).toHaveBeenNthCalledWith(4, "/api/agents/agent-1/skills/snapshot", {
+    expect(mockedApi.get).toHaveBeenNthCalledWith(5, "/api/agents/agent-1/skills/snapshot", {
       params: { tenantId: undefined }
     });
   });

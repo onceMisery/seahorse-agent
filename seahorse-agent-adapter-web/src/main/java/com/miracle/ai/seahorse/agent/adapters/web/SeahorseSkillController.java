@@ -19,9 +19,11 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillBinding;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillRevision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillInjectMode;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.skill.AgentSkillBindingInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.skill.AgentSkillManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResults;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -71,6 +73,22 @@ public class SeahorseSkillController {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SKILL_MANAGEMENT);
         return ApiResponses.requireService(managementPortProvider, port -> port.find(tenantId, name)
                 .orElseThrow(() -> new ResourceNotFoundException("Skill not found")));
+    }
+
+    @GetMapping("/api/skills/{name}/gate-result")
+    public ApiResponse<Object> gateResult(@PathVariable String name,
+                                          @RequestParam(required = false) String tenantId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SKILL_MANAGEMENT);
+        return ApiResponses.requireService(managementPortProvider, port -> {
+            String latestRevisionId = port.find(tenantId, name)
+                    .orElseThrow(() -> new ResourceNotFoundException("Skill not found"))
+                    .latestRevisionId();
+            AgentSkillRevision revision = port.history(tenantId, name).stream()
+                    .filter(item -> Objects.equals(item.revisionId(), latestRevisionId))
+                    .findFirst()
+                    .orElseThrow(() -> new ResourceNotFoundException("Latest skill revision not found"));
+            return GateResults.fromSkillRevision(revision);
+        });
     }
 
     @PostMapping("/api/skills/custom")

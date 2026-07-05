@@ -20,6 +20,8 @@ package com.miracle.ai.seahorse.agent.ports.inbound.gate;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateCheckItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillRevision;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillScanDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
@@ -98,6 +100,28 @@ public final class GateResults {
                 comparison.comparisonId());
     }
 
+    public static GateResult fromSkillRevision(AgentSkillRevision revision) {
+        Objects.requireNonNull(revision, "revision must not be null");
+        SkillScanDecision decision = Objects.requireNonNullElse(revision.scanDecision(), SkillScanDecision.ALLOW);
+        GateResultItem scanItem = new GateResultItem(
+                "SKILL_SECURITY_SCAN",
+                statusForSkillScan(decision),
+                "Latest skill revision security scan decision is " + decision.name());
+        List<String> blockingCodes = decision == SkillScanDecision.BLOCK
+                ? List.of(scanItem.code())
+                : List.of();
+        return new GateResult(
+                "SKILL",
+                revision.tenantId() + ":" + revision.skillName(),
+                statusForSkillGate(decision),
+                decision != SkillScanDecision.BLOCK,
+                blockingCodes,
+                List.of(scanItem),
+                revision.createdAt(),
+                "AgentSkillRevision",
+                revision.revisionId());
+    }
+
     private static GateResultItem fromAgentItem(ProductionGateCheckItem item) {
         return new GateResultItem(item.code().name(), item.status().name(), item.message());
     }
@@ -156,6 +180,18 @@ public final class GateResults {
 
     private static GateResultItem metricItem(String code, boolean passed, String message) {
         return new GateResultItem(code, passed ? "PASS" : "FAIL", message);
+    }
+
+    private static String statusForSkillGate(SkillScanDecision decision) {
+        return switch (decision) {
+            case ALLOW -> "PASS";
+            case WARN -> "WARN";
+            case BLOCK -> "FAIL";
+        };
+    }
+
+    private static String statusForSkillScan(SkillScanDecision decision) {
+        return decision == SkillScanDecision.BLOCK ? "FAIL" : statusForSkillGate(decision);
     }
 
     private static RetrievalEvaluationReport reportFor(RetrievalEvaluationComparisonReport report, String strategyName) {

@@ -49,6 +49,24 @@ export interface SkillPage {
   pages?: number;
 }
 
+export interface GateResultItem {
+  code: string;
+  status: string;
+  message?: string;
+}
+
+export interface GateResult {
+  subjectType: string;
+  subjectId: string;
+  status: string;
+  passed: boolean;
+  blockingCodes?: string[];
+  items?: GateResultItem[];
+  checkedAt?: string;
+  sourceType?: string;
+  sourceId?: string;
+}
+
 export function listSkills(params?: { tenantId?: string; current?: number; size?: number; keyword?: string }) {
   return optionalGet(api.get<SkillPage>("/api/skills", { params, suppressErrorToast: true }), {
     records: [],
@@ -61,6 +79,10 @@ export function listSkills(params?: { tenantId?: string; current?: number; size?
 
 export function getSkill(name: string, tenantId?: string) {
   return api.get<AgentSkill>(`/api/skills/${encodeURIComponent(name)}`, { params: { tenantId } });
+}
+
+export function getSkillGateResult(name: string, tenantId?: string) {
+  return api.get<GateResult>(`/api/skills/${encodeURIComponent(name)}/gate-result`, { params: { tenantId } });
 }
 
 export function createCustomSkill(payload: { tenantId?: string; content: string }) {

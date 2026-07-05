@@ -392,3 +392,11 @@ The unified GateResult route now covers RAG Strategy comparison evidence. `GateR
 The Web API exposes this projection through `GET /knowledge-base/{kbId}/retrieval-evaluation-datasets/{datasetId}/comparisons/{comparisonId}/gate-result`. Existing comparison and promotion endpoints remain unchanged. This is a projection adapter slice only; it does not persist unified gate rows or add Model Config, Tool/Skill, or Ingestion Pipeline adapters.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=GateResultsTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 4/4 projection tests; `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseRetrievalAndMemoryControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 20/20 Web contract tests; and `npm test -- src/services/frontendCapabilityContracts.test.ts src/services/serviceEndpointCoverage.test.ts` passed 15/15 frontend manifest/coverage tests.
+
+## 2026-07-05 Update: Skill GateResult Adapter
+
+The unified GateResult route now covers Skill revision security evidence. `GateResults.fromSkillRevision` projects the latest `AgentSkillRevision.scanDecision` into `subjectType=SKILL`, preserving `ALLOW -> PASS`, `WARN -> WARN` with non-blocking `passed=true`, and `BLOCK -> FAIL` with `SKILL_SECURITY_SCAN` in `blockingCodes`.
+
+The Web API exposes this projection through `GET /api/skills/{name}/gate-result?tenantId=...`, using the existing Skill management port to resolve the skill and its latest revision. Existing skill create/update/install/enable/disable/history endpoints remain unchanged. This is a projection adapter slice only; it does not persist unified gate rows or add Model Config or Ingestion Pipeline adapters.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=GateResultsTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 6/6 projection tests; `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseSkillControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 3/3 Web contract tests; and `npm test -- src/services/frontendCapabilityContracts.test.ts src/services/serviceEndpointCoverage.test.ts` passed 15/15 frontend manifest/coverage tests.

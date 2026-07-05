@@ -609,6 +609,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/skills/{}/gate-result"
+  },
+  {
+    "method": "GET",
     "path": "/api/skills/custom/{}/history"
   },
   {

@@ -21,6 +21,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateChec
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateCheckItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillRevision;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillScanDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
@@ -127,6 +129,36 @@ class GateResultsTests {
                 result.blockingCodes());
     }
 
+    @Test
+    void shouldProjectWarningSkillRevisionGateResult() {
+        AgentSkillRevision revision = revision("rev-1", SkillScanDecision.WARN);
+
+        GateResult result = GateResults.fromSkillRevision(revision);
+
+        assertEquals("SKILL", result.subjectType());
+        assertEquals("tenant-a:research-helper", result.subjectId());
+        assertEquals("WARN", result.status());
+        assertTrue(result.passed());
+        assertEquals(List.of(), result.blockingCodes());
+        assertEquals(Instant.parse("2026-07-05T02:00:00Z"), result.checkedAt());
+        assertEquals("AgentSkillRevision", result.sourceType());
+        assertEquals("rev-1", result.sourceId());
+        assertEquals("SKILL_SECURITY_SCAN", result.items().get(0).code());
+        assertEquals("WARN", result.items().get(0).status());
+    }
+
+    @Test
+    void shouldProjectBlockedSkillRevisionGateResult() {
+        AgentSkillRevision revision = revision("rev-2", SkillScanDecision.BLOCK);
+
+        GateResult result = GateResults.fromSkillRevision(revision);
+
+        assertEquals("FAIL", result.status());
+        assertFalse(result.passed());
+        assertEquals(List.of("SKILL_SECURITY_SCAN"), result.blockingCodes());
+        assertEquals("FAIL", result.items().get(0).status());
+    }
+
     private static RetrievalEvaluationComparisonRecord comparison(
             Instant checkedAt,
             RetrievalEvaluationReport baseline,
@@ -164,5 +196,20 @@ class GateResultsTests {
                 10D,
                 20D,
                 List.of());
+    }
+
+    private static AgentSkillRevision revision(String revisionId, SkillScanDecision decision) {
+        return new AgentSkillRevision(
+                revisionId,
+                "research-helper",
+                "tenant-a",
+                1L,
+                "sha256:abc",
+                "# Research",
+                "{\"name\":\"research-helper\"}",
+                decision,
+                "{\"decision\":\"" + decision.name() + "\"}",
+                "admin-1",
+                Instant.parse("2026-07-05T02:00:00Z"));
     }
 }

@@ -94,6 +94,17 @@ class SeahorseSkillControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.latestRevisionId").value("rev-1"));
 
+        mvc.perform(get("/api/skills/research-helper/gate-result")
+                        .param("tenantId", "tenant-a"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.subjectType").value("SKILL"))
+                .andExpect(jsonPath("$.data.subjectId").value("tenant-a:research-helper"))
+                .andExpect(jsonPath("$.data.status").value("PASS"))
+                .andExpect(jsonPath("$.data.passed").value(true))
+                .andExpect(jsonPath("$.data.sourceType").value("AgentSkillRevision"))
+                .andExpect(jsonPath("$.data.sourceId").value("rev-1"))
+                .andExpect(jsonPath("$.data.items[0].code").value("SKILL_SECURITY_SCAN"));
+
         mvc.perform(post("/api/skills/custom")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("tenantId", "tenant-a", "content", "# Research"))))
