@@ -106,20 +106,23 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final int MIN_BROWSER_VIEWPORT_SIZE = 320;
     private static final int MAX_BROWSER_VIEWPORT_SIZE = 2400;
     private static final Set<String> SENSITIVE_BROWSER_QUERY_PARAMETER_NAMES = Set.of(
-            "access_token",
-            "api_key",
+            "accesstoken",
             "apikey",
-            "auth_token",
-            "client_secret",
+            "authorization",
+            "authtoken",
+            "bearer",
+            "bearertoken",
+            "clientsecret",
             "credential",
             "credentials",
-            "id_token",
+            "idtoken",
+            "oauthtoken",
             "password",
-            "refresh_token",
+            "refreshtoken",
             "secret",
             "session",
-            "session_id",
             "sessionid",
+            "sessiontoken",
             "token");
 
     private final ContainerSandboxAdapterProperties properties;
@@ -1380,9 +1383,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String decodedName = decodedBrowserQueryParameterName(value).toLowerCase(Locale.ROOT);
         int bracketIndex = decodedName.indexOf('[');
         if (bracketIndex > 0) {
-            return decodedName.substring(0, bracketIndex);
+            decodedName = decodedName.substring(0, bracketIndex);
         }
-        return decodedName;
+        return decodedName.replaceAll("[^a-z0-9]", "");
     }
 
     private String decodedBrowserQueryParameterName(String value) {

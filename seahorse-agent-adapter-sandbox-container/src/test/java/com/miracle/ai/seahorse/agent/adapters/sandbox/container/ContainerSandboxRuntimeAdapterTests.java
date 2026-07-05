@@ -1094,6 +1094,30 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldFailClosedWhenBrowserUrlUsesVariantCredentialQueryBeforeRunningContainer() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","url":"http://example.test/admin?sessionToken=secret-session-value&client-secret=secret-client-value","allowedHosts":["example.test"]}
+                        """,
+                true,
+                List.of("example.test")));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("url query must not include credential parameters");
+        assertThat(result.execution().resultSummary()).doesNotContain("sessionToken=secret-session-value");
+        assertThat(result.execution().resultSummary()).doesNotContain("client-secret=secret-client-value");
+        assertThat(result.execution().resultSummary()).doesNotContain("secret-session-value");
+        assertThat(result.execution().resultSummary()).doesNotContain("secret-client-value");
+        assertThat(runner.lastCommand).isNull();
+    }
+
+    @Test
     void shouldAllowBrowserUrlWithNonCredentialQueryBeforeRunningContainer() {
         RecordingRunner runner = new RecordingRunner(
                 ContainerCommandResult.succeeded("browser snapshot completed\n", Duration.ofMillis(100)),
