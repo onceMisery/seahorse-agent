@@ -378,6 +378,36 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldRejectLocalhostBrowserUrlBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://localhost:8080/admin",
+                "allowedHosts", List.of("localhost"))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("not localhost or an IP literal"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
+    void shouldRejectIpLiteralBrowserUrlBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://127.0.0.1:8080/admin",
+                "allowedHosts", List.of("127.0.0.1"))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("not localhost or an IP literal"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
     void shouldRejectCookieWhenDomainIsNotAllowlistedBeforeCreatingSession() {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);

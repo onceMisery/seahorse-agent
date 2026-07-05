@@ -424,7 +424,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
 
     private String urlHost(String url) {
         try {
-            return new URI(url).getHost().toLowerCase(Locale.ROOT);
+            String host = new URI(url).getHost().toLowerCase(Locale.ROOT);
+            validatePublicBrowserHost(host, "url host");
+            return host;
         } catch (URISyntaxException ex) {
             throw new IllegalArgumentException("sandbox_browser failed: url is not valid", ex);
         }
@@ -463,6 +465,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         if (host.contains("/") || host.contains(":") || !host.matches("[a-z0-9.-]+")) {
             throw new IllegalArgumentException("sandbox_browser failed: allowedHosts must contain host names only");
         }
+        validatePublicBrowserHost(host, "allowedHosts");
         return host;
     }
 
@@ -577,6 +580,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         if (!hasText(host) || !host.matches("[a-z0-9.-]+")) {
             throw new IllegalArgumentException("sandbox_browser failed: sessionState cookie domain is invalid");
         }
+        validatePublicBrowserHost(host, "sessionState cookie domain");
         return host;
     }
 
@@ -590,7 +594,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             if (!Set.of("http", "https").contains(scheme) || !hasText(uri.getHost())) {
                 throw new IllegalArgumentException("sandbox_browser failed: sessionState origin must be HTTP/HTTPS");
             }
-            return uri.getHost().toLowerCase(Locale.ROOT);
+            String host = uri.getHost().toLowerCase(Locale.ROOT);
+            validatePublicBrowserHost(host, "sessionState origin host");
+            return host;
         } catch (URISyntaxException ex) {
             throw new IllegalArgumentException("sandbox_browser failed: sessionState origin is not valid", ex);
         }
@@ -692,7 +698,38 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         if (!hasText(domain) || domain.contains("/") || domain.contains(":") || !domain.matches("[a-z0-9.-]+")) {
             throw new IllegalArgumentException("sandbox_browser failed: cookie domain must be a host name only");
         }
+        validatePublicBrowserHost(domain, "cookie domain");
         return domain;
+    }
+
+    private void validatePublicBrowserHost(String host, String label) {
+        if (!hasText(host)
+                || "localhost".equals(host)
+                || host.endsWith(".localhost")
+                || isIpv4Literal(host)
+                || host.chars().allMatch(Character::isDigit)) {
+            throw new IllegalArgumentException("sandbox_browser failed: " + label
+                    + " must be a DNS host, not localhost or an IP literal");
+        }
+    }
+
+    private boolean isIpv4Literal(String host) {
+        if (!host.matches("\\d{1,3}(\\.\\d{1,3}){3}")) {
+            return false;
+        }
+        String[] parts = host.split("\\.");
+        for (String part : parts) {
+            int value;
+            try {
+                value = Integer.parseInt(part);
+            } catch (NumberFormatException ex) {
+                return false;
+            }
+            if (value < 0 || value > 255) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String normalizedCookiePath(String value) {
