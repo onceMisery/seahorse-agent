@@ -122,6 +122,14 @@ This is a narrow document-conversion guard. It does not add PDF rendering, OCR, 
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 43/43.
 
+## 2026-07-06 Update: Sandbox PDF Text Conversion Flate Budget Guard
+
+The conservative `sandbox_file_convert` PDF-to-text runtime script now bounds each PDF `FlateDecode` stream decompression to 1 MiB before literal text extraction. Over-budget compressed streams fail closed with a value-free error instead of letting the stdlib-only converter expand unbounded stream data inside the file-conversion sandbox.
+
+This is a narrow resource-boundary guard for the existing PDF literal-text path. It does not add full PDF parsing, rendering/OCR, external scanner engines, password handling, LibreOffice/Tika integration, or a general binary conversion engine.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 43/43.
+
 ## 2026-07-03 Update: Sandbox Tool Quota Governance
 
 Sandbox Operations now exposes `POST /api/sandbox/runtime/tool-quota-policies` for sandbox-backed tool quota policy writes. The endpoint is gated by both `SANDBOX` and `QUOTA_MANAGEMENT`, accepts only `sandbox_python`, `sandbox_file_convert`, and the planned `sandbox_browser`, then writes an existing `QuotaScope.TOOL` policy so Tool Gateway quota preflight remains the enforcement owner.

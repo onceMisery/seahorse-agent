@@ -975,14 +975,22 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         dictionary = match.group(1)
                         data = match.group(2)
                         if b"FlateDecode" in dictionary:
-                            try:
-                                data = zlib.decompress(data)
-                            except zlib.error as exc:
-                                raise ValueError("pdf FlateDecode stream could not be decompressed") from exc
+                            data = bounded_pdf_flate_decode(data)
                         streams.append(data)
                     if not streams:
                         raise ValueError("pdf text stream not found")
                     return streams
+
+                def bounded_pdf_flate_decode(data, limit=1048576):
+                    try:
+                        decompressor = zlib.decompressobj()
+                        output = decompressor.decompress(data, limit + 1)
+                        output += decompressor.flush(limit + 1 - len(output))
+                    except zlib.error as exc:
+                        raise ValueError("pdf FlateDecode stream could not be decompressed") from exc
+                    if len(output) > limit or decompressor.unconsumed_tail:
+                        raise ValueError("pdf FlateDecode stream exceeds decompression budget")
+                    return output
 
                 def pdf_to_text(path):
                     content = path.read_bytes()

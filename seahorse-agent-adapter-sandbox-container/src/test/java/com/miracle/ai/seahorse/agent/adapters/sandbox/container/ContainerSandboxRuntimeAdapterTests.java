@@ -397,6 +397,8 @@ class ContainerSandboxRuntimeAdapterTests {
                                     "source_format = \"pdf\"",
                                     "b\"%PDF-\"",
                                     "encrypted pdf is not supported",
+                                    "bounded_pdf_flate_decode",
+                                    "pdf FlateDecode stream exceeds decompression budget",
                                     "converted.txt")
                             .doesNotContain(pdfBase64);
                     assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.pdf")))
