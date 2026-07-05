@@ -484,22 +484,27 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         Map<String, Object> metadata = mapValue(arguments.get("metadata"));
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("toolId", request.toolId());
-        summary.put("agentName", argumentString(arguments, "agentName"));
+        String agentName = argumentString(arguments, "agentName");
+        String metadataVersion = argumentString(metadata, "version");
+        summary.put("agentNamePresent", hasText(agentName));
+        summary.put("agentNameLength", agentName.length());
         summary.put("promptLength", argumentString(arguments, "prompt").length());
         summary.put("metadataKeys", safeArgumentKeys(metadata));
         summary.put("metadataCount", metadata.size());
-        if (hasText(argumentString(metadata, "version"))) {
-            summary.put("version", argumentString(metadata, "version"));
-        }
+        summary.put("versionPresent", hasText(metadataVersion));
+        summary.put("versionLength", metadataVersion.length());
         summary.put("argumentKeys", safeArgumentKeys(arguments));
         try {
             return truncate(OBJECT_MAPPER.writeValueAsString(summary));
         } catch (JsonProcessingException ex) {
-            return truncate("toolId=invoke_remote_a2a_agent, agentName="
-                    + argumentString(arguments, "agentName")
+            return truncate("toolId=invoke_remote_a2a_agent"
+                    + ", agentNamePresent=" + hasText(agentName)
+                    + ", agentNameLength=" + agentName.length()
                     + ", promptLength=" + argumentString(arguments, "prompt").length()
                     + ", metadataKeys=" + safeArgumentKeys(metadata)
-                    + ", metadataCount=" + metadata.size());
+                    + ", metadataCount=" + metadata.size()
+                    + ", versionPresent=" + hasText(metadataVersion)
+                    + ", versionLength=" + metadataVersion.length());
         }
     }
 

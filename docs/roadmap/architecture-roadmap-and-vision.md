@@ -713,11 +713,11 @@ Fresh UX evidence: `npm test -- src/pages/admin/rag-evaluation/RetrievalDatasetD
 
 `invoke_remote_a2a_agent` now bounds the cross-provider A2A request envelope before invoking the connector: `agentName`, `prompt`, metadata entry count, metadata key length, metadata value length, and disallowed control characters are rejected at the AgentScope tool adapter boundary. This keeps unbounded metadata from crossing the A2A connector while preserving the normal prompt payload path.
 
-The Tool Gateway audit summary now has a dedicated value-free `invoke_remote_a2a_agent` projection. It records target agent name, prompt length, metadata keys/count, and requested version when present, without storing the raw prompt or metadata values in `argumentsSummary`.
+The Tool Gateway audit summary now has a dedicated value-free `invoke_remote_a2a_agent` projection. It records target-agent presence/length, prompt length, metadata keys/count, and requested-version presence/length, without storing the raw prompt, target agent name, requested version, or metadata values in `argumentsSummary`.
 
 This is a narrow A2A/Tool Gateway governance slice. It does not add cross-provider rate limits, remote content redaction, remote agent trust scoring, or full-Docker multi-agent smoke coverage.
 
-Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-agent-agentscope -am "-Dtest=AgentScopeA2AToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 4/4; `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 15/15.
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-agent-agentscope -am "-Dtest=AgentScopeA2AToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 4/4; `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 21/21, including regression coverage that secret-like target agent names and metadata versions are reduced to presence/length metadata.
 
 ## 2026-07-06 Update: Sandbox File Conversion Active-Content Preflight
 

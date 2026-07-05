@@ -547,10 +547,10 @@ class LocalToolGatewayPortAuditTests {
                 "agent-identity-1",
                 "invoke_remote_a2a_agent",
                 Map.of(
-                        "agentName", "planner",
+                        "agentName", "planner-secret-agent",
                         "prompt", "draft a confidential launch plan",
                         "metadata", Map.of(
-                                "version", "1.2.3",
+                                "version", "version-secret-marker",
                                 "source", "secret-source-marker")),
                 Map.of(),
                 "run-1:call-1",
@@ -559,14 +559,18 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(result.success());
         String summary = audit.requested.get(0).argumentsSummary();
         assertTrue(summary.contains("\"toolId\":\"invoke_remote_a2a_agent\""));
-        assertTrue(summary.contains("\"agentName\":\"planner\""));
+        assertTrue(summary.contains("\"agentNamePresent\":true"));
+        assertTrue(summary.contains("\"agentNameLength\":20"));
         assertTrue(summary.contains("\"promptLength\":32"));
         assertTrue(summary.contains("\"metadataKeys\":["));
         assertTrue(summary.contains("version"));
         assertTrue(summary.contains("source"));
         assertTrue(summary.contains("\"metadataCount\":2"));
-        assertTrue(summary.contains("\"version\":\"1.2.3\""));
+        assertTrue(summary.contains("\"versionPresent\":true"));
+        assertTrue(summary.contains("\"versionLength\":21"));
+        assertFalse(summary.contains("planner-secret-agent"));
         assertFalse(summary.contains("confidential launch plan"));
+        assertFalse(summary.contains("version-secret-marker"));
         assertFalse(summary.contains("secret-source-marker"));
     }
 
