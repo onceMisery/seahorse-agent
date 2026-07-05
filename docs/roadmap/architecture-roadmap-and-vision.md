@@ -610,3 +610,11 @@ The Skill Management admin page now exposes the existing unified `GateResult` pr
 This is a narrow unified GateResult productization slice. It does not add new skill gate rules, persisted gate-result rows, release approval workflows, or full-Docker UI smoke coverage.
 
 Fresh UX evidence: `npm test -- src/pages/admin/skills/SkillManagementPage.test.tsx` passed 2/2 focused frontend tests, covering row action invocation of `getSkillGateResult` and rendering of `SKILL`, blocking code, source, and check-message evidence.
+
+## 2026-07-06 Update: Model Config GateResult UX
+
+The Model Config admin page now exposes the existing unified `GateResult` projection from the model registry header. Operators can open a read-only `Model Config GateResult` dialog for `ai.models` to inspect subject, status, source, checked time, blocking codes, and per-check evidence from `GET /admin/ai-config/{key}/gate-result` without leaving model management.
+
+This is a narrow unified GateResult productization slice. It does not add new model quality checks, provider health checks, persisted gate-result rows, release approval workflows, or full-Docker UI smoke coverage.
+
+Fresh UX evidence: `npm test -- src/pages/admin/settings/ModelConfigPage.test.tsx` passed 1/1 focused frontend test, covering row/header action invocation of `getAiModelConfigGateResult` for `ai.models` with the active tenant and rendering of `MODEL_CONFIG`, blocking code, source, and check-message evidence. `npm run build` completed successfully with the existing Browserslist/chunk-size warnings.

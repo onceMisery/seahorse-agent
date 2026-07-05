@@ -1,15 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, RefreshCw, Save, Trash2 } from "lucide-react";
+import { Plus, RefreshCw, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getAiModelConfigs, createAiModelConfig, updateAiModelConfig, type AiModelConfigItem } from "@/services/aiConfigService";
+import {
+  getAiModelConfigGateResult,
+  getAiModelConfigs,
+  createAiModelConfig,
+  updateAiModelConfig,
+  type AiModelConfigItem,
+  type GateResult
+} from "@/services/aiConfigService";
 import { getErrorMessage } from "@/utils/error";
 import { storage } from "@/utils/storage";
 
@@ -97,12 +105,24 @@ function normalizeModels(models: TenantModelItem[]) {
     .filter((item) => item.id && item.model);
 }
 
+const formatDate = (value?: string | null) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("zh-CN");
+};
+
 export function ModelConfigPage() {
   const [tenantId, setTenantId] = useState(activeTenantId());
   const [configs, setConfigs] = useState<AiModelConfigItem[]>([]);
   const [models, setModels] = useState<TenantModelItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [gateDialog, setGateDialog] = useState<{
+    open: boolean;
+    gateResult: GateResult | null;
+    loading: boolean;
+  }>({ open: false, gateResult: null, loading: false });
 
   const registryConfig = useMemo(
     () => configs.find((item) => item.configKey === MODEL_REGISTRY_KEY),
@@ -186,6 +206,18 @@ export function ModelConfigPage() {
     }
   };
 
+  const openGateResult = async () => {
+    const safeTenant = tenantId.trim() || "default";
+    setGateDialog({ open: true, gateResult: null, loading: true });
+    try {
+      const gateResult = await getAiModelConfigGateResult(MODEL_REGISTRY_KEY, safeTenant);
+      setGateDialog({ open: true, gateResult, loading: false });
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Load model config GateResult failed"));
+      setGateDialog({ open: true, gateResult: null, loading: false });
+    }
+  };
+
   const enabledCount = models.filter((item) => item.enabled).length;
   const embeddingCount = models.filter((item) => item.capability === "embedding" && item.enabled).length;
 
@@ -240,6 +272,10 @@ export function ModelConfigPage() {
             <CardDescription>知识库创建会读取当前租户启用的向量化模型</CardDescription>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={openGateResult} disabled={loading}>
+              <ShieldCheck className="mr-2 h-4 w-4" />
+              Gate
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setModels((prev) => [...prev, emptyModel("embedding")])}>
               <Plus className="mr-2 h-4 w-4" />
               向量模型
@@ -333,6 +369,126 @@ export function ModelConfigPage() {
           )}
         </CardContent>
       </Card>
+      <ModelConfigGateResultDialog
+        open={gateDialog.open}
+        gateResult={gateDialog.gateResult}
+        loading={gateDialog.loading}
+        onOpenChange={(open) =>
+          setGateDialog((prev) => ({
+            ...prev,
+            open
+          }))
+        }
+      />
     </div>
+  );
+}
+
+interface ModelConfigGateResultDialogProps {
+  open: boolean;
+  gateResult: GateResult | null;
+  loading: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+function ModelConfigGateResultDialog({
+  open,
+  gateResult,
+  loading,
+  onOpenChange
+}: ModelConfigGateResultDialogProps) {
+  const items = gateResult?.items || [];
+  const blockingCodes = gateResult?.blockingCodes || [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sidebar-scroll sm:max-w-[760px]"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
+        <DialogHeader>
+          <DialogTitle>Model Config GateResult</DialogTitle>
+          <DialogDescription>{MODEL_REGISTRY_KEY}</DialogDescription>
+        </DialogHeader>
+        {loading ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">Loading GateResult...</div>
+        ) : gateResult ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-md border p-3">
+                <div className="text-xs uppercase text-muted-foreground">Subject</div>
+                <div className="mt-1 font-mono text-sm">
+                  {gateResult.subjectType}:{gateResult.subjectId}
+                </div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs uppercase text-muted-foreground">Status</div>
+                <div className="mt-1 flex items-center gap-2">
+                  <Badge variant={gateResult.passed ? "default" : "destructive"}>{gateResult.status}</Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {gateResult.passed ? "passed" : "blocked"}
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs uppercase text-muted-foreground">Source</div>
+                <div className="mt-1 font-mono text-sm">{gateResult.sourceType || "-"}</div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs uppercase text-muted-foreground">Checked</div>
+                <div className="mt-1 text-sm">{formatDate(gateResult.checkedAt)}</div>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-sm font-medium">Blocking Codes</div>
+              {blockingCodes.length === 0 ? (
+                <div className="rounded-md border p-3 text-sm text-muted-foreground">None</div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {blockingCodes.map((code) => (
+                    <Badge key={code} variant="destructive">
+                      {code}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-2 text-sm font-medium">Check Items</div>
+              {items.length === 0 ? (
+                <div className="rounded-md border p-3 text-sm text-muted-foreground">No check items</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                        <th className="w-[220px] px-2 py-2 font-medium">Code</th>
+                        <th className="w-[100px] px-2 py-2 font-medium">Status</th>
+                        <th className="px-2 py-2 font-medium">Message</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item) => (
+                        <tr key={`${item.code}-${item.status}`} className="border-b last:border-0">
+                          <td className="px-2 py-2 font-mono text-xs">{item.code}</td>
+                          <td className="px-2 py-2">
+                            <Badge variant={item.status === "PASS" ? "default" : "secondary"}>{item.status}</Badge>
+                          </td>
+                          <td className="px-2 py-2 text-muted-foreground">{item.message || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="py-8 text-center text-sm text-muted-foreground">No GateResult</div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
