@@ -47,6 +47,24 @@ export interface AgentToolBinding {
   approvalPolicy?: Record<string, unknown>;
 }
 
+export interface GateResultItem {
+  code: string;
+  status: string;
+  message?: string;
+}
+
+export interface GateResult {
+  subjectType: string;
+  subjectId: string;
+  status: string;
+  passed: boolean;
+  blockingCodes?: string[];
+  items?: GateResultItem[];
+  checkedAt?: string;
+  sourceType?: string;
+  sourceId?: string;
+}
+
 export interface UpdateToolBindingsPayload {
   tools: AgentToolBinding[];
 }
@@ -70,6 +88,10 @@ export function listTools(params: {
 
 export function getTool(toolId: string) {
   return api.get<ToolItem>(`/api/tools/${encodeURIComponent(toolId)}`);
+}
+
+export function getToolGateResult(toolId: string) {
+  return api.get<GateResult>(`/api/tools/${encodeURIComponent(toolId)}/gate-result`);
 }
 
 export function enableTool(toolId: string) {

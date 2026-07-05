@@ -27,7 +27,7 @@ import {
   getContextPack,
   listContextPackItems
 } from "@/services/contextPackService";
-import { listToolInvocations } from "@/services/toolCatalogService";
+import { getToolGateResult, listToolInvocations } from "@/services/toolCatalogService";
 import { createSecret } from "@/services/securityGovernanceService";
 import {
   compareStrategies,
@@ -126,6 +126,7 @@ describe("frontend capability service contracts", () => {
     expect(backendEndpoints).toContain("POST /api/agent-handoffs/{}/cancel");
     expect(backendEndpoints).toContain("GET /api/agents/{}/production-gate/gate-result");
     expect(backendEndpoints).toContain("POST /api/run-profiles/{}/production-gate/gate-result");
+    expect(backendEndpoints).toContain("GET /api/tools/{}/gate-result");
     expect(backendEndpoints).toContain(
       "GET /knowledge-base/{}/retrieval-evaluation-datasets/{}/comparisons/{}/gate-result"
     );
@@ -220,6 +221,7 @@ describe("frontend capability service contracts", () => {
   });
 
   it("queries tool invocation audit with rollout attribution filters", async () => {
+    await getToolGateResult("tool-1");
     await listToolInvocations({
       current: 2,
       size: 10,
@@ -231,7 +233,8 @@ describe("frontend capability service contracts", () => {
       status: "SUCCEEDED"
     });
 
-    expect(mockedApi.get).toHaveBeenCalledWith("/api/tool-invocations", {
+    expect(mockedApi.get).toHaveBeenNthCalledWith(1, "/api/tools/tool-1/gate-result");
+    expect(mockedApi.get).toHaveBeenNthCalledWith(2, "/api/tool-invocations", {
       params: {
         current: 2,
         size: 10,

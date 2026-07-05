@@ -645,6 +645,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/tools/{}/gate-result"
+  },
+  {
+    "method": "GET",
     "path": "/api/workflows/{}/visualization"
   },
   {
@@ -1102,6 +1106,10 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/tools/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/tools/{}/gate-result"
   },
   {
     "method": "GET",
