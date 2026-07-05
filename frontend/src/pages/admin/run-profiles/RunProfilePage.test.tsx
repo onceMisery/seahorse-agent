@@ -11,6 +11,7 @@ const serviceMocks = vi.hoisted(() => ({
   deleteRunProfile: vi.fn(),
   getRunProfile: vi.fn(),
   getRunProfileAuditSummary: vi.fn(),
+  getRunProfileGateResult: vi.fn(),
   getRunProfileRiskSummary: vi.fn(),
   listRunProfileExecutorEngines: vi.fn(),
   listRunProfiles: vi.fn(),
@@ -24,6 +25,10 @@ const toolMocks = vi.hoisted(() => ({
   listTools: vi.fn()
 }));
 
+const roleCardMocks = vi.hoisted(() => ({
+  listRoleCards: vi.fn()
+}));
+
 vi.mock("@/services/runProfileService", () => ({
   activateRunProfile: serviceMocks.activateRunProfile,
   approveRunProfile: serviceMocks.approveRunProfile,
@@ -32,6 +37,7 @@ vi.mock("@/services/runProfileService", () => ({
   deleteRunProfile: serviceMocks.deleteRunProfile,
   getRunProfile: serviceMocks.getRunProfile,
   getRunProfileAuditSummary: serviceMocks.getRunProfileAuditSummary,
+  getRunProfileGateResult: serviceMocks.getRunProfileGateResult,
   getRunProfileRiskSummary: serviceMocks.getRunProfileRiskSummary,
   listRunProfileExecutorEngines: serviceMocks.listRunProfileExecutorEngines,
   listRunProfiles: serviceMocks.listRunProfiles,
@@ -43,6 +49,10 @@ vi.mock("@/services/runProfileService", () => ({
 
 vi.mock("@/services/toolCatalogService", () => ({
   listTools: toolMocks.listTools
+}));
+
+vi.mock("@/services/roleCardService", () => ({
+  listRoleCards: roleCardMocks.listRoleCards
 }));
 
 vi.mock("sonner", () => ({
@@ -90,6 +100,23 @@ describe("RunProfilePage", () => {
       enabledToolCount: 2,
       highRiskToolCount: 1,
       highRiskToolIds: ["filesystem.read_file"]
+    });
+    serviceMocks.getRunProfileGateResult.mockResolvedValue({
+      subjectType: "RUN_PROFILE",
+      subjectId: "77",
+      status: "BLOCKED",
+      passed: false,
+      blockingCodes: ["APPROVAL_NOT_ENFORCED"],
+      sourceType: "RUN_PROFILE_PRODUCTION_GATE",
+      sourceId: "77",
+      checkedAt: "2026-07-06T04:10:00Z",
+      items: [
+        {
+          code: "APPROVAL_NOT_ENFORCED",
+          status: "FAIL",
+          message: "High-risk tool approval must be enabled before production"
+        }
+      ]
     });
     serviceMocks.getRunProfile.mockResolvedValue({
       profile: {
@@ -175,6 +202,22 @@ describe("RunProfilePage", () => {
       current: 1,
       pages: 1
     });
+    roleCardMocks.listRoleCards.mockResolvedValue([
+      {
+        id: 9,
+        name: "Research Role",
+        definition: "Research role",
+        published: true,
+        assetSource: "USER"
+      },
+      {
+        id: 12,
+        name: "Tool Safe Role",
+        definition: "Tool safe role",
+        published: true,
+        assetSource: "USER"
+      }
+    ]);
   });
 
   it("renders run profile governance fields from the list API", async () => {
@@ -183,7 +226,7 @@ describe("RunProfilePage", () => {
     expect(await screen.findByText("Research AgentScope")).toBeInTheDocument();
     expect(screen.getByText("Long research tasks")).toBeInTheDocument();
     expect(screen.getByText("agentscope")).toBeInTheDocument();
-    expect(screen.getByText("角色卡 9")).toBeInTheDocument();
+    expect(screen.getByText("Research Role (9)")).toBeInTheDocument();
     expect(screen.getByText("Kernel Default")).toBeInTheDocument();
   });
 
@@ -209,7 +252,9 @@ describe("RunProfilePage", () => {
     fireEvent.change(screen.getByLabelText("名称"), { target: { value: "Tool Safe Profile" } });
     fireEvent.change(screen.getByLabelText("描述"), { target: { value: "No high risk tools" } });
     fireEvent.change(screen.getByLabelText("执行引擎"), { target: { value: "agentscope" } });
-    fireEvent.change(screen.getByLabelText("角色卡 ID"), { target: { value: "12" } });
+    fireEvent.change(document.querySelector("#run-profile-role-card-id") as HTMLSelectElement, {
+      target: { value: "12" }
+    });
     fireEvent.change(screen.getByLabelText("Executor Config JSON"), {
       target: { value: "{\"studioTraceEnabled\":true,\"nacosNamespace\":\"public\"}" }
     });
@@ -312,6 +357,22 @@ describe("RunProfilePage", () => {
     expect(screen.getByText("APPROVAL_NOT_ENFORCED")).toBeInTheDocument();
     expect(screen.getByText("High-risk tool approval must be enabled before production")).toBeInTheDocument();
     expect(screen.getByText("AGENTSCOPE_NACOS_NAMESPACE_MISSING")).toBeInTheDocument();
+  });
+
+  it("loads the unified GateResult projection for a run profile", async () => {
+    render(<RunProfilePage />);
+
+    await screen.findByText("Research AgentScope");
+    fireEvent.click(screen.getByRole("button", { name: "run-profile-gate-result-77" }));
+
+    await waitFor(() => {
+      expect(serviceMocks.getRunProfileGateResult).toHaveBeenCalledWith(77);
+    });
+    expect(await screen.findByText("Run Profile GateResult")).toBeInTheDocument();
+    expect(screen.getByText("RUN_PROFILE:77")).toBeInTheDocument();
+    expect(screen.getByText("RUN_PROFILE_PRODUCTION_GATE")).toBeInTheDocument();
+    expect(screen.getAllByText("APPROVAL_NOT_ENFORCED").length).toBeGreaterThan(0);
+    expect(screen.getByText("High-risk tool approval must be enabled before production")).toBeInTheDocument();
   });
 
   it("runs governance approval actions and loads audit summary", async () => {

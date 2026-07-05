@@ -84,6 +84,24 @@ export interface RunProfileProductionGateCheck {
   checkItems: RunProfileProductionGateItem[];
 }
 
+export interface GateResultItem {
+  code: string;
+  status: string;
+  message?: string;
+}
+
+export interface GateResult {
+  subjectType: string;
+  subjectId: string;
+  status: string;
+  passed: boolean;
+  blockingCodes?: string[];
+  items?: GateResultItem[];
+  checkedAt?: string;
+  sourceType?: string;
+  sourceId?: string;
+}
+
 export interface RunProfileAuditSummary {
   runProfileId: number | string;
   approvalStatus: string;
@@ -145,6 +163,12 @@ export async function checkRunProfileProductionGate(
 ): Promise<RunProfileProductionGateCheck> {
   return api.post<RunProfileProductionGateCheck, RunProfileProductionGateCheck>(
     `/api/run-profiles/${encodeURIComponent(String(id))}/production-gate/check`
+  );
+}
+
+export async function getRunProfileGateResult(id: number | string): Promise<GateResult> {
+  return api.post<GateResult, GateResult>(
+    `/api/run-profiles/${encodeURIComponent(String(id))}/production-gate/gate-result`
   );
 }
 

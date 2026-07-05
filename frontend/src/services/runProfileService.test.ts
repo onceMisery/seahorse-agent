@@ -18,6 +18,7 @@ import {
   deleteRunProfile,
   getRunProfile,
   getRunProfileAuditSummary,
+  getRunProfileGateResult,
   getRunProfileRiskSummary,
   getAppliedRunProfileForConversation,
   listRunProfileExecutorEngines,
@@ -138,6 +139,31 @@ describe("runProfileService", () => {
     await expect(checkRunProfileProductionGate(12)).resolves.toEqual(check);
 
     expect(api.post).toHaveBeenCalledWith("/api/run-profiles/12/production-gate/check");
+  });
+
+  it("gets a unified run profile GateResult from the API endpoint", async () => {
+    const gateResult = {
+      subjectType: "RUN_PROFILE",
+      subjectId: "12",
+      status: "BLOCKED",
+      passed: false,
+      blockingCodes: ["APPROVAL_NOT_ENFORCED"],
+      sourceType: "RUN_PROFILE_PRODUCTION_GATE",
+      sourceId: "12",
+      checkedAt: "2026-07-06T04:10:00Z",
+      items: [
+        {
+          code: "APPROVAL_NOT_ENFORCED",
+          status: "FAIL",
+          message: "High-risk tool approval must be enabled before production"
+        }
+      ]
+    };
+    vi.mocked(api.post).mockResolvedValueOnce(gateResult);
+
+    await expect(getRunProfileGateResult(12)).resolves.toEqual(gateResult);
+
+    expect(api.post).toHaveBeenCalledWith("/api/run-profiles/12/production-gate/gate-result");
   });
 
   it("runs run profile governance actions from the API endpoints", async () => {

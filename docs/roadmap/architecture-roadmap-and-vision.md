@@ -618,3 +618,11 @@ The Model Config admin page now exposes the existing unified `GateResult` projec
 This is a narrow unified GateResult productization slice. It does not add new model quality checks, provider health checks, persisted gate-result rows, release approval workflows, or full-Docker UI smoke coverage.
 
 Fresh UX evidence: `npm test -- src/pages/admin/settings/ModelConfigPage.test.tsx` passed 1/1 focused frontend test, covering row/header action invocation of `getAiModelConfigGateResult` for `ai.models` with the active tenant and rendering of `MODEL_CONFIG`, blocking code, source, and check-message evidence. `npm run build` completed successfully with the existing Browserslist/chunk-size warnings.
+
+## 2026-07-06 Update: Run Profile GateResult UX
+
+The Run Profile admin table now exposes the existing unified `GateResult` projection directly from each run profile row. Operators can open a read-only `Run Profile GateResult` evidence panel to inspect subject, status, source, checked time, blocking codes, and per-check evidence from `POST /api/run-profiles/{id}/production-gate/gate-result` without replacing the existing object-specific production gate check and approval workflow.
+
+This is a narrow unified GateResult productization slice. It does not add new run profile gate rules, persisted gate-result rows, release approval workflows, or full-Docker UI smoke coverage.
+
+Fresh UX evidence: `npm test -- src/pages/admin/run-profiles/RunProfilePage.test.tsx src/services/runProfileService.test.ts` passed 21/21 focused frontend tests, covering the service endpoint, row action invocation of `getRunProfileGateResult`, rendering of `RUN_PROFILE`, blocking code, source, and check-message evidence, and isolated role-card form behavior.

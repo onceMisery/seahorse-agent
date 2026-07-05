@@ -13,6 +13,7 @@ import {
   checkRunProfileProductionGate,
   createRunProfile,
   deleteRunProfile,
+  getRunProfileGateResult,
   getRunProfile,
   getRunProfileAuditSummary,
   getRunProfileRiskSummary,
@@ -22,6 +23,7 @@ import {
   resolveRunProfilePreview,
   submitRunProfileApproval,
   updateRunProfile,
+  type GateResult,
   type RunProfileAuditSummary,
   type RunProfileProductionGateCheck,
   type RunProfileRequest,
@@ -139,9 +141,11 @@ export function RunProfilePage() {
   const [preview, setPreview] = useState<RunProfileResolvedPreview | null>(null);
   const [riskSummary, setRiskSummary] = useState<RunProfileRiskSummary | null>(null);
   const [productionGate, setProductionGate] = useState<RunProfileProductionGateCheck | null>(null);
+  const [gateResult, setGateResult] = useState<GateResult | null>(null);
   const [auditSummary, setAuditSummary] = useState<RunProfileAuditSummary | null>(null);
   const [previewLoadingId, setPreviewLoadingId] = useState<number | string | null>(null);
   const [gateLoadingId, setGateLoadingId] = useState<number | string | null>(null);
+  const [gateResultLoadingId, setGateResultLoadingId] = useState<number | string | null>(null);
   const [governanceLoadingId, setGovernanceLoadingId] = useState<string | null>(null);
   const [executorEngines, setExecutorEngines] = useState<string[]>(["kernel"]);
 
@@ -373,6 +377,18 @@ export function RunProfilePage() {
       console.error(error);
     } finally {
       setGateLoadingId(null);
+    }
+  };
+
+  const handleGateResult = async (id: number | string) => {
+    try {
+      setGateResultLoadingId(id);
+      setGateResult(await getRunProfileGateResult(id));
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Load Run Profile GateResult failed"));
+      console.error(error);
+    } finally {
+      setGateResultLoadingId(null);
     }
   };
 
@@ -730,6 +746,60 @@ export function RunProfilePage() {
         </Card>
       ) : null}
 
+      {gateResult ? (
+        <Card>
+          <CardContent className="space-y-4 pt-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">Run Profile GateResult</h2>
+                <p className="text-xs text-muted-foreground">Unified production gate evidence projection for release and audit surfaces.</p>
+              </div>
+              <Badge variant={gateResult.passed ? "secondary" : "destructive"}>{gateResult.status}</Badge>
+            </div>
+            <div className="grid gap-3 text-sm md:grid-cols-4">
+              <div className="rounded-md border border-slate-200 p-3">
+                <div className="text-xs text-muted-foreground">Subject</div>
+                <div className="mt-1 break-all font-mono text-xs text-slate-900">
+                  {gateResult.subjectType}:{gateResult.subjectId}
+                </div>
+              </div>
+              <div className="rounded-md border border-slate-200 p-3">
+                <div className="text-xs text-muted-foreground">Source</div>
+                <div className="mt-1 break-all font-mono text-xs text-slate-900">{textOrDash(gateResult.sourceType)}</div>
+              </div>
+              <div className="rounded-md border border-slate-200 p-3">
+                <div className="text-xs text-muted-foreground">Checked</div>
+                <div className="mt-1 text-slate-900">{textOrDash(gateResult.checkedAt)}</div>
+              </div>
+              <div className="rounded-md border border-slate-200 p-3">
+                <div className="text-xs text-muted-foreground">Blocking Codes</div>
+                <div className="mt-1 font-medium text-slate-900">{gateResult.blockingCodes?.length || 0}</div>
+              </div>
+            </div>
+            {gateResult.blockingCodes && gateResult.blockingCodes.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {gateResult.blockingCodes.map((code) => (
+                  <Badge key={code} variant="destructive">{code}</Badge>
+                ))}
+              </div>
+            ) : null}
+            <div className="grid gap-2 md:grid-cols-2">
+              {(gateResult.items || []).map((item) => (
+                <div key={`${item.code}-${item.status}`} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={item.status === "PASS" ? "secondary" : item.status === "FAIL" ? "destructive" : "outline"}>
+                      {item.status}
+                    </Badge>
+                    <span className="font-mono text-xs text-slate-600">{item.code}</span>
+                  </div>
+                  <div className="mt-2 break-words text-sm text-slate-700">{item.message || "-"}</div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {auditSummary ? (
         <Card>
           <CardContent className="space-y-4 pt-6">
@@ -849,6 +919,16 @@ export function RunProfilePage() {
                         >
                           <ShieldCheck className="mr-1 h-4 w-4" />
                           发布门禁
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`run-profile-gate-result-${profile.id}`}
+                          disabled={gateResultLoadingId === profile.id}
+                          onClick={() => handleGateResult(profile.id)}
+                        >
+                          <ShieldCheck className="mr-1 h-4 w-4" />
+                          GateResult
                         </Button>
                         <Button
                           variant="ghost"
