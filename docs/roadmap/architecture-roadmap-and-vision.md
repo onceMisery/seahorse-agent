@@ -509,6 +509,8 @@ The runtime route guard also rejects same-origin browser requests that carry URL
 
 Blocked credential-bearing route URLs are also redacted before entering the generated HAR event model, preserving only the safe origin/path shape plus value-free redaction markers for userinfo, query, and fragment parts.
 
+HAR event URL recording now also shortens allowed internal `data:` and `blob:` pseudo-URLs to value-free markers, keeping inline data and blob identifiers out of governed network artifacts while preserving the route allow/abort decision.
+
 This is a narrow runtime egress hardening slice. It does not add a general outbound proxy, per-path URL policy UX, DNS pinning, CIDR/private-network classification, or long-lived browser profile management.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 40/40.

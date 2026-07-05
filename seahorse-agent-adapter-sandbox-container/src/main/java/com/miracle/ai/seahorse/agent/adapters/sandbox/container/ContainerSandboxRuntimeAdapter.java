@@ -531,6 +531,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     return False
 
                 def redacted_har_url(url):
+                    if url.startswith("data:"):
+                        return "data:<redacted>"
+                    if url.startswith("blob:"):
+                        return "blob:<redacted>"
                     if not has_credential_url_parts(url):
                         return url
                     parsed = urlparse(url)
@@ -672,7 +676,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             event = {
                                 "startedDateTime": utc_now(),
                                 "method": request.method,
-                                "url": redacted_har_url(request.url) if blocked else request.url,
+                                "url": redacted_har_url(request.url),
                                 "resourceType": request.resource_type,
                                 "status": 0,
                                 "statusText": "",
