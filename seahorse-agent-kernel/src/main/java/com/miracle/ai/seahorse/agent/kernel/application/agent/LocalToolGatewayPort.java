@@ -366,7 +366,55 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         if ("invoke_remote_a2a_agent".equals(request.toolId())) {
             return summarizeRemoteA2aArguments(request);
         }
+        if (request.toolId() != null && request.toolId().startsWith("openapi_")) {
+            return summarizeOpenApiArguments(request);
+        }
         return truncate("keys=" + request.arguments().keySet() + ", size=" + request.arguments().size());
+    }
+
+    private String summarizeOpenApiArguments(ToolInvocationRequest request) {
+        Map<String, Object> arguments = request.arguments();
+        Map<String, Object> path = mapValue(arguments.get("path"));
+        Map<String, Object> query = mapValue(arguments.get("query"));
+        Map<String, Object> parameters = mapValue(arguments.get("parameters"));
+        Map<String, Object> headers = mapValue(arguments.get("headers"));
+        Object body = arguments.containsKey("requestBody") ? arguments.get("requestBody") : arguments.get("body");
+        Map<String, Object> bodyMap = mapValue(body);
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("toolId", request.toolId());
+        summary.put("provider", "OPENAPI");
+        summary.put("argumentKeys", arguments.keySet());
+        summary.put("argumentCount", arguments.size());
+        summary.put("pathKeys", path.keySet());
+        summary.put("pathCount", path.size());
+        summary.put("queryKeys", query.keySet());
+        summary.put("queryCount", query.size());
+        summary.put("parameterKeys", parameters.keySet());
+        summary.put("parameterCount", parameters.size());
+        summary.put("headerKeys", headers.keySet());
+        summary.put("headerCount", headers.size());
+        summary.put("requestBodyPresent", body != null);
+        summary.put("requestBodyType", valueType(body));
+        if (body instanceof String text) {
+            summary.put("requestBodyLength", text.length());
+        } else if (!bodyMap.isEmpty()) {
+            summary.put("requestBodyKeys", bodyMap.keySet());
+            summary.put("requestBodyFieldCount", bodyMap.size());
+        }
+        try {
+            return truncate(OBJECT_MAPPER.writeValueAsString(summary));
+        } catch (JsonProcessingException ex) {
+            return truncate("toolId=" + request.toolId()
+                    + ", provider=OPENAPI"
+                    + ", argumentKeys=" + arguments.keySet()
+                    + ", argumentCount=" + arguments.size()
+                    + ", pathKeys=" + path.keySet()
+                    + ", queryKeys=" + query.keySet()
+                    + ", parameterKeys=" + parameters.keySet()
+                    + ", headerKeys=" + headers.keySet()
+                    + ", requestBodyPresent=" + (body != null)
+                    + ", requestBodyType=" + valueType(body));
+        }
     }
 
     private String summarizeSandboxPythonArguments(ToolInvocationRequest request) {
@@ -533,6 +581,28 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             }
         });
         return result;
+    }
+
+    private String valueType(Object value) {
+        if (value == null) {
+            return "none";
+        }
+        if (value instanceof Map<?, ?>) {
+            return "object";
+        }
+        if (value instanceof Collection<?>) {
+            return "array";
+        }
+        if (value instanceof String) {
+            return "string";
+        }
+        if (value instanceof Number) {
+            return "number";
+        }
+        if (value instanceof Boolean) {
+            return "boolean";
+        }
+        return value.getClass().getSimpleName();
     }
 
     private static boolean hasText(String value) {

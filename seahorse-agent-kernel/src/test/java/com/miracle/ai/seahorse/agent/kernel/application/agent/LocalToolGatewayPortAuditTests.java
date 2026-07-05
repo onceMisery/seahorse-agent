@@ -485,6 +485,65 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldSummarizeOpenApiGovernanceMetadataWithoutParameterHeaderOrBodyValues() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "openapi_customers",
+                Map.of(
+                        "path", Map.of("customerId", "cust-secret-marker"),
+                        "query", Map.of("status", "active-secret-marker"),
+                        "parameters", Map.of("page", "page-secret-marker"),
+                        "headers", Map.of("x-api-key", "header-secret-marker"),
+                        "requestBody", Map.of(
+                                "email", "customer-secret@example.test",
+                                "token", "body-secret-marker")),
+                Map.of(),
+                "run-1:call-1",
+                List.of("openapi_customers")));
+
+        assertTrue(result.success());
+        String summary = audit.requested.get(0).argumentsSummary();
+        assertTrue(summary.contains("\"toolId\":\"openapi_customers\""));
+        assertTrue(summary.contains("\"provider\":\"OPENAPI\""));
+        assertTrue(summary.contains("\"argumentCount\":5"));
+        assertTrue(summary.contains("\"pathKeys\":[\"customerId\"]"));
+        assertTrue(summary.contains("\"pathCount\":1"));
+        assertTrue(summary.contains("\"queryKeys\":[\"status\"]"));
+        assertTrue(summary.contains("\"queryCount\":1"));
+        assertTrue(summary.contains("\"parameterKeys\":[\"page\"]"));
+        assertTrue(summary.contains("\"parameterCount\":1"));
+        assertTrue(summary.contains("\"headerKeys\":[\"x-api-key\"]"));
+        assertTrue(summary.contains("\"headerCount\":1"));
+        assertTrue(summary.contains("\"requestBodyPresent\":true"));
+        assertTrue(summary.contains("\"requestBodyType\":\"object\""));
+        assertTrue(summary.contains("\"requestBodyKeys\":["));
+        assertTrue(summary.contains("email"));
+        assertTrue(summary.contains("token"));
+        assertTrue(summary.contains("\"requestBodyFieldCount\":2"));
+        assertFalse(summary.contains("cust-secret-marker"));
+        assertFalse(summary.contains("active-secret-marker"));
+        assertFalse(summary.contains("page-secret-marker"));
+        assertFalse(summary.contains("header-secret-marker"));
+        assertFalse(summary.contains("customer-secret@example.test"));
+        assertFalse(summary.contains("body-secret-marker"));
+    }
+
+    @Test
     void shouldPublishArtifactsFromSuccessfulToolResultWithFullRequestContext() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
                 "{\"artifactType\":\"REPORT\",\"b64Json\":\"raw-image-bytes\"}"));

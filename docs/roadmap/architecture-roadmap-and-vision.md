@@ -708,3 +708,11 @@ The built-in Tool Catalog registrar now recognizes `invoke_remote_a2a_agent` as 
 This closes a cross-provider governance gap at registration time only. It does not change AgentScope discovery, request signing, connector invocation, Tool Gateway audit summaries, or approval decision semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-Dtest=BuiltInAgentToolRegistrarTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed after adding regression coverage for the remote A2A catalog projection.
+
+## 2026-07-06 Update: OpenAPI Tool Gateway Audit Summary
+
+Tool Gateway request audit now emits an `openapi_` dynamic-tool-specific value-free argument summary. The summary records the OpenAPI provider marker, argument keys/count, path/query/parameter/header key partitions, request body presence/type, and body field count or string length while excluding raw parameter, header, and body values from `argumentsSummary`.
+
+This is a narrow cross-provider audit hardening slice. It does not change OpenAPI connector import, credential injection, HTTP invocation, response redaction, approval policy, or quota policy semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed after adding regression coverage that OpenAPI audit summaries include governance metadata while excluding path/query/parameter/header/body secret markers.
