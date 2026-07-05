@@ -42,6 +42,7 @@ import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -346,6 +347,20 @@ class SeahorseRunProfileControllerTests {
                 .andExpect(jsonPath("$.data.checkItems[0].status").value("BLOCK"));
 
         verify(port).productionGateCheck("100", 12L);
+
+        mvc.perform(post("/api/run-profiles/12/production-gate/gate-result").param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.subjectType").value("RUN_PROFILE"))
+                .andExpect(jsonPath("$.data.subjectId").value("12"))
+                .andExpect(jsonPath("$.data.status").value("FAIL"))
+                .andExpect(jsonPath("$.data.passed").value(false))
+                .andExpect(jsonPath("$.data.blockingCodes[0]").value("APPROVAL_NOT_ENFORCED"))
+                .andExpect(jsonPath("$.data.sourceType").value("RunProfileProductionGateCheck"))
+                .andExpect(jsonPath("$.data.sourceId").value("12"))
+                .andExpect(jsonPath("$.data.items[0].status").value("FAIL"));
+
+        verify(port, times(2)).productionGateCheck("100", 12L);
     }
 
     @Test

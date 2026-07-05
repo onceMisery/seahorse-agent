@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResults;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileToolBindingCommand;
@@ -150,6 +151,22 @@ public class SeahorseRunProfileController {
         return runProfilePort()
                 .productionGateCheck(resolveUserId(userId, headerUserId), id)
                 .<Map<String, Object>>map(check -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, check))
+                .orElseGet(() -> Map.of(KEY_CODE, SUCCESS_CODE));
+    }
+
+    @PostMapping({
+            "/run-profiles/{id:-?\\d+}/production-gate/gate-result",
+            "/api/run-profiles/{id:-?\\d+}/production-gate/gate-result"
+    })
+    public Map<String, Object> productionGateResult(@PathVariable Long id,
+                                                    @RequestParam(required = false) String userId,
+                                                    @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID,
+                                                            required = false)
+                                                    String headerUserId) {
+        return runProfilePort()
+                .productionGateCheck(resolveUserId(userId, headerUserId), id)
+                .<Map<String, Object>>map(check -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                        GateResults.fromRunProfileCheck(check)))
                 .orElseGet(() -> Map.of(KEY_CODE, SUCCESS_CODE));
     }
 

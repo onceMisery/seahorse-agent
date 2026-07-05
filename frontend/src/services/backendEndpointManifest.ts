@@ -321,6 +321,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/agents/{}/production-gate/gate-result"
+  },
+  {
+    "method": "GET",
     "path": "/api/agents/{}/production-gate/latest"
   },
   {
@@ -1445,6 +1449,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/api/run-profiles/{}/production-gate/gate-result"
+  },
+  {
+    "method": "POST",
     "path": "/api/run-profiles/{}/reject"
   },
   {
@@ -1886,6 +1894,10 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/run-profiles/{}/production-gate/check"
+  },
+  {
+    "method": "POST",
+    "path": "/run-profiles/{}/production-gate/gate-result"
   },
   {
     "method": "POST",

@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ProductionGateInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResults;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -61,5 +62,13 @@ public class SeahorseProductionGateController {
         advancedFeatureGate.requireEnabled(AdvancedFeature.PRODUCTION_GATE);
         return ApiResponses.requireService(productionGatePortProvider, port -> port.latest(agentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Production gate report not found")));
+    }
+
+    @GetMapping("/api/agents/{agentId}/production-gate/gate-result")
+    public ApiResponse<Object> latestGateResult(@PathVariable String agentId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.PRODUCTION_GATE);
+        return ApiResponses.requireService(productionGatePortProvider, port -> GateResults.fromAgentReport(
+                port.latest(agentId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Production gate report not found"))));
     }
 }

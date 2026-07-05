@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -69,6 +70,18 @@ class SeahorseProductionGateControllerTests {
                 .andExpect(jsonPath("$.data.agentId").value("agent-1"))
                 .andExpect(jsonPath("$.data.versionId").value("version-1"));
         verify(port).latest("agent-1");
+
+        mvc.perform(get("/api/agents/agent-1/production-gate/gate-result"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.subjectType").value("AGENT"))
+                .andExpect(jsonPath("$.data.subjectId").value("agent-1"))
+                .andExpect(jsonPath("$.data.status").value("WARN"))
+                .andExpect(jsonPath("$.data.passed").value(true))
+                .andExpect(jsonPath("$.data.sourceType").value("ProductionGateReport"))
+                .andExpect(jsonPath("$.data.sourceId").value("gate-1"))
+                .andExpect(jsonPath("$.data.items[1].code").value("EVAL_PASSING"))
+                .andExpect(jsonPath("$.data.items[1].status").value("WARN"));
+        verify(port, times(2)).latest("agent-1");
     }
 
     @Test
