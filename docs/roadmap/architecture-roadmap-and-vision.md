@@ -724,3 +724,11 @@ OpenAPI connector credential-binding audit events now record `credentialRefPrese
 This is a narrow cross-provider audit minimization slice. It does not change credential binding rotation, credential provider resolution, connector operation enablement, Tool Gateway invocation, or redaction policy semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelOpenApiConnectorImportServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed after adding regression coverage that connector credential-binding audit events include the presence marker while excluding the raw `secret-ref` value.
+
+## 2026-07-06 Update: Sandbox PDF Active Content Marker Guard
+
+The bounded sandbox artifact scanner now treats additional PDF action and embedded-content markers as active content: `/Launch`, `/EmbeddedFile`, `/RichMedia`, and `/SubmitForm` are blocked alongside the existing JavaScript/OpenAction/AA markers. The same value-free `PDF_ACTIVE_CONTENT` and `ARCHIVE_PDF_ACTIVE_CONTENT` categories are reused for direct PDF artifacts and PDF entries inside scanned archives.
+
+This is a narrow scanner hardening slice. It does not add PDF rendering/OCR, full PDF parsing, attachment extraction, external scanner engines, recursive archive scanning, or new artifact policy semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=DefaultSandboxArtifactScannerPortTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed after adding regression coverage that direct `/Launch` PDFs and ZIP-embedded `/EmbeddedFile` PDFs fail closed without persisting raw marker values in redaction summaries.

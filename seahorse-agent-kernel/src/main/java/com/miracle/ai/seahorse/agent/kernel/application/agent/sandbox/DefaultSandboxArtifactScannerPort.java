@@ -134,7 +134,7 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
     private static final Pattern US_SSN_PATTERN = Pattern.compile(
             "\\b\\d{3}-\\d{2}-\\d{4}\\b");
     private static final Pattern PDF_ACTIVE_CONTENT_PATTERN = Pattern.compile(
-            "/(JavaScript|JS|OpenAction|AA)\\b",
+            "/(AA|EmbeddedFile|JavaScript|JS|Launch|OpenAction|RichMedia|SubmitForm)\\b",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern SCRIPT_LIKE_PREFIX_PATTERN = Pattern.compile(
             "\\A\\s*(#!|<(!doctype\\s+html|html|script)\\b|javascript:)",
