@@ -559,7 +559,9 @@ The credential-query guard now also treats semicolon-delimited query components 
 
 The same guard now canonicalizes bracketed query parameter names before matching, so structured forms such as `access_token[]=...` and `session[id]=...` inherit the same fail-closed credential-query behavior.
 
-Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 23/23; `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 47/47; `git diff --check` passed.
+The adapter-side query guard now also canonicalizes common credential parameter variants by removing separators before matching, so forms such as `sessionToken=...`, `client-secret=...`, `auth-token=...`, and `oauth_token=...` fail closed before sandbox session creation without echoing the credential values.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 30/30; `git diff --check` passed. Earlier container-runtime evidence for the base credential-query guard remains `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 47/47.
 
 ## 2026-07-06 Update: Sandbox Browser URL Route Same-Origin Guard
 

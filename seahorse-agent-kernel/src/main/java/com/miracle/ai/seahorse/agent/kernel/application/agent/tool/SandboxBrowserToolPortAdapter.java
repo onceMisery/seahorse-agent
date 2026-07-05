@@ -81,20 +81,23 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private static final String ACTION_EXTRACT_TEXT = "extract_text";
     private static final Set<String> SUPPORTED_ACTIONS = Set.of(ACTION_SNAPSHOT, ACTION_EXTRACT_TEXT);
     private static final Set<String> SENSITIVE_QUERY_PARAMETER_NAMES = Set.of(
-            "access_token",
-            "api_key",
+            "accesstoken",
             "apikey",
-            "auth_token",
-            "client_secret",
+            "authorization",
+            "authtoken",
+            "bearer",
+            "bearertoken",
+            "clientsecret",
             "credential",
             "credentials",
-            "id_token",
+            "idtoken",
+            "oauthtoken",
             "password",
-            "refresh_token",
+            "refreshtoken",
             "secret",
             "session",
-            "session_id",
             "sessionid",
+            "sessiontoken",
             "token");
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
@@ -478,9 +481,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         String decodedName = decodedQueryParameterName(value).toLowerCase(Locale.ROOT);
         int bracketIndex = decodedName.indexOf('[');
         if (bracketIndex > 0) {
-            return decodedName.substring(0, bracketIndex);
+            decodedName = decodedName.substring(0, bracketIndex);
         }
-        return decodedName;
+        return decodedName.replaceAll("[^a-z0-9]", "");
     }
 
     private String decodedQueryParameterName(String value) {

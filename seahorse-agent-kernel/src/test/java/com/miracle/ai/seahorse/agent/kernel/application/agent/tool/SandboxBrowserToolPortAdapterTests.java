@@ -552,6 +552,25 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldRejectVariantCredentialQueryBrowserUrlBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/admin?sessionToken=secret-session-value&client-secret=secret-client-value",
+                "allowedHosts", List.of("example.test"))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("url query must not include credential parameters"));
+        assertFalse(result.error().contains("sessionToken=secret-session-value"));
+        assertFalse(result.error().contains("client-secret=secret-client-value"));
+        assertFalse(result.error().contains("secret-session-value"));
+        assertFalse(result.error().contains("secret-client-value"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
     void shouldAllowNonCredentialQueryBrowserUrlBeforeCreatingSession() throws Exception {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
                 new SandboxExecution(
