@@ -685,12 +685,11 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     }
 
     private String cookieDomainHost(String domain) {
-        String host = domain.startsWith(".") ? domain.substring(1) : domain;
-        if (!hasText(host) || !host.matches("[a-z0-9.-]+")) {
+        if (!hasText(domain) || domain.startsWith(".") || !domain.matches("[a-z0-9.-]+")) {
             throw new IllegalArgumentException("sandbox_browser failed: sessionState cookie domain is invalid");
         }
-        validatePublicBrowserHost(host, "sessionState cookie domain");
-        return host;
+        validatePublicBrowserHost(domain, "sessionState cookie domain");
+        return domain;
     }
 
     private String sessionStateOriginHost(String origin) {
@@ -807,7 +806,11 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
 
     private String normalizedCookieDomain(String value) {
         String domain = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
-        if (!hasText(domain) || domain.contains("/") || domain.contains(":") || !domain.matches("[a-z0-9.-]+")) {
+        if (!hasText(domain)
+                || domain.startsWith(".")
+                || domain.contains("/")
+                || domain.contains(":")
+                || !domain.matches("[a-z0-9.-]+")) {
             throw new IllegalArgumentException("sandbox_browser failed: cookie domain must be a host name only");
         }
         validatePublicBrowserHost(domain, "cookie domain");

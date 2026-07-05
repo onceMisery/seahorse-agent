@@ -616,6 +616,28 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldRejectSessionStateCookieWithLeadingDotDomainBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/page",
+                "allowedHosts", List.of("example.test"),
+                "sessionState", Map.of(
+                        "cookies", List.of(Map.of(
+                                "name", "restored_session",
+                                "value", "restored-secret-value",
+                                "domain", ".example.test",
+                                "path", "/"))))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("cookie domain must be a host name only"));
+        assertFalse(result.error().contains("restored-secret-value"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
     void shouldRejectSessionStateOriginWhenHostIsNotAllowlistedBeforeCreatingSession() {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
