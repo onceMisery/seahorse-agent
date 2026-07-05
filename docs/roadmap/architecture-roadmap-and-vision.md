@@ -441,6 +441,14 @@ The Web API exposes this projection through `GET /admin/ai-config/{key}/gate-res
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=GateResultsTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 10/10 projection tests; `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=AiModelConfigControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 1/1 Web contract test; and `npm test -- src/services/frontendCapabilityContracts.test.ts src/services/serviceEndpointCoverage.test.ts` passed 17/17 frontend manifest/coverage tests.
 
+## 2026-07-06 Update: Tool Catalog GateResult Adapter
+
+The unified GateResult route now covers Tool Catalog release evidence. `GateResults.fromToolCatalogEntry` projects a `ToolCatalogEntry` into `subjectType=TOOL`, checking that the tool is enabled, declares risk and action metadata, requires approval for HIGH/CRITICAL risk, has an owner team warning signal, and carries valid JSON input/output schemas.
+
+The Web API exposes this projection through `GET /api/tools/{toolId}/gate-result` and the non-proxy `/tools/{toolId}/gate-result` alias, reusing the existing tool catalog management port. Existing tool catalog list/detail/enable/disable endpoints remain unchanged. This is a catalog integrity projection only; it does not persist unified gate rows, execute provider health checks, or replace runtime Tool Gateway policy enforcement.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=GateResultsTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 13/13 projection tests; and `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseAgentControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 17/17 Web contract tests.
+
 ## 2026-07-05 Update: Sandbox Browser Localhost/IP Egress Guard
 
 The sandbox browser URL path now rejects localhost-style and IPv4-literal targets before creating a browser sandbox session, even when the caller includes those values in `allowedHosts`. The same guard is duplicated in the container runtime adapter input parser so direct runtime calls also fail closed before a Docker command is built. This tightens the P1 browser egress policy from "caller-listed host" to "caller-listed DNS host plus runtime profile/global sandbox policy".

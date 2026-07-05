@@ -23,6 +23,10 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateRepo
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillRevision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillScanDecision;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.model.AiModelConfig;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
@@ -236,6 +240,50 @@ class GateResultsTests {
                 result.blockingCodes());
     }
 
+    @Test
+    void shouldProjectPassingToolCatalogGateResult() {
+        ToolCatalogEntry tool = tool(true, ToolRiskLevel.MEDIUM, false, "platform", "{\"type\":\"object\"}", null);
+
+        GateResult result = GateResults.fromToolCatalogEntry(tool);
+
+        assertEquals("TOOL", result.subjectType());
+        assertEquals("weather_query", result.subjectId());
+        assertEquals("PASS", result.status());
+        assertTrue(result.passed());
+        assertEquals(List.of(), result.blockingCodes());
+        assertEquals(Instant.parse("2026-07-05T05:00:00Z"), result.checkedAt());
+        assertEquals("ToolCatalogEntry", result.sourceType());
+        assertEquals("weather_query", result.sourceId());
+        assertEquals("TOOL_HIGH_RISK_APPROVAL_REQUIRED", result.items().get(3).code());
+        assertEquals("PASS", result.items().get(3).status());
+    }
+
+    @Test
+    void shouldProjectWarningToolCatalogGateResultWhenOwnerMissing() {
+        ToolCatalogEntry tool = tool(true, ToolRiskLevel.LOW, false, null, "{\"type\":\"object\"}", null);
+
+        GateResult result = GateResults.fromToolCatalogEntry(tool);
+
+        assertEquals("WARN", result.status());
+        assertTrue(result.passed());
+        assertEquals(List.of(), result.blockingCodes());
+        assertEquals("TOOL_OWNER_DECLARED", result.items().get(4).code());
+        assertEquals("WARN", result.items().get(4).status());
+    }
+
+    @Test
+    void shouldProjectFailingToolCatalogGateResult() {
+        ToolCatalogEntry tool = tool(false, ToolRiskLevel.HIGH, false, "platform", "{not-json", "{\"type\":\"object\"}");
+
+        GateResult result = GateResults.fromToolCatalogEntry(tool);
+
+        assertEquals("FAIL", result.status());
+        assertFalse(result.passed());
+        assertEquals(
+                List.of("TOOL_ENABLED", "TOOL_HIGH_RISK_APPROVAL_REQUIRED", "TOOL_INPUT_SCHEMA_VALID"),
+                result.blockingCodes());
+    }
+
     private static RetrievalEvaluationComparisonRecord comparison(
             Instant checkedAt,
             RetrievalEvaluationReport baseline,
@@ -317,5 +365,28 @@ class GateResultsTests {
         config.setCreatedAt(LocalDateTime.parse("2026-07-05T03:30:00"));
         config.setUpdatedAt(LocalDateTime.parse("2026-07-05T04:00:00"));
         return config;
+    }
+
+    private static ToolCatalogEntry tool(boolean enabled,
+                                         ToolRiskLevel riskLevel,
+                                         boolean requiresApproval,
+                                         String ownerTeam,
+                                         String schemaJson,
+                                         String outputSchemaJson) {
+        return new ToolCatalogEntry(
+                "weather_query",
+                ToolProvider.MCP,
+                "Weather Query",
+                "Query weather",
+                schemaJson,
+                outputSchemaJson,
+                riskLevel,
+                ToolActionType.EXECUTE,
+                "MCP",
+                ownerTeam,
+                enabled,
+                requiresApproval,
+                Instant.parse("2026-07-05T04:30:00Z"),
+                Instant.parse("2026-07-05T05:00:00Z"));
     }
 }

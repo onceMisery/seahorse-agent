@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResults;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -79,6 +80,14 @@ public class SeahorseToolCatalogController {
         advancedFeatureGate.requireEnabled(AdvancedFeature.TOOL_CATALOG_MANAGEMENT);
         return ApiResponses.requireService(toolCatalogPortProvider,
                 port -> port.findById(toolId).orElseThrow(() -> new ResourceNotFoundException("Tool not found")));
+    }
+
+    @GetMapping({"/tools/{toolId}/gate-result", "/api/tools/{toolId}/gate-result"})
+    public ApiResponse<Object> gateResult(@PathVariable String toolId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.TOOL_CATALOG_MANAGEMENT);
+        return ApiResponses.requireService(toolCatalogPortProvider,
+                port -> GateResults.fromToolCatalogEntry(
+                        port.findById(toolId).orElseThrow(() -> new ResourceNotFoundException("Tool not found"))));
     }
 
     @PostMapping({"/tools/{toolId}/enable", "/api/tools/{toolId}/enable"})

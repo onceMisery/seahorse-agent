@@ -23,6 +23,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateRepo
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillRevision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillScanDecision;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.model.AiModelConfig;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
@@ -171,6 +174,25 @@ public final class GateResults {
                 instant(config.getUpdatedAt(), config.getCreatedAt()),
                 "AiModelConfig",
                 config.getId());
+    }
+
+    public static GateResult fromToolCatalogEntry(ToolCatalogEntry tool) {
+        Objects.requireNonNull(tool, "tool must not be null");
+        List<GateResultItem> items = toolCatalogItems(tool);
+        List<String> blockingCodes = items.stream()
+                .filter(item -> "FAIL".equals(item.status()))
+                .map(GateResultItem::code)
+                .toList();
+        return new GateResult(
+                "TOOL",
+                tool.toolId(),
+                gateStatus(items),
+                blockingCodes.isEmpty(),
+                blockingCodes,
+                items,
+                tool.updatedAt(),
+                "ToolCatalogEntry",
+                tool.toolId());
     }
 
     private static GateResultItem fromAgentItem(ProductionGateCheckItem item) {
@@ -361,6 +383,47 @@ public final class GateResults {
                         ? "Sensitive model config encryption requirement is satisfied"
                         : "Sensitive model config keys must be encrypted"));
         return List.copyOf(items);
+    }
+
+    private static List<GateResultItem> toolCatalogItems(ToolCatalogEntry tool) {
+        java.util.ArrayList<GateResultItem> items = new java.util.ArrayList<>();
+        ToolRiskLevel riskLevel = tool.riskLevel();
+        ToolActionType actionType = tool.actionType();
+        items.add(metricItem("TOOL_ENABLED",
+                tool.enabled(),
+                tool.enabled() ? "Tool is enabled" : "Disabled tools cannot be released for production use"));
+        items.add(metricItem("TOOL_RISK_LEVEL_DECLARED",
+                riskLevel != null,
+                riskLevel == null ? "Tool risk level is missing" : "Tool risk level is " + riskLevel.name()));
+        items.add(metricItem("TOOL_ACTION_TYPE_DECLARED",
+                actionType != null,
+                actionType == null ? "Tool action type is missing" : "Tool action type is " + actionType.name()));
+        boolean highRisk = riskLevel == ToolRiskLevel.HIGH || riskLevel == ToolRiskLevel.CRITICAL;
+        items.add(metricItem("TOOL_HIGH_RISK_APPROVAL_REQUIRED",
+                !highRisk || tool.requiresApproval(),
+                highRisk
+                        ? "High and critical risk tools must require approval"
+                        : "Tool risk level does not require mandatory approval"));
+        items.add(new GateResultItem("TOOL_OWNER_DECLARED",
+                hasText(tool.ownerTeam()) ? "PASS" : "WARN",
+                hasText(tool.ownerTeam()) ? "Tool owner team is " + tool.ownerTeam() : "Tool owner team is missing"));
+        items.add(metricItem("TOOL_INPUT_SCHEMA_VALID",
+                validJson(tool.schemaJson()),
+                "Tool input schema must be valid JSON"));
+        String outputSchema = trimToNull(tool.outputSchemaJson());
+        items.add(metricItem("TOOL_OUTPUT_SCHEMA_VALID",
+                outputSchema == null || validJson(outputSchema),
+                outputSchema == null ? "Tool output schema is optional" : "Tool output schema must be valid JSON"));
+        return List.copyOf(items);
+    }
+
+    private static String gateStatus(List<GateResultItem> items) {
+        boolean failed = items.stream().anyMatch(item -> "FAIL".equals(item.status()));
+        if (failed) {
+            return "FAIL";
+        }
+        boolean warned = items.stream().anyMatch(item -> "WARN".equals(item.status()));
+        return warned ? "WARN" : "PASS";
     }
 
     private static boolean validJson(String value) {

@@ -140,6 +140,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -492,6 +493,17 @@ class SeahorseAgentControllerTests {
                 .andExpect(jsonPath("$.data.provider").value("MCP"))
                 .andExpect(jsonPath("$.data.riskLevel").value("MEDIUM"));
 
+        mvc.perform(get("/api/tools/weather_query/gate-result"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.subjectType").value("TOOL"))
+                .andExpect(jsonPath("$.data.subjectId").value("weather_query"))
+                .andExpect(jsonPath("$.data.status").value("PASS"))
+                .andExpect(jsonPath("$.data.passed").value(true))
+                .andExpect(jsonPath("$.data.sourceType").value("ToolCatalogEntry"))
+                .andExpect(jsonPath("$.data.sourceId").value("weather_query"))
+                .andExpect(jsonPath("$.data.items[3].code").value("TOOL_HIGH_RISK_APPROVAL_REQUIRED"));
+
         mvc.perform(post("/api/tools/weather_query/disable"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.enabled").value(false));
@@ -501,7 +513,7 @@ class SeahorseAgentControllerTests {
                 .andExpect(jsonPath("$.data.enabled").value(true));
 
         verify(port).page("MCP", "MCP", "MEDIUM", "weather", 2L, 20L, true);
-        verify(port).findById("weather_query");
+        verify(port, times(2)).findById("weather_query");
         verify(port).disable("weather_query");
         verify(port).enable("weather_query");
     }
