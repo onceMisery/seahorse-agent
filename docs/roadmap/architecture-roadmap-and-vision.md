@@ -668,3 +668,11 @@ The Tool Gateway audit summary now has a dedicated value-free `invoke_remote_a2a
 This is a narrow A2A/Tool Gateway governance slice. It does not add cross-provider rate limits, remote content redaction, remote agent trust scoring, or full-Docker multi-agent smoke coverage.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-agent-agentscope -am "-Dtest=AgentScopeA2AToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 4/4; `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 15/15.
+
+## 2026-07-06 Update: Sandbox File Conversion Active-Content Preflight
+
+`sandbox_file_convert` now preflights base64 DOCX/PDF inputs in the container adapter before writing converter scripts, writing decoded input files, or starting Docker/Podman. DOCX inputs must be inspectable bounded ZIP packages with `word/document.xml`; unsafe paths, too many entries, macro projects, ActiveX, embedded OLE/object payloads, and external links fail closed. PDF inputs must have a PDF header and fail closed on encrypted or active-content markers such as JavaScript/OpenAction/AA in the bounded prefix.
+
+This keeps the existing conservative text-extraction path aligned with its no-render/no-edit scope. It does not add LibreOffice/Tika, PDF rendering/OCR, Office rendering/editing, password handling, or general binary conversion.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 53/53, including regressions that DOCX/PDF active content is rejected before container command execution and before `main.py` or decoded input files are written.

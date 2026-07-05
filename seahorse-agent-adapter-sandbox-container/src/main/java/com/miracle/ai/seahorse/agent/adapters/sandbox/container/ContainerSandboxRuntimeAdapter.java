@@ -37,6 +37,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
 
 import java.io.IOException;
+import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
@@ -57,6 +58,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
@@ -79,6 +82,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final String CONTAINER_WORKSPACE = "/workspace";
     private static final String CONTAINER_NAME_PREFIX = "seahorse-sandbox-";
     private static final int MAX_FILE_CONVERSION_CONTENT_CHARS = 256 * 1024;
+    private static final int MAX_FILE_CONVERSION_ARCHIVE_ENTRIES = 128;
+    private static final int MAX_FILE_CONVERSION_BINARY_SCAN_BYTES = 256 * 1024;
     private static final int MAX_BROWSER_HTML_CHARS = 256 * 1024;
     private static final int MAX_BROWSER_URL_CHARS = 2048;
     private static final int MAX_BROWSER_ALLOWED_HOSTS = 16;
@@ -276,10 +281,15 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
         if (runtimeType == SandboxRuntimeType.FILE_CONVERSION) {
             FileConversionRequest request = parseFileConversionRequest(input);
+            byte[] binaryContent = null;
+            if (BASE64_ENCODING.equals(request.contentEncoding())) {
+                binaryContent = decodeBase64Content(request.content());
+                validateBinaryFileConversionInput(request.sourceFormat(), binaryContent);
+            }
             Path inputPath = safeWorkspace.resolve(fileConversionInputName(request.sourceFormat()));
             Files.writeString(safeWorkspace.resolve(SCRIPT_NAME), fileConversionScript(request), StandardCharsets.UTF_8);
-            if (BASE64_ENCODING.equals(request.contentEncoding())) {
-                Files.write(inputPath, decodeBase64Content(request.content()));
+            if (binaryContent != null) {
+                Files.write(inputPath, binaryContent);
             } else {
                 Files.writeString(
                         inputPath,
@@ -352,6 +362,86 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     "file conversion content exceeds " + MAX_FILE_CONVERSION_CONTENT_CHARS + " chars");
         }
         return new FileConversionRequest(sourceFormat, targetFormat, contentEncoding, content);
+    }
+
+    private void validateBinaryFileConversionInput(String sourceFormat, byte[] content) {
+        if (DOCX_FORMAT.equals(sourceFormat)) {
+            validateDocxFileConversionInput(content);
+        }
+        if (PDF_FORMAT.equals(sourceFormat)) {
+            validatePdfFileConversionInput(content);
+        }
+    }
+
+    private void validateDocxFileConversionInput(byte[] content) {
+        boolean documentXmlFound = false;
+        int inspectedEntries = 0;
+        try (ZipInputStream archive = new ZipInputStream(new ByteArrayInputStream(content))) {
+            ZipEntry entry;
+            while ((entry = archive.getNextEntry()) != null) {
+                if (++inspectedEntries > MAX_FILE_CONVERSION_ARCHIVE_ENTRIES) {
+                    throw new IllegalArgumentException("docx archive exceeds entry scan budget");
+                }
+                String entryName = normalizedArchiveEntryName(entry.getName());
+                if (hasUnsafeArchivePath(entryName)) {
+                    throw new IllegalArgumentException("docx archive contains unsafe entry");
+                }
+                if (hasDocxActiveContentEntry(entryName)) {
+                    throw new IllegalArgumentException("docx active content is not supported");
+                }
+                if ("word/document.xml".equals(entryName)) {
+                    documentXmlFound = true;
+                }
+            }
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("docx archive could not be inspected", ex);
+        }
+        if (!documentXmlFound) {
+            throw new IllegalArgumentException("docx word/document.xml not found");
+        }
+    }
+
+    private void validatePdfFileConversionInput(byte[] content) {
+        byte[] prefix = java.util.Arrays.copyOf(content, Math.min(content.length, MAX_FILE_CONVERSION_BINARY_SCAN_BYTES));
+        String prefixText = new String(prefix, StandardCharsets.ISO_8859_1);
+        if (!prefixText.startsWith("%PDF-")) {
+            throw new IllegalArgumentException("pdf header not found");
+        }
+        if (prefixText.contains("/Encrypt")) {
+            throw new IllegalArgumentException("encrypted pdf is not supported");
+        }
+        if (java.util.regex.Pattern.compile("/(JavaScript|JS|OpenAction|AA)\\b",
+                java.util.regex.Pattern.CASE_INSENSITIVE).matcher(prefixText).find()) {
+            throw new IllegalArgumentException("pdf active content is not supported");
+        }
+    }
+
+    private String normalizedArchiveEntryName(String value) {
+        return nullToEmpty(value).replace('\\', '/').trim().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean hasUnsafeArchivePath(String value) {
+        if (!hasText(value) || value.indexOf('\0') >= 0) {
+            return true;
+        }
+        return value.startsWith("/")
+                || value.matches("^[a-z]:/.*")
+                || value.equals("..")
+                || value.startsWith("../")
+                || value.endsWith("/..")
+                || value.contains("/../");
+    }
+
+    private boolean hasDocxActiveContentEntry(String value) {
+        if (!hasText(value)) {
+            return false;
+        }
+        return value.equals("vbaproject.bin")
+                || value.endsWith("/vbaproject.bin")
+                || value.startsWith("word/activex/")
+                || value.startsWith("word/embeddings/")
+                || value.startsWith("word/externallinks/")
+                || value.contains("/oleobject");
     }
 
     private BrowserAutomationRequest parseBrowserAutomationRequest(String input) throws IOException {

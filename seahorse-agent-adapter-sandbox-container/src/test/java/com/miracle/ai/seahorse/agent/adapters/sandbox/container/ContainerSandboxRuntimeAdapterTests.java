@@ -32,6 +32,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,6 +44,8 @@ import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -353,7 +356,8 @@ class ContainerSandboxRuntimeAdapterTests {
 
     @Test
     void shouldRunDocxToTextFileConversionAndCollectTextOutputOnly() throws Exception {
-        String docxBase64 = Base64.getEncoder().encodeToString("fake-docx-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        byte[] docxBytes = zipBytes("word/document.xml", "<w:document><w:p><w:r><w:t>safe docx</w:t></w:r></w:p></w:document>");
+        String docxBase64 = Base64.getEncoder().encodeToString(docxBytes);
         RecordingRunner runner = new RecordingRunner(
                 ContainerCommandResult.succeeded("converted docx document to text\n", Duration.ofMillis(190)),
                 command -> {
@@ -364,7 +368,7 @@ class ContainerSandboxRuntimeAdapterTests {
                                     "converted.txt")
                             .doesNotContain(docxBase64);
                     assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.docx")))
-                            .isEqualTo("fake-docx-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                            .isEqualTo(docxBytes);
                     Files.writeString(command.workingDirectory().resolve("converted.txt"),
                             "Sandbox DOCX marker\n");
                 });
@@ -387,6 +391,33 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.artifacts())
                 .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
                 .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.docx"));
+    }
+
+    @Test
+    void shouldRejectDocxWithActiveContentBeforeRunningContainer() throws Exception {
+        byte[] docxBytes = zipBytes(
+                "word/vbaProject.bin",
+                "macro marker",
+                "word/document.xml",
+                "<w:document><w:p><w:r><w:t>unsafe docx</w:t></w:r></w:p></w:document>");
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"docx","targetFormat":"txt","contentEncoding":"base64","content":"%s"}
+                        """.formatted(Base64.getEncoder().encodeToString(docxBytes)),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("docx active content is not supported");
+        assertThat(runner.lastCommand).isNull();
+        assertThat(tempDir.resolve(session.sessionId()).resolve("main.py")).doesNotExist();
+        assertThat(tempDir.resolve(session.sessionId()).resolve("input.docx")).doesNotExist();
     }
 
     @Test
@@ -428,6 +459,30 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.artifacts())
                 .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
                 .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.pdf"));
+    }
+
+    @Test
+    void shouldRejectPdfWithActiveContentBeforeRunningContainer() {
+        String pdfBase64 = Base64.getEncoder().encodeToString(
+                "%PDF-1.4\n1 0 obj\n<< /OpenAction 2 0 R >>\nendobj".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"pdf","targetFormat":"txt","contentEncoding":"base64","content":"%s"}
+                        """.formatted(pdfBase64),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("pdf active content is not supported");
+        assertThat(runner.lastCommand).isNull();
+        assertThat(tempDir.resolve(session.sessionId()).resolve("main.py")).doesNotExist();
+        assertThat(tempDir.resolve(session.sessionId()).resolve("input.pdf")).doesNotExist();
     }
 
     @Test
@@ -1429,6 +1484,30 @@ class ContainerSandboxRuntimeAdapterTests {
 
     private SandboxSessionRequest sessionRequest(SandboxRuntimeType runtimeType) {
         return new SandboxSessionRequest("default", "run-1", runtimeType, false, List.of());
+    }
+
+    private static byte[] zipBytes(String entryName, String content) throws IOException {
+        return zipBytes(entryName, content, null, null);
+    }
+
+    private static byte[] zipBytes(String firstEntryName,
+                                   String firstContent,
+                                   String secondEntryName,
+                                   String secondContent) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream archive = new ZipOutputStream(bytes)) {
+            writeZipEntry(archive, firstEntryName, firstContent);
+            if (secondEntryName != null) {
+                writeZipEntry(archive, secondEntryName, secondContent);
+            }
+        }
+        return bytes.toByteArray();
+    }
+
+    private static void writeZipEntry(ZipOutputStream archive, String entryName, String content) throws IOException {
+        archive.putNextEntry(new ZipEntry(entryName));
+        archive.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        archive.closeEntry();
     }
 
     private static final class RecordingRunner implements ContainerCommandRunner {
