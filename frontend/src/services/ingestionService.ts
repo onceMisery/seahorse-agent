@@ -100,6 +100,24 @@ export interface IngestionTaskCreatePayload {
   vectorSpaceId?: Record<string, unknown>;
 }
 
+export interface GateResultItem {
+  code: string;
+  status: string;
+  message?: string;
+}
+
+export interface GateResult {
+  subjectType: string;
+  subjectId: string;
+  status: string;
+  passed: boolean;
+  blockingCodes?: string[];
+  items?: GateResultItem[];
+  checkedAt?: string;
+  sourceType?: string;
+  sourceId?: string;
+}
+
 export async function getIngestionPipelines(pageNo = 1, pageSize = 10, keyword?: string) {
   return api.get<PageResult<IngestionPipeline>, PageResult<IngestionPipeline>>(
     "/ingestion/pipelines",
@@ -111,6 +129,10 @@ export async function getIngestionPipelines(pageNo = 1, pageSize = 10, keyword?:
 
 export async function getIngestionPipeline(id: string) {
   return api.get<IngestionPipeline, IngestionPipeline>(`/ingestion/pipelines/${id}`);
+}
+
+export async function getIngestionPipelineGateResult(id: string) {
+  return api.get<GateResult, GateResult>(`/ingestion/pipelines/${id}/gate-result`);
 }
 
 export async function createIngestionPipeline(payload: IngestionPipelinePayload) {

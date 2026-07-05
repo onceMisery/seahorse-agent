@@ -27,6 +27,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileProductionGateCheck;
+import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineNodePayload;
+import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineRecord;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -159,6 +161,46 @@ class GateResultsTests {
         assertEquals("FAIL", result.items().get(0).status());
     }
 
+    @Test
+    void shouldProjectPassingIngestionPipelineGateResult() {
+        IngestionPipelineRecord pipeline = pipeline(
+                new IngestionPipelineNodePayload("extract", "EXTRACT", "chunk", null, null),
+                new IngestionPipelineNodePayload("chunk", "CHUNK", "", null, null));
+
+        GateResult result = GateResults.fromIngestionPipeline(pipeline);
+
+        assertEquals("INGESTION_PIPELINE", result.subjectType());
+        assertEquals("pipeline-1", result.subjectId());
+        assertEquals("PASS", result.status());
+        assertTrue(result.passed());
+        assertEquals(List.of(), result.blockingCodes());
+        assertEquals(Instant.parse("2026-07-05T03:00:00Z"), result.checkedAt());
+        assertEquals("IngestionPipelineRecord", result.sourceType());
+        assertEquals("pipeline-1", result.sourceId());
+        assertEquals("INGESTION_PIPELINE_CHAIN_ACYCLIC", result.items().get(5).code());
+        assertEquals("PASS", result.items().get(5).status());
+    }
+
+    @Test
+    void shouldProjectFailingIngestionPipelineGateResult() {
+        IngestionPipelineRecord pipeline = pipeline(
+                new IngestionPipelineNodePayload("extract", "EXTRACT", "missing", null, null),
+                new IngestionPipelineNodePayload("loop", "CHUNK", "loop", null, null),
+                new IngestionPipelineNodePayload("extract", "", "", null, null));
+
+        GateResult result = GateResults.fromIngestionPipeline(pipeline);
+
+        assertEquals("FAIL", result.status());
+        assertFalse(result.passed());
+        assertEquals(
+                List.of(
+                        "INGESTION_PIPELINE_NODE_TYPES_PRESENT",
+                        "INGESTION_PIPELINE_NODE_IDS_UNIQUE",
+                        "INGESTION_PIPELINE_NEXT_NODES_RESOLVE",
+                        "INGESTION_PIPELINE_CHAIN_ACYCLIC"),
+                result.blockingCodes());
+    }
+
     private static RetrievalEvaluationComparisonRecord comparison(
             Instant checkedAt,
             RetrievalEvaluationReport baseline,
@@ -211,5 +253,16 @@ class GateResultsTests {
                 "{\"decision\":\"" + decision.name() + "\"}",
                 "admin-1",
                 Instant.parse("2026-07-05T02:00:00Z"));
+    }
+
+    private static IngestionPipelineRecord pipeline(IngestionPipelineNodePayload... nodes) {
+        IngestionPipelineRecord pipeline = new IngestionPipelineRecord();
+        pipeline.setId("pipeline-1");
+        pipeline.setName("Knowledge ingestion");
+        pipeline.setVersion(1);
+        pipeline.setCreateTime(Instant.parse("2026-07-05T02:30:00Z"));
+        pipeline.setUpdateTime(Instant.parse("2026-07-05T03:00:00Z"));
+        pipeline.setNodes(List.of(nodes));
+        return pipeline;
     }
 }

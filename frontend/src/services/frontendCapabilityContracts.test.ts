@@ -31,6 +31,9 @@ import {
   evaluateDataset
 } from "@/services/ragEvaluationService";
 import {
+  getIngestionPipelineGateResult
+} from "@/services/ingestionService";
+import {
   createQuotaPolicy,
   evaluateQuotaDecision
 } from "@/services/securityGovernanceService";
@@ -79,6 +82,7 @@ describe("frontend capability service contracts", () => {
     expect(backendEndpoints).toContain("GET /api/skills");
     expect(backendEndpoints).toContain("GET /api/skills/{}");
     expect(backendEndpoints).toContain("GET /api/skills/{}/gate-result");
+    expect(backendEndpoints).toContain("GET /ingestion/pipelines/{}/gate-result");
     expect(backendEndpoints).toContain("POST /api/skills/custom");
     expect(backendEndpoints).toContain("PUT /api/skills/custom/{}");
     expect(backendEndpoints).toContain("DELETE /api/skills/custom/{}");
@@ -262,6 +266,12 @@ describe("frontend capability service contracts", () => {
     });
     expect(mockedApi.get).toHaveBeenNthCalledWith(2, "/api/agent-handoffs/handoff-1");
     expect(mockedApi.post).toHaveBeenCalledWith("/api/agent-handoffs/handoff-1/cancel");
+  });
+
+  it("queries ingestion pipeline gate result with backend path", async () => {
+    await getIngestionPipelineGateResult("pipeline-1");
+
+    expect(mockedApi.get).toHaveBeenCalledWith("/ingestion/pipelines/pipeline-1/gate-result");
   });
 
   it("rolls back agents with the backend rollback payload", async () => {

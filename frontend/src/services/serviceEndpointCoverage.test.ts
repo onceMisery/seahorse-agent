@@ -68,6 +68,7 @@ const KNOWN_GAPS = new Set([
   // ingestionService — legacy non-/api/ path
   "GET /ingestion/pipelines",
   "GET /ingestion/pipelines/{}",
+  "GET /ingestion/pipelines/{}/gate-result",
   "POST /ingestion/pipelines",
   "PUT /ingestion/pipelines/{}",
   "DELETE /ingestion/pipelines/{}",

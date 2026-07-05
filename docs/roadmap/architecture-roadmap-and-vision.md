@@ -400,3 +400,11 @@ The unified GateResult route now covers Skill revision security evidence. `GateR
 The Web API exposes this projection through `GET /api/skills/{name}/gate-result?tenantId=...`, using the existing Skill management port to resolve the skill and its latest revision. Existing skill create/update/install/enable/disable/history endpoints remain unchanged. This is a projection adapter slice only; it does not persist unified gate rows or add Model Config or Ingestion Pipeline adapters.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=GateResultsTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 6/6 projection tests; `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseSkillControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 3/3 Web contract tests; and `npm test -- src/services/frontendCapabilityContracts.test.ts src/services/serviceEndpointCoverage.test.ts` passed 15/15 frontend manifest/coverage tests.
+
+## 2026-07-05 Update: Ingestion Pipeline GateResult Adapter
+
+The unified GateResult route now covers Ingestion Pipeline structure evidence. `GateResults.fromIngestionPipeline` projects an `IngestionPipelineRecord` into `subjectType=INGESTION_PIPELINE`, checking the same static safety assumptions used before execution: nodes exist, node ids and types are present, node ids are unique, `nextNodeId` references resolve, and the configured chain is acyclic.
+
+The Web API exposes this projection through `GET /ingestion/pipelines/{id}/gate-result`, reusing the existing ingestion pipeline management port. Existing pipeline CRUD and ingestion task execution endpoints remain unchanged. This is a projection adapter slice only; it does not execute the pipeline, validate plugin availability for each node type, persist unified gate rows, or add the Model Config adapter.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=GateResultsTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 8/8 projection tests; `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseIngestionAndIntentControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 16/16 Web contract tests; and `npm test -- src/services/frontendCapabilityContracts.test.ts src/services/serviceEndpointCoverage.test.ts` passed 16/16 frontend manifest/coverage tests.

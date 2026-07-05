@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionPipelineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionPipelinePayload;
+import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResults;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineNodePayload;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
@@ -87,6 +88,12 @@ public class SeahorseIngestionPipelineController {
     public ApiResponse<Object> get(@PathVariable String id) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_PIPELINE_MANAGEMENT);
         return ApiResponses.requireServiceOrError(pipelinePortProvider, port -> port.get(id));
+    }
+
+    @GetMapping("/ingestion/pipelines/{id}/gate-result")
+    public ApiResponse<Object> gateResult(@PathVariable String id) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_PIPELINE_MANAGEMENT);
+        return ApiResponses.requireServiceOrError(pipelinePortProvider, port -> GateResults.fromIngestionPipeline(port.get(id)));
     }
 
     @GetMapping("/ingestion/pipelines")

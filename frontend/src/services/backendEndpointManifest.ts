@@ -705,6 +705,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/ingestion/pipelines/{}/gate-result"
+  },
+  {
+    "method": "GET",
     "path": "/ingestion/tasks"
   },
   {

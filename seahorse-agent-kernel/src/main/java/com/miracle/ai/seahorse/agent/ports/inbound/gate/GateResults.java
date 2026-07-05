@@ -26,10 +26,16 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileProductionGateCheck;
+import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineNodePayload;
+import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineRecord;
 
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public final class GateResults {
 
@@ -122,6 +128,26 @@ public final class GateResults {
                 revision.revisionId());
     }
 
+    public static GateResult fromIngestionPipeline(IngestionPipelineRecord pipeline) {
+        Objects.requireNonNull(pipeline, "pipeline must not be null");
+        List<GateResultItem> items = ingestionPipelineItems(pipeline);
+        List<String> blockingCodes = items.stream()
+                .filter(item -> "FAIL".equals(item.status()))
+                .map(GateResultItem::code)
+                .distinct()
+                .toList();
+        return new GateResult(
+                "INGESTION_PIPELINE",
+                pipeline.getId(),
+                blockingCodes.isEmpty() ? "PASS" : "FAIL",
+                blockingCodes.isEmpty(),
+                blockingCodes,
+                items,
+                Objects.requireNonNullElse(pipeline.getUpdateTime(), pipeline.getCreateTime()),
+                "IngestionPipelineRecord",
+                pipeline.getId());
+    }
+
     private static GateResultItem fromAgentItem(ProductionGateCheckItem item) {
         return new GateResultItem(item.code().name(), item.status().name(), item.message());
     }
@@ -194,6 +220,95 @@ public final class GateResults {
         return decision == SkillScanDecision.BLOCK ? "FAIL" : statusForSkillGate(decision);
     }
 
+    private static List<GateResultItem> ingestionPipelineItems(IngestionPipelineRecord pipeline) {
+        List<IngestionPipelineNodePayload> nodes = Objects.requireNonNullElse(
+                pipeline.getNodes(),
+                List.<IngestionPipelineNodePayload>of()).stream()
+                .filter(Objects::nonNull)
+                .toList();
+        java.util.ArrayList<GateResultItem> items = new java.util.ArrayList<>();
+        items.add(metricItem("INGESTION_PIPELINE_NODES_PRESENT",
+                !nodes.isEmpty(),
+                "Pipeline node count: " + nodes.size()));
+        List<String> blankNodeIds = nodes.stream()
+                .filter(node -> !hasText(node.nodeId()))
+                .map(node -> Objects.requireNonNullElse(node.nodeType(), "unknown"))
+                .toList();
+        items.add(metricItem("INGESTION_PIPELINE_NODE_IDS_PRESENT",
+                blankNodeIds.isEmpty(),
+                blankNodeIds.isEmpty()
+                        ? "All pipeline nodes define nodeId"
+                        : "Pipeline nodes missing nodeId: " + String.join(", ", blankNodeIds)));
+        List<String> blankNodeTypes = nodes.stream()
+                .filter(node -> !hasText(node.nodeType()))
+                .map(IngestionPipelineNodePayload::nodeId)
+                .filter(GateResults::hasText)
+                .toList();
+        items.add(metricItem("INGESTION_PIPELINE_NODE_TYPES_PRESENT",
+                blankNodeTypes.isEmpty(),
+                blankNodeTypes.isEmpty()
+                        ? "All pipeline nodes define nodeType"
+                        : "Pipeline nodes missing nodeType: " + String.join(", ", blankNodeTypes)));
+        Set<String> duplicateNodeIds = duplicateNodeIds(nodes);
+        items.add(metricItem("INGESTION_PIPELINE_NODE_IDS_UNIQUE",
+                duplicateNodeIds.isEmpty(),
+                duplicateNodeIds.isEmpty()
+                        ? "Pipeline nodeIds are unique"
+                        : "Duplicate pipeline nodeIds: " + String.join(", ", duplicateNodeIds)));
+        Set<String> nodeIds = nodes.stream()
+                .map(IngestionPipelineNodePayload::nodeId)
+                .filter(GateResults::hasText)
+                .collect(Collectors.toSet());
+        List<String> missingNextNodes = nodes.stream()
+                .map(IngestionPipelineNodePayload::nextNodeId)
+                .filter(GateResults::hasText)
+                .filter(nextNodeId -> !nodeIds.contains(nextNodeId))
+                .distinct()
+                .toList();
+        items.add(metricItem("INGESTION_PIPELINE_NEXT_NODES_RESOLVE",
+                missingNextNodes.isEmpty(),
+                missingNextNodes.isEmpty()
+                        ? "All nextNodeId references resolve"
+                        : "Missing nextNodeId targets: " + String.join(", ", missingNextNodes)));
+        items.add(metricItem("INGESTION_PIPELINE_CHAIN_ACYCLIC",
+                !hasCycle(nodes),
+                "Pipeline nextNodeId chain must not form a cycle"));
+        return List.copyOf(items);
+    }
+
+    private static Set<String> duplicateNodeIds(List<IngestionPipelineNodePayload> nodes) {
+        Set<String> seen = new HashSet<>();
+        return nodes.stream()
+                .map(IngestionPipelineNodePayload::nodeId)
+                .filter(GateResults::hasText)
+                .filter(nodeId -> !seen.add(nodeId))
+                .collect(Collectors.toSet());
+    }
+
+    private static boolean hasCycle(List<IngestionPipelineNodePayload> nodes) {
+        java.util.Map<String, IngestionPipelineNodePayload> nodeById = nodes.stream()
+                .filter(node -> hasText(node.nodeId()))
+                .collect(Collectors.toMap(
+                        IngestionPipelineNodePayload::nodeId,
+                        Function.identity(),
+                        (left, right) -> left));
+        for (String nodeId : nodeById.keySet()) {
+            Set<String> visiting = new HashSet<>();
+            String current = nodeId;
+            while (hasText(current)) {
+                if (!visiting.add(current)) {
+                    return true;
+                }
+                IngestionPipelineNodePayload node = nodeById.get(current);
+                if (node == null) {
+                    break;
+                }
+                current = node.nextNodeId();
+            }
+        }
+        return false;
+    }
+
     private static RetrievalEvaluationReport reportFor(RetrievalEvaluationComparisonReport report, String strategyName) {
         if (strategyName == null) {
             return null;
@@ -206,5 +321,9 @@ public final class GateResults {
 
     private static String trimToNull(String value) {
         return value == null || value.trim().isEmpty() ? null : value.trim();
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

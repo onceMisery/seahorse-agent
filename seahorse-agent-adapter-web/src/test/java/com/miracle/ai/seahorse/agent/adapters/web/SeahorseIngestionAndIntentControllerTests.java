@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.DocumentRefreshInbo
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.DocumentRefreshResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelinePage;
+import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineNodePayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskNodeRecord;
@@ -36,6 +37,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.Instant;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -89,6 +91,26 @@ class SeahorseIngestionAndIntentControllerTests {
                 .andExpect(jsonPath("$.code").value("0"));
 
         verify(port).page(1L, 10L, "test");
+    }
+
+    @Test
+    void shouldExposeIngestionPipelineGateResult() throws Exception {
+        IngestionPipelineInboundPort port = mock(IngestionPipelineInboundPort.class);
+        when(port.get("pipeline-1")).thenReturn(pipeline());
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseIngestionPipelineController(provider(IngestionPipelineInboundPort.class, port))).build();
+
+        mvc.perform(get("/ingestion/pipelines/pipeline-1/gate-result"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.subjectType").value("INGESTION_PIPELINE"))
+                .andExpect(jsonPath("$.data.subjectId").value("pipeline-1"))
+                .andExpect(jsonPath("$.data.status").value("PASS"))
+                .andExpect(jsonPath("$.data.passed").value(true))
+                .andExpect(jsonPath("$.data.sourceType").value("IngestionPipelineRecord"))
+                .andExpect(jsonPath("$.data.items[0].code").value("INGESTION_PIPELINE_NODES_PRESENT"));
+
+        verify(port).get("pipeline-1");
     }
 
     @Test
@@ -306,5 +328,17 @@ class SeahorseIngestionAndIntentControllerTests {
 
     private static <T> ObjectProvider<T> emptyProvider(Class<T> type) {
         return new StaticListableBeanFactory().getBeanProvider(type);
+    }
+
+    private static IngestionPipelineRecord pipeline() {
+        IngestionPipelineRecord pipeline = new IngestionPipelineRecord();
+        pipeline.setId("pipeline-1");
+        pipeline.setName("Knowledge ingestion");
+        pipeline.setCreateTime(Instant.parse("2026-07-05T03:00:00Z"));
+        pipeline.setUpdateTime(Instant.parse("2026-07-05T03:05:00Z"));
+        pipeline.setNodes(List.of(
+                new IngestionPipelineNodePayload("extract", "EXTRACT", "chunk", null, null),
+                new IngestionPipelineNodePayload("chunk", "CHUNK", "", null, null)));
+        return pipeline;
     }
 }
