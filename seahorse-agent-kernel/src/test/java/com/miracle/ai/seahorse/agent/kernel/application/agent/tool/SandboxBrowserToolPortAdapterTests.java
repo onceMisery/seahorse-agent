@@ -678,6 +678,29 @@ class SandboxBrowserToolPortAdapterTests {
         assertEquals(0, runtime.createCalls);
     }
 
+    @Test
+    void shouldRejectSessionStateOriginWithCredentialPartsBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/page",
+                "allowedHosts", List.of("example.test"),
+                "sessionState", Map.of(
+                        "origins", List.of(Map.of(
+                                "origin", "http://alice:secret@example.test/path?token=secret#frag",
+                                "localStorage", List.of(Map.of(
+                                        "name", "marker",
+                                        "value", "value"))))))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("sessionState origin must be an origin only"));
+        assertFalse(result.error().contains("alice:secret"));
+        assertFalse(result.error().contains("token=secret"));
+        assertEquals(0, runtime.createCalls);
+    }
+
     private ToolInvocationRequest request(Map<String, Object> arguments) {
         return new ToolInvocationRequest(
                 "run-1",

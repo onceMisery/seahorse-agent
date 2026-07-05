@@ -504,6 +504,13 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             if (!Set.of("http", "https").contains(scheme) || !hasText(host)) {
                 throw new IllegalArgumentException("sandbox_browser failed: " + label + " must be HTTP/HTTPS");
             }
+            if (label.startsWith("sessionState origin")
+                    && (hasText(uri.getUserInfo())
+                    || hasText(uri.getRawPath())
+                    || hasText(uri.getRawQuery())
+                    || hasText(uri.getRawFragment()))) {
+                throw new IllegalArgumentException("sandbox_browser failed: " + label + " must be an origin only");
+            }
             validatePublicBrowserHost(host, label + " host");
             int port = uri.getPort();
             if (port < 0) {
