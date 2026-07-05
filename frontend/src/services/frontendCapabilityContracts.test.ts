@@ -31,7 +31,8 @@ import { getToolGateResult, listToolInvocations } from "@/services/toolCatalogSe
 import { createSecret } from "@/services/securityGovernanceService";
 import {
   compareStrategies,
-  evaluateDataset
+  evaluateDataset,
+  getRetrievalComparisonGateResult
 } from "@/services/ragEvaluationService";
 import {
   getIngestionPipelineGateResult
@@ -368,6 +369,14 @@ describe("frontend capability service contracts", () => {
           { strategyName: "hybrid", topK: 5, options: { rerank: true } }
         ]
       }
+    );
+  });
+
+  it("queries RAG strategy comparison GateResult with backend path", async () => {
+    await getRetrievalComparisonGateResult("kb-1", "dataset-1", "comparison-1");
+
+    expect(mockedApi.get).toHaveBeenCalledWith(
+      "/knowledge-base/kb-1/retrieval-evaluation-datasets/dataset-1/comparisons/comparison-1/gate-result"
     );
   });
 

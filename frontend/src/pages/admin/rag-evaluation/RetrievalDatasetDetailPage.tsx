@@ -18,9 +18,11 @@ import {
   listEvaluationRuns,
   listEvaluationComparisons,
   listStrategyTemplates,
+  getRetrievalComparisonGateResult,
   promoteStrategyFromComparison,
   type EvaluationRun,
   type EvaluationComparison,
+  type GateResult,
   type RetrievalStrategyTemplate
 } from "@/services/ragEvaluationService";
 import { EvaluationResultPanel } from "./components/EvaluationResultPanel";
@@ -42,6 +44,24 @@ export function RetrievalDatasetDetailPage() {
   const [baseStrategy, setBaseStrategy] = useState("");
   const [candidateStrategy, setCandidateStrategy] = useState("");
   const [running, setRunning] = useState(false);
+  const [gateResultOpen, setGateResultOpen] = useState(false);
+  const [gateResultLoading, setGateResultLoading] = useState(false);
+  const [gateResult, setGateResult] = useState<GateResult | null>(null);
+
+  const openComparisonGateResult = async (comparisonId?: string) => {
+    if (!kbId || !datasetId || !comparisonId) return;
+    setGateResultOpen(true);
+    setGateResultLoading(true);
+    try {
+      setGateResult(await getRetrievalComparisonGateResult(kbId, datasetId, comparisonId));
+    } catch (error) {
+      setGateResult(null);
+      toast.error(getErrorMessage(error, "Load RAG Strategy GateResult failed"));
+      console.error(error);
+    } finally {
+      setGateResultLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!featureState.enabled || !kbId || !datasetId) return;
@@ -220,8 +240,18 @@ export function RetrievalDatasetDetailPage() {
                           </div>
                         </div>
                       )}
-                      {canPromote && (
-                        <div className="mt-3 flex justify-end">
+                      <div className="mt-3 flex justify-end gap-2">
+                        {comp.comparisonId ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            aria-label={`rag-comparison-gate-result-${comp.comparisonId}`}
+                            onClick={() => openComparisonGateResult(comp.comparisonId)}
+                          >
+                            GateResult
+                          </Button>
+                        ) : null}
+                        {canPromote && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -247,8 +277,8 @@ export function RetrievalDatasetDetailPage() {
                           >
                             推荐为线上策略
                           </Button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   );
                   })}
@@ -258,6 +288,63 @@ export function RetrievalDatasetDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={gateResultOpen} onOpenChange={setGateResultOpen}>
+        <DialogContent className="sm:max-w-[720px]">
+          <DialogHeader>
+            <DialogTitle>RAG Strategy GateResult</DialogTitle>
+            <DialogDescription>Unified promotion gate evidence for retrieval strategy comparison.</DialogDescription>
+          </DialogHeader>
+          {gateResultLoading ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">Loading GateResult...</div>
+          ) : gateResult ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm text-muted-foreground">
+                  {gateResult.subjectType}:{gateResult.subjectId}
+                </div>
+                <Badge variant={gateResult.passed ? "secondary" : "destructive"}>{gateResult.status}</Badge>
+              </div>
+              <div className="grid gap-3 text-sm md:grid-cols-3">
+                <div className="rounded-md border border-slate-200 p-3">
+                  <div className="text-xs text-muted-foreground">Source</div>
+                  <div className="mt-1 break-all font-mono text-xs text-slate-900">{gateResult.sourceType || "-"}</div>
+                </div>
+                <div className="rounded-md border border-slate-200 p-3">
+                  <div className="text-xs text-muted-foreground">Checked</div>
+                  <div className="mt-1 text-slate-900">{gateResult.checkedAt || "-"}</div>
+                </div>
+                <div className="rounded-md border border-slate-200 p-3">
+                  <div className="text-xs text-muted-foreground">Blocking Codes</div>
+                  <div className="mt-1 font-medium text-slate-900">{gateResult.blockingCodes?.length || 0}</div>
+                </div>
+              </div>
+              {gateResult.blockingCodes?.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {gateResult.blockingCodes.map((code) => (
+                    <Badge key={code} variant="destructive">{code}</Badge>
+                  ))}
+                </div>
+              ) : null}
+              <div className="grid gap-2 md:grid-cols-2">
+                {(gateResult.items || []).map((item) => (
+                  <div key={`${item.code}-${item.status}`} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={item.status === "PASS" ? "secondary" : item.status === "FAIL" ? "destructive" : "outline"}>
+                        {item.status}
+                      </Badge>
+                      <span className="font-mono text-xs text-slate-600">{item.code}</span>
+                    </div>
+                    <div className="mt-2 break-words text-sm text-slate-700">{item.message || "-"}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="py-8 text-center text-sm text-muted-foreground">No GateResult</div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* 运行评测对话框 */}
       <Dialog open={evaluateOpen} onOpenChange={setEvaluateOpen}>

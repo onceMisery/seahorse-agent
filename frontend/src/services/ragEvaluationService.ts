@@ -111,6 +111,24 @@ export interface VersionQualityDiff {
   improvedSamples?: Array<{ documentId?: string; baseQuality?: number; candidateQuality?: number }>;
 }
 
+export interface GateResultItem {
+  code: string;
+  status: string;
+  message?: string;
+}
+
+export interface GateResult {
+  subjectType: string;
+  subjectId: string;
+  status: string;
+  passed: boolean;
+  blockingCodes?: string[];
+  items?: GateResultItem[];
+  checkedAt?: string;
+  sourceType?: string;
+  sourceId?: string;
+}
+
 function normalizePage<T>(data: PageResult<T> | T[] | null | undefined, current = 1, size = 50): PageResult<T> {
   if (Array.isArray(data)) {
     return {
@@ -225,6 +243,12 @@ export function listEvaluationRuns(kbId: string, datasetId: string) {
 export function listEvaluationComparisons(kbId: string, datasetId: string) {
   return api.get<EvaluationComparison[]>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-evaluation-datasets/${encodeURIComponent(datasetId)}/comparisons`
+  );
+}
+
+export function getRetrievalComparisonGateResult(kbId: string, datasetId: string, comparisonId: string) {
+  return api.get<GateResult, GateResult>(
+    `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-evaluation-datasets/${encodeURIComponent(datasetId)}/comparisons/${encodeURIComponent(comparisonId)}/gate-result`
   );
 }
 

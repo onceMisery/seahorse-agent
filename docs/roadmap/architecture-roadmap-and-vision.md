@@ -634,3 +634,11 @@ The Agent detail page now exposes the existing unified `GateResult` projection f
 This is a narrow unified GateResult productization slice. It does not add new agent gate rules, persisted gate-result rows, release approval workflows, or full-Docker UI smoke coverage.
 
 Fresh UX evidence: `npm test -- src/pages/admin/agents/AgentDetailPage.test.tsx src/services/frontendCapabilityContracts.test.ts` passed 17/17 focused frontend tests, covering the service endpoint, Agent detail `GateResult` tab rendering of `AGENT`, blocking code, source, and check-message evidence. `npm run build` completed successfully with the existing Browserslist/chunk-size warnings.
+
+## 2026-07-06 Update: RAG Strategy GateResult UX
+
+The RAG evaluation dataset detail page now exposes the existing unified `GateResult` projection from each strategy comparison row. Operators can open a read-only `RAG Strategy GateResult` dialog to inspect subject, status, source, checked time, blocking codes, and per-check evidence from `GET /knowledge-base/{kbId}/retrieval-evaluation-datasets/{datasetId}/comparisons/{comparisonId}/gate-result` without replacing the existing comparison or promotion workflow.
+
+This is a narrow unified GateResult productization slice. It does not add new RAG evaluation gates, persisted gate-result rows, release approval workflows, or full-Docker UI smoke coverage.
+
+Fresh UX evidence: `npm test -- src/pages/admin/rag-evaluation/RetrievalDatasetDetailPage.test.tsx src/services/frontendCapabilityContracts.test.ts` passed 18/18 focused frontend tests, covering the service endpoint, comparison row action invocation of `getRetrievalComparisonGateResult`, rendering of `RAG_STRATEGY`, blocking code, source, and check-message evidence. `npm run build` completed successfully with the existing Browserslist/chunk-size warnings.
