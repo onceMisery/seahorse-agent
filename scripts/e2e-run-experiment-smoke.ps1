@@ -272,6 +272,8 @@ $report = Test-Step "Export run experiment report" {
             "cost=$($reportEvidence.Cost)",
             "tokens=$($reportEvidence.Tokens)",
             "Fork Target",
+            "Message Branch",
+            "Trial branch leaves",
             "Reproduction Appendix"
         )) {
         if ($markdown -notlike "*$expected*") {
@@ -284,6 +286,12 @@ $report = Test-Step "Export run experiment report" {
         }
         if ($markdown -notlike "*$($trial.outputMessageId)*") {
             throw "Report markdown did not include trial outputMessageId $($trial.outputMessageId)"
+        }
+        if ($markdown -notlike "*leaf=$($trial.outputMessageId)*") {
+            throw "Report markdown did not include trial branch leaf $($trial.outputMessageId)"
+        }
+        if ($markdown -notlike "*trial $($trial.id) -> leaf=$($trial.outputMessageId)*") {
+            throw "Report markdown did not include reproduction branch leaf for trial $($trial.id)"
         }
     }
     $response.data
