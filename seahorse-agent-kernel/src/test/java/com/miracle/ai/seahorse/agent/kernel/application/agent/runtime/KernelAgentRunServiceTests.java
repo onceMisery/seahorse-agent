@@ -26,6 +26,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
@@ -409,6 +411,109 @@ class KernelAgentRunServiceTests {
         assertEquals(FIXED_CLOCK.instant(), second.finishedAt());
     }
 
+    @Test
+    void shouldDenyUnrelatedUserRunDetailAccess() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("run-1", "user-1", AgentRunStatus.RUNNING));
+        KernelAgentRunService service = new KernelAgentRunService(
+                new MemoryAgentDefinitionRepository(), runRepository, currentUser(2L, "user"), FIXED_CLOCK);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> service.findRunById("run-1"));
+
+        assertEquals("权限不足", error.getMessage());
+    }
+
+    @Test
+    void shouldAllowAdminRunDetailAccess() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("run-1", "user-1", AgentRunStatus.RUNNING));
+        KernelAgentRunService service = new KernelAgentRunService(
+                new MemoryAgentDefinitionRepository(), runRepository, currentUser(9L, "admin"), FIXED_CLOCK);
+
+        Optional<AgentRun> run = service.findRunById("run-1");
+
+        assertTrue(run.isPresent());
+    }
+
+    @Test
+    void shouldDenyUnrelatedUserStepAccess() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("run-1", "user-1", AgentRunStatus.RUNNING));
+        runRepository.appendStep(step("step-1", "run-1"));
+        KernelAgentRunService service = new KernelAgentRunService(
+                new MemoryAgentDefinitionRepository(), runRepository, currentUser(2L, "user"), FIXED_CLOCK);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> service.listSteps("run-1"));
+
+        assertEquals("权限不足", error.getMessage());
+    }
+
+    @Test
+    void shouldDenyUnrelatedUserRunCancellation() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("run-1", "user-1", AgentRunStatus.RUNNING));
+        KernelAgentRunService service = new KernelAgentRunService(
+                new MemoryAgentDefinitionRepository(), runRepository, currentUser(2L, "user"), FIXED_CLOCK);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> service.cancel("run-1"));
+
+        assertEquals("权限不足", error.getMessage());
+        assertEquals(AgentRunStatus.RUNNING, runRepository.runs.get("run-1").status());
+    }
+
+    @Test
+    void shouldDenyUnrelatedUserRunRetry() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("run-1", "user-1", AgentRunStatus.FAILED));
+        KernelAgentRunService service = new KernelAgentRunService(
+                new MemoryAgentDefinitionRepository(), runRepository, currentUser(2L, "user"), FIXED_CLOCK);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> service.retry("run-1"));
+
+        assertEquals("权限不足", error.getMessage());
+        assertEquals(AgentRunStatus.FAILED, runRepository.runs.get("run-1").status());
+    }
+
+    private static AgentRun run(String runId, String userId, AgentRunStatus status) {
+        return new AgentRun(
+                runId,
+                "ops-agent",
+                "version-1",
+                AgentDefinition.DEFAULT_TENANT_ID,
+                userId,
+                "conversation-1",
+                AgentRunTriggerType.CHAT,
+                "summary",
+                status,
+                "trace-1",
+                0L,
+                0L,
+                AgentRun.ZERO_COST,
+                null,
+                null,
+                FIXED_CLOCK.instant(),
+                status.isFinished() ? FIXED_CLOCK.instant() : null);
+    }
+
+    private static AgentStep step(String stepId, String runId) {
+        return new AgentStep(
+                stepId,
+                runId,
+                1,
+                AgentStepType.MODEL_TURN,
+                AgentStepStatus.SUCCEEDED,
+                "{\"input\":\"safe\"}",
+                "{\"output\":\"ok\"}",
+                null,
+                null,
+                FIXED_CLOCK.instant(),
+                FIXED_CLOCK.instant());
+    }
+
     private static AgentDefinition agent(String agentId, AgentStatus status, String latestVersionId) {
         Instant now = FIXED_CLOCK.instant();
         return new AgentDefinition(agentId, AgentDefinition.DEFAULT_TENANT_ID, agentId, null, "owner-1", null,
@@ -445,6 +550,10 @@ class KernelAgentRunServiceTests {
 
     private static CurrentUserPort currentUser() {
         return () -> Optional.of(new CurrentUser(1L, "user-1", "user", null));
+    }
+
+    private static CurrentUserPort currentUser(Long userId, String role) {
+        return () -> Optional.of(new CurrentUser(userId, role + "-" + userId, role, null));
     }
 
     private static class MemoryAgentDefinitionRepository implements AgentDefinitionRepositoryPort {

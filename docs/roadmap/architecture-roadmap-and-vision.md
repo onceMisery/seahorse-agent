@@ -802,3 +802,11 @@ Agent checkpoint query results now require the requested run to be readable by t
 This closes a checkpoint API authorization gap adjacent to the resource-reference minimization work. It does not change checkpoint persistence, resume behavior, worker access to internal checkpoints, or the sanitized checkpoint response shape.
 
 Fresh evidence: the new regression first failed because `KernelAgentCheckpointQueryService` had no run repository dependency or owner/admin gate. After the fix, `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentCheckpointQueryServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 5/5, and `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-DskipTests" compile` completed with reactor `BUILD SUCCESS` after the Spring auto-configuration was updated to inject `AgentRunRepositoryPort`.
+
+## 2026-07-06 Update: Agent Run Operation Ownership Guard
+
+Agent run detail, step listing, cancellation, and retry operations now require the target run to be readable by the current user. Owners can inspect and operate on their own runs, admins can inspect across users, and unrelated users receive `权限不足` before run steps are listed or run state is mutated. Worker-owned terminal transitions such as `succeed` and `fail` remain internal and unchanged.
+
+This closes the same run-boundary authorization class as the checkpoint query guard. It does not change run creation, worker execution, run queue handling, snapshots, workflow projection, or cost-summary behavior.
+
+Fresh evidence: the new regression first failed because `KernelAgentRunService` only required login for run detail, step listing, cancel, and retry. After the fix, `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 19/19, including unrelated-user denial for run detail, steps, cancel, and retry plus admin read access.

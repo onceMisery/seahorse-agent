@@ -51,6 +51,8 @@ import java.util.Optional;
 
 public class KernelAgentRunService implements AgentRunInboundPort {
 
+    private static final String ADMIN_ROLE = "admin";
+    private static final String ACCESS_DENIED = "\u6743\u9650\u4e0d\u8db3";
     private static final String RUN_ID_PREFIX = "run_";
     private static final String VERSION_REQUIRED_MESSAGE = "Agent run requires a versionId";
     private static final String VERSION_NOT_FOUND_MESSAGE = "Agent version does not exist";
@@ -369,14 +371,16 @@ public class KernelAgentRunService implements AgentRunInboundPort {
 
     @Override
     public Optional<AgentRun> findRunById(String runId) {
-        currentUserPort.requireCurrentUser();
-        return findRunByIdInternal(runId);
+        CurrentUser currentUser = currentUserPort.requireCurrentUser();
+        return findRunByIdInternal(runId)
+                .map(run -> requireReadable(run, currentUser));
     }
 
     @Override
     public Optional<AgentRun> findRunById(String runId, CurrentUser currentUser) {
-        currentUser(currentUser);
-        return findRunByIdInternal(runId);
+        CurrentUser safeUser = currentUser(currentUser);
+        return findRunByIdInternal(runId)
+                .map(run -> requireReadable(run, safeUser));
     }
 
     private Optional<AgentRun> findRunByIdInternal(String runId) {
@@ -402,14 +406,15 @@ public class KernelAgentRunService implements AgentRunInboundPort {
 
     @Override
     public List<AgentStep> listSteps(String runId) {
-        currentUserPort.requireCurrentUser();
-        return runRepository.listSteps(requireText(runId, "runId must not be blank"));
+        CurrentUser currentUser = currentUserPort.requireCurrentUser();
+        AgentRun run = loadReadableRun(runId, currentUser);
+        return runRepository.listSteps(run.runId());
     }
 
     @Override
     public AgentRun cancel(String runId) {
-        currentUserPort.requireCurrentUser();
-        AgentRun current = loadRun(runId);
+        CurrentUser currentUser = currentUserPort.requireCurrentUser();
+        AgentRun current = loadReadableRun(runId, currentUser);
         AgentRun cancelled = current.cancel(clock.instant());
         runRepository.updateRun(cancelled);
         return cancelled;
@@ -417,8 +422,8 @@ public class KernelAgentRunService implements AgentRunInboundPort {
 
     @Override
     public AgentRun retry(String runId) {
-        currentUserPort.requireCurrentUser();
-        AgentRun current = loadRun(runId);
+        CurrentUser currentUser = currentUserPort.requireCurrentUser();
+        AgentRun current = loadReadableRun(runId, currentUser);
         AgentRun retrying = current.retry();
         runRepository.updateRun(retrying);
         return retrying;
@@ -465,6 +470,25 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     private AgentRun loadRun(String runId) {
         return runRepository.findRunById(requireText(runId, "runId must not be blank"))
                 .orElseThrow(() -> new IllegalArgumentException("Agent run does not exist"));
+    }
+
+    private AgentRun loadReadableRun(String runId, CurrentUser currentUser) {
+        return requireReadable(loadRun(runId), currentUser);
+    }
+
+    private AgentRun requireReadable(AgentRun run, CurrentUser currentUser) {
+        if (isAdmin(currentUser) || run.userId().equals(currentUserId(currentUser))) {
+            return run;
+        }
+        throw new IllegalStateException(ACCESS_DENIED);
+    }
+
+    private boolean isAdmin(CurrentUser currentUser) {
+        return currentUser != null && currentUser.hasRole(ADMIN_ROLE);
+    }
+
+    private String currentUserId(CurrentUser currentUser) {
+        return currentUser == null ? null : currentUser.operator();
     }
 
     private String nextRunId() {
