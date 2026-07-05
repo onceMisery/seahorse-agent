@@ -507,6 +507,8 @@ The sandbox browser URL runtime route guard now allows network requests only to 
 
 The runtime route guard also rejects same-origin browser requests that carry URL credential material in userinfo, fragments, or credential-shaped query parameter names, including URL-decoded, semicolon-delimited, and bracketed query forms. This keeps page-initiated token URLs from being continued after the initial target URL has passed kernel/runtime input validation.
 
+Blocked credential-bearing route URLs are also redacted before entering the generated HAR event model, preserving only the safe origin/path shape plus value-free redaction markers for userinfo, query, and fragment parts.
+
 This is a narrow runtime egress hardening slice. It does not add a general outbound proxy, per-path URL policy UX, DNS pinning, CIDR/private-network classification, or long-lived browser profile management.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 40/40.

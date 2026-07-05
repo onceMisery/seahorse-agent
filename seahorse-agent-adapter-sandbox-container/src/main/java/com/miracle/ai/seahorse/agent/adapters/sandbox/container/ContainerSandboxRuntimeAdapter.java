@@ -530,6 +530,28 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             return True
                     return False
 
+                def redacted_har_url(url):
+                    if not has_credential_url_parts(url):
+                        return url
+                    parsed = urlparse(url)
+                    scheme = parsed.scheme.lower()
+                    host = (parsed.hostname or "").lower()
+                    if scheme not in ("http", "https") or not host:
+                        return "<redacted-url>"
+                    try:
+                        port = parsed.port
+                    except ValueError:
+                        port = None
+                    authority = host if port is None else f"{host}:{port}"
+                    redacted = f"{scheme}://{authority}{parsed.path or ''}"
+                    if parsed.username or parsed.password:
+                        redacted += "?<redacted-userinfo>"
+                    if parsed.query:
+                        redacted += ("&" if "?" in redacted else "?") + "<redacted-query>"
+                    if parsed.fragment:
+                        redacted += "#<redacted-fragment>"
+                    return redacted
+
                 target_origin = origin_key(target_url) if target_url else None
 
                 def allowed_url(url):
@@ -646,15 +668,16 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         page = context.new_page()
 
                         def on_request(request):
+                            blocked = not allowed_url(request.url)
                             event = {
                                 "startedDateTime": utc_now(),
                                 "method": request.method,
-                                "url": request.url,
+                                "url": redacted_har_url(request.url) if blocked else request.url,
                                 "resourceType": request.resource_type,
                                 "status": 0,
                                 "statusText": "",
                                 "failure": None,
-                                "blocked": not allowed_url(request.url),
+                                "blocked": blocked,
                             }
                             network_event_index[id(request)] = event
                             network_events.append(event)
