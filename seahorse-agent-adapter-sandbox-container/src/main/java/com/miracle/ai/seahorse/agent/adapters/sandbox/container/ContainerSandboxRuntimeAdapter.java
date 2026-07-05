@@ -347,6 +347,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String html = root.path("html").asText("");
         String url = normalizedBrowserUrl(root.path("url").asText(""));
         String urlHost = hasText(url) ? browserUrlHost(url) : "";
+        String urlOrigin = hasText(url) ? browserUrlOrigin(url, "url") : "";
         List<String> allowedHosts = normalizedBrowserAllowedHosts(root.get("allowedHosts"));
         List<BrowserCookie> cookies = normalizedBrowserCookies(
                 root.get("cookies"),
@@ -381,7 +382,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         boolean har = root.path("har").asBoolean(false);
         boolean video = root.path("video").asBoolean(false);
         boolean captureSessionState = root.path("captureSessionState").asBoolean(false);
-        String sessionStateJson = normalizedBrowserSessionState(root.get("sessionState"), allowedHosts, urlHost, hasText(url));
+        String sessionStateJson = normalizedBrowserSessionState(root.get("sessionState"), allowedHosts, urlHost, urlOrigin, hasText(url));
         if (captureSessionState && !hasText(url)) {
             throw new IllegalArgumentException("browser automation session state capture is only supported for url mode");
         }
@@ -1166,6 +1167,25 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
     }
 
+    private String browserUrlOrigin(String url, String label) {
+        try {
+            URI uri = new URI(url);
+            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+            String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+            if (!Set.of("http", "https").contains(scheme) || !hasText(host)) {
+                throw new IllegalArgumentException("browser automation " + label + " must be HTTP/HTTPS");
+            }
+            validatePublicBrowserHost(host, label + " host");
+            int port = uri.getPort();
+            if (port < 0) {
+                port = "https".equals(scheme) ? 443 : 80;
+            }
+            return scheme + "://" + host + ":" + port;
+        } catch (URISyntaxException ex) {
+            throw new IllegalArgumentException("browser automation " + label + " is not valid", ex);
+        }
+    }
+
     private List<String> normalizedBrowserAllowedHosts(JsonNode value) {
         if (value == null || value.isMissingNode() || value.isNull()) {
             return List.of();
@@ -1202,6 +1222,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private String normalizedBrowserSessionState(JsonNode value,
                                                  List<String> allowedHosts,
                                                  String urlHost,
+                                                 String urlOrigin,
                                                  boolean urlMode) throws IOException {
         if (value == null || value.isMissingNode() || value.isNull()) {
             return "";
@@ -1216,7 +1237,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             throw new IllegalArgumentException("browser automation sessionState must be an object");
         }
         validateBrowserSessionStateCookies(state.get("cookies"), allowedHosts, urlHost);
-        validateBrowserSessionStateOrigins(state.get("origins"), allowedHosts, urlHost);
+        validateBrowserSessionStateOrigins(state.get("origins"), allowedHosts, urlHost, urlOrigin);
         String serialized = objectMapper.writeValueAsString(state);
         if (serialized.length() > MAX_BROWSER_SESSION_STATE_CHARS) {
             throw new IllegalArgumentException("browser automation sessionState exceeds "
@@ -1256,7 +1277,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
     }
 
-    private void validateBrowserSessionStateOrigins(JsonNode value, List<String> allowedHosts, String urlHost) {
+    private void validateBrowserSessionStateOrigins(JsonNode value,
+                                                    List<String> allowedHosts,
+                                                    String urlHost,
+                                                    String urlOrigin) {
         if (value == null || value.isMissingNode() || value.isNull()) {
             return;
         }
@@ -1271,7 +1295,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             if (!originNode.isObject()) {
                 throw new IllegalArgumentException("browser automation sessionState origin must be an object");
             }
-            String host = browserSessionStateOriginHost(originNode.path("origin").asText(""));
+            String originValue = originNode.path("origin").asText("");
+            String host = browserSessionStateOriginHost(originValue);
             if (!allowedHosts.contains(host)) {
                 throw new IllegalArgumentException(
                         "browser automation sessionState origin host must be included in allowedHosts");
@@ -1279,6 +1304,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             if (!host.equals(urlHost)) {
                 throw new IllegalArgumentException(
                         "browser automation sessionState origin host must match the target URL host");
+            }
+            if (!browserUrlOrigin(originValue, "sessionState origin").equals(urlOrigin)) {
+                throw new IllegalArgumentException(
+                        "browser automation sessionState origin must match the target URL origin");
             }
             validateBrowserSessionStateLocalStorage(originNode.get("localStorage"));
         }

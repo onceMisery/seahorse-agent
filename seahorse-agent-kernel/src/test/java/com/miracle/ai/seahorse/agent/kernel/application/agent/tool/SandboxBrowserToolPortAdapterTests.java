@@ -533,6 +533,27 @@ class SandboxBrowserToolPortAdapterTests {
         assertEquals(0, runtime.createCalls);
     }
 
+    @Test
+    void shouldRejectSessionStateOriginWhenOriginDoesNotMatchTargetUrlOriginBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test:8080/page",
+                "allowedHosts", List.of("example.test"),
+                "sessionState", Map.of(
+                        "origins", List.of(Map.of(
+                                "origin", "http://example.test:9090",
+                                "localStorage", List.of(Map.of(
+                                        "name", "seahorse_session_marker",
+                                        "value", "secret"))))))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("sessionState origin must match the target URL origin"));
+        assertEquals(0, runtime.createCalls);
+    }
+
     private ToolInvocationRequest request(Map<String, Object> arguments) {
         return new ToolInvocationRequest(
                 "run-1",

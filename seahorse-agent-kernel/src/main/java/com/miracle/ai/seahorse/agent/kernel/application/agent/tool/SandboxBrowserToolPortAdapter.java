@@ -127,10 +127,12 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         String url;
         List<String> allowedHosts;
         String urlHost;
+        String urlOrigin;
         try {
             url = normalizedUrl(jsonSupport.string(safeRequest.arguments(), URL_ARGUMENT));
             allowedHosts = normalizedAllowedHosts(safeRequest.arguments().get(ALLOWED_HOSTS_ARGUMENT));
             urlHost = hasText(url) ? urlHost(url) : "";
+            urlOrigin = hasText(url) ? urlOrigin(url, "url") : "";
         } catch (IllegalArgumentException ex) {
             return ToolInvocationResult.failed(ex.getMessage());
         }
@@ -151,6 +153,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                     safeRequest.arguments().get(SESSION_STATE_ARGUMENT),
                     allowedHosts,
                     urlHost,
+                    urlOrigin,
                     urlMode);
         } catch (IllegalArgumentException ex) {
             return ToolInvocationResult.failed(ex.getMessage());
@@ -436,6 +439,25 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         }
     }
 
+    private String urlOrigin(String url, String label) {
+        try {
+            URI uri = new URI(url);
+            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+            String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+            if (!Set.of("http", "https").contains(scheme) || !hasText(host)) {
+                throw new IllegalArgumentException("sandbox_browser failed: " + label + " must be HTTP/HTTPS");
+            }
+            validatePublicBrowserHost(host, label + " host");
+            int port = uri.getPort();
+            if (port < 0) {
+                port = "https".equals(scheme) ? 443 : 80;
+            }
+            return scheme + "://" + host + ":" + port;
+        } catch (URISyntaxException ex) {
+            throw new IllegalArgumentException("sandbox_browser failed: " + label + " is not valid", ex);
+        }
+    }
+
     private List<String> normalizedAllowedHosts(Object value) {
         if (value == null) {
             return List.of();
@@ -476,6 +498,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private Object normalizedSessionState(Object value,
                                           List<String> allowedHosts,
                                           String urlHost,
+                                          String urlOrigin,
                                           boolean urlMode) {
         if (value == null) {
             return null;
@@ -487,7 +510,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             throw new IllegalArgumentException("sandbox_browser failed: sessionState must be an object");
         }
         validateSessionStateCookies(state.get("cookies"), allowedHosts, urlHost);
-        validateSessionStateOrigins(state.get("origins"), allowedHosts, urlHost);
+        validateSessionStateOrigins(state.get("origins"), allowedHosts, urlHost, urlOrigin);
         if (jsonSupport.write(value).length() > MAX_SESSION_STATE_CHARS) {
             throw new IllegalArgumentException("sandbox_browser failed: sessionState exceeds "
                     + MAX_SESSION_STATE_CHARS + " chars");
@@ -526,7 +549,10 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         }
     }
 
-    private void validateSessionStateOrigins(Object value, List<String> allowedHosts, String urlHost) {
+    private void validateSessionStateOrigins(Object value,
+                                             List<String> allowedHosts,
+                                             String urlHost,
+                                             String urlOrigin) {
         if (value == null) {
             return;
         }
@@ -541,7 +567,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             if (!(rawOrigin instanceof Map<?, ?> origin)) {
                 throw new IllegalArgumentException("sandbox_browser failed: sessionState origin must be an object");
             }
-            String host = sessionStateOriginHost(mapString(origin, "origin"));
+            String originValue = mapString(origin, "origin");
+            String host = sessionStateOriginHost(originValue);
             if (!allowedHosts.contains(host)) {
                 throw new IllegalArgumentException(
                         "sandbox_browser failed: sessionState origin host must be included in allowedHosts");
@@ -549,6 +576,10 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             if (!host.equals(urlHost)) {
                 throw new IllegalArgumentException(
                         "sandbox_browser failed: sessionState origin host must match the target URL host");
+            }
+            if (!urlOrigin(originValue, "sessionState origin").equals(urlOrigin)) {
+                throw new IllegalArgumentException(
+                        "sandbox_browser failed: sessionState origin must match the target URL origin");
             }
             validateSessionStateLocalStorage(origin.get("localStorage"));
         }
