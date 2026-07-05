@@ -29,10 +29,17 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 public class A2aRequestAuthenticator {
 
     private static final String DEFAULT_AUTH_HEADER = "X-Seahorse-A2A-Token";
+    private static final int MAX_TENANT_HEADER_CHARS = 128;
+    private static final int MAX_AGENT_HEADER_CHARS = 128;
+    private static final int MAX_TIMESTAMP_HEADER_CHARS = 64;
+    private static final int MAX_NONCE_HEADER_CHARS = 128;
+    private static final int SHA256_HEX_CHARS = 64;
+    private static final Pattern SHA256_HEX = Pattern.compile("[0-9a-fA-F]{" + SHA256_HEX_CHARS + "}");
 
     private final AgentScopeProperties properties;
     private final Clock clock;
@@ -69,17 +76,33 @@ public class A2aRequestAuthenticator {
 
     private void verifyTenantSigned(String body, Map<String, String> headers) {
         String secret = configuredSecret();
-        String tenantId = requiredHeader(headers, A2aRequestSigner.HEADER_TENANT);
-        String agentName = requiredHeader(headers, A2aRequestSigner.HEADER_AGENT);
+        String tenantId = requiredBoundedHeader(
+                headers,
+                A2aRequestSigner.HEADER_TENANT,
+                MAX_TENANT_HEADER_CHARS,
+                "A2A tenant");
+        String agentName = requiredBoundedHeader(
+                headers,
+                A2aRequestSigner.HEADER_AGENT,
+                MAX_AGENT_HEADER_CHARS,
+                "A2A agent");
         if (!tenantId.equals(textOrDefault(properties.getA2a().getTenantId(), "default"))
                 || !agentName.equals(textOrDefault(properties.getA2a().getAgentName(), "seahorse-agent"))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "A2A tenant or agent mismatch");
         }
 
-        String timestamp = requiredHeader(headers, A2aRequestSigner.HEADER_TIMESTAMP);
-        String nonce = requiredHeader(headers, A2aRequestSigner.HEADER_NONCE);
-        String bodySha256 = requiredHeader(headers, A2aRequestSigner.HEADER_BODY_SHA256);
-        String signature = requiredHeader(headers, A2aRequestSigner.HEADER_SIGNATURE);
+        String timestamp = requiredBoundedHeader(
+                headers,
+                A2aRequestSigner.HEADER_TIMESTAMP,
+                MAX_TIMESTAMP_HEADER_CHARS,
+                "A2A timestamp");
+        String nonce = requiredBoundedHeader(
+                headers,
+                A2aRequestSigner.HEADER_NONCE,
+                MAX_NONCE_HEADER_CHARS,
+                "A2A nonce");
+        String bodySha256 = requiredSha256Header(headers, A2aRequestSigner.HEADER_BODY_SHA256, "A2A body hash");
+        String signature = requiredSha256Header(headers, A2aRequestSigner.HEADER_SIGNATURE, "A2A signature");
 
         verifyTimestamp(timestamp);
         String actualBodySha256 = A2aRequestSigner.sha256Hex(body);
@@ -137,6 +160,26 @@ public class A2aRequestAuthenticator {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing A2A signed header: " + headerName);
         }
         return value;
+    }
+
+    private String requiredBoundedHeader(Map<String, String> headers, String headerName, int maxChars, String label) {
+        String value = requiredHeader(headers, headerName);
+        if (value.length() > maxChars || containsControlCharacter(value)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, label + " header is invalid");
+        }
+        return value;
+    }
+
+    private String requiredSha256Header(Map<String, String> headers, String headerName, String label) {
+        String value = requiredHeader(headers, headerName);
+        if (!SHA256_HEX.matcher(value).matches()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, label + " header is invalid");
+        }
+        return value;
+    }
+
+    private boolean containsControlCharacter(String value) {
+        return value.chars().anyMatch(ch -> ch < 0x20 || ch == 0x7f);
     }
 
     private String configuredSecret() {

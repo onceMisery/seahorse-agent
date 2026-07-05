@@ -229,6 +229,38 @@ class AgentScopeA2aServerControllerTests {
     }
 
     @Test
+    void rejectsTenantSignedPostWhenNonceIsOverBoundary() {
+        AgentScopeProperties properties = signedProperties();
+        AgentScopeA2aServerController controller = controller(
+                mock(AgentScopeA2aServer.class),
+                properties,
+                new A2aRequestAuthenticator(properties, FIXED_CLOCK));
+        Map<String, String> headers = new A2aRequestSigner("unit-secret", FIXED_CLOCK, () -> "n".repeat(129))
+                .sign("tenant-a", "planner", "{}");
+
+        assertThatThrownBy(() -> controller.handleJsonRpc("{}", headers))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED));
+    }
+
+    @Test
+    void rejectsTenantSignedPostWhenBodyHashIsMalformed() {
+        AgentScopeProperties properties = signedProperties();
+        AgentScopeA2aServerController controller = controller(
+                mock(AgentScopeA2aServer.class),
+                properties,
+                new A2aRequestAuthenticator(properties, FIXED_CLOCK));
+        Map<String, String> headers = new java.util.LinkedHashMap<>(
+                new A2aRequestSigner("unit-secret", FIXED_CLOCK, () -> "nonce-1")
+                        .sign("tenant-a", "planner", "{}"));
+        headers.put(A2aRequestSigner.HEADER_BODY_SHA256, "not-a-sha256");
+
+        assertThatThrownBy(() -> controller.handleJsonRpc("{}", headers))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED));
+    }
+
+    @Test
     void rejectsTenantSignedPostWhenTenantDoesNotMatch() {
         AgentScopeProperties properties = signedProperties();
         AgentScopeA2aServerController controller = controller(

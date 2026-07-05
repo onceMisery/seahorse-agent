@@ -216,6 +216,14 @@ The audit summary deliberately omits URL credential material, cookie values, and
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 14/14, including regression coverage that sandbox browser audit summaries include URL/egress/session governance metadata while excluding cookie and localStorage secret values.
 
+## 2026-07-06 Update: AgentScope A2A Signed Header Boundary Guard
+
+AgentScope inbound A2A `tenant-signed` authentication now rejects malformed signed headers before signature comparison and nonce-cache mutation. Tenant, agent, timestamp, and nonce headers have bounded lengths and control-character rejection; body-hash and signature headers must be 64-character SHA-256 hex strings.
+
+This is a narrow production hardening slice for the existing tenant-signed A2A path. It does not add durable distributed nonce storage, live Nacos/Studio/OTEL production infrastructure, or new A2A routing behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-agent-agentscope -am "-Dtest=AgentScopeA2aServerControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 15/15, including malformed body-hash and over-boundary nonce rejection while preserving normal shared-secret and tenant-signed flows.
+
 ## 2026-07-03 Update: Sandbox Artifact Binary/PDF Signature Scan
 
 `DefaultSandboxArtifactScannerPort` now performs a bounded local-file signature scan for existing prompt-safe binary artifacts (`application/pdf`, supported image media types) and download-only `video/webm` artifacts. The scanner reads only the first 256 KiB, blocks PE/ELF executable signatures, blocks ZIP/PDF/EBML/script-like masquerading when the media type does not match, and blocks PDF active-content markers such as `/JavaScript`, `/JS`, `/OpenAction`, and `/AA`.
