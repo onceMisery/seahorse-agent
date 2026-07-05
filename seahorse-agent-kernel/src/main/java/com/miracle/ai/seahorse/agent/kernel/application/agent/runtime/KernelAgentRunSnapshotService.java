@@ -45,8 +45,14 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ContextPackRepositoryP
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -129,10 +135,11 @@ public class KernelAgentRunSnapshotService implements AgentRunSnapshotInboundPor
                 currentUser);
         List<ApprovalRequest> pendingApprovals = pendingApprovals(run.runId(), currentUser);
         List<AgentArtifact> artifacts = artifacts(run.runId(), currentUser);
+        Optional<AgentCheckpoint> snapshotCheckpoint = latestCheckpoint.map(this::checkpointForSnapshot);
         return new AgentRunSnapshot(
                 run,
                 steps.stream().map(this::toSnapshotStep).toList(),
-                latestCheckpoint,
+                snapshotCheckpoint,
                 messageSnapshot(latestCheckpoint),
                 currentStepId(steps, latestCheckpoint),
                 sources,
@@ -141,6 +148,109 @@ public class KernelAgentRunSnapshotService implements AgentRunSnapshotInboundPor
                 latestCheckpoint.map(AgentCheckpoint::sequenceNo).orElse(INITIAL_EVENT_SEQUENCE),
                 canResume(run, latestCheckpoint, pendingApprovals),
                 run.status() == AgentRunStatus.FAILED);
+    }
+
+    private AgentCheckpoint checkpointForSnapshot(AgentCheckpoint checkpoint) {
+        return new AgentCheckpoint(
+                checkpoint.checkpointId(),
+                checkpoint.runId(),
+                checkpoint.stepId(),
+                checkpoint.sequenceNo(),
+                checkpoint.checkpointType(),
+                checkpoint.stateJson(),
+                checkpoint.messageHistoryJson(),
+                checkpoint.contextPackId(),
+                pendingToolCallJsonForSnapshot(checkpoint.pendingToolCallJson()),
+                checkpoint.createdAt());
+    }
+
+    private String pendingToolCallJsonForSnapshot(String pendingToolCallJson) {
+        if (!hasText(pendingToolCallJson)) {
+            return pendingToolCallJson;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(pendingToolCallJson);
+            if (!root.isObject()) {
+                return null;
+            }
+            Map<String, Object> payload = new LinkedHashMap<>();
+            root.fields().forEachRemaining(entry -> {
+                if (!"resourceRefs".equals(entry.getKey())) {
+                    payload.put(entry.getKey(), objectMapper.convertValue(entry.getValue(), Object.class));
+                }
+            });
+            JsonNode resourceRefs = root.path("resourceRefs");
+            payload.put("resourceRefKeys", safeResourceRefKeys(resourceRefs));
+            payload.put("resourceRefCount", resourceRefs.isObject() ? resourceRefs.size() : 0);
+            payload.put("resourceRefHash", sha256(canonicalJson(resourceRefs)));
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+
+    private List<String> safeResourceRefKeys(JsonNode resourceRefs) {
+        if (resourceRefs == null || !resourceRefs.isObject()) {
+            return List.of();
+        }
+        List<String> keys = new ArrayList<>();
+        resourceRefs.fieldNames().forEachRemaining(key -> {
+            String trimmed = key == null ? "" : key.trim();
+            if (isSafePreviewKey(trimmed)) {
+                keys.add(trimmed);
+            }
+        });
+        return keys.stream().sorted().toList();
+    }
+
+    private boolean isSafePreviewKey(String key) {
+        if (!hasText(key) || key.length() > 64) {
+            return false;
+        }
+        String lower = key.toLowerCase();
+        if (lower.contains("secret") || lower.contains("token") || lower.contains("password")) {
+            return false;
+        }
+        for (int i = 0; i < key.length(); i++) {
+            char ch = key.charAt(i);
+            boolean safe = (ch >= 'a' && ch <= 'z')
+                    || (ch >= 'A' && ch <= 'Z')
+                    || (ch >= '0' && ch <= '9')
+                    || ch == '_'
+                    || ch == '-'
+                    || ch == '.';
+            if (!safe) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String canonicalJson(JsonNode node) throws JsonProcessingException {
+        if (node == null || !node.isObject()) {
+            return "{}";
+        }
+        Map<String, String> canonical = new LinkedHashMap<>();
+        node.fieldNames().forEachRemaining(key -> canonical.put(key, text(node, key)));
+        Map<String, String> sorted = new LinkedHashMap<>();
+        canonical.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> sorted.put(entry.getKey(), entry.getValue()));
+        return objectMapper.writeValueAsString(sorted);
+    }
+
+    private String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest(Objects.requireNonNullElse(value, "").getBytes(StandardCharsets.UTF_8));
+            StringBuilder result = new StringBuilder(bytes.length * 2);
+            for (byte item : bytes) {
+                result.append(String.format("%02x", item));
+            }
+            return result.toString();
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is not available", ex);
+        }
     }
 
     private AgentRunMessageSnapshot messageSnapshot(Optional<AgentCheckpoint> latestCheckpoint) {

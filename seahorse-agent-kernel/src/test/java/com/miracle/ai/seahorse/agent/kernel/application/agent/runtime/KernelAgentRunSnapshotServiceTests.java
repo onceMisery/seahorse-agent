@@ -99,6 +99,14 @@ class KernelAgentRunSnapshotServiceTests {
         assertEquals("checkpoint-2", snapshot.latestCheckpoint().orElseThrow().checkpointId());
         assertEquals("partial", snapshot.messageSnapshot().content());
         assertEquals("thinking", snapshot.messageSnapshot().thinking());
+        String pendingToolCallJson = snapshot.latestCheckpoint().orElseThrow().pendingToolCallJson();
+        assertFalse(pendingToolCallJson.contains("resourceRefs"));
+        assertFalse(pendingToolCallJson.contains("kb-secret-ref"));
+        assertFalse(pendingToolCallJson.contains("secretResourceKey"));
+        assertFalse(pendingToolCallJson.contains("resource-secret-value"));
+        assertEquals(true, pendingToolCallJson.contains("\"resourceRefKeys\":[\"knowledgeBaseId\"]"));
+        assertEquals(true, pendingToolCallJson.contains("\"resourceRefCount\":2"));
+        assertEquals(true, pendingToolCallJson.contains("resourceRefHash"));
         assertEquals(List.of("step-1", "step-2"), snapshot.steps().stream().map(item -> item.stepId()).toList());
         assertEquals("step-2", snapshot.currentStepId());
         assertEquals(List.of("approval-1"),
@@ -209,7 +217,8 @@ class KernelAgentRunSnapshotServiceTests {
                 "{\"state\":\"waiting\"}",
                 "[{\"role\":\"assistant\",\"content\":\"partial\",\"thinkingContent\":\"thinking\"}]",
                 contextPackId,
-                "{\"toolId\":\"memory-forget\"}",
+                "{\"toolId\":\"memory-forget\",\"resourceRefs\":{\"knowledgeBaseId\":\"kb-secret-ref\","
+                        + "\"secretResourceKey\":\"resource-secret-value\"}}",
                 NOW.plusSeconds(sequenceNo));
     }
 
