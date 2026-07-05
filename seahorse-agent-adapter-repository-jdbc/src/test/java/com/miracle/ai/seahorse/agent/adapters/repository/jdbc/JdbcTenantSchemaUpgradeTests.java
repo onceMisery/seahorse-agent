@@ -147,6 +147,41 @@ class JdbcTenantSchemaUpgradeTests {
     }
 
     @Test
+    void shouldAddAgentHandoffContextPackReferenceForExistingTable() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:tenant-schema-upgrade-agent-handoff-" + System.nanoTime()
+                        + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+                "sa",
+                "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.execute("""
+                CREATE TABLE sa_agent_handoff (
+                    handoff_id VARCHAR(64) PRIMARY KEY,
+                    tenant_id VARCHAR(64) NOT NULL,
+                    parent_run_id VARCHAR(64) NOT NULL,
+                    child_run_id VARCHAR(64),
+                    source_agent_id VARCHAR(64) NOT NULL,
+                    target_agent_id VARCHAR(64) NOT NULL,
+                    status VARCHAR(32) NOT NULL,
+                    failure_code VARCHAR(64),
+                    handoff_reason VARCHAR(1000),
+                    input_summary_json TEXT NOT NULL,
+                    context_summary_json TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL,
+                    finished_at TIMESTAMP
+                )
+                """);
+
+        JdbcTenantSchemaUpgrade upgrade = new JdbcTenantSchemaUpgrade(dataSource);
+        upgrade.upgrade();
+        upgrade.upgrade();
+
+        assertThat(columnExists(jdbcTemplate, "sa_agent_handoff", "context_pack_id")).isTrue();
+        assertThat(isNullable(jdbcTemplate, "sa_agent_handoff", "context_pack_id")).isEqualTo("YES");
+    }
+
+    @Test
     void shouldCreateSandboxRuntimeProfilePolicyTableWhenMissing() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:tenant-schema-upgrade-sandbox-runtime-profile-" + System.nanoTime()

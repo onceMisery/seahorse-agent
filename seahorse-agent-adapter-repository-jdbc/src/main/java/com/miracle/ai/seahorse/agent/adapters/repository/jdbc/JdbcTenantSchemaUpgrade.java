@@ -103,6 +103,7 @@ public class JdbcTenantSchemaUpgrade {
         upgradeSandboxArtifactScanSummary();
         upgradeSandboxArtifactRedactionSummary();
         upgradeToolInvocationRolloutAttribution();
+        upgradeAgentHandoffContextPackReference();
         upgradeSandboxRuntimeProfilePolicy();
         upgradeAiModelConfigUniqueness();
         enableRowLevelSecurity();
@@ -218,6 +219,13 @@ public class JdbcTenantSchemaUpgrade {
         } catch (Exception e) {
             log.warn("[TenantSchema] repair sa_tool_invocation rollout index failed: {}", e.getMessage());
         }
+    }
+
+    private void upgradeAgentHandoffContextPackReference() {
+        if (!tableExists("sa_agent_handoff")) {
+            return;
+        }
+        addColumnIfMissing("sa_agent_handoff", "context_pack_id", "VARCHAR(64)");
     }
 
     private void upgradeSandboxRuntimeProfilePolicy() {
