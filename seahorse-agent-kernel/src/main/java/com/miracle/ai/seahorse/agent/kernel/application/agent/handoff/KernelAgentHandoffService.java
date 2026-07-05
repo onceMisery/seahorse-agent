@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.handoff;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditActorType;
@@ -37,12 +39,15 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.MeshPolicyPort;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class KernelAgentHandoffService implements AgentHandoffInboundPort {
 
     private static final String HANDOFF_ID_PREFIX = "handoff_";
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final AgentHandoffRepositoryPort handoffRepository;
     private final AgentRunInboundPort runPort;
@@ -89,6 +94,7 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
                 AgentHandoffStatus.CREATED,
                 null,
                 safeCommand.handoffReason(),
+                safeCommand.contextPackId(),
                 inputSummaryJson(safeCommand.inputSummary()),
                 safeCommand.contextSummaryJson(),
                 now,
@@ -103,11 +109,13 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
         AgentRun childRun = runPort.startRun(new AgentRunStartCommand(
                 safeCommand.targetAgentId(),
                 safeCommand.targetVersionId(),
+                null,
                 safeCommand.tenantId(),
                 safeCommand.parentRunId(),
                 AgentRunTriggerType.A2A,
                 truncate(safeCommand.inputSummary(), AgentHandoffLimits.INPUT_SUMMARY_MAX_LENGTH),
-                safeCommand.traceId()));
+                safeCommand.traceId(),
+                childRunMetadataJson(created)));
         AgentHandoff running = handoffRepository.save(created.running(childRun.runId(), now));
         appendCreatedAudit(running);
         return running;
@@ -141,8 +149,8 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
     }
 
     private String inputSummaryJson(String inputSummary) {
-        return "{\"inputSummary\":\"" + escape(truncate(inputSummary, AgentHandoffLimits.INPUT_SUMMARY_MAX_LENGTH))
-                + "\"}";
+        return json(Map.of("inputSummary", Objects.requireNonNullElse(
+                truncate(inputSummary, AgentHandoffLimits.INPUT_SUMMARY_MAX_LENGTH), "")));
     }
 
     private String nextHandoffId() {
@@ -176,22 +184,36 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
     }
 
     private String createdPayload(AgentHandoff handoff) {
-        return "{\"handoffId\":\"" + escape(handoff.handoffId())
-                + "\",\"parentRunId\":\"" + escape(handoff.parentRunId())
-                + "\",\"childRunId\":\"" + escape(handoff.childRunId())
-                + "\",\"sourceAgentId\":\"" + escape(handoff.sourceAgentId())
-                + "\",\"targetAgentId\":\"" + escape(handoff.targetAgentId())
-                + "\",\"status\":\"" + handoff.status().name()
-                + "\",\"inputSummaryLength\":" + lengthOf(handoff.inputSummaryJson())
-                + ",\"contextSummaryLength\":" + lengthOf(handoff.contextSummaryJson()) + "}";
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("handoffId", handoff.handoffId());
+        payload.put("parentRunId", handoff.parentRunId());
+        payload.put("childRunId", handoff.childRunId());
+        payload.put("sourceAgentId", handoff.sourceAgentId());
+        payload.put("targetAgentId", handoff.targetAgentId());
+        payload.put("status", handoff.status().name());
+        payload.put("contextPackId", Objects.requireNonNullElse(handoff.contextPackId(), ""));
+        payload.put("inputSummaryLength", lengthOf(handoff.inputSummaryJson()));
+        payload.put("contextSummaryLength", lengthOf(handoff.contextSummaryJson()));
+        return json(payload);
     }
 
     private String finishedPayload(AgentHandoff handoff) {
-        return "{\"handoffId\":\"" + escape(handoff.handoffId())
-                + "\",\"childRunId\":\"" + escape(handoff.childRunId())
-                + "\",\"status\":\"" + handoff.status().name()
-                + "\",\"failureCode\":\"" + (handoff.failureCode() == null ? "" : handoff.failureCode().name())
-                + "\"}";
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("handoffId", handoff.handoffId());
+        payload.put("childRunId", handoff.childRunId());
+        payload.put("status", handoff.status().name());
+        payload.put("contextPackId", Objects.requireNonNullElse(handoff.contextPackId(), ""));
+        payload.put("failureCode", handoff.failureCode() == null ? "" : handoff.failureCode().name());
+        return json(payload);
+    }
+
+    private String childRunMetadataJson(AgentHandoff handoff) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("handoffId", handoff.handoffId());
+        payload.put("parentRunId", handoff.parentRunId());
+        payload.put("contextPackId", Objects.requireNonNullElse(handoff.contextPackId(), ""));
+        payload.put("contextSummaryJson", Objects.requireNonNullElse(handoff.contextSummaryJson(), ""));
+        return json(payload);
     }
 
     private int lengthOf(String value) {
@@ -205,10 +227,12 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
         return value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 
-    private String escape(String value) {
-        return Objects.requireNonNullElse(value, "")
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"");
+    private String json(Object value) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize handoff JSON payload", ex);
+        }
     }
 
     private String requireText(String value, String message) {

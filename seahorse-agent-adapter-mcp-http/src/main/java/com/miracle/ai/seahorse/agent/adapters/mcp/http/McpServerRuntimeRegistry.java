@@ -196,6 +196,7 @@ public class McpServerRuntimeRegistry implements McpServerManagementInboundPort 
                 TEST_CALL_PREFIX + safeServerName + ":" + toolId,
                 TEST_AGENT_ID,
                 null,
+                null,
                 TEST_TENANT_ID,
                 TEST_USER_ID,
                 TEST_USER_ID,

@@ -17,6 +17,7 @@ if ([string]::IsNullOrWhiteSpace($SharedSecret)) {
 }
 
 $agentScopeUnitTests = @(
+    "AgentScopeCoreModuleBoundaryTests",
     "AgentScopeReActExecutorTests",
     "A2aAgentRemoteInvokerTests",
     "AgentScopeA2aServerControllerTests",

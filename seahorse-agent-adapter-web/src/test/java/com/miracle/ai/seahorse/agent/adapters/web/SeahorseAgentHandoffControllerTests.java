@@ -62,6 +62,7 @@ class SeahorseAgentHandoffControllerTests {
                 .andExpect(jsonPath("$.data[0].handoffId").value("handoff-1"))
                 .andExpect(jsonPath("$.data[0].parentRunId").value("parent-run-1"))
                 .andExpect(jsonPath("$.data[0].childRunId").value("child-run-1"))
+                .andExpect(jsonPath("$.data[0].contextPackId").value("context-pack-1"))
                 .andExpect(jsonPath("$.data[0].status").value("RUNNING"))
                 .andExpect(jsonPath("$.data[0].inputSummaryJson").doesNotExist())
                 .andExpect(jsonPath("$.data[0].contextSummaryJson").doesNotExist());
@@ -100,6 +101,7 @@ class SeahorseAgentHandoffControllerTests {
                 status,
                 null,
                 "delegate summary",
+                "context-pack-1",
                 "{\"inputSummary\":\"secret-token should not be returned\"}",
                 "{\"summary\":\"raw context should not be returned\"}",
                 NOW,

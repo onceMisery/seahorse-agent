@@ -10,9 +10,21 @@ vi.mock("@/services/api", () => ({
 }));
 
 import { api } from "@/services/api";
+import {
+  cancelAgentHandoff,
+  getAgentHandoff,
+  getAgentRunHandoffs
+} from "@/services/agentArtifactService";
 import { backendEndpointManifest } from "@/services/backendEndpointManifest";
 import * as agentDefinitionService from "@/services/agentDefinitionService";
 import * as skillService from "@/services/skillService";
+import {
+  cleanupExpiredContextPackItems,
+  diffContextPacks,
+  getContextPack,
+  listContextPackItems
+} from "@/services/contextPackService";
+import { listToolInvocations } from "@/services/toolCatalogService";
 import { createSecret } from "@/services/securityGovernanceService";
 import {
   compareStrategies,
@@ -96,6 +108,13 @@ describe("frontend capability service contracts", () => {
     expect(backendEndpoints).toContain("POST /api/sandbox/runtime/orphans:sweep");
     expect(backendEndpoints).toContain("POST /api/sandbox/runtime/profile-policies");
     expect(backendEndpoints).toContain("POST /api/sandbox/runtime/tool-quota-policies");
+    expect(backendEndpoints).toContain("GET /api/context-packs/{}");
+    expect(backendEndpoints).toContain("GET /api/context-packs/{}/items");
+    expect(backendEndpoints).toContain("GET /api/context-packs/{}/diff");
+    expect(backendEndpoints).toContain("POST /api/context-packs/{}/items:cleanup-expired");
+    expect(backendEndpoints).toContain("GET /api/agent-runs/{}/handoffs");
+    expect(backendEndpoints).toContain("GET /api/agent-handoffs/{}");
+    expect(backendEndpoints).toContain("POST /api/agent-handoffs/{}/cancel");
   });
 
   it("publishes agents with the backend publish payload", async () => {
@@ -180,6 +199,59 @@ describe("frontend capability service contracts", () => {
 
   it("does not expose a missing agent versions endpoint", () => {
     expect("getAgentVersions" in agentDefinitionService).toBe(false);
+  });
+
+  it("queries tool invocation audit with rollout attribution filters", async () => {
+    await listToolInvocations({
+      current: 2,
+      size: 10,
+      agentId: "agent-1",
+      versionId: "version-1",
+      rolloutId: "rollout-1",
+      runId: "run-1",
+      toolId: "tool-1",
+      status: "SUCCEEDED"
+    });
+
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/tool-invocations", {
+      params: {
+        current: 2,
+        size: 10,
+        agentId: "agent-1",
+        versionId: "version-1",
+        rolloutId: "rollout-1",
+        runId: "run-1",
+        toolId: "tool-1",
+        status: "SUCCEEDED"
+      },
+      suppressErrorToast: true
+    });
+  });
+
+  it("queries context pack explanation endpoints", async () => {
+    await getContextPack("ctx-run-1");
+    await listContextPackItems("ctx-run-1");
+    await cleanupExpiredContextPackItems("ctx-run-1");
+    await diffContextPacks("ctx-run-1", "ctx-run-2");
+
+    expect(mockedApi.get).toHaveBeenNthCalledWith(1, "/api/context-packs/ctx-run-1");
+    expect(mockedApi.get).toHaveBeenNthCalledWith(2, "/api/context-packs/ctx-run-1/items");
+    expect(mockedApi.post).toHaveBeenCalledWith("/api/context-packs/ctx-run-1/items:cleanup-expired");
+    expect(mockedApi.get).toHaveBeenNthCalledWith(3, "/api/context-packs/ctx-run-1/diff", {
+      params: { rightContextPackId: "ctx-run-2" }
+    });
+  });
+
+  it("queries agent handoff endpoints with backend paths", async () => {
+    await getAgentRunHandoffs("run-1");
+    await getAgentHandoff("handoff-1");
+    await cancelAgentHandoff("handoff-1");
+
+    expect(mockedApi.get).toHaveBeenNthCalledWith(1, "/api/agent-runs/run-1/handoffs", {
+      params: { tenantId: "default" }
+    });
+    expect(mockedApi.get).toHaveBeenNthCalledWith(2, "/api/agent-handoffs/handoff-1");
+    expect(mockedApi.post).toHaveBeenCalledWith("/api/agent-handoffs/handoff-1/cancel");
   });
 
   it("rolls back agents with the backend rollback payload", async () => {

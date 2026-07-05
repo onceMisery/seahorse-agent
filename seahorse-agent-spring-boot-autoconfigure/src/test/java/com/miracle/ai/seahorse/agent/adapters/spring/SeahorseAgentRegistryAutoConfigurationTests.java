@@ -63,6 +63,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AccessDecisionQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackDiffInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackRetentionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.CostUsageInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.EnterprisePilotReadinessInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.OpenApiConnectorInboundPort;
@@ -227,6 +229,8 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(KernelAgentCheckpointQueryService.class);
                     assertThat(context).hasSingleBean(KernelContextPackBuilderService.class);
                     assertThat(context).hasSingleBean(KernelContextPackQueryService.class);
+                    assertThat(context).hasSingleBean(ContextPackRetentionInboundPort.class);
+                    assertThat(context).hasSingleBean(ContextPackDiffInboundPort.class);
                     assertThat(context).hasSingleBean(KernelAccessDecisionQueryService.class);
                     assertThat(context).hasSingleBean(KernelResourceAclManagementService.class);
                     assertThat(field(context.getBean(KernelResourceAclManagementService.class), "auditLedger"))

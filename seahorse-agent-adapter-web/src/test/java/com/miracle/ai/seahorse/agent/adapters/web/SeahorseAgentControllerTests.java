@@ -90,7 +90,11 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalDecisionCommand
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalModifyCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AccessDecisionQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackDiffInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackDiffResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackRetentionCleanupResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackRetentionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ConnectorCredentialBindingCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ConnectorImportResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ConnectorOperationDisableCommand;
@@ -573,6 +577,7 @@ class SeahorseAgentControllerTests {
                         "tenant-a",
                         "agent-1",
                         "agent-1-v1",
+                        "rollout-1",
                         "run-1",
                         "weather_query",
                         ToolInvocationStatus.SUCCEEDED,
@@ -588,6 +593,7 @@ class SeahorseAgentControllerTests {
                         .param("tenantId", "tenant-a")
                         .param("agentId", "agent-1")
                         .param("versionId", "agent-1-v1")
+                        .param("rolloutId", "rollout-1")
                         .param("runId", "run-1")
                         .param("toolId", "weather_query")
                         .param("status", "SUCCEEDED")
@@ -602,6 +608,7 @@ class SeahorseAgentControllerTests {
                 "tenant-a",
                 "agent-1",
                 "agent-1-v1",
+                "rollout-1",
                 "run-1",
                 "weather_query",
                 ToolInvocationStatus.SUCCEEDED,
@@ -612,7 +619,7 @@ class SeahorseAgentControllerTests {
     @Test
     void shouldExposeToolInvocationAuditQueryApiBehindDockerProxy() throws Exception {
         ToolInvocationAuditQueryInboundPort port = mock(ToolInvocationAuditQueryInboundPort.class);
-        when(port.page(null, null, null, null, null, null, 1L, 10L))
+        when(port.page(null, null, null, null, null, null, null, 1L, 10L))
                 .thenReturn(new ToolInvocationAuditPage(List.of(invocation()), 1L, 10L, 1L, 1L));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
@@ -625,7 +632,7 @@ class SeahorseAgentControllerTests {
                 .andExpect(jsonPath("$.data.records[0].invocationId").value("invocation-1"))
                 .andExpect(jsonPath("$.data.records[0].status").value("SUCCEEDED"));
 
-        verify(port).page(null, null, null, null, null, null, 1L, 10L);
+        verify(port).page(null, null, null, null, null, null, null, 1L, 10L);
     }
 
     @Test
@@ -1056,11 +1063,21 @@ class SeahorseAgentControllerTests {
     @Test
     void shouldExposeContextPackQueryApi() throws Exception {
         ContextPackQueryInboundPort port = mock(ContextPackQueryInboundPort.class);
+        ContextPackRetentionInboundPort retentionPort = mock(ContextPackRetentionInboundPort.class);
+        ContextPackDiffInboundPort diffPort = mock(ContextPackDiffInboundPort.class);
         when(port.findById("context-pack-1")).thenReturn(Optional.of(contextPack()));
         when(port.listItems("context-pack-1")).thenReturn(List.of(contextItem()));
+        when(retentionPort.cleanupExpiredItems("context-pack-1")).thenReturn(
+                new ContextPackRetentionCleanupResult("context-pack-1", NOW, 2));
+        when(diffPort.diff("context-pack-1", "context-pack-2")).thenReturn(
+                new ContextPackDiffResult("context-pack-1", "context-pack-2", 1, 0, 1, 2,
+                        List.of(), List.of(), List.of()));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseContextPackController(provider(ContextPackQueryInboundPort.class, port))).build();
+                new SeahorseContextPackController(
+                        provider(ContextPackQueryInboundPort.class, port),
+                        provider(ContextPackRetentionInboundPort.class, retentionPort),
+                        provider(ContextPackDiffInboundPort.class, diffPort))).build();
 
         mvc.perform(get("/api/context-packs/context-pack-1"))
                 .andExpect(status().isOk())
@@ -1075,8 +1092,23 @@ class SeahorseAgentControllerTests {
                 .andExpect(jsonPath("$.data[0].sourceType").value("RAG_CHUNK"))
                 .andExpect(jsonPath("$.data[0].sensitivity").value("INTERNAL"));
 
+        mvc.perform(post("/api/context-packs/context-pack-1/items:cleanup-expired"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.contextPackId").value("context-pack-1"))
+                .andExpect(jsonPath("$.data.deletedItemCount").value(2));
+
+        mvc.perform(get("/api/context-packs/context-pack-1/diff")
+                        .param("rightContextPackId", "context-pack-2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.leftContextPackId").value("context-pack-1"))
+                .andExpect(jsonPath("$.data.rightContextPackId").value("context-pack-2"))
+                .andExpect(jsonPath("$.data.addedItemCount").value(1))
+                .andExpect(jsonPath("$.data.changedItemCount").value(1));
+
         verify(port).findById("context-pack-1");
         verify(port).listItems("context-pack-1");
+        verify(retentionPort).cleanupExpiredItems("context-pack-1");
+        verify(diffPort).diff("context-pack-1", "context-pack-2");
     }
 
     @Test

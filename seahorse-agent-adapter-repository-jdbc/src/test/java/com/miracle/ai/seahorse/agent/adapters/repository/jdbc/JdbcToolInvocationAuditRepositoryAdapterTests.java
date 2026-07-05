@@ -50,6 +50,7 @@ class JdbcToolInvocationAuditRepositoryAdapterTests {
                 "step-1",
                 "agent-1",
                 "version-1",
+                "rollout-1",
                 "tenant-1",
                 "user-1",
                 "weather",
@@ -69,7 +70,7 @@ class JdbcToolInvocationAuditRepositoryAdapterTests {
                 finishedAt));
 
         Map<String, Object> row = jdbcTemplate.queryForMap("""
-                SELECT invocation_id, run_id, step_id, agent_id, version_id, tenant_id, user_id, tool_id,
+                SELECT invocation_id, run_id, step_id, agent_id, version_id, rollout_id, tenant_id, user_id, tool_id,
                        idempotency_key, status, policy_decision_id, arguments_summary, result_summary,
                        error_message, started_at, finished_at
                 FROM sa_tool_invocation
@@ -77,6 +78,7 @@ class JdbcToolInvocationAuditRepositoryAdapterTests {
                 """, "invocation-1");
 
         assertThat(row.get("RUN_ID")).isEqualTo("run-1");
+        assertThat(row.get("ROLLOUT_ID")).isEqualTo("rollout-1");
         assertThat(row.get("TOOL_ID")).isEqualTo("weather");
         assertThat(row.get("STATUS")).isEqualTo(ToolInvocationStatus.SUCCEEDED.name());
         assertThat(row.get("POLICY_DECISION_ID")).isEqualTo("decision-1");
@@ -133,11 +135,26 @@ class JdbcToolInvocationAuditRepositoryAdapterTests {
                 "boom",
                 startedAt.plusSeconds(3)));
         adapter.recordRequested(record("invocation-3", "run-2", "agent-2", "version-1", "weather", startedAt.plusSeconds(4)));
+        adapter.recordRequested(new ToolInvocationAuditRecord(
+                "invocation-4",
+                "run-1",
+                "step-invocation-4",
+                "agent-1",
+                "version-1",
+                "rollout-2",
+                "tenant-1",
+                "user-1",
+                "weather",
+                "run-1:invocation-4",
+                ToolInvocationStatus.REQUESTED,
+                "keys=[], size=0",
+                startedAt.plusSeconds(5)));
 
         ToolInvocationAuditPage page = adapter.page(new ToolInvocationAuditQuery(
                 "tenant-1",
                 "agent-1",
                 "version-1",
+                null,
                 "run-1",
                 "weather",
                 ToolInvocationStatus.SUCCEEDED,
@@ -152,6 +169,22 @@ class JdbcToolInvocationAuditRepositoryAdapterTests {
         assertThat(record.status()).isEqualTo(ToolInvocationStatus.SUCCEEDED);
         assertThat(record.policyDecisionId()).isEqualTo("decision-1");
         assertThat(record.resultSummary()).isEqualTo("length=16");
+
+        ToolInvocationAuditPage rolloutPage = adapter.page(new ToolInvocationAuditQuery(
+                "tenant-1",
+                "agent-1",
+                "version-1",
+                "rollout-2",
+                "run-1",
+                "weather",
+                ToolInvocationStatus.REQUESTED,
+                1L,
+                10L));
+
+        assertThat(rolloutPage.records()).singleElement().satisfies(entry -> {
+            assertThat(entry.invocationId()).isEqualTo("invocation-4");
+            assertThat(entry.rolloutId()).isEqualTo("rollout-2");
+        });
     }
 
     private DriverManagerDataSource dataSource(String name) {
@@ -167,6 +200,7 @@ class JdbcToolInvocationAuditRepositoryAdapterTests {
                     step_id VARCHAR(64) NOT NULL,
                     agent_id VARCHAR(64),
                     version_id VARCHAR(64),
+                    rollout_id VARCHAR(64),
                     tenant_id VARCHAR(64) NOT NULL,
                     user_id VARCHAR(64) NOT NULL,
                     tool_id VARCHAR(128) NOT NULL,

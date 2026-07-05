@@ -80,6 +80,14 @@ export function ToolDetailPage() {
     return new Date(dateStr).toLocaleString("zh-CN");
   };
 
+  const formatDuration = (startedAt?: string | null, finishedAt?: string | null) => {
+    if (!startedAt || !finishedAt) return "";
+    const started = new Date(startedAt).getTime();
+    const finished = new Date(finishedAt).getTime();
+    if (!Number.isFinite(started) || !Number.isFinite(finished) || finished < started) return "";
+    return `${finished - started}ms`;
+  };
+
   if (!featureState.enabled) {
     return <FeatureUnavailableState featureState={featureState} featureName="工具目录" />;
   }
@@ -219,10 +227,13 @@ export function ToolDetailPage() {
                   {invocations.map((inv) => (
                     <div key={inv.invocationId} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                       <div>
-                        <span className="font-medium">{inv.toolName || "-"}</span>
+                        <span className="font-medium">{inv.toolId || "-"}</span>
                         <span className="ml-2 text-sm text-muted-foreground">{inv.status || "-"}</span>
+                        {formatDuration(inv.startedAt, inv.finishedAt) ? (
+                          <span className="ml-2 text-sm text-muted-foreground">{formatDuration(inv.startedAt, inv.finishedAt)}</span>
+                        ) : null}
                       </div>
-                      <div className="text-sm text-muted-foreground">{formatTime(inv.createTime)}</div>
+                      <div className="text-sm text-muted-foreground">{formatTime(inv.startedAt)}</div>
                     </div>
                   ))}
                 </div>

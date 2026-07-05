@@ -47,6 +47,7 @@
         <module>seahorse-agent-adapter-parser-tika</module>
         <module>seahorse-agent-adapter-source-feishu</module>
         <module>seahorse-agent-adapter-ai-openai-compatible</module>
+        <module>seahorse-agent-adapter-agent-agentscope-core</module>
         <module>seahorse-agent-adapter-agent-agentscope</module>
         <module>seahorse-agent-adapter-mcp-http</module>
         <module>seahorse-agent-adapter-openapi</module>

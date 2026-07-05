@@ -52,6 +52,7 @@ class JdbcAgentHandoffRepositoryAdapterTests {
         assertThat(unchanged.status()).isEqualTo(AgentHandoffStatus.CANCELLED);
         assertThat(unchanged.failureCode()).isNull();
         assertThat(adapter.findById("handoff-1")).contains(unchanged);
+        assertThat(adapter.findById("handoff-1").orElseThrow().contextPackId()).isEqualTo("context-pack-1");
         assertThat(adapter.listByParentRunId("tenant-a", "parent-run-1"))
                 .extracting(AgentHandoff::handoffId)
                 .containsExactly("handoff-1", "handoff-2");
@@ -69,6 +70,7 @@ class JdbcAgentHandoffRepositoryAdapterTests {
                 AgentHandoffStatus.CREATED,
                 null,
                 "delegate summary",
+                "context-pack-1",
                 "{\"inputSummary\":\"safe\"}",
                 "{\"summary\":\"context\"}",
                 createdAt,
@@ -95,6 +97,7 @@ class JdbcAgentHandoffRepositoryAdapterTests {
                     status VARCHAR(32) NOT NULL,
                     failure_code VARCHAR(64),
                     handoff_reason VARCHAR(1000),
+                    context_pack_id VARCHAR(64),
                     input_summary_json CLOB NOT NULL,
                     context_summary_json CLOB NOT NULL,
                     created_at TIMESTAMP NOT NULL,

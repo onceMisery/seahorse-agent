@@ -1540,6 +1540,7 @@ CREATE TABLE IF NOT EXISTS sa_tool_invocation (
   step_id VARCHAR(64) NOT NULL,
   agent_id VARCHAR(64),
   version_id VARCHAR(64),
+  rollout_id VARCHAR(64),
   tenant_id VARCHAR(64) NOT NULL,
   user_id VARCHAR(64) NOT NULL,
   tool_id VARCHAR(128) NOT NULL,
@@ -1558,6 +1559,9 @@ CREATE INDEX IF NOT EXISTS idx_sa_tool_invocation_run_tool
 
 CREATE INDEX IF NOT EXISTS idx_sa_tool_invocation_tenant_user
   ON sa_tool_invocation(tenant_id, user_id, started_at);
+
+CREATE INDEX IF NOT EXISTS idx_sa_tool_invocation_rollout
+  ON sa_tool_invocation(tenant_id, agent_id, rollout_id, started_at);
 
 CREATE TABLE IF NOT EXISTS sa_approval_request (
   pk_id BIGSERIAL PRIMARY KEY,
@@ -1641,6 +1645,9 @@ CREATE TABLE IF NOT EXISTS sa_context_item (
 
 CREATE INDEX IF NOT EXISTS idx_sa_context_item_pack
   ON sa_context_item(context_pack_id);
+
+CREATE INDEX IF NOT EXISTS idx_sa_context_item_expiry
+  ON sa_context_item(context_pack_id, expires_at);
 
 CREATE TABLE IF NOT EXISTS sa_access_decision_log (
   pk_id BIGSERIAL PRIMARY KEY,
@@ -1958,6 +1965,7 @@ CREATE TABLE IF NOT EXISTS sa_agent_handoff (
   status VARCHAR(32) NOT NULL,
   failure_code VARCHAR(64),
   handoff_reason VARCHAR(1000),
+  context_pack_id VARCHAR(64),
   input_summary_json TEXT NOT NULL,
   context_summary_json TEXT NOT NULL,
   created_at TIMESTAMP NOT NULL,
@@ -1975,6 +1983,7 @@ CREATE TABLE IF NOT EXISTS sa_agent_handoff (
       'CHILD_RUN_FAILED'
     ))
 );
+ALTER TABLE sa_agent_handoff ADD COLUMN IF NOT EXISTS context_pack_id VARCHAR(64);
 
 CREATE INDEX IF NOT EXISTS idx_sa_agent_handoff_parent
   ON sa_agent_handoff(tenant_id, parent_run_id, created_at);

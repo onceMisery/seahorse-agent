@@ -56,6 +56,44 @@ class DeploymentEvidenceGateScriptContractTests {
                 "[switch]$SkipAgentRollout");
     }
 
+    @Test
+    void backendDockerfileShouldCopyAgentScopeCorePomBeforeOfflineDependencyResolution() throws Exception {
+        Path dockerfile = repositoryRoot().resolve("Dockerfile.backend");
+
+        assertThat(dockerfile).exists();
+        String content = Files.readString(dockerfile);
+
+        assertThat(content).contains(
+                "COPY seahorse-agent-adapter-agent-agentscope-core/pom.xml seahorse-agent-adapter-agent-agentscope-core/",
+                "COPY seahorse-agent-adapter-agent-agentscope/pom.xml seahorse-agent-adapter-agent-agentscope/",
+                "./mvnw dependency:go-offline -B -pl seahorse-agent-bootstrap -am -DskipTests");
+        assertThat(content.indexOf(
+                        "COPY seahorse-agent-adapter-agent-agentscope-core/pom.xml seahorse-agent-adapter-agent-agentscope-core/"))
+                .isLessThan(content.indexOf("./mvnw dependency:go-offline -B -pl seahorse-agent-bootstrap -am -DskipTests"));
+    }
+
+    @Test
+    void contextPackHandoffSmokeShouldExerciseToolGatewayAndHandoffEvidencePath() throws Exception {
+        Path script = repositoryRoot().resolve(Path.of("scripts", "e2e-context-pack-handoff-smoke.ps1"));
+
+        assertThat(script).exists();
+        String content = Files.readString(script);
+
+        assertThat(content).contains(
+                "/api/tools?current=1&size=50&provider=BUILTIN&keyword=local_agent_handoff",
+                "/api/tools/local_agent_handoff/invoke",
+                "allowedToolIds = @(\"local_agent_handoff\")",
+                "contextPackId = $contextPackId",
+                "/api/agent-runs/$parentRunId/handoffs?tenantId=default",
+                "/api/agent-handoffs/$($invoke.handoffId)",
+                "/api/agent-runs/$($invoke.childRunId)",
+                "/api/tool-invocations?current=1&size=20&runId=$gatewayRunId&toolId=local_agent_handoff");
+        assertThat(content).contains(
+                "Handoff detail leaked raw summary fields",
+                "Child run metadata contextPackId mismatch",
+                "Tool invocation audit leaked raw input marker");
+    }
+
     private Path repositoryRoot() {
         Path current = Path.of("").toAbsolutePath();
         while (current != null) {

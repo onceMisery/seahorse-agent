@@ -23,15 +23,21 @@ export interface ToolItem {
 export interface ToolInvocation {
   invocationId?: string;
   runId?: string;
+  stepId?: string;
   agentId?: string;
+  versionId?: string;
+  rolloutId?: string;
+  tenantId?: string;
+  userId?: string;
   toolId?: string;
-  toolName?: string;
+  idempotencyKey?: string;
   status?: string;
+  policyDecisionId?: string;
   argumentsSummary?: string;
-  resultStatus?: string;
-  durationMs?: number;
-  approvalId?: string;
-  createTime?: string;
+  resultSummary?: string;
+  errorMessage?: string;
+  startedAt?: string;
+  finishedAt?: string;
 }
 
 export interface AgentToolBinding {
@@ -90,6 +96,8 @@ export function listToolInvocations(params: {
   size?: number;
   runId?: string;
   agentId?: string;
+  versionId?: string;
+  rolloutId?: string;
   toolId?: string;
   status?: string;
   startTime?: string;

@@ -83,6 +83,12 @@ public class JdbcContextPackRepositoryAdapter implements ContextPackRepositoryPo
             DELETE FROM sa_context_item
             WHERE context_pack_id = ?
             """;
+    private static final String SQL_DELETE_EXPIRED_ITEMS = """
+            DELETE FROM sa_context_item
+            WHERE context_pack_id = ?
+              AND expires_at IS NOT NULL
+              AND expires_at <= ?
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -120,6 +126,17 @@ public class JdbcContextPackRepositoryAdapter implements ContextPackRepositoryPo
             return List.of();
         }
         return jdbcTemplate.query(SQL_LIST_ITEMS, this::mapItem, contextPackId.trim());
+    }
+
+    @Override
+    public int deleteExpiredItems(String contextPackId, Instant cutoff) {
+        if (!hasText(contextPackId) || cutoff == null) {
+            return 0;
+        }
+        String safeContextPackId = contextPackId.trim();
+        int deleted = jdbcTemplate.update(SQL_DELETE_EXPIRED_ITEMS, safeContextPackId, toTimestamp(cutoff));
+        refreshItemCount(safeContextPackId);
+        return deleted;
     }
 
     private boolean packExists(String contextPackId) {
@@ -174,6 +191,18 @@ public class JdbcContextPackRepositoryAdapter implements ContextPackRepositoryPo
                 item.estimatedTokens(),
                 toTimestamp(item.expiresAt()),
                 toTimestamp(item.createdAt()));
+    }
+
+    private void refreshItemCount(String contextPackId) {
+        jdbcTemplate.update("""
+                UPDATE sa_context_pack
+                SET item_count = (
+                    SELECT COUNT(1)
+                    FROM sa_context_item
+                    WHERE context_pack_id = ?
+                )
+                WHERE context_pack_id = ?
+                """, contextPackId, contextPackId);
     }
 
     private ContextPackRow mapPackRow(ResultSet resultSet, int rowNum) throws SQLException {

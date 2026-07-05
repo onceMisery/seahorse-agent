@@ -31,6 +31,8 @@ export function ToolInvocationAuditPage() {
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState("");
   const [keyword, setKeyword] = useState("");
+  const [rolloutInput, setRolloutInput] = useState("");
+  const [rolloutId, setRolloutId] = useState("");
   const [pageNo, setPageNo] = useState(1);
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -43,6 +45,7 @@ export function ToolInvocationAuditPage() {
         current,
         size: PAGE_SIZE,
         runId: kw || undefined,
+        rolloutId: rolloutId || undefined,
         status: statusFilter !== "all" ? statusFilter : undefined
       });
       setPageData(data);
@@ -57,11 +60,12 @@ export function ToolInvocationAuditPage() {
   useEffect(() => {
     if (!featureState.enabled) return;
     loadInvocations();
-  }, [pageNo, keyword, statusFilter]);
+  }, [pageNo, keyword, rolloutId, statusFilter]);
 
   const handleSearch = () => {
     setPageNo(1);
     setKeyword(searchInput.trim());
+    setRolloutId(rolloutInput.trim());
   };
 
   const handleRefresh = () => {
@@ -72,6 +76,14 @@ export function ToolInvocationAuditPage() {
   const formatTime = (dateStr?: string | null) => {
     if (!dateStr) return "-";
     return new Date(dateStr).toLocaleString("zh-CN");
+  };
+
+  const formatDuration = (startedAt?: string | null, finishedAt?: string | null) => {
+    if (!startedAt || !finishedAt) return "-";
+    const started = new Date(startedAt).getTime();
+    const finished = new Date(finishedAt).getTime();
+    if (!Number.isFinite(started) || !Number.isFinite(finished) || finished < started) return "-";
+    return String(finished - started);
   };
 
   const statusVariant = (status?: string | null) => {
@@ -96,6 +108,13 @@ export function ToolInvocationAuditPage() {
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
             placeholder="搜索 Run ID"
+            className="w-[200px]"
+            onKeyDown={(event) => event.key === "Enter" && handleSearch()}
+          />
+          <Input
+            value={rolloutInput}
+            onChange={(event) => setRolloutInput(event.target.value)}
+            placeholder="Rollout ID"
             className="w-[200px]"
             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
           />
@@ -130,11 +149,13 @@ export function ToolInvocationAuditPage() {
             <Table className="min-w-[1000px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[180px]">工具名称</TableHead>
+                  <TableHead className="w-[180px]">工具 ID</TableHead>
                   <TableHead className="w-[140px]">状态</TableHead>
                   <TableHead className="w-[160px]">参数摘要</TableHead>
+                  <TableHead className="w-[160px]">结果摘要</TableHead>
                   <TableHead className="w-[100px]">耗时(ms)</TableHead>
-                  <TableHead className="w-[140px]">审批 ID</TableHead>
+                  <TableHead className="w-[140px]">策略裁决 ID</TableHead>
+                  <TableHead className="w-[140px]">Rollout ID</TableHead>
                   <TableHead className="w-[140px]">Run ID</TableHead>
                   <TableHead className="w-[160px]">时间</TableHead>
                 </TableRow>
@@ -142,17 +163,19 @@ export function ToolInvocationAuditPage() {
               <TableBody>
                 {invocations.map((invocation) => (
                   <TableRow key={invocation.invocationId}>
-                    <TableCell className="font-medium">{invocation.toolName || "-"}</TableCell>
+                    <TableCell className="font-medium">{invocation.toolId || "-"}</TableCell>
                     <TableCell>
                       <Badge variant={statusVariant(invocation.status)}>
                         {STATUS_LABELS[invocation.status || ""] || invocation.status || "-"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground truncate max-w-[150px]">{invocation.argumentsSummary || "-"}</TableCell>
-                    <TableCell className="text-muted-foreground">{invocation.durationMs ?? "-"}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{invocation.approvalId || "-"}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground truncate max-w-[150px]">{invocation.resultSummary || invocation.errorMessage || "-"}</TableCell>
+                    <TableCell className="text-muted-foreground">{formatDuration(invocation.startedAt, invocation.finishedAt)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{invocation.policyDecisionId || "-"}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{invocation.rolloutId || "-"}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{invocation.runId || "-"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{formatTime(invocation.createTime)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{formatTime(invocation.startedAt)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -25,12 +25,18 @@ export interface AgentCheckpoint {
 
 export interface AgentHandoff {
   handoffId?: string;
-  runId?: string;
-  fromAgentId?: string;
-  toAgentId?: string;
+  tenantId?: string;
+  parentRunId?: string;
+  childRunId?: string;
+  sourceAgentId?: string;
+  targetAgentId?: string;
   status?: string;
-  summary?: string;
-  createTime?: string;
+  failureCode?: string;
+  handoffReason?: string;
+  contextPackId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  finishedAt?: string;
 }
 
 export interface AgentArtifactItem {
@@ -103,8 +109,10 @@ export function getAgentRunCheckpoints(runId: string) {
 
 // ── Handoffs ──
 
-export function getAgentRunHandoffs(runId: string) {
-  return api.get<AgentHandoff[]>(`/api/agent-runs/${encodeURIComponent(runId)}/handoffs`);
+export function getAgentRunHandoffs(runId: string, tenantId = "default") {
+  return api.get<AgentHandoff[]>(`/api/agent-runs/${encodeURIComponent(runId)}/handoffs`, {
+    params: { tenantId }
+  });
 }
 
 export function getAgentHandoff(handoffId: string) {

@@ -78,7 +78,9 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AccessDecisionQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AuditQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackDiffInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackRetentionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.CostUsageInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.EnterprisePilotReadinessInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.OpenApiConnectorInboundPort;
@@ -318,8 +320,28 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     @ConditionalOnMissingBean(ContextPackQueryInboundPort.class)
     public KernelContextPackQueryService seahorseContextPackQueryInboundPort(
             ContextPackRepositoryPort contextPackRepositoryPort,
-            CurrentUserPort currentUserPort) {
-        return new KernelContextPackQueryService(contextPackRepositoryPort, currentUserPort);
+            CurrentUserPort currentUserPort,
+            ObjectProvider<Clock> clockProvider) {
+        return new KernelContextPackQueryService(
+                contextPackRepositoryPort,
+                currentUserPort,
+                clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnBean(KernelContextPackQueryService.class)
+    @ConditionalOnMissingBean(ContextPackRetentionInboundPort.class)
+    public ContextPackRetentionInboundPort seahorseContextPackRetentionInboundPort(
+            KernelContextPackQueryService contextPackQueryService) {
+        return contextPackQueryService;
+    }
+
+    @Bean
+    @ConditionalOnBean(KernelContextPackQueryService.class)
+    @ConditionalOnMissingBean(ContextPackDiffInboundPort.class)
+    public ContextPackDiffInboundPort seahorseContextPackDiffInboundPort(
+            KernelContextPackQueryService contextPackQueryService) {
+        return contextPackQueryService;
     }
 
     @Bean

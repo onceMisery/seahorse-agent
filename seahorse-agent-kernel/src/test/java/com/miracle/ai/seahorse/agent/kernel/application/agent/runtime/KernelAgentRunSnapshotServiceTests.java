@@ -374,6 +374,11 @@ class KernelAgentRunSnapshotServiceTests {
             }
             return pack.items();
         }
+
+        @Override
+        public int deleteExpiredItems(String contextPackId, Instant cutoff) {
+            return 0;
+        }
     }
 
     private static final class MemoryApprovalQueryPort implements ApprovalRequestQueryPort {

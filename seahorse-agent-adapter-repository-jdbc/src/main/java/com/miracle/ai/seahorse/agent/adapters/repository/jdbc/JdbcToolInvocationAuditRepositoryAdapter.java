@@ -46,15 +46,15 @@ public class JdbcToolInvocationAuditRepositoryAdapter implements ToolInvocationA
         ToolInvocationAuditQueryPort {
 
     private static final String AUDIT_COLUMNS = """
-            invocation_id, run_id, step_id, agent_id, version_id, tenant_id, user_id, tool_id,
+            invocation_id, run_id, step_id, agent_id, version_id, rollout_id, tenant_id, user_id, tool_id,
             idempotency_key, status, policy_decision_id, arguments_summary, result_summary,
             error_message, started_at, finished_at
             """;
     private static final String SQL_INSERT_REQUESTED = """
             INSERT INTO sa_tool_invocation
-            (invocation_id, run_id, step_id, agent_id, version_id, tenant_id, user_id, tool_id,
+            (invocation_id, run_id, step_id, agent_id, version_id, rollout_id, tenant_id, user_id, tool_id,
              idempotency_key, status, arguments_summary, started_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String SQL_UPDATE_DECISION = """
             UPDATE sa_tool_invocation
@@ -94,6 +94,7 @@ public class JdbcToolInvocationAuditRepositoryAdapter implements ToolInvocationA
                 safeRecord.stepId(),
                 safeRecord.agentId(),
                 safeRecord.versionId(),
+                safeRecord.rolloutId(),
                 safeRecord.tenantId(),
                 safeRecord.userId(),
                 safeRecord.toolId(),
@@ -193,6 +194,7 @@ public class JdbcToolInvocationAuditRepositoryAdapter implements ToolInvocationA
         addCondition(conditions, parameters, "tenant_id", query.tenantId());
         addCondition(conditions, parameters, "agent_id", query.agentId());
         addCondition(conditions, parameters, "version_id", query.versionId());
+        addCondition(conditions, parameters, "rollout_id", query.rolloutId());
         addCondition(conditions, parameters, "run_id", query.runId());
         addCondition(conditions, parameters, "tool_id", query.toolId());
         if (query.status() != null) {
@@ -218,6 +220,7 @@ public class JdbcToolInvocationAuditRepositoryAdapter implements ToolInvocationA
                 resultSet.getString("step_id"),
                 resultSet.getString("agent_id"),
                 resultSet.getString("version_id"),
+                resultSet.getString("rollout_id"),
                 resultSet.getString("tenant_id"),
                 resultSet.getString("user_id"),
                 resultSet.getString("tool_id"),

@@ -48,6 +48,7 @@ class KernelToolInvocationAuditQueryServiceTests {
                 "tenant-1",
                 "agent-1",
                 "agent-1-v1",
+                "rollout-1",
                 "run-1",
                 "weather_query",
                 ToolInvocationStatus.SUCCEEDED,
@@ -57,6 +58,7 @@ class KernelToolInvocationAuditQueryServiceTests {
         assertEquals("tenant-1", queryPort.lastQuery.tenantId());
         assertEquals("agent-1", queryPort.lastQuery.agentId());
         assertEquals("agent-1-v1", queryPort.lastQuery.versionId());
+        assertEquals("rollout-1", queryPort.lastQuery.rolloutId());
         assertEquals("run-1", queryPort.lastQuery.runId());
         assertEquals("weather_query", queryPort.lastQuery.toolId());
         assertEquals(ToolInvocationStatus.SUCCEEDED, queryPort.lastQuery.status());
@@ -71,7 +73,7 @@ class KernelToolInvocationAuditQueryServiceTests {
                 new KernelToolInvocationAuditQueryService(new MemoryToolInvocationAuditQueryPort(), user());
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> service.page(null, null, null, null, null, null, 1L, 10L));
+                () -> service.page(null, null, null, null, null, null, null, 1L, 10L));
 
         assertEquals("权限不足", error.getMessage());
     }

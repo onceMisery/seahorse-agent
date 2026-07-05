@@ -36,15 +36,15 @@ public class JdbcAgentHandoffRepositoryAdapter implements AgentHandoffRepository
 
     private static final String HANDOFF_COLUMNS = """
             handoff_id, tenant_id, parent_run_id, child_run_id, source_agent_id, target_agent_id,
-            status, failure_code, handoff_reason, input_summary_json, context_summary_json,
+            status, failure_code, handoff_reason, context_pack_id, input_summary_json, context_summary_json,
             created_at, updated_at, finished_at
             """;
     private static final String SQL_INSERT = """
             INSERT INTO sa_agent_handoff
             (handoff_id, tenant_id, parent_run_id, child_run_id, source_agent_id, target_agent_id,
-             status, failure_code, handoff_reason, input_summary_json, context_summary_json,
+             status, failure_code, handoff_reason, context_pack_id, input_summary_json, context_summary_json,
              created_at, updated_at, finished_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String SQL_UPDATE = """
             UPDATE sa_agent_handoff
@@ -56,6 +56,7 @@ public class JdbcAgentHandoffRepositoryAdapter implements AgentHandoffRepository
                 status = ?,
                 failure_code = ?,
                 handoff_reason = ?,
+                context_pack_id = ?,
                 input_summary_json = ?,
                 context_summary_json = ?,
                 created_at = ?,
@@ -113,6 +114,7 @@ public class JdbcAgentHandoffRepositoryAdapter implements AgentHandoffRepository
                 safeHandoff.status().name(),
                 failureName(safeHandoff.failureCode()),
                 safeHandoff.handoffReason(),
+                safeHandoff.contextPackId(),
                 safeHandoff.inputSummaryJson(),
                 safeHandoff.contextSummaryJson(),
                 toTimestamp(safeHandoff.createdAt()),
@@ -149,6 +151,7 @@ public class JdbcAgentHandoffRepositoryAdapter implements AgentHandoffRepository
                 handoff.status().name(),
                 failureName(handoff.failureCode()),
                 handoff.handoffReason(),
+                handoff.contextPackId(),
                 handoff.inputSummaryJson(),
                 handoff.contextSummaryJson(),
                 toTimestamp(handoff.createdAt()),
@@ -167,6 +170,7 @@ public class JdbcAgentHandoffRepositoryAdapter implements AgentHandoffRepository
                 AgentHandoffStatus.valueOf(resultSet.getString("status")),
                 failureCode(resultSet.getString("failure_code")),
                 resultSet.getString("handoff_reason"),
+                resultSet.getString("context_pack_id"),
                 resultSet.getString("input_summary_json"),
                 resultSet.getString("context_summary_json"),
                 toInstant(resultSet.getTimestamp("created_at")),

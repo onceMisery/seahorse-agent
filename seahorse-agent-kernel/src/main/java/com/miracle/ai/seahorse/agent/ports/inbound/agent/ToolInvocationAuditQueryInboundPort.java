@@ -28,9 +28,21 @@ public interface ToolInvocationAuditQueryInboundPort {
     ToolInvocationAuditPage page(String tenantId,
                                  String agentId,
                                  String versionId,
+                                 String rolloutId,
                                  String runId,
                                  String toolId,
                                  ToolInvocationStatus status,
                                  long current,
                                  long size);
+
+    default ToolInvocationAuditPage page(String tenantId,
+                                         String agentId,
+                                         String versionId,
+                                         String runId,
+                                         String toolId,
+                                         ToolInvocationStatus status,
+                                         long current,
+                                         long size) {
+        return page(tenantId, agentId, versionId, null, runId, toolId, status, current, size);
+    }
 }

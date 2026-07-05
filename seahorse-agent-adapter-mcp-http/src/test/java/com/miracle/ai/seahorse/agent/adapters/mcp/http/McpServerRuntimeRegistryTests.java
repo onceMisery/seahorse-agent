@@ -106,6 +106,11 @@ class McpServerRuntimeRegistryTests {
         assertThat(result.getApprovalId()).isEqualTo("approval:diagnostic");
         assertThat(result.getReasonCode()).isEqualTo("TOOL_APPROVAL_REQUIRED");
         assertThat(governed.preflightRequest.toolId()).isEqualTo("echo");
+        assertThat(governed.preflightRequest.agentId()).isEqualTo("legacy-react-agent");
+        assertThat(governed.preflightRequest.rolloutId()).isNull();
+        assertThat(governed.preflightRequest.tenantId()).isEqualTo("default");
+        assertThat(governed.preflightRequest.userId()).isEqualTo("mcp-server-test");
+        assertThat(governed.preflightRequest.agentIdentityId()).isEqualTo("mcp-server-test");
         assertThat(governed.preflightRequest.allowedToolIds()).containsExactly("echo");
         assertThat(governed.preflightRequest.arguments()).containsEntry("text", "seahorse mcp health check");
         assertThat(governed.invokeCalls.get()).isZero();
@@ -131,6 +136,10 @@ class McpServerRuntimeRegistryTests {
         assertThat(governed.invokeCalls.get()).isEqualTo(1);
         assertThat(governed.invokeRequest.runId()).isEqualTo("mcp-server-test:local-echo");
         assertThat(governed.invokeRequest.stepId()).isEqualTo("mcp-server-test-step:echo");
+        assertThat(governed.invokeRequest.rolloutId()).isNull();
+        assertThat(governed.invokeRequest.tenantId()).isEqualTo("default");
+        assertThat(governed.invokeRequest.userId()).isEqualTo("mcp-server-test");
+        assertThat(governed.invokeRequest.toolId()).isEqualTo("echo");
     }
 
     @Test

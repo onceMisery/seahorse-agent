@@ -182,6 +182,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                 safeRequest.stepId(),
                 safeRequest.agentId(),
                 safeRequest.versionId(),
+                safeRequest.rolloutId(),
                 safeRequest.tenantId(),
                 effectiveUserId,
                 safeRequest.toolId(),

@@ -31,6 +31,7 @@ public record AgentHandoff(String handoffId,
                            AgentHandoffStatus status,
                            AgentHandoffFailureCode failureCode,
                            String handoffReason,
+                           String contextPackId,
                            String inputSummaryJson,
                            String contextSummaryJson,
                            Instant createdAt,
@@ -52,6 +53,7 @@ public record AgentHandoff(String handoffId,
         }
         failureCode = normalizeFailure(status, failureCode);
         handoffReason = trimToNull(handoffReason);
+        contextPackId = trimToNull(contextPackId);
         inputSummaryJson = defaultJson(inputSummaryJson);
         contextSummaryJson = defaultJson(contextSummaryJson);
         createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
@@ -106,6 +108,7 @@ public record AgentHandoff(String handoffId,
                 nextStatus,
                 nextFailureCode,
                 handoffReason,
+                contextPackId,
                 inputSummaryJson,
                 contextSummaryJson,
                 createdAt,

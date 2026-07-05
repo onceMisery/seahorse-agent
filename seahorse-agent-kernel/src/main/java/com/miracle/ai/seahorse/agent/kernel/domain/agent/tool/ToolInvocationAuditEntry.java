@@ -45,6 +45,7 @@ public record ToolInvocationAuditEntry(String invocationId,
                                        String stepId,
                                        String agentId,
                                        String versionId,
+                                       String rolloutId,
                                        String tenantId,
                                        String userId,
                                        String toolId,
@@ -57,12 +58,48 @@ public record ToolInvocationAuditEntry(String invocationId,
                                        Instant startedAt,
                                        Instant finishedAt) {
 
+    public ToolInvocationAuditEntry(String invocationId,
+                                    String runId,
+                                    String stepId,
+                                    String agentId,
+                                    String versionId,
+                                    String tenantId,
+                                    String userId,
+                                    String toolId,
+                                    String idempotencyKey,
+                                    ToolInvocationStatus status,
+                                    String policyDecisionId,
+                                    String argumentsSummary,
+                                    String resultSummary,
+                                    String errorMessage,
+                                    Instant startedAt,
+                                    Instant finishedAt) {
+        this(invocationId,
+                runId,
+                stepId,
+                agentId,
+                versionId,
+                null,
+                tenantId,
+                userId,
+                toolId,
+                idempotencyKey,
+                status,
+                policyDecisionId,
+                argumentsSummary,
+                resultSummary,
+                errorMessage,
+                startedAt,
+                finishedAt);
+    }
+
     public ToolInvocationAuditEntry {
         invocationId = requireText(invocationId, "invocationId 不能为空");
         runId = requireText(runId, "runId 不能为空");
         stepId = requireText(stepId, "stepId 不能为空");
         agentId = trimToNull(agentId);
         versionId = trimToNull(versionId);
+        rolloutId = trimToNull(rolloutId);
         tenantId = requireText(tenantId, "tenantId 不能为空");
         userId = requireText(userId, "userId 不能为空");
         toolId = requireText(toolId, "toolId 不能为空");

@@ -413,6 +413,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/context-packs/{}/diff"
+  },
+  {
+    "method": "GET",
     "path": "/api/context-packs/{}/items"
   },
   {
@@ -565,15 +569,15 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/sandbox/runtime/artifact-scanner-policy"
+  },
+  {
+    "method": "GET",
     "path": "/api/sandbox/runtime/health"
   },
   {
     "method": "GET",
     "path": "/api/sandbox/runtime/nodes"
-  },
-  {
-    "method": "GET",
-    "path": "/api/sandbox/runtime/artifact-scanner-policy"
   },
   {
     "method": "GET",
@@ -1286,6 +1290,10 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/api/connectors/openapi"
+  },
+  {
+    "method": "POST",
+    "path": "/api/context-packs/{}/items:cleanup-expired"
   },
   {
     "method": "POST",

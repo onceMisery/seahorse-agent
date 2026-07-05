@@ -17,11 +17,14 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.handoff;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -32,8 +35,9 @@ public class LocalAgentAsToolPort implements DescribedToolPort {
 
     private static final String TOOL_NAME = "Local Agent Handoff";
     private static final String TOOL_DESCRIPTION = "Delegate a governed local child Agent run.";
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String TOOL_SCHEMA = """
-            {"type":"object","properties":{"tenantId":{"type":"string"},"parentRunId":{"type":"string"},"sourceAgentId":{"type":"string"},"targetAgentId":{"type":"string"},"targetVersionId":{"type":"string"},"handoffReason":{"type":"string"},"inputSummary":{"type":"string"},"contextSummaryJson":{"type":"string"},"depth":{"type":"integer"},"ancestorAgentIds":{"type":"array","items":{"type":"string"}}},"required":["parentRunId","sourceAgentId","targetAgentId","inputSummary"]}\
+            {"type":"object","properties":{"tenantId":{"type":"string"},"parentRunId":{"type":"string"},"sourceAgentId":{"type":"string"},"targetAgentId":{"type":"string"},"targetVersionId":{"type":"string"},"handoffReason":{"type":"string"},"contextPackId":{"type":"string"},"inputSummary":{"type":"string"},"contextSummaryJson":{"type":"string"},"depth":{"type":"integer"},"ancestorAgentIds":{"type":"array","items":{"type":"string"}}},"required":["parentRunId","sourceAgentId","targetAgentId","inputSummary"]}\
             """;
 
     private final KernelAgentHandoffService handoffService;
@@ -60,14 +64,18 @@ public class LocalAgentAsToolPort implements DescribedToolPort {
                     text(arguments, "targetAgentId"),
                     text(arguments, "targetVersionId"),
                     text(arguments, "handoffReason"),
+                    text(arguments, "contextPackId"),
                     text(arguments, "inputSummary"),
                     text(arguments, "contextSummaryJson"),
                     integer(arguments, "depth"),
                     stringList(arguments, "ancestorAgentIds"),
                     text(arguments, "traceId")));
-            return ToolInvocationResult.ok("{\"handoffId\":\"" + handoff.handoffId()
-                    + "\",\"childRunId\":\"" + handoff.childRunId()
-                    + "\",\"status\":\"" + handoff.status().name() + "\"}");
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("handoffId", handoff.handoffId());
+            payload.put("childRunId", Objects.requireNonNullElse(handoff.childRunId(), ""));
+            payload.put("contextPackId", Objects.requireNonNullElse(handoff.contextPackId(), ""));
+            payload.put("status", handoff.status().name());
+            return ToolInvocationResult.ok(json(payload));
         } catch (RuntimeException ex) {
             return ToolInvocationResult.failed(ex.getMessage());
         }
@@ -106,5 +114,13 @@ public class LocalAgentAsToolPort implements DescribedToolPort {
 
     private static Map<String, Object> safeArguments(Map<String, Object> arguments) {
         return arguments == null ? Map.of() : arguments;
+    }
+
+    private static String json(Object value) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize local handoff tool result", ex);
+        }
     }
 }

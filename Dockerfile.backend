@@ -20,6 +20,7 @@ COPY seahorse-agent-spring-boot-starter/pom.xml seahorse-agent-spring-boot-start
 COPY seahorse-agent-spring-boot-starter-all/pom.xml seahorse-agent-spring-boot-starter-all/
 COPY seahorse-agent-kernel/pom.xml seahorse-agent-kernel/
 COPY seahorse-agent-adapter-web/pom.xml seahorse-agent-adapter-web/
+COPY seahorse-agent-adapter-agent-agentscope-core/pom.xml seahorse-agent-adapter-agent-agentscope-core/
 COPY seahorse-agent-adapter-agent-agentscope/pom.xml seahorse-agent-adapter-agent-agentscope/
 COPY seahorse-agent-adapter-ai-openai-compatible/pom.xml seahorse-agent-adapter-ai-openai-compatible/
 COPY seahorse-agent-adapter-cache-local/pom.xml seahorse-agent-adapter-cache-local/

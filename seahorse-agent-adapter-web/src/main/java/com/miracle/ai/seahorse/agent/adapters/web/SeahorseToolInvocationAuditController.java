@@ -44,12 +44,13 @@ public class SeahorseToolInvocationAuditController {
     public ApiResponse<Object> page(@RequestParam(required = false) String tenantId,
                                     @RequestParam(required = false) String agentId,
                                     @RequestParam(required = false) String versionId,
+                                    @RequestParam(required = false) String rolloutId,
                                     @RequestParam(required = false) String runId,
                                     @RequestParam(required = false) String toolId,
                                     @RequestParam(required = false) ToolInvocationStatus status,
                                     @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,
                                     @RequestParam(required = false, defaultValue = DEFAULT_SIZE) long size) {
         return ApiResponses.requireService(auditQueryPortProvider,
-                port -> port.page(tenantId, agentId, versionId, runId, toolId, status, current, size));
+                port -> port.page(tenantId, agentId, versionId, rolloutId, runId, toolId, status, current, size));
     }
 }

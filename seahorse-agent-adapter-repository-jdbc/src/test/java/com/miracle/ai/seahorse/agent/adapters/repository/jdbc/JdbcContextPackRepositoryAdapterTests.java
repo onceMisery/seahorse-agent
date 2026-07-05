@@ -87,6 +87,31 @@ class JdbcContextPackRepositoryAdapterTests {
         assertThat(row.get("CREATED_AT")).isNotNull();
     }
 
+    @Test
+    void shouldDeleteExpiredContextItemsAndRefreshItemCount() {
+        DriverManagerDataSource dataSource = dataSource("context-item-retention");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createContextPackSchema(jdbcTemplate);
+        JdbcContextPackRepositoryAdapter adapter = new JdbcContextPackRepositoryAdapter(dataSource);
+        Instant cutoff = Instant.parse("2026-05-24T01:00:00Z");
+
+        adapter.save(pack(List.of(
+                item("expired", "doc-expired", 0.91, cutoff.minusSeconds(1)),
+                item("retained", "doc-retained", 0.82, cutoff.plusSeconds(1)),
+                item("manual-retain", "doc-manual", 0.72, null))));
+
+        int deleted = adapter.deleteExpiredItems("context-pack-1", cutoff);
+
+        assertThat(deleted).isEqualTo(1);
+        assertThat(adapter.listItems("context-pack-1"))
+                .extracting(ContextItem::itemId)
+                .containsExactly("manual-retain", "retained");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT item_count FROM sa_context_pack WHERE context_pack_id = ?",
+                Integer.class,
+                "context-pack-1")).isEqualTo(2);
+    }
+
     private DriverManagerDataSource dataSource(String name) {
         return new DriverManagerDataSource(
                 "jdbc:h2:mem:" + name + "-" + System.nanoTime() + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
@@ -146,6 +171,10 @@ class JdbcContextPackRepositoryAdapterTests {
     }
 
     private static ContextItem item(String itemId, String sourceId, double score) {
+        return item(itemId, sourceId, score, null);
+    }
+
+    private static ContextItem item(String itemId, String sourceId, double score, Instant expiresAt) {
         return new ContextItem(
                 itemId,
                 "context-pack-1",
@@ -159,7 +188,7 @@ class JdbcContextPackRepositoryAdapterTests {
                 "decision-" + sourceId,
                 "{\"sourceId\":\"" + sourceId + "\"}",
                 64,
-                null,
+                expiresAt,
                 CREATED_AT);
     }
 }

@@ -157,6 +157,7 @@ class LocalToolGatewayPortAuditTests {
         ApprovalRequest approval = approvals.saved.get(0);
         assertEquals(ApprovalRequestStatus.PENDING, approval.status());
         assertEquals(ApprovalType.TOOL_EXECUTION, approval.approvalType());
+        assertEquals("rollout-1", audit.requested.get(0).rolloutId());
         assertEquals("run-1", approval.runId());
         assertEquals("step-1", approval.stepId());
         assertEquals(audit.requested.get(0).invocationId(), approval.toolInvocationId());

@@ -32,6 +32,7 @@ import java.util.Objects;
  * @param toolCallId        模型返回的 tool_call ID，用于把 observation 回填给模型
  * @param agentId           Agent 定义 ID；兼容 legacy ReAct 运行时的默认 Agent
  * @param versionId         Agent 发布版本 ID，后续用于版本级工具绑定与策略回放
+ * @param rolloutId         Agent 灰度发布 ID，用于把工具审批、审计和成本归因到同一次发布
  * @param tenantId          租户 ID，用于租户隔离、配额和策略裁决
  * @param userId            最终用户 ID，用于用户权限、审计和配额判断
  * @param agentIdentityId   Agent 执行身份 ID，用于区分“用户本人权限”和“代理身份权限”

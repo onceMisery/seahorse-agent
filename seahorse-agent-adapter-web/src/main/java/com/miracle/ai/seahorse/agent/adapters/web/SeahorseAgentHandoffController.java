@@ -83,6 +83,7 @@ public class SeahorseAgentHandoffController {
                                        AgentHandoffStatus status,
                                        AgentHandoffFailureCode failureCode,
                                        String handoffReason,
+                                       String contextPackId,
                                        Instant createdAt,
                                        Instant updatedAt,
                                        Instant finishedAt) {
@@ -98,6 +99,7 @@ public class SeahorseAgentHandoffController {
                     handoff.status(),
                     handoff.failureCode(),
                     handoff.handoffReason(),
+                    handoff.contextPackId(),
                     handoff.createdAt(),
                     handoff.updatedAt(),
                     handoff.finishedAt());

@@ -102,6 +102,7 @@ public class JdbcTenantSchemaUpgrade {
         upgradeSandboxSessionRuntimeGovernance();
         upgradeSandboxArtifactScanSummary();
         upgradeSandboxArtifactRedactionSummary();
+        upgradeToolInvocationRolloutAttribution();
         upgradeSandboxRuntimeProfilePolicy();
         upgradeAiModelConfigUniqueness();
         enableRowLevelSecurity();
@@ -202,6 +203,21 @@ public class JdbcTenantSchemaUpgrade {
             return;
         }
         addColumnIfMissing("sa_sandbox_artifact", "redaction_summary_json", "VARCHAR(2048)");
+    }
+
+    private void upgradeToolInvocationRolloutAttribution() {
+        if (!tableExists("sa_tool_invocation")) {
+            return;
+        }
+        addColumnIfMissing("sa_tool_invocation", "rollout_id", "VARCHAR(64)");
+        try {
+            jdbcTemplate.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_sa_tool_invocation_rollout
+                      ON sa_tool_invocation(tenant_id, agent_id, rollout_id, started_at)
+                    """);
+        } catch (Exception e) {
+            log.warn("[TenantSchema] repair sa_tool_invocation rollout index failed: {}", e.getMessage());
+        }
     }
 
     private void upgradeSandboxRuntimeProfilePolicy() {

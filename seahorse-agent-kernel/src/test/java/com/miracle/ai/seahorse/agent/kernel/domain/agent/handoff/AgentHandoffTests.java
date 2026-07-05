@@ -58,6 +58,7 @@ class AgentHandoffTests {
                 status,
                 failureCode,
                 "delegate analysis",
+                "context-pack-1",
                 "{\"input\":\"summary\"}",
                 "{\"items\":[]}",
                 NOW,

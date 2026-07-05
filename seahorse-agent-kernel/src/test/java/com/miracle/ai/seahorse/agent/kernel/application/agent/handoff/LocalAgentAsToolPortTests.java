@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.handoff;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
@@ -45,6 +47,7 @@ class LocalAgentAsToolPortTests {
 
     private static final Instant NOW = Instant.parse("2026-05-26T00:00:00Z");
     private static final Clock FIXED_CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Test
     void shouldCreateChildRunOnlyThroughRunPort() {
@@ -79,6 +82,36 @@ class LocalAgentAsToolPortTests {
         assertEquals(AgentHandoffStatus.RUNNING, handoff.status());
         assertEquals("parent-run-1", handoff.parentRunId());
         assertEquals("child-run-1", handoff.childRunId());
+    }
+
+    @Test
+    void shouldReturnValidJsonWhenContextPackIdContainsControlCharacters() throws Exception {
+        MemoryAgentHandoffRepository repository = new MemoryAgentHandoffRepository();
+        RecordingRunPort runPort = new RecordingRunPort();
+        KernelAgentHandoffService service = new KernelAgentHandoffService(
+                repository,
+                runPort,
+                new DefaultMeshPolicyPort(),
+                FIXED_CLOCK);
+        LocalAgentAsToolPort tool = new LocalAgentAsToolPort(service);
+
+        ToolInvocationResult result = tool.invoke("call-1", LocalAgentAsToolPort.TOOL_ID, Map.of(
+                "tenantId", "tenant-1",
+                "parentRunId", "parent-run-1",
+                "sourceAgentId", "source-agent",
+                "targetAgentId", "target-agent",
+                "targetVersionId", "target-version-1",
+                "contextPackId", "context-pack-\t1",
+                "inputSummary", "line one\nline two",
+                "contextSummaryJson", "{\"items\":[{\"text\":\"line one\\nline two\"}]}",
+                "depth", 1,
+                "ancestorAgentIds", List.of("source-agent")));
+
+        JsonNode json = OBJECT_MAPPER.readTree(result.content());
+        assertTrue(result.success());
+        assertEquals("child-run-1", json.get("childRunId").asText());
+        assertEquals("context-pack-\t1", json.get("contextPackId").asText());
+        assertEquals("RUNNING", json.get("status").asText());
     }
 
     private static final class MemoryAgentHandoffRepository implements AgentHandoffRepositoryPort {

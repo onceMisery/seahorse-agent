@@ -18,12 +18,8 @@
     <dependencies>
         <dependency>
             <groupId>com.miracle.ai</groupId>
-            <artifactId>seahorse-agent-kernel</artifactId>
+            <artifactId>seahorse-agent-adapter-agent-agentscope-core</artifactId>
             <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.agentscope</groupId>
-            <artifactId>agentscope</artifactId>
         </dependency>
         <dependency>
             <groupId>io.agentscope</groupId>

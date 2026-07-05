@@ -224,5 +224,10 @@ class KernelContextPackBuilderServiceTests {
                     .sorted(Comparator.comparing(ContextItem::itemId))
                     .toList();
         }
+
+        @Override
+        public int deleteExpiredItems(String contextPackId, Instant cutoff) {
+            return 0;
+        }
     }
 }

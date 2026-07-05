@@ -114,6 +114,39 @@ class JdbcTenantSchemaUpgradeTests {
     }
 
     @Test
+    void shouldAddToolInvocationRolloutAttributionForExistingTable() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:tenant-schema-upgrade-tool-invocation-" + System.nanoTime()
+                        + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+                "sa",
+                "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.execute("""
+                CREATE TABLE sa_tool_invocation (
+                    invocation_id VARCHAR(64) PRIMARY KEY,
+                    run_id VARCHAR(64) NOT NULL,
+                    step_id VARCHAR(64) NOT NULL,
+                    agent_id VARCHAR(64),
+                    version_id VARCHAR(64),
+                    tenant_id VARCHAR(64) NOT NULL,
+                    user_id VARCHAR(64) NOT NULL,
+                    tool_id VARCHAR(128) NOT NULL,
+                    idempotency_key VARCHAR(128),
+                    status VARCHAR(32) NOT NULL,
+                    started_at TIMESTAMP NOT NULL
+                )
+                """);
+
+        JdbcTenantSchemaUpgrade upgrade = new JdbcTenantSchemaUpgrade(dataSource);
+        upgrade.upgrade();
+        upgrade.upgrade();
+
+        assertThat(columnExists(jdbcTemplate, "sa_tool_invocation", "rollout_id")).isTrue();
+        assertThat(isNullable(jdbcTemplate, "sa_tool_invocation", "rollout_id")).isEqualTo("YES");
+        assertThat(indexExists(jdbcTemplate, "sa_tool_invocation", "idx_sa_tool_invocation_rollout")).isTrue();
+    }
+
+    @Test
     void shouldCreateSandboxRuntimeProfilePolicyTableWhenMissing() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:tenant-schema-upgrade-sandbox-runtime-profile-" + System.nanoTime()

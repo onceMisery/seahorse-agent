@@ -34,11 +34,23 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationStat
 public record ToolInvocationAuditQuery(String tenantId,
                                        String agentId,
                                        String versionId,
+                                       String rolloutId,
                                        String runId,
                                        String toolId,
                                        ToolInvocationStatus status,
                                        long current,
                                        long size) {
+
+    public ToolInvocationAuditQuery(String tenantId,
+                                    String agentId,
+                                    String versionId,
+                                    String runId,
+                                    String toolId,
+                                    ToolInvocationStatus status,
+                                    long current,
+                                    long size) {
+        this(tenantId, agentId, versionId, null, runId, toolId, status, current, size);
+    }
 
     public static final long DEFAULT_CURRENT = 1L;
     public static final long DEFAULT_PAGE_SIZE = 10L;
@@ -47,6 +59,7 @@ public record ToolInvocationAuditQuery(String tenantId,
         tenantId = trimToNull(tenantId);
         agentId = trimToNull(agentId);
         versionId = trimToNull(versionId);
+        rolloutId = trimToNull(rolloutId);
         runId = trimToNull(runId);
         toolId = trimToNull(toolId);
         current = current <= 0 ? DEFAULT_CURRENT : current;

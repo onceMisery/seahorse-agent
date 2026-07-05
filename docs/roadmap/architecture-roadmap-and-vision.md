@@ -343,3 +343,29 @@ Fresh evidence: focused model bridge and auto-configuration regressions passed 2
 The P2 deployment verification item is now closed by `scripts/deployment-evidence-gate.ps1`, which aggregates the existing full-Docker deployment smokes for S3 storage switching, Pulsar consume-loop processing, RAG strategy promotion, and Agent rollout promotion. The gate runs each smoke in an isolated PowerShell process, records per-step exit codes and durations, and fails closed when no steps are selected or when any child smoke fails.
 
 Fresh evidence: PowerShell parsing returned `PSParser OK`; the script contract regression passed 1/1; and `.\scripts\deployment-evidence-gate.ps1 -BackendBaseUrl http://127.0.0.1:9090 -FrontendBaseUrl http://127.0.0.1 -Password admin123 -BackendImage seahorse-agent-backend` passed with `DEPLOYMENT_EVIDENCE_GATE=PASS`. The run verified S3 attachment upload/list/delete against MinIO and PostgreSQL, Pulsar publish/consume/ack counters and document materialization, RAG strategy promotion with audit evidence, and Agent rollout missing-gate failure plus successful full promotion with audit evidence. The temporary S3 smoke backend was removed after the run.
+
+## 2026-07-05 Update: Context Pack Retention Cleanup
+
+Context Pack productization now has a narrow executable retention cleanup path. The existing `expiresAt` item contract is enforced by `POST /api/context-packs/{contextPackId}/items:cleanup-expired`, which deletes expired items, keeps manually retained items with no expiry, refreshes `item_count`, and reuses the existing admin/owner access guard. The admin Context Pack page exposes the cleanup action and refreshes the pack and item table after execution.
+
+This advances the roadmap's Pack Retention acceptance surface only. Pack Diff, handoff context transfer, scheduled retention jobs, and tenant policy editing remain follow-up Context Pack productization work.
+
+Fresh evidence: focused Java regression passed with reactor `BUILD SUCCESS` across kernel, JDBC repository, Web controller, and autoconfigure Context Pack coverage; frontend capability contracts passed 12/12; and `npm run build` completed with only existing Browserslist/chunk-size warnings.
+
+## 2026-07-05 Update: Context Pack Diff
+
+Context Pack productization now includes a Pack Diff path. `GET /api/context-packs/{contextPackId}/diff?rightContextPackId=...` compares readable packs by stable source key (`sourceType:sourceId`) and returns added, removed, changed, and unchanged counts with changed field names and left/right item payloads. The admin Context Pack page can query a right-side pack and render a compact diff summary plus changed field list.
+
+This advances the roadmap's Pack Diff acceptance surface only. Handoff context transfer, richer side-by-side item visualization, scheduled retention cleanup, and tenant policy editing remain follow-up Context Pack productization work.
+
+Fresh evidence: focused Java regression passed with reactor `BUILD SUCCESS` across kernel, Web controller, and autoconfigure Context Pack coverage; frontend capability contracts passed 12/12; and `npm run build` completed with only existing Browserslist/chunk-size warnings.
+
+## 2026-07-05 Update: Context Pack Handoff Reference
+
+Context Pack productization now includes a narrow handoff transfer reference. `local_agent_handoff` accepts `contextPackId`, `AgentHandoffCreateCommand` carries it into the kernel, `AgentHandoff` persists it, and child A2A runs receive handoff metadata containing `handoffId`, `parentRunId`, `contextPackId`, and the reduced `contextSummaryJson` snapshot. The JDBC handoff repository stores `context_pack_id` through migration `V53__agent_handoff_context_pack_reference.sql`, and the Web API returns `contextPackId` on handoff list/detail/cancel responses while still omitting raw `inputSummaryJson` and `contextSummaryJson`.
+
+The admin Agent Inspector handoff table now uses the backend handoff contract directly, including `sourceAgentId`, `targetAgentId`, backend status values, `handoffReason`, and `contextPackId`. This advances the roadmap's handoff context transfer acceptance surface by making delegated child runs traceable back to the Context Pack asset used for reduced transfer.
+
+This is a transfer-reference slice only. It does not clone Context Pack rows for child runs, add a full side-by-side handoff context viewer, introduce tenant-specific handoff transfer policies, or perform a full-Docker multi-agent handoff E2E.
+
+Fresh evidence: focused Java regression passed with reactor `BUILD SUCCESS` via `.\mvnw.cmd -pl seahorse-agent-kernel,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web -am "-Dtest=AgentHandoffTests,KernelAgentHandoffServiceTests,JdbcAgentHandoffRepositoryAdapterTests,SeahorseAgentHandoffControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`; frontend capability contracts passed 13/13 with agent handoff endpoint coverage; and `npm run build` completed with only existing Browserslist/chunk-size warnings.

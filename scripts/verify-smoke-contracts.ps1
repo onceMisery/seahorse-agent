@@ -1,7 +1,8 @@
 param(
     [string]$SmokeScript = "scripts/e2e-backend-smoke.ps1",
     [string]$RagEvaluationSmokeScript = "scripts/e2e-rag-evaluation-smoke.ps1",
-    [string]$FrontendDockerfile = "frontend/Dockerfile.frontend"
+    [string]$FrontendDockerfile = "frontend/Dockerfile.frontend",
+    [string]$BackendDockerfile = "Dockerfile.backend"
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,6 +27,13 @@ if (-not (Test-Path -LiteralPath $frontendDockerfilePath)) {
 }
 
 $frontendDockerfileContent = Get-Content -LiteralPath $frontendDockerfilePath -Raw
+
+$backendDockerfilePath = Join-Path (Get-Location) $BackendDockerfile
+if (-not (Test-Path -LiteralPath $backendDockerfilePath)) {
+    throw "Backend Dockerfile not found: $BackendDockerfile"
+}
+
+$backendDockerfileContent = Get-Content -LiteralPath $backendDockerfilePath -Raw
 
 $requiredSnippets = @(
     'Authorization = "Bearer $token"',
@@ -156,4 +164,18 @@ if ($missingFrontend.Count -gt 0 -or $forbiddenFrontend.Count -gt 0) {
     exit 1
 }
 
-Write-Host "Smoke contract check passed for $SmokeScript, $RagEvaluationSmokeScript, and $FrontendDockerfile"
+$requiredBackendDockerfileSnippets = @(
+    'COPY seahorse-agent-adapter-agent-agentscope-core/pom.xml seahorse-agent-adapter-agent-agentscope-core/',
+    'COPY seahorse-agent-adapter-agent-agentscope/pom.xml seahorse-agent-adapter-agent-agentscope/',
+    './mvnw dependency:go-offline -B -pl seahorse-agent-bootstrap -am -DskipTests'
+)
+
+$missingBackend = @($requiredBackendDockerfileSnippets | Where-Object { -not $backendDockerfileContent.Contains($_) })
+
+if ($missingBackend.Count -gt 0) {
+    Write-Host "Missing required backend Dockerfile snippets:" -ForegroundColor Red
+    $missingBackend | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    exit 1
+}
+
+Write-Host "Smoke contract check passed for $SmokeScript, $RagEvaluationSmokeScript, $FrontendDockerfile, and $BackendDockerfile"

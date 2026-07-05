@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,6 +31,8 @@ public interface ContextPackRepositoryPort {
     Optional<ContextPack> findById(String contextPackId);
 
     List<ContextItem> listItems(String contextPackId);
+
+    int deleteExpiredItems(String contextPackId, Instant cutoff);
 
     static ContextPackRepositoryPort empty() {
         return new ContextPackRepositoryPort() {
@@ -45,6 +48,11 @@ public interface ContextPackRepositoryPort {
             @Override
             public List<ContextItem> listItems(String contextPackId) {
                 return List.of();
+            }
+
+            @Override
+            public int deleteExpiredItems(String contextPackId, Instant cutoff) {
+                return 0;
             }
         };
     }

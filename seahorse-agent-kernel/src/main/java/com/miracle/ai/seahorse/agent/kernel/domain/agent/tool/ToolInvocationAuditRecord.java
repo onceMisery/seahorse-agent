@@ -41,6 +41,7 @@ public record ToolInvocationAuditRecord(String invocationId,
                                         String stepId,
                                         String agentId,
                                         String versionId,
+                                        String rolloutId,
                                         String tenantId,
                                         String userId,
                                         String toolId,
@@ -49,6 +50,33 @@ public record ToolInvocationAuditRecord(String invocationId,
                                         String argumentsSummary,
                                         Instant startedAt) {
 
+    public ToolInvocationAuditRecord(String invocationId,
+                                     String runId,
+                                     String stepId,
+                                     String agentId,
+                                     String versionId,
+                                     String tenantId,
+                                     String userId,
+                                     String toolId,
+                                     String idempotencyKey,
+                                     ToolInvocationStatus status,
+                                     String argumentsSummary,
+                                     Instant startedAt) {
+        this(invocationId,
+                runId,
+                stepId,
+                agentId,
+                versionId,
+                null,
+                tenantId,
+                userId,
+                toolId,
+                idempotencyKey,
+                status,
+                argumentsSummary,
+                startedAt);
+    }
+
     public ToolInvocationAuditRecord {
         invocationId = requireText(invocationId, "invocationId 不能为空");
         stepId = requireText(stepId, "stepId 不能为空");
@@ -56,6 +84,7 @@ public record ToolInvocationAuditRecord(String invocationId,
         runId = requireText(runId, "runId 不能为空");
         agentId = trimToNull(agentId);
         versionId = trimToNull(versionId);
+        rolloutId = trimToNull(rolloutId);
         tenantId = requireText(tenantId, "tenantId 不能为空");
         userId = requireText(userId, "userId 不能为空");
         idempotencyKey = trimToNull(idempotencyKey);

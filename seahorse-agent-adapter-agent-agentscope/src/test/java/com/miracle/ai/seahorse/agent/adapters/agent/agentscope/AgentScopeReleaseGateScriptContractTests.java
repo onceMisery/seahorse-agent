@@ -37,7 +37,10 @@ class AgentScopeReleaseGateScriptContractTests {
                 "[string]$MainUrl = \"http://127.0.0.1:9090/a2a\"",
                 "[string]$NacosServer = \"127.0.0.1:8848\"");
         assertThat(content).contains("mvn -pl seahorse-agent-adapter-agent-agentscope -am test");
-        assertThat(content).contains("AgentScopeReActExecutorTests", "A2aAgentRemoteInvokerTests");
+        assertThat(content).contains(
+                "AgentScopeCoreModuleBoundaryTests",
+                "AgentScopeReActExecutorTests",
+                "A2aAgentRemoteInvokerTests");
         assertThat(content).contains("\"-DfailIfNoTests=false\"", "\"-Dsurefire.failIfNoSpecifiedTests=false\"");
         assertThat(content).contains("agentscope-kernel-run-contracts");
         assertThat(content).contains("KernelChatAgentRunStoreTests");

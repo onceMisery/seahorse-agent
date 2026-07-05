@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.handoff;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditActorType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
@@ -53,6 +55,7 @@ class KernelAgentHandoffServiceTests {
 
     private static final Instant NOW = Instant.parse("2026-05-26T00:00:00Z");
     private static final Clock FIXED_CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Test
     void shouldCancelPendingHandoffIdempotently() {
@@ -96,6 +99,7 @@ class KernelAgentHandoffServiceTests {
                 "target-agent",
                 "target-version-1",
                 "delegate work",
+                "context-pack-1",
                 "raw secret-token input must not be audited",
                 "{\"items\":[]}",
                 1,
@@ -108,9 +112,52 @@ class KernelAgentHandoffServiceTests {
         assertEquals(AuditEventType.AGENT_HANDOFF_FINISHED, auditRepository.saved.get(1).eventType());
         assertEquals("parent-run-1", auditRepository.saved.get(0).runId());
         assertEquals("source-agent", auditRepository.saved.get(0).agentId());
+        assertEquals("context-pack-1", handoff.contextPackId());
+        assertEquals("context-pack-1", runPort.startedCommands.get(0).metadataJson()
+                .replaceAll(".*\"contextPackId\":\"([^\"]+)\".*", "$1"));
         assertFalse(auditRepository.saved.get(0).redactedPayload().contains("secret-token"));
         assertFalse(auditRepository.saved.get(0).redactedPayload().contains("raw"));
         assertFalse(auditRepository.saved.get(1).redactedPayload().contains("secret-token"));
+    }
+
+    @Test
+    void shouldSerializeHandoffMetadataAndAuditPayloadsAsValidJsonWithControlCharacters() throws Exception {
+        MemoryAgentHandoffRepository repository = new MemoryAgentHandoffRepository();
+        RecordingRunPort runPort = new RecordingRunPort();
+        RecordingAuditRepository auditRepository = new RecordingAuditRepository();
+        KernelAgentHandoffService service = new KernelAgentHandoffService(
+                repository,
+                runPort,
+                new DefaultMeshPolicyPort(),
+                new KernelAuditLedgerService(
+                        auditRepository,
+                        new AuditRedactionPolicy(),
+                        AuditWriteFailurePolicy.FAIL_CLOSED),
+                FIXED_CLOCK);
+
+        AgentHandoff handoff = service.createLocalHandoff(new AgentHandoffCreateCommand(
+                "tenant-1",
+                "parent-run-1",
+                "source-agent",
+                "target-agent",
+                "target-version-1",
+                "delegate \"quoted\"\nreason",
+                "context-pack-\t1",
+                "line one\nline two\twith tab",
+                "{\"items\":[{\"text\":\"line one\\nline two\"}]}",
+                1,
+                List.of("source-agent"),
+                "trace-1"));
+        service.cancel(handoff.handoffId());
+
+        JsonNode metadata = OBJECT_MAPPER.readTree(runPort.startedCommands.get(0).metadataJson());
+        assertEquals("context-pack-\t1", metadata.get("contextPackId").asText());
+        assertEquals("{\"items\":[{\"text\":\"line one\\nline two\"}]}",
+                metadata.get("contextSummaryJson").asText());
+        JsonNode createdAudit = OBJECT_MAPPER.readTree(auditRepository.saved.get(0).redactedPayload());
+        JsonNode finishedAudit = OBJECT_MAPPER.readTree(auditRepository.saved.get(1).redactedPayload());
+        assertEquals("context-pack-\t1", createdAudit.get("contextPackId").asText());
+        assertEquals("context-pack-\t1", finishedAudit.get("contextPackId").asText());
     }
 
     private static AgentHandoff handoff(String handoffId, AgentHandoffStatus status, String childRunId) {
@@ -124,6 +171,7 @@ class KernelAgentHandoffServiceTests {
                 status,
                 null,
                 "delegate work",
+                "context-pack-1",
                 "{\"input\":\"summary\"}",
                 "{\"items\":[]}",
                 NOW,
@@ -184,9 +232,11 @@ class KernelAgentHandoffServiceTests {
 
     private static final class RecordingRunPort implements AgentRunInboundPort {
         private final List<String> cancelledRunIds = new ArrayList<>();
+        private final List<AgentRunStartCommand> startedCommands = new ArrayList<>();
 
         @Override
         public AgentRun startRun(AgentRunStartCommand command) {
+            startedCommands.add(command);
             return run("child-run-1", command.agentId(), command.versionId(), command.tenantId());
         }
 
