@@ -209,6 +209,21 @@ class DefaultSandboxArtifactScannerPortTests {
     }
 
     @Test
+    void shouldBlockPdfArtifactWithImportDataAction(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("import-report.pdf");
+        Files.writeString(output, "%PDF-1.7\n1 0 obj\n<< /ImportData 2 0 R >>\nendobj", StandardCharsets.ISO_8859_1);
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/pdf")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("pdf active content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("PDF_ACTIVE_CONTENT", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("ImportData"));
+    }
+
+    @Test
     void shouldBlockPromptSafeBinaryArtifactWithSignatureMismatch(@TempDir Path tempDir) throws Exception {
         Path output = tempDir.resolve("report.pdf");
         Files.write(output, new byte[]{'P', 'K', 0x03, 0x04, 0, 0});
@@ -353,6 +368,23 @@ class DefaultSandboxArtifactScannerPortTests {
         JsonNode redactionSummary = redactionSummary(result);
         assertEquals("ARCHIVE_PDF_ACTIVE_CONTENT", redactionSummary.path("categories").get(0).asText());
         assertEquals(-1, result.redactionSummaryJson().indexOf("EmbeddedFile"));
+    }
+
+    @Test
+    void shouldBlockZipArchiveWithEmbeddedPdfExternalGoTo(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.zip");
+        writeZip(output,
+                "docs/report.pdf",
+                "%PDF-1.7\n1 0 obj\n<< /GoToE 2 0 R >>\nendobj".getBytes(StandardCharsets.ISO_8859_1));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/zip")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("archive pdf active content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("ARCHIVE_PDF_ACTIVE_CONTENT", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("GoToE"));
     }
 
     @Test
