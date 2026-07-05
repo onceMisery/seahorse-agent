@@ -527,6 +527,8 @@ class ContainerSandboxRuntimeAdapterTests {
                                     "return \"<redacted-url>\"",
                                     "redacted += \"?<redacted-userinfo>\"",
                                     "\"url\": redacted_har_url(request.url)",
+                                    "\"url\": redacted_har_url(current_url)",
+                                    "\"url\": redacted_har_url(page.url)",
                                     "\"blocked\": blocked",
                                     "if has_credential_url_parts(url):",
                                     "return origin_key(url) == target_origin",

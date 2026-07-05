@@ -628,7 +628,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     return {
                         "source": "url" if target_url else "html",
                         "targetUrl": target_url or None,
-                        "url": current_url,
+                        "url": redacted_har_url(current_url),
                         "cookies": {
                             "count": len(cookies),
                             "domains": sorted({cookie.get("domain") for cookie in cookies if cookie.get("domain")}),
@@ -744,7 +744,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             "action": action,
                             "source": "url" if target_url else "html",
                             "title": title,
-                            "url": page.url,
+                            "url": redacted_har_url(page.url),
                             "targetUrl": target_url or None,
                             "allowedHosts": sorted(allowed_hosts),
                             "cookies": {

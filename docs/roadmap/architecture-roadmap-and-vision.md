@@ -511,6 +511,8 @@ Blocked credential-bearing route URLs are also redacted before entering the gene
 
 HAR event URL recording now also shortens allowed internal `data:` and `blob:` pseudo-URLs to value-free markers, keeping inline data and blob identifiers out of governed network artifacts while preserving the route allow/abort decision.
 
+The browser result and captured session summary now apply the same value-free URL redaction to the final `page.url`, so page-side History API changes cannot move credential query strings, fragments, `data:`, or `blob:` payloads into governed JSON artifacts after navigation.
+
 This is a narrow runtime egress hardening slice. It does not add a general outbound proxy, per-path URL policy UX, DNS pinning, CIDR/private-network classification, or long-lived browser profile management.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 40/40.
