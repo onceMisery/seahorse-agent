@@ -333,6 +333,14 @@ class KernelOpenApiConnectorImportServiceTests {
         assertTrue(auditRepository.events.stream()
                 .map(AuditEvent::redactedPayload)
                 .noneMatch(payload -> payload.contains("bearer-token") || payload.contains("secret-value")));
+        assertTrue(auditRepository.events.stream()
+                .filter(event -> event.eventType() == AuditEventType.CONNECTOR_CREDENTIAL_BOUND)
+                .map(AuditEvent::redactedPayload)
+                .allMatch(payload -> payload.contains("\"credentialRefPresent\":true")));
+        assertTrue(auditRepository.events.stream()
+                .filter(event -> event.eventType() == AuditEventType.CONNECTOR_CREDENTIAL_BOUND)
+                .map(AuditEvent::redactedPayload)
+                .noneMatch(payload -> payload.contains("secret-ref-1")));
     }
 
     private static KernelOpenApiConnectorImportService service(ConnectorRepositoryPort connectorRepository,

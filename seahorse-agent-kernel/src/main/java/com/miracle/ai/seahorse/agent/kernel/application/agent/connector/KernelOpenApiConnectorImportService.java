@@ -231,8 +231,8 @@ public class KernelOpenApiConnectorImportService implements OpenApiConnectorInbo
                 RESOURCE_TYPE_CONNECTOR_OPERATION,
                 operationId,
                 """
-                        {"connectorId":"%s","operationId":"%s","authType":"%s","credentialRef":"%s","boundBy":"%s"}
-                        """.formatted(connectorId, operationId, authType.name(), credentialRef, boundBy));
+                        {"connectorId":"%s","operationId":"%s","authType":"%s","credentialRefPresent":true,"boundBy":"%s"}
+                        """.formatted(connectorId, operationId, authType.name(), boundBy));
         return binding;
     }
 

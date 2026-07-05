@@ -716,3 +716,11 @@ Tool Gateway request audit now emits an `openapi_` dynamic-tool-specific value-f
 This is a narrow cross-provider audit hardening slice. It does not change OpenAPI connector import, credential injection, HTTP invocation, response redaction, approval policy, or quota policy semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed after adding regression coverage that OpenAPI audit summaries include governance metadata while excluding path/query/parameter/header/body secret markers.
+
+## 2026-07-06 Update: OpenAPI Credential Binding Audit Minimization
+
+OpenAPI connector credential-binding audit events now record `credentialRefPresent=true` instead of embedding the credential reference value in the audit payload. Runtime credential binding storage still preserves the reference for invocation-time resolution, but the governance audit source payload no longer carries the secret reference itself.
+
+This is a narrow cross-provider audit minimization slice. It does not change credential binding rotation, credential provider resolution, connector operation enablement, Tool Gateway invocation, or redaction policy semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelOpenApiConnectorImportServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed after adding regression coverage that connector credential-binding audit events include the presence marker while excluding the raw `secret-ref` value.
