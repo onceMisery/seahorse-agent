@@ -157,7 +157,7 @@ class BuiltInAgentToolRegistrarTests {
             assertThat(entry.resourceType()).isEqualTo("SANDBOX");
             assertThat(entry.riskLevel()).isEqualTo(ToolRiskLevel.HIGH);
             assertThat(entry.enabled()).isTrue();
-            assertThat(entry.requiresApproval()).isFalse();
+            assertThat(entry.requiresApproval()).isTrue();
         });
         assertThat(catalog.findById(SandboxFileConvertToolPortAdapter.TOOL_ID)).hasValueSatisfying(entry -> {
             assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
@@ -165,7 +165,7 @@ class BuiltInAgentToolRegistrarTests {
             assertThat(entry.resourceType()).isEqualTo("SANDBOX");
             assertThat(entry.riskLevel()).isEqualTo(ToolRiskLevel.HIGH);
             assertThat(entry.enabled()).isTrue();
-            assertThat(entry.requiresApproval()).isFalse();
+            assertThat(entry.requiresApproval()).isTrue();
         });
         assertThat(catalog.findById(SandboxBrowserToolPortAdapter.TOOL_ID)).hasValueSatisfying(entry -> {
             assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
@@ -173,7 +173,7 @@ class BuiltInAgentToolRegistrarTests {
             assertThat(entry.resourceType()).isEqualTo("SANDBOX");
             assertThat(entry.riskLevel()).isEqualTo(ToolRiskLevel.HIGH);
             assertThat(entry.enabled()).isTrue();
-            assertThat(entry.requiresApproval()).isFalse();
+            assertThat(entry.requiresApproval()).isTrue();
         });
 
         context.close();

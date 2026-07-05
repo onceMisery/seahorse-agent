@@ -692,3 +692,11 @@ Tool Gateway request audit now emits a `sandbox_python`-specific value-free argu
 This is a narrow Tool Gateway audit hardening slice for the existing Code Interpreter path. It does not change sandbox execution, network enforcement, artifact scanning, approval policy, or quota policy.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed after adding regression coverage that `sandbox_python` audit summaries include governance metadata while excluding raw code markers.
+
+## 2026-07-06 Update: Sandbox Built-in Tool Catalog Approval Defaults
+
+Built-in sandbox tools now enter the Tool Catalog with `requiresApproval=true` while keeping their existing `HIGH` risk level, `EXECUTE` action type, and `SANDBOX` resource type. This closes the gap where `sandbox_python`, `sandbox_file_convert`, and `sandbox_browser` were cataloged as high-risk but not explicitly approval-required, even though the policy layer only enforces approval from catalog flags, critical risk, or specific action types.
+
+This is a catalog-registration hardening slice only. It does not change sandbox execution behavior, per-agent binding limits, quota policy semantics, MCP/OpenAPI registration, or non-sandbox built-in tool defaults.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-Dtest=BuiltInAgentToolRegistrarTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed after updating regression coverage that all three built-in sandbox tools are saved with `requiresApproval=true`.

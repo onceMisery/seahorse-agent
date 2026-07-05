@@ -110,7 +110,7 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
                 resourceType(descriptor.toolId()),
                 "kernel-agent",
                 true,
-                false,
+                requiresApproval(descriptor.toolId()),
                 now,
                 now);
     }
@@ -162,5 +162,9 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
         return SandboxPythonToolPortAdapter.TOOL_ID.equals(toolId)
                 || SandboxFileConvertToolPortAdapter.TOOL_ID.equals(toolId)
                 || SandboxBrowserToolPortAdapter.TOOL_ID.equals(toolId);
+    }
+
+    private boolean requiresApproval(String toolId) {
+        return isSandboxTool(toolId);
     }
 }
