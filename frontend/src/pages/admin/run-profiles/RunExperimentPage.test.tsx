@@ -142,6 +142,11 @@ describe("RunExperimentPage", () => {
     });
     expect(window.URL.createObjectURL).toHaveBeenCalled();
     expect(window.URL.revokeObjectURL).toHaveBeenCalledWith("blob:run-experiment-report");
+    expect(await screen.findByText("Report preview")).toBeInTheDocument();
+    expect(screen.getByText("profile-compare-1.md")).toBeInTheDocument();
+    expect(screen.getByText("text/markdown; charset=UTF-8")).toBeInTheDocument();
+    expect(screen.getByText("23 chars")).toBeInTheDocument();
+    expect(screen.getByText("# Run Experiment Report")).toBeInTheDocument();
   });
 });
 

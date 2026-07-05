@@ -14,6 +14,7 @@ import {
   getRunExperimentReport,
   scoreRunExperimentTrial,
   type RunExperimentDetails,
+  type RunExperimentReport,
   type RunExperimentTrialVO
 } from "@/services/runExperimentService";
 import { listRunProfiles, type RunProfileVO } from "@/services/runProfileService";
@@ -124,6 +125,7 @@ export function RunExperimentPage() {
   const [operating, setOperating] = useState(false);
   const [scoreTrialId, setScoreTrialId] = useState<number | string | null>(null);
   const [scoreJson, setScoreJson] = useState("{\"rating\":5}");
+  const [latestReport, setLatestReport] = useState<RunExperimentReport | null>(null);
   const profileById = useMemo(() => {
     const entries = profiles.map((profile) => [String(profile.id), profile] as const);
     return new Map(entries);
@@ -179,6 +181,7 @@ export function RunExperimentPage() {
         runProfileIds: form.runProfileIds
       });
       setExperiment(details);
+      setLatestReport(null);
       toast.success("实验已创建");
     } catch (error) {
       toast.error(getErrorMessage(error, "发起实验失败"));
@@ -235,6 +238,7 @@ export function RunExperimentPage() {
     try {
       setOperating(true);
       const report = await getRunExperimentReport(experiment.experiment.id);
+      setLatestReport(report);
       const blob = new Blob([report.markdown], {
         type: report.contentType || "text/markdown;charset=utf-8"
       });
@@ -511,6 +515,25 @@ export function RunExperimentPage() {
                     </TableBody>
                   </Table>
                 </div>
+                {latestReport ? (
+                  <div className="rounded-md border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-900">Report preview</h3>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {latestReport.fileName || `run-experiment-${experiment.experiment.id}.md`}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        <Badge variant="secondary">{latestReport.contentType || "text/markdown"}</Badge>
+                        <Badge variant="secondary">{latestReport.markdown.length} chars</Badge>
+                      </div>
+                    </div>
+                    <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-white p-3 font-mono text-xs leading-5 text-slate-700">
+                      {latestReport.markdown}
+                    </pre>
+                  </div>
+                ) : null}
               </>
             )}
           </CardContent>
