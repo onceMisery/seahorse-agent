@@ -298,6 +298,52 @@ $report = Test-Step "Export run experiment report" {
 }
 if (-not $report) { exit 1 }
 
+$negativeExperiment = Test-Step "Create missing-leaf experiment and export failure report" {
+    $missingLeafId = 999999999999
+    $body = @{
+        conversationId = [Int64]$conversationId
+        baseLeafMessageId = [Int64]$missingLeafId
+        name = "e2e-run-experiment-missing-leaf-$(Get-Date -Format yyyyMMddHHmmss)"
+        runProfileIds = @([Int64]$RunProfileIds[0])
+    } | ConvertTo-Json -Compress
+    $response = Invoke-RestMethod -Uri "$BaseUrl/api/run-experiments" `
+        -Method Post -ContentType "application/json" -Body $body -Headers $headers -TimeoutSec 120
+    Assert-ApiOk $response "Create missing-leaf run experiment"
+    if (-not $response.data.experiment.id) {
+        throw "Missing-leaf experiment response did not include experiment id"
+    }
+    Assert-Equal $response.data.experiment.status "FAILED" "Missing-leaf experiment status"
+    $trials = @($response.data.trials)
+    Assert-Equal $trials.Count 1 "Missing-leaf trial count"
+    Assert-Equal $trials[0].status "FAILED" "Missing-leaf trial status"
+    if ("$($trials[0].errorMessage)" -notlike "*base leaf message not found*") {
+        throw "Missing-leaf trial error did not include base leaf reason: $($trials[0].errorMessage)"
+    }
+
+    $reportResponse = Invoke-RestMethod -Uri "$BaseUrl/api/run-experiments/$($response.data.experiment.id)/report" `
+        -Headers $headers
+    Assert-ApiOk $reportResponse "Export missing-leaf run experiment report"
+    $markdown = "$($reportResponse.data.markdown)"
+    foreach ($expected in @(
+            "Run Experiment Report",
+            "e2e-run-experiment-missing-leaf",
+            "Failed: 1",
+            "base leaf message not found",
+            "Output message ID: -",
+            "Message branch: not resolved"
+        )) {
+        if ($markdown -notlike "*$expected*") {
+            throw "Missing-leaf report markdown did not include '$expected': $markdown"
+        }
+    }
+    @{
+        ExperimentId = "$($response.data.experiment.id)"
+        TrialId = "$($trials[0].id)"
+        ReportFile = "$($reportResponse.data.fileName)"
+    }
+}
+if (-not $negativeExperiment) { exit 1 }
+
 Test-Step "Verify database experiment state" {
     $experimentRows = @(Invoke-DbRows "select status, conversation_id, base_leaf_message_id from sa_run_experiment where id = $($experiment.experiment.id) and deleted = 0;")
     if ($experimentRows.Count -ne 1) {
@@ -352,6 +398,9 @@ Write-Host "Experiment ID: $($experiment.experiment.id)"
 Write-Host "Forked trial ID: $($fork.TrialId)"
 Write-Host "Forked output message ID: $($fork.OutputMessageId)"
 Write-Host "Report file: $($report.fileName)"
+Write-Host "Missing-leaf experiment ID: $($negativeExperiment.ExperimentId)"
+Write-Host "Missing-leaf trial ID: $($negativeExperiment.TrialId)"
+Write-Host "Missing-leaf report file: $($negativeExperiment.ReportFile)"
 
 if ($failed -gt 0) {
     exit 1
