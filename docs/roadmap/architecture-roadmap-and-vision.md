@@ -554,3 +554,11 @@ The sandbox browser URL runtime script now bounds captured Playwright storage-st
 This is a narrow resource-boundary guard for request-scoped session capture. It does not add stored browser profiles, credential vault integration, replay from previously captured SECRET/BLOCKED artifacts, proxy-rich egress audit, or operator-managed URL policy UX.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 44/44; `git diff --check` passed.
+
+## 2026-07-06 Update: Run Experiment Failure Report Hardening
+
+Run Experiment report export now handles failed trials that have no output message and no executor error message. The output comparison section no longer dereferences a null `outputMessageId`, and the failures section treats `FAILED` trial status as reportable evidence even when the executor returned an empty error, using a stable `FAILED - no failure message recorded` explanation.
+
+This is a narrow P1 report hardening slice for the existing report export path. It does not add new report formats, frontend previews, persisted report metadata, or full-Docker report export evidence.
+
+Fresh evidence: the new focused regression first failed with a report export `NullPointerException`; after the fix, `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=KernelRunExperimentServiceTests#shouldExplainFailedTrialEvenWhenExecutorDoesNotReturnErrorMessage" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 1/1, and `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=KernelRunExperimentServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 7/7.

@@ -309,7 +309,7 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         report.append("## Output Comparison\n\n");
         String baseline = firstOutputContent(trials, outputMessages);
         for (RunExperimentTrialRecord trial : trials) {
-            ConversationMessageRecord message = outputMessages.get(trial.getOutputMessageId());
+            ConversationMessageRecord message = outputMessage(outputMessages, trial.getOutputMessageId());
             String content = message == null ? "" : Objects.requireNonNullElse(message.getContent(), "");
             report.append("### Trial ").append(valueOrDash(trial.getId())).append("\n\n");
             report.append("- Run profile: ").append(valueOrDash(trial.getRunProfileId())).append("\n");
@@ -328,7 +328,8 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
     private void appendFailures(StringBuilder report, List<RunExperimentTrialRecord> trials) {
         report.append("## Failures\n\n");
         List<RunExperimentTrialRecord> failedTrials = trials.stream()
-                .filter(trial -> trial.getErrorMessage() != null && !trial.getErrorMessage().isBlank())
+                .filter(trial -> STATUS_FAILED.equalsIgnoreCase(trial.getStatus())
+                        || (trial.getErrorMessage() != null && !trial.getErrorMessage().isBlank()))
                 .toList();
         if (failedTrials.isEmpty()) {
             report.append("- None recorded.\n");
@@ -337,11 +338,18 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                 report.append("- Trial ")
                         .append(valueOrDash(trial.getId()))
                         .append(": ")
-                        .append(markdownText(trial.getErrorMessage()))
+                        .append(markdownText(failureExplanation(trial)))
                         .append("\n");
             }
         }
         report.append("\n");
+    }
+
+    private String failureExplanation(RunExperimentTrialRecord trial) {
+        if (trial.getErrorMessage() != null && !trial.getErrorMessage().isBlank()) {
+            return trial.getErrorMessage();
+        }
+        return valueOrDash(trial.getStatus()) + " - no failure message recorded";
     }
 
     private void appendReproductionAppendix(
@@ -438,12 +446,21 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
     private String firstOutputContent(List<RunExperimentTrialRecord> trials,
                                       Map<Long, ConversationMessageRecord> outputMessages) {
         for (RunExperimentTrialRecord trial : trials) {
-            ConversationMessageRecord message = outputMessages.get(trial.getOutputMessageId());
+            ConversationMessageRecord message = outputMessage(outputMessages, trial.getOutputMessageId());
             if (message != null) {
                 return Objects.requireNonNullElse(message.getContent(), "");
             }
         }
         return "";
+    }
+
+    private ConversationMessageRecord outputMessage(
+            Map<Long, ConversationMessageRecord> outputMessages,
+            Long outputMessageId) {
+        if (outputMessageId == null || outputMessages == null || outputMessages.isEmpty()) {
+            return null;
+        }
+        return outputMessages.get(outputMessageId);
     }
 
     private String diffAgainstBaseline(String baseline, String content) {

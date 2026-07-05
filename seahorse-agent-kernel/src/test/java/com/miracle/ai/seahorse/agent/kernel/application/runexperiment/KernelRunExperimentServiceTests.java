@@ -262,6 +262,28 @@ class KernelRunExperimentServiceTests {
         assertEquals("run-exp-1-trial-10", costRepository.query.runId());
     }
 
+    @Test
+    void shouldExplainFailedTrialEvenWhenExecutorDoesNotReturnErrorMessage() {
+        InMemoryRunExperimentRepository repository = new InMemoryRunExperimentRepository();
+        RunExperimentTrialExecutorPort executor = request -> RunExperimentTrialExecutionResult.builder()
+                .status("FAILED")
+                .runId("run-exp-1-trial-10")
+                .build();
+        KernelRunExperimentService service = new KernelRunExperimentService(repository, executor);
+
+        RunExperimentDetails details = service.create(RunExperimentCommand.builder()
+                .userId("100")
+                .conversationId(101L)
+                .name("Profile compare")
+                .runProfileIds(List.of(12L))
+                .build());
+
+        RunExperimentReport report = service.exportReport("100", details.getExperiment().getId());
+
+        assertTrue(report.markdown().contains("- Failed: 1"));
+        assertTrue(report.markdown().contains("Trial 10: FAILED - no failure message recorded"));
+    }
+
     private static final class InMemoryRunExperimentRepository implements RunExperimentRepositoryPort {
 
         private RunExperimentDetails details;
