@@ -707,11 +707,25 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                 || "localhost".equals(host)
                 || host.endsWith(".localhost")
                 || !host.contains(".")
+                || !hasValidDnsLabels(host)
                 || isIpv4Literal(host)
                 || host.chars().allMatch(Character::isDigit)) {
             throw new IllegalArgumentException("sandbox_browser failed: " + label
-                    + " must be a dotted DNS host, not localhost or an IP literal");
+                    + " must be a valid dotted DNS host, not localhost or an IP literal");
         }
+    }
+
+    private boolean hasValidDnsLabels(String host) {
+        String[] labels = host.split("\\.", -1);
+        for (String dnsLabel : labels) {
+            if (dnsLabel.isEmpty()
+                    || dnsLabel.length() > 63
+                    || dnsLabel.startsWith("-")
+                    || dnsLabel.endsWith("-")) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean isIpv4Literal(String host) {
