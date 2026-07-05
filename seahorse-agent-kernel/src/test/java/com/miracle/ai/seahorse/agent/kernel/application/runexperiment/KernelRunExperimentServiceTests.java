@@ -19,6 +19,11 @@ package com.miracle.ai.seahorse.agent.kernel.application.runexperiment;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageAggregate;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageRecord;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentCommand;
@@ -35,6 +40,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentT
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentTrialExecutionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentTrialExecutorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentTrialRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileToolBindingRecord;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -288,6 +296,39 @@ class KernelRunExperimentServiceTests {
         assertTrue(report.markdown().contains("Trial 10: FAILED - no failure message recorded"));
     }
 
+    @Test
+    void shouldExportFailureReportWhenRealExecutorCannotResolveBaseLeaf() {
+        InMemoryRunExperimentRepository repository = new InMemoryRunExperimentRepository();
+        InMemoryBranchRepository branchRepository = new InMemoryBranchRepository();
+        KernelRunExperimentTrialExecutor trialExecutor = new KernelRunExperimentTrialExecutor(
+                new FailingIfCalledExecutor(),
+                branchRepository,
+                new StaticRunProfileRepository());
+        KernelRunExperimentService service = new KernelRunExperimentService(
+                repository,
+                () -> trialExecutor,
+                branchRepository);
+
+        RunExperimentDetails details = service.create(RunExperimentCommand.builder()
+                .userId("100")
+                .conversationId(101L)
+                .baseLeafMessageId(999L)
+                .name("Missing base leaf")
+                .runProfileIds(List.of(12L))
+                .build());
+
+        assertEquals("FAILED", details.getExperiment().getStatus());
+        assertEquals("FAILED", details.getTrials().get(0).getStatus());
+        assertEquals("base leaf message not found", details.getTrials().get(0).getErrorMessage());
+
+        RunExperimentReport report = service.exportReport("100", details.getExperiment().getId());
+
+        assertTrue(report.markdown().contains("- Failed: 1"));
+        assertTrue(report.markdown().contains("Trial 10: base leaf message not found"));
+        assertTrue(report.markdown().contains("- Output message ID: -"));
+        assertTrue(report.markdown().contains("- Message branch: not resolved"));
+    }
+
     private static final class InMemoryRunExperimentRepository implements RunExperimentRepositoryPort {
 
         private RunExperimentDetails details;
@@ -443,6 +484,73 @@ class KernelRunExperimentServiceTests {
                 return new CostUsageAggregate(query.tenantId(), query.agentId(), query.runId(), 0, 0, 0, 0);
             }
             return new CostUsageAggregate(query.tenantId(), query.agentId(), query.runId(), 123, 2, 0.42, 1);
+        }
+    }
+
+    private static final class StaticRunProfileRepository implements RunProfileRepositoryPort {
+
+        @Override
+        public List<RunProfileRecord> listByUser(String userId) {
+            return List.of();
+        }
+
+        @Override
+        public Optional<RunProfileRecord> findById(String userId, Long id) {
+            RunProfileRecord record = new RunProfileRecord();
+            record.setId(id);
+            record.setUserId(userId);
+            record.setName("Kernel experiment profile");
+            record.setExecutorEngine("kernel");
+            record.setTenantId("default");
+            return Optional.of(record);
+        }
+
+        @Override
+        public Long save(RunProfileRecord record) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void replaceTools(Long profileId, List<RunProfileToolBindingRecord> tools) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<RunProfileToolBindingRecord> listTools(Long profileId) {
+            return List.of();
+        }
+
+        @Override
+        public void disableAll(String userId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void setEnabled(String userId, Long id, boolean enabled) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void delete(String userId, Long id) {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+    private static final class FailingIfCalledExecutor implements ReActExecutorPort {
+
+        @Override
+        public AgentLoopResult execute(AgentLoopRequest request) {
+            throw new AssertionError("executor should not run when base leaf is missing");
+        }
+
+        @Override
+        public StreamCancellationHandle streamExecute(AgentLoopRequest request, StreamCallback callback) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public String engineId() {
+            return "kernel";
         }
     }
 

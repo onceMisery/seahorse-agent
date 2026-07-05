@@ -582,3 +582,11 @@ Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=KernelRunExperimen
 The full-Docker run experiment smoke now asserts the same branch evidence in the exported report. The smoke checks `Message Branch`, `Trial branch leaves`, each trial `leaf=<outputMessageId>`, and each reproduction appendix `trial <id> -> leaf=<outputMessageId>` entry after report export.
 
 Fresh full-Docker evidence: `docker compose -f docker-compose.full.yml build --build-arg HTTP_PROXY=http://192.168.1.9:7890 --build-arg HTTPS_PROXY=http://192.168.1.9:7890 backend` rebuilt the backend image with in-image Maven `BUILD SUCCESS`; recreating backend returned healthy; and `.\scripts\e2e-run-experiment-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123` passed 11/11 with report `e2e-run-experiment-20260706030925-332236547099926528.md`.
+
+## 2026-07-06 Update: Run Experiment Missing-Leaf Failure Report
+
+Run Experiment report export now remains available when the real trial executor fails before producing a `runId` or output message, such as when the requested `baseLeafMessageId` is not present in the conversation tree. Snapshot lookup is null-safe for failed trials, so the report still renders the failed trial, unresolved output message, unresolved branch evidence, and executor failure explanation instead of throwing a report export `NullPointerException`.
+
+This is a narrow P1 failure-report hardening slice for the existing Run Experiment export path. It does not add API-level preflight validation, new report formats, persisted report history, or full-Docker negative-path smoke coverage.
+
+Fresh evidence: the new regression first failed with a report export `NullPointerException` after a real `KernelRunExperimentTrialExecutor` returned `base leaf message not found`; after the fix, `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=KernelRunExperimentServiceTests,KernelRunExperimentTrialExecutorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 10/10.

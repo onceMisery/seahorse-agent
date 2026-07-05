@@ -252,7 +252,7 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         report.append("| Trial | Run ID | Studio Trace | Cost Source | Fork Target | Message Branch |\n");
         report.append("|---|---|---|---|---|---|\n");
         for (RunExperimentTrialRecord trial : trials) {
-            RunContextSnapshotRecord snapshot = snapshots.get(trial.getRunId());
+            RunContextSnapshotRecord snapshot = snapshotFor(snapshots, trial);
             ConversationMessageRecord outputMessage = outputMessage(outputMessages, trial.getOutputMessageId());
             report.append("| ")
                     .append(tableCell(trial.getId()))
@@ -280,7 +280,7 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         report.append("| Trial | Run Profile | Status | Run ID | Output Message | Message Branch | Score | Metrics | Studio Trace | Cost Source | Fork Target |\n");
         report.append("|---|---|---|---|---|---|---|---|---|---|---|\n");
         for (RunExperimentTrialRecord trial : trials) {
-            RunContextSnapshotRecord snapshot = snapshots.get(trial.getRunId());
+            RunContextSnapshotRecord snapshot = snapshotFor(snapshots, trial);
             ConversationMessageRecord outputMessage = outputMessage(outputMessages, trial.getOutputMessageId());
             String metrics = valueOrDash(trial.getMetricJson());
             report.append("| ")
@@ -402,6 +402,16 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
             return Map.of();
         }
         return messages;
+    }
+
+    private RunContextSnapshotRecord snapshotFor(
+            Map<String, RunContextSnapshotRecord> snapshots,
+            RunExperimentTrialRecord trial) {
+        if (snapshots == null || snapshots.isEmpty() || trial == null
+                || trial.getRunId() == null || trial.getRunId().isBlank()) {
+            return null;
+        }
+        return snapshots.get(trial.getRunId().trim());
     }
 
     private String recommendedTrial(List<RunExperimentTrialRecord> trials) {
