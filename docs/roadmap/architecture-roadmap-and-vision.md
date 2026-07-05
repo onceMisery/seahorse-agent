@@ -456,3 +456,11 @@ The sandbox browser URL runtime route guard now allows network requests only to 
 This is a narrow runtime egress hardening slice. It does not add a general outbound proxy, per-path URL policy UX, DNS pinning, CIDR/private-network classification, or long-lived browser profile management.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 40/40.
+
+## 2026-07-06 Update: Sandbox Browser Target-Host Session Replay Guard
+
+The sandbox browser URL path now requires request-scoped cookies and replayed session-state cookies/origins to match the target URL host, not merely any host listed in `allowedHosts`. This keeps extra policy-authorized hosts from carrying unrelated cookie or localStorage secrets into the transient browser runtime input after the runtime route guard was narrowed to the initial target origin.
+
+This is a narrow auth/session hygiene guard. It does not add stored browser sessions, credential vault integration, replay from previously captured SECRET/BLOCKED artifacts, proxy-rich egress audit, or mutable operator URL policy UX.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 18/18; `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 42/42.

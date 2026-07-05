@@ -473,6 +473,25 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldRejectCookieWhenDomainDoesNotMatchTargetUrlHostBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/page",
+                "allowedHosts", List.of("example.test", "other.test"),
+                "cookies", List.of(Map.of(
+                        "name", "seahorse_session",
+                        "value", "secret",
+                        "domain", "other.test")))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("cookie domain must match the target URL host"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
     void shouldRejectSessionStateOriginWhenHostIsNotAllowlistedBeforeCreatingSession() {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
@@ -490,6 +509,27 @@ class SandboxBrowserToolPortAdapterTests {
 
         assertFalse(result.success());
         assertTrue(result.error().contains("sessionState origin host must be included in allowedHosts"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
+    void shouldRejectSessionStateOriginWhenHostDoesNotMatchTargetUrlHostBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/page",
+                "allowedHosts", List.of("example.test", "other.test"),
+                "sessionState", Map.of(
+                        "origins", List.of(Map.of(
+                                "origin", "http://other.test",
+                                "localStorage", List.of(Map.of(
+                                        "name", "seahorse_session_marker",
+                                        "value", "secret"))))))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("sessionState origin host must match the target URL host"));
         assertEquals(0, runtime.createCalls);
     }
 

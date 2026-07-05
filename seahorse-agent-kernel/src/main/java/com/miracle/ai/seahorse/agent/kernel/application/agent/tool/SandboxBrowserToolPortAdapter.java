@@ -150,6 +150,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             sessionState = normalizedSessionState(
                     safeRequest.arguments().get(SESSION_STATE_ARGUMENT),
                     allowedHosts,
+                    urlHost,
                     urlMode);
         } catch (IllegalArgumentException ex) {
             return ToolInvocationResult.failed(ex.getMessage());
@@ -474,6 +475,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
 
     private Object normalizedSessionState(Object value,
                                           List<String> allowedHosts,
+                                          String urlHost,
                                           boolean urlMode) {
         if (value == null) {
             return null;
@@ -484,8 +486,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         if (!(value instanceof Map<?, ?> state)) {
             throw new IllegalArgumentException("sandbox_browser failed: sessionState must be an object");
         }
-        validateSessionStateCookies(state.get("cookies"), allowedHosts);
-        validateSessionStateOrigins(state.get("origins"), allowedHosts);
+        validateSessionStateCookies(state.get("cookies"), allowedHosts, urlHost);
+        validateSessionStateOrigins(state.get("origins"), allowedHosts, urlHost);
         if (jsonSupport.write(value).length() > MAX_SESSION_STATE_CHARS) {
             throw new IllegalArgumentException("sandbox_browser failed: sessionState exceeds "
                     + MAX_SESSION_STATE_CHARS + " chars");
@@ -493,7 +495,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         return value;
     }
 
-    private void validateSessionStateCookies(Object value, List<String> allowedHosts) {
+    private void validateSessionStateCookies(Object value, List<String> allowedHosts, String urlHost) {
         if (value == null) {
             return;
         }
@@ -511,15 +513,20 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             normalizedCookieName(mapString(cookie, "name"));
             normalizedCookieValue(mapStringPreservingWhitespace(cookie, "value"));
             String domain = normalizedCookieDomain(mapString(cookie, "domain"));
-            if (!allowedHosts.contains(cookieDomainHost(domain))) {
+            String domainHost = cookieDomainHost(domain);
+            if (!allowedHosts.contains(domainHost)) {
                 throw new IllegalArgumentException(
                         "sandbox_browser failed: sessionState cookie domain must be included in allowedHosts");
+            }
+            if (!domainHost.equals(urlHost)) {
+                throw new IllegalArgumentException(
+                        "sandbox_browser failed: sessionState cookie domain must match the target URL host");
             }
             normalizedCookiePath(mapString(cookie, "path"));
         }
     }
 
-    private void validateSessionStateOrigins(Object value, List<String> allowedHosts) {
+    private void validateSessionStateOrigins(Object value, List<String> allowedHosts, String urlHost) {
         if (value == null) {
             return;
         }
@@ -538,6 +545,10 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             if (!allowedHosts.contains(host)) {
                 throw new IllegalArgumentException(
                         "sandbox_browser failed: sessionState origin host must be included in allowedHosts");
+            }
+            if (!host.equals(urlHost)) {
+                throw new IllegalArgumentException(
+                        "sandbox_browser failed: sessionState origin host must match the target URL host");
             }
             validateSessionStateLocalStorage(origin.get("localStorage"));
         }
@@ -638,6 +649,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                     hasText(mapString(item, "domain")) ? mapString(item, "domain") : urlHost);
             if (!allowedHosts.contains(domain)) {
                 throw new IllegalArgumentException("sandbox_browser failed: cookie domain must be included in allowedHosts");
+            }
+            if (!domain.equals(urlHost)) {
+                throw new IllegalArgumentException("sandbox_browser failed: cookie domain must match the target URL host");
             }
             cookies.add(new BrowserCookie(
                     name,

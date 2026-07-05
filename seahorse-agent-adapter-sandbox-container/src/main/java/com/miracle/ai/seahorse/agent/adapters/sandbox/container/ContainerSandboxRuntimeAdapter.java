@@ -346,18 +346,19 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
         String html = root.path("html").asText("");
         String url = normalizedBrowserUrl(root.path("url").asText(""));
+        String urlHost = hasText(url) ? browserUrlHost(url) : "";
         List<String> allowedHosts = normalizedBrowserAllowedHosts(root.get("allowedHosts"));
         List<BrowserCookie> cookies = normalizedBrowserCookies(
                 root.get("cookies"),
                 allowedHosts,
-                hasText(url) ? browserUrlHost(url) : "");
+                urlHost);
         if (!hasText(url) && !hasText(html)) {
             throw new IllegalArgumentException("browser automation html or url is required");
         }
         if (hasText(url) && allowedHosts.isEmpty()) {
             throw new IllegalArgumentException("browser automation allowedHosts is required for url mode");
         }
-        if (hasText(url) && !allowedHosts.contains(browserUrlHost(url))) {
+        if (hasText(url) && !allowedHosts.contains(urlHost)) {
             throw new IllegalArgumentException("browser automation url host must be included in allowedHosts");
         }
         if (html.length() > MAX_BROWSER_HTML_CHARS) {
@@ -380,7 +381,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         boolean har = root.path("har").asBoolean(false);
         boolean video = root.path("video").asBoolean(false);
         boolean captureSessionState = root.path("captureSessionState").asBoolean(false);
-        String sessionStateJson = normalizedBrowserSessionState(root.get("sessionState"), allowedHosts, hasText(url));
+        String sessionStateJson = normalizedBrowserSessionState(root.get("sessionState"), allowedHosts, urlHost, hasText(url));
         if (captureSessionState && !hasText(url)) {
             throw new IllegalArgumentException("browser automation session state capture is only supported for url mode");
         }
@@ -1200,6 +1201,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
     private String normalizedBrowserSessionState(JsonNode value,
                                                  List<String> allowedHosts,
+                                                 String urlHost,
                                                  boolean urlMode) throws IOException {
         if (value == null || value.isMissingNode() || value.isNull()) {
             return "";
@@ -1213,8 +1215,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         if (state == null || !state.isObject()) {
             throw new IllegalArgumentException("browser automation sessionState must be an object");
         }
-        validateBrowserSessionStateCookies(state.get("cookies"), allowedHosts);
-        validateBrowserSessionStateOrigins(state.get("origins"), allowedHosts);
+        validateBrowserSessionStateCookies(state.get("cookies"), allowedHosts, urlHost);
+        validateBrowserSessionStateOrigins(state.get("origins"), allowedHosts, urlHost);
         String serialized = objectMapper.writeValueAsString(state);
         if (serialized.length() > MAX_BROWSER_SESSION_STATE_CHARS) {
             throw new IllegalArgumentException("browser automation sessionState exceeds "
@@ -1223,7 +1225,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return serialized;
     }
 
-    private void validateBrowserSessionStateCookies(JsonNode value, List<String> allowedHosts) {
+    private void validateBrowserSessionStateCookies(JsonNode value, List<String> allowedHosts, String urlHost) {
         if (value == null || value.isMissingNode() || value.isNull()) {
             return;
         }
@@ -1241,15 +1243,20 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             normalizedBrowserCookieName(cookieNode.path("name").asText(""));
             normalizedBrowserCookieValue(cookieNode.path("value").asText(""));
             String domain = normalizedBrowserCookieDomain(cookieNode.path("domain").asText(""));
-            if (!allowedHosts.contains(browserCookieDomainHost(domain))) {
+            String domainHost = browserCookieDomainHost(domain);
+            if (!allowedHosts.contains(domainHost)) {
                 throw new IllegalArgumentException(
                         "browser automation sessionState cookie domain must be included in allowedHosts");
+            }
+            if (!domainHost.equals(urlHost)) {
+                throw new IllegalArgumentException(
+                        "browser automation sessionState cookie domain must match the target URL host");
             }
             normalizedBrowserCookiePath(cookieNode.path("path").asText("/"));
         }
     }
 
-    private void validateBrowserSessionStateOrigins(JsonNode value, List<String> allowedHosts) {
+    private void validateBrowserSessionStateOrigins(JsonNode value, List<String> allowedHosts, String urlHost) {
         if (value == null || value.isMissingNode() || value.isNull()) {
             return;
         }
@@ -1268,6 +1275,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             if (!allowedHosts.contains(host)) {
                 throw new IllegalArgumentException(
                         "browser automation sessionState origin host must be included in allowedHosts");
+            }
+            if (!host.equals(urlHost)) {
+                throw new IllegalArgumentException(
+                        "browser automation sessionState origin host must match the target URL host");
             }
             validateBrowserSessionStateLocalStorage(originNode.get("localStorage"));
         }
@@ -1363,6 +1374,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             String domain = normalizedBrowserCookieDomain(cookieNode.path("domain").asText(urlHost));
             if (!allowedHosts.contains(domain)) {
                 throw new IllegalArgumentException("browser automation cookie domain must be included in allowedHosts");
+            }
+            if (!domain.equals(urlHost)) {
+                throw new IllegalArgumentException("browser automation cookie domain must match the target URL host");
             }
             cookies.add(new BrowserCookie(
                     name,

@@ -657,6 +657,26 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldFailClosedWhenBrowserSessionStateOriginDoesNotMatchTargetUrlHostBeforeRunningContainer() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","url":"http://example.test/page","allowedHosts":["example.test","other.test"],"sessionState":{"origins":[{"origin":"http://other.test","localStorage":[{"name":"seahorse_session_marker","value":"secret"}]}]}}
+                        """,
+                true,
+                List.of("example.test", "other.test")));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("sessionState origin host must match the target URL host");
+        assertThat(runner.lastCommand).isNull();
+    }
+
+    @Test
     void shouldFailClosedWhenBrowserUrlHostIsNotAllowlistedBeforeRunningContainer() {
         RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
         ContainerSandboxRuntimeAdapter adapter = adapter(runner);
@@ -794,6 +814,26 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
         assertThat(result.execution().resultSummary()).contains("cookie domain must be included in allowedHosts");
+        assertThat(runner.lastCommand).isNull();
+    }
+
+    @Test
+    void shouldFailClosedWhenBrowserCookieDomainDoesNotMatchTargetUrlHostBeforeRunningContainer() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","url":"http://example.test/page","allowedHosts":["example.test","other.test"],"cookies":[{"name":"seahorse_session","value":"secret","domain":"other.test"}]}
+                        """,
+                true,
+                List.of("example.test", "other.test")));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("cookie domain must match the target URL host");
         assertThat(runner.lastCommand).isNull();
     }
 
