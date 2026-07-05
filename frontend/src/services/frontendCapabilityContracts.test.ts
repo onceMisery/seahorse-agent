@@ -37,6 +37,9 @@ import {
   getIngestionPipelineGateResult
 } from "@/services/ingestionService";
 import {
+  getAgentGateResult
+} from "@/services/productionGateService";
+import {
   createQuotaPolicy,
   evaluateQuotaDecision
 } from "@/services/securityGovernanceService";
@@ -273,6 +276,12 @@ describe("frontend capability service contracts", () => {
     });
     expect(mockedApi.get).toHaveBeenNthCalledWith(2, "/api/agent-handoffs/handoff-1");
     expect(mockedApi.post).toHaveBeenCalledWith("/api/agent-handoffs/handoff-1/cancel");
+  });
+
+  it("queries agent production GateResult with backend path", async () => {
+    await getAgentGateResult("agent-1");
+
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/agents/agent-1/production-gate/gate-result");
   });
 
   it("queries ingestion pipeline gate result with backend path", async () => {

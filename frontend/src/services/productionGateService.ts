@@ -17,6 +17,24 @@ export interface ProductionGateCheckItem {
   detail?: string;
 }
 
+export interface GateResultItem {
+  code: string;
+  status: string;
+  message?: string;
+}
+
+export interface GateResult {
+  subjectType: string;
+  subjectId: string;
+  status: string;
+  passed: boolean;
+  blockingCodes?: string[];
+  items?: GateResultItem[];
+  checkedAt?: string;
+  sourceType?: string;
+  sourceId?: string;
+}
+
 // ── API 调用 ──
 
 export function triggerProductionGate(agentId: string) {
@@ -28,5 +46,11 @@ export function triggerProductionGate(agentId: string) {
 export function getLatestProductionGate(agentId: string) {
   return api.get<ProductionGateReport>(
     `/api/agents/${encodeURIComponent(agentId)}/production-gate/latest`
+  );
+}
+
+export function getAgentGateResult(agentId: string) {
+  return api.get<GateResult, GateResult>(
+    `/api/agents/${encodeURIComponent(agentId)}/production-gate/gate-result`
   );
 }

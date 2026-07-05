@@ -24,6 +24,10 @@ import { AgentToolBindingPanel } from "../tools/components/AgentToolBindingPanel
 import { getErrorMessage } from "@/utils/error";
 import { getAgentSkillSnapshot } from "@/services/skillService";
 import { listAgentRuns } from "@/services/agentRunService";
+import {
+  getAgentGateResult,
+  type GateResult
+} from "@/services/productionGateService";
 
 type RunRecord = Record<string, unknown>;
 
@@ -46,6 +50,8 @@ export function AgentDetailPage() {
   const [versionError, setVersionError] = useState<string | null>(null);
   const [recentRuns, setRecentRuns] = useState<RunRecord[]>([]);
   const [runsLoading, setRunsLoading] = useState(false);
+  const [gateResult, setGateResult] = useState<GateResult | null>(null);
+  const [gateResultLoading, setGateResultLoading] = useState(false);
 
   const loadAgent = useCallback(async () => {
     if (!agentId) return;
@@ -80,12 +86,26 @@ export function AgentDetailPage() {
     }
   }, [agentId]);
 
+  const loadAgentGateResult = useCallback(async () => {
+    if (!agentId) return;
+    setGateResultLoading(true);
+    try {
+      setGateResult(await getAgentGateResult(agentId));
+    } catch (error) {
+      console.error(error);
+      setGateResult(null);
+    } finally {
+      setGateResultLoading(false);
+    }
+  }, [agentId]);
+
   useEffect(() => {
     if (!featureState.enabled) return;
     loadAgent();
     loadPublishChecks();
     loadSkillSnapshot();
-  }, [featureState.enabled, loadAgent, loadPublishChecks, loadSkillSnapshot]);
+    loadAgentGateResult();
+  }, [featureState.enabled, loadAgent, loadPublishChecks, loadSkillSnapshot, loadAgentGateResult]);
 
   useEffect(() => {
     const versionId = resolveCurrentVersionId(agent);
@@ -258,7 +278,7 @@ export function AgentDetailPage() {
               发布
             </Button>
           )}
-          <Button variant="outline" onClick={() => { loadAgent(); }}>
+          <Button variant="outline" onClick={() => { loadAgent(); loadPublishChecks(); loadAgentGateResult(); }}>
             <RefreshCw className="w-4 h-4 mr-1" />
             刷新
           </Button>
@@ -302,6 +322,7 @@ export function AgentDetailPage() {
           <TabsTrigger value="tools">工具绑定</TabsTrigger>
           <TabsTrigger value="runs">运行记录</TabsTrigger>
           <TabsTrigger value="checks">发布检查</TabsTrigger>
+          <TabsTrigger value="gate-result">GateResult</TabsTrigger>
           <TabsTrigger value="validation">校验结果</TabsTrigger>
         </TabsList>
 
@@ -458,6 +479,69 @@ export function AgentDetailPage() {
                     </div>
                   ))}
                 </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="gate-result">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>Agent GateResult</span>
+                {gateResult ? (
+                  <Badge variant={gateResult.passed ? "secondary" : "destructive"}>{gateResult.status}</Badge>
+                ) : null}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {gateResultLoading ? (
+                <div className="text-center py-4 text-muted-foreground">Loading GateResult...</div>
+              ) : gateResult ? (
+                <>
+                  <div className="grid gap-3 text-sm md:grid-cols-4">
+                    <div className="rounded-md border border-slate-200 p-3">
+                      <div className="text-xs text-muted-foreground">Subject</div>
+                      <div className="mt-1 break-all font-mono text-xs text-slate-900">
+                        {gateResult.subjectType}:{gateResult.subjectId}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-slate-200 p-3">
+                      <div className="text-xs text-muted-foreground">Source</div>
+                      <div className="mt-1 break-all font-mono text-xs text-slate-900">{gateResult.sourceType || "-"}</div>
+                    </div>
+                    <div className="rounded-md border border-slate-200 p-3">
+                      <div className="text-xs text-muted-foreground">Checked</div>
+                      <div className="mt-1 text-slate-900">{gateResult.checkedAt || "-"}</div>
+                    </div>
+                    <div className="rounded-md border border-slate-200 p-3">
+                      <div className="text-xs text-muted-foreground">Blocking Codes</div>
+                      <div className="mt-1 font-medium text-slate-900">{gateResult.blockingCodes?.length || 0}</div>
+                    </div>
+                  </div>
+                  {gateResult.blockingCodes?.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {gateResult.blockingCodes.map((code) => (
+                        <Badge key={code} variant="destructive">{code}</Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {(gateResult.items || []).map((item) => (
+                      <div key={`${item.code}-${item.status}`} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={item.status === "PASS" ? "secondary" : item.status === "FAIL" ? "destructive" : "outline"}>
+                            {item.status}
+                          </Badge>
+                          <span className="font-mono text-xs text-slate-600">{item.code}</span>
+                        </div>
+                        <div className="mt-2 break-words text-sm text-slate-700">{item.message || "-"}</div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">No GateResult</div>
               )}
             </CardContent>
           </Card>

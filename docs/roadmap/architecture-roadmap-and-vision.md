@@ -626,3 +626,11 @@ The Run Profile admin table now exposes the existing unified `GateResult` projec
 This is a narrow unified GateResult productization slice. It does not add new run profile gate rules, persisted gate-result rows, release approval workflows, or full-Docker UI smoke coverage.
 
 Fresh UX evidence: `npm test -- src/pages/admin/run-profiles/RunProfilePage.test.tsx src/services/runProfileService.test.ts` passed 21/21 focused frontend tests, covering the service endpoint, row action invocation of `getRunProfileGateResult`, rendering of `RUN_PROFILE`, blocking code, source, and check-message evidence, and isolated role-card form behavior.
+
+## 2026-07-06 Update: Agent GateResult UX
+
+The Agent detail page now exposes the existing unified `GateResult` projection from a dedicated `GateResult` tab. Operators can inspect subject, status, source, checked time, blocking codes, and per-check evidence from `GET /api/agents/{agentId}/production-gate/gate-result` without replacing the existing publish checks, validation, or production gate workflow.
+
+This is a narrow unified GateResult productization slice. It does not add new agent gate rules, persisted gate-result rows, release approval workflows, or full-Docker UI smoke coverage.
+
+Fresh UX evidence: `npm test -- src/pages/admin/agents/AgentDetailPage.test.tsx src/services/frontendCapabilityContracts.test.ts` passed 17/17 focused frontend tests, covering the service endpoint, Agent detail `GateResult` tab rendering of `AGENT`, blocking code, source, and check-message evidence. `npm run build` completed successfully with the existing Browserslist/chunk-size warnings.
