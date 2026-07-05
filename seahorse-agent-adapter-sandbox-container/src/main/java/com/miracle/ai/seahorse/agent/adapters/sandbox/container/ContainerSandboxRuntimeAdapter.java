@@ -459,12 +459,28 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 def utc_now():
                     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
+                def origin_key(url):
+                    parsed = urlparse(url)
+                    scheme = parsed.scheme.lower()
+                    host = (parsed.hostname or "").lower()
+                    if scheme not in ("http", "https") or not host:
+                        return ""
+                    try:
+                        port = parsed.port
+                    except ValueError:
+                        return ""
+                    if port is None:
+                        port = 443 if scheme == "https" else 80
+                    return f"{scheme}://{host}:{port}"
+
+                target_origin = origin_key(target_url) if target_url else None
+
                 def allowed_url(url):
                     if url.startswith(("about:", "blob:", "data:")):
                         return True
-                    parsed = urlparse(url)
-                    host = (parsed.hostname or "").lower()
-                    return parsed.scheme in ("http", "https") and host in allowed_hosts
+                    if target_origin:
+                        return origin_key(url) == target_origin
+                    return False
 
                 def empty_har_request(method, url):
                     return {

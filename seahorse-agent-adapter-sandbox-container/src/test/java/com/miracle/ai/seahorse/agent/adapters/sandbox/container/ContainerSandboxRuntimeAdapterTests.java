@@ -505,6 +505,8 @@ class ContainerSandboxRuntimeAdapterTests {
                     assertThat(script)
                             .contains("target_url = \"http://host.docker.internal:18080/page\"",
                                     "allowed_hosts = set([\"host.docker.internal\"])",
+                                    "target_origin = origin_key(target_url)",
+                                    "return origin_key(url) == target_origin",
                                     "cookies_path = Path(\"/workspace/browser-cookies.json\")",
                                     "session_state_input_path = Path(\"/workspace/browser-session-state-input.json\")",
                                     "context_options[\"storage_state\"] = str(session_state_input_path)",
@@ -515,7 +517,7 @@ class ContainerSandboxRuntimeAdapterTests {
                                     "browser-session-summary.json",
                                     "page.goto",
                                     "\"source\": \"url\" if target_url else \"html\"")
-                            .doesNotContain("url mode marker", cookieValue, storageValue);
+                            .doesNotContain("host in allowed_hosts", "url mode marker", cookieValue, storageValue);
                     assertThat(Files.readString(command.workingDirectory().resolve("browser-cookies.json")))
                             .contains("seahorse_session", cookieValue, "host.docker.internal");
                     assertThat(Files.readString(command.workingDirectory().resolve("browser-session-state-input.json")))
