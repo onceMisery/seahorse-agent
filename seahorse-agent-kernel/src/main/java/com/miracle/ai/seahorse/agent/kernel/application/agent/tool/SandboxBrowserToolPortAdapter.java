@@ -423,6 +423,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             if (hasText(uri.getUserInfo())) {
                 throw new IllegalArgumentException("sandbox_browser failed: url must not include userinfo credentials");
             }
+            if (hasText(uri.getRawFragment())) {
+                throw new IllegalArgumentException("sandbox_browser failed: url must not include fragment identifiers");
+            }
             return uri.normalize().toString();
         } catch (URISyntaxException ex) {
             throw new IllegalArgumentException("sandbox_browser failed: url is not valid", ex);

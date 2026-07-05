@@ -1170,6 +1170,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             if (hasText(uri.getUserInfo())) {
                 throw new IllegalArgumentException("browser automation url must not include userinfo credentials");
             }
+            if (hasText(uri.getRawFragment())) {
+                throw new IllegalArgumentException("browser automation url must not include fragment identifiers");
+            }
             return uri.normalize().toString();
         } catch (URISyntaxException ex) {
             throw new IllegalArgumentException("browser automation url is not valid", ex);

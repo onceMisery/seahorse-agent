@@ -850,6 +850,27 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldFailClosedWhenBrowserUrlUsesFragmentBeforeRunningContainer() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","url":"http://example.test/admin#access_token=secret","allowedHosts":["example.test"]}
+                        """,
+                true,
+                List.of("example.test")));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("must not include fragment identifiers");
+        assertThat(result.execution().resultSummary()).doesNotContain("access_token=secret");
+        assertThat(runner.lastCommand).isNull();
+    }
+
+    @Test
     void shouldFailClosedWhenBrowserCookieDomainIsNotAllowlistedBeforeRunningContainer() {
         RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
         ContainerSandboxRuntimeAdapter adapter = adapter(runner);
