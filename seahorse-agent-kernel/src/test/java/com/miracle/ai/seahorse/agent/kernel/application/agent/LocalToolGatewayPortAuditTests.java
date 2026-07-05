@@ -508,7 +508,7 @@ class LocalToolGatewayPortAuditTests {
                         "path", Map.of("customerId", "cust-secret-marker"),
                         "query", Map.of("status", "active-secret-marker"),
                         "parameters", Map.of("page", "page-secret-marker"),
-                        "headers", Map.of("x-api-key", "header-secret-marker"),
+                        "header", Map.of("x-api-key", "header-secret-marker"),
                         "requestBody", Map.of(
                                 "email", "customer-secret@example.test",
                                 "token", "body-secret-marker")),

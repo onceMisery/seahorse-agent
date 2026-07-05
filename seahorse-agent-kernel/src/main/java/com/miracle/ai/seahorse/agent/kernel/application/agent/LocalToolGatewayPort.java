@@ -377,7 +377,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         Map<String, Object> path = mapValue(arguments.get("path"));
         Map<String, Object> query = mapValue(arguments.get("query"));
         Map<String, Object> parameters = mapValue(arguments.get("parameters"));
-        Map<String, Object> headers = mapValue(arguments.get("headers"));
+        Map<String, Object> headers = mergeMaps(arguments.get("header"), arguments.get("headers"));
         Object body = arguments.containsKey("requestBody") ? arguments.get("requestBody") : arguments.get("body");
         Map<String, Object> bodyMap = mapValue(body);
         Map<String, Object> summary = new LinkedHashMap<>();
@@ -580,6 +580,12 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                 result.put(key.toString(), item);
             }
         });
+        return result;
+    }
+
+    private Map<String, Object> mergeMaps(Object first, Object second) {
+        Map<String, Object> result = new LinkedHashMap<>(mapValue(first));
+        result.putAll(mapValue(second));
         return result;
     }
 
