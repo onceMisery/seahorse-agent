@@ -74,6 +74,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final String HTML_FORMAT = "html";
     private static final String MARKDOWN_FORMAT = "markdown";
     private static final String DOCX_FORMAT = "docx";
+    private static final String XLSX_FORMAT = "xlsx";
     private static final String PDF_FORMAT = "pdf";
     private static final String BASE64_ENCODING = "base64";
     private static final String PLAIN_ENCODING = "plain";
@@ -354,13 +355,13 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String contentEncoding = normalizedContentEncoding(root.path("contentEncoding").asText(PLAIN_ENCODING));
         if (!isSupportedFileConversion(sourceFormat, targetFormat)) {
             throw new UnsupportedFileConversionException(
-                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, and docx/pdf to txt only");
+                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to txt, and xlsx to csv only");
         }
         if (isBinaryDocumentFormat(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
             throw new IllegalArgumentException(sourceFormat + " file conversion contentEncoding must be base64");
         }
         if (!isBinaryDocumentFormat(sourceFormat) && BASE64_ENCODING.equals(contentEncoding)) {
-            throw new IllegalArgumentException("base64 contentEncoding is only supported for docx/pdf input");
+            throw new IllegalArgumentException("base64 contentEncoding is only supported for docx/xlsx/pdf input");
         }
         String content = root.path("content").asText("");
         if (!hasText(content)) {
@@ -376,6 +377,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private void validateBinaryFileConversionInput(String sourceFormat, byte[] content) {
         if (DOCX_FORMAT.equals(sourceFormat)) {
             validateDocxFileConversionInput(content);
+        }
+        if (XLSX_FORMAT.equals(sourceFormat)) {
+            validateXlsxFileConversionInput(content);
         }
         if (PDF_FORMAT.equals(sourceFormat)) {
             validatePdfFileConversionInput(content);
@@ -407,6 +411,34 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
         if (!documentXmlFound) {
             throw new IllegalArgumentException("docx word/document.xml not found");
+        }
+    }
+
+    private void validateXlsxFileConversionInput(byte[] content) {
+        boolean worksheetFound = false;
+        int inspectedEntries = 0;
+        try (ZipInputStream archive = new ZipInputStream(new ByteArrayInputStream(content))) {
+            ZipEntry entry;
+            while ((entry = archive.getNextEntry()) != null) {
+                if (++inspectedEntries > MAX_FILE_CONVERSION_ARCHIVE_ENTRIES) {
+                    throw new IllegalArgumentException("xlsx archive exceeds entry scan budget");
+                }
+                String entryName = normalizedArchiveEntryName(entry.getName());
+                if (hasUnsafeArchivePath(entryName)) {
+                    throw new IllegalArgumentException("xlsx archive contains unsafe entry");
+                }
+                if (hasXlsxActiveContentEntry(entryName)) {
+                    throw new IllegalArgumentException("xlsx active content is not supported");
+                }
+                if ("xl/worksheets/sheet1.xml".equals(entryName)) {
+                    worksheetFound = true;
+                }
+            }
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("xlsx archive could not be inspected", ex);
+        }
+        if (!worksheetFound) {
+            throw new IllegalArgumentException("xlsx xl/worksheets/sheet1.xml not found");
         }
     }
 
@@ -451,6 +483,18 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || value.startsWith("word/activex/")
                 || value.startsWith("word/embeddings/")
                 || value.startsWith("word/externallinks/")
+                || value.contains("/oleobject");
+    }
+
+    private boolean hasXlsxActiveContentEntry(String value) {
+        if (!hasText(value)) {
+            return false;
+        }
+        return value.equals("vbaproject.bin")
+                || value.endsWith("/vbaproject.bin")
+                || value.startsWith("xl/activex/")
+                || value.startsWith("xl/embeddings/")
+                || value.startsWith("xl/externallinks/")
                 || value.contains("/oleobject");
     }
 
@@ -923,6 +967,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return """
                 import csv
                 import html
+                import io
                 import json
                 import re
                 import xml.etree.ElementTree as ET
@@ -1091,6 +1136,87 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             paragraphs.append(text)
                     return "\\n".join(paragraphs) + ("\\n" if paragraphs else "")
 
+                def xlsx_shared_strings(archive):
+                    try:
+                        info = archive.getinfo("xl/sharedStrings.xml")
+                    except KeyError:
+                        return []
+                    if info.file_size > 1048576:
+                        raise ValueError("xlsx sharedStrings.xml exceeds extraction budget")
+                    root = ET.fromstring(archive.read(info))
+                    ns = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+                    values = []
+                    for item in root.findall(".//s:si", ns):
+                        parts = []
+                        for node in item.findall(".//s:t", ns):
+                            if node.text:
+                                parts.append(node.text)
+                        values.append("".join(parts))
+                    return values
+
+                def xlsx_column_index(cell_ref):
+                    letters = "".join(ch for ch in cell_ref if ch.isalpha()).upper()
+                    if not letters:
+                        return 0
+                    index = 0
+                    for ch in letters:
+                        index = index * 26 + (ord(ch) - ord("A") + 1)
+                    return index - 1
+
+                def xlsx_cell_text(cell, shared_strings, ns):
+                    value = cell.find("s:v", ns)
+                    inline = cell.find("s:is", ns)
+                    if inline is not None:
+                        parts = []
+                        for node in inline.findall(".//s:t", ns):
+                            if node.text:
+                                parts.append(node.text)
+                        return "".join(parts)
+                    if value is None or value.text is None:
+                        return ""
+                    text = value.text
+                    if cell.get("t") == "s":
+                        try:
+                            index = int(text)
+                        except ValueError:
+                            return ""
+                        if 0 <= index < len(shared_strings):
+                            return shared_strings[index]
+                        return ""
+                    return text
+
+                def xlsx_to_csv(path):
+                    with zipfile.ZipFile(path) as archive:
+                        try:
+                            sheet_info = archive.getinfo("xl/worksheets/sheet1.xml")
+                        except KeyError as exc:
+                            raise ValueError("xlsx xl/worksheets/sheet1.xml not found") from exc
+                        if sheet_info.file_size > 1048576:
+                            raise ValueError("xlsx sheet1.xml exceeds extraction budget")
+                        shared_strings = xlsx_shared_strings(archive)
+                        sheet_xml = archive.read(sheet_info)
+                    root = ET.fromstring(sheet_xml)
+                    ns = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+                    rows = []
+                    max_width = 0
+                    for row in root.findall(".//s:row", ns):
+                        cells = {}
+                        for cell in row.findall("s:c", ns):
+                            ref = cell.get("r", "")
+                            index = xlsx_column_index(ref)
+                            cells[index] = xlsx_cell_text(cell, shared_strings, ns)
+                        if cells:
+                            max_index = max(cells)
+                            max_width = max(max_width, max_index + 1)
+                            rows.append([cells.get(index, "") for index in range(max_index + 1)])
+                    if not rows:
+                        raise ValueError("xlsx worksheet rows not found")
+                    output = io.StringIO()
+                    writer = csv.writer(output)
+                    for row in rows:
+                        writer.writerow(row + [""] * (max_width - len(row)))
+                    return output.getvalue()
+
                 def pdf_unescape_literal(value):
                     output = bytearray()
                     index = 0
@@ -1238,6 +1364,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "docx" and target_format == "txt":
                     output_path.write_text(docx_to_text(input_path), encoding="utf-8")
                     print(f"converted docx document to text")
+                elif source_format == "xlsx" and target_format == "csv":
+                    output_path.write_text(xlsx_to_csv(input_path), encoding="utf-8")
+                    print(f"converted xlsx worksheet to csv")
                 elif source_format == "pdf" and target_format == "txt":
                     output_path.write_text(pdf_to_text(input_path), encoding="utf-8")
                     print(f"converted pdf document to text")
@@ -1257,7 +1386,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
                 || (MARKDOWN_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
-                || (isBinaryDocumentFormat(sourceFormat) && TXT_FORMAT.equals(targetFormat));
+                || ((DOCX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat)) && TXT_FORMAT.equals(targetFormat))
+                || (XLSX_FORMAT.equals(sourceFormat) && CSV_FORMAT.equals(targetFormat));
     }
 
     private boolean isDelimitedFileFormat(String format) {
@@ -1265,7 +1395,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     }
 
     private boolean isBinaryDocumentFormat(String sourceFormat) {
-        return DOCX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat);
+        return DOCX_FORMAT.equals(sourceFormat) || XLSX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat);
     }
 
     private String fileConversionInputName(String sourceFormat) {
@@ -1274,6 +1404,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             case TXT_FORMAT -> "txt";
             case HTML_FORMAT -> "html";
             case DOCX_FORMAT -> "docx";
+            case XLSX_FORMAT -> "xlsx";
             case PDF_FORMAT -> "pdf";
             default -> sourceFormat;
         };

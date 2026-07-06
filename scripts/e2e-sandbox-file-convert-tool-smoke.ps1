@@ -9,6 +9,7 @@ param(
     [string]$BackendContainer = "seahorse-backend",
     [string]$StorageRoot = "/app/seahorse-agent-storage",
     [string]$ExpectedObjectUriPrefix = "local://sandbox-artifacts/",
+    [long]$KernelRunProfileId = -9101,
     [switch]$SkipHealth
 )
 
@@ -123,6 +124,98 @@ function Assert-ApiOk {
     }
 }
 
+function Invoke-SandboxFileConvertTool {
+    param(
+        [hashtable]$Headers,
+        [hashtable]$Body,
+        [string]$Name
+    )
+
+    $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_file_convert/invoke" -Headers $Headers -Body $Body
+    Assert-ApiOk $response $Name
+
+    $requiresApproval = $response.data.success -eq $false -and (
+        "$($response.data.error)" -eq "TOOL_APPROVAL_REQUIRED" -or
+        "$($response.data.reasonCode)" -eq "TOOL_APPROVAL_REQUIRED"
+    )
+    if (-not $requiresApproval) {
+        return $response
+    }
+
+    if (-not $response.data.approvalId) {
+        throw "$Name required approval but did not return approvalId: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+    $approvalId = "$($response.data.approvalId)"
+    $approval = Invoke-Json -Method GET -Path "/api/approvals/$approvalId" -Headers $Headers
+    Assert-ApiOk $approval "Read $Name approval"
+    if ("$($approval.data.runId)" -ne "$($Body.runId)" -or "$($approval.data.stepId)" -ne "$($Body.stepId)") {
+        throw "$Name approval did not match invocation identity: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+    if ("$($approval.data.status)" -ne "PENDING") {
+        throw "$Name approval was not pending: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+
+    $approved = Invoke-Json -Method POST -Path "/api/approvals/$approvalId/approve" -Headers $Headers -Body @{
+        decisionComment = "Allow sandbox file conversion smoke test"
+    }
+    Assert-ApiOk $approved "Approve $Name"
+    if ("$($approved.data.status)" -ne "APPROVED") {
+        throw "$Name approval was not approved: $($approved.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+
+    $retry = Invoke-Json -Method POST -Path "/api/tools/sandbox_file_convert/invoke" -Headers $Headers -Body $Body
+    Assert-ApiOk $retry "Retry $Name after approval"
+    return $retry
+}
+
+function New-RealAgentRunId {
+    param(
+        [hashtable]$Headers,
+        [string]$Marker,
+        [long]$RunProfileId
+    )
+
+    $created = Invoke-Json -Method POST -Path "/api/conversations" -Headers $Headers
+    Assert-ApiOk $created "Create file conversion smoke conversation"
+    if (-not $created.data) {
+        throw "Create conversation response did not include id"
+    }
+    $conversationId = "$($created.data)"
+    $question = "Sandbox file conversion smoke $Marker. Reply with one short sentence."
+    $encodedQuestion = [System.Uri]::EscapeDataString($question)
+    $response = Invoke-WebRequest -Uri "$BaseUrl/rag/v3/chat?conversationId=$conversationId&question=$encodedQuestion&runProfileId=$RunProfileId&chatMode=agent" `
+        -Headers $Headers -UseBasicParsing -TimeoutSec 180
+    if ([int]$response.StatusCode -ne 200) {
+        throw "Chat returned HTTP $($response.StatusCode)"
+    }
+    $contentType = "$($response.Headers['Content-Type'])"
+    if ($contentType -notlike "*text/event-stream*") {
+        throw "Chat content type was '$contentType'"
+    }
+    if ($response.Content -notlike "*[DONE]*") {
+        throw "Chat SSE did not include [DONE]"
+    }
+
+    $runId = ""
+    $matches = [regex]::Matches($response.Content, '"runId"\s*:\s*"([^"]+)"')
+    if ($matches.Count -gt 0) {
+        $runId = $matches[0].Groups[1].Value
+    }
+    if ([string]::IsNullOrWhiteSpace($runId)) {
+        throw "Chat SSE did not include runId"
+    }
+
+    $safeRunId = $runId.Replace("'", "''")
+    $row = Invoke-PostgresScalar "SELECT run_id FROM sa_agent_run WHERE run_id = '$safeRunId';"
+    if ($row -ne $runId) {
+        throw "Agent run was not persisted before tool invocation: $runId"
+    }
+    return [PSCustomObject]@{
+        ConversationId = $conversationId
+        RunId = $runId
+    }
+}
+
 function Wait-ForHealth {
     param([int]$Attempts = 90)
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
@@ -152,6 +245,58 @@ function Invoke-PostgresScalar {
         throw "SQL returned no rows: $Sql"
     }
     return $rows[0]
+}
+
+function Assert-PersistedFileConversionArtifact {
+    param(
+        [string]$ArtifactId,
+        [string]$ExpectedMediaType,
+        [string]$Label
+    )
+
+    $safeArtifactId = $ArtifactId.Replace("'", "''")
+    $artifactRow = Invoke-PostgresScalar "SELECT session_id, object_uri, media_type, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
+    $artifactParts = $artifactRow -split "`t"
+    if ($artifactParts.Count -ne 6) {
+        throw "Unexpected $Label sa_sandbox_artifact row: $artifactRow"
+    }
+    $persistedSessionId = $artifactParts[0]
+    $objectUri = $artifactParts[1]
+    if ($objectUri -like "file:*") {
+        throw "$Label artifact still points at file URI: $objectUri"
+    }
+    if ($ExpectedObjectUriPrefix -and $objectUri -notlike "$ExpectedObjectUriPrefix*") {
+        throw "Expected $Label object_uri prefix '$ExpectedObjectUriPrefix' but got '$objectUri'"
+    }
+    if ($artifactParts[2] -ne $ExpectedMediaType) {
+        throw "Expected $Label media_type $ExpectedMediaType but got '$($artifactParts[2])'"
+    }
+    if ($artifactParts[3] -ne "CLEAN") {
+        throw "Expected $Label scan_status CLEAN but got '$($artifactParts[3])'"
+    }
+    if ($artifactParts[4] -ne "INTERNAL") {
+        throw "Expected $Label sensitivity INTERNAL but got '$($artifactParts[4])'"
+    }
+    if ($artifactParts[5] -ne "metadata scan passed") {
+        throw "Expected $Label scan_summary metadata scan passed but got '$($artifactParts[5])'"
+    }
+
+    $safeSessionId = $persistedSessionId.Replace("'", "''")
+    $sessionRow = Invoke-PostgresScalar "SELECT runtime_type, profile_id, status FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
+    $sessionParts = $sessionRow -split "`t"
+    if ($sessionParts.Count -ne 3) {
+        throw "Unexpected $Label sa_sandbox_session row: $sessionRow"
+    }
+    if ($sessionParts[0] -ne "FILE_CONVERSION") {
+        throw "Expected $Label runtime_type FILE_CONVERSION but got '$($sessionParts[0])'"
+    }
+    if ($sessionParts[1] -ne "file-conversion") {
+        throw "Expected $Label profile_id file-conversion but got '$($sessionParts[1])'"
+    }
+    if ($sessionParts[2] -ne "CANCELLED") {
+        throw "Expected $Label closed session status CANCELLED but got '$($sessionParts[2])'"
+    }
+    return $objectUri
 }
 
 function Add-ZipTextEntry {
@@ -204,6 +349,69 @@ function New-DocxBase64 {
 </w:document>
 "@
         Add-ZipTextEntry -Archive $archive -Name "word/document.xml" -Content $documentXml
+    } finally {
+        $archive.Dispose()
+        $fileStream.Dispose()
+    }
+    try {
+        return [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($tempPath))
+    } finally {
+        Remove-Item -LiteralPath $tempPath -ErrorAction SilentlyContinue
+    }
+}
+
+function New-XlsxBase64 {
+    param(
+        [string]$Marker,
+        [string]$SecondValue = "42"
+    )
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $tempPath = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "seahorse-xlsx-$([guid]::NewGuid().ToString('N')).xlsx")
+    $fileStream = [System.IO.File]::Open($tempPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite)
+    $archive = [System.IO.Compression.ZipArchive]::new($fileStream, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        Add-ZipTextEntry -Archive $archive -Name "[Content_Types].xml" -Content @'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+</Types>
+'@
+        Add-ZipTextEntry -Archive $archive -Name "_rels/.rels" -Content @'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>
+'@
+        Add-ZipTextEntry -Archive $archive -Name "xl/workbook.xml" -Content @'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>
+</workbook>
+'@
+        $escapedMarker = [System.Security.SecurityElement]::Escape("Sandbox XLSX $Marker")
+        Add-ZipTextEntry -Archive $archive -Name "xl/sharedStrings.xml" -Content @"
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <si><t>label</t></si>
+  <si><t>value</t></si>
+  <si><t>$escapedMarker</t></si>
+</sst>
+"@
+        $escapedSecondValue = [System.Security.SecurityElement]::Escape($SecondValue)
+        Add-ZipTextEntry -Archive $archive -Name "xl/worksheets/sheet1.xml" -Content @"
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    <row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>
+    <row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2" t="str"><v>$escapedSecondValue</v></c></row>
+  </sheetData>
+</worksheet>
+"@
     } finally {
         $archive.Dispose()
         $fileStream.Dispose()
@@ -283,7 +491,12 @@ try {
 
     $headers = @{ Authorization = "Bearer $($login.data.token)" }
     $suffix = ([guid]::NewGuid().ToString('N')).Substring(0, 8)
-    $runId = "sandbox-file-convert-run-$suffix"
+    $smokeRun = Test-Step "Create real agent run for governed tool artifact binding" {
+        New-RealAgentRunId -Headers $headers -Marker $Marker -RunProfileId $KernelRunProfileId
+    }
+    if (-not $smokeRun) { exit 1 }
+
+    $runId = "$($smokeRun.RunId)"
     $toolCallId = "sandbox-file-convert-call-$suffix"
     $csvContent = "name,score,marker`nAda,42,$Marker`nGrace,99,$Marker`n"
 
@@ -304,7 +517,7 @@ try {
     } | Out-Null
 
     $observation = Test-Step "Invoke sandbox_file_convert through Tool Gateway" {
-        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_file_convert/invoke" -Headers $headers -Body @{
+        $requestBody = @{
             runId = $runId
             stepId = "sandbox-file-convert-step-$suffix"
             toolCallId = $toolCallId
@@ -321,7 +534,7 @@ try {
             idempotencyKey = "${runId}:${toolCallId}"
             allowedToolIds = @("sandbox_file_convert")
         }
-        Assert-ApiOk $response "Invoke sandbox_file_convert"
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert"
         if ($response.data.success -ne $true) {
             throw "sandbox_file_convert failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
@@ -360,47 +573,7 @@ try {
     $artifactId = "$(@($observation.artifacts)[0].artifactId)"
 
     $objectUri = Test-Step "Verify persisted FILE_CONVERSION session and JSON artifact" {
-        $safeSessionId = $sessionId.Replace("'", "''")
-        $sessionRow = Invoke-PostgresScalar "SELECT runtime_type, profile_id, status FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
-        $sessionParts = $sessionRow -split "`t"
-        if ($sessionParts.Count -ne 3) {
-            throw "Unexpected sa_sandbox_session row: $sessionRow"
-        }
-        if ($sessionParts[0] -ne "FILE_CONVERSION") {
-            throw "Expected runtime_type FILE_CONVERSION but got '$($sessionParts[0])'"
-        }
-        if ($sessionParts[1] -ne "file-conversion") {
-            throw "Expected profile_id file-conversion but got '$($sessionParts[1])'"
-        }
-        if ($sessionParts[2] -ne "CANCELLED") {
-            throw "Expected closed session status CANCELLED but got '$($sessionParts[2])'"
-        }
-
-        $safeArtifactId = $artifactId.Replace("'", "''")
-        $artifactRow = Invoke-PostgresScalar "SELECT object_uri, media_type, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
-        $artifactParts = $artifactRow -split "`t"
-        if ($artifactParts.Count -ne 5) {
-            throw "Unexpected sa_sandbox_artifact row: $artifactRow"
-        }
-        if ($artifactParts[0] -like "file:*") {
-            throw "sandbox file conversion artifact still points at file URI: $($artifactParts[0])"
-        }
-        if ($ExpectedObjectUriPrefix -and $artifactParts[0] -notlike "$ExpectedObjectUriPrefix*") {
-            throw "Expected object_uri prefix '$ExpectedObjectUriPrefix' but got '$($artifactParts[0])'"
-        }
-        if ($artifactParts[1] -ne "application/json") {
-            throw "Expected media_type application/json but got '$($artifactParts[1])'"
-        }
-        if ($artifactParts[2] -ne "CLEAN") {
-            throw "Expected scan_status CLEAN but got '$($artifactParts[2])'"
-        }
-        if ($artifactParts[3] -ne "INTERNAL") {
-            throw "Expected sensitivity INTERNAL but got '$($artifactParts[3])'"
-        }
-        if ($artifactParts[4] -ne "metadata scan passed") {
-            throw "Expected scan_summary metadata scan passed but got '$($artifactParts[4])'"
-        }
-        $artifactParts[0]
+        Assert-PersistedFileConversionArtifact -ArtifactId $artifactId -ExpectedMediaType "application/json" -Label "FILE_CONVERSION JSON"
     }
     if (-not $objectUri) { exit 1 }
 
@@ -442,7 +615,7 @@ try {
         } | Out-Null
     }
 
-    $jsonToCsvRunId = "sandbox-file-convert-json-csv-run-$suffix"
+    $jsonToCsvRunId = $runId
     $jsonToCsvToolCallId = "sandbox-file-convert-json-csv-call-$suffix"
     $jsonRows = @(
         [ordered]@{ name = "Lin"; score = "7"; marker = $Marker },
@@ -451,7 +624,7 @@ try {
     $jsonContent = $jsonRows | ConvertTo-Json -Depth 10 -Compress
 
     $jsonToCsvObservation = Test-Step "Invoke sandbox_file_convert JSON to CSV through Tool Gateway" {
-        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_file_convert/invoke" -Headers $headers -Body @{
+        $requestBody = @{
             runId = $jsonToCsvRunId
             stepId = "sandbox-file-convert-json-csv-step-$suffix"
             toolCallId = $jsonToCsvToolCallId
@@ -468,7 +641,7 @@ try {
             idempotencyKey = "${jsonToCsvRunId}:${jsonToCsvToolCallId}"
             allowedToolIds = @("sandbox_file_convert")
         }
-        Assert-ApiOk $response "Invoke sandbox_file_convert JSON to CSV"
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert JSON to CSV"
         if ($response.data.success -ne $true) {
             throw "sandbox_file_convert JSON to CSV failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
@@ -507,47 +680,7 @@ try {
     $jsonToCsvArtifactId = "$(@($jsonToCsvObservation.artifacts)[0].artifactId)"
 
     $jsonToCsvObjectUri = Test-Step "Verify persisted JSON to CSV session and artifact" {
-        $safeSessionId = $jsonToCsvSessionId.Replace("'", "''")
-        $sessionRow = Invoke-PostgresScalar "SELECT runtime_type, profile_id, status FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
-        $sessionParts = $sessionRow -split "`t"
-        if ($sessionParts.Count -ne 3) {
-            throw "Unexpected JSON to CSV sa_sandbox_session row: $sessionRow"
-        }
-        if ($sessionParts[0] -ne "FILE_CONVERSION") {
-            throw "Expected JSON to CSV runtime_type FILE_CONVERSION but got '$($sessionParts[0])'"
-        }
-        if ($sessionParts[1] -ne "file-conversion") {
-            throw "Expected JSON to CSV profile_id file-conversion but got '$($sessionParts[1])'"
-        }
-        if ($sessionParts[2] -ne "CANCELLED") {
-            throw "Expected JSON to CSV closed session status CANCELLED but got '$($sessionParts[2])'"
-        }
-
-        $safeArtifactId = $jsonToCsvArtifactId.Replace("'", "''")
-        $artifactRow = Invoke-PostgresScalar "SELECT object_uri, media_type, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
-        $artifactParts = $artifactRow -split "`t"
-        if ($artifactParts.Count -ne 5) {
-            throw "Unexpected JSON to CSV sa_sandbox_artifact row: $artifactRow"
-        }
-        if ($artifactParts[0] -like "file:*") {
-            throw "JSON to CSV artifact still points at file URI: $($artifactParts[0])"
-        }
-        if ($ExpectedObjectUriPrefix -and $artifactParts[0] -notlike "$ExpectedObjectUriPrefix*") {
-            throw "Expected JSON to CSV object_uri prefix '$ExpectedObjectUriPrefix' but got '$($artifactParts[0])'"
-        }
-        if ($artifactParts[1] -ne "text/csv") {
-            throw "Expected JSON to CSV media_type text/csv but got '$($artifactParts[1])'"
-        }
-        if ($artifactParts[2] -ne "CLEAN") {
-            throw "Expected JSON to CSV scan_status CLEAN but got '$($artifactParts[2])'"
-        }
-        if ($artifactParts[3] -ne "INTERNAL") {
-            throw "Expected JSON to CSV sensitivity INTERNAL but got '$($artifactParts[3])'"
-        }
-        if ($artifactParts[4] -ne "metadata scan passed") {
-            throw "Expected JSON to CSV scan_summary metadata scan passed but got '$($artifactParts[4])'"
-        }
-        $artifactParts[0]
+        Assert-PersistedFileConversionArtifact -ArtifactId $jsonToCsvArtifactId -ExpectedMediaType "text/csv" -Label "JSON to CSV"
     }
     if (-not $jsonToCsvObjectUri) { exit 1 }
 
@@ -585,12 +718,12 @@ try {
         } | Out-Null
     }
 
-    $markdownRunId = "sandbox-file-convert-markdown-html-run-$suffix"
+    $markdownRunId = $runId
     $markdownToolCallId = "sandbox-file-convert-markdown-html-call-$suffix"
     $markdownContent = "# Sandbox Document`n`nHello **$Marker** from markdown.`n- first item`n"
 
     $markdownObservation = Test-Step "Invoke sandbox_file_convert Markdown to HTML through Tool Gateway" {
-        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_file_convert/invoke" -Headers $headers -Body @{
+        $requestBody = @{
             runId = $markdownRunId
             stepId = "sandbox-file-convert-markdown-html-step-$suffix"
             toolCallId = $markdownToolCallId
@@ -607,7 +740,7 @@ try {
             idempotencyKey = "${markdownRunId}:${markdownToolCallId}"
             allowedToolIds = @("sandbox_file_convert")
         }
-        Assert-ApiOk $response "Invoke sandbox_file_convert Markdown to HTML"
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert Markdown to HTML"
         if ($response.data.success -ne $true) {
             throw "sandbox_file_convert Markdown to HTML failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
@@ -646,47 +779,7 @@ try {
     $markdownArtifactId = "$(@($markdownObservation.artifacts)[0].artifactId)"
 
     $markdownObjectUri = Test-Step "Verify persisted Markdown to HTML session and artifact" {
-        $safeSessionId = $markdownSessionId.Replace("'", "''")
-        $sessionRow = Invoke-PostgresScalar "SELECT runtime_type, profile_id, status FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
-        $sessionParts = $sessionRow -split "`t"
-        if ($sessionParts.Count -ne 3) {
-            throw "Unexpected Markdown to HTML sa_sandbox_session row: $sessionRow"
-        }
-        if ($sessionParts[0] -ne "FILE_CONVERSION") {
-            throw "Expected Markdown to HTML runtime_type FILE_CONVERSION but got '$($sessionParts[0])'"
-        }
-        if ($sessionParts[1] -ne "file-conversion") {
-            throw "Expected Markdown to HTML profile_id file-conversion but got '$($sessionParts[1])'"
-        }
-        if ($sessionParts[2] -ne "CANCELLED") {
-            throw "Expected Markdown to HTML closed session status CANCELLED but got '$($sessionParts[2])'"
-        }
-
-        $safeArtifactId = $markdownArtifactId.Replace("'", "''")
-        $artifactRow = Invoke-PostgresScalar "SELECT object_uri, media_type, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
-        $artifactParts = $artifactRow -split "`t"
-        if ($artifactParts.Count -ne 5) {
-            throw "Unexpected Markdown to HTML sa_sandbox_artifact row: $artifactRow"
-        }
-        if ($artifactParts[0] -like "file:*") {
-            throw "Markdown to HTML artifact still points at file URI: $($artifactParts[0])"
-        }
-        if ($ExpectedObjectUriPrefix -and $artifactParts[0] -notlike "$ExpectedObjectUriPrefix*") {
-            throw "Expected Markdown to HTML object_uri prefix '$ExpectedObjectUriPrefix' but got '$($artifactParts[0])'"
-        }
-        if ($artifactParts[1] -ne "text/html") {
-            throw "Expected Markdown to HTML media_type text/html but got '$($artifactParts[1])'"
-        }
-        if ($artifactParts[2] -ne "CLEAN") {
-            throw "Expected Markdown to HTML scan_status CLEAN but got '$($artifactParts[2])'"
-        }
-        if ($artifactParts[3] -ne "INTERNAL") {
-            throw "Expected Markdown to HTML sensitivity INTERNAL but got '$($artifactParts[3])'"
-        }
-        if ($artifactParts[4] -ne "metadata scan passed") {
-            throw "Expected Markdown to HTML scan_summary metadata scan passed but got '$($artifactParts[4])'"
-        }
-        $artifactParts[0]
+        Assert-PersistedFileConversionArtifact -ArtifactId $markdownArtifactId -ExpectedMediaType "text/html" -Label "Markdown to HTML"
     }
     if (-not $markdownObjectUri) { exit 1 }
 
@@ -720,7 +813,7 @@ try {
         } | Out-Null
     }
 
-    $docxRunId = "sandbox-file-convert-docx-txt-run-$suffix"
+    $docxRunId = $runId
     $docxToolCallId = "sandbox-file-convert-docx-txt-call-$suffix"
     $docxContent = New-DocxBase64 -Paragraphs @(
         "Sandbox DOCX $Marker",
@@ -728,7 +821,7 @@ try {
     )
 
     $docxObservation = Test-Step "Invoke sandbox_file_convert DOCX to TXT through Tool Gateway" {
-        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_file_convert/invoke" -Headers $headers -Body @{
+        $requestBody = @{
             runId = $docxRunId
             stepId = "sandbox-file-convert-docx-txt-step-$suffix"
             toolCallId = $docxToolCallId
@@ -746,7 +839,7 @@ try {
             idempotencyKey = "${docxRunId}:${docxToolCallId}"
             allowedToolIds = @("sandbox_file_convert")
         }
-        Assert-ApiOk $response "Invoke sandbox_file_convert DOCX to TXT"
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert DOCX to TXT"
         if ($response.data.success -ne $true) {
             throw "sandbox_file_convert DOCX to TXT failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
@@ -785,47 +878,7 @@ try {
     $docxArtifactId = "$(@($docxObservation.artifacts)[0].artifactId)"
 
     $docxObjectUri = Test-Step "Verify persisted DOCX to TXT session and artifact" {
-        $safeSessionId = $docxSessionId.Replace("'", "''")
-        $sessionRow = Invoke-PostgresScalar "SELECT runtime_type, profile_id, status FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
-        $sessionParts = $sessionRow -split "`t"
-        if ($sessionParts.Count -ne 3) {
-            throw "Unexpected DOCX to TXT sa_sandbox_session row: $sessionRow"
-        }
-        if ($sessionParts[0] -ne "FILE_CONVERSION") {
-            throw "Expected DOCX to TXT runtime_type FILE_CONVERSION but got '$($sessionParts[0])'"
-        }
-        if ($sessionParts[1] -ne "file-conversion") {
-            throw "Expected DOCX to TXT profile_id file-conversion but got '$($sessionParts[1])'"
-        }
-        if ($sessionParts[2] -ne "CANCELLED") {
-            throw "Expected DOCX to TXT closed session status CANCELLED but got '$($sessionParts[2])'"
-        }
-
-        $safeArtifactId = $docxArtifactId.Replace("'", "''")
-        $artifactRow = Invoke-PostgresScalar "SELECT object_uri, media_type, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
-        $artifactParts = $artifactRow -split "`t"
-        if ($artifactParts.Count -ne 5) {
-            throw "Unexpected DOCX to TXT sa_sandbox_artifact row: $artifactRow"
-        }
-        if ($artifactParts[0] -like "file:*") {
-            throw "DOCX to TXT artifact still points at file URI: $($artifactParts[0])"
-        }
-        if ($ExpectedObjectUriPrefix -and $artifactParts[0] -notlike "$ExpectedObjectUriPrefix*") {
-            throw "Expected DOCX to TXT object_uri prefix '$ExpectedObjectUriPrefix' but got '$($artifactParts[0])'"
-        }
-        if ($artifactParts[1] -ne "text/plain") {
-            throw "Expected DOCX to TXT media_type text/plain but got '$($artifactParts[1])'"
-        }
-        if ($artifactParts[2] -ne "CLEAN") {
-            throw "Expected DOCX to TXT scan_status CLEAN but got '$($artifactParts[2])'"
-        }
-        if ($artifactParts[3] -ne "INTERNAL") {
-            throw "Expected DOCX to TXT sensitivity INTERNAL but got '$($artifactParts[3])'"
-        }
-        if ($artifactParts[4] -ne "metadata scan passed") {
-            throw "Expected DOCX to TXT scan_summary metadata scan passed but got '$($artifactParts[4])'"
-        }
-        $artifactParts[0]
+        Assert-PersistedFileConversionArtifact -ArtifactId $docxArtifactId -ExpectedMediaType "text/plain" -Label "DOCX to TXT"
     }
     if (-not $docxObjectUri) { exit 1 }
 
@@ -856,7 +909,7 @@ try {
         } | Out-Null
     }
 
-    $pdfRunId = "sandbox-file-convert-pdf-txt-run-$suffix"
+    $pdfRunId = $runId
     $pdfToolCallId = "sandbox-file-convert-pdf-txt-call-$suffix"
     $pdfContent = New-PdfBase64 -Lines @(
         "Sandbox PDF $Marker",
@@ -864,7 +917,7 @@ try {
     )
 
     $pdfObservation = Test-Step "Invoke sandbox_file_convert PDF to TXT through Tool Gateway" {
-        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_file_convert/invoke" -Headers $headers -Body @{
+        $requestBody = @{
             runId = $pdfRunId
             stepId = "sandbox-file-convert-pdf-txt-step-$suffix"
             toolCallId = $pdfToolCallId
@@ -882,7 +935,7 @@ try {
             idempotencyKey = "${pdfRunId}:${pdfToolCallId}"
             allowedToolIds = @("sandbox_file_convert")
         }
-        Assert-ApiOk $response "Invoke sandbox_file_convert PDF to TXT"
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert PDF to TXT"
         if ($response.data.success -ne $true) {
             throw "sandbox_file_convert PDF to TXT failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
@@ -921,47 +974,7 @@ try {
     $pdfArtifactId = "$(@($pdfObservation.artifacts)[0].artifactId)"
 
     $pdfObjectUri = Test-Step "Verify persisted PDF to TXT session and artifact" {
-        $safeSessionId = $pdfSessionId.Replace("'", "''")
-        $sessionRow = Invoke-PostgresScalar "SELECT runtime_type, profile_id, status FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
-        $sessionParts = $sessionRow -split "`t"
-        if ($sessionParts.Count -ne 3) {
-            throw "Unexpected PDF to TXT sa_sandbox_session row: $sessionRow"
-        }
-        if ($sessionParts[0] -ne "FILE_CONVERSION") {
-            throw "Expected PDF to TXT runtime_type FILE_CONVERSION but got '$($sessionParts[0])'"
-        }
-        if ($sessionParts[1] -ne "file-conversion") {
-            throw "Expected PDF to TXT profile_id file-conversion but got '$($sessionParts[1])'"
-        }
-        if ($sessionParts[2] -ne "CANCELLED") {
-            throw "Expected PDF to TXT closed session status CANCELLED but got '$($sessionParts[2])'"
-        }
-
-        $safeArtifactId = $pdfArtifactId.Replace("'", "''")
-        $artifactRow = Invoke-PostgresScalar "SELECT object_uri, media_type, scan_status, sensitivity, scan_summary FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
-        $artifactParts = $artifactRow -split "`t"
-        if ($artifactParts.Count -ne 5) {
-            throw "Unexpected PDF to TXT sa_sandbox_artifact row: $artifactRow"
-        }
-        if ($artifactParts[0] -like "file:*") {
-            throw "PDF to TXT artifact still points at file URI: $($artifactParts[0])"
-        }
-        if ($ExpectedObjectUriPrefix -and $artifactParts[0] -notlike "$ExpectedObjectUriPrefix*") {
-            throw "Expected PDF to TXT object_uri prefix '$ExpectedObjectUriPrefix' but got '$($artifactParts[0])'"
-        }
-        if ($artifactParts[1] -ne "text/plain") {
-            throw "Expected PDF to TXT media_type text/plain but got '$($artifactParts[1])'"
-        }
-        if ($artifactParts[2] -ne "CLEAN") {
-            throw "Expected PDF to TXT scan_status CLEAN but got '$($artifactParts[2])'"
-        }
-        if ($artifactParts[3] -ne "INTERNAL") {
-            throw "Expected PDF to TXT sensitivity INTERNAL but got '$($artifactParts[3])'"
-        }
-        if ($artifactParts[4] -ne "metadata scan passed") {
-            throw "Expected PDF to TXT scan_summary metadata scan passed but got '$($artifactParts[4])'"
-        }
-        $artifactParts[0]
+        Assert-PersistedFileConversionArtifact -ArtifactId $pdfArtifactId -ExpectedMediaType "text/plain" -Label "PDF to TXT"
     }
     if (-not $pdfObjectUri) { exit 1 }
 
@@ -992,8 +1005,103 @@ try {
         } | Out-Null
     }
 
+    $xlsxRunId = $runId
+    $xlsxToolCallId = "sandbox-file-convert-xlsx-csv-call-$suffix"
+    $xlsxContent = New-XlsxBase64 -Marker $Marker -SecondValue "XLSX conversion extracts first worksheet"
+
+    $xlsxObservation = Test-Step "Invoke sandbox_file_convert XLSX to CSV through Tool Gateway" {
+        $requestBody = @{
+            runId = $xlsxRunId
+            stepId = "sandbox-file-convert-xlsx-csv-step-$suffix"
+            toolCallId = $xlsxToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "xlsx"
+                targetFormat = "csv"
+                contentEncoding = "base64"
+                content = $xlsxContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${xlsxRunId}:${xlsxToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert XLSX to CSV"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert XLSX to CSV failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION") {
+            throw "Expected FILE_CONVERSION runtime for XLSX to CSV: $content"
+        }
+        if ("$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected SUCCEEDED XLSX to CSV execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "xlsx" -or "$($parsed.conversion.targetFormat)" -ne "csv" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected XLSX to CSV conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1) {
+            throw "Expected one XLSX to CSV artifact: $content"
+        }
+        if ("$($artifacts[0].mediaType)" -ne "text/csv") {
+            throw "Expected XLSX to CSV artifact mediaType text/csv: $content"
+        }
+        if ("$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected CLEAN XLSX to CSV artifact scan status: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed") {
+            throw "Expected XLSX to CSV metadata scan summary: $content"
+        }
+        if ($artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible XLSX to CSV artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $xlsxObservation) { exit 1 }
+
+    $xlsxSessionId = "$($xlsxObservation.sessionId)"
+    $xlsxArtifactId = "$(@($xlsxObservation.artifacts)[0].artifactId)"
+
+    $xlsxObjectUri = Test-Step "Verify persisted XLSX to CSV session and artifact" {
+        Assert-PersistedFileConversionArtifact -ArtifactId $xlsxArtifactId -ExpectedMediaType "text/csv" -Label "XLSX to CSV"
+    }
+    if (-not $xlsxObjectUri) { exit 1 }
+
+    Test-Step "Download converted XLSX CSV through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$xlsxArtifactId/download" -Headers $headers
+        if ($content -notlike "*Sandbox XLSX $Marker*") {
+            throw "Downloaded XLSX CSV did not include marker '$Marker': $content"
+        }
+        if ($content -notlike "*XLSX conversion extracts first worksheet*") {
+            throw "Downloaded XLSX CSV did not include worksheet value: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded XLSX CSV artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($xlsxObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted XLSX CSV object exists in backend storage volume" {
+            $key = $xlsxObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote XLSX to CSV key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored XLSX to CSV object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Host "Backend: $BaseUrl"
+    Write-Host "Conversation: $($smokeRun.ConversationId)"
+    Write-Host "Run: $runId"
     Write-Host "Tool: sandbox_file_convert"
     Write-Host "Artifact: $artifactId"
     Write-Host "Object URI: $objectUri"

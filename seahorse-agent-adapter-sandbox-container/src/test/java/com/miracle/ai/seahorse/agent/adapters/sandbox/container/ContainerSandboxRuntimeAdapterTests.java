@@ -462,6 +462,45 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldRunXlsxToCsvFileConversionAndCollectCsvOutputOnly() throws Exception {
+        byte[] xlsxBytes = xlsxBytes();
+        String xlsxBase64 = Base64.getEncoder().encodeToString(xlsxBytes);
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted xlsx worksheet to csv\n", Duration.ofMillis(190)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("xlsx_to_csv",
+                                    "source_format = \"xlsx\"",
+                                    "xl/worksheets/sheet1.xml",
+                                    "converted.csv")
+                            .doesNotContain(xlsxBase64);
+                    assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.xlsx")))
+                            .isEqualTo(xlsxBytes);
+                    Files.writeString(command.workingDirectory().resolve("converted.csv"),
+                            "name,score\nAda,42\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"xlsx","targetFormat":"csv","contentEncoding":"base64","content":"%s"}
+                        """.formatted(xlsxBase64),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted xlsx worksheet to csv");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.csv");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/csv");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.xlsx"));
+    }
+
+    @Test
     void shouldRejectPdfWithActiveContentBeforeRunningContainer() {
         shouldRejectPdfActiveContentMarkerBeforeRunningContainer("/OpenAction");
         shouldRejectPdfActiveContentMarkerBeforeRunningContainer("/ImportData");
@@ -1232,7 +1271,7 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED);
         assertThat(result.execution().resultSummary())
-                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, and docx/pdf to txt only");
+                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to txt, and xlsx to csv only");
         assertThat(runner.lastCommand).isNull();
     }
 
@@ -1586,6 +1625,35 @@ class ContainerSandboxRuntimeAdapterTests {
 
     private static byte[] zipBytes(String entryName, String content) throws IOException {
         return zipBytes(entryName, content, null, null);
+    }
+
+    private static byte[] xlsxBytes() throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream archive = new ZipOutputStream(bytes)) {
+            writeZipEntry(archive, "[Content_Types].xml", "<Types/>");
+            writeZipEntry(archive, "xl/workbook.xml",
+                    """
+                            <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                              <sheets><sheet name="Sheet1" sheetId="1" r:id="rId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/></sheets>
+                            </workbook>
+                            """);
+            writeZipEntry(archive, "xl/sharedStrings.xml",
+                    """
+                            <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                              <si><t>name</t></si><si><t>score</t></si><si><t>Ada</t></si>
+                            </sst>
+                            """);
+            writeZipEntry(archive, "xl/worksheets/sheet1.xml",
+                    """
+                            <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                              <sheetData>
+                                <row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>
+                                <row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>42</v></c></row>
+                              </sheetData>
+                            </worksheet>
+                            """);
+        }
+        return bytes.toByteArray();
     }
 
     private static byte[] zipBytes(String firstEntryName,
