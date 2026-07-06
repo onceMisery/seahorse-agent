@@ -810,3 +810,11 @@ Agent run detail, step listing, cancellation, and retry operations now require t
 This closes the same run-boundary authorization class as the checkpoint query guard. It does not change run creation, worker execution, run queue handling, snapshots, workflow projection, or cost-summary behavior.
 
 Fresh evidence: the new regression first failed because `KernelAgentRunService` only required login for run detail, step listing, cancel, and retry. After the fix, `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 19/19, including unrelated-user denial for run detail, steps, cancel, and retry plus admin read access.
+
+## 2026-07-06 Update: Agent Run Event Replay Ownership Guard
+
+Agent run event replay now requires the target run to be readable before returning buffered stream events from `GET /agent-runs/{runId}/events` and `GET /api/agent-runs/{runId}/events`. The web endpoint reuses `AgentRunInboundPort.findRunById(runId)`, so the owner/admin authorization boundary stays in the kernel run service instead of being reimplemented at the event buffer.
+
+This closes a run-boundary authorization gap for replayed stream events. It does not change chat SSE resume internals, event buffer persistence, event payload shape, snapshot/workflow/cost-summary authorization, or long-lived event retention semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseAgentControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 18/18 after adding regression coverage that unreadable runs return `权限不足` and do not call `AgentRunEventBufferPort.getAfter`.

@@ -353,6 +353,34 @@ class SeahorseAgentControllerTests {
     }
 
     @Test
+    void shouldDenyAgentRunEventsWhenRunIsNotReadable() throws Exception {
+        AgentRunInboundPort port = mock(AgentRunInboundPort.class);
+        AgentRunEventBufferPort eventBufferPort = mock(AgentRunEventBufferPort.class);
+        when(port.findRunById("run-1")).thenThrow(new IllegalStateException("权限不足"));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                        new SeahorseAgentRunController(
+                                provider(AgentRunInboundPort.class, port),
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                provider(AgentRunEventBufferPort.class, eventBufferPort),
+                                provider(AdvancedFeatureGate.class, AdvancedFeatureGate.allEnabledForTests())))
+                .setControllerAdvice(new SeahorseWebExceptionHandler())
+                .build();
+
+        mvc.perform(get("/agent-runs/run-1/events")
+                        .param("afterSeq", "10"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("权限不足"));
+
+        verify(port).findRunById("run-1");
+        verifyNoInteractions(eventBufferPort);
+    }
+
+    @Test
     void consumerWebModeShouldRejectRunManagementApiVariantsExceptSnapshot() throws Exception {
         AgentRunInboundPort port = mock(AgentRunInboundPort.class);
         AgentRunResumeInboundPort resumePort = mock(AgentRunResumeInboundPort.class);

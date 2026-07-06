@@ -124,6 +124,7 @@ public class SeahorseAgentRunController {
                 parseInstant(from),
                 parseInstant(to),
                 null,
+                null,
                 current,
                 size)));
     }
@@ -185,10 +186,14 @@ public class SeahorseAgentRunController {
                                       @RequestParam(defaultValue = "0") long afterSeq,
                                       HttpServletRequest request) {
         requireApiOrRunManagement(request);
-        AgentRunEventBufferPort port = eventBufferPortProvider != null
-                ? eventBufferPortProvider.getIfAvailable(AgentRunEventBufferPort::noop)
-                : AgentRunEventBufferPort.noop();
-        return ApiResponse.ok(port.getAfter(runId, Math.max(0L, afterSeq)));
+        return ApiResponses.requireService(agentRunPortProvider, agentRunPort -> {
+            agentRunPort.findRunById(runId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Agent run not found"));
+            AgentRunEventBufferPort port = eventBufferPortProvider != null
+                    ? eventBufferPortProvider.getIfAvailable(AgentRunEventBufferPort::noop)
+                    : AgentRunEventBufferPort.noop();
+            return port.getAfter(runId, Math.max(0L, afterSeq));
+        });
     }
 
     private void requireApiOrRunManagement(HttpServletRequest request) {
