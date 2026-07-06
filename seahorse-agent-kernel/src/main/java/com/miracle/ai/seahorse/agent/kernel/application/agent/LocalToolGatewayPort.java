@@ -341,7 +341,12 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     }
 
     private String approvalSummary(ToolInvocationRequest request, PolicyDecision decision) {
-        return truncate("Tool " + request.toolId() + " requires approval: " + decision.reasonCode());
+        return truncate("Tool " + safeToolIdPreview(request.toolId()) + " requires approval: " + decision.reasonCode());
+    }
+
+    private String safeToolIdPreview(String toolId) {
+        String value = Objects.requireNonNullElse(toolId, "").trim();
+        return isSafePreviewArgumentKey(value) ? value : "unsafe-tool-id";
     }
 
     private String argumentsPreviewJson(ToolInvocationRequest request) {

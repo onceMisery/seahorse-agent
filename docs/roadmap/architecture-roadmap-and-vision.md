@@ -1218,3 +1218,11 @@ Tool Gateway successful completion audit now adds value-free text shape metadata
 This is a narrow completion-audit hardening slice. It does not change tool execution, output redaction, JSON result summaries, artifact publication, failure summaries, approval policy, quota policy, or caller-visible tool observations.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 29/29, covering multi-line text shape metadata while preserving assertions that raw text values are excluded from completion summaries.
+
+## 2026-07-06 Update: Tool Approval Summary Tool ID Preview
+
+Tool approval request summaries now filter the human-readable tool-id preview through the same safe preview boundary used for argument and resource-ref keys. The persisted `ApprovalRequest.toolId` still retains the real tool id for matching and resume semantics, while the display `summary` falls back to `unsafe-tool-id` when a pre-validation tool id contains unsafe characters or credential-shaped markers.
+
+This is a narrow approval-governance hardening slice. It does not change approval matching, pending approval persistence, tool execution, request audit summaries, arguments preview JSON, policy decisions, or resume behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 30/30, covering unsafe tool-id suppression in approval summaries while preserving the real persisted `toolId`.

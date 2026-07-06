@@ -325,6 +325,43 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldFilterUnsafeToolIdFromApprovalSummary() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
+        RecordingToolApprovalRequestRepositoryPort approvals = new RecordingToolApprovalRequestRepositoryPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
+                        ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED,
+                        "Tool requires approval")),
+                ToolInvocationAuditPort.noop(),
+                approvals,
+                FIXED_CLOCK);
+
+        gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "memory-forget\nsessionToken=secret-marker",
+                Map.of("input", "value"),
+                Map.of(),
+                "run-1:call-1",
+                List.of("memory-forget\nsessionToken=secret-marker")));
+
+        assertEquals(1, approvals.saved.size());
+        ApprovalRequest approval = approvals.saved.get(0);
+        assertEquals("memory-forget\nsessionToken=secret-marker", approval.toolId());
+        assertTrue(approval.summary().contains("Tool unsafe-tool-id requires approval"));
+        assertFalse(approval.summary().contains("memory-forget"));
+        assertFalse(approval.summary().contains("sessionToken"));
+        assertFalse(approval.summary().contains("secret-marker"));
+    }
+
+    @Test
     void shouldExecuteToolWhenApprovalWasAlreadyApprovedForRunStep() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
