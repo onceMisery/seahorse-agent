@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.research;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.ResearchStepType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.ResearchTaskProfile;
@@ -144,7 +145,7 @@ public class ResearchRunOrchestrator {
             }
             int nextAttempt = task.attemptCount() + 1;
             Instant retryAt = Instant.now().plusSeconds(30L * nextAttempt);
-            taskQueue.retry(task.taskId(), retryAt, e.getMessage());
+            taskQueue.retry(task.taskId(), retryAt, failureMessage(e));
             log.info("Research step {} retry scheduled for run={}, attempt={}", stepType, task.runId(), nextAttempt);
             return true;
         } catch (Exception e) {
@@ -162,10 +163,15 @@ public class ResearchRunOrchestrator {
     }
 
     private void failStep(DurableTask task, ResearchStepType stepType, ResearchStepContext context, Exception e) {
-        taskQueue.fail(task.taskId(), e.getMessage());
+        String message = failureMessage(e);
+        taskQueue.fail(task.taskId(), message);
         emitEvent(task.runId(), context, StreamEventType.RECOVERABLE_ERROR,
                 Map.of("stepId", task.taskId(), "title", stepType.name(),
-                        "message", Objects.requireNonNullElse(e.getMessage(), "Unknown error")));
+                        "message", message));
+    }
+
+    private String failureMessage(Exception e) {
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(e.getMessage(), "Unknown error"));
     }
 
     private void enqueueNextStep(String runId, ResearchStepType current, ResearchStepContext context) {

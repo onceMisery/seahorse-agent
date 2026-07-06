@@ -176,6 +176,30 @@ class ResearchRunOrchestratorTests {
     }
 
     @Test
+    void retryableExceptionShouldRedactCredentialLikeRetryReason() {
+        List<ResearchStepHandler> handlers = new ArrayList<>();
+        handlers.add(new ResearchStepHandler() {
+            @Override
+            public ResearchStepType stepType() { return ResearchStepType.PLAN; }
+            @Override
+            public void execute(DurableTask task, ResearchStepContext context) {
+                throw new RetryableResearchException(
+                        "transient Authorization: Bearer abcdefghijklmnop api_key=plain-retry-secret");
+            }
+        });
+        orchestrator = new ResearchRunOrchestrator(taskQueue, eventBuffer, handlers);
+        orchestrator.startResearch("run-retry-redaction", ResearchTaskProfile.defaultProfile(),
+                "q", "t", "u");
+
+        orchestrator.pollAndExecute();
+
+        assertEquals(1, taskQueue.retryCount);
+        assertTrue(taskQueue.lastRetryReason.contains("[REDACTED]"));
+        assertFalse(taskQueue.lastRetryReason.contains("abcdefghijklmnop"));
+        assertFalse(taskQueue.lastRetryReason.contains("plain-retry-secret"));
+    }
+
+    @Test
     void retryableExceptionWithSecurityCauseFailsWithoutRetry() {
         List<ResearchStepHandler> handlers = new ArrayList<>();
         handlers.add(new ResearchStepHandler() {
@@ -196,6 +220,39 @@ class ResearchRunOrchestratorTests {
         assertEquals(1, taskQueue.failCount);
         assertTrue(eventBuffer.allEvents("run-non-retryable").stream()
                 .anyMatch(event -> event.eventType() == StreamEventType.RECOVERABLE_ERROR));
+    }
+
+    @Test
+    void failedStepShouldRedactCredentialLikeFailureReasonAndEventMessage() {
+        List<ResearchStepHandler> handlers = new ArrayList<>();
+        handlers.add(new ResearchStepHandler() {
+            @Override
+            public ResearchStepType stepType() { return ResearchStepType.PLAN; }
+            @Override
+            public void execute(DurableTask task, ResearchStepContext context) {
+                throw new IllegalStateException(
+                        "provider failed Authorization: Bearer abcdefghijklmnop api_key=plain-failure-secret");
+            }
+        });
+        orchestrator = new ResearchRunOrchestrator(taskQueue, eventBuffer, handlers);
+        orchestrator.startResearch("run-failure-redaction", ResearchTaskProfile.defaultProfile(),
+                "q", "t", "u");
+
+        orchestrator.pollAndExecute();
+
+        assertEquals(1, taskQueue.failCount);
+        assertTrue(taskQueue.lastFailReason.contains("[REDACTED]"));
+        assertFalse(taskQueue.lastFailReason.contains("abcdefghijklmnop"));
+        assertFalse(taskQueue.lastFailReason.contains("plain-failure-secret"));
+        String errorEventPayload = eventBuffer.allEvents("run-failure-redaction").stream()
+                .filter(event -> event.eventType() == StreamEventType.RECOVERABLE_ERROR)
+                .findFirst()
+                .orElseThrow()
+                .typedPayload()
+                .toString();
+        assertTrue(errorEventPayload.contains("[REDACTED]"));
+        assertFalse(errorEventPayload.contains("abcdefghijklmnop"));
+        assertFalse(errorEventPayload.contains("plain-failure-secret"));
     }
 
     @Test
@@ -284,6 +341,8 @@ class ResearchRunOrchestratorTests {
         private final Queue<DurableTask> queue = new LinkedList<>();
         int retryCount = 0;
         int failCount = 0;
+        String lastRetryReason = "";
+        String lastFailReason = "";
 
         @Override
         public void enqueue(DurableTask task) { queue.add(task); }
@@ -299,12 +358,16 @@ class ResearchRunOrchestratorTests {
         @Override
         public void retry(String taskId, Instant retryAt, String reason) {
             retryCount++;
+            lastRetryReason = reason;
             queue.add(new DurableTask(taskId, findRunId(taskId), findStepType(taskId),
                     1, Instant.now(), null, findPayload(taskId)));
         }
 
         @Override
-        public void fail(String taskId, String reason) { failCount++; }
+        public void fail(String taskId, String reason) {
+            failCount++;
+            lastFailReason = reason;
+        }
 
         @Override
         public void cancel(String runId) { queue.removeIf(t -> t.runId().equals(runId)); }

@@ -1654,3 +1654,11 @@ Memory review alias apply failures now redact credential-shaped exception text b
 This is a narrow review alias-apply hardening slice. It does not change review decision semantics, alias command construction, claim/release behavior, feedback persistence, raw alias command inputs, successful approve tracing, or server-side exception logging with the original exception chain.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelMemoryReviewServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new alias apply regression because the thrown review error returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 23/23 across kernel redactor and memory review coverage.
+
+## 2026-07-06 Update: Research Task Failure Redaction
+
+Research step retry and failure messages now redact credential-shaped exception text before writing durable task queue retry/fail reasons or streaming `RECOVERABLE_ERROR` event payload messages. This protects research task operations and subscriber surfaces when model, retrieval, artifact, or provider failures accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow research orchestration failure-boundary hardening slice. It does not change step ordering, retry eligibility, retry backoff, loop detection, handler execution, task ack/enqueue semantics, event sequencing, successful step events, or server-side exception logging with the original exception chain.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=ResearchRunOrchestratorTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new retry/fail regressions because durable queue reasons lacked `[REDACTED]`, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 14/14 across kernel redactor and research orchestration coverage.
