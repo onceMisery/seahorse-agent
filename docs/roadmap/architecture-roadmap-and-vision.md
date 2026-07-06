@@ -1310,3 +1310,11 @@ Run failure writes now also redact credential-shaped `errorMessage` values befor
 This is a narrow legacy run-query and fail-write hardening slice. It does not change run ownership checks, paging filters, worker lifecycle transitions, retry/cancel/succeed semantics, snapshot assembly, workflow projections, or repository schema.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 27/27, covering run detail/page/step projection redaction, fail-write error redaction, owner/admin authorization, numeric owner compatibility, and existing run lifecycle behavior.
+
+## 2026-07-06 Update: Tool Invocation Audit Query Projection Redaction
+
+Tool invocation audit queries now defensively redact credential-shaped display text before returning records from `KernelToolInvocationAuditQueryService.page`. The projection covers historical `argumentsSummary`, `resultSummary`, and `errorMessage` values while leaving the underlying audit query record unchanged.
+
+This is a narrow Tool Gateway audit-query hardening slice. It does not change admin authorization, query filters, audit write paths, completion summary generation, policy decisions, Tool Gateway execution, or repository schema.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelToolInvocationAuditQueryServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 6/6, covering query-time redaction for historical credential-bearing tool invocation audit entries, admin-only access, query parameter propagation, and shared credential text redactor behavior.

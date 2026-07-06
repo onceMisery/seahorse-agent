@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class KernelToolInvocationAuditQueryServiceTests {
@@ -65,6 +66,50 @@ class KernelToolInvocationAuditQueryServiceTests {
         assertEquals(2L, queryPort.lastQuery.current());
         assertEquals(20L, queryPort.lastQuery.size());
         assertEquals(1L, page.total());
+    }
+
+    @Test
+    void shouldRedactHistoricalCredentialTextWhenQueryingAuditEntries() {
+        MemoryToolInvocationAuditQueryPort queryPort = new MemoryToolInvocationAuditQueryPort(
+                new ToolInvocationAuditEntry(
+                        "invocation-1",
+                        "run-1",
+                        "step-1",
+                        "agent-1",
+                        "agent-1-v1",
+                        "tenant-1",
+                        "user-1",
+                        "weather_query",
+                        "run-1:call-1",
+                        ToolInvocationStatus.FAILED,
+                        "decision-1",
+                        "request had api_key=secret-api-key-value",
+                        "result had access_token=result-token-value",
+                        "failed with Authorization: Bearer abcdefghijklmnop",
+                        NOW,
+                        NOW.plusSeconds(1)));
+        ToolInvocationAuditQueryInboundPort service =
+                new KernelToolInvocationAuditQueryService(queryPort, adminUser());
+
+        ToolInvocationAuditPage page = service.page(
+                "tenant-1",
+                "agent-1",
+                "agent-1-v1",
+                null,
+                "run-1",
+                "weather_query",
+                ToolInvocationStatus.FAILED,
+                1L,
+                10L);
+
+        ToolInvocationAuditEntry entry = page.records().get(0);
+        assertEquals("request had [REDACTED]", entry.argumentsSummary());
+        assertEquals("result had [REDACTED]", entry.resultSummary());
+        assertEquals("failed with [REDACTED]", entry.errorMessage());
+        assertFalse(entry.argumentsSummary().contains("secret-api-key-value"));
+        assertFalse(entry.resultSummary().contains("result-token-value"));
+        assertFalse(entry.errorMessage().contains("abcdefghijklmnop"));
+        assertEquals("request had api_key=secret-api-key-value", queryPort.entry.argumentsSummary());
     }
 
     @Test
@@ -107,12 +152,21 @@ class KernelToolInvocationAuditQueryServiceTests {
     }
 
     private static final class MemoryToolInvocationAuditQueryPort implements ToolInvocationAuditQueryPort {
+        private final ToolInvocationAuditEntry entry;
         private ToolInvocationAuditQuery lastQuery;
+
+        private MemoryToolInvocationAuditQueryPort() {
+            this(entry());
+        }
+
+        private MemoryToolInvocationAuditQueryPort(ToolInvocationAuditEntry entry) {
+            this.entry = entry;
+        }
 
         @Override
         public ToolInvocationAuditPage page(ToolInvocationAuditQuery query) {
             lastQuery = query;
-            return new ToolInvocationAuditPage(List.of(entry()), 1L, query.size(), query.current(), 1L);
+            return new ToolInvocationAuditPage(List.of(entry), 1L, query.size(), query.current(), 1L);
         }
     }
 }

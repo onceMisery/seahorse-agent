@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditEntry;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationStatus;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPage;
@@ -24,6 +26,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditQue
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 
+import java.util.List;
 import java.util.Objects;
 
 public class KernelToolInvocationAuditQueryService implements ToolInvocationAuditQueryInboundPort {
@@ -51,7 +54,7 @@ public class KernelToolInvocationAuditQueryService implements ToolInvocationAudi
                                         long size) {
         currentUserPort.requireRole(ADMIN_ROLE);
         // 查询服务只负责鉴权和条件归一化，分页 SQL 与字段映射由只读查询端口负责。
-        return queryPort.page(new ToolInvocationAuditQuery(
+        return safePage(queryPort.page(new ToolInvocationAuditQuery(
                 tenantId,
                 agentId,
                 versionId,
@@ -60,6 +63,48 @@ public class KernelToolInvocationAuditQueryService implements ToolInvocationAudi
                 toolId,
                 status,
                 current,
-                size));
+                size)));
+    }
+
+    private ToolInvocationAuditPage safePage(ToolInvocationAuditPage page) {
+        if (page == null) {
+            return new ToolInvocationAuditPage(List.of(), 0L, 0L, 1L, 0L);
+        }
+        return new ToolInvocationAuditPage(
+                page.records().stream()
+                        .map(this::safeEntry)
+                        .toList(),
+                page.total(),
+                page.size(),
+                page.current(),
+                page.pages());
+    }
+
+    private ToolInvocationAuditEntry safeEntry(ToolInvocationAuditEntry entry) {
+        if (entry == null) {
+            return null;
+        }
+        return new ToolInvocationAuditEntry(
+                entry.invocationId(),
+                entry.runId(),
+                entry.stepId(),
+                entry.agentId(),
+                entry.versionId(),
+                entry.rolloutId(),
+                entry.tenantId(),
+                entry.userId(),
+                entry.toolId(),
+                entry.idempotencyKey(),
+                entry.status(),
+                entry.policyDecisionId(),
+                safeText(entry.argumentsSummary()),
+                safeText(entry.resultSummary()),
+                safeText(entry.errorMessage()),
+                entry.startedAt(),
+                entry.finishedAt());
+    }
+
+    private String safeText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 }
