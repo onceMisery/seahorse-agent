@@ -273,6 +273,40 @@ class SeahorseAgentAdapterCanonicalPropertyAutoConfigurationTests {
     }
 
     @Test
+    void readinessShouldRedactCredentialShapedPulsarProbeFailures() {
+        RecordingMessageQueue messageQueue = RecordingMessageQueue.failing(
+                new IllegalStateException("send failed", new IllegalArgumentException(
+                        "broker rejected Authorization: Bearer abcdefghijklmnop api_key=plain-readiness-secret")));
+        ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(SeahorseAgentReadinessAutoConfiguration.class))
+                .withBean(MessageQueuePort.class, () -> messageQueue)
+                .withBean(AdvancedFeatureGate.class, AdvancedFeatureGate::allEnabledForTests);
+
+        contextRunner.withPropertyValues(
+                        "seahorse-agent.product-mode=enterprise",
+                        "seahorse-agent.adapters.mq.type=pulsar")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+
+                    ReadinessProbePort.ComponentStatus mqStatus = context.getBean(ReadinessProbePort.class)
+                            .probeComponents()
+                            .get("mq");
+                    assertThat(mqStatus.available()).isFalse();
+                    assertThat(mqStatus.detail()).contains("[REDACTED]");
+                    assertThat(mqStatus.detail()).doesNotContain("abcdefghijklmnop");
+                    assertThat(mqStatus.detail()).doesNotContain("plain-readiness-secret");
+
+                    ReadinessCheck mqCheck = context.getBean(ReadinessInboundPort.class)
+                            .runCheck("mq");
+                    assertThat(mqCheck.status()).isEqualTo(ReadinessCheck.Status.FAILED);
+                    assertThat(mqCheck.message()).contains("[REDACTED]");
+                    assertThat(mqCheck.message()).doesNotContain("abcdefghijklmnop");
+                    assertThat(mqCheck.message()).doesNotContain("plain-readiness-secret");
+                    assertThat(messageQueue.sendCalls).isEqualTo(1);
+                });
+    }
+
+    @Test
     void readinessFailsConfiguredPulsarMqOutsideEnterpriseWhenProbeSendFails() {
         RecordingMessageQueue messageQueue = RecordingMessageQueue.failing(
                 new IllegalStateException("send failed", new IllegalArgumentException("bookie unavailable")));

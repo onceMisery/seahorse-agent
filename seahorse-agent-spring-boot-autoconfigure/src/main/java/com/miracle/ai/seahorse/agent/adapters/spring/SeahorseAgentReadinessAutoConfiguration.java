@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.miracle.ai.seahorse.agent.adapters.web.AdvancedFeatureGate;
 import com.miracle.ai.seahorse.agent.adapters.web.ReadinessController;
 import com.miracle.ai.seahorse.agent.kernel.application.readiness.KernelReadinessService;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.inbound.readiness.ReadinessInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchPort;
@@ -196,8 +197,7 @@ public class SeahorseAgentReadinessAutoConfiguration {
                 while (root.getCause() != null) {
                     root = root.getCause();
                 }
-                String message = root.getMessage();
-                return message == null || message.isBlank() ? root.getClass().getSimpleName() : message;
+                return failureMessage(root);
             }
 
             private boolean hasText(String value) {
@@ -219,7 +219,7 @@ public class SeahorseAgentReadinessAutoConfiguration {
                     }
                     return ComponentStatus.available("applied", "核心表齐全");
                 } catch (Exception e) {
-                    return ComponentStatus.unavailable("迁移校验失败: " + e.getMessage());
+                    return ComponentStatus.unavailable("迁移校验失败: " + failureMessage(e));
                 }
             }
 
@@ -246,8 +246,14 @@ public class SeahorseAgentReadinessAutoConfiguration {
                     }
                     return ComponentStatus.unavailable("未发现任何用户账号");
                 } catch (Exception e) {
-                    return ComponentStatus.unavailable("用户表查询失败: " + e.getMessage());
+                    return ComponentStatus.unavailable("用户表查询失败: " + failureMessage(e));
                 }
+            }
+
+            private String failureMessage(Throwable error) {
+                String message = error.getMessage();
+                String failure = message == null || message.isBlank() ? error.getClass().getSimpleName() : message;
+                return CredentialTextRedactor.redact(failure);
             }
 
             private ComponentStatus probeEmbeddingDimension(int embedDim, int vecDim) {

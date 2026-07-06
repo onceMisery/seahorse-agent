@@ -1752,3 +1752,11 @@ Eval regression replay failures now redact credential-shaped exception text befo
 This is a narrow eval replay failure-boundary hardening slice. It does not change sample loading, model invocation, citation scoring, semantic-overlap heuristics, report aggregation, baseline comparison, or successful sample outputs.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelEvalRegressionServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 5/5 across kernel redactor and eval regression coverage.
+
+## 2026-07-06 Update: Readiness Failure Redaction
+
+Readiness probe failures now redact credential-shaped exception text before returning MQ probe, migration-check, or default-admin component messages. This protects readiness APIs, status pages, and operator diagnostics when MQ brokers, JDBC drivers, or infrastructure checks accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow readiness diagnostics hardening slice. It does not change component availability decisions, Pulsar probe send behavior, probe caching, adapter type reporting, migration table checks, default-admin SQL checks, or product-mode severity mapping.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-spring-boot-autoconfigure,seahorse-agent-kernel -am "-Dtest=SeahorseAgentAdapterCanonicalPropertyAutoConfigurationTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 16/16 across kernel redactor and Spring readiness/canonical property coverage.
