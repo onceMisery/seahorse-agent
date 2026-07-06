@@ -826,3 +826,11 @@ Run context snapshot queries now apply the agent-run owner/admin boundary when t
 This closes an Agent run context snapshot authorization gap. It does not change snapshot persistence, snapshot JSON shape, chat task snapshot compatibility, run experiment internal snapshot reads, or retention semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunContextSnapshotServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 4/4, covering owner access, unrelated-user denial, admin access, and legacy task snapshot compatibility. `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-DskipTests" compile` completed with reactor `BUILD SUCCESS` after the production bean was updated to inject the run repository and current-user port.
+
+## 2026-07-06 Update: Agent Handoff Parent Run Ownership Guard
+
+Agent handoff creation, detail lookup, parent-run listing, and cancellation now require the parent run to be readable before exposing or mutating handoff records. The kernel handoff service reuses `AgentRunInboundPort.findRunById`, so the owner/admin boundary remains centralized in the Agent run service and unreadable parent runs fail before child run cancellation or child A2A run creation is attempted.
+
+This closes a handoff run-boundary authorization gap. It does not change mesh policy decisions, child run metadata shape, handoff audit payload shape, repository schema, or local Agent-as-Tool response contracts.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentHandoffServiceTests,LocalAgentAsToolPortTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 9/9, covering parent-run authorization for create/list/detail/cancel and preserving the local handoff tool success path when the parent run is readable.

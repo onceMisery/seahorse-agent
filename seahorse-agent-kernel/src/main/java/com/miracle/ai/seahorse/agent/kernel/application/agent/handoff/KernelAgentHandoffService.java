@@ -76,6 +76,7 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
 
     public AgentHandoff createLocalHandoff(AgentHandoffCreateCommand command) {
         AgentHandoffCreateCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
+        requireReadableParentRun(safeCommand.parentRunId());
         Instant now = clock.instant();
         MeshPolicyDecision decision = meshPolicyPort.decide(new MeshPolicyRequest(
                 safeCommand.tenantId(),
@@ -125,6 +126,7 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
     public AgentHandoff cancel(String handoffId) {
         AgentHandoff current = handoffRepository.findById(requireText(handoffId, "handoffId must not be blank"))
                 .orElseThrow(() -> new IllegalArgumentException("Agent handoff does not exist"));
+        requireReadableParentRun(current.parentRunId());
         if (current.status().isTerminal()) {
             return current;
         }
@@ -139,13 +141,22 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
 
     @Override
     public AgentHandoff findById(String handoffId) {
-        return handoffRepository.findById(requireText(handoffId, "handoffId must not be blank"))
+        AgentHandoff handoff = handoffRepository.findById(requireText(handoffId, "handoffId must not be blank"))
                 .orElseThrow(() -> new IllegalArgumentException("Agent handoff does not exist"));
+        requireReadableParentRun(handoff.parentRunId());
+        return handoff;
     }
 
     @Override
     public List<AgentHandoff> listByParentRunId(String tenantId, String parentRunId) {
-        return handoffRepository.listByParentRunId(tenantId, requireText(parentRunId, "parentRunId must not be blank"));
+        String safeParentRunId = requireText(parentRunId, "parentRunId must not be blank");
+        requireReadableParentRun(safeParentRunId);
+        return handoffRepository.listByParentRunId(tenantId, safeParentRunId);
+    }
+
+    private void requireReadableParentRun(String parentRunId) {
+        runPort.findRunById(requireText(parentRunId, "parentRunId must not be blank"))
+                .orElseThrow(() -> new IllegalArgumentException("Agent run does not exist"));
     }
 
     private String inputSummaryJson(String inputSummary) {

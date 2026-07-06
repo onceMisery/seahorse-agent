@@ -50,6 +50,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class KernelAgentHandoffServiceTests {
 
@@ -75,6 +76,79 @@ class KernelAgentHandoffServiceTests {
         assertEquals(AgentHandoffStatus.CANCELLED, second.status());
         assertEquals(1, runPort.cancelledRunIds.size());
         assertEquals("child-run-1", runPort.cancelledRunIds.get(0));
+    }
+
+    @Test
+    void shouldRequireReadableParentRunBeforeListingHandoffs() {
+        MemoryAgentHandoffRepository repository = new MemoryAgentHandoffRepository();
+        repository.save(handoff("handoff-1", AgentHandoffStatus.RUNNING, "child-run-1"));
+        RecordingRunPort runPort = new RecordingRunPort();
+        runPort.denyRunIds.add("parent-run-1");
+        KernelAgentHandoffService service = new KernelAgentHandoffService(
+                repository,
+                runPort,
+                new DefaultMeshPolicyPort(),
+                FIXED_CLOCK);
+
+        assertThrows(IllegalStateException.class, () -> service.listByParentRunId("tenant-1", "parent-run-1"));
+    }
+
+    @Test
+    void shouldRequireReadableParentRunBeforeFindingHandoffById() {
+        MemoryAgentHandoffRepository repository = new MemoryAgentHandoffRepository();
+        repository.save(handoff("handoff-1", AgentHandoffStatus.RUNNING, "child-run-1"));
+        RecordingRunPort runPort = new RecordingRunPort();
+        runPort.denyRunIds.add("parent-run-1");
+        KernelAgentHandoffService service = new KernelAgentHandoffService(
+                repository,
+                runPort,
+                new DefaultMeshPolicyPort(),
+                FIXED_CLOCK);
+
+        assertThrows(IllegalStateException.class, () -> service.findById("handoff-1"));
+    }
+
+    @Test
+    void shouldRequireReadableParentRunBeforeCancellingHandoff() {
+        MemoryAgentHandoffRepository repository = new MemoryAgentHandoffRepository();
+        repository.save(handoff("handoff-1", AgentHandoffStatus.RUNNING, "child-run-1"));
+        RecordingRunPort runPort = new RecordingRunPort();
+        runPort.denyRunIds.add("parent-run-1");
+        KernelAgentHandoffService service = new KernelAgentHandoffService(
+                repository,
+                runPort,
+                new DefaultMeshPolicyPort(),
+                FIXED_CLOCK);
+
+        assertThrows(IllegalStateException.class, () -> service.cancel("handoff-1"));
+        assertEquals(0, runPort.cancelledRunIds.size());
+    }
+
+    @Test
+    void shouldRequireReadableParentRunBeforeCreatingHandoff() {
+        MemoryAgentHandoffRepository repository = new MemoryAgentHandoffRepository();
+        RecordingRunPort runPort = new RecordingRunPort();
+        runPort.denyRunIds.add("parent-run-1");
+        KernelAgentHandoffService service = new KernelAgentHandoffService(
+                repository,
+                runPort,
+                new DefaultMeshPolicyPort(),
+                FIXED_CLOCK);
+
+        assertThrows(IllegalStateException.class, () -> service.createLocalHandoff(new AgentHandoffCreateCommand(
+                "tenant-1",
+                "parent-run-1",
+                "source-agent",
+                "target-agent",
+                "target-version-1",
+                "delegate work",
+                "context-pack-1",
+                "handoff input",
+                "{\"items\":[]}",
+                1,
+                List.of("source-agent"),
+                "trace-1")));
+        assertEquals(0, runPort.startedCommands.size());
     }
 
     @Test
@@ -233,6 +307,7 @@ class KernelAgentHandoffServiceTests {
     private static final class RecordingRunPort implements AgentRunInboundPort {
         private final List<String> cancelledRunIds = new ArrayList<>();
         private final List<AgentRunStartCommand> startedCommands = new ArrayList<>();
+        private final List<String> denyRunIds = new ArrayList<>();
 
         @Override
         public AgentRun startRun(AgentRunStartCommand command) {
@@ -242,7 +317,10 @@ class KernelAgentHandoffServiceTests {
 
         @Override
         public Optional<AgentRun> findRunById(String runId) {
-            return Optional.empty();
+            if (denyRunIds.contains(runId)) {
+                throw new IllegalStateException("\u6743\u9650\u4e0d\u8db3");
+            }
+            return Optional.of(run(runId, "source-agent", "version-1", "tenant-1"));
         }
 
         @Override

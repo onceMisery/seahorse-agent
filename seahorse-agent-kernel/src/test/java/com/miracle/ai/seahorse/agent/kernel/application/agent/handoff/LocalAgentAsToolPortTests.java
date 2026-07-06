@@ -171,7 +171,24 @@ class LocalAgentAsToolPortTests {
 
         @Override
         public Optional<AgentRun> findRunById(String runId) {
-            return Optional.empty();
+            return Optional.of(new AgentRun(
+                    runId,
+                    "source-agent",
+                    "version-1",
+                    "tenant-1",
+                    "user-1",
+                    null,
+                    AgentRunTriggerType.A2A,
+                    "parent input",
+                    AgentRunStatus.RUNNING,
+                    null,
+                    0,
+                    0,
+                    BigDecimal.ZERO,
+                    null,
+                    null,
+                    NOW,
+                    null));
         }
 
         @Override
