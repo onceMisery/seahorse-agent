@@ -302,6 +302,9 @@ class KernelRunExperimentServiceTests {
                 "Diff vs first trial: same as first trial; chars baseline=30 current=30 delta=0; lines baseline=1 current=1 delta=0"));
         assertTrue(report.markdown().contains(
                 "Diff vs first trial: output not available"));
+        assertTrue(report.markdown().contains("## Failure Reason Summary"));
+        assertTrue(report.markdown().contains("| Reason | Count | Trials |"));
+        assertTrue(report.markdown().contains("| AgentScope timeout | 1 | 11 |"));
         assertTrue(report.markdown().contains("AgentScope timeout"));
         assertNotNull(costRepository.query);
         assertEquals("default", costRepository.query.tenantId());
@@ -327,6 +330,8 @@ class KernelRunExperimentServiceTests {
         RunExperimentReport report = service.exportReport("100", details.getExperiment().getId());
 
         assertTrue(report.markdown().contains("- Failed: 1"));
+        assertTrue(report.markdown().contains("## Failure Reason Summary"));
+        assertTrue(report.markdown().contains("| FAILED - no failure message recorded | 1 | 10 |"));
         assertTrue(report.markdown().contains("Trial 10: FAILED - no failure message recorded"));
     }
 
@@ -358,6 +363,8 @@ class KernelRunExperimentServiceTests {
         RunExperimentReport report = service.exportReport("100", details.getExperiment().getId());
 
         assertTrue(report.markdown().contains("- Failed: 1"));
+        assertTrue(report.markdown().contains("## Failure Reason Summary"));
+        assertTrue(report.markdown().contains("| base leaf message not found | 1 | 10 |"));
         assertTrue(report.markdown().contains("Trial 10: base leaf message not found"));
         assertTrue(report.markdown().contains("- Output message ID: -"));
         assertTrue(report.markdown().contains("- Message branch: not resolved"));

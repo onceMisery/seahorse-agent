@@ -287,6 +287,8 @@ $report = Test-Step "Export run experiment report" {
             "Fork Target",
             "Message Branch",
             "Trial branch leaves",
+            "Failure Reason Summary",
+            "No failure reasons recorded",
             "Reproduction Appendix"
         )) {
         if ($markdown -notlike "*$expected*") {
@@ -341,6 +343,8 @@ $negativeExperiment = Test-Step "Create missing-leaf experiment and export failu
             "Run Experiment Report",
             "e2e-run-experiment-missing-leaf",
             "Failed: 1",
+            "Failure Reason Summary",
+            "base leaf message not found | 1",
             "base leaf message not found",
             "Output message ID: -",
             "Message branch: not resolved"

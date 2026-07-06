@@ -224,6 +224,7 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         appendEvidenceIndex(report, trials, snapshots, outputMessages);
         appendTrialExport(report, trials, snapshots, outputMessages);
         appendOutputComparison(report, trials, outputMessages);
+        appendFailureReasonSummary(report, trials);
         appendFailures(report, trials);
         appendReproductionAppendix(report, experiment, trials, outputMessages);
         return report.toString();
@@ -418,10 +419,7 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
 
     private void appendFailures(StringBuilder report, List<RunExperimentTrialRecord> trials) {
         report.append("## Failures\n\n");
-        List<RunExperimentTrialRecord> failedTrials = trials.stream()
-                .filter(trial -> STATUS_FAILED.equalsIgnoreCase(trial.getStatus())
-                        || (trial.getErrorMessage() != null && !trial.getErrorMessage().isBlank()))
-                .toList();
+        List<RunExperimentTrialRecord> failedTrials = failedTrials(trials);
         if (failedTrials.isEmpty()) {
             report.append("- None recorded.\n");
         } else {
@@ -434,6 +432,41 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
             }
         }
         report.append("\n");
+    }
+
+    private void appendFailureReasonSummary(StringBuilder report, List<RunExperimentTrialRecord> trials) {
+        report.append("## Failure Reason Summary\n\n");
+        Map<String, List<RunExperimentTrialRecord>> groups = failedTrials(trials).stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        this::failureExplanation,
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()));
+        if (groups.isEmpty()) {
+            report.append("- No failure reasons recorded.\n\n");
+            return;
+        }
+        report.append("| Reason | Count | Trials |\n");
+        report.append("|---|---|---|\n");
+        for (Map.Entry<String, List<RunExperimentTrialRecord>> entry : groups.entrySet()) {
+            String trialIds = entry.getValue().stream()
+                    .map(trial -> valueOrDash(trial.getId()))
+                    .collect(java.util.stream.Collectors.joining(", "));
+            report.append("| ")
+                    .append(tableCell(markdownText(entry.getKey())))
+                    .append(" | ")
+                    .append(entry.getValue().size())
+                    .append(" | ")
+                    .append(tableCell(trialIds))
+                    .append(" |\n");
+        }
+        report.append("\n");
+    }
+
+    private List<RunExperimentTrialRecord> failedTrials(List<RunExperimentTrialRecord> trials) {
+        return Objects.requireNonNullElse(trials, List.<RunExperimentTrialRecord>of()).stream()
+                .filter(trial -> STATUS_FAILED.equalsIgnoreCase(trial.getStatus())
+                        || (trial.getErrorMessage() != null && !trial.getErrorMessage().isBlank()))
+                .toList();
     }
 
     private String failureExplanation(RunExperimentTrialRecord trial) {
