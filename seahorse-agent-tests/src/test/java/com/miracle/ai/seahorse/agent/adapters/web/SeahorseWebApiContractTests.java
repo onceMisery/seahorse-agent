@@ -67,6 +67,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceTaskOutcome;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryConflictResolutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationReport;
@@ -170,6 +171,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaField
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageFieldRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.VersionQualityComparisonReport;
+import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRecord;
@@ -348,7 +350,7 @@ class SeahorseWebApiContractTests {
         when(memoryManagementPort.deleteMemory("short_term", "m1")).thenReturn(true);
         when(memoryManagementPort.listQualitySnapshots("u1", 20)).thenReturn(List.of());
         when(memoryManagementPort.listConflicts("u1", null, 20)).thenReturn(List.of());
-        when(memoryManagementPort.resolveConflict("c1", "merge", "u1")).thenReturn(true);
+        when(memoryManagementPort.resolveConflict(any(MemoryConflictResolutionCommand.class))).thenReturn(true);
         when(memoryManagementPort.listProfileFacts("u1", "default", 20))
                 .thenReturn(List.of(new ProfileFact(
                         "pf-1", "u1", "default", "occupation", "学生", 0.95,
@@ -578,9 +580,28 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data").isArray());
         mvc.perform(post("/agent/plugins/status")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("name", "wrapper", "portType", "demo", "enabled", true))))
+                        .content(json(Map.of(
+                                "name", "wrapper",
+                                "portType", "demo",
+                                "enabled", true,
+                                "message", "provider failed Authorization: Bearer abcdefghijklmnop",
+                                "lastError", "api_key=plain-plugin-secret",
+                                "details", Map.of(
+                                        "summary", "set_cookie=session=plain-cookie-secret",
+                                        "nested", Map.of("reason", "refresh_token=plain-refresh-secret"))))))
                 .andExpect(status().isOk())
-                        .andExpect(jsonPath("$.data.name").value("wrapper"));
+                .andExpect(jsonPath("$.data.name").value("wrapper"))
+                .andExpect(jsonPath("$.data.message").value("provider failed [REDACTED]"))
+                .andExpect(jsonPath("$.data.lastError").value("[REDACTED]"))
+                .andExpect(jsonPath("$.data.details.summary").value("[REDACTED]"))
+                .andExpect(jsonPath("$.data.details.nested.reason").value("[REDACTED]"));
+        ArgumentCaptor<AgentExtensionStatus> pluginStatusCaptor =
+                ArgumentCaptor.forClass(AgentExtensionStatus.class);
+        verify(statusPort).saveStatus(pluginStatusCaptor.capture());
+        assertThat(pluginStatusCaptor.getValue().message()).doesNotContain("abcdefghijklmnop");
+        assertThat(pluginStatusCaptor.getValue().lastError()).doesNotContain("plain-plugin-secret");
+        assertThat(String.valueOf(pluginStatusCaptor.getValue().details())).doesNotContain("plain-cookie-secret");
+        assertThat(String.valueOf(pluginStatusCaptor.getValue().details())).doesNotContain("plain-refresh-secret");
     }
 
     @Test

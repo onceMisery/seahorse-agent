@@ -1800,3 +1800,11 @@ Extension loader failure diagnostics now redact credential-shaped text before re
 This is a narrow extension-loading diagnostics hardening slice. It does not change extension discovery, descriptor parsing semantics, activation ordering, managed-by-container handling, registry registration, thrown exception types, or server-side exception causes.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=ExtensionLoaderTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes covered kernel redactor plus successful classpath extension loading and failure diagnostic redaction.
+
+## 2026-07-06 Update: Plugin Status Diagnostic Redaction
+
+Plugin status management requests now redact credential-shaped diagnostic text before saving or returning `AgentExtensionStatus.message`, `lastError`, or nested `details` string values. This protects plugin operations APIs and persisted status records when manual status updates or adapter diagnostics accidentally include bearer tokens, API keys, cookies, refresh tokens, or similar material.
+
+This is a narrow Web adapter boundary hardening slice. It does not change plugin health reporting, registry listing, status identity fields, capability sets, enabled/healthy semantics, repository persistence shape, or non-string diagnostic detail values.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-adapter-web,seahorse-agent-kernel -am "-Dtest=SeahorseWebApiContractTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes covered kernel redactor plus plugin status POST response/persistence redaction and existing Web API contracts.

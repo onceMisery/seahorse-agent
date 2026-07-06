@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureHealthAggregator;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatus;
@@ -28,6 +29,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -99,11 +102,42 @@ public class SeahorsePluginController {
                     Boolean.TRUE.equals(enabled),
                     healthy == null || healthy,
                     capabilities,
-                    message,
-                    lastError,
-                    details,
+                    safeDiagnosticText(message),
+                    safeDiagnosticText(lastError),
+                    safeDiagnosticDetails(details),
                     updatedBy,
                     Instant.now());
+        }
+
+        private static String safeDiagnosticText(String value) {
+            return CredentialTextRedactor.redact(value);
+        }
+
+        private static Map<String, Object> safeDiagnosticDetails(Map<String, Object> details) {
+            if (details == null || details.isEmpty()) {
+                return details;
+            }
+            Map<String, Object> safeDetails = new LinkedHashMap<>();
+            details.forEach((key, value) -> safeDetails.put(key, safeDiagnosticValue(value)));
+            return safeDetails;
+        }
+
+        private static Object safeDiagnosticValue(Object value) {
+            if (value instanceof String text) {
+                return safeDiagnosticText(text);
+            }
+            if (value instanceof Map<?, ?> map) {
+                Map<String, Object> safeMap = new LinkedHashMap<>();
+                map.forEach((key, nestedValue) ->
+                        safeMap.put(Objects.toString(key, ""), safeDiagnosticValue(nestedValue)));
+                return safeMap;
+            }
+            if (value instanceof Iterable<?> iterable) {
+                List<Object> safeList = new ArrayList<>();
+                iterable.forEach(item -> safeList.add(safeDiagnosticValue(item)));
+                return safeList;
+            }
+            return value;
         }
     }
 }
