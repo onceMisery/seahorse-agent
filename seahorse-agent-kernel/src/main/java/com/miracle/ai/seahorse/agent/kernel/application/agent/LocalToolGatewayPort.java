@@ -527,6 +527,9 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("promptLength", argumentString(arguments, "prompt").length());
         summary.put("metadataKeys", safeArgumentKeys(metadata));
         summary.put("metadataCount", metadata.size());
+        summary.put("metadataValueCount", metadataValueCount(metadata));
+        summary.put("metadataValueTotalLength", metadataValueTotalLength(metadata));
+        summary.put("metadataValueMaxLength", metadataValueMaxLength(metadata));
         summary.put("versionPresent", hasText(metadataVersion));
         summary.put("versionLength", metadataVersion.length());
         summary.put("argumentKeys", safeArgumentKeys(arguments));
@@ -768,6 +771,31 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             }
         }
         return count;
+    }
+
+    private int metadataValueCount(Map<String, Object> metadata) {
+        return metadata == null ? 0 : metadata.size();
+    }
+
+    private int metadataValueTotalLength(Map<String, Object> metadata) {
+        if (metadata == null || metadata.isEmpty()) {
+            return 0;
+        }
+        return metadata.values().stream()
+                .filter(Objects::nonNull)
+                .mapToInt(value -> value.toString().length())
+                .sum();
+    }
+
+    private int metadataValueMaxLength(Map<String, Object> metadata) {
+        if (metadata == null || metadata.isEmpty()) {
+            return 0;
+        }
+        return metadata.values().stream()
+                .filter(Objects::nonNull)
+                .mapToInt(value -> value.toString().length())
+                .max()
+                .orElse(0);
     }
 
     private List<String> argumentStringList(Object value) {

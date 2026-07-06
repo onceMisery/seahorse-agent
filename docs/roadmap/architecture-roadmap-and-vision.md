@@ -962,3 +962,11 @@ Tool Gateway request audit now includes value-free request-scoped browser sessio
 This is a narrow auth/session audit-hardening slice. It does not change session replay validation, browser execution, capture artifacts, credential storage, approval policy, quota policy, or artifact governance.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering localStorage item count metadata while preserving the existing URL, HTML, cookie, and session value redaction assertions.
+
+## 2026-07-06 Update: Remote A2A Audit Metadata Value Shape Summary
+
+Tool Gateway request audit now includes value-free metadata value shape evidence for `invoke_remote_a2a_agent`: metadata value count, total value length, and maximum value length. The summary still excludes the raw prompt, target agent name, requested version value, metadata values, and unsafe argument keys.
+
+This is a narrow cross-provider audit-hardening slice. It does not change A2A request validation, connector invocation, signing, approval policy, quota policy, or remote-agent execution behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering A2A metadata value shape metadata while preserving existing prompt, agent-name, version, and metadata value redaction assertions.
