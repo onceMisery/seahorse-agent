@@ -95,6 +95,9 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(audit.completed.get(0).resultSummary().contains("\"contentPresent\":true"));
         assertTrue(audit.completed.get(0).resultSummary().contains("\"contentLength\":11"));
         assertTrue(audit.completed.get(0).resultSummary().contains("\"contentJsonType\":\"object\""));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentJsonValueCount\":1"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentJsonValueTotalLength\":4"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentJsonValueMaxLength\":4"));
         assertEquals(FIXED_CLOCK.instant(), audit.completed.get(0).finishedAt());
     }
 

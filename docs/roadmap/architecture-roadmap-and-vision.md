@@ -1178,3 +1178,11 @@ Tool Gateway completion audit now emits value-free result summaries for failed, 
 This is a narrow completion-audit hardening slice. It does not change policy decisions, approval request persistence, tool execution, caller-visible errors, output redaction, artifact publication, or successful result summaries.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 26/26, covering denied, approval-required, thrown-exception, and failed-tool completion summaries while preserving failed-error redaction assertions.
+
+## 2026-07-06 Update: Tool Gateway Success JSON Value Shape Audit
+
+Tool Gateway completion audit now adds value-free JSON leaf-value shape metadata for successful JSON tool observations: leaf value count, total leaf value length, and maximum leaf value length. The summary continues to omit raw tool output values and JSON field names while giving operators a little more diagnostic shape than content length alone.
+
+This is a narrow completion-audit hardening slice. It does not change tool execution, output redaction, artifact publication, failure summaries, approval policy, quota policy, or caller-visible tool observations.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 26/26, covering successful JSON value-shape metadata while preserving existing result-summary redaction assertions.

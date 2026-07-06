@@ -962,6 +962,12 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("contentPresent", true);
         summary.put("contentLength", content.length());
         summary.put("contentJsonType", resultContentJsonType(content));
+        JsonValueShape jsonValueShape = resultContentJsonValueShape(content);
+        if (jsonValueShape != null) {
+            summary.put("contentJsonValueCount", jsonValueShape.count());
+            summary.put("contentJsonValueTotalLength", jsonValueShape.totalLength());
+            summary.put("contentJsonValueMaxLength", jsonValueShape.maxLength());
+        }
         try {
             return truncate(OBJECT_MAPPER.writeValueAsString(summary));
         } catch (JsonProcessingException ex) {
@@ -986,6 +992,52 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     + ", errorLength=" + error.length()
                     + ", approvalIdPresent=" + hasText(result.approvalId()));
         }
+    }
+
+    private JsonValueShape resultContentJsonValueShape(String content) {
+        if (!hasText(content)) {
+            return null;
+        }
+        try {
+            return jsonValueShape(OBJECT_MAPPER.readTree(content));
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+
+    private JsonValueShape jsonValueShape(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return new JsonValueShape(1, 4, 4);
+        }
+        if (node.isObject()) {
+            int count = 0;
+            int totalLength = 0;
+            int maxLength = 0;
+            for (JsonNode child : node) {
+                JsonValueShape shape = jsonValueShape(child);
+                count += shape.count();
+                totalLength += shape.totalLength();
+                maxLength = Math.max(maxLength, shape.maxLength());
+            }
+            return new JsonValueShape(count, totalLength, maxLength);
+        }
+        if (node.isArray()) {
+            int count = 0;
+            int totalLength = 0;
+            int maxLength = 0;
+            for (JsonNode child : node) {
+                JsonValueShape shape = jsonValueShape(child);
+                count += shape.count();
+                totalLength += shape.totalLength();
+                maxLength = Math.max(maxLength, shape.maxLength());
+            }
+            return new JsonValueShape(count, totalLength, maxLength);
+        }
+        String value = node.isTextual() ? node.asText() : node.toString();
+        return new JsonValueShape(1, value.length(), value.length());
+    }
+
+    private record JsonValueShape(int count, int totalLength, int maxLength) {
     }
 
     private String resultContentJsonType(String content) {
