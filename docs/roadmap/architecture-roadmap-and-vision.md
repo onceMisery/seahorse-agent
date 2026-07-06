@@ -1258,3 +1258,11 @@ Agent run resume now defensively redacts credential-shaped approval decision com
 This is a narrow resume-boundary hardening slice. It does not mutate stored approval records, change approved/modified resume execution, alter approval matching, modify Tool Gateway invocation, or change normal approval-management write behavior.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunResumeServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 8/8, covering rejected and expired resume transitions with historical credential-bearing decision comments while preserving approved/modified resume behavior.
+
+## 2026-07-06 Update: Agent Run Snapshot Step Error Redaction
+
+Agent run snapshots now redact credential-shaped step error text before exposing `AgentRunSnapshotStep.summary` and `AgentRunSnapshotStep.errorMessage`. This protects historical step records whose stored `errorMessage` contains bearer tokens or other credential fragments from leaking through the run status/detail projection.
+
+This is a narrow snapshot-projection hardening slice. It does not mutate stored `AgentStep` records, change step recording, alter workflow ordering, modify checkpoint sanitization, or change run resume behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunSnapshotServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 9/9, covering snapshot summary/error redaction for credential-bearing historical step errors while preserving snapshot ownership, pending approval, source, artifact, and checkpoint minimization behavior.

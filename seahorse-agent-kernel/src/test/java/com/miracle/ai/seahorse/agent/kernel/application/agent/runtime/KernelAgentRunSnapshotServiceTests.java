@@ -165,6 +165,29 @@ class KernelAgentRunSnapshotServiceTests {
     }
 
     @Test
+    void shouldRedactCredentialStepErrorsInSnapshotProjection() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("user-1", AgentRunStatus.FAILED));
+        runRepository.appendStep(stepWithError(
+                "step-secret",
+                "tool failed with Authorization: Bearer secretmarker123"));
+        KernelAgentRunSnapshotService service = new KernelAgentRunSnapshotService(
+                runRepository,
+                new MemoryCheckpointRepository(),
+                new MemoryContextPackRepository(null),
+                new MemoryApprovalQueryPort(List.of()),
+                new MemoryArtifactRepository(List.of()),
+                currentUser(1L, "user"));
+
+        AgentRunSnapshot snapshot = service.getSnapshot("run-1");
+
+        assertEquals("tool failed with [REDACTED]", snapshot.steps().get(0).summary());
+        assertEquals("tool failed with [REDACTED]", snapshot.steps().get(0).errorMessage());
+        assertFalse(snapshot.steps().get(0).summary().contains("secretmarker123"));
+        assertFalse(snapshot.steps().get(0).errorMessage().contains("secretmarker123"));
+    }
+
+    @Test
     void shouldDenyUnrelatedUserSnapshotAccess() {
         MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
         runRepository.createRun(run("1", AgentRunStatus.RUNNING));
@@ -229,6 +252,21 @@ class KernelAgentRunSnapshotServiceTests {
                 null,
                 NOW.plusSeconds(stepNo),
                 status == AgentStepStatus.RUNNING ? null : NOW.plusSeconds(stepNo + 1L));
+    }
+
+    private static AgentStep stepWithError(String stepId, String errorMessage) {
+        return new AgentStep(
+                stepId,
+                "run-1",
+                1,
+                AgentStepType.TOOL_CALL,
+                AgentStepStatus.FAILED,
+                "{\"input\":\"safe\"}",
+                "{\"summary\":\"fallback\"}",
+                "TOOL_FAILED",
+                errorMessage,
+                NOW.plusSeconds(1),
+                NOW.plusSeconds(2));
     }
 
     private static AgentCheckpoint checkpoint(String checkpointId, long sequenceNo, String contextPackId) {

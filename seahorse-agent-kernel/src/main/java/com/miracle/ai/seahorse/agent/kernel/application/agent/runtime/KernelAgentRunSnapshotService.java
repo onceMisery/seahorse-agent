@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalReques
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
@@ -238,16 +239,21 @@ public class KernelAgentRunSnapshotService implements AgentRunSnapshotInboundPor
     }
 
     private AgentRunSnapshotStep toSnapshotStep(AgentStep step) {
+        String safeErrorMessage = safeSnapshotText(step.errorMessage());
         return new AgentRunSnapshotStep(
                 step.stepId(),
                 step.stepNo(),
                 step.stepType(),
                 step.status(),
-                firstText(step.errorMessage(), step.outputJson(), step.inputJson()),
+                safeSnapshotText(firstText(step.errorMessage(), step.outputJson(), step.inputJson())),
                 step.errorCode(),
-                step.errorMessage(),
+                safeErrorMessage,
                 step.startedAt(),
                 step.finishedAt());
+    }
+
+    private String safeSnapshotText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private AgentRunSnapshotSource toSnapshotSource(ContextItem item) {
