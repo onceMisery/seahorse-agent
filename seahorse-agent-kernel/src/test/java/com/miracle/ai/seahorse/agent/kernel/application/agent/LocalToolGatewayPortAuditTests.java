@@ -139,6 +139,10 @@ class LocalToolGatewayPortAuditTests {
         assertEquals(ToolInvocationStatus.DENIED, audit.decisions.get(0).status());
         assertEquals(ToolInvocationStatus.DENIED, audit.completed.get(0).status());
         assertEquals(ToolPolicyReasonCodes.TOOL_NOT_BOUND, audit.completed.get(0).errorMessage());
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentPresent\":false"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"errorPresent\":true"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"errorLength\":14"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"approvalIdPresent\":false"));
     }
 
     @Test
@@ -162,6 +166,10 @@ class LocalToolGatewayPortAuditTests {
         assertEquals(0, tool.calls.get());
         assertEquals(ToolInvocationStatus.APPROVAL_REQUIRED, audit.decisions.get(0).status());
         assertEquals(ToolInvocationStatus.APPROVAL_REQUIRED, audit.completed.get(0).status());
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentPresent\":false"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"errorPresent\":true"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"errorLength\":22"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"approvalIdPresent\":true"));
         assertEquals(1, approvals.saved.size());
         ApprovalRequest approval = approvals.saved.get(0);
         assertEquals(ApprovalRequestStatus.PENDING, approval.status());
@@ -405,6 +413,10 @@ class LocalToolGatewayPortAuditTests {
         assertEquals(1, audit.completed.size());
         assertEquals(ToolInvocationStatus.FAILED, audit.completed.get(0).status());
         assertEquals("tool boom", audit.completed.get(0).errorMessage());
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentPresent\":false"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"errorPresent\":true"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"errorLength\":9"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"approvalIdPresent\":false"));
     }
 
     @Test
@@ -425,6 +437,10 @@ class LocalToolGatewayPortAuditTests {
         assertEquals("upstream failed [REDACTED]", result.error());
         assertEquals(ToolInvocationStatus.FAILED, audit.completed.get(0).status());
         assertEquals("upstream failed [REDACTED]", audit.completed.get(0).errorMessage());
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentPresent\":false"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"errorPresent\":true"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"errorLength\":26"));
+        assertFalse(audit.completed.get(0).resultSummary().contains("plain-secret-token-123"));
         assertFalse(result.error().contains("plain-secret-token-123"));
         assertFalse(audit.completed.get(0).errorMessage().contains("plain-secret-token-123"));
     }

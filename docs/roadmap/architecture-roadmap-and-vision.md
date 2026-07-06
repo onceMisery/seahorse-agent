@@ -1170,3 +1170,11 @@ Tool Gateway request audit now includes value-free top-level argument shape meta
 This is a narrow cross-provider audit-hardening slice. It does not change browser execution, URL/session validation, egress policy, approval policy, quota policy, artifact publication, or output redaction.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 26/26, covering sandbox browser argument shape metadata while preserving existing raw URL/HTML/cookie/session/host redaction assertions.
+
+## 2026-07-06 Update: Tool Gateway Failed Completion Shape Audit
+
+Tool Gateway completion audit now emits value-free result summaries for failed, denied, and approval-required tool invocations. The summary records content absence, redacted-error presence, redacted-error length, and approval-id presence, so failed completion records have structured diagnostic shape without storing raw error text in the summary payload.
+
+This is a narrow completion-audit hardening slice. It does not change policy decisions, approval request persistence, tool execution, caller-visible errors, output redaction, artifact publication, or successful result summaries.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 26/26, covering denied, approval-required, thrown-exception, and failed-tool completion summaries while preserving failed-error redaction assertions.

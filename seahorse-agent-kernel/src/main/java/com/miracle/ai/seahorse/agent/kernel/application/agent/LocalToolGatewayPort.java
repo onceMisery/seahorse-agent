@@ -255,11 +255,12 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                         startedAt);
             }
             ToolInvocationResult result = ToolInvocationResult.failed(decision.reasonCode(), approvalId);
+            String auditError = auditErrorMessage(result.error());
             auditPort.recordCompleted(new ToolInvocationAuditCompletion(
                     invocationId,
                     decisionStatus,
-                    null,
-                    auditErrorMessage(result.error()),
+                    summarizeResult(result, auditError),
+                    auditError,
                     clock.instant()));
             return result;
         }
@@ -274,21 +275,23 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                 publishArtifacts(safeRequest, rawResult);
             }
             ToolInvocationResult result = outputRedactionPort.redact(safeRequest, rawResult);
+            String auditError = auditErrorMessage(result.error());
             auditPort.recordCompleted(new ToolInvocationAuditCompletion(
                     invocationId,
                     result.success() ? ToolInvocationStatus.SUCCEEDED : ToolInvocationStatus.FAILED,
-                    summarizeResult(result),
-                    auditErrorMessage(result.error()),
+                    summarizeResult(result, auditError),
+                    auditError,
                     clock.instant()));
             return result;
         } catch (Exception ex) {
             ToolInvocationResult result = ToolInvocationResult.failed(
                     Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+            String auditError = auditErrorMessage(result.error());
             auditPort.recordCompleted(new ToolInvocationAuditCompletion(
                     invocationId,
                     ToolInvocationStatus.FAILED,
-                    null,
-                    auditErrorMessage(result.error()),
+                    summarizeResult(result, auditError),
+                    auditError,
                     clock.instant()));
             return result;
         }
@@ -944,8 +947,14 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         return value != null && !value.trim().isEmpty();
     }
 
-    private String summarizeResult(ToolInvocationResult result) {
-        if (result == null || result.content() == null) {
+    private String summarizeResult(ToolInvocationResult result, String auditError) {
+        if (result == null) {
+            return null;
+        }
+        if (!result.success()) {
+            return summarizeFailedResult(result, auditError);
+        }
+        if (result.content() == null) {
             return null;
         }
         String content = result.content();
@@ -959,6 +968,23 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             return truncate("contentPresent=true"
                     + ", contentLength=" + content.length()
                     + ", contentJsonType=" + resultContentJsonType(content));
+        }
+    }
+
+    private String summarizeFailedResult(ToolInvocationResult result, String auditError) {
+        String error = Objects.requireNonNullElse(auditError, "");
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("contentPresent", false);
+        summary.put("errorPresent", hasText(error));
+        summary.put("errorLength", error.length());
+        summary.put("approvalIdPresent", hasText(result.approvalId()));
+        try {
+            return truncate(OBJECT_MAPPER.writeValueAsString(summary));
+        } catch (JsonProcessingException ex) {
+            return truncate("contentPresent=false"
+                    + ", errorPresent=" + hasText(error)
+                    + ", errorLength=" + error.length()
+                    + ", approvalIdPresent=" + hasText(result.approvalId()));
         }
     }
 
