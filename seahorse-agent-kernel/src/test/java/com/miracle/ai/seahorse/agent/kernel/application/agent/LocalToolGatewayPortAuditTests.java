@@ -400,6 +400,7 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"sessionStateReplayRequested\":true"));
         assertTrue(summary.contains("\"sessionStateCookieCount\":1"));
         assertTrue(summary.contains("\"sessionStateOriginCount\":1"));
+        assertTrue(summary.contains("\"sessionStateLocalStorageItemCount\":1"));
         assertTrue(summary.contains("\"captureSessionState\":true"));
         assertTrue(summary.contains("\"screenshot\":false"));
         assertTrue(summary.contains("\"har\":true"));
@@ -456,6 +457,7 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"urlQueryLength\":0"));
         assertTrue(summary.contains("\"htmlPresent\":true"));
         assertTrue(summary.contains("\"htmlLength\":" + html.length()));
+        assertTrue(summary.contains("\"sessionStateLocalStorageItemCount\":0"));
         assertTrue(summary.contains("\"screenshot\":true"));
         assertTrue(summary.contains("\"viewportWidthPresent\":false"));
         assertTrue(summary.contains("\"viewportWidth\":0"));

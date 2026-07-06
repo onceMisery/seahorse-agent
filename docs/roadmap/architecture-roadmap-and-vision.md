@@ -954,3 +954,11 @@ Tool Gateway request audit now includes value-free capture shape evidence for `s
 This is a narrow audit-hardening slice. It does not change browser execution, viewport validation, capture artifact collection, URL mode, egress policy, approval policy, quota policy, or artifact governance.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering screenshot and viewport metadata for URL mode plus default inline screenshot/absent viewport metadata while preserving existing URL, HTML, and session redaction coverage.
+
+## 2026-07-06 Update: Sandbox Browser Audit Session Storage Shape Summary
+
+Tool Gateway request audit now includes value-free request-scoped browser session replay storage evidence for `sandbox_browser`: replayed cookie count, origin count, and localStorage item count. The summary still excludes cookie values, localStorage keys and values, origin strings, URL values, and raw HTML.
+
+This is a narrow auth/session audit-hardening slice. It does not change session replay validation, browser execution, capture artifacts, credential storage, approval policy, quota policy, or artifact governance.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering localStorage item count metadata while preserving the existing URL, HTML, cookie, and session value redaction assertions.

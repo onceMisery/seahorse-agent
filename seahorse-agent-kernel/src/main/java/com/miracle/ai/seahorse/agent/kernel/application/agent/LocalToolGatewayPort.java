@@ -554,6 +554,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         Map<String, Object> sessionState = mapValue(arguments.get("sessionState"));
         int sessionCookieCount = listSize(sessionState.get("cookies"));
         int sessionOriginCount = listSize(sessionState.get("origins"));
+        int sessionLocalStorageItemCount = sessionStateLocalStorageItemCount(sessionState.get("origins"));
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("toolId", request.toolId());
         summary.put("mode", urlMode ? "url" : "inline");
@@ -571,6 +572,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("sessionStateReplayRequested", !sessionState.isEmpty());
         summary.put("sessionStateCookieCount", sessionCookieCount);
         summary.put("sessionStateOriginCount", sessionOriginCount);
+        summary.put("sessionStateLocalStorageItemCount", sessionLocalStorageItemCount);
         summary.put("captureSessionState", booleanArgument(arguments, "captureSessionState"));
         summary.put("screenshot", booleanArgument(arguments, "screenshot", true));
         summary.put("har", booleanArgument(arguments, "har"));
@@ -753,6 +755,19 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             return collection.size();
         }
         return 0;
+    }
+
+    private int sessionStateLocalStorageItemCount(Object value) {
+        if (!(value instanceof Collection<?> origins)) {
+            return 0;
+        }
+        int count = 0;
+        for (Object origin : origins) {
+            if (origin instanceof Map<?, ?> originMap) {
+                count += listSize(originMap.get("localStorage"));
+            }
+        }
+        return count;
     }
 
     private List<String> argumentStringList(Object value) {
