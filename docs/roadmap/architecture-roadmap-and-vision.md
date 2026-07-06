@@ -1760,3 +1760,11 @@ Readiness probe failures now redact credential-shaped exception text before retu
 This is a narrow readiness diagnostics hardening slice. It does not change component availability decisions, Pulsar probe send behavior, probe caching, adapter type reporting, migration table checks, default-admin SQL checks, or product-mode severity mapping.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-spring-boot-autoconfigure,seahorse-agent-kernel -am "-Dtest=SeahorseAgentAdapterCanonicalPropertyAutoConfigurationTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 16/16 across kernel redactor and Spring readiness/canonical property coverage.
+
+## 2026-07-06 Update: Date-Time Tool Failure Redaction
+
+The built-in `get_current_datetime` tool now redacts credential-shaped exception text before returning failed `ToolInvocationResult.error` values. This protects tool observations, model-visible tool errors, and run diagnostics if time-zone resolution or runtime dependencies ever surface bearer tokens, API keys, cookies, or similar material in exception messages.
+
+This is a narrow built-in tool failure-boundary hardening slice. It does not change the normal date/time response shape, tool descriptor, default `Asia/Shanghai` zone, tool registration, or agent loop execution semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=GetDateTimeToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran across kernel redactor and date-time tool success/failure coverage.

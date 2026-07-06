@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
@@ -25,6 +26,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.Objects;
+import java.util.function.Supplier;
 
 public class GetDateTimeToolPortAdapter implements DescribedToolPort {
 
@@ -37,6 +40,15 @@ public class GetDateTimeToolPortAdapter implements DescribedToolPort {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private final Supplier<ZoneId> zoneSupplier;
+
+    public GetDateTimeToolPortAdapter() {
+        this(() -> ZoneId.of("Asia/Shanghai"));
+    }
+
+    GetDateTimeToolPortAdapter(Supplier<ZoneId> zoneSupplier) {
+        this.zoneSupplier = Objects.requireNonNull(zoneSupplier, "zoneSupplier");
+    }
 
     @Override
     public ToolDescriptor descriptor() {
@@ -46,7 +58,7 @@ public class GetDateTimeToolPortAdapter implements DescribedToolPort {
     @Override
     public ToolInvocationResult invoke(String toolCallId, String toolId, Map<String, Object> arguments) {
         try {
-            LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"));
+            LocalDateTime now = LocalDateTime.now(zoneSupplier.get());
             String[] dayOfWeekCn = {"星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"};
             String result = "当前时间: %s %s (%s)，时区: Asia/Shanghai".formatted(
                     now.format(DATE_FMT),
@@ -55,7 +67,7 @@ public class GetDateTimeToolPortAdapter implements DescribedToolPort {
             return ToolInvocationResult.ok(result);
         } catch (Exception ex) {
             return ToolInvocationResult.failed("get_current_datetime failed: "
-                    + (ex.getMessage() != null ? ex.getMessage() : ex.getClass().getName()));
+                    + CredentialTextRedactor.redact(ex.getMessage() != null ? ex.getMessage() : ex.getClass().getName()));
         }
     }
 }
