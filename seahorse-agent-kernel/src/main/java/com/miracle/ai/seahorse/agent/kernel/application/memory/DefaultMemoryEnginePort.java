@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
@@ -922,8 +923,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             operationGateway.markCompleted(operationId, execution.result(), execution.classification());
             return execution.result();
         } catch (RuntimeException ex) {
-            operationGateway.markFailed(operationId,
-                    Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+            operationGateway.markFailed(operationId, failureMessage(ex));
             throw ex;
         }
     }
@@ -1748,6 +1748,10 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private String failureMessage(RuntimeException ex) {
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
     }
 
 }

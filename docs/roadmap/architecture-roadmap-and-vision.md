@@ -1574,3 +1574,11 @@ Memory outbox relay failures now redact credential-shaped exception text before 
 This is a narrow memory-outbox relay hardening slice. It does not change outbox polling, handler dispatch precedence, vector upsert/delete execution, retry state semantics, observation counters, raw handler inputs, or successful task tracing.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=MemoryOutboxRelayServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new regression with raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 17/17 across kernel redactor and memory outbox relay coverage.
+
+## 2026-07-06 Update: Memory Operation Failure Redaction
+
+Memory ingestion failures now redact credential-shaped exception text before marking the memory operation log failed. This protects memory operation history and management surfaces when durable writes or downstream memory components accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow memory-operation persistence hardening slice. It does not change ingestion classification, durable memory write inputs, operation start/completion semantics, raw exception propagation, server logging, refiner fail-open/fail-closed decisions, or successful operation decision details.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=DefaultMemoryEnginePortTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the corrected regression because the operation failure reason lacked `[REDACTED]`, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 68/68 across kernel redactor and default memory engine coverage.

@@ -868,6 +868,45 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldRedactCredentialLikeOperationFailureReason() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of()) {
+            @Override
+            public void save(MemoryRecord record) {
+                throw new IllegalStateException(
+                        "store failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret");
+            }
+        };
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                operationLogPort);
+
+        Assertions.assertThrows(IllegalStateException.class, () -> engine.ingest(new MemoryIngestionCommand(
+                "op-failed-secret",
+                "default",
+                "agent-memory-write",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-failed-secret")
+                        .messageId("msg-failed-secret")
+                        .message(ChatMessage.user("i prefer concise answers"))
+                        .build())));
+
+        Assertions.assertEquals(MemoryOperationStatus.FAILED, operationLogPort.statusById.get("op-failed-secret"));
+        String errorMessage = operationLogPort.decisionById.get("op-failed-secret").get("errorMessage").toString();
+        Assertions.assertTrue(errorMessage.contains("[REDACTED]"));
+        Assertions.assertFalse(errorMessage.contains("abcdefghijklmnop"));
+        Assertions.assertFalse(errorMessage.contains("plain-memory-secret"));
+    }
+
+    @Test
     void shouldNotCallRefinerWhenRefinerIsDisabled() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(
