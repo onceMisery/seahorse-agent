@@ -1350,3 +1350,11 @@ Run profile risk and audit summaries now filter tool-id display values through t
 This is a narrow run-profile governance display-boundary hardening slice. It does not change tool binding persistence, resolve-preview tool allowlists, Tool Gateway invocation, approval matching, risk-code computation, production-gate blocking codes, repository schema, or Web adapter projection redaction.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunProfileServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 16/16, covering unsafe tool-id suppression in run-profile risk/audit summaries, binding immutability, existing run-profile lifecycle behavior, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Run Experiment Report Credential Redaction
+
+Run Experiment report export now defensively redacts credential-shaped display text before rendering Markdown or deriving the report file name in `KernelRunExperimentService.exportReport`. The report boundary covers experiment names, trial scores, metric JSON, trace evidence, failure messages, table cells, and output code blocks while leaving persisted experiment records, trial metrics/scores, run-context snapshots, branch messages, and executor results unchanged.
+
+This is a narrow report-rendering hardening slice. It does not change Run Experiment execution semantics, report schema/sections, frontend preview behavior, score persistence, metric persistence, trace snapshot capture, repository schema, or API authorization.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunExperimentServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 12/12, covering report-boundary redaction for credential-bearing experiment names, score JSON, metric JSON, trace context, failure text, output content, report file names, existing failure-report behavior, branch evidence rendering, and shared credential text redactor behavior.

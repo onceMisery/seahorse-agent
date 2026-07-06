@@ -329,6 +329,62 @@ class KernelRunExperimentServiceTests {
         assertTrue(report.markdown().contains("- Message branch: not resolved"));
     }
 
+    @Test
+    void shouldRedactCredentialTextFromExportedReport() {
+        InMemoryRunExperimentRepository repository = new InMemoryRunExperimentRepository();
+        InMemoryBranchRepository branchRepository = new InMemoryBranchRepository();
+        RunExperimentTrialExecutorPort executor = request -> RunExperimentTrialExecutionResult.builder()
+                .status("FAILED")
+                .runId("run-exp-1-trial-10")
+                .outputMessageId(301L)
+                .metricJson("{\"traceId\":\"Bearer metric-secret-123456\",\"cost\":0.11}")
+                .errorMessage("failed with api_key=trial-error-secret")
+                .build();
+        InMemoryRunContextSnapshotRepository snapshotRepository = new InMemoryRunContextSnapshotRepository();
+        KernelRunExperimentService service = new KernelRunExperimentService(
+                repository,
+                () -> executor,
+                branchRepository,
+                snapshotRepository,
+                null);
+
+        RunExperimentDetails details = service.create(RunExperimentCommand.builder()
+                .userId("100")
+                .conversationId(101L)
+                .baseLeafMessageId(202L)
+                .name("Profile compare api_key=experiment-name-secret")
+                .runProfileIds(List.of(12L))
+                .build());
+        RunContextSnapshotRecord snapshot = new RunContextSnapshotRecord();
+        snapshot.setTenantId("default");
+        snapshot.setRunId("run-exp-1-trial-10");
+        snapshot.setTraceContextJson("""
+                {"traceId":"Bearer trace-secret-123456","studioUrl":"http://studio.local"}
+                """);
+        snapshotRepository.snapshots.put("run-exp-1-trial-10", snapshot);
+        branchRepository.add(message("301", "101", "100", "assistant",
+                "output contains password=output-secret-value", 202L, 202L, 1));
+        service.scoreTrial("100", details.getExperiment().getId(), details.getTrials().get(0).getId(),
+                "{\"verdict\":\"Bearer score-secret-123456\"}");
+
+        RunExperimentReport report = service.exportReport("100", details.getExperiment().getId());
+
+        assertTrue(report.fileName().contains("redacted"));
+        assertTrue(report.markdown().contains("[REDACTED]"));
+        assertTrue(report.markdown().contains("cost"));
+        assertTrue(report.markdown().contains("studio="));
+        assertTrue(report.markdown().contains("Trial 10"));
+        assertTrue(report.markdown().contains("output contains [REDACTED]"));
+        assertTrue(report.markdown().contains("failed with [REDACTED]"));
+        assertTrue(report.markdown().contains("{\"verdict\":\"[REDACTED]\"}"));
+        assertTrue(report.markdown().contains("{\"traceId\":\"[REDACTED]\",\"cost\":0.11}"));
+        assertTrue(report.markdown().contains("studio=[[REDACTED]]"));
+        assertTrue(report.markdown().contains("# Run Experiment Report: Profile compare [REDACTED]"));
+        assertTrue(report.markdown().contains("Trial branch leaves: trial 10 -> leaf=301 parent=202 root=202 sibling=1"));
+        assertTrue(report.markdown().contains("- Recommended trial: not available"));
+        assertEquals("profile-compare-redacted-1.md", report.fileName());
+    }
+
     private static final class InMemoryRunExperimentRepository implements RunExperimentRepositoryPort {
 
         private RunExperimentDetails details;

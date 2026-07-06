@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.runexperiment;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageAggregate;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentInboundPort;
@@ -637,9 +638,9 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
     }
 
     private String reportFileName(RunExperimentRecord experiment) {
-        String name = experiment == null ? "run-experiment" : Objects.requireNonNullElse(
+        String name = experiment == null ? "run-experiment" : reportText(Objects.requireNonNullElse(
                 experiment.getName(),
-                "run-experiment");
+                "run-experiment"));
         String slug = name.toLowerCase(Locale.ROOT)
                 .replaceAll("[^a-z0-9\\u4e00-\\u9fa5]+", "-")
                 .replaceAll("^-+|-+$", "");
@@ -654,19 +655,23 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
     }
 
     private String tableCell(Object value) {
-        return truncate(valueOrDash(value), 180)
+        return truncate(reportText(valueOrDash(value)), 180)
                 .replace("\r", " ")
                 .replace("\n", " ")
                 .replace("|", "\\|");
     }
 
     private String markdownText(String value) {
-        return Objects.requireNonNullElse(value, "").replace("\r\n", "\n").replace("\r", "\n");
+        return reportText(value).replace("\r\n", "\n").replace("\r", "\n");
     }
 
     private String codeBlockText(String value) {
-        String safe = Objects.requireNonNullElse(value, "");
+        String safe = reportText(value);
         return safe.replace("```", "` ` `");
+    }
+
+    private String reportText(String value) {
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(value, ""));
     }
 
     private String truncate(String value, int maxLength) {
