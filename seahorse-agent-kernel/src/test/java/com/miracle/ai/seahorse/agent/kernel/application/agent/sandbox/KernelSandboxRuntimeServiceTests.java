@@ -23,6 +23,11 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditRedactionPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditWriteFailurePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
@@ -56,8 +61,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionReposi
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 import org.junit.jupiter.api.Test;
@@ -744,6 +753,78 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals(1, executions.size());
         assertEquals(result.execution(), executions.get(0));
         assertEquals(result.execution(), executionRepository.findExecutionById("exec-1").orElseThrow());
+    }
+
+    @Test
+    void shouldRejectUnrelatedUserSandboxExecutionLookupBeforeReadingExecutions() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        sessionRepository.saveSession(SandboxSession.created(
+                "session-1",
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW));
+        MemorySandboxExecutionRepository executionRepository = new MemorySandboxExecutionRepository();
+        KernelSandboxRuntimeService service = guardedService(
+                sessionRepository,
+                executionRepository,
+                new EmptySandboxArtifactQueryPort(),
+                currentUser("other-user", "user"),
+                run("run-1", "user-1"));
+
+        assertThrows(IllegalStateException.class, () -> service.listExecutions("session-1"));
+
+        assertEquals(0, executionRepository.listExecutionsCalls);
+    }
+
+    @Test
+    void shouldFilterUnreadableSandboxSessionsFromTenantList() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        sessionRepository.saveSession(SandboxSession.created(
+                "session-owner",
+                "tenant-1",
+                "run-owner",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW.plusSeconds(1)));
+        sessionRepository.saveSession(SandboxSession.created(
+                "session-other",
+                "tenant-1",
+                "run-other",
+                SandboxRuntimeType.FILE_CONVERSION,
+                NOW.plusSeconds(2)));
+        KernelSandboxRuntimeService service = guardedService(
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                currentUser("user-1", "user"),
+                run("run-owner", "user-1"),
+                run("run-other", "other-user"));
+
+        List<SandboxSession> sessions = service.listSessions("tenant-1", 10);
+
+        assertEquals(List.of("session-owner"), sessions.stream().map(SandboxSession::sessionId).toList());
+    }
+
+    @Test
+    void shouldRejectUnrelatedUserSandboxArtifactDownloadBeforeReturningStorageRef() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        sessionRepository.saveSession(SandboxSession.created(
+                "session-1",
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW));
+        KernelSandboxRuntimeService service = guardedService(
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new MemorySandboxArtifactQueryPort(storedArtifact(
+                        "artifact-clean",
+                        "s3://sandbox-artifacts/secret.txt",
+                        "text/plain")),
+                currentUser("other-user", "user"),
+                run("run-1", "user-1"));
+
+        assertThrows(IllegalStateException.class, () -> service.downloadArtifact("artifact-clean"));
     }
 
     @Test
@@ -1641,6 +1722,120 @@ class KernelSandboxRuntimeServiceTests {
         throw new IllegalStateException("scanner unavailable");
     }
 
+    private static KernelSandboxRuntimeService guardedService(MemorySandboxSessionRepository sessionRepository,
+                                                              MemorySandboxExecutionRepository executionRepository,
+                                                              SandboxArtifactQueryPort artifactQueryPort,
+                                                              CurrentUserPort currentUserPort,
+                                                              AgentRun... runs) {
+        return new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                sessionRepository,
+                executionRepository,
+                artifactQueryPort,
+                new DefaultSandboxArtifactScannerPort(),
+                null,
+                new MemorySandboxRuntimeProfilePolicyRepository(),
+                new MemoryAgentRunRepository(runs),
+                currentUserPort,
+                null,
+                CLOCK);
+    }
+
+    private static CurrentUserPort currentUser(String userId, String role) {
+        return () -> Optional.of(new CurrentUser(1L, userId, role, null));
+    }
+
+    private static AgentRun run(String runId, String userId) {
+        return new AgentRun(
+                runId,
+                "agent-1",
+                "version-1",
+                AgentDefinition.DEFAULT_TENANT_ID,
+                userId,
+                "conversation-1",
+                AgentRunTriggerType.CHAT,
+                "input",
+                AgentRunStatus.RUNNING,
+                "trace-1",
+                0L,
+                0L,
+                java.math.BigDecimal.ZERO,
+                null,
+                null,
+                NOW,
+                null);
+    }
+
+    private static final class MemoryAgentRunRepository implements AgentRunRepositoryPort {
+
+        private final Map<String, AgentRun> runs = new ConcurrentHashMap<>();
+
+        private MemoryAgentRunRepository(AgentRun... runs) {
+            for (AgentRun run : runs) {
+                this.runs.put(run.runId(), run);
+            }
+        }
+
+        @Override
+        public void createRun(AgentRun run) {
+            runs.put(run.runId(), run);
+        }
+
+        @Override
+        public void updateRun(AgentRun run) {
+            runs.put(run.runId(), run);
+        }
+
+        @Override
+        public Optional<AgentRun> findRunById(String runId) {
+            return Optional.ofNullable(runs.get(runId));
+        }
+
+        @Override
+        public void appendStep(AgentStep step) {
+        }
+
+        @Override
+        public List<AgentStep> listSteps(String runId) {
+            return List.of();
+        }
+    }
+
+    private static final class MemorySandboxRuntimeProfilePolicyRepository
+            implements SandboxRuntimeProfilePolicyRepositoryPort {
+
+        private final Map<String, SandboxRuntimeProfilePolicy> policies = new ConcurrentHashMap<>();
+
+        @Override
+        public SandboxRuntimeProfilePolicy upsert(SandboxRuntimeProfilePolicy policy) {
+            policies.put(policy.policyId(), policy);
+            return policy;
+        }
+
+        @Override
+        public Optional<SandboxRuntimeProfilePolicy> findById(String policyId) {
+            return Optional.ofNullable(policies.get(policyId));
+        }
+
+        @Override
+        public Optional<SandboxRuntimeProfilePolicy> findByTenantAndRuntimeType(String tenantId,
+                                                                                SandboxRuntimeType runtimeType) {
+            return policies.values().stream()
+                    .filter(policy -> policy.tenantId().equals(tenantId))
+                    .filter(policy -> policy.runtimeType() == runtimeType)
+                    .findFirst();
+        }
+
+        @Override
+        public List<SandboxRuntimeProfilePolicy> listByTenant(String tenantId) {
+            return policies.values().stream()
+                    .filter(policy -> policy.tenantId().equals(tenantId))
+                    .toList();
+        }
+    }
+
     private static final class MemorySandboxSessionRepository implements SandboxSessionRepositoryPort {
 
         private final Map<String, SandboxSession> store = new ConcurrentHashMap<>();
@@ -1693,6 +1888,7 @@ class KernelSandboxRuntimeServiceTests {
     private static final class MemorySandboxExecutionRepository implements SandboxExecutionRepositoryPort {
 
         private final Map<String, SandboxExecution> store = new ConcurrentHashMap<>();
+        private int listExecutionsCalls;
 
         @Override
         public SandboxExecution saveExecution(SandboxExecution execution) {
@@ -1707,6 +1903,7 @@ class KernelSandboxRuntimeServiceTests {
 
         @Override
         public List<SandboxExecution> listExecutionsBySession(String sessionId) {
+            listExecutionsCalls++;
             return store.values().stream()
                     .filter(execution -> execution.sessionId().equals(sessionId))
                     .sorted(Comparator.comparing(SandboxExecution::createdAt)

@@ -850,3 +850,11 @@ Pending approval lookup by Agent run now requires the requested run to be readab
 This closes a narrow pending-approval run-boundary gap. It does not change admin approval paging, approval detail admin semantics, approve/reject/modify ownership checks, approval decision persistence, or modified-argument validation.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelApprovalManagementServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 12/12, covering readable-run pending approval lookup and denial before approval repository query for unreadable runs. `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-DskipTests" compile` completed with reactor `BUILD SUCCESS` after the production bean was updated to inject the run repository.
+
+## 2026-07-06 Update: Sandbox Session Run Ownership Guard
+
+Sandbox session execution lookup, artifact listing, artifact detail, artifact download, execute, and close paths now apply the Agent run owner/admin boundary when `AgentRunRepositoryPort` and `CurrentUserPort` are available. Production auto-configuration injects both ports into `KernelSandboxRuntimeService`, so `/api/sandbox/sessions/{sessionId}/executions`, `/artifacts`, and `/api/sandbox/artifacts/{artifactId}` no longer expose sandbox resources for sessions attached to another user's Agent run. Tenant session listing filters unreadable sessions instead of returning cross-user session metadata.
+
+This closes a sandbox run-boundary authorization gap. It does not change sandbox policy admission, runtime profile governance, artifact scanner behavior, object-storage copy/download semantics, orphan cleanup, runtime health inspection, or legacy constructor compatibility for tests and embedded use.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelSandboxRuntimeServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 43/43, covering unrelated-user denial before execution repository reads, unreadable session filtering, and artifact download denial. `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-DskipTests" compile` completed with reactor `BUILD SUCCESS` after production wiring was updated to inject `AgentRunRepositoryPort` and `CurrentUserPort`.

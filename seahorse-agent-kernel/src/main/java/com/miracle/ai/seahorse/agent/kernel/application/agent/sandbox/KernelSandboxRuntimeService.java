@@ -60,6 +60,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfileP
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 
@@ -86,6 +89,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private static final String EXECUTION_ID_PREFIX = "sandbox_exec_";
     private static final String AUDIT_ID_PREFIX = "audit_sandbox_";
     private static final String AUDIT_ACTOR_ID = "sandbox-runtime";
+    private static final String ADMIN_ROLE = "admin";
+    private static final String ACCESS_DENIED = "权限不足";
     private static final String RESOURCE_TYPE_SANDBOX_SESSION = "SANDBOX_SESSION";
     private static final String RESOURCE_TYPE_SANDBOX_EXECUTION = "SANDBOX_EXECUTION";
     private static final String SANDBOX_ARTIFACT_BUCKET = "sandbox-artifacts";
@@ -127,6 +132,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private final SandboxExecutionRepositoryPort executionRepositoryPort;
     private final SandboxArtifactQueryPort artifactQueryPort;
     private final SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort;
+    private final AgentRunRepositoryPort runRepository;
+    private final CurrentUserPort currentUserPort;
     private final KernelAuditLedgerService auditLedger;
     private final Clock clock;
     private final Map<String, SandboxSession> sessions = new ConcurrentHashMap<>();
@@ -230,6 +237,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 artifactScannerPort,
                 artifactStoragePort,
                 new InMemorySandboxRuntimeProfilePolicyRepository(),
+                null,
+                null,
                 auditLedger,
                 clock);
     }
@@ -245,6 +254,34 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                                        SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort,
                                        KernelAuditLedgerService auditLedger,
                                        Clock clock) {
+        this(policyPort,
+                runtimePort,
+                artifactPort,
+                sessionRepositoryPort,
+                executionRepositoryPort,
+                artifactQueryPort,
+                artifactScannerPort,
+                artifactStoragePort,
+                runtimeProfilePolicyRepositoryPort,
+                null,
+                null,
+                auditLedger,
+                clock);
+    }
+
+    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
+                                       SandboxRuntimePort runtimePort,
+                                       SandboxArtifactPort artifactPort,
+                                       SandboxSessionRepositoryPort sessionRepositoryPort,
+                                       SandboxExecutionRepositoryPort executionRepositoryPort,
+                                       SandboxArtifactQueryPort artifactQueryPort,
+                                       SandboxArtifactScannerPort artifactScannerPort,
+                                       ObjectStoragePort artifactStoragePort,
+                                       SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort,
+                                       AgentRunRepositoryPort runRepository,
+                                       CurrentUserPort currentUserPort,
+                                       KernelAuditLedgerService auditLedger,
+                                       Clock clock) {
         this.policyPort = Objects.requireNonNull(policyPort, "policyPort must not be null");
         this.runtimePort = Objects.requireNonNull(runtimePort, "runtimePort must not be null");
         this.artifactPort = Objects.requireNonNull(artifactPort, "artifactPort must not be null");
@@ -258,6 +295,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         this.artifactQueryPort = Objects.requireNonNull(artifactQueryPort, "artifactQueryPort must not be null");
         this.runtimeProfilePolicyRepositoryPort = Objects.requireNonNull(runtimeProfilePolicyRepositoryPort,
                 "runtimeProfilePolicyRepositoryPort must not be null");
+        this.runRepository = runRepository;
+        this.currentUserPort = currentUserPort;
         this.auditLedger = auditLedger;
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
@@ -343,7 +382,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     @Override
     public SandboxExecutionResult execute(SandboxExecutionCommand command) {
         SandboxExecutionCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
-        SandboxSession session = findSessionOrThrow(safeCommand.sessionId());
+        SandboxSession session = requireReadableSession(findSessionOrThrow(safeCommand.sessionId()));
         if (session.status().isTerminal()) {
             return failedResult(session, session.reasonCode());
         }
@@ -378,7 +417,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
 
     @Override
     public SandboxSession close(String sessionId) {
-        SandboxSession session = findSessionOrThrow(requireText(sessionId, "sessionId must not be blank"));
+        SandboxSession session = requireReadableSession(findSessionOrThrow(requireText(sessionId,
+                "sessionId must not be blank")));
         if (session.status().isTerminal()) {
             return session;
         }
@@ -394,7 +434,9 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         int safeLimit = normalizeSessionListLimit(limit);
         List<SandboxSession> records = sessionRepositoryPort.listSessionsByTenant(safeTenantId, safeLimit);
         records.forEach(session -> sessions.put(session.sessionId(), session));
-        return records;
+        return records.stream()
+                .filter(this::canReadSession)
+                .toList();
     }
 
     @Override
@@ -511,14 +553,14 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     @Override
     public List<SandboxExecution> listExecutions(String sessionId) {
         String safeSessionId = requireText(sessionId, "sessionId must not be blank");
-        findSessionOrThrow(safeSessionId);
+        requireReadableSession(findSessionOrThrow(safeSessionId));
         return executionRepositoryPort.listExecutionsBySession(safeSessionId);
     }
 
     @Override
     public List<SandboxArtifact> listArtifacts(String sessionId) {
         String safeSessionId = requireText(sessionId, "sessionId must not be blank");
-        findSessionOrThrow(safeSessionId);
+        requireReadableSession(findSessionOrThrow(safeSessionId));
         return artifactQueryPort.listArtifactsBySession(safeSessionId);
     }
 
@@ -552,7 +594,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         SandboxArtifact artifact = artifactQueryPort.findArtifactById(
                         requireText(artifactId, "artifactId must not be blank"))
                 .orElseThrow(() -> new IllegalArgumentException("Sandbox artifact not found"));
-        findSessionOrThrow(artifact.sessionId());
+        requireReadableSession(findSessionOrThrow(artifact.sessionId()));
         return artifact;
     }
 
@@ -629,6 +671,39 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         Optional<SandboxSession> loaded = sessionRepositoryPort.findSessionById(safeSessionId);
         loaded.ifPresent(session -> sessions.put(session.sessionId(), session));
         return loaded;
+    }
+
+    private SandboxSession requireReadableSession(SandboxSession session) {
+        if (runRepository == null || currentUserPort == null) {
+            return session;
+        }
+        CurrentUser currentUser = currentUserPort.requireCurrentUser();
+        runRepository.findRunById(session.runId())
+                .map(run -> {
+                    if (isAdmin(currentUser) || currentUserId(currentUser).equals(run.userId())) {
+                        return run;
+                    }
+                    throw new IllegalStateException(ACCESS_DENIED);
+                })
+                .orElseThrow(() -> new IllegalArgumentException("Agent run not found"));
+        return session;
+    }
+
+    private boolean canReadSession(SandboxSession session) {
+        try {
+            requireReadableSession(session);
+            return true;
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            return false;
+        }
+    }
+
+    private boolean isAdmin(CurrentUser currentUser) {
+        return currentUser != null && currentUser.hasRole(ADMIN_ROLE);
+    }
+
+    private String currentUserId(CurrentUser currentUser) {
+        return currentUser == null ? null : currentUser.operator();
     }
 
     private SandboxExecution failedExecution(SandboxSession session, SandboxPolicyReasonCode reasonCode) {
