@@ -575,6 +575,119 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldRunOdsToCsvFileConversionAndCollectCsvOutputOnly() throws Exception {
+        byte[] odsBytes = odsBytes("safe ods marker", "ODS conversion extracts first table");
+        String odsBase64 = Base64.getEncoder().encodeToString(odsBytes);
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted ods spreadsheet to csv\n", Duration.ofMillis(190)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("ods_to_csv",
+                                    "ods_rows",
+                                    "source_format = \"ods\"",
+                                    "ods content.xml exceeds extraction budget",
+                                    "converted.csv")
+                            .doesNotContain(odsBase64);
+                    assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.ods")))
+                            .isEqualTo(odsBytes);
+                    Files.writeString(command.workingDirectory().resolve("converted.csv"),
+                            "label,value\nsafe ods marker,ODS conversion extracts first table\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"ods","targetFormat":"csv","contentEncoding":"base64","content":"%s"}
+                        """.formatted(odsBase64),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted ods spreadsheet to csv");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.csv");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/csv");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.ods"));
+    }
+
+    @Test
+    void shouldRunOdsToHtmlFileConversionAndCollectHtmlOutputOnly() throws Exception {
+        byte[] odsBytes = odsBytes("safe ods html marker", "ODS HTML conversion renders first table");
+        String odsBase64 = Base64.getEncoder().encodeToString(odsBytes);
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted ods spreadsheet to html\n", Duration.ofMillis(190)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("ods_to_html",
+                                    "ods_rows",
+                                    "source_format = \"ods\"",
+                                    "target_format = \"html\"",
+                                    "converted.html")
+                            .doesNotContain(odsBase64);
+                    assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.ods")))
+                            .isEqualTo(odsBytes);
+                    Files.writeString(command.workingDirectory().resolve("converted.html"),
+                            "<!doctype html>\n<html><body><table><tr><td>label</td></tr></table></body></html>\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"ods","targetFormat":"html","contentEncoding":"base64","content":"%s"}
+                        """.formatted(odsBase64),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted ods spreadsheet to html");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.html");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/html");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.ods"));
+    }
+
+    @Test
+    void shouldRejectOdsWithActiveContentBeforeRunningContainer() throws Exception {
+        byte[] odsBytes = zipBytes(
+                "content.xml",
+                """
+                        <office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                                                 xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+                                                 xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+                          <office:body><office:spreadsheet><table:table><table:table-row><table:table-cell><text:p>unsafe ods</text:p></table:table-cell></table:table-row></table:table></office:spreadsheet></office:body>
+                        </office:document-content>
+                        """,
+                "Scripts/macro.js",
+                "alert('macro')");
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"ods","targetFormat":"csv","contentEncoding":"base64","content":"%s"}
+                        """.formatted(Base64.getEncoder().encodeToString(odsBytes)),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("ods active content is not supported");
+        assertThat(runner.lastCommand).isNull();
+        assertThat(tempDir.resolve(session.sessionId()).resolve("main.py")).doesNotExist();
+        assertThat(tempDir.resolve(session.sessionId()).resolve("input.ods")).doesNotExist();
+    }
+
+    @Test
     void shouldRunPdfToTextFileConversionAndCollectTextOutputOnly() throws Exception {
         String pdfBase64 = Base64.getEncoder().encodeToString("%PDF-1.4\nfake-pdf-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         RecordingRunner runner = new RecordingRunner(
@@ -1614,7 +1727,7 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED);
         assertThat(result.execution().resultSummary())
-                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/odt/pdf to html/txt, xlsx to csv/html, and pptx to html/txt only");
+                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/odt/pdf to html/txt, xlsx/ods to csv/html, and pptx to html/txt only");
         assertThat(runner.lastCommand).isNull();
     }
 
@@ -2015,6 +2128,35 @@ class ContainerSandboxRuntimeAdapterTests {
                               </office:body>
                             </office:document-content>
                             """.formatted(firstParagraph, secondParagraph));
+        }
+        return bytes.toByteArray();
+    }
+
+    private static byte[] odsBytes(String marker, String secondValue) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream archive = new ZipOutputStream(bytes)) {
+            writeZipEntry(archive, "mimetype", "application/vnd.oasis.opendocument.spreadsheet");
+            writeZipEntry(archive, "content.xml",
+                    """
+                            <office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                                                     xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+                                                     xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+                              <office:body>
+                                <office:spreadsheet>
+                                  <table:table table:name="Sheet1">
+                                    <table:table-row>
+                                      <table:table-cell><text:p>label</text:p></table:table-cell>
+                                      <table:table-cell><text:p>value</text:p></table:table-cell>
+                                    </table:table-row>
+                                    <table:table-row>
+                                      <table:table-cell><text:p>%s</text:p></table:table-cell>
+                                      <table:table-cell><text:p>%s</text:p></table:table-cell>
+                                    </table:table-row>
+                                  </table:table>
+                                </office:spreadsheet>
+                              </office:body>
+                            </office:document-content>
+                            """.formatted(marker, secondValue));
         }
         return bytes.toByteArray();
     }

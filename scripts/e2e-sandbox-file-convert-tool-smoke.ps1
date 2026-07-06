@@ -391,6 +391,51 @@ function New-OdtBase64 {
     }
 }
 
+function New-OdsBase64 {
+    param(
+        [string]$Marker,
+        [string]$SecondValue = "ODS conversion extracts first table"
+    )
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $tempPath = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "seahorse-ods-$([guid]::NewGuid().ToString('N')).ods")
+    $fileStream = [System.IO.File]::Open($tempPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite)
+    $archive = [System.IO.Compression.ZipArchive]::new($fileStream, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        Add-ZipTextEntry -Archive $archive -Name "mimetype" -Content "application/vnd.oasis.opendocument.spreadsheet"
+        $escapedMarker = [System.Security.SecurityElement]::Escape("Sandbox ODS $Marker")
+        $escapedSecondValue = [System.Security.SecurityElement]::Escape($SecondValue)
+        $contentXml = @"
+<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Sheet1">
+        <table:table-row>
+          <table:table-cell><text:p>label</text:p></table:table-cell>
+          <table:table-cell><text:p>value</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell><text:p>$escapedMarker</text:p></table:table-cell>
+          <table:table-cell><text:p>$escapedSecondValue</text:p></table:table-cell>
+        </table:table-row>
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document-content>
+"@
+        Add-ZipTextEntry -Archive $archive -Name "content.xml" -Content $contentXml
+    } finally {
+        $archive.Dispose()
+        $fileStream.Dispose()
+    }
+    try {
+        return [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($tempPath))
+    } finally {
+        Remove-Item -LiteralPath $tempPath -ErrorAction SilentlyContinue
+    }
+}
+
 function New-XlsxBase64 {
     param(
         [string]$Marker,
@@ -1243,6 +1288,158 @@ try {
             & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
             if ($LASTEXITCODE -ne 0) {
                 throw "Stored ODT to HTML object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
+    $odsRunId = $runId
+    $odsToolCallId = "sandbox-file-convert-ods-csv-call-$suffix"
+    $odsContent = New-OdsBase64 -Marker $Marker -SecondValue "ODS conversion extracts first table"
+
+    $odsObservation = Test-Step "Invoke sandbox_file_convert ODS to CSV through Tool Gateway" {
+        $requestBody = @{
+            runId = $odsRunId
+            stepId = "sandbox-file-convert-ods-csv-step-$suffix"
+            toolCallId = $odsToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "ods"
+                targetFormat = "csv"
+                contentEncoding = "base64"
+                content = $odsContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${odsRunId}:${odsToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert ODS to CSV"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert ODS to CSV failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION" -or "$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected succeeded FILE_CONVERSION ODS to CSV execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "ods" -or "$($parsed.conversion.targetFormat)" -ne "csv" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected ODS to CSV conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1 -or "$($artifacts[0].mediaType)" -ne "text/csv" -or "$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected one clean ODS CSV artifact: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed" -or $artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible ODS CSV metadata-scanned artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $odsObservation) { exit 1 }
+
+    $odsArtifactId = "$(@($odsObservation.artifacts)[0].artifactId)"
+    $odsObjectUri = Test-Step "Verify persisted ODS to CSV session and artifact" {
+        Assert-PersistedFileConversionArtifact -ArtifactId $odsArtifactId -ExpectedMediaType "text/csv" -Label "ODS to CSV"
+    }
+    if (-not $odsObjectUri) { exit 1 }
+
+    Test-Step "Download converted ODS CSV through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$odsArtifactId/download" -Headers $headers
+        if ($content -notlike "*Sandbox ODS $Marker*" -or $content -notlike "*ODS conversion extracts first table*") {
+            throw "Downloaded ODS CSV did not include expected cells: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded ODS CSV artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($odsObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted ODS CSV object exists in backend storage volume" {
+            $key = $odsObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote ODS to CSV key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored ODS to CSV object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
+    $odsHtmlRunId = $runId
+    $odsHtmlToolCallId = "sandbox-file-convert-ods-html-call-$suffix"
+    $odsHtmlContent = New-OdsBase64 -Marker $Marker -SecondValue "ODS HTML conversion renders first table"
+
+    $odsHtmlObservation = Test-Step "Invoke sandbox_file_convert ODS to HTML through Tool Gateway" {
+        $requestBody = @{
+            runId = $odsHtmlRunId
+            stepId = "sandbox-file-convert-ods-html-step-$suffix"
+            toolCallId = $odsHtmlToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "ods"
+                targetFormat = "html"
+                contentEncoding = "base64"
+                content = $odsHtmlContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${odsHtmlRunId}:${odsHtmlToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert ODS to HTML"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert ODS to HTML failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION" -or "$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected succeeded FILE_CONVERSION ODS to HTML execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "ods" -or "$($parsed.conversion.targetFormat)" -ne "html" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected ODS to HTML conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1 -or "$($artifacts[0].mediaType)" -ne "text/html" -or "$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected one clean ODS HTML artifact: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed" -or $artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible ODS HTML metadata-scanned artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $odsHtmlObservation) { exit 1 }
+
+    $odsHtmlArtifactId = "$(@($odsHtmlObservation.artifacts)[0].artifactId)"
+    $odsHtmlObjectUri = Test-Step "Verify persisted ODS to HTML session and artifact" {
+        Assert-PersistedFileConversionArtifact -ArtifactId $odsHtmlArtifactId -ExpectedMediaType "text/html" -Label "ODS to HTML"
+    }
+    if (-not $odsHtmlObjectUri) { exit 1 }
+
+    Test-Step "Download converted ODS HTML through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$odsHtmlArtifactId/download" -Headers $headers
+        if ($content -notlike "*<table>*" -or $content -notlike "*<td>Sandbox ODS $Marker</td>*" -or $content -notlike "*<td>ODS HTML conversion renders first table</td>*") {
+            throw "Downloaded ODS HTML did not include expected table cells: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded ODS HTML artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($odsHtmlObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted ODS HTML object exists in backend storage volume" {
+            $key = $odsHtmlObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote ODS to HTML key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored ODS to HTML object not found or marker missing at $path"
             }
         } | Out-Null
     }
