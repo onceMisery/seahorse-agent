@@ -20,8 +20,12 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.approval;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialJsonFieldClassifier;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
@@ -36,7 +40,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 
 import java.time.Clock;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -90,7 +96,7 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
     @Override
     public ApprovalRequestPage page(String tenantId, ApprovalRequestStatus status, long current, long size) {
         requireAdmin();
-        return queryPort.page(new ApprovalRequestQuery(tenantId, status, current, size));
+        return safeApprovalPage(queryPort.page(new ApprovalRequestQuery(tenantId, status, current, size)));
     }
 
     @Override
@@ -106,6 +112,7 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
                 RUN_PENDING_APPROVAL_PAGE_SIZE));
         return page.records().stream()
                 .filter(approval -> isAdmin(currentUser) || ownsUserId(approval.userId(), currentUser))
+                .map(this::safeApprovalRequest)
                 .toList();
     }
 
@@ -126,7 +133,8 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
     @Override
     public Optional<ApprovalRequest> findById(String approvalId) {
         requireAdmin();
-        return queryPort.findById(requireText(approvalId, "approvalId 不能为空"));
+        return queryPort.findById(requireText(approvalId, "approvalId 不能为空"))
+                .map(this::safeApprovalRequest);
     }
 
     @Override
@@ -172,6 +180,7 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
                 safeDecisionComment(decisionComment),
                 safeArgumentsPreviewJson);
         return decisionPort.decide(decision)
+                .map(this::safeApprovalRequest)
                 .orElseThrow(() -> new IllegalStateException(APPROVAL_STATE_CHANGED));
     }
 
@@ -197,7 +206,87 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
         if (root.has("arguments") && !root.path("arguments").isObject()) {
             throw new IllegalArgumentException("argumentsPreviewJson.arguments must be a JSON object");
         }
-        return json;
+        return safeArgumentsPreviewJson(json);
+    }
+
+    private ApprovalRequestPage safeApprovalPage(ApprovalRequestPage page) {
+        if (page == null) {
+            return new ApprovalRequestPage(List.of(), 0L, 0L, 1L, 0L);
+        }
+        return new ApprovalRequestPage(
+                page.records().stream()
+                        .map(this::safeApprovalRequest)
+                        .toList(),
+                page.total(),
+                page.size(),
+                page.current(),
+                page.pages());
+    }
+
+    private ApprovalRequest safeApprovalRequest(ApprovalRequest approval) {
+        if (approval == null) {
+            return null;
+        }
+        return new ApprovalRequest(
+                approval.approvalId(),
+                approval.runId(),
+                approval.stepId(),
+                approval.toolInvocationId(),
+                approval.tenantId(),
+                approval.userId(),
+                approval.agentId(),
+                approval.rolloutId(),
+                approval.toolId(),
+                approval.approvalType(),
+                approval.riskLevel(),
+                safeText(approval.summary()),
+                safeArgumentsPreviewJson(approval.argumentsPreviewJson()),
+                approval.status(),
+                approval.requestedAt(),
+                approval.expiresAt(),
+                approval.decidedBy(),
+                approval.decidedAt(),
+                safeDecisionComment(approval.decisionComment()));
+    }
+
+    private String safeArgumentsPreviewJson(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(value);
+            return objectMapper.writeValueAsString(safeJson(root));
+        } catch (JsonProcessingException ex) {
+            return safeText(value);
+        }
+    }
+
+    private JsonNode safeJson(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return node;
+        }
+        if (node.isObject()) {
+            ObjectNode result = objectMapper.createObjectNode();
+            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> field = fields.next();
+                if (CredentialJsonFieldClassifier.isSensitiveOutputField(field.getKey())) {
+                    result.set(field.getKey(), TextNode.valueOf(CredentialTextRedactor.REDACTED_VALUE));
+                } else {
+                    result.set(field.getKey(), safeJson(field.getValue()));
+                }
+            }
+            return result;
+        }
+        if (node.isArray()) {
+            ArrayNode result = objectMapper.createArrayNode();
+            node.forEach(item -> result.add(safeJson(item)));
+            return result;
+        }
+        if (node.isTextual()) {
+            return TextNode.valueOf(safeText(node.asText()));
+        }
+        return node;
     }
 
     private CurrentUser requireAdmin() {
@@ -232,6 +321,10 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
 
     private String safeDecisionComment(String decisionComment) {
         return CredentialTextRedactor.redact(decisionComment);
+    }
+
+    private String safeText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private String requireText(String value, String message) {

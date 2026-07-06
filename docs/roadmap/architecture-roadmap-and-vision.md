@@ -1282,3 +1282,13 @@ Legacy workflow visualizations now redact credential-shaped `ExecutionStepAggreg
 This is a narrow legacy visualization-boundary hardening slice. It does not mutate stored workflow step aggregates, change workflow ordering, alter sequential edge construction, modify owner/admin authorization, or affect the newer Agent run workflow projection.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelWorkflowVisualizationServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 9/9, covering result-data redaction for historical credential-bearing workflow aggregates while preserving owner/admin access, unrelated-user denial, numeric user-id compatibility, and legacy ungated constructor behavior.
+
+## 2026-07-06 Update: Approval Query Projection Redaction
+
+Approval management queries now defensively redact credential-shaped approval display text before returning records from `page`, `findById`, and `listPendingByRunId`. The projection covers historical or externally written `summary`, `argumentsPreviewJson`, and `decisionComment` values while leaving the underlying approval repository record unchanged.
+
+Modified approval decisions also sanitize the allowed `argumentsPreviewJson` payload before persistence, so approved argument previews can keep value-free shape while suppressing sensitive fields and credential-shaped string values.
+
+This is a narrow approval-query and modify-preview hardening slice. It does not change approval authorization, approval status transitions, approval matching, Tool Gateway invocation, resume execution, or the approval repository schema.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelApprovalManagementServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 20/20, covering historical query projection redaction, modified-preview write redaction, decision-comment write redaction, owner/admin access, and existing malformed-preview validation.

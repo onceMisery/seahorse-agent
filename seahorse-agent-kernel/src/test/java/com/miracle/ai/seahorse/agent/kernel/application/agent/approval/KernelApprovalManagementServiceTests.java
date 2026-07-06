@@ -213,6 +213,35 @@ class KernelApprovalManagementServiceTests {
     }
 
     @Test
+    void shouldRedactHistoricalCredentialTextWhenQueryingApprovals() {
+        ApprovalRequest historical = approval(
+                "approval-1",
+                "run-1",
+                "2",
+                ApprovalRequestStatus.REJECTED,
+                "Tool failed Authorization: Bearer abcdefghijklmnop",
+                "{\"arguments\":{\"password\":\"hunter2\",\"note\":\"Bearer tokenvalue123\"}}",
+                "operator pasted access_token=secret-marker");
+        MemoryApprovalRepository repository = new MemoryApprovalRepository(List.of(historical));
+        ApprovalManagementInboundPort service = new KernelApprovalManagementService(
+                repository,
+                repository,
+                adminUser(),
+                FIXED_CLOCK);
+
+        ApprovalRequestPage page = service.page("tenant-1", ApprovalRequestStatus.REJECTED, 1L, 10L);
+        ApprovalRequest found = service.findById("approval-1").orElseThrow();
+
+        assertEquals("Tool failed [REDACTED]", page.records().get(0).summary());
+        assertEquals("operator pasted [REDACTED]", page.records().get(0).decisionComment());
+        assertEquals("{\"arguments\":{\"password\":\"[REDACTED]\",\"note\":\"[REDACTED]\"}}",
+                page.records().get(0).argumentsPreviewJson());
+        assertEquals(page.records().get(0), found);
+        assertEquals("Tool failed Authorization: Bearer abcdefghijklmnop",
+                repository.approvalsById.get("approval-1").summary());
+    }
+
+    @Test
     void shouldApprovePendingApprovalWithOwningUser() {
         MemoryApprovalRepository repository = new MemoryApprovalRepository(
                 List.of(approval("approval-1", "run-1", "2", ApprovalRequestStatus.PENDING)));
@@ -310,6 +339,28 @@ class KernelApprovalManagementServiceTests {
     }
 
     @Test
+    void shouldRedactModifiedApprovalPreviewBeforePersistingDecision() {
+        MemoryApprovalRepository repository = new MemoryApprovalRepository(
+                List.of(approval("approval-1", ApprovalRequestStatus.PENDING)));
+        ApprovalManagementInboundPort service = new KernelApprovalManagementService(
+                repository,
+                repository,
+                adminUser(),
+                FIXED_CLOCK);
+
+        ApprovalRequest decided = service.modify(
+                "approval-1",
+                new ApprovalModifyCommand(
+                        "{\"arguments\":{\"password\":\"hunter2\",\"note\":\"api_key=secret-api-key-value\"},"
+                                + "\"modified\":true}",
+                        "Reduced scope"));
+
+        assertEquals("{\"arguments\":{\"password\":\"[REDACTED]\",\"note\":\"[REDACTED]\"},\"modified\":true}",
+                decided.argumentsPreviewJson());
+        assertEquals(decided.argumentsPreviewJson(), repository.lastDecision.argumentsPreviewJson());
+    }
+
+    @Test
     void shouldRejectMalformedModifiedApprovalPreview() {
         MemoryApprovalRepository repository = new MemoryApprovalRepository(
                 List.of(approval("approval-1", ApprovalRequestStatus.PENDING)));
@@ -372,6 +423,23 @@ class KernelApprovalManagementServiceTests {
                                             String runId,
                                             String userId,
                                             ApprovalRequestStatus status) {
+        return approval(
+                approvalId,
+                runId,
+                userId,
+                status,
+                "Tool memory-forget requires approval",
+                "{\"argumentKeys\":[\"input\"]}",
+                status == ApprovalRequestStatus.PENDING ? null : "already decided");
+    }
+
+    private static ApprovalRequest approval(String approvalId,
+                                            String runId,
+                                            String userId,
+                                            ApprovalRequestStatus status,
+                                            String summary,
+                                            String argumentsPreviewJson,
+                                            String decisionComment) {
         return new ApprovalRequest(
                 approvalId,
                 runId,
@@ -383,14 +451,14 @@ class KernelApprovalManagementServiceTests {
                 "memory-forget",
                 ApprovalType.TOOL_EXECUTION,
                 ToolRiskLevel.HIGH,
-                "Tool memory-forget requires approval",
-                "{\"argumentKeys\":[\"input\"]}",
+                summary,
+                argumentsPreviewJson,
                 status,
                 NOW.minusSeconds(60),
                 null,
                 status == ApprovalRequestStatus.PENDING ? null : "admin-0",
                 status == ApprovalRequestStatus.PENDING ? null : NOW.minusSeconds(30),
-                status == ApprovalRequestStatus.PENDING ? null : "already decided");
+                status == ApprovalRequestStatus.PENDING ? null : decisionComment);
     }
 
     private static CurrentUserPort adminUser() {
