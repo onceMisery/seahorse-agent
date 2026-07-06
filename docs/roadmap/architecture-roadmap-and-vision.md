@@ -922,3 +922,11 @@ The `sandbox_browser` tool adapter and container browser automation runtime now 
 This is a narrow URL hygiene slice. It does not change host allowlisting, egress policy, cookie/session-state replay, credential-parameter detection, inline HTML mode, screenshot/HAR/video capture, or browser action semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 31/31, and `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 57/57, covering tool-layer rejection before sandbox session creation and runtime-layer rejection before container command execution.
+
+## 2026-07-06 Update: Sandbox Browser Observation URL Query Redaction
+
+The `sandbox_browser` tool observation now redacts allowed URL query values before returning the browser metadata to the model-visible tool result. The sandbox runtime still receives the full validated URL, but `browser.url` in the observation keeps only scheme, host, optional port, path, and a value-free `<redacted-query>` marker when a query is present.
+
+This is a narrow observation hardening slice. It does not change URL validation, runtime input, host allowlisting, egress policy, HAR capture, session-state replay/capture, or browser navigation behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=SandboxBrowserToolPortAdapterTests#shouldRedactAllowedUrlQueryFromObservation" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 1/1, and `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 32/32, covering full runtime URL preservation while excluding the allowed query value from the tool result observation.

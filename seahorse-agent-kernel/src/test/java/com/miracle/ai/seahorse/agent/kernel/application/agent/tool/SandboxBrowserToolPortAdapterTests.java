@@ -614,6 +614,36 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldRedactAllowedUrlQueryFromObservation() throws Exception {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
+                new SandboxExecution(
+                        "exec-1",
+                        "session-1",
+                        SandboxRuntimeType.BROWSER_AUTOMATION,
+                        SandboxExecutionStatus.SUCCEEDED,
+                        "exitCode=0; stdout=browser snapshot completed",
+                        SandboxPolicyReasonCode.VALID_REQUEST,
+                        NOW,
+                        NOW),
+                List.of()));
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+        String queryValue = "customer-search-marker";
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/search?q=" + queryValue,
+                "allowedHosts", List.of("example.test"))));
+
+        assertTrue(result.success());
+        JsonNode browserInput = objectMapper.readTree(runtime.executeCommand.input());
+        assertEquals("http://example.test/search?q=" + queryValue, browserInput.path("url").asText());
+
+        JsonNode root = objectMapper.readTree(result.content());
+        assertEquals("http://example.test/search?<redacted-query>", root.path("browser").path("url").asText());
+        assertFalse(result.content().contains(queryValue));
+    }
+
+    @Test
     void shouldRejectCookieWhenDomainIsNotAllowlistedBeforeCreatingSession() {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);

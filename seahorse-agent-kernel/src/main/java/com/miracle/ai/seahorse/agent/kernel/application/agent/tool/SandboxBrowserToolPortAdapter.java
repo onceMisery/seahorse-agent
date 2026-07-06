@@ -367,7 +367,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                         boolean captureSessionState) {
         Map<String, Object> browser = new LinkedHashMap<>();
         browser.put("action", action);
-        browser.put("url", hasText(url) ? url : null);
+        browser.put("url", observationUrl(url));
         browser.put("allowedHosts", allowedHosts == null ? List.of() : List.copyOf(allowedHosts));
         browser.put("cookieCount", cookies == null ? 0 : cookies.size());
         browser.put("cookieDomains", cookieDomains(cookies));
@@ -380,6 +380,29 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                 "captureRequested", captureSessionState,
                 "replayRequested", sessionState != null));
         return browser;
+    }
+
+    private String observationUrl(String value) {
+        if (!hasText(value)) {
+            return null;
+        }
+        try {
+            URI uri = new URI(value);
+            StringBuilder summary = new StringBuilder();
+            summary.append(uri.getScheme()).append("://").append(uri.getHost());
+            if (uri.getPort() >= 0) {
+                summary.append(':').append(uri.getPort());
+            }
+            if (hasText(uri.getRawPath())) {
+                summary.append(uri.getRawPath());
+            }
+            if (hasText(uri.getRawQuery())) {
+                summary.append("?<redacted-query>");
+            }
+            return summary.toString();
+        } catch (URISyntaxException ex) {
+            return "<redacted-url>";
+        }
     }
 
     private List<Map<String, Object>> artifacts(List<SandboxArtifact> artifacts) {
