@@ -95,6 +95,30 @@ class SeahorseRunExperimentControllerTests {
     }
 
     @Test
+    void shouldRedactCredentialTextFromRunExperimentHttpProjection() throws Exception {
+        RunExperimentInboundPort port = mock(RunExperimentInboundPort.class);
+        RunExperimentDetails details = detailsWithCredentials();
+        when(port.findById("100", 1L)).thenReturn(Optional.of(details));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseRunExperimentController(provider(port))).build();
+
+        mvc.perform(get("/api/run-experiments/1").param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.experiment.name").value("Profile compare [REDACTED]"))
+                .andExpect(jsonPath("$.data.trials[0].scoreJson").value(
+                        "{\"verdict\":\"[REDACTED]\",\"cost\":0.11}"))
+                .andExpect(jsonPath("$.data.trials[0].metricJson").value(
+                        "{\"traceId\":\"[REDACTED]\",\"nested\":{\"apiKey\":\"[REDACTED]\"}}"))
+                .andExpect(jsonPath("$.data.trials[0].errorMessage").value("failed with [REDACTED]"));
+
+        assertThat(details.getExperiment().getName()).contains("experiment-name-secret");
+        assertThat(details.getTrials().get(0).getScoreJson()).contains("score-secret-123456");
+        assertThat(details.getTrials().get(0).getMetricJson()).contains("metric-secret-123456");
+        assertThat(details.getTrials().get(0).getErrorMessage()).contains("trial-error-secret");
+        verify(port).findById("100", 1L);
+    }
+
+    @Test
     void shouldExportRunExperimentReport() throws Exception {
         RunExperimentInboundPort port = mock(RunExperimentInboundPort.class);
         when(port.exportReport("100", 1L)).thenReturn(new RunExperimentReport(
@@ -201,6 +225,17 @@ class SeahorseRunExperimentControllerTests {
     private static RunExperimentDetails detailsWithScore() {
         RunExperimentDetails details = details();
         details.getTrials().get(0).setScoreJson("{\"rating\":5}");
+        return details;
+    }
+
+    private static RunExperimentDetails detailsWithCredentials() {
+        RunExperimentDetails details = details();
+        details.getExperiment().setName("Profile compare api_key=experiment-name-secret");
+        details.getTrials().get(0).setScoreJson("{\"verdict\":\"Bearer score-secret-123456\",\"cost\":0.11}");
+        details.getTrials().get(0).setMetricJson("""
+                {"traceId":"Bearer metric-secret-123456","nested":{"apiKey":"nested-secret-value"}}
+                """);
+        details.getTrials().get(0).setErrorMessage("failed with password=trial-error-secret");
         return details;
     }
 

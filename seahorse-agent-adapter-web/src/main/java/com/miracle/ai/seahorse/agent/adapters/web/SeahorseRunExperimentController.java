@@ -19,11 +19,14 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialJsonFieldClassifier;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationBranchInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentDetails;
+import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentTrialRecord;
 import lombok.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +39,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -79,9 +84,9 @@ public class SeahorseRunExperimentController {
                                       @RequestParam(required = false) String userId,
                                       @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
                                       String headerUserId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, runExperimentPort().create(command(
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, safeDetails(runExperimentPort().create(command(
                 resolveUserId(userId, headerUserId),
-                request)));
+                request))));
     }
 
     @GetMapping({"/run-experiments/{id}", "/api/run-experiments/{id}"})
@@ -91,7 +96,7 @@ public class SeahorseRunExperimentController {
                                    String headerUserId) {
         return runExperimentPort()
                 .findById(resolveUserId(userId, headerUserId), id)
-                .<Map<String, Object>>map(details -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, details))
+                .<Map<String, Object>>map(details -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, safeDetails(details)))
                 .orElseGet(() -> Map.of(KEY_CODE, SUCCESS_CODE));
     }
 
@@ -113,7 +118,7 @@ public class SeahorseRunExperimentController {
                 KEY_CODE,
                 SUCCESS_CODE,
                 KEY_DATA,
-                runExperimentPort().cancel(resolveUserId(userId, headerUserId), id));
+                safeDetails(runExperimentPort().cancel(resolveUserId(userId, headerUserId), id)));
     }
 
     @PostMapping({
@@ -130,11 +135,11 @@ public class SeahorseRunExperimentController {
                 KEY_CODE,
                 SUCCESS_CODE,
                 KEY_DATA,
-                runExperimentPort().scoreTrial(
+                safeDetails(runExperimentPort().scoreTrial(
                         resolveUserId(userId, headerUserId),
                         id,
                         trialId,
-                        scoreJson(request)));
+                        scoreJson(request))));
     }
 
     @PostMapping({
@@ -181,6 +186,102 @@ public class SeahorseRunExperimentController {
                 .name(safeRequest.getName())
                 .runProfileIds(safeRequest.getRunProfileIds())
                 .build();
+    }
+
+    private RunExperimentDetails safeDetails(RunExperimentDetails details) {
+        if (details == null) {
+            return null;
+        }
+        return RunExperimentDetails.builder()
+                .experiment(safeExperiment(details.getExperiment()))
+                .trials(Objects.requireNonNullElse(details.getTrials(), List.<RunExperimentTrialRecord>of())
+                        .stream()
+                        .map(this::safeTrial)
+                        .toList())
+                .build();
+    }
+
+    private RunExperimentRecord safeExperiment(RunExperimentRecord record) {
+        if (record == null) {
+            return null;
+        }
+        return RunExperimentRecord.builder()
+                .id(record.getId())
+                .tenantId(record.getTenantId())
+                .userId(record.getUserId())
+                .conversationId(record.getConversationId())
+                .baseLeafMessageId(record.getBaseLeafMessageId())
+                .name(safeText(record.getName()))
+                .status(record.getStatus())
+                .createTime(record.getCreateTime())
+                .updateTime(record.getUpdateTime())
+                .deleted(record.getDeleted())
+                .build();
+    }
+
+    private RunExperimentTrialRecord safeTrial(RunExperimentTrialRecord record) {
+        if (record == null) {
+            return null;
+        }
+        return RunExperimentTrialRecord.builder()
+                .id(record.getId())
+                .tenantId(record.getTenantId())
+                .experimentId(record.getExperimentId())
+                .runProfileId(record.getRunProfileId())
+                .runId(record.getRunId())
+                .outputMessageId(record.getOutputMessageId())
+                .scoreJson(safeJsonText(record.getScoreJson()))
+                .metricJson(safeJsonText(record.getMetricJson()))
+                .status(record.getStatus())
+                .errorMessage(safeText(record.getErrorMessage()))
+                .createTime(record.getCreateTime())
+                .updateTime(record.getUpdateTime())
+                .deleted(record.getDeleted())
+                .build();
+    }
+
+    private String safeJsonText(String value) {
+        String text = blankToNull(value);
+        if (text == null) {
+            return null;
+        }
+        try {
+            Object parsed = objectMapper.readValue(text, Object.class);
+            return objectMapper.writeValueAsString(safeJsonValue(null, parsed));
+        } catch (JsonProcessingException ignored) {
+            return safeText(text);
+        }
+    }
+
+    private Object safeJsonValue(String key, Object value) {
+        if (key != null && CredentialJsonFieldClassifier.isSensitiveOutputField(key)) {
+            return CredentialTextRedactor.REDACTED_VALUE;
+        }
+        if (value instanceof String text) {
+            return safeText(text);
+        }
+        if (value instanceof Map<?, ?> map) {
+            LinkedHashMap<String, Object> safe = new LinkedHashMap<>();
+            map.forEach((nestedKey, nestedValue) -> {
+                String safeKey = nestedKey == null ? null : String.valueOf(nestedKey);
+                safe.put(safeKey, safeJsonValue(safeKey, nestedValue));
+            });
+            return safe;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(item -> safeJsonValue(null, item))
+                    .toList();
+        }
+        return value;
+    }
+
+    private String safeText(String value) {
+        return CredentialTextRedactor.redact(value);
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private String resolveUserId(String userId, String headerUserId) {

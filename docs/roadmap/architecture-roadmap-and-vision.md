@@ -1358,3 +1358,11 @@ Run Experiment report export now defensively redacts credential-shaped display t
 This is a narrow report-rendering hardening slice. It does not change Run Experiment execution semantics, report schema/sections, frontend preview behavior, score persistence, metric persistence, trace snapshot capture, repository schema, or API authorization.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunExperimentServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 12/12, covering report-boundary redaction for credential-bearing experiment names, score JSON, metric JSON, trace context, failure text, output content, report file names, existing failure-report behavior, branch evidence rendering, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Run Experiment HTTP Projection Redaction
+
+Run Experiment HTTP responses now defensively redact credential-shaped display text before returning `RunExperimentDetails` from create, detail, cancel, and score endpoints in `SeahorseRunExperimentController`. The Web projection covers experiment names, trial `scoreJson`, trial `metricJson`, and trial failure messages, recursively redacts sensitive JSON field names, and applies shared credential-text redaction to string values while leaving the underlying inbound-port result objects unchanged.
+
+This is a narrow Web adapter display-boundary hardening slice. It does not change Run Experiment command input semantics, kernel persistence, scoring writes, cancellation behavior, report export rendering, trial fork-to-branch behavior, repository schema, or frontend response contracts.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseRunExperimentControllerTests,CredentialTextRedactorTests,CredentialJsonFieldClassifierTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 12/12, covering HTTP projection redaction for credential-bearing experiment names, score JSON, metric JSON, failure text, projection immutability, existing Run Experiment controller routes, and shared credential redaction/classifier behavior.
