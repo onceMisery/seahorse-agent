@@ -1074,3 +1074,11 @@ Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=AuditRedaction
 This is a narrow provider-layer output-redaction hardening slice. It does not change HTTP invocation, JSON response field redaction, credential injection, response truncation, Tool Gateway policy/audit flow, or generic output redaction wiring.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=OpenApiToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 5/5, covering text/plain and invalid application/json response redaction before any gateway-level fallback.
+
+## 2026-07-06 Update: Colon-Delimited Credential Text Redaction
+
+Tool Gateway output redaction, OpenAPI provider text response redaction, and audit payload redaction now treat colon-delimited credential fragments such as `api_key: ...`, `access_token: ...`, and `password: ...` the same as existing equals-delimited fragments. This closes common header/log formatting paths while keeping JSON field redaction and safe `secretRef` handling unchanged.
+
+This is a narrow credential-pattern hardening slice. It does not change tool execution, OpenAPI request construction, JSON response field vocabulary, audit persistence, approval policy, artifact publication, or the default redaction wiring.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,OpenApiToolPortAdapterTests,AuditRedactionPolicyTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 34/34, covering colon-delimited credential redaction in failed tool errors, OpenAPI text/invalid-JSON response bodies, and audit payload string values.

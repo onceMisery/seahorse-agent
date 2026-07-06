@@ -219,7 +219,7 @@ class OpenApiToolPortAdapterTests {
     void shouldRedactCredentialShapedOpenApiTextResponseBeforeGatewayFallback() throws Exception {
         try (TestHttpApi api = TestHttpApi.start("/api/customers", exchange -> respond(exchange, 200,
                 "text/plain",
-                "upstream failed api_key=plain-api-key Bearer abcdefghijklmnop sk-live-secret"))) {
+                "upstream failed api_key: plain-api-key Authorization: Bearer abcdefghijklmnop sk-live-secret"))) {
             OpenApiToolPortAdapter adapter = adapterFor(api.baseUrl(), CredentialAuthType.NONE);
 
             ToolInvocationResult result = adapter.invoke(
@@ -228,7 +228,7 @@ class OpenApiToolPortAdapterTests {
                     Map.of("status", "active"));
 
             assertTrue(result.success());
-            assertTrue(result.content().contains("upstream failed [REDACTED] [REDACTED] [REDACTED]"));
+            assertTrue(result.content().contains("upstream failed [REDACTED] Authorization: [REDACTED] [REDACTED]"));
             assertFalse(result.content().contains("plain-api-key"));
             assertFalse(result.content().contains("abcdefghijklmnop"));
             assertFalse(result.content().contains("sk-live-secret"));
@@ -239,7 +239,7 @@ class OpenApiToolPortAdapterTests {
     void shouldRedactCredentialShapedInvalidJsonResponseBeforeGatewayFallback() throws Exception {
         try (TestHttpApi api = TestHttpApi.start("/api/customers", exchange -> respond(exchange, 200,
                 "application/json",
-                "{\"error\":\"partial\", \"message\":\"access_token=plain-access-token"))) {
+                "{\"error\":\"partial\", \"message\":\"access_token: plain-access-token"))) {
             OpenApiToolPortAdapter adapter = adapterFor(api.baseUrl(), CredentialAuthType.NONE);
 
             ToolInvocationResult result = adapter.invoke(

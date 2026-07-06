@@ -34,7 +34,7 @@ public interface ToolOutputRedactionPort {
     Pattern CREDENTIAL_VALUE_PATTERN = Pattern.compile(
             "(?i)(bearer\\s+[a-z0-9._~+/=-]{8,}"
                     + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id)"
-                    + "\\s*=\\s*[^\\s&;]+)");
+                    + "\\s*[:=]\\s*[^\\s&;]+)");
     Pattern SECRET_FIELD_PATTERN = Pattern.compile(
             "(?i).*(access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id"
                     + "|authorization|set[_-]?cookie|secret[_-]?key|private[_-]?key).*");

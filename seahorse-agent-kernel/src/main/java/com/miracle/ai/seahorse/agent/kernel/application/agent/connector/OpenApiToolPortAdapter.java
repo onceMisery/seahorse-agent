@@ -91,7 +91,7 @@ public class OpenApiToolPortAdapter implements ToolPort {
     private static final Pattern CREDENTIAL_VALUE_PATTERN = Pattern.compile(
             "(?i)(bearer\\s+[a-z0-9._~+/=-]{8,}"
                     + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id)"
-                    + "\\s*=\\s*[^\\s&;]+)");
+                    + "\\s*[:=]\\s*[^\\s&;]+)");
     private static final Pattern OPENAI_KEY_PATTERN = Pattern.compile("sk-[A-Za-z0-9][A-Za-z0-9_-]*");
 
     private final ConnectorRepositoryPort connectorRepository;

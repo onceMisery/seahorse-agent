@@ -73,7 +73,7 @@ class AuditRedactionPolicyTests {
                 {
                   "message":"upstream failed with Bearer abcdefghijklmnop",
                   "url":"https://example.test/callback?access_token=token-secret-value",
-                  "notes":["safe note","api_key=secret-api-key-value","password=hunter2"],
+                  "notes":["safe note","api_key: secret-api-key-value","password: hunter2"],
                   "safe":"ordinary business text"
                 }
                 """);

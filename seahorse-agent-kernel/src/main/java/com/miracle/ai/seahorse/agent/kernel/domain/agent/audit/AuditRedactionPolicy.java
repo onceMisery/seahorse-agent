@@ -48,7 +48,7 @@ public class AuditRedactionPolicy {
     private static final Pattern CREDENTIAL_VALUE_PATTERN = Pattern.compile(
             "(?i)(bearer\\s+[a-z0-9._~+/=-]{8,}"
                     + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id)"
-                    + "\\s*=\\s*[^\\s&;]+)");
+                    + "\\s*[:=]\\s*[^\\s&;]+)");
 
     private final ObjectMapper objectMapper;
 
