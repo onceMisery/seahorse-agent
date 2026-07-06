@@ -874,3 +874,11 @@ Agent artifact query and update ownership checks now accept both the current use
 This is a narrow authorization-compatibility slice. It does not change artifact persistence, download eligibility, scan status transitions, object storage behavior, admin access, or unrelated-user denial.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentArtifactQueryServiceTests,KernelAgentArtifactUpdateServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 8/8, covering numeric web user ID owners for artifact list/read/update while preserving unrelated-user denial and existing download guards.
+
+## 2026-07-06 Update: Agent Run Numeric Owner Compatibility
+
+Agent run by-id operations now accept both the current user's numeric primary-key string and operator username when comparing against persisted run `userId` values. This keeps the existing owner/admin boundary intact while allowing web-created or migrated runs whose owner was stored as a numeric user ID to be read, stepped, cancelled, and retried by the real owner.
+
+This is a narrow authorization-compatibility slice for by-id run operations. It does not change run creation attribution, admin access, unrelated-user denial, worker terminal transitions, run paging query semantics, snapshot persistence, or repository schema.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 22/22, covering numeric web user ID owners for run detail, step listing, and cancellation while preserving unrelated-user denial, admin read access, and current-user page scoping.

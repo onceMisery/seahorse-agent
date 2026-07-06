@@ -439,6 +439,23 @@ class KernelAgentRunServiceTests {
     }
 
     @Test
+    void shouldAllowNumericWebUserIdOwnerForRunOperations() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("run-1", "42", AgentRunStatus.RUNNING));
+        runRepository.appendStep(step("step-1", "run-1"));
+        KernelAgentRunService service = new KernelAgentRunService(
+                new MemoryAgentDefinitionRepository(), runRepository, currentUser(42L, "owner"), FIXED_CLOCK);
+
+        Optional<AgentRun> run = service.findRunById("run-1");
+        List<AgentStep> steps = service.listSteps("run-1");
+        AgentRun cancelled = service.cancel("run-1");
+
+        assertTrue(run.isPresent());
+        assertEquals(List.of("step-1"), steps.stream().map(AgentStep::stepId).toList());
+        assertEquals(AgentRunStatus.CANCELLED, cancelled.status());
+    }
+
+    @Test
     void shouldScopeRunPageToCurrentUser() {
         MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
         runRepository.createRun(run("run-1", "user-1", AgentRunStatus.RUNNING));

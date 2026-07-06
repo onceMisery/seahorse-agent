@@ -480,7 +480,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     }
 
     private AgentRun requireReadable(AgentRun run, CurrentUser currentUser) {
-        if (isAdmin(currentUser) || run.userId().equals(currentUserId(currentUser))) {
+        if (isAdmin(currentUser) || ownsRun(run, currentUser)) {
             return run;
         }
         throw new IllegalStateException(ACCESS_DENIED);
@@ -492,6 +492,15 @@ public class KernelAgentRunService implements AgentRunInboundPort {
 
     private String currentUserId(CurrentUser currentUser) {
         return currentUser == null ? null : currentUser.operator();
+    }
+
+    private boolean ownsRun(AgentRun run, CurrentUser currentUser) {
+        if (currentUser == null) {
+            return false;
+        }
+        String numericUserId = currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
+        return Objects.equals(run.userId(), numericUserId)
+                || Objects.equals(run.userId(), currentUser.operator());
     }
 
     private String nextRunId() {
