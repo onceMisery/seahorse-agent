@@ -1050,3 +1050,11 @@ The successful JSON output redactor now also treats cross-provider response fiel
 This is a narrow output-redaction vocabulary hardening slice. It does not change output redaction wiring, text credential matching, failure error handling, Tool Gateway execution, audit result-summary shape, approval policy, or artifact publication.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 26/26, covering authorization, cookie, private-key, and secret-key JSON field redaction alongside the existing output/audit behaviors.
+
+## 2026-07-06 Update: OpenAPI Provider Response Field Redaction
+
+`OpenApiToolPortAdapter` now applies the broader credential-shaped JSON field vocabulary before returning provider observations, instead of relying only on the Tool Gateway fallback redactor. OpenAPI JSON responses now redact normalized/case-varied fields such as `Authorization`, `setCookie`, `clientSecret`, `private_key`, `sessionToken`, and `secretKey`, while preserving `secretRef` references and safe sibling fields.
+
+This is a narrow provider-layer output-redaction hardening slice. It does not change OpenAPI HTTP invocation, credential injection, request argument handling, Tool Gateway policy/audit flow, generic output redaction wiring, or response truncation semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=OpenApiToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 3/3, covering direct adapter response redaction before any gateway-level fallback.

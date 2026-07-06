@@ -76,14 +76,17 @@ public class OpenApiToolPortAdapter implements ToolPort {
             "transfer-encoding");
     private static final Set<String> SENSITIVE_FIELD_NAMES = Set.of(
             "authorization",
+            "setcookie",
             "password",
             "secret",
             "token",
-            "access_token",
-            "refresh_token",
-            "api_key",
+            "accesstoken",
+            "refreshtoken",
             "apikey",
-            "client_secret");
+            "clientsecret",
+            "sessionid",
+            "secretkey",
+            "privatekey");
 
     private final ConnectorRepositoryPort connectorRepository;
     private final ConnectorCredentialBindingRepositoryPort credentialBindingRepository;
@@ -414,9 +417,13 @@ public class OpenApiToolPortAdapter implements ToolPort {
 
     private boolean isSensitiveField(String fieldName) {
         String normalized = fieldName == null ? "" : fieldName.trim()
-                .replace('-', '_')
+                .replace("-", "")
+                .replace("_", "")
                 .toLowerCase(Locale.ROOT);
-        return SENSITIVE_FIELD_NAMES.contains(normalized);
+        if ("secretref".equals(normalized)) {
+            return false;
+        }
+        return SENSITIVE_FIELD_NAMES.stream().anyMatch(normalized::contains);
     }
 
     private boolean isJson(String contentType) {

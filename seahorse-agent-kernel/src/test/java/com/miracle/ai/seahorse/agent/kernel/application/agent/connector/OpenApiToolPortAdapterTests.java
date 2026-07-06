@@ -167,6 +167,54 @@ class OpenApiToolPortAdapterTests {
         }
     }
 
+    @Test
+    void shouldRedactCredentialShapedOpenApiResponseFieldsBeforeGatewayFallback() throws Exception {
+        try (TestHttpApi api = TestHttpApi.start("/api/customers", exchange -> respond(exchange, 200,
+                "{\"secretRef\":\"secret://tenant/openapi\","
+                        + "\"Authorization\":\"Bearer upstream-authorization-token\","
+                        + "\"setCookie\":\"sid=upstream-cookie-value\","
+                        + "\"nested\":{\"clientSecret\":\"upstream-client-secret\","
+                        + "\"private_key\":\"upstream-private-key\"},"
+                        + "\"items\":[{\"sessionToken\":\"upstream-session-token\","
+                        + "\"secretKey\":\"upstream-secret-key\",\"label\":\"safe\"}]}"))) {
+            MemoryConnectorRepository connectorRepository = new MemoryConnectorRepository();
+            Connector connector = connector(api.baseUrl());
+            ConnectorOperation operation = operation(connector.connectorId(), CredentialAuthType.NONE);
+            connectorRepository.saveConnector(connector);
+            connectorRepository.saveVersion(version(connector.connectorId()));
+            connectorRepository.saveOperation(operation);
+            OpenApiToolPortAdapter adapter = new OpenApiToolPortAdapter(
+                    connectorRepository,
+                    ConnectorCredentialBindingRepositoryPort.empty(),
+                    request -> CredentialMaterial.none(),
+                    null,
+                    new ObjectMapper(),
+                    Duration.ofSeconds(5),
+                    64 * 1024);
+
+            ToolInvocationResult result = adapter.invoke(
+                    "call-1",
+                    operation.toolId(),
+                    Map.of("status", "active"));
+
+            assertTrue(result.success());
+            assertTrue(result.content().contains("\"secretRef\":\"secret://tenant/openapi\""));
+            assertTrue(result.content().contains("\"label\":\"safe\""));
+            assertTrue(result.content().contains("\"Authorization\":\"[REDACTED]\""));
+            assertTrue(result.content().contains("\"setCookie\":\"[REDACTED]\""));
+            assertTrue(result.content().contains("\"clientSecret\":\"[REDACTED]\""));
+            assertTrue(result.content().contains("\"private_key\":\"[REDACTED]\""));
+            assertTrue(result.content().contains("\"sessionToken\":\"[REDACTED]\""));
+            assertTrue(result.content().contains("\"secretKey\":\"[REDACTED]\""));
+            assertFalse(result.content().contains("upstream-authorization-token"));
+            assertFalse(result.content().contains("upstream-cookie-value"));
+            assertFalse(result.content().contains("upstream-client-secret"));
+            assertFalse(result.content().contains("upstream-private-key"));
+            assertFalse(result.content().contains("upstream-session-token"));
+            assertFalse(result.content().contains("upstream-secret-key"));
+        }
+    }
+
     private static ToolInvocationRequest request(String toolId, Map<String, Object> arguments) {
         return new ToolInvocationRequest(
                 "run-openapi",
