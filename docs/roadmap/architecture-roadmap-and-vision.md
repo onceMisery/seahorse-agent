@@ -994,3 +994,11 @@ Tool Gateway request audit now emits a value-free structured summary for non-spe
 This is a narrow audit-hardening slice. It does not change tool execution, specialized sandbox/OpenAPI/A2A summaries, approval policy, quota policy, output redaction, or request routing behavior.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering generic tool argument value shape metadata while preserving the existing specialized tool audit redaction coverage.
+
+## 2026-07-06 Update: Approval Preview Argument Value Shape Summary
+
+Tool approval request previews now include value-free argument shape evidence: argument value count, total value length, and maximum value length. The preview still records safe argument keys, argument count, resource-ref keys/count, and a resource-ref hash without storing raw argument values or raw resource references.
+
+This is a narrow approval-governance hardening slice. It does not change approval decisions, pending approval persistence, resource-ref hashing, tool execution, Tool Gateway request audits, output redaction, or approval paging behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering approval preview argument value shape metadata while preserving existing secret argument and resource-reference minimization assertions.

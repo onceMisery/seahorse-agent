@@ -211,6 +211,9 @@ class LocalToolGatewayPortAuditTests {
         String preview = approvals.saved.get(0).argumentsPreviewJson();
         assertTrue(preview.contains("argumentKeys"));
         assertTrue(preview.contains("argumentCount"));
+        assertTrue(preview.contains("\"argumentValueCount\":2"));
+        assertTrue(preview.contains("\"argumentValueTotalLength\":2012"));
+        assertTrue(preview.contains("\"argumentValueMaxLength\":2000"));
         assertTrue(preview.contains("\"resourceRefKeys\":[\"knowledgeBaseId\"]"));
         assertTrue(preview.contains("\"resourceRefCount\":1"));
         assertTrue(preview.contains("resourceRefHash"));

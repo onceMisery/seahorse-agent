@@ -344,12 +344,18 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             return truncate(OBJECT_MAPPER.writeValueAsString(Map.of(
                     "argumentKeys", safeArgumentKeys(request.arguments()),
                     "argumentCount", request.arguments().size(),
+                    "argumentValueCount", mapValueCount(request.arguments()),
+                    "argumentValueTotalLength", mapValueTotalLength(request.arguments()),
+                    "argumentValueMaxLength", mapValueMaxLength(request.arguments()),
                     "resourceRefKeys", safeResourceRefKeys(request.resourceRefs()),
                     "resourceRefCount", request.resourceRefs().size(),
                     "resourceRefHash", sha256(canonicalResourceRefs(request.resourceRefs())))));
         } catch (JsonProcessingException ex) {
             return truncate("keys=" + safeArgumentKeys(request.arguments())
                     + ", size=" + request.arguments().size()
+                    + ", argumentValueCount=" + mapValueCount(request.arguments())
+                    + ", argumentValueTotalLength=" + mapValueTotalLength(request.arguments())
+                    + ", argumentValueMaxLength=" + mapValueMaxLength(request.arguments())
                     + ", resourceRefCount=" + request.resourceRefs().size());
         }
     }
