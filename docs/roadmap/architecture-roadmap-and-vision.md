@@ -938,3 +938,11 @@ Tool Gateway request audit now includes value-free URL shape evidence for `sandb
 This is a narrow audit-hardening slice. It does not change tool execution, URL validation, browser runtime input, approval policy, quota policy, or artifact governance.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 23/23, covering sandbox browser URL/query length metadata while excluding the allowed query marker and existing cookie/session-state secret values.
+
+## 2026-07-06 Update: Sandbox Browser Audit Inline HTML Shape Summary
+
+Tool Gateway request audit now includes value-free inline HTML shape evidence for `sandbox_browser`: HTML presence and character length. Inline browser audit summaries can distinguish no-network HTML mode from URL mode without persisting the raw HTML payload, script content, DOM text, cookies, localStorage values, or URL values.
+
+This is a narrow audit-hardening slice. It does not change browser execution, inline HTML validation, URL mode, egress policy, approval policy, quota policy, or artifact governance.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering sandbox browser inline HTML length metadata while excluding the inline HTML marker value and preserving the existing URL/session audit redaction coverage.

@@ -409,6 +409,51 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldSummarizeSandboxBrowserInlineHtmlShapeWithoutHtmlValues() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+        String html = "<main data-secret=\"inline-html-marker\">hello</main>";
+
+        ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "sandbox_browser",
+                Map.of(
+                        "html", html,
+                        "action", "snapshot",
+                        "har", true),
+                Map.of(),
+                "run-1:call-1",
+                List.of("sandbox_browser")));
+
+        assertTrue(result.success());
+        String summary = audit.requested.get(0).argumentsSummary();
+        assertTrue(summary.contains("\"toolId\":\"sandbox_browser\""));
+        assertTrue(summary.contains("\"mode\":\"inline\""));
+        assertTrue(summary.contains("\"networkRequested\":false"));
+        assertTrue(summary.contains("\"urlPresent\":false"));
+        assertTrue(summary.contains("\"urlLength\":0"));
+        assertTrue(summary.contains("\"urlQueryPresent\":false"));
+        assertTrue(summary.contains("\"urlQueryLength\":0"));
+        assertTrue(summary.contains("\"htmlPresent\":true"));
+        assertTrue(summary.contains("\"htmlLength\":" + html.length()));
+        assertTrue(summary.contains("\"argumentKeys\":[\"html\",\"action\",\"har\"]"));
+        assertFalse(summary.contains("inline-html-marker"));
+        assertFalse(summary.contains(html));
+    }
+
+    @Test
     void shouldSummarizeSandboxBrowserAuditWithoutPrevalidatedHostOrActionValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.failed("sandbox_browser failed"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();

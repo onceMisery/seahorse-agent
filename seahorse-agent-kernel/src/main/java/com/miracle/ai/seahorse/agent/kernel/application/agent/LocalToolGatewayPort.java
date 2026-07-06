@@ -547,6 +547,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     private String summarizeSandboxBrowserArguments(ToolInvocationRequest request) {
         Map<String, Object> arguments = request.arguments();
         String url = argumentString(arguments, "url");
+        String html = argumentString(arguments, "html");
         boolean urlMode = hasText(url);
         List<String> allowedHosts = argumentStringList(arguments.get("allowedHosts"));
         int cookieCount = listSize(arguments.get("cookies"));
@@ -562,6 +563,8 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("urlLength", url.length());
         summary.put("urlQueryPresent", hasUrlQuery(url));
         summary.put("urlQueryLength", urlQueryLength(url));
+        summary.put("htmlPresent", hasText(html));
+        summary.put("htmlLength", html.length());
         summary.put("allowedHostCount", allowedHosts.size());
         summary.put("allowedHostsPresent", !allowedHosts.isEmpty());
         summary.put("cookieCount", cookieCount);
