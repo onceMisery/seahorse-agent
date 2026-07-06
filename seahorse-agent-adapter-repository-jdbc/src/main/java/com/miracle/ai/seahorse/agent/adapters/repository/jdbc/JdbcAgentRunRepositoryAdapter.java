@@ -291,6 +291,7 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
         List<String> conditions = new ArrayList<>();
         List<Object> parameters = new ArrayList<>();
         addEqualCondition(conditions, parameters, "tenant_id", query.tenantId());
+        addEqualCondition(conditions, parameters, "user_id", query.userId());
         addEqualCondition(conditions, parameters, "agent_id", query.agentId());
         addEqualCondition(conditions, parameters, "rollout_id", query.rolloutId());
         addLikeCondition(conditions, parameters, "run_id", query.runId());

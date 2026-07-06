@@ -389,10 +389,11 @@ public class KernelAgentRunService implements AgentRunInboundPort {
 
     @Override
     public AgentRunPage page(AgentRunQuery query) {
-        currentUserPort.requireCurrentUser();
+        CurrentUser currentUser = currentUserPort.requireCurrentUser();
         AgentRunQuery safeQuery = query == null
                 ? new AgentRunQuery(null, null, null, null, null, 1L, 15L)
                 : query;
+        String userId = isAdmin(currentUser) ? safeQuery.userId() : currentUserId(currentUser);
         return runRepository.page(new AgentRunQuery(
                 safeQuery.agentId(),
                 safeQuery.runId(),
@@ -400,6 +401,8 @@ public class KernelAgentRunService implements AgentRunInboundPort {
                 normalizeStatus(safeQuery.status()),
                 safeQuery.from(),
                 safeQuery.to(),
+                safeQuery.tenantId(),
+                userId,
                 safeQuery.current(),
                 safeQuery.size()));
     }

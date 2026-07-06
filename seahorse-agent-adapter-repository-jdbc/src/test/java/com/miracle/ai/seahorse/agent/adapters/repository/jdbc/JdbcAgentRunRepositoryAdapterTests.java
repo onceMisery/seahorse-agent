@@ -181,6 +181,36 @@ class JdbcAgentRunRepositoryAdapterTests {
     }
 
     @Test
+    void shouldPageRunsByUserId() {
+        DriverManagerDataSource dataSource = dataSource("agent-run-user");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createRunSchema(jdbcTemplate);
+        JdbcAgentRunRepositoryAdapter adapter = new JdbcAgentRunRepositoryAdapter(dataSource);
+        Instant startedAt = Instant.parse("2026-05-23T00:00:00Z");
+        adapter.createRun(new AgentRun("run-user-1", "agent-1", "version-1", "tenant-a", "user-1",
+                null, AgentRunTriggerType.API, "user 1", AgentRunStatus.RUNNING, null,
+                0L, 0L, BigDecimal.ZERO, null, null, startedAt.plusSeconds(60), null));
+        adapter.createRun(new AgentRun("run-user-2", "agent-1", "version-1", "tenant-a", "user-2",
+                null, AgentRunTriggerType.API, "user 2", AgentRunStatus.RUNNING, null,
+                0L, 0L, BigDecimal.ZERO, null, null, startedAt.plusSeconds(120), null));
+
+        AgentRunPage page = adapter.page(new AgentRunQuery(
+                "agent-1",
+                null,
+                null,
+                AgentRunStatus.RUNNING.name(),
+                null,
+                null,
+                "tenant-a",
+                "user-1",
+                1L,
+                10L));
+
+        assertThat(page.total()).isEqualTo(1L);
+        assertThat(page.records()).extracting(AgentRun::runId).containsExactly("run-user-1");
+    }
+
+    @Test
     void shouldPageRunsByExactRolloutId() {
         DriverManagerDataSource dataSource = dataSource("agent-run-rollout");
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);

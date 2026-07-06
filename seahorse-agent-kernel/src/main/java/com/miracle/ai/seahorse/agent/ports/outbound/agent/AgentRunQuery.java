@@ -26,6 +26,7 @@ public record AgentRunQuery(String agentId,
                             Instant from,
                             Instant to,
                             String tenantId,
+                            String userId,
                             long current,
                             long size) {
 
@@ -40,7 +41,7 @@ public record AgentRunQuery(String agentId,
                          Instant to,
                          long current,
                          long size) {
-        this(agentId, runId, null, status, from, to, null, current, size);
+        this(agentId, runId, null, status, from, to, null, null, current, size);
     }
 
     public AgentRunQuery(String tenantId,
@@ -51,7 +52,7 @@ public record AgentRunQuery(String agentId,
                          Instant to,
                          long current,
                          long size) {
-        this(agentId, runId, null, status, from, to, tenantId, current, size);
+        this(agentId, runId, null, status, from, to, tenantId, null, current, size);
     }
 
     public AgentRunQuery(String tenantId,
@@ -63,7 +64,7 @@ public record AgentRunQuery(String agentId,
                          Instant to,
                          long current,
                          long size) {
-        this(agentId, runId, rolloutId, status, from, to, tenantId, current, size);
+        this(agentId, runId, rolloutId, status, from, to, tenantId, null, current, size);
     }
 
     public AgentRunQuery {
@@ -72,6 +73,7 @@ public record AgentRunQuery(String agentId,
         rolloutId = trimToNull(rolloutId);
         status = trimToNull(status);
         tenantId = trimToNull(tenantId);
+        userId = trimToNull(userId);
         current = current <= 0 ? DEFAULT_CURRENT : current;
         size = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
     }

@@ -33,6 +33,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
@@ -437,6 +439,36 @@ class KernelAgentRunServiceTests {
     }
 
     @Test
+    void shouldScopeRunPageToCurrentUser() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("run-1", "user-1", AgentRunStatus.RUNNING));
+        runRepository.createRun(run("run-2", "user-2", AgentRunStatus.RUNNING));
+        KernelAgentRunService service = new KernelAgentRunService(
+                new MemoryAgentDefinitionRepository(), runRepository, currentUser(), FIXED_CLOCK);
+
+        AgentRunPage page = service.page(new AgentRunQuery(null, null, null, null, null, 1L, 15L));
+
+        assertEquals(1L, page.total());
+        assertEquals(List.of("run-1"), page.records().stream().map(AgentRun::runId).toList());
+        assertEquals("user-1", runRepository.lastQuery.userId());
+    }
+
+    @Test
+    void shouldAllowAdminRunPageAcrossUsers() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("run-1", "user-1", AgentRunStatus.RUNNING));
+        runRepository.createRun(run("run-2", "user-2", AgentRunStatus.RUNNING));
+        KernelAgentRunService service = new KernelAgentRunService(
+                new MemoryAgentDefinitionRepository(), runRepository, currentUser(9L, "admin"), FIXED_CLOCK);
+
+        AgentRunPage page = service.page(new AgentRunQuery(null, null, null, null, null, 1L, 15L));
+
+        assertEquals(2L, page.total());
+        assertEquals(List.of("run-1", "run-2"), page.records().stream().map(AgentRun::runId).toList());
+        assertEquals(null, runRepository.lastQuery.userId());
+    }
+
+    @Test
     void shouldDenyUnrelatedUserStepAccess() {
         MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
         runRepository.createRun(run("run-1", "user-1", AgentRunStatus.RUNNING));
@@ -618,6 +650,7 @@ class KernelAgentRunServiceTests {
     private static class MemoryAgentRunRepository implements AgentRunRepositoryPort {
         private final Map<String, AgentRun> runs = new LinkedHashMap<>();
         private final List<AgentStep> steps = new ArrayList<>();
+        private AgentRunQuery lastQuery;
 
         @Override
         public void createRun(AgentRun run) {
@@ -632,6 +665,24 @@ class KernelAgentRunServiceTests {
         @Override
         public Optional<AgentRun> findRunById(String runId) {
             return Optional.ofNullable(runs.get(runId));
+        }
+
+        @Override
+        public AgentRunPage page(AgentRunQuery query) {
+            AgentRunQuery safeQuery = query == null
+                    ? new AgentRunQuery(null, null, null, null, null, 1L, 15L)
+                    : query;
+            lastQuery = safeQuery;
+            List<AgentRun> filtered = runs.values().stream()
+                    .filter(run -> safeQuery.tenantId() == null || safeQuery.tenantId().equals(run.tenantId()))
+                    .filter(run -> safeQuery.userId() == null || safeQuery.userId().equals(run.userId()))
+                    .filter(run -> safeQuery.agentId() == null || safeQuery.agentId().equals(run.agentId()))
+                    .filter(run -> safeQuery.rolloutId() == null || safeQuery.rolloutId().equals(run.rolloutId()))
+                    .filter(run -> safeQuery.runId() == null || run.runId().contains(safeQuery.runId()))
+                    .filter(run -> safeQuery.status() == null || safeQuery.status().equals(run.status().name()))
+                    .toList();
+            long pages = filtered.isEmpty() ? 0L : (filtered.size() + safeQuery.size() - 1L) / safeQuery.size();
+            return new AgentRunPage(filtered, filtered.size(), safeQuery.size(), safeQuery.current(), pages);
         }
 
         @Override
