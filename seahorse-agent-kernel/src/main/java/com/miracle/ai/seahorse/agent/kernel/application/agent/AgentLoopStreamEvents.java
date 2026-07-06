@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillReso
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentObservation;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus;
@@ -121,7 +122,7 @@ final class AgentLoopStreamEvents {
                 finishedAt,
                 Math.max(0L, Duration.between(startedAt, finishedAt).toMillis()),
                 error == null ? null : error.getClass().getSimpleName(),
-                error == null ? message : Objects.requireNonNullElse(error.getMessage(), error.getClass().getName()),
+                error == null ? message : safeErrorText(error),
                 false));
     }
 
@@ -138,7 +139,7 @@ final class AgentLoopStreamEvents {
                 Instant.now(),
                 null,
                 error == null ? null : error.getClass().getSimpleName(),
-                error == null ? null : Objects.requireNonNullElse(error.getMessage(), error.getClass().getName()),
+                error == null ? null : safeErrorText(error),
                 true));
     }
 
@@ -361,6 +362,14 @@ final class AgentLoopStreamEvents {
 
     private String observationText(AgentObservation observation) {
         return observation.success() ? observation.content() : observation.error();
+    }
+
+    private String safeErrorText(Throwable error) {
+        if (error == null) {
+            return null;
+        }
+        return CredentialTextRedactor.redact(
+                Objects.requireNonNullElse(error.getMessage(), error.getClass().getName()));
     }
 
     private String loadSkillName(AgentToolCall toolCall) {

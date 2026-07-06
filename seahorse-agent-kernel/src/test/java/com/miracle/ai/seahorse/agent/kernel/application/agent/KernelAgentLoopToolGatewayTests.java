@@ -44,6 +44,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamApprovalRequiredEvent;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamAgentStepEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamSkillEvent;
@@ -955,6 +956,39 @@ class KernelAgentLoopToolGatewayTests {
     }
 
     @Test
+    void shouldRedactCredentialShapedModelErrorsFromStreamingStepEvents() {
+        StreamingChatModelPort model = new FailingModel(
+                "model failed Authorization: Bearer abcdefghijklmnop api_key=plain-loop-model-secret");
+        KernelAgentLoop loop = kernelLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                new RecordingToolGateway(ToolInvocationResult.ok("unused")),
+                KernelAgentLoopOptions.defaults());
+        RecordingStreamCallback callback = new RecordingStreamCallback();
+
+        loop.streamExecute(AgentLoopRequest.builder()
+                .question("research")
+                .allowedToolIds(List.of("web_search"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-model-secret-failed-stream")
+                .build(), callback);
+
+        assertTrue(callback.awaitTerminal());
+        List<StreamAgentStepEvent> stepEvents = callback.events.stream()
+                .filter(event -> StreamEventType.RECOVERABLE_ERROR.value().equals(event.eventName())
+                        || StreamEventType.STEP_FINISHED.value().equals(event.eventName()))
+                .map(StreamEvent::payload)
+                .filter(StreamAgentStepEvent.class::isInstance)
+                .map(StreamAgentStepEvent.class::cast)
+                .toList();
+        assertFalse(stepEvents.isEmpty());
+        assertTrue(stepEvents.stream().allMatch(event -> event.message().contains("[REDACTED]")));
+        assertTrue(stepEvents.stream().noneMatch(event ->
+                event.message().contains("abcdefghijklmnop")
+                        || event.message().contains("plain-loop-model-secret")));
+    }
+
+    @Test
     void shouldEmitSourcesFromWebSearchObservationDuringStreamingExecution() {
         AgentToolCall toolCall = AgentToolCall.of("call-1", "web_search", Map.of("query", "seahorse ai"));
         ScriptedModel model = new ScriptedModel(List.of(
@@ -1146,6 +1180,27 @@ class KernelAgentLoopToolGatewayTests {
             callback.onComplete();
             return () -> {
             };
+        }
+    }
+
+    private static final class FailingModel implements StreamingChatModelPort {
+        private final String message;
+
+        private FailingModel(String message) {
+            this.message = message;
+        }
+
+        @Override
+        public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public StreamCancellationHandle streamChatWithTools(
+                ChatRequest request,
+                StreamCallback callback,
+                ToolCallCollector toolCallCollector) {
+            throw new IllegalStateException(message);
         }
     }
 

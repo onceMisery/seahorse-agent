@@ -1704,3 +1704,11 @@ This is a narrow metadata-governance diagnostics hardening slice. It does not ch
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=MetadataGovernanceNodeFeatureTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new LLM extraction and normalization regressions because metadata issue/quality messages captured raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 19/19 across kernel redactor and metadata governance node coverage.
 
 Regex extraction failure diagnostics are now covered by the same boundary: invalid `ruleRegex`/`pathRegex` patterns can include raw pattern text in `PatternSyntaxException` messages, so `REGEX_FAILED` issue messages now pass through the shared credential redactor before entering metadata governance surfaces.
+
+## 2026-07-06 Update: Agent Loop Streaming Error Redaction
+
+Agent loop model-turn stream error events now redact credential-shaped exception text before emitting `RECOVERABLE_ERROR` or failed `STEP_FINISHED` payload messages. This protects frontend, SSE subscribers, and live run diagnostics when model adapters or streaming callbacks accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow streaming-event hardening slice. It does not change model retry semantics, step status transitions, tool observation handling, run persistence, trace recording, callback error propagation, or server-side exception logging with the original exception chain.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentLoopToolGatewayTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new model-stream regression because the test initially inspected the optional summary field instead of the event message field, then passed with `BUILD SUCCESS`; targeted test classes ran 29/29 across kernel redactor and agent loop Tool Gateway streaming coverage.
