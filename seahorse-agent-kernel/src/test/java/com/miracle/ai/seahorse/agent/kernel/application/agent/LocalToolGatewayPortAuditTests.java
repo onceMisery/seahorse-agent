@@ -358,6 +358,26 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldRedactCredentialShapedFailedToolErrorBeforeAuditing() {
+        CountingToolPort tool = new CountingToolPort(
+                ToolInvocationResult.failed("upstream failed api_key=plain-secret-token-123"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("weather"));
+
+        assertFalse(result.success());
+        assertEquals("upstream failed api_key=plain-secret-token-123", result.error());
+        assertEquals(ToolInvocationStatus.FAILED, audit.completed.get(0).status());
+        assertEquals("upstream failed [REDACTED]", audit.completed.get(0).errorMessage());
+        assertFalse(audit.completed.get(0).errorMessage().contains("plain-secret-token-123"));
+    }
+
+    @Test
     void shouldSummarizeSandboxBrowserGovernanceMetadataWithoutSessionValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();

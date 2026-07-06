@@ -1010,3 +1010,11 @@ Tool Gateway completion audit summaries now record structured value-free result 
 This is a narrow completion-audit hardening slice. It does not change tool execution, output redaction, artifact publication, failure error recording, approval policy, quota policy, or request audit summaries.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering JSON-object and redacted-text result shape summaries while preserving existing output redaction assertions.
+
+## 2026-07-06 Update: Tool Completion Error Audit Redaction
+
+Tool Gateway completion audit now redacts obvious credential-shaped substrings from failed tool error messages before persisting `errorMessage`. The tool result returned to the caller keeps its original error text for behavior compatibility, while the audit record replaces patterns such as `api_key=...`, bearer tokens, and OpenAI-style `sk-...` keys with `[REDACTED]`.
+
+This is a narrow completion-audit hardening slice. It does not change tool execution, failure propagation to the Agent loop, output redaction for successful observations, approval decisions, quota policy, or request audit summaries.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 25/25, covering failed-tool credential-shaped error redaction in completion audit while preserving caller-visible failure text.

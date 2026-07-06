@@ -62,6 +62,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 public class LocalToolGatewayPort implements ToolGatewayPort {
 
@@ -71,6 +72,12 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     private static final String APPROVAL_ID_PREFIX = "approval:";
     private static final String LEGACY_RUN_ID_PREFIX = "legacy-run:";
     private static final String LEGACY_USER_ID = "legacy-user";
+    private static final String AUDIT_REDACTED_VALUE = "[REDACTED]";
+    private static final Pattern AUDIT_ERROR_CREDENTIAL_PATTERN = Pattern.compile(
+            "(?i)(sk-[A-Za-z0-9][A-Za-z0-9_-]*"
+                    + "|bearer\\s+[a-z0-9._~+/=-]{8,}"
+                    + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id)"
+                    + "\\s*=\\s*[^\\s&;]+)");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final List<String> SANDBOX_FILE_FORMATS = List.of(
             "csv",
@@ -252,7 +259,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     invocationId,
                     decisionStatus,
                     null,
-                    result.error(),
+                    auditErrorMessage(result.error()),
                     clock.instant()));
             return result;
         }
@@ -271,7 +278,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     invocationId,
                     result.success() ? ToolInvocationStatus.SUCCEEDED : ToolInvocationStatus.FAILED,
                     summarizeResult(result),
-                    result.error(),
+                    auditErrorMessage(result.error()),
                     clock.instant()));
             return result;
         } catch (Exception ex) {
@@ -281,7 +288,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     invocationId,
                     ToolInvocationStatus.FAILED,
                     null,
-                    result.error(),
+                    auditErrorMessage(result.error()),
                     clock.instant()));
             return result;
         }
@@ -952,6 +959,13 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         } catch (JsonProcessingException ex) {
             return "text";
         }
+    }
+
+    private String auditErrorMessage(String errorMessage) {
+        if (!hasText(errorMessage)) {
+            return errorMessage;
+        }
+        return truncate(AUDIT_ERROR_CREDENTIAL_PATTERN.matcher(errorMessage).replaceAll(AUDIT_REDACTED_VALUE));
     }
 
     private String truncate(String value) {
