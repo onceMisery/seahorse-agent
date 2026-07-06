@@ -29,6 +29,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.ConnectorCred
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.ConnectorOperation;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.ConnectorOperationStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.OpenApiHttpMethod;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialJsonFieldClassifier;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ConnectorCredentialBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ConnectorPage;
@@ -75,19 +76,6 @@ public class OpenApiToolPortAdapter implements ToolPort {
             "host",
             "content-length",
             "transfer-encoding");
-    private static final Set<String> SENSITIVE_FIELD_NAMES = Set.of(
-            "authorization",
-            "setcookie",
-            "password",
-            "secret",
-            "accesstoken",
-            "refreshtoken",
-            "sessiontoken",
-            "apikey",
-            "clientsecret",
-            "sessionid",
-            "secretkey",
-            "privatekey");
     private final ConnectorRepositoryPort connectorRepository;
     private final ConnectorCredentialBindingRepositoryPort credentialBindingRepository;
     private final CredentialProviderPort credentialProvider;
@@ -420,17 +408,7 @@ public class OpenApiToolPortAdapter implements ToolPort {
     }
 
     private boolean isSensitiveField(String fieldName) {
-        String normalized = fieldName == null ? "" : fieldName.trim()
-                .replace("-", "")
-                .replace("_", "")
-                .toLowerCase(Locale.ROOT);
-        if ("secretref".equals(normalized)) {
-            return false;
-        }
-        if ("cookie".equals(normalized) || "token".equals(normalized)) {
-            return true;
-        }
-        return SENSITIVE_FIELD_NAMES.stream().anyMatch(normalized::contains);
+        return CredentialJsonFieldClassifier.isSensitiveProviderOrAuditField(fieldName);
     }
 
     private boolean isJson(String contentType) {

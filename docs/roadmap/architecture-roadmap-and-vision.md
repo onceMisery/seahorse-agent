@@ -1130,3 +1130,11 @@ OpenAPI provider JSON response redaction and audit payload redaction now treat e
 This is a narrow JSON field vocabulary hardening slice. It does not change Tool Gateway fallback redaction, text credential redaction, OpenAPI request construction, credential injection, audit persistence, approval policy, artifact publication, or default redaction wiring.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=OpenApiToolPortAdapterTests,AuditRedactionPolicyTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 8/8, covering exact token redaction and `tokenCount` preservation in OpenAPI provider and audit payload paths.
+
+## 2026-07-06 Update: Shared Credential JSON Field Classifier
+
+Credential-shaped JSON field classification is now centralized in the domain-level `CredentialJsonFieldClassifier`. Tool Gateway output redaction uses the shared basic output-field vocabulary, while OpenAPI provider response redaction and audit payload redaction use the shared provider/audit extension that still covers broader `secret*` fields and preserves `secretRef`.
+
+This is a narrow maintainability hardening slice. It does not change text credential redaction, OpenAPI request construction, credential injection, audit persistence, approval policy, artifact publication, sandbox browser metadata, or default redaction wiring.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=CredentialJsonFieldClassifierTests,CredentialTextRedactorTests,LocalToolGatewayPortAuditTests,OpenApiToolPortAdapterTests,AuditRedactionPolicyTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 40/40, covering the shared classifier directly plus Tool Gateway, OpenAPI, and audit caller paths.

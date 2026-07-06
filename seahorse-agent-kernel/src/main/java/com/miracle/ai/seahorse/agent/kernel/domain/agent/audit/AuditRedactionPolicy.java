@@ -23,30 +23,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialJsonFieldClassifier;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 
 import java.util.Iterator;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 public class AuditRedactionPolicy {
 
     public static final String REDACTED_VALUE = "[REDACTED]";
 
-    private static final String SECRET_REF_KEY = "secretref";
     private static final String REDACTED_PAYLOAD = "{\"redacted\":\"" + REDACTED_VALUE + "\"}";
-    private static final Set<String> SENSITIVE_KEYWORDS = Set.of(
-            "secret",
-            "accesstoken",
-            "refreshtoken",
-            "sessiontoken",
-            "password",
-            "apikey",
-            "privatekey",
-            "sessionid",
-            "setcookie",
-            "authorization");
 
     private final ObjectMapper objectMapper;
 
@@ -105,16 +92,6 @@ public class AuditRedactionPolicy {
     }
 
     private boolean sensitive(String key) {
-        if (key == null) {
-            return false;
-        }
-        String normalized = key.toLowerCase(Locale.ROOT).replace("_", "").replace("-", "");
-        if (SECRET_REF_KEY.equals(normalized)) {
-            return false;
-        }
-        if ("cookie".equals(normalized) || "token".equals(normalized)) {
-            return true;
-        }
-        return SENSITIVE_KEYWORDS.stream().anyMatch(normalized::contains);
+        return CredentialJsonFieldClassifier.isSensitiveProviderOrAuditField(key);
     }
 }

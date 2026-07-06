@@ -17,24 +17,20 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialJsonFieldClassifier;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.util.Objects;
-import java.util.regex.Pattern;
 
 @FunctionalInterface
 public interface ToolOutputRedactionPort {
 
     String REDACTED_VALUE = "[REDACTED]";
-    Pattern SECRET_FIELD_PATTERN = Pattern.compile(
-            "(?i).*(access[_-]?token|refresh[_-]?token|session[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id"
-                    + "|authorization|set[_-]?cookie|secret[_-]?key|private[_-]?key).*");
-
     ToolInvocationResult redact(ToolInvocationRequest request, ToolInvocationResult result);
 
     static ToolOutputRedactionPort noop() {
@@ -90,7 +86,7 @@ public interface ToolOutputRedactionPort {
             var fields = objectNode.fields();
             while (fields.hasNext()) {
                 var field = fields.next();
-                if (secretField(field.getKey())) {
+                if (CredentialJsonFieldClassifier.isSensitiveOutputField(field.getKey())) {
                     changed |= redactField(objectNode, field.getKey());
                 } else {
                     changed |= redactSecretJsonFields(field.getValue());
@@ -104,14 +100,6 @@ public interface ToolOutputRedactionPort {
             }
         }
         return changed;
-    }
-
-    private static boolean secretField(String fieldName) {
-        if (fieldName == null) {
-            return false;
-        }
-        String normalized = fieldName.trim().replace("-", "").replace("_", "").toLowerCase();
-        return "cookie".equals(normalized) || SECRET_FIELD_PATTERN.matcher(fieldName).matches();
     }
 
     private static boolean redactField(ObjectNode node, String fieldName) {
