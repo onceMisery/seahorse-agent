@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.application.runcontext.RunContextSnapshotRedactor;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
@@ -58,6 +59,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     private static final String RUN_ID_PREFIX = "run_";
     private static final String VERSION_REQUIRED_MESSAGE = "Agent run requires a versionId";
     private static final String VERSION_NOT_FOUND_MESSAGE = "Agent version does not exist";
+    private static final RunContextSnapshotRedactor RUN_CONTEXT_SNAPSHOT_REDACTOR = new RunContextSnapshotRedactor();
     private static final TypeReference<LinkedHashMap<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
 
@@ -274,7 +276,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
         snapshot.setExecutorConfigJson(writeJsonOrNull(runProfileContext.executorConfig()));
         snapshot.setTraceContextJson(traceContextJson(run));
         snapshot.setSnapshotJson(snapshotJson(run, command, runProfileContext, metadataJson));
-        runContextSnapshotRepository.save(snapshot);
+        runContextSnapshotRepository.save(RUN_CONTEXT_SNAPSHOT_REDACTOR.redact(snapshot));
     }
 
     private String traceContextJson(AgentRun run) {

@@ -1406,3 +1406,11 @@ Run Experiment trial execution updates now redact credential-shaped executor out
 This is a narrow trial-execution write hardening slice. It does not change trial status normalization, run/output message ids, score writes, experiment-name writes, report format, Web adapter response shape, repository schema, or executor invocation inputs.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunExperimentServiceTests,CredentialTextRedactorTests,CredentialJsonFieldClassifierTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 18/18, covering trial metric/error write redaction before repository persistence, inbound projection redaction, existing Run Experiment execution/report behavior, and shared credential redaction/classifier behavior.
+
+## 2026-07-06 Update: Run Context Snapshot Write Redaction
+
+Run context snapshot persistence now redacts credential-shaped snapshot fields before repository writes across chat agent runs, legacy/RAG chat snapshots, agent-run starts, and Run Experiment trial execution snapshots. The shared `RunContextSnapshotRedactor` copies snapshot records, recursively redacts sensitive JSON field names and credential-shaped string values in `executorConfigJson`, `traceContextJson`, and `snapshotJson`, and is reused by the query projection service so persisted-write and read-boundary defenses stay aligned.
+
+This is a narrow run-context snapshot write-boundary hardening slice. It does not change agent run creation, chat streaming behavior, Run Experiment executor invocation, snapshot schema, repository ports, authorization checks, non-sensitive snapshot metadata, or downstream trace/profile lookup semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunContextSnapshotServiceTests,KernelAgentRunServiceTests,KernelChatAgentRunStoreTests,CredentialTextRedactorTests,CredentialJsonFieldClassifierTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 56/56, covering shared snapshot redaction, query projection immutability, agent-run snapshot write redaction, chat snapshot write redaction, existing run-context authorization behavior, and shared credential redaction/classifier behavior.

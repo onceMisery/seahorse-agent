@@ -332,6 +332,8 @@ class KernelChatAgentRunStoreTests {
                         "studioTraceEnabled", true,
                         "studioUrl", "http://studio.local",
                         "tracingUrl", "http://trace.local/{traceId}",
+                        "apiKey", "secret-api-key-value",
+                        "authorization", "Bearer trace-secret-123456",
                         "project", "seahorse-prod",
                         "runName", "agent-chat"));
         RecordingCallback callback = new RecordingCallback();
@@ -376,6 +378,9 @@ class KernelChatAgentRunStoreTests {
         assertTrue(snapshot.getSnapshotJson().contains("\"studioUrl\":\"http://studio.local\""),
                 snapshot.getSnapshotJson());
         assertTrue(snapshot.getSnapshotJson().contains("\"tracingUrl\":\"http://trace.local/{traceId}\""),
+                snapshot.getSnapshotJson());
+        assertTrue(snapshot.getSnapshotJson().contains("\"apiKey\":\"[REDACTED]\""), snapshot.getSnapshotJson());
+        assertTrue(snapshot.getSnapshotJson().contains("\"authorization\":\"[REDACTED]\""),
                 snapshot.getSnapshotJson());
         assertTrue(snapshot.getTraceContextJson().contains("\"traceId\":\"trace-studio-1\""),
                 snapshot.getTraceContextJson());

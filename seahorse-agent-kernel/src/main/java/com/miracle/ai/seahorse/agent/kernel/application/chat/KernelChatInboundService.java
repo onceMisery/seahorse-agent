@@ -34,6 +34,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowled
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.runcontext.RunContextSnapshotRedactor;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageRecord;
@@ -102,6 +103,7 @@ public class KernelChatInboundService implements ChatInboundPort {
     private static final Logger LOG = LoggerFactory.getLogger(KernelChatInboundService.class);
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final RunContextSnapshotRedactor RUN_CONTEXT_SNAPSHOT_REDACTOR = new RunContextSnapshotRedactor();
     private static final double DEFAULT_AGENT_TEMPERATURE = 0.3D;
     private static final String MODEL_CONFIG_MODEL_ID = "modelId";
     private static final String MODEL_CONFIG_MODEL = "model";
@@ -844,7 +846,7 @@ public class KernelChatInboundService implements ChatInboundPort {
             record.setExecutorConfigJson(effectiveExecutorConfigJson(command));
             record.setTraceContextJson(traceContextJson(traceRunScope, run, metadataJson));
             record.setSnapshotJson(runContextSnapshotJson(command, run, record.getExecutorEngine(), metadataJson));
-            runContextSnapshotRepository.get().save(record);
+            runContextSnapshotRepository.get().save(RUN_CONTEXT_SNAPSHOT_REDACTOR.redact(record));
         } catch (Exception ex) {
             LOG.warn("Failed to save run context snapshot: runId={}, conversationId={}",
                     run.runId(), command.conversationId(), ex);
@@ -867,7 +869,7 @@ public class KernelChatInboundService implements ChatInboundPort {
             record.setExecutorConfigJson(effectiveExecutorConfigJson(command));
             record.setTraceContextJson(traceContextJson(traceRunScope, null, null));
             record.setSnapshotJson(runContextSnapshotJson(command, record.getExecutorEngine()));
-            runContextSnapshotRepository.get().save(record);
+            runContextSnapshotRepository.get().save(RUN_CONTEXT_SNAPSHOT_REDACTOR.redact(record));
         } catch (Exception ex) {
             LOG.warn("Failed to save chat run context snapshot: runId={}, conversationId={}",
                     command.taskId(), command.conversationId(), ex);

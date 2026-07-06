@@ -133,7 +133,10 @@ class KernelAgentRunServiceTests {
                 "{\"source\":\"api\"}",
                 77L,
                 "agentscope",
-                Map.of("studioTraceEnabled", true)));
+                Map.of(
+                        "studioTraceEnabled", true,
+                        "apiKey", "secret-api-key-value",
+                        "callbackHeader", "Bearer callback-secret-123456")));
 
         assertTrue(run.metadataJson().contains("\"source\":\"api\""), run.metadataJson());
         assertTrue(run.metadataJson().contains("\"runProfileId\":77"), run.metadataJson());
@@ -147,6 +150,13 @@ class KernelAgentRunServiceTests {
         assertEquals("agentscope", snapshot.getExecutorEngine());
         assertTrue(snapshot.getTraceContextJson().contains("\"traceId\":\"trace-1\""), snapshot.getTraceContextJson());
         assertTrue(snapshot.getSnapshotJson().contains("\"runProfileId\":77"), snapshot.getSnapshotJson());
+        assertTrue(snapshot.getExecutorConfigJson().contains("\"apiKey\":\"[REDACTED]\""),
+                snapshot.getExecutorConfigJson());
+        assertTrue(snapshot.getExecutorConfigJson().contains("\"callbackHeader\":\"[REDACTED]\""),
+                snapshot.getExecutorConfigJson());
+        assertTrue(snapshot.getSnapshotJson().contains("\"apiKey\":\"[REDACTED]\""), snapshot.getSnapshotJson());
+        assertTrue(snapshot.getSnapshotJson().contains("\"callbackHeader\":\"[REDACTED]\""),
+                snapshot.getSnapshotJson());
     }
 
     @Test

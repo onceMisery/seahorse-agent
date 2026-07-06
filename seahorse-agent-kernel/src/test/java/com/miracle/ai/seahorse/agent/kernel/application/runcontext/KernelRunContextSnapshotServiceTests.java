@@ -155,6 +155,40 @@ class KernelRunContextSnapshotServiceTests {
         assertTrue(repositoryRecord.getSnapshotJson().contains("hunter2"));
     }
 
+    @Test
+    void shouldRedactSnapshotRecordCopy() {
+        RunContextSnapshotRecord stored = snapshot("run-1");
+        stored.setId(10L);
+        stored.setConversationId(101L);
+        stored.setBranchLeafMessageId(202L);
+        stored.setRoleCardId(303L);
+        stored.setRunProfileId(404L);
+        stored.setExecutorConfigJson("{\"apiKey\":\"secret-api-key-value\",\"safe\":\"ok\"}");
+        stored.setTraceContextJson("{\"authorization\":\"Bearer trace-secret-123456\",\"traceId\":\"trace-1\"}");
+        stored.setSnapshotJson("{\"prompt\":\"Bearer prompt-secret-123456\","
+                + "\"metadata\":{\"password\":\"hunter2\",\"safe\":\"ok\"}}");
+        stored.setCreateTime(NOW);
+        stored.setDeleted(0);
+
+        RunContextSnapshotRecord safe = new RunContextSnapshotRedactor().redact(stored);
+
+        assertEquals(10L, safe.getId());
+        assertEquals(101L, safe.getConversationId());
+        assertEquals(202L, safe.getBranchLeafMessageId());
+        assertEquals(303L, safe.getRoleCardId());
+        assertEquals(404L, safe.getRunProfileId());
+        assertEquals("{\"apiKey\":\"[REDACTED]\",\"safe\":\"ok\"}", safe.getExecutorConfigJson());
+        assertEquals("{\"authorization\":\"[REDACTED]\",\"traceId\":\"trace-1\"}", safe.getTraceContextJson());
+        assertEquals("{\"prompt\":\"[REDACTED]\",\"metadata\":{\"password\":\"[REDACTED]\",\"safe\":\"ok\"}}",
+                safe.getSnapshotJson());
+        assertEquals(NOW, safe.getCreateTime());
+        assertEquals(0, safe.getDeleted());
+        assertTrue(stored.getExecutorConfigJson().contains("secret-api-key-value"));
+        assertTrue(stored.getTraceContextJson().contains("trace-secret-123456"));
+        assertTrue(stored.getSnapshotJson().contains("prompt-secret-123456"));
+        assertTrue(stored.getSnapshotJson().contains("hunter2"));
+    }
+
     private static RunContextSnapshotRecord snapshot(String runId) {
         RunContextSnapshotRecord record = new RunContextSnapshotRecord();
         record.setTenantId(AgentDefinition.DEFAULT_TENANT_ID);

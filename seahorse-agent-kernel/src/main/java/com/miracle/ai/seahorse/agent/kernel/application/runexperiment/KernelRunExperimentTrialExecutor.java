@@ -21,6 +21,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
+import com.miracle.ai.seahorse.agent.kernel.application.runcontext.RunContextSnapshotRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
@@ -48,6 +49,7 @@ import java.util.Objects;
 public class KernelRunExperimentTrialExecutor implements RunExperimentTrialExecutorPort {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final RunContextSnapshotRedactor RUN_CONTEXT_SNAPSHOT_REDACTOR = new RunContextSnapshotRedactor();
 
     @NonNull
     private final ReActExecutorPort executorPort;
@@ -235,7 +237,7 @@ public class KernelRunExperimentTrialExecutor implements RunExperimentTrialExecu
         snapshot.setTraceContextJson(traceContextJson(request, profile, runId));
         snapshot.setSnapshotJson(snapshotJson(profile, request.getBaseLeafMessageId(), enabledTools, allowedToolIds));
         snapshot.setDeleted(0);
-        runContextSnapshotRepositoryPort.save(snapshot);
+        runContextSnapshotRepositoryPort.save(RUN_CONTEXT_SNAPSHOT_REDACTOR.redact(snapshot));
     }
 
     private String traceContextJson(RunExperimentTrialExecutionRequest request, RunProfileRecord profile, String runId) {
