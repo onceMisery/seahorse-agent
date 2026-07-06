@@ -1776,3 +1776,11 @@ Output governance validators now redact credential-shaped exception text before 
 This is a narrow output-governance failure-boundary hardening slice. It does not change validator selection, PASS/BLOCK/WARN decisions, self-heal retry semantics, normalized content, observation event names, or the block fallback message.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=JsonSchemaOutputValidatorTests,MarkdownAndMermaidValidatorTests,OutputGovernanceServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes covered kernel redactor plus JSON, Markdown, and output-governance validator failure boundaries.
+
+## 2026-07-06 Update: Research Report Streaming Failure Redaction
+
+Research report streaming failures now redact credential-shaped exception text before wrapping model callback errors in `RetryableResearchException` messages. This protects research retry reasons, task failure surfaces, streaming diagnostics, and downstream orchestration events when streaming model providers accidentally include bearer tokens, API keys, cookies, or similar material in exception messages.
+
+This is a narrow write-report streaming failure-boundary hardening slice. It does not change report prompt construction, streaming lifecycle events, artifact persistence, retry classification, timeout handling, cancellation behavior, or the original exception cause retained for server-side diagnostics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=WriteReportStepHandlerStreamingTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes covered kernel redactor plus write-report streaming success, blocking compatibility, and streaming failure redaction.

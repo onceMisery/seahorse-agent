@@ -17,7 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.research;
 
-import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactType;
@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DurableTask;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
@@ -205,8 +206,7 @@ public class WriteReportStepHandler implements ResearchStepHandler {
         Throwable failure = error.get();
         if (failure != null) {
             throw new RetryableResearchException(
-                    "Research report streaming failed: " + Objects.requireNonNullElse(
-                            failure.getMessage(), failure.getClass().getSimpleName()), failure);
+                    "Research report streaming failed: " + safeMessage(failure), failure);
         }
         return report.toString();
     }
@@ -278,5 +278,10 @@ public class WriteReportStepHandler implements ResearchStepHandler {
         AgentArtifact saved = artifactRepository.save(artifact);
         context.setArtifactId(artifactId);
         return saved;
+    }
+
+    private String safeMessage(Throwable failure) {
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(
+                failure.getMessage(), failure.getClass().getSimpleName()));
     }
 }

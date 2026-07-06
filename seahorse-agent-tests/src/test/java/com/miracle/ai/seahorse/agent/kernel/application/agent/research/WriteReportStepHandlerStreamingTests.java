@@ -98,6 +98,30 @@ class WriteReportStepHandlerStreamingTests {
         assertEquals("final report", stringPayload(events.get(1), "delta"));
     }
 
+    @Test
+    void streamingFailureRedactsCredentialTextFromRetryableMessage() {
+        CapturingStorage storage = new CapturingStorage();
+        CapturingArtifactRepository repository = new CapturingArtifactRepository();
+        IllegalStateException failure = new IllegalStateException(
+                "Authorization: Bearer report-stream-token api_key=report-stream-secret");
+        StreamingChatModelPort streamingModel = (request, callback) -> {
+            callback.onError(failure);
+            return () -> {
+            };
+        };
+        WriteReportStepHandler handler = new WriteReportStepHandler(
+                ChatModelPort.noop(), streamingModel, storage, repository);
+        ResearchStepContext context = new ResearchStepContext("run-stream-failure", "q", 0);
+
+        RetryableResearchException ex = assertThrows(RetryableResearchException.class,
+                () -> handler.execute(task("run-stream-failure"), context, ResearchEventPublisher.noop()));
+
+        assertSame(failure, ex.getCause());
+        assertTrue(ex.getMessage().contains("[REDACTED]"));
+        assertFalse(ex.getMessage().contains("report-stream-token"));
+        assertFalse(ex.getMessage().contains("report-stream-secret"));
+    }
+
     private static DurableTask task(String runId) {
         return new DurableTask("task-1", runId, "WRITE_REPORT", 0, Instant.now(), null, null);
     }
