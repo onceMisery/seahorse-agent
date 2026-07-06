@@ -1234,3 +1234,11 @@ Tool approval request summaries now also filter the human-readable policy reason
 This is a narrow approval-governance hardening slice. It does not change policy decisions, approval matching, pending approval persistence, tool execution, request audit summaries, arguments preview JSON, persisted tool ids, or resume behavior.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,LocalGovernedToolExecutionPortTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 35/35, covering unsafe reason-code suppression in both direct Tool Gateway and governed preflight approval summaries.
+
+## 2026-07-06 Update: Governed Tool Permission Reason Message Redaction
+
+Governed tool preflight permissions now redact credential-shaped policy reason messages before returning them to pluggable agent executors. The machine-readable `reasonCode` remains unchanged for policy handling, while the human-readable `reasonMessage` uses the shared `CredentialTextRedactor` across ALLOW, DENY, and APPROVAL_REQUIRED effects.
+
+This is a narrow governed-preflight display hardening slice. It does not change policy decisions, approval matching, pending approval persistence, approval summaries, Tool Gateway invocation, request audit summaries, arguments preview JSON, or resume behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalGovernedToolExecutionPortTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 5/5, covering reason-message credential redaction across allow, deny, and approval-required preflight outcomes.

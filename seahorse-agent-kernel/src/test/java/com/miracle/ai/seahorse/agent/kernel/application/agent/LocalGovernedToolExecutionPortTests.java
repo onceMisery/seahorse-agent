@@ -192,8 +192,70 @@ class LocalGovernedToolExecutionPortTests {
         assertFalse(approval.summary().contains("secret-marker"));
     }
 
+    @Test
+    void preflightRedactsCredentialReasonMessagesAcrossPolicyEffects() {
+        CapturingApprovalRepository approvals = new CapturingApprovalRepository();
+        LocalGovernedToolExecutionPort allowPort = governedPort(
+                new CountingGateway(),
+                approvals,
+                request -> new PolicyDecision(
+                        "allow-1",
+                        PolicyDecision.Effect.ALLOW,
+                        ToolPolicyReasonCodes.ALLOW,
+                        "allowed with access_token=secret-marker",
+                        PolicyDecision.BUILTIN_POLICY_ID,
+                        PolicyDecision.BUILTIN_POLICY_VERSION,
+                        null,
+                        null));
+        LocalGovernedToolExecutionPort denyPort = governedPort(
+                new CountingGateway(),
+                approvals,
+                request -> PolicyDecision.deny(
+                        "deny-1",
+                        "DENY_SECRET",
+                        "denied with Authorization: Bearer secretmarker123"));
+        LocalGovernedToolExecutionPort approvalPort = governedPort(
+                new CountingGateway(),
+                approvals,
+                request -> PolicyDecision.approvalRequired(
+                        "approval-1",
+                        ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED,
+                        "approval needs sessionToken=secret-marker"));
+
+        GovernedToolPermission allowed = allowPort.preflight(request("weather", Map.of("city", "Hangzhou")));
+        GovernedToolPermission denied = denyPort.preflight(request("weather", Map.of("city", "Hangzhou")));
+        GovernedToolPermission approvalRequired = approvalPort.preflight(request("weather", Map.of("city", "Hangzhou")));
+
+        assertEquals(GovernedToolPermission.Effect.ALLOW, allowed.effect());
+        assertEquals(ToolPolicyReasonCodes.ALLOW, allowed.reasonCode());
+        assertEquals("allowed with [REDACTED]", allowed.reasonMessage());
+        assertEquals(GovernedToolPermission.Effect.DENY, denied.effect());
+        assertEquals("DENY_SECRET", denied.reasonCode());
+        assertEquals("denied with [REDACTED]", denied.reasonMessage());
+        assertEquals(GovernedToolPermission.Effect.APPROVAL_REQUIRED, approvalRequired.effect());
+        assertEquals(ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED, approvalRequired.reasonCode());
+        assertEquals("approval needs [REDACTED]", approvalRequired.reasonMessage());
+        assertFalse(allowed.reasonMessage().contains("secret-marker"));
+        assertFalse(denied.reasonMessage().contains("secretmarker123"));
+        assertFalse(approvalRequired.reasonMessage().contains("secret-marker"));
+    }
+
     private static ToolInvocationRequest request(String toolId, Map<String, Object> arguments) {
         return request(toolId, arguments, Map.of());
+    }
+
+    private static LocalGovernedToolExecutionPort governedPort(
+            ToolGatewayPort gateway,
+            ToolApprovalRequestRepositoryPort approvals,
+            ToolPolicyPort policy) {
+        return new LocalGovernedToolExecutionPort(
+                new SingleToolRegistry(),
+                gateway,
+                policy,
+                approvals,
+                ApprovalRequestQueryPort.empty(),
+                new ObjectMapper(),
+                FIXED_CLOCK);
     }
 
     private static ToolInvocationRequest request(String toolId,

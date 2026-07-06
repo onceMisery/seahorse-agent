@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
@@ -102,17 +103,17 @@ public class LocalGovernedToolExecutionPort implements GovernedToolExecutionPort
                         ToolPolicyReasonCodes.POLICY_DECISION_MISSING,
                         "Tool policy did not return a decision"));
         if (decision.effect() == PolicyDecision.Effect.ALLOW) {
-            return GovernedToolPermission.allow(decision.reasonCode(), decision.reasonMessage());
+            return GovernedToolPermission.allow(decision.reasonCode(), safeReasonMessage(decision.reasonMessage()));
         }
         if (decision.effect() != PolicyDecision.Effect.APPROVAL_REQUIRED) {
-            return GovernedToolPermission.deny(decision.reasonCode(), decision.reasonMessage());
+            return GovernedToolPermission.deny(decision.reasonCode(), safeReasonMessage(decision.reasonMessage()));
         }
         ApprovalRequest approval = createApprovalRequest(safeRequest, decision, clock.instant());
         approvalRequestRepository.save(approval);
         return GovernedToolPermission.approvalRequired(
                 approval.approvalId(),
                 decision.reasonCode(),
-                decision.reasonMessage());
+                safeReasonMessage(decision.reasonMessage()));
     }
 
     @Override
@@ -201,6 +202,10 @@ public class LocalGovernedToolExecutionPort implements GovernedToolExecutionPort
     private String safeReasonCodePreview(String reasonCode) {
         String value = Objects.requireNonNullElse(reasonCode, "").trim();
         return isSafePreviewArgumentKey(value) ? value : "unsafe-reason-code";
+    }
+
+    private String safeReasonMessage(String reasonMessage) {
+        return CredentialTextRedactor.redact(reasonMessage);
     }
 
     private String argumentsPreviewJson(ToolInvocationRequest invocationRequest) {
