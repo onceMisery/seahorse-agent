@@ -181,7 +181,7 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                         requireText(userId, "userId must not be blank"),
                         experimentId,
                         trialId,
-                        requireText(scoreJson, "scoreJson must not be blank"))
+                        safeJsonText(requireText(scoreJson, "scoreJson must not be blank")))
                 .orElseThrow(() -> new IllegalArgumentException("run experiment trial not found")));
     }
 

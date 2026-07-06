@@ -423,7 +423,31 @@ class KernelRunExperimentServiceTests {
         assertTrue(repository.details.getTrials().get(0).getMetricJson().contains("metric-secret-123456"));
         assertTrue(repository.details.getTrials().get(0).getMetricJson().contains("nested-secret-value"));
         assertTrue(repository.details.getTrials().get(0).getErrorMessage().contains("trial-error-secret"));
-        assertTrue(repository.details.getTrials().get(0).getScoreJson().contains("score-secret-123456"));
+        assertEquals("{\"verdict\":\"[REDACTED]\",\"cost\":0.11}", repository.details.getTrials().get(0).getScoreJson());
+    }
+
+    @Test
+    void shouldRedactCredentialTextBeforePersistingTrialScore() {
+        InMemoryRunExperimentRepository repository = new InMemoryRunExperimentRepository();
+        KernelRunExperimentService service = new KernelRunExperimentService(repository);
+        RunExperimentDetails created = service.create(RunExperimentCommand.builder()
+                .userId("100")
+                .conversationId(101L)
+                .name("Profile compare")
+                .runProfileIds(List.of(12L))
+                .build());
+
+        RunExperimentDetails scored = service.scoreTrial(
+                "100",
+                created.getExperiment().getId(),
+                created.getTrials().get(0).getId(),
+                """
+                        {"verdict":"Bearer score-secret-123456","nested":{"apiKey":"nested-score-secret"},"rating":5}
+                        """);
+
+        String expected = "{\"verdict\":\"[REDACTED]\",\"nested\":{\"apiKey\":\"[REDACTED]\"},\"rating\":5}";
+        assertEquals(expected, scored.getTrials().get(0).getScoreJson());
+        assertEquals(expected, repository.details.getTrials().get(0).getScoreJson());
     }
 
     private static final class InMemoryRunExperimentRepository implements RunExperimentRepositoryPort {

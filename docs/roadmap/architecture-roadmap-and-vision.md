@@ -1382,3 +1382,11 @@ Run Experiment kernel inbound responses now defensively redact credential-shaped
 This is a narrow kernel-boundary hardening slice for non-Web callers of `RunExperimentInboundPort`. It does not change Run Experiment execution inputs, persistence semantics, score writes, metric writes, cancellation behavior, report format, Web adapter projections, trial fork-to-branch behavior, repository schema, or stored experiment/trial values.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunExperimentServiceTests,CredentialTextRedactorTests,CredentialJsonFieldClassifierTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 16/16, covering kernel inbound projection redaction for credential-bearing experiment names, score JSON, metric JSON, failure text, repository immutability, existing Run Experiment execution/report behavior, and shared credential redaction/classifier behavior.
+
+## 2026-07-06 Update: Run Experiment Trial Score Write Redaction
+
+Run Experiment trial scoring now redacts credential-shaped `scoreJson` before persistence in `KernelRunExperimentService.scoreTrial`. The write boundary parses JSON when possible, recursively redacts sensitive field names such as `apiKey`, applies shared credential-text redaction to string values, and preserves ordinary scoring fields such as numeric ratings or costs.
+
+This is a narrow score-write hardening slice. It does not change trial execution metrics, executor error persistence, experiment creation, cancellation behavior, report format, Web adapter projections, repository schema, or scoring endpoint request contracts.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunExperimentServiceTests,CredentialTextRedactorTests,CredentialJsonFieldClassifierTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 17/17, covering score write redaction before repository persistence, inbound projection redaction, existing Run Experiment execution/report behavior, and shared credential redaction/classifier behavior.
