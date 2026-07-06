@@ -1662,3 +1662,11 @@ Research step retry and failure messages now redact credential-shaped exception 
 This is a narrow research orchestration failure-boundary hardening slice. It does not change step ordering, retry eligibility, retry backoff, loop detection, handler execution, task ack/enqueue semantics, event sequencing, successful step events, or server-side exception logging with the original exception chain.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=ResearchRunOrchestratorTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new retry/fail regressions because durable queue reasons lacked `[REDACTED]`, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 14/14 across kernel redactor and research orchestration coverage.
+
+## 2026-07-06 Update: RAG Trace Failure Redaction
+
+RAG trace run/node failure messages and retrieval channel failure `extraData.errorMessage` values now redact credential-shaped exception text before persisting trace records. This protects trace repository, trace query, and retrieval diagnostics surfaces when model, search, vector, or post-processing failures accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow trace persistence hardening slice. It does not change trace sampling, run/node lifecycle recording, retrieval fallback behavior, channel timeout policy, trace hit metadata, successful trace payloads, or server-side exception logging with the original exception chain.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelRagTraceRecorderTests,KernelMultiChannelRetrievalEngineTraceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new trace regressions because node/run failure errors and channel `extraData.errorMessage` lacked `[REDACTED]`, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 12/12 across kernel redactor, trace recorder, and retrieval trace coverage.

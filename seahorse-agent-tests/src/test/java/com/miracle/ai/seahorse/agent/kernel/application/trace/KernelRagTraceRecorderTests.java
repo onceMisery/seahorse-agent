@@ -74,6 +74,32 @@ class KernelRagTraceRecorderTests {
     }
 
     @Test
+    void shouldRedactCredentialLikeFailureMessagesBeforePersistingTraceErrors() {
+        RecordingTraceRepository repository = new RecordingTraceRepository();
+        KernelRagTraceRecorder recorder = new KernelRagTraceRecorder(repository);
+        TraceRunScope runScope = recorder.startRun(new TraceRunStartCommand(
+                "stream-chat", "KernelChatInboundService#streamChat", "conv-1", "task-1", "user-1"));
+
+        Assertions.assertThrows(IllegalStateException.class,
+                () -> recorder.recordNode(runScope, new TraceNodeStartCommand(
+                        "retrieval", "CHAT_STAGE", "KernelChatPipeline", "retrieve", null, 0), () -> {
+                            throw new IllegalStateException(
+                                    "trace failed Authorization: Bearer abcdefghijklmnop api_key=plain-trace-secret");
+                        }));
+        recorder.finishRun(runScope, new IllegalStateException(
+                "run failed Authorization: Bearer abcdefghijklmnop api_key=plain-run-secret"));
+
+        String nodeError = repository.finishedNodes.get(0).errorMessage();
+        Assertions.assertTrue(nodeError.contains("[REDACTED]"));
+        Assertions.assertFalse(nodeError.contains("abcdefghijklmnop"));
+        Assertions.assertFalse(nodeError.contains("plain-trace-secret"));
+        String runError = repository.finishedRuns.get(0).errorMessage();
+        Assertions.assertTrue(runError.contains("[REDACTED]"));
+        Assertions.assertFalse(runError.contains("abcdefghijklmnop"));
+        Assertions.assertFalse(runError.contains("plain-run-secret"));
+    }
+
+    @Test
     void shouldSkipRunAndNodesWhenSampleRateIsZero() {
         RecordingTraceRepository repository = new RecordingTraceRepository();
         KernelRagTraceRecorder recorder = new KernelRagTraceRecorder(repository, new RagTraceRecorderOptions(0D));

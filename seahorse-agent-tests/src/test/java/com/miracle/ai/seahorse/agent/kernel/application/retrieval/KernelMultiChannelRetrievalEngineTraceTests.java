@@ -96,6 +96,27 @@ class KernelMultiChannelRetrievalEngineTraceTests {
         assertThat(repository.finishedNodes.get(0).errorMessage()).contains("channel failed");
     }
 
+    @Test
+    void shouldRedactCredentialLikeChannelFailureExtraData() {
+        RecordingTraceRepository repository = new RecordingTraceRepository();
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        registry.register(new ExtensionDescriptor("secret-channel", SearchChannelFeature.class,
+                FeatureType.SEARCH_CHANNEL, 1, true), new SecretFailingChannel());
+        KernelMultiChannelRetrievalEngine engine = engine(registry, repository);
+
+        List<RetrievedChunk> chunks = engine.retrieveKnowledgeChannels(
+                List.of(new SubQuestionIntent("闂", List.of())),
+                3,
+                TraceRunScope.active("trace-secret", Instant.now()));
+
+        assertThat(chunks).isEmpty();
+        assertThat(repository.finishedNodes).hasSize(1);
+        assertThat(repository.finishedNodes.get(0).extraData())
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-channel-secret");
+    }
+
     private KernelMultiChannelRetrievalEngine engine(DefaultExtensionRegistry registry,
                                                      RecordingTraceRepository repository) {
         return new KernelMultiChannelRetrievalEngine(
@@ -165,6 +186,30 @@ class KernelMultiChannelRetrievalEngineTraceTests {
                                             List<SearchChannelResult> results,
                                             SearchContext context) {
             return chunks;
+        }
+    }
+
+    private static class SecretFailingChannel implements SearchChannelFeature {
+
+        @Override
+        public String name() {
+            return "secret-channel";
+        }
+
+        @Override
+        public SearchChannelType channelType() {
+            return SearchChannelType.VECTOR_GLOBAL;
+        }
+
+        @Override
+        public boolean enabled(SearchContext context) {
+            return true;
+        }
+
+        @Override
+        public SearchChannelResult search(SearchContext context) {
+            throw new IllegalStateException(
+                    "channel failed Authorization: Bearer abcdefghijklmnop api_key=plain-channel-secret");
         }
     }
 

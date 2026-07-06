@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.retrieval;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
@@ -217,7 +218,7 @@ final class KernelSearchChannelExecutor {
         payload.put("hits", traceHits(result));
         if (error != null) {
             payload.put("errorType", error.getClass().getSimpleName());
-            payload.put("errorMessage", truncate(error.getMessage(), TRACE_HIT_PREVIEW_MAX_LENGTH));
+            payload.put("errorMessage", traceErrorMessage(error));
         }
         try {
             return OBJECT_MAPPER.writeValueAsString(payload);
@@ -262,5 +263,12 @@ final class KernelSearchChannelExecutor {
             return normalized;
         }
         return normalized.substring(0, Math.max(maxLength - 3, 0)) + "...";
+    }
+
+    private String traceErrorMessage(Throwable error) {
+        if (error == null) {
+            return null;
+        }
+        return truncate(CredentialTextRedactor.redact(error.getMessage()), TRACE_HIT_PREVIEW_MAX_LENGTH);
     }
 }
