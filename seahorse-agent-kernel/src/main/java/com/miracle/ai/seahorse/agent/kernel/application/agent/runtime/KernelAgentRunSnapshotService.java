@@ -208,7 +208,7 @@ public class KernelAgentRunSnapshotService implements AgentRunSnapshotInboundPor
         }
         return contextPackRepository.findById(contextPackId.orElseThrow())
                 .filter(pack -> packBelongsToRun(pack, run))
-                .filter(pack -> isAdmin(currentUser) || currentUserId(currentUser).equals(pack.userId()))
+                .filter(pack -> isAdmin(currentUser) || ownsUserId(pack.userId(), currentUser))
                 .map(pack -> contextPackRepository.listItems(pack.contextPackId()).stream()
                         .map(this::toSnapshotSource)
                         .toList())
@@ -227,13 +227,13 @@ public class KernelAgentRunSnapshotService implements AgentRunSnapshotInboundPor
                 ApprovalRequestQuery.DEFAULT_CURRENT,
                 PENDING_APPROVAL_PAGE_SIZE));
         return page.records().stream()
-                .filter(approval -> isAdmin(currentUser) || currentUserId(currentUser).equals(approval.userId()))
+                .filter(approval -> isAdmin(currentUser) || ownsUserId(approval.userId(), currentUser))
                 .toList();
     }
 
     private List<AgentArtifact> artifacts(String runId, CurrentUser currentUser) {
         return artifactRepository.listByRunId(runId).stream()
-                .filter(artifact -> isAdmin(currentUser) || currentUserId(currentUser).equals(artifact.userId()))
+                .filter(artifact -> isAdmin(currentUser) || ownsUserId(artifact.userId(), currentUser))
                 .toList();
     }
 
@@ -309,7 +309,7 @@ public class KernelAgentRunSnapshotService implements AgentRunSnapshotInboundPor
     }
 
     private AgentRun requireReadable(AgentRun run, CurrentUser currentUser) {
-        if (isAdmin(currentUser) || run.userId().equals(currentUserId(currentUser))) {
+        if (isAdmin(currentUser) || ownsUserId(run.userId(), currentUser)) {
             return run;
         }
         throw new IllegalStateException(ACCESS_DENIED);
@@ -321,6 +321,15 @@ public class KernelAgentRunSnapshotService implements AgentRunSnapshotInboundPor
 
     private String currentUserId(CurrentUser currentUser) {
         return currentUser == null ? null : currentUser.operator();
+    }
+
+    private boolean ownsUserId(String resourceUserId, CurrentUser currentUser) {
+        if (currentUser == null) {
+            return false;
+        }
+        String numericUserId = currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
+        return Objects.equals(resourceUserId, numericUserId)
+                || Objects.equals(resourceUserId, currentUserId(currentUser));
     }
 
     private String firstText(String... values) {

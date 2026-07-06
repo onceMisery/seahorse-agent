@@ -141,6 +141,30 @@ class KernelAgentRunSnapshotServiceTests {
     }
 
     @Test
+    void shouldAllowNumericWebUserIdOwnerToReadSnapshotDetails() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("42", AgentRunStatus.WAITING_APPROVAL));
+        MemoryCheckpointRepository checkpointRepository = new MemoryCheckpointRepository();
+        checkpointRepository.save(checkpoint("checkpoint-1", 1L, "context-pack-1"));
+        KernelAgentRunSnapshotService service = new KernelAgentRunSnapshotService(
+                runRepository,
+                checkpointRepository,
+                new MemoryContextPackRepository(contextPack("42")),
+                new MemoryApprovalQueryPort(List.of(approval("approval-1", "42", ApprovalRequestStatus.PENDING))),
+                new MemoryArtifactRepository(List.of(artifact("artifact-1", "42", AgentArtifactScanStatus.CLEAN))),
+                currentUser(42L, "owner"));
+
+        AgentRunSnapshot snapshot = service.getSnapshot("run-1");
+
+        assertEquals("42", snapshot.run().userId());
+        assertEquals(List.of("item-1"), snapshot.sources().stream().map(item -> item.itemId()).toList());
+        assertEquals(List.of("approval-1"),
+                snapshot.pendingApprovals().stream().map(ApprovalRequest::approvalId).toList());
+        assertEquals(List.of("artifact-1"),
+                snapshot.artifacts().stream().map(AgentArtifact::artifactId).toList());
+    }
+
+    @Test
     void shouldDenyUnrelatedUserSnapshotAccess() {
         MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
         runRepository.createRun(run("1", AgentRunStatus.RUNNING));

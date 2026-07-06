@@ -890,3 +890,11 @@ Agent checkpoint history and run cost summary lookups now accept both the curren
 This is a narrow authorization-compatibility slice. It does not change checkpoint persistence, checkpoint sanitization, cost aggregation dimensions, admin access, unrelated-user denial, run paging semantics, or repository schema.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentCheckpointQueryServiceTests,KernelAgentRunCostSummaryServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 10/10, covering numeric web user ID owners for checkpoint history and run cost summary while preserving unrelated-user denial and admin read access.
+
+## 2026-07-06 Update: Agent Run Snapshot and Workflow Numeric Owner Compatibility
+
+Agent run snapshot and run workflow lookups now accept both the current user's numeric primary-key string and operator username when comparing against the owning Agent run `userId`. Snapshot nested visibility for context-pack sources, pending approvals, and artifacts uses the same owner compatibility, so numeric-owner runs do not open with empty adjacent details.
+
+This is a narrow authorization-compatibility slice. It does not change snapshot assembly, checkpoint sanitization, workflow graph layout, admin access, unrelated-user denial, artifact scan filtering, approval state transitions, or repository schema.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunSnapshotServiceTests,KernelAgentRunWorkflowServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 7/7, covering numeric web user ID owners for snapshot detail and workflow graph while preserving unrelated-user denial.
