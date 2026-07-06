@@ -36,7 +36,8 @@ public interface ToolOutputRedactionPort {
                     + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id)"
                     + "\\s*=\\s*[^\\s&;]+)");
     Pattern SECRET_FIELD_PATTERN = Pattern.compile(
-            "(?i).*(access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id).*");
+            "(?i).*(access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id"
+                    + "|authorization|set[_-]?cookie|secret[_-]?key|private[_-]?key).*");
 
     ToolInvocationResult redact(ToolInvocationRequest request, ToolInvocationResult result);
 

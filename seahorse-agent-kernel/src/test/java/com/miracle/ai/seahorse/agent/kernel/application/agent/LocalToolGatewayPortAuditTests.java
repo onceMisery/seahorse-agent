@@ -340,8 +340,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldRedactSecretJsonFieldsBeforeReturningSuccessfulToolOutput() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
                 "{\"status\":\"ok\",\"apiKey\":\"plain-api-key\","
-                        + "\"nested\":{\"clientSecret\":\"plain-client-secret\",\"password\":\"plain-password\"},"
-                        + "\"items\":[{\"access_token\":\"plain-access-token\",\"label\":\"safe\"}]}"));
+                        + "\"Authorization\":\"Bearer plain-authorization-token\","
+                        + "\"setCookie\":\"sid=plain-cookie-value\","
+                        + "\"nested\":{\"clientSecret\":\"plain-client-secret\",\"password\":\"plain-password\","
+                        + "\"private_key\":\"plain-private-key\"},"
+                        + "\"items\":[{\"access_token\":\"plain-access-token\","
+                        + "\"secretKey\":\"plain-secret-key\",\"label\":\"safe\"}]}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
         LocalToolGatewayPort gateway = new LocalToolGatewayPort(
                 new SingleToolRegistry(tool),
@@ -354,13 +358,21 @@ class LocalToolGatewayPortAuditTests {
 
         assertTrue(result.success());
         assertEquals("{\"status\":\"ok\",\"apiKey\":\"[REDACTED]\","
-                        + "\"nested\":{\"clientSecret\":\"[REDACTED]\",\"password\":\"[REDACTED]\"},"
-                        + "\"items\":[{\"access_token\":\"[REDACTED]\",\"label\":\"safe\"}]}",
+                        + "\"Authorization\":\"[REDACTED]\","
+                        + "\"setCookie\":\"[REDACTED]\","
+                        + "\"nested\":{\"clientSecret\":\"[REDACTED]\",\"password\":\"[REDACTED]\","
+                        + "\"private_key\":\"[REDACTED]\"},"
+                        + "\"items\":[{\"access_token\":\"[REDACTED]\","
+                        + "\"secretKey\":\"[REDACTED]\",\"label\":\"safe\"}]}",
                 result.content());
         assertFalse(result.content().contains("plain-api-key"));
+        assertFalse(result.content().contains("plain-authorization-token"));
+        assertFalse(result.content().contains("plain-cookie-value"));
         assertFalse(result.content().contains("plain-client-secret"));
         assertFalse(result.content().contains("plain-password"));
+        assertFalse(result.content().contains("plain-private-key"));
         assertFalse(result.content().contains("plain-access-token"));
+        assertFalse(result.content().contains("plain-secret-key"));
         assertFalse(audit.completed.get(0).resultSummary().contains("plain-api-key"));
     }
 

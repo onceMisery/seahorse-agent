@@ -1042,3 +1042,11 @@ Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-D
 This is a narrow output-redaction hardening slice. It does not change Tool Gateway execution, result summary shape, approval policy, artifact publication ordering, noop redaction behavior, or the configured default redaction wiring.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 26/26, covering nested successful JSON secret-field redaction while preserving existing output, audit, approval, and artifact behaviors.
+
+## 2026-07-06 Update: Tool Output Header and Key Field Redaction
+
+The successful JSON output redactor now also treats cross-provider response fields such as `Authorization`, `setCookie`, `secretKey`, and `private_key` as sensitive fields. These values are replaced with `[REDACTED]` before the Tool Gateway returns the observation, while safe sibling fields remain intact.
+
+This is a narrow output-redaction vocabulary hardening slice. It does not change output redaction wiring, text credential matching, failure error handling, Tool Gateway execution, audit result-summary shape, approval policy, or artifact publication.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 26/26, covering authorization, cookie, private-key, and secret-key JSON field redaction alongside the existing output/audit behaviors.
