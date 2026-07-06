@@ -1058,3 +1058,11 @@ Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatew
 This is a narrow provider-layer output-redaction hardening slice. It does not change OpenAPI HTTP invocation, credential injection, request argument handling, Tool Gateway policy/audit flow, generic output redaction wiring, or response truncation semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=OpenApiToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 3/3, covering direct adapter response redaction before any gateway-level fallback.
+
+## 2026-07-06 Update: Audit Payload Header and Key Redaction
+
+`AuditRedactionPolicy` now redacts additional credential-shaped audit payload fields such as `setCookie`, `private_key`, and `sessionId`, aligning the audit ledger redaction vocabulary with the Tool Gateway and OpenAPI response redactors while preserving `secretRef` references for traceability.
+
+This is a narrow audit-ledger redaction hardening slice. It does not change audit event persistence, invalid-JSON fail-closed behavior, Tool Gateway request/completion summaries, output redaction wiring, approval policy, or provider execution.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=AuditRedactionPolicyTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 3/3, covering nested authorization, cookie, private-key, and session-id payload redaction while preserving `secretRef`.

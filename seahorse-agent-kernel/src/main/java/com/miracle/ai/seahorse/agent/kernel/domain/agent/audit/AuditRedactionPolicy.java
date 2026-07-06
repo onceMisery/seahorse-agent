@@ -41,6 +41,9 @@ public class AuditRedactionPolicy {
             "token",
             "password",
             "apikey",
+            "privatekey",
+            "sessionid",
+            "setcookie",
             "authorization");
     private static final Pattern CREDENTIAL_VALUE_PATTERN = Pattern.compile(
             "(?i)(bearer\\s+[a-z0-9._~+/=-]{8,}"

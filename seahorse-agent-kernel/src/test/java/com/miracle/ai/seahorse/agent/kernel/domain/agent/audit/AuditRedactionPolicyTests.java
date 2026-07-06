@@ -32,7 +32,13 @@ class AuditRedactionPolicyTests {
                 {
                   "secretRef":"secret://tenant/a",
                   "secretValue":"plain-secret",
-                  "nested":{"Authorization":"Bearer token-value","safe":"visible"},
+                  "nested":{
+                    "Authorization":"Bearer token-value",
+                    "setCookie":"sid=plain-cookie",
+                    "private_key":"plain-private-key",
+                    "sessionId":"plain-session-id",
+                    "safe":"visible"
+                  },
                   "items":[{"apiKey":"abc123"},{"password":"pw"}]
                 }
                 """);
@@ -42,6 +48,9 @@ class AuditRedactionPolicyTests {
         assertTrue(redacted.contains(AuditRedactionPolicy.REDACTED_VALUE));
         assertFalse(redacted.contains("plain-secret"));
         assertFalse(redacted.contains("token-value"));
+        assertFalse(redacted.contains("plain-cookie"));
+        assertFalse(redacted.contains("plain-private-key"));
+        assertFalse(redacted.contains("plain-session-id"));
         assertFalse(redacted.contains("abc123"));
         assertFalse(redacted.contains("pw"));
     }
