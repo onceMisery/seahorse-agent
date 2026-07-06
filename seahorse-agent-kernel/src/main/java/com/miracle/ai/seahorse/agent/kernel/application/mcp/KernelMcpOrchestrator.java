@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.mcp;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentNode;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScore;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionRequest;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpParameterExtractionPort;
@@ -130,7 +131,12 @@ public class KernelMcpOrchestrator {
             return executor.execute(request);
         } catch (Exception ex) {
             LOG.error("MCP 工具 {} 执行失败，按失败结果降级", request.toolId(), ex);
-            return McpToolExecutionResult.failed(request.toolId(), ex.getMessage());
+            return McpToolExecutionResult.failed(request.toolId(), redactFailureText(
+                    Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
+    }
+
+    private String redactFailureText(String message) {
+        return CredentialTextRedactor.redact(message);
     }
 }

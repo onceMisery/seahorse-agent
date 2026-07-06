@@ -1510,3 +1510,11 @@ Tool Gateway execution failures now redact credential-shaped text before returni
 This is a narrow Tool Gateway and Agent Loop display-boundary hardening slice. It does not change policy decisions, approval creation, idempotency, tool registry lookup, artifact publication, output redaction configuration, audit shape summaries, run-step persistence redaction, successful tool result content, or base `ToolInvocationResult` semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,KernelAgentLoopToolGatewayTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 60/60, covering thrown ToolPort exception redaction before return/audit, Agent Loop failed-observation redaction for custom gateway results, stream tool-call event redaction, existing Tool Gateway audit behavior, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: MCP Orchestrator Failure Result Redaction
+
+Kernel MCP orchestration now redacts credential-shaped executor exception messages before creating `McpToolExecutionResult.failed(...)`. This closes the MCP failure-result boundary for callers that consume the orchestrator directly, while the Agent ToolPort adapter and Tool Gateway still keep their downstream redaction defenses.
+
+This is a narrow MCP orchestration display-boundary hardening slice. It does not change MCP registry lookup, parameter extraction, executor invocation, concurrent intent execution, successful MCP content, ToolPort adapter behavior, Tool Gateway audit persistence, approval/quota policy, or base MCP result semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=KernelMcpOrchestratorTests,McpToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 10/10, covering MCP executor exception redaction, existing MCP adapter redaction, tool-not-found/success behavior, intent-tool execution, and shared credential text redactor behavior.

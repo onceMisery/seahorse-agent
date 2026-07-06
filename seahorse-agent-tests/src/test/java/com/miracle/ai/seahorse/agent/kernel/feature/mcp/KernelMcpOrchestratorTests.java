@@ -68,6 +68,22 @@ class KernelMcpOrchestratorTests {
     }
 
     @Test
+    void shouldRedactCredentialShapedToolExceptionMessage() {
+        KernelMcpOrchestrator orchestrator = new KernelMcpOrchestrator(new SingleToolRegistry(request -> {
+            throw new IllegalStateException(
+                    "remote failed Authorization: Bearer abcdefghijklmnop api_key=plain-mcp-orchestrator-secret");
+        }));
+
+        McpToolExecutionResult result = orchestrator.execute(new McpToolExecutionRequest(TOOL_ID, Map.of()));
+
+        Assertions.assertFalse(result.success());
+        Assertions.assertEquals(McpToolExecutionStatus.EXECUTION_FAILED, result.status());
+        Assertions.assertEquals("remote failed [REDACTED] [REDACTED]", result.message());
+        Assertions.assertFalse(result.message().contains("abcdefghijklmnop"));
+        Assertions.assertFalse(result.message().contains("plain-mcp-orchestrator-secret"));
+    }
+
+    @Test
     void shouldReturnToolContentWhenExecutionSucceeds() {
         KernelMcpOrchestrator orchestrator = new KernelMcpOrchestrator(new SingleToolRegistry(
                 request -> McpToolExecutionResult.success(request.toolId(), "晴天")));
