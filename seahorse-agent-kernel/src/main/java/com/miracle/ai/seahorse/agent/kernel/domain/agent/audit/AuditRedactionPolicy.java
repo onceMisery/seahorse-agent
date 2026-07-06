@@ -49,7 +49,7 @@ public class AuditRedactionPolicy {
             "(?i)(authorization\\s*[:=]\\s*(?:bearer|basic)\\s+[a-z0-9._~+/=-]{8,}"
                     + "|bearer\\s+[a-z0-9._~+/=-]{8,}"
                     + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id"
-                    + "|session[_-]?token|secret[_-]?key|private[_-]?key|set[_-]?cookie)"
+                    + "|session[_-]?token|secret[_-]?key|private[_-]?key|set[_-]?cookie|cookie)"
                     + "\\s*[:=]\\s*[^\\s&;]+)");
 
     private final ObjectMapper objectMapper;

@@ -1090,3 +1090,11 @@ Tool Gateway output redaction, OpenAPI provider text response redaction, and aud
 This is a narrow text-redaction vocabulary hardening slice. It does not change JSON field redaction semantics, OpenAPI request construction, credential injection, audit persistence, approval policy, artifact publication, or default redaction wiring.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,OpenApiToolPortAdapterTests,AuditRedactionPolicyTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 34/34, covering failed tool errors, OpenAPI text/invalid-JSON provider responses, and audit payload string values with header-style credential fragments.
+
+## 2026-07-06 Update: Cookie Header Text Redaction
+
+Tool Gateway output redaction, OpenAPI provider text response redaction, and audit payload redaction now also cover exact `Cookie: ...` / `cookie: ...` text fragments. The pattern is intentionally limited to a standalone `cookie` key followed by `:` or `=`, so value-free governance metadata such as `cookieCount` and `sessionStateCookieCount` remains visible while raw cookie header values are removed.
+
+This is a narrow text-redaction vocabulary hardening slice. It does not change sandbox browser cookie injection/replay, cookie count summaries, JSON field redaction, OpenAPI request construction, audit persistence, approval policy, artifact publication, or default redaction wiring.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,OpenApiToolPortAdapterTests,AuditRedactionPolicyTests,SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 66/66, covering Cookie header text redaction in Tool Gateway/OpenAPI/audit paths while preserving sandbox browser cookie/session metadata behavior.

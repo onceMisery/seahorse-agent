@@ -92,7 +92,7 @@ public class OpenApiToolPortAdapter implements ToolPort {
             "(?i)(authorization\\s*[:=]\\s*(?:bearer|basic)\\s+[a-z0-9._~+/=-]{8,}"
                     + "|bearer\\s+[a-z0-9._~+/=-]{8,}"
                     + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id"
-                    + "|session[_-]?token|secret[_-]?key|private[_-]?key|set[_-]?cookie)"
+                    + "|session[_-]?token|secret[_-]?key|private[_-]?key|set[_-]?cookie|cookie)"
                     + "\\s*[:=]\\s*[^\\s&;]+)");
     private static final Pattern OPENAI_KEY_PATTERN = Pattern.compile("sk-[A-Za-z0-9][A-Za-z0-9_-]*");
 

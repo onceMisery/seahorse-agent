@@ -219,7 +219,7 @@ class OpenApiToolPortAdapterTests {
     void shouldRedactCredentialShapedOpenApiTextResponseBeforeGatewayFallback() throws Exception {
         try (TestHttpApi api = TestHttpApi.start("/api/customers", exchange -> respond(exchange, 200,
                 "text/plain",
-                "upstream failed private_key: plain-private-key Authorization: Bearer abcdefghijklmnop sk-live-secret"))) {
+                "upstream failed Cookie: plain-private-key Authorization: Bearer abcdefghijklmnop sk-live-secret"))) {
             OpenApiToolPortAdapter adapter = adapterFor(api.baseUrl(), CredentialAuthType.NONE);
 
             ToolInvocationResult result = adapter.invoke(
@@ -240,7 +240,7 @@ class OpenApiToolPortAdapterTests {
     void shouldRedactCredentialShapedInvalidJsonResponseBeforeGatewayFallback() throws Exception {
         try (TestHttpApi api = TestHttpApi.start("/api/customers", exchange -> respond(exchange, 200,
                 "application/json",
-                "{\"error\":\"partial\", \"message\":\"set-cookie: sid=plain-session-cookie"))) {
+                "{\"error\":\"partial\", \"message\":\"cookie: plain-session-cookie"))) {
             OpenApiToolPortAdapter adapter = adapterFor(api.baseUrl(), CredentialAuthType.NONE);
 
             ToolInvocationResult result = adapter.invoke(
