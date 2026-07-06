@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpointType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
@@ -190,8 +191,12 @@ public class RepositoryAgentApprovalWaitHandler implements AgentApprovalWaitHand
         try {
             return objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException ex) {
-            return "{\"serializationError\":\"" + escape(ex.getMessage()) + "\"}";
+            return "{\"serializationError\":\"" + escape(safeText(ex.getMessage())) + "\"}";
         }
+    }
+
+    private String safeText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private boolean isBlank(String value) {

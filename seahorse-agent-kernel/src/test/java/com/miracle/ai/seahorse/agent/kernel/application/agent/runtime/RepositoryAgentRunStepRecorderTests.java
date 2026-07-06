@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentObservation;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
@@ -87,6 +89,41 @@ class RepositoryAgentRunStepRecorderTests {
         assertFalse(step.inputJson().contains("secret-api-key-value"));
         assertFalse(step.outputJson().contains("tool-secret-123456"));
         assertFalse(step.errorMessage().contains("tool-secret-123456"));
+    }
+
+    @Test
+    void shouldRedactSerializationFailureFallbackBeforePersistence() {
+        RecordingAgentRunRepository repository = new RecordingAgentRunRepository();
+        RepositoryAgentRunStepRecorder recorder = new RepositoryAgentRunStepRecorder(
+                repository,
+                FIXED_CLOCK,
+                new FailingObjectMapper(
+                        "json failed Authorization: Bearer serializer-secret-123456 api_key=plain-serializer-secret"));
+
+        recorder.recordToolCall(
+                "run-1",
+                AgentToolCall.of("call-1", "tool-1", Map.of("query", "safe")),
+                AgentObservation.failed("call-1", "tool failed"));
+
+        AgentStep step = repository.steps.get(0);
+        assertTrue(step.inputJson().contains("[REDACTED]"), step.inputJson());
+        assertTrue(step.outputJson().contains("[REDACTED]"), step.outputJson());
+        assertFalse(step.inputJson().contains("serializer-secret-123456"));
+        assertFalse(step.outputJson().contains("plain-serializer-secret"));
+    }
+
+    private static final class FailingObjectMapper extends ObjectMapper {
+        private final String message;
+
+        private FailingObjectMapper(String message) {
+            this.message = message;
+        }
+
+        @Override
+        public String writeValueAsString(Object value) throws JsonProcessingException {
+            throw new JsonProcessingException(message) {
+            };
+        }
     }
 
     private static final class RecordingAgentRunRepository implements AgentRunRepositoryPort {

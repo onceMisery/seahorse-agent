@@ -1712,3 +1712,11 @@ Agent loop model-turn stream error events now redact credential-shaped exception
 This is a narrow streaming-event hardening slice. It does not change model retry semantics, step status transitions, tool observation handling, run persistence, trace recording, callback error propagation, or server-side exception logging with the original exception chain.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentLoopToolGatewayTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new model-stream regression because the test initially inspected the optional summary field instead of the event message field, then passed with `BUILD SUCCESS`; targeted test classes ran 29/29 across kernel redactor and agent loop Tool Gateway streaming coverage.
+
+## 2026-07-06 Update: Agent Run Serialization Fallback Redaction
+
+Agent run runtime JSON serialization fallback messages now redact credential-shaped exception text before persisting `serializationError` payloads for recorded run steps, approval-wait checkpoints, or resumed run step payloads. This protects run detail, checkpoint, resume, and approval diagnostics surfaces when JSON serializers fail with exception messages that accidentally include bearer tokens, API keys, or similar material.
+
+This is a narrow runtime persistence hardening slice. It does not change normal JSON payload shape, checkpoint sequencing, approval wait transitions, resume execution semantics, step status handling, or server-side exception logging with the original exception chain.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=RepositoryAgentRunStepRecorderTests,RepositoryAgentApprovalWaitHandlerTests,KernelAgentRunResumeServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with `BUILD SUCCESS`; targeted test classes ran 13/13 across kernel redactor, run step recorder serialization fallback, approval wait checkpoint serialization fallback, and existing resume behavior coverage.

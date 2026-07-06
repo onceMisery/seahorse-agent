@@ -128,7 +128,7 @@ public class RepositoryAgentRunStepRecorder implements AgentRunStepRecorder {
         try {
             return objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException ex) {
-            return "{\"serializationError\":\"" + escape(ex.getMessage()) + "\"}";
+            return "{\"serializationError\":\"" + escape(safeText(ex.getMessage())) + "\"}";
         }
     }
 
