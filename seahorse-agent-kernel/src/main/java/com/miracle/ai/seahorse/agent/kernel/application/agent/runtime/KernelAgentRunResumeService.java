@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopException
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpointType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
@@ -127,12 +128,12 @@ public class KernelAgentRunResumeService implements AgentRunResumeInboundPort {
         if (approval.status() == ApprovalRequestStatus.REJECTED) {
             return transition(current, AgentRunStatus.REJECTED,
                     AgentRuntimeConstants.AGENT_RUN_APPROVAL_REJECTED_CODE,
-                    approval.decisionComment());
+                    safeApprovalDecisionComment(approval));
         }
         if (approval.status() == ApprovalRequestStatus.EXPIRED) {
             return transition(current, AgentRunStatus.EXPIRED,
                     AgentRuntimeConstants.AGENT_RUN_APPROVAL_EXPIRED_CODE,
-                    approval.decisionComment());
+                    safeApprovalDecisionComment(approval));
         }
         if (approval.status() != ApprovalRequestStatus.APPROVED && approval.status() != ApprovalRequestStatus.MODIFIED) {
             throw new IllegalStateException("Approval must be approved before resume");
@@ -276,6 +277,10 @@ public class KernelAgentRunResumeService implements AgentRunResumeInboundPort {
                 status.isFinished() ? clock.instant() : null);
         runRepository.updateRun(next);
         return next;
+    }
+
+    private String safeApprovalDecisionComment(ApprovalRequest approval) {
+        return CredentialTextRedactor.redact(approval.decisionComment());
     }
 
     private List<ChatMessage> messageHistory(String messageHistoryJson) {

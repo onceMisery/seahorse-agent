@@ -172,6 +172,58 @@ class KernelAgentRunResumeServiceTests {
         assertEquals(AgentRunStatus.REJECTED, runRepository.findRunById("run-1").orElseThrow().status());
     }
 
+    @Test
+    void shouldRedactHistoricalApprovalDecisionCommentWhenRejectedOrExpired() {
+        MemoryAgentRunRepository rejectedRunRepository = new MemoryAgentRunRepository();
+        rejectedRunRepository.createRun(waitingRun());
+        MemoryAgentCheckpointRepository rejectedCheckpointRepository = new MemoryAgentCheckpointRepository();
+        rejectedCheckpointRepository.save(waitingCheckpoint());
+        MemoryApprovalQueryPort rejectedApproval = new MemoryApprovalQueryPort(approval(
+                ApprovalRequestStatus.REJECTED,
+                null,
+                "rejected with access_token=secret-marker"));
+        RecordingToolGateway rejectedToolGateway = new RecordingToolGateway(ToolInvocationResult.ok("should-not-run"));
+        AgentRunResumeInboundPort rejectedService = new KernelAgentRunResumeService(
+                rejectedRunRepository,
+                rejectedCheckpointRepository,
+                rejectedApproval,
+                rejectedToolGateway,
+                new SingleTurnModel("should-not-run"),
+                currentUser(),
+                FIXED_CLOCK);
+        MemoryAgentRunRepository expiredRunRepository = new MemoryAgentRunRepository();
+        expiredRunRepository.createRun(waitingRun());
+        MemoryAgentCheckpointRepository expiredCheckpointRepository = new MemoryAgentCheckpointRepository();
+        expiredCheckpointRepository.save(waitingCheckpoint());
+        MemoryApprovalQueryPort expiredApproval = new MemoryApprovalQueryPort(approval(
+                ApprovalRequestStatus.EXPIRED,
+                null,
+                "expired with Authorization: Bearer secretmarker123"));
+        RecordingToolGateway expiredToolGateway = new RecordingToolGateway(ToolInvocationResult.ok("should-not-run"));
+        AgentRunResumeInboundPort expiredService = new KernelAgentRunResumeService(
+                expiredRunRepository,
+                expiredCheckpointRepository,
+                expiredApproval,
+                expiredToolGateway,
+                new SingleTurnModel("should-not-run"),
+                currentUser(),
+                FIXED_CLOCK);
+
+        AgentRun rejected = rejectedService.resume("run-1");
+        AgentRun expired = expiredService.resume("run-1");
+
+        assertEquals(AgentRunStatus.REJECTED, rejected.status());
+        assertEquals("rejected with [REDACTED]", rejected.errorMessage());
+        assertEquals("rejected with [REDACTED]",
+                rejectedRunRepository.findRunById("run-1").orElseThrow().errorMessage());
+        assertEquals(0, rejectedToolGateway.requests.size());
+        assertEquals(AgentRunStatus.EXPIRED, expired.status());
+        assertEquals("expired with [REDACTED]", expired.errorMessage());
+        assertEquals("expired with [REDACTED]",
+                expiredRunRepository.findRunById("run-1").orElseThrow().errorMessage());
+        assertEquals(0, expiredToolGateway.requests.size());
+    }
+
     private static AgentRun waitingRun() {
         return new AgentRun(
                 "run-1",
@@ -218,6 +270,12 @@ class KernelAgentRunResumeServiceTests {
     }
 
     private static ApprovalRequest approval(ApprovalRequestStatus status, String argumentsPreviewJson) {
+        return approval(status, argumentsPreviewJson, "decided");
+    }
+
+    private static ApprovalRequest approval(ApprovalRequestStatus status,
+                                            String argumentsPreviewJson,
+                                            String decisionComment) {
         return new ApprovalRequest(
                 "approval-1",
                 "run-1",
@@ -237,7 +295,7 @@ class KernelAgentRunResumeServiceTests {
                 null,
                 status == ApprovalRequestStatus.PENDING ? null : "admin-1",
                 status == ApprovalRequestStatus.PENDING ? null : FIXED_CLOCK.instant().minusSeconds(1),
-                status == ApprovalRequestStatus.PENDING ? null : "decided");
+                status == ApprovalRequestStatus.PENDING ? null : decisionComment);
     }
 
     private static CurrentUserPort currentUser() {

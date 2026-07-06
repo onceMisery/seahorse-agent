@@ -1250,3 +1250,11 @@ Approval management now redacts credential-shaped decision comments before persi
 This is a narrow approval-management display hardening slice. It does not change approval request creation, policy decisions, approval matching, Tool Gateway invocation, arguments preview validation, request audit summaries, or frontend approval workflows.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelApprovalManagementServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 18/18, covering approve, reject, and modify decision-comment redaction plus shared credential text redactor behavior.
+
+## 2026-07-06 Update: Approval Resume Decision Comment Defense
+
+Agent run resume now defensively redacts credential-shaped approval decision comments when a waiting run transitions to REJECTED or EXPIRED. This protects historical or externally written approval records that predate the approval-management write-side redaction from being copied into `AgentRun.errorMessage`.
+
+This is a narrow resume-boundary hardening slice. It does not mutate stored approval records, change approved/modified resume execution, alter approval matching, modify Tool Gateway invocation, or change normal approval-management write behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunResumeServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 8/8, covering rejected and expired resume transitions with historical credential-bearing decision comments while preserving approved/modified resume behavior.
