@@ -1590,3 +1590,11 @@ Memory derived-index dispatch failures now redact credential-shaped exception te
 This is a narrow derived-index dispatch hardening slice. It does not change vector upsert/delete inputs, memory record content, outbox task type selection, keyword/graph outbox flags, retry behavior, or successful derived-index operation strings.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=MemoryDerivedIndexDispatchServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new regression because the vector fallback outbox `errorMessage` lacked `[REDACTED]`, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 9/9 across kernel redactor and derived-index dispatch coverage.
+
+## 2026-07-06 Update: Memory Governance Failure Redaction
+
+Memory governance promotion, quality snapshot, inference, conflict detection, and decay failure lists now redact credential-shaped exception text before returning `MemoryGovernanceRunResult.errors()`. This protects memory governance operations surfaces when repository, inference, or maintenance failures accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow governance result-boundary hardening slice. It does not change promotion, semantic upsert, quality report generation, inference, conflict detection, decay logic, raw execution inputs, repository semantics, server logs beyond returned error text, or the quality snapshot schema.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelMemoryGovernanceServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new regression because a promotion failure returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 9/9 across kernel redactor and memory governance coverage.

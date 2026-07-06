@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.InferredMemory;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryQualityReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
@@ -95,7 +96,7 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
                     semanticUpserted++;
                 }
             } catch (RuntimeException ex) {
-                errors.add(record.id() + ":" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                errors.add(record.id() + ":" + failureMessage(ex));
             }
         }
 
@@ -113,7 +114,7 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
                 ports.qualitySnapshotRepositoryPort().save(new MemoryQualitySnapshot(
                         "", safeUserId, qualitySnapshot(report), Instant.now()));
             } catch (RuntimeException ex) {
-                errors.add("quality:" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                errors.add("quality:" + failureMessage(ex));
             }
         }
         return new MemoryGovernanceRunResult(safeUserId, Objects.requireNonNullElse(reason, "manual"),
@@ -139,15 +140,14 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
                     }
                     inferred++;
                 } catch (RuntimeException ex) {
-                    errors.add("inference:" + candidate.content() + ":" +
-                            Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    errors.add("inference:" + candidate.content() + ":" + failureMessage(ex));
                 }
             }
             if (inferred > 0) {
                 LOG.info("跨会话推理完成: userId={}, inferred={}", userId, inferred);
             }
         } catch (RuntimeException ex) {
-            errors.add("inference:" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+            errors.add("inference:" + failureMessage(ex));
         }
         return inferred;
     }
@@ -187,7 +187,7 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
                         Instant.now()));
             }
         } catch (RuntimeException ex) {
-            errors.add("conflict:" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+            errors.add("conflict:" + failureMessage(ex));
         }
     }
 
@@ -277,7 +277,7 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
                         .toList());
             }
         } catch (RuntimeException ex) {
-            errors.add(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+            errors.add(failureMessage(ex));
         }
         return new MemoryGovernanceRunResult("", Objects.requireNonNullElse(reason, "manual-decay"),
                 0, 0, 0, true, false, errors, Instant.now());
@@ -445,5 +445,9 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private String failureMessage(RuntimeException ex) {
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
     }
 }

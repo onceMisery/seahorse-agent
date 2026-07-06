@@ -86,6 +86,30 @@ class KernelMemoryGovernanceServiceTests {
     }
 
     @Test
+    void shouldRedactCredentialLikePromotionFailureErrors() {
+        RecordingShortTermMemoryPort shortTerm = new RecordingShortTermMemoryPort();
+        RecordingMemoryPort longTerm = new RecordingMemoryPort();
+        RecordingMemoryPort semantic = new RecordingMemoryPort();
+        RecordingMemoryEnginePort memoryEngine = new RecordingMemoryEnginePort();
+        longTerm.failOnSaveMessage = "promotion failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret";
+        shortTerm.records.add(new MemoryRecord("m-secret", "short_term", "PROFILE", "Name is Alice",
+                Map.of("userId", "user-1", "importanceScore", 0.8D, "confidenceLevel", 0.9D),
+                Instant.now()));
+
+        KernelMemoryGovernanceService service = new KernelMemoryGovernanceService(
+                new MemoryGovernanceServicePorts(shortTerm, longTerm, semantic, memoryEngine), 0.6D);
+
+        MemoryGovernanceRunResult result = service.runGovernance("user-1", "manual", false);
+
+        assertThat(result.errors()).hasSize(1);
+        assertThat(result.errors().get(0))
+                .contains("m-secret:")
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-memory-secret");
+    }
+
+    @Test
     void shouldPersistQualitySnapshotAndPendingConflictsDuringGovernance() {
         RecordingShortTermMemoryPort shortTerm = new RecordingShortTermMemoryPort();
         RecordingMemoryPort longTerm = new RecordingMemoryPort();
@@ -204,6 +228,7 @@ class KernelMemoryGovernanceServiceTests {
     private static class RecordingMemoryPort implements LongTermMemoryPort, SemanticMemoryPort {
 
         final List<MemoryRecord> records = new ArrayList<>();
+        String failOnSaveMessage;
 
         @Override
         public Optional<MemoryRecord> findById(String id) {
@@ -228,6 +253,9 @@ class KernelMemoryGovernanceServiceTests {
 
         @Override
         public void save(MemoryRecord record) {
+            if (failOnSaveMessage != null) {
+                throw new IllegalStateException(failOnSaveMessage);
+            }
             records.add(record);
         }
 
