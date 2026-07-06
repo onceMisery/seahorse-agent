@@ -1154,6 +1154,101 @@ try {
         } | Out-Null
     }
 
+    $pdfHtmlRunId = $runId
+    $pdfHtmlToolCallId = "sandbox-file-convert-pdf-html-call-$suffix"
+    $pdfHtmlContent = New-PdfBase64 -Lines @(
+        "Sandbox PDF HTML $Marker",
+        "PDF HTML conversion renders literal text"
+    )
+
+    $pdfHtmlObservation = Test-Step "Invoke sandbox_file_convert PDF to HTML through Tool Gateway" {
+        $requestBody = @{
+            runId = $pdfHtmlRunId
+            stepId = "sandbox-file-convert-pdf-html-step-$suffix"
+            toolCallId = $pdfHtmlToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "pdf"
+                targetFormat = "html"
+                contentEncoding = "base64"
+                content = $pdfHtmlContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${pdfHtmlRunId}:${pdfHtmlToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert PDF to HTML"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert PDF to HTML failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION") {
+            throw "Expected FILE_CONVERSION runtime for PDF to HTML: $content"
+        }
+        if ("$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected SUCCEEDED PDF to HTML execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "pdf" -or "$($parsed.conversion.targetFormat)" -ne "html" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected PDF to HTML conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1) {
+            throw "Expected one PDF to HTML artifact: $content"
+        }
+        if ("$($artifacts[0].mediaType)" -ne "text/html") {
+            throw "Expected PDF to HTML artifact mediaType text/html: $content"
+        }
+        if ("$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected CLEAN PDF to HTML artifact scan status: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed") {
+            throw "Expected PDF to HTML metadata scan summary: $content"
+        }
+        if ($artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible PDF to HTML artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $pdfHtmlObservation) { exit 1 }
+
+    $pdfHtmlArtifactId = "$(@($pdfHtmlObservation.artifacts)[0].artifactId)"
+
+    $pdfHtmlObjectUri = Test-Step "Verify persisted PDF to HTML session and artifact" {
+        Assert-PersistedFileConversionArtifact -ArtifactId $pdfHtmlArtifactId -ExpectedMediaType "text/html" -Label "PDF to HTML"
+    }
+    if (-not $pdfHtmlObjectUri) { exit 1 }
+
+    Test-Step "Download converted PDF HTML through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$pdfHtmlArtifactId/download" -Headers $headers
+        if ($content -notlike "*<p>Sandbox PDF HTML $Marker</p>*") {
+            throw "Downloaded PDF HTML did not include marker paragraph '$Marker': $content"
+        }
+        if ($content -notlike "*<p>PDF HTML conversion renders literal text</p>*") {
+            throw "Downloaded PDF HTML did not include second paragraph: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded PDF HTML artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($pdfHtmlObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted PDF HTML object exists in backend storage volume" {
+            $key = $pdfHtmlObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote PDF to HTML key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored PDF to HTML object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
     $xlsxRunId = $runId
     $xlsxToolCallId = "sandbox-file-convert-xlsx-csv-call-$suffix"
     $xlsxContent = New-XlsxBase64 -Marker $Marker -SecondValue "XLSX conversion extracts first worksheet"

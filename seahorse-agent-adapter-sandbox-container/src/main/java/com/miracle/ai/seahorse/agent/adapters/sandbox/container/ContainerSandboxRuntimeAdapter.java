@@ -356,7 +356,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String contentEncoding = normalizedContentEncoding(root.path("contentEncoding").asText(PLAIN_ENCODING));
         if (!isSupportedFileConversion(sourceFormat, targetFormat)) {
             throw new UnsupportedFileConversionException(
-                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx to html/txt, pptx/pdf to txt, and xlsx to csv only");
+                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to html/txt, pptx to txt, and xlsx to csv only");
         }
         if (isBinaryDocumentFormat(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
             throw new IllegalArgumentException(sourceFormat + " file conversion contentEncoding must be base64");
@@ -1412,6 +1412,11 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         raise ValueError("pdf text not found")
                     return "\\n".join(texts) + "\\n"
 
+                def pdf_to_html(path):
+                    lines = [line.strip() for line in pdf_to_text(path).splitlines() if line.strip()]
+                    body = "\\n".join("<p>" + html.escape(line) + "</p>" for line in lines)
+                    return "<!doctype html>\\n<html><body>\\n" + body + "\\n</body></html>\\n"
+
                 if target_format == "json" and source_format in ("csv", "tsv"):
                     with input_path.open("r", encoding="utf-8-sig", newline="") as source:
                         reader = csv.DictReader(source, delimiter=delimiter(source_format))
@@ -1460,6 +1465,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "pdf" and target_format == "txt":
                     output_path.write_text(pdf_to_text(input_path), encoding="utf-8")
                     print(f"converted pdf document to text")
+                elif source_format == "pdf" and target_format == "html":
+                    output_path.write_text(pdf_to_html(input_path), encoding="utf-8")
+                    print(f"converted pdf document to html")
                 else:
                     raise ValueError(f"unsupported conversion: {source_format} to {target_format}")
                 """.formatted(
@@ -1476,8 +1484,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
                 || (MARKDOWN_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
-                || (DOCX_FORMAT.equals(sourceFormat) && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
-                || ((PPTX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat))
+                || ((DOCX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat))
+                && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
+                || (PPTX_FORMAT.equals(sourceFormat)
                 && TXT_FORMAT.equals(targetFormat))
                 || (XLSX_FORMAT.equals(sourceFormat) && CSV_FORMAT.equals(targetFormat));
     }

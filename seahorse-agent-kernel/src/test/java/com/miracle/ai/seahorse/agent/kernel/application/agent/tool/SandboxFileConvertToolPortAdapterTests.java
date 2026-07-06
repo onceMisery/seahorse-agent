@@ -79,8 +79,8 @@ class SandboxFileConvertToolPortAdapterTests {
         assertTrue(adapter.descriptor().description().contains("CSV/TSV to JSON"));
         assertTrue(adapter.descriptor().description().contains("JSON to CSV/TSV"));
         assertTrue(adapter.descriptor().description().contains("Markdown to HTML/text"));
-        assertTrue(adapter.descriptor().description().contains("base64 DOCX to HTML/text"));
-        assertTrue(adapter.descriptor().description().contains("base64 PPTX/PDF to text"));
+        assertTrue(adapter.descriptor().description().contains("base64 DOCX/PDF to HTML/text"));
+        assertTrue(adapter.descriptor().description().contains("base64 PPTX to text"));
         assertTrue(adapter.descriptor().description().contains("base64 XLSX to CSV"));
     }
 
@@ -444,6 +444,56 @@ class SandboxFileConvertToolPortAdapterTests {
         assertEquals("txt", root.path("conversion").path("targetFormat").asText());
         assertEquals("base64", root.path("conversion").path("contentEncoding").asText());
         assertEquals("text/plain", root.path("artifacts").get(0).path("mediaType").asText());
+        assertTrue(root.path("artifacts").get(0).path("promptVisible").asBoolean());
+    }
+
+    @Test
+    void shouldExecutePdfToHtmlThroughFileConversionRuntimeWithBase64Input() throws Exception {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
+                new SandboxExecution(
+                        "exec-1",
+                        "session-1",
+                        SandboxRuntimeType.FILE_CONVERSION,
+                        SandboxExecutionStatus.SUCCEEDED,
+                        "exitCode=0; stdout=converted pdf document to html",
+                        SandboxPolicyReasonCode.VALID_REQUEST,
+                        NOW,
+                        NOW),
+                List.of(new SandboxArtifact(
+                        "artifact-1",
+                        "session-1",
+                        "exec-1",
+                        "local://sandbox-artifacts/converted.html",
+                        "text/html",
+                        SandboxArtifactScanStatus.CLEAN,
+                        ContextSensitivity.INTERNAL,
+                        "metadata scan passed",
+                        NOW))));
+        SandboxFileConvertToolPortAdapter adapter = new SandboxFileConvertToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "sourceFormat", "pdf",
+                "targetFormat", "html",
+                "contentEncoding", "base64",
+                "content", "JVBERi0xLjQK")));
+
+        assertTrue(result.success());
+        assertEquals(SandboxRuntimeType.FILE_CONVERSION, runtime.createCommand.runtimeType());
+        assertFalse(runtime.createCommand.networkRequested());
+        assertFalse(runtime.executeCommand.networkRequested());
+        assertEquals("session-1", runtime.closedSessionId);
+
+        JsonNode conversionInput = objectMapper.readTree(runtime.executeCommand.input());
+        assertEquals("pdf", conversionInput.path("sourceFormat").asText());
+        assertEquals("html", conversionInput.path("targetFormat").asText());
+        assertEquals("base64", conversionInput.path("contentEncoding").asText());
+        assertEquals("JVBERi0xLjQK", conversionInput.path("content").asText());
+
+        JsonNode root = objectMapper.readTree(result.content());
+        assertEquals("pdf", root.path("conversion").path("sourceFormat").asText());
+        assertEquals("html", root.path("conversion").path("targetFormat").asText());
+        assertEquals("base64", root.path("conversion").path("contentEncoding").asText());
+        assertEquals("text/html", root.path("artifacts").get(0).path("mediaType").asText());
         assertTrue(root.path("artifacts").get(0).path("promptVisible").asBoolean());
     }
 

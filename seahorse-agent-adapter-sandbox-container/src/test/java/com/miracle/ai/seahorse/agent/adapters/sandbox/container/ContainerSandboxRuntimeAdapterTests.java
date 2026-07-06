@@ -504,6 +504,45 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldRunPdfToHtmlFileConversionAndCollectHtmlOutputOnly() throws Exception {
+        String pdfBase64 = Base64.getEncoder().encodeToString("%PDF-1.4\nfake-pdf-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted pdf document to html\n", Duration.ofMillis(190)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("pdf_to_html",
+                                    "pdf_to_text(path)",
+                                    "source_format = \"pdf\"",
+                                    "target_format = \"html\"",
+                                    "converted.html")
+                            .doesNotContain(pdfBase64);
+                    assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.pdf")))
+                            .isEqualTo("%PDF-1.4\nfake-pdf-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    Files.writeString(command.workingDirectory().resolve("converted.html"),
+                            "<!doctype html>\n<html><body><p>Sandbox PDF marker</p></body></html>\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"pdf","targetFormat":"html","contentEncoding":"base64","content":"%s"}
+                        """.formatted(pdfBase64),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted pdf document to html");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.html");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/html");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.pdf"));
+    }
+
+    @Test
     void shouldRunXlsxToCsvFileConversionAndCollectCsvOutputOnly() throws Exception {
         byte[] xlsxBytes = xlsxBytes();
         String xlsxBase64 = Base64.getEncoder().encodeToString(xlsxBytes);
@@ -1384,7 +1423,7 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED);
         assertThat(result.execution().resultSummary())
-                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx to html/txt, pptx/pdf to txt, and xlsx to csv only");
+                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to html/txt, pptx to txt, and xlsx to csv only");
         assertThat(runner.lastCommand).isNull();
     }
 

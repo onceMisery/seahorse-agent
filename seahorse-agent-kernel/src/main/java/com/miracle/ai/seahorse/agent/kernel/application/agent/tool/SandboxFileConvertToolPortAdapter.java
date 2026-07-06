@@ -64,7 +64,7 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
             "Sandbox File Convert",
-            "Convert bounded file content through the Seahorse sandbox runtime. Supports CSV/TSV to JSON, JSON to CSV/TSV, text to HTML, HTML to text, Markdown to HTML/text, base64 DOCX to HTML/text, base64 PPTX/PDF to text, and base64 XLSX to CSV with network disabled.",
+            "Convert bounded file content through the Seahorse sandbox runtime. Supports CSV/TSV to JSON, JSON to CSV/TSV, text to HTML, HTML to text, Markdown to HTML/text, base64 DOCX/PDF to HTML/text, base64 PPTX to text, and base64 XLSX to CSV with network disabled.",
             """
                     {"type":"object","required":["sourceFormat","targetFormat","content"],"properties":{"sourceFormat":{"type":"string","enum":["csv","tsv","json","txt","html","markdown","md","docx","xlsx","pptx","pdf"]},"targetFormat":{"type":"string","enum":["json","csv","tsv","txt","html"]},"contentEncoding":{"type":"string","enum":["plain","base64"],"default":"plain","description":"Use base64 for binary DOCX/XLSX/PPTX/PDF input; plain is used for text inputs."},"content":{"type":"string","minLength":1,"maxLength":262144}}}
                     """);
@@ -114,7 +114,7 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
         String content = argumentStringPreservingWhitespace(safeRequest.arguments(), CONTENT_ARGUMENT);
         if (!isSupportedConversion(sourceFormat, targetFormat)) {
             return ToolInvocationResult.failed(
-                    "sandbox_file_convert failed: supported conversions are csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx to html/txt, pptx/pdf to txt, and xlsx to csv");
+                    "sandbox_file_convert failed: supported conversions are csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to html/txt, pptx to txt, and xlsx to csv");
         }
         if (isBinaryDocumentFormat(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
             return ToolInvocationResult.failed("sandbox_file_convert failed: "
@@ -275,8 +275,9 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
                 || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
                 || (MARKDOWN_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
-                || (DOCX_FORMAT.equals(sourceFormat) && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
-                || ((PPTX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat))
+                || ((DOCX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat))
+                && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
+                || (PPTX_FORMAT.equals(sourceFormat)
                 && TXT_FORMAT.equals(targetFormat))
                 || (XLSX_FORMAT.equals(sourceFormat) && CSV_FORMAT.equals(targetFormat));
     }
