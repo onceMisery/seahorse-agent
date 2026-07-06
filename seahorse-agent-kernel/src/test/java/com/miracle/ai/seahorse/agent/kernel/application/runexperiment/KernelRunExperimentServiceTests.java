@@ -88,6 +88,22 @@ class KernelRunExperimentServiceTests {
     }
 
     @Test
+    void shouldRedactCredentialTextBeforePersistingExperimentName() {
+        InMemoryRunExperimentRepository repository = new InMemoryRunExperimentRepository();
+        KernelRunExperimentService service = new KernelRunExperimentService(repository);
+
+        RunExperimentDetails details = service.create(RunExperimentCommand.builder()
+                .userId("100")
+                .conversationId(101L)
+                .name("Profile compare api_key=experiment-name-secret")
+                .runProfileIds(List.of(12L))
+                .build());
+
+        assertEquals("Profile compare [REDACTED]", details.getExperiment().getName());
+        assertEquals("Profile compare [REDACTED]", repository.details.getExperiment().getName());
+    }
+
+    @Test
     void shouldCancelExperimentAndScoreTrial() {
         InMemoryRunExperimentRepository repository = new InMemoryRunExperimentRepository();
         KernelRunExperimentService service = new KernelRunExperimentService(repository);
@@ -419,7 +435,7 @@ class KernelRunExperimentServiceTests {
         assertEquals("Profile compare [REDACTED]", found.getExperiment().getName());
         assertEquals("{\"verdict\":\"[REDACTED]\",\"cost\":0.11}", found.getTrials().get(0).getScoreJson());
 
-        assertTrue(repository.details.getExperiment().getName().contains("experiment-name-secret"));
+        assertEquals("Profile compare [REDACTED]", repository.details.getExperiment().getName());
         assertTrue(repository.details.getTrials().get(0).getMetricJson().contains("metric-secret-123456"));
         assertTrue(repository.details.getTrials().get(0).getMetricJson().contains("nested-secret-value"));
         assertTrue(repository.details.getTrials().get(0).getErrorMessage().contains("trial-error-secret"));

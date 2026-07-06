@@ -113,7 +113,7 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
     public RunExperimentDetails create(RunExperimentCommand command) {
         RunExperimentCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         String userId = requireText(safeCommand.getUserId(), "userId must not be blank");
-        String name = requireText(safeCommand.getName(), "name must not be blank");
+        String name = safeText(requireText(safeCommand.getName(), "name must not be blank"));
         if (safeCommand.getConversationId() == null) {
             throw new IllegalArgumentException("conversationId must not be null");
         }
