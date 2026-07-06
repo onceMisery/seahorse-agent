@@ -582,6 +582,46 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldRunXlsxToHtmlFileConversionAndCollectHtmlOutputOnly() throws Exception {
+        byte[] xlsxBytes = xlsxBytes();
+        String xlsxBase64 = Base64.getEncoder().encodeToString(xlsxBytes);
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted xlsx worksheet to html\n", Duration.ofMillis(190)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("xlsx_to_html",
+                                    "xlsx_rows",
+                                    "source_format = \"xlsx\"",
+                                    "target_format = \"html\"",
+                                    "converted.html")
+                            .doesNotContain(xlsxBase64);
+                    assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.xlsx")))
+                            .isEqualTo(xlsxBytes);
+                    Files.writeString(command.workingDirectory().resolve("converted.html"),
+                            "<!doctype html>\n<html><body><table><tr><td>name</td></tr></table></body></html>\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"xlsx","targetFormat":"html","contentEncoding":"base64","content":"%s"}
+                        """.formatted(xlsxBase64),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted xlsx worksheet to html");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.html");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/html");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.xlsx"));
+    }
+
+    @Test
     void shouldRunPptxToTextFileConversionAndCollectTextOutputOnly() throws Exception {
         byte[] pptxBytes = pptxBytes();
         String pptxBase64 = Base64.getEncoder().encodeToString(pptxBytes);
@@ -1423,7 +1463,7 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED);
         assertThat(result.execution().resultSummary())
-                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to html/txt, pptx to txt, and xlsx to csv only");
+                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to html/txt, xlsx to csv/html, and pptx to txt only");
         assertThat(runner.lastCommand).isNull();
     }
 

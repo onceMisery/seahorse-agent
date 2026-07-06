@@ -1342,6 +1342,101 @@ try {
         } | Out-Null
     }
 
+    $xlsxHtmlRunId = $runId
+    $xlsxHtmlToolCallId = "sandbox-file-convert-xlsx-html-call-$suffix"
+    $xlsxHtmlContent = New-XlsxBase64 -Marker $Marker -SecondValue "XLSX HTML conversion renders first worksheet"
+
+    $xlsxHtmlObservation = Test-Step "Invoke sandbox_file_convert XLSX to HTML through Tool Gateway" {
+        $requestBody = @{
+            runId = $xlsxHtmlRunId
+            stepId = "sandbox-file-convert-xlsx-html-step-$suffix"
+            toolCallId = $xlsxHtmlToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "xlsx"
+                targetFormat = "html"
+                contentEncoding = "base64"
+                content = $xlsxHtmlContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${xlsxHtmlRunId}:${xlsxHtmlToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert XLSX to HTML"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert XLSX to HTML failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION") {
+            throw "Expected FILE_CONVERSION runtime for XLSX to HTML: $content"
+        }
+        if ("$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected SUCCEEDED XLSX to HTML execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "xlsx" -or "$($parsed.conversion.targetFormat)" -ne "html" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected XLSX to HTML conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1) {
+            throw "Expected one XLSX to HTML artifact: $content"
+        }
+        if ("$($artifacts[0].mediaType)" -ne "text/html") {
+            throw "Expected XLSX to HTML artifact mediaType text/html: $content"
+        }
+        if ("$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected CLEAN XLSX to HTML artifact scan status: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed") {
+            throw "Expected XLSX to HTML metadata scan summary: $content"
+        }
+        if ($artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible XLSX to HTML artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $xlsxHtmlObservation) { exit 1 }
+
+    $xlsxHtmlArtifactId = "$(@($xlsxHtmlObservation.artifacts)[0].artifactId)"
+
+    $xlsxHtmlObjectUri = Test-Step "Verify persisted XLSX to HTML session and artifact" {
+        Assert-PersistedFileConversionArtifact -ArtifactId $xlsxHtmlArtifactId -ExpectedMediaType "text/html" -Label "XLSX to HTML"
+    }
+    if (-not $xlsxHtmlObjectUri) { exit 1 }
+
+    Test-Step "Download converted XLSX HTML through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$xlsxHtmlArtifactId/download" -Headers $headers
+        if ($content -notlike "*<table>*") {
+            throw "Downloaded XLSX HTML did not include table: $content"
+        }
+        if ($content -notlike "*<td>Sandbox XLSX $Marker</td>*") {
+            throw "Downloaded XLSX HTML did not include marker cell '$Marker': $content"
+        }
+        if ($content -notlike "*<td>XLSX HTML conversion renders first worksheet</td>*") {
+            throw "Downloaded XLSX HTML did not include worksheet value: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded XLSX HTML artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($xlsxHtmlObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted XLSX HTML object exists in backend storage volume" {
+            $key = $xlsxHtmlObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote XLSX to HTML key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored XLSX to HTML object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
     $pptxRunId = $runId
     $pptxToolCallId = "sandbox-file-convert-pptx-txt-call-$suffix"
     $pptxContent = New-PptxBase64 -Marker $Marker -SecondValue "PPTX conversion extracts slide text"

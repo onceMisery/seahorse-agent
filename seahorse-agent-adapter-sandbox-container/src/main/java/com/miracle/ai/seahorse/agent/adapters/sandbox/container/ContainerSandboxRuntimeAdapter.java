@@ -356,7 +356,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String contentEncoding = normalizedContentEncoding(root.path("contentEncoding").asText(PLAIN_ENCODING));
         if (!isSupportedFileConversion(sourceFormat, targetFormat)) {
             throw new UnsupportedFileConversionException(
-                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to html/txt, pptx to txt, and xlsx to csv only");
+                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to html/txt, xlsx to csv/html, and pptx to txt only");
         }
         if (isBinaryDocumentFormat(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
             throw new IllegalArgumentException(sourceFormat + " file conversion contentEncoding must be base64");
@@ -1238,7 +1238,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         return ""
                     return text
 
-                def xlsx_to_csv(path):
+                def xlsx_rows(path):
                     with zipfile.ZipFile(path) as archive:
                         try:
                             sheet_info = archive.getinfo("xl/worksheets/sheet1.xml")
@@ -1264,11 +1264,23 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             rows.append([cells.get(index, "") for index in range(max_index + 1)])
                     if not rows:
                         raise ValueError("xlsx worksheet rows not found")
+                    return [row + [""] * (max_width - len(row)) for row in rows]
+
+                def xlsx_to_csv(path):
+                    rows = xlsx_rows(path)
                     output = io.StringIO()
                     writer = csv.writer(output)
                     for row in rows:
-                        writer.writerow(row + [""] * (max_width - len(row)))
+                        writer.writerow(row)
                     return output.getvalue()
+
+                def xlsx_to_html(path):
+                    rows = xlsx_rows(path)
+                    output = ["<!doctype html>", "<html><body>", "<table>"]
+                    for row in rows:
+                        output.append("<tr>" + "".join("<td>" + html.escape(cell) + "</td>" for cell in row) + "</tr>")
+                    output.extend(["</table>", "</body></html>", ""])
+                    return "\\n".join(output)
 
                 def pptx_slide_sort_key(name):
                     match = re.search(r"slide(\\d+)\\.xml$", name)
@@ -1459,6 +1471,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "xlsx" and target_format == "csv":
                     output_path.write_text(xlsx_to_csv(input_path), encoding="utf-8")
                     print(f"converted xlsx worksheet to csv")
+                elif source_format == "xlsx" and target_format == "html":
+                    output_path.write_text(xlsx_to_html(input_path), encoding="utf-8")
+                    print(f"converted xlsx worksheet to html")
                 elif source_format == "pptx" and target_format == "txt":
                     output_path.write_text(pptx_to_text(input_path), encoding="utf-8")
                     print(f"converted pptx presentation to text")
@@ -1488,7 +1503,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
                 || (PPTX_FORMAT.equals(sourceFormat)
                 && TXT_FORMAT.equals(targetFormat))
-                || (XLSX_FORMAT.equals(sourceFormat) && CSV_FORMAT.equals(targetFormat));
+                || (XLSX_FORMAT.equals(sourceFormat)
+                && (CSV_FORMAT.equals(targetFormat) || HTML_FORMAT.equals(targetFormat)));
     }
 
     private boolean isDelimitedFileFormat(String format) {
