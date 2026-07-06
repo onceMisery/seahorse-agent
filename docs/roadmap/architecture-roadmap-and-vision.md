@@ -1266,3 +1266,11 @@ Agent run snapshots now redact credential-shaped step error text before exposing
 This is a narrow snapshot-projection hardening slice. It does not mutate stored `AgentStep` records, change step recording, alter workflow ordering, modify checkpoint sanitization, or change run resume behavior.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunSnapshotServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 9/9, covering snapshot summary/error redaction for credential-bearing historical step errors while preserving snapshot ownership, pending approval, source, artifact, and checkpoint minimization behavior.
+
+## 2026-07-06 Update: Agent Run Workflow Node Text Redaction
+
+Agent run workflow projections now redact credential-shaped node display text before exposing `AgentRunWorkflowNodeData.label`, `description`, and `errorMessage`. This closes the companion workflow graph path for historical step output/error text that may contain bearer tokens or credential fragments.
+
+This is a narrow workflow-projection hardening slice. It does not mutate stored `AgentStep` records, change workflow graph layout, alter owner/admin authorization, modify snapshot projections, or change run execution/resume behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunWorkflowServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 6/6, covering workflow node label, description, and error-message redaction while preserving owner access and unrelated-user denial.

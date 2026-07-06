@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus;
@@ -79,6 +80,7 @@ public class KernelAgentRunWorkflowService implements AgentRunWorkflowInboundPor
     private AgentRunWorkflowNode nodeFor(AgentStep step, int index) {
         int row = index / COLUMNS;
         int column = index % COLUMNS;
+        String safeErrorMessage = safeWorkflowText(step.errorMessage());
         return new AgentRunWorkflowNode(
                 step.stepId(),
                 NODE_TYPE,
@@ -86,15 +88,19 @@ public class KernelAgentRunWorkflowService implements AgentRunWorkflowInboundPor
                         column * (NODE_WIDTH + HORIZONTAL_GAP),
                         row * (NODE_HEIGHT + VERTICAL_GAP)),
                 new AgentRunWorkflowNodeData(
-                        labelFor(step),
+                        safeWorkflowText(labelFor(step)),
                         normalizeStatus(step.status()),
-                        firstText(step.errorMessage(), step.outputJson(), step.inputJson()),
+                        safeWorkflowText(firstText(step.errorMessage(), step.outputJson(), step.inputJson())),
                         durationMs(step),
                         step.stepType().name(),
                         step.stepNo(),
-                        step.errorMessage(),
+                        safeErrorMessage,
                         step.startedAt(),
                         step.finishedAt()));
+    }
+
+    private String safeWorkflowText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private List<AgentRunWorkflowEdge> edgesFor(List<AgentRunWorkflowNode> nodes) {

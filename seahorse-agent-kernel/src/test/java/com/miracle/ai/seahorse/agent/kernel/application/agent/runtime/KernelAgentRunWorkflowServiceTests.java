@@ -78,6 +78,24 @@ class KernelAgentRunWorkflowServiceTests {
         assertEquals("Access denied", error.getMessage());
     }
 
+    @Test
+    void shouldRedactCredentialStepErrorsInWorkflowProjection() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("42"));
+        runRepository.appendStep(stepWithError(
+                "step-secret",
+                "tool failed with Authorization: Bearer secretmarker123"));
+        KernelAgentRunWorkflowService service = new KernelAgentRunWorkflowService(
+                runRepository,
+                currentUser(42L, "owner"));
+
+        AgentRunWorkflow workflow = service.getWorkflow("run-1");
+
+        assertEquals("result [REDACTED]", workflow.nodes().get(0).data().label());
+        assertEquals("tool failed with [REDACTED]", workflow.nodes().get(0).data().description());
+        assertEquals("tool failed with [REDACTED]", workflow.nodes().get(0).data().errorMessage());
+    }
+
     private static AgentRun run(String userId) {
         return new AgentRun(
                 "run-1",
@@ -112,6 +130,21 @@ class KernelAgentRunWorkflowServiceTests {
                 null,
                 NOW.plusSeconds(stepNo),
                 status == AgentStepStatus.RUNNING ? null : NOW.plusSeconds(stepNo + 1L));
+    }
+
+    private static AgentStep stepWithError(String stepId, String errorMessage) {
+        return new AgentStep(
+                stepId,
+                "run-1",
+                1,
+                AgentStepType.TOOL_CALL,
+                AgentStepStatus.FAILED,
+                "{\"input\":\"safe\"}",
+                "result access_token=secret-marker",
+                "TOOL_FAILED",
+                errorMessage,
+                NOW.plusSeconds(1),
+                NOW.plusSeconds(2));
     }
 
     private static CurrentUserPort currentUser(Long userId, String role) {
