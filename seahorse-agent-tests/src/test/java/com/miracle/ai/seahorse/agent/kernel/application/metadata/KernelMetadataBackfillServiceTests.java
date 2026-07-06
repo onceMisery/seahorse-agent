@@ -151,22 +151,37 @@ class KernelMetadataBackfillServiceTests {
         documents.add(document(1L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         List<MetadataQuarantineItem> quarantines = new ArrayList<>();
+        String failureMessage = "metadata failed Authorization: Bearer qwertyuiopasdfgh "
+                + "api_key=plain-backfill-secret";
         KernelMetadataBackfillService service = serviceWithFailure(
-                documents, jobs, "1", quarantines::add);
+                documents, jobs, "1", quarantines::add, failureMessage);
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
                 "tenant-1", "1", "pipe-1", 10, "admin", Map.of()));
         MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
 
         assertThat(result.failedDocuments()).isEqualTo(1);
+        assertThat(result.failures()).singleElement().asString()
+                .contains("1")
+                .contains("metadata failed [REDACTED] [REDACTED]")
+                .doesNotContain("qwertyuiopasdfgh")
+                .doesNotContain("plain-backfill-secret");
+        assertThat(documents.failedMessages)
+                .containsExactly("metadata failed [REDACTED] [REDACTED]");
         assertThat(quarantines).hasSize(1);
         MetadataQuarantineItem quarantine = quarantines.get(0);
         assertThat(quarantine.stage()).isEqualTo("EXTRACT");
         assertThat(quarantine.reasonCode()).isEqualTo("BACKFILL_DOCUMENT_FAILED");
         assertThat(quarantine.taskId()).isEqualTo(job.jobId());
+        assertThat(quarantine.reasonMessage())
+                .isEqualTo("metadata failed [REDACTED] [REDACTED]");
         assertThat(quarantine.sourceSnapshot())
                 .containsEntry("backfillJobId", job.jobId())
-                .containsEntry("pipelineId", "pipe-1");
+                .containsEntry("pipelineId", "pipe-1")
+                .containsEntry("errorMessage", "metadata failed [REDACTED] [REDACTED]");
+        assertThat(quarantine.sourceSnapshot().toString())
+                .doesNotContain("qwertyuiopasdfgh")
+                .doesNotContain("plain-backfill-secret");
     }
 
     @Test
@@ -617,11 +632,19 @@ class KernelMetadataBackfillServiceTests {
                                                                   InMemoryBackfillJobRepository jobs,
                                                                   String failedDocId,
                                                                   MetadataQuarantinePort quarantinePort) {
+        return serviceWithFailure(documents, jobs, failedDocId, quarantinePort, "boom");
+    }
+
+    private static KernelMetadataBackfillService serviceWithFailure(InMemoryDocumentRepository documents,
+                                                                  InMemoryBackfillJobRepository jobs,
+                                                                  String failedDocId,
+                                                                  MetadataQuarantinePort quarantinePort,
+                                                                  String failureMessage) {
         KernelIngestionEngine engine = mock(KernelIngestionEngine.class);
         when(engine.execute(any(PipelineDefinition.class), any(IngestionContext.class))).thenAnswer(invocation -> {
             IngestionContext context = invocation.getArgument(1);
             if (failedDocId.equals(context.getTaskId())) {
-                throw new IllegalStateException("boom");
+                throw new IllegalStateException(failureMessage);
             }
             context.setMetadataValidationResult(new MetadataValidationResult(
                     MetadataValidationDecision.ACCEPT, List.of(), Map.of(), Map.of()));
@@ -800,6 +823,7 @@ class KernelMetadataBackfillServiceTests {
         private final List<Long> runningDocuments = new ArrayList<>();
         private final List<Long> successDocuments = new ArrayList<>();
         private final List<Long> failedDocuments = new ArrayList<>();
+        private final List<String> failedMessages = new ArrayList<>();
 
         void add(KnowledgeDocumentDetail document) {
             documents.put(document.getId(), document);
@@ -830,6 +854,7 @@ class KernelMetadataBackfillServiceTests {
         @Override
         public void markFailed(Long docId, String operator, String errorMessage) {
             failedDocuments.add(docId);
+            failedMessages.add(errorMessage);
         }
 
         @Override

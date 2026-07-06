@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.metadata;
 
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionEngine;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.PipelineDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchemaMissingException;
@@ -373,7 +374,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         String pipelineId = defaultText(job.pipelineId(), document.getPipelineId());
         if (!hasText(pipelineId)) {
             IllegalStateException ex = new IllegalStateException("pipelineId missing");
-            documentRepositoryPort.markFailed(document.getId(), job.operator(), ex.getMessage());
+            documentRepositoryPort.markFailed(document.getId(), job.operator(), failureMessage(ex));
             quarantineBackfillFailure(job, document, "EXTRACT", ex);
             return DocumentOutcome.failed("pipelineId missing");
         }
@@ -397,12 +398,13 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
             documentRepositoryPort.markSuccess(document.getId(), chunkCount, job.operator());
             return DocumentOutcome.success(decision(result));
         } catch (MetadataSchemaMissingException ex) {
-            documentRepositoryPort.markFailed(document.getId(), job.operator(), ex.getMessage());
+            documentRepositoryPort.markFailed(document.getId(), job.operator(), failureMessage(ex));
             throw ex;
         } catch (Exception ex) {
-            documentRepositoryPort.markFailed(document.getId(), job.operator(), ex.getMessage());
+            String message = failureMessage(ex);
+            documentRepositoryPort.markFailed(document.getId(), job.operator(), message);
             quarantineBackfillFailure(job, document, failureStage, ex);
-            return DocumentOutcome.failed(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+            return DocumentOutcome.failed(message);
         }
     }
 
@@ -413,8 +415,9 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         Map<String, Object> checkpoint = new LinkedHashMap<>(Objects.requireNonNullElse(latest.checkpoint(),
                 Map.of()));
         checkpoint.put("pauseReason", PAUSE_REASON_SCHEMA_MISSING);
-        checkpoint.put("pauseMessage", ex.getMessage());
-        accumulator.addFailure("schema: " + ex.getMessage());
+        String message = failureMessage(ex);
+        checkpoint.put("pauseMessage", message);
+        accumulator.addFailure("schema: " + message);
         // Schema 缺失是任务级阻塞：暂停等待治理配置补齐，不把当前文档写入 Review/Quarantine。
         MetadataBackfillJobRecord paused = accumulator.toRecord(MetadataBackfillJobStatus.PAUSED,
                 latest.currentPage(), checkpoint);
@@ -446,7 +449,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         snapshot.put("pipelineId", defaultText(job.pipelineId(), document.getPipelineId()));
         snapshot.put("fileUrl", Objects.requireNonNullElse(document.getFileUrl(), ""));
         snapshot.put("errorType", ex.getClass().getName());
-        snapshot.put("errorMessage", Objects.requireNonNullElse(ex.getMessage(), ""));
+        snapshot.put("errorMessage", failureMessage(ex));
         try {
             quarantinePort.quarantine(new MetadataQuarantineItem(
                     job.tenantId(),
@@ -455,7 +458,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                     job.jobId(),
                     stage,
                     "BACKFILL_DOCUMENT_FAILED",
-                    firstText(ex.getMessage(), "元数据历史回填文档处理失败"),
+                    firstText(failureMessage(ex), "元数据历史回填文档处理失败"),
                     snapshot));
         } catch (RuntimeException ignored) {
             // 隔离写入失败不能影响回填断点和文档失败状态。
@@ -526,7 +529,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
 
     private MetadataBackfillJobRecord failBatch(MetadataBackfillJobRecord job, RuntimeException ex) {
         List<String> failures = new ArrayList<>(job.failures());
-        failures.add("batch: " + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+        failures.add("batch: " + failureMessage(ex));
         // 批次级异常没有具体文档归属，直接终止任务并保留原 checkpoint，便于人工排查后重建任务。
         return new MetadataBackfillJobRecord(job.jobId(), job.tenantId(), job.knowledgeBaseId(), job.pipelineId(),
                 MetadataBackfillJobStatus.FAILED, job.currentPage(), job.batchSize(), job.processedDocuments(),
@@ -682,6 +685,13 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
 
     private String firstText(String first, String second) {
         return hasText(first) ? first.trim() : Objects.requireNonNullElse(second, "");
+    }
+
+    private String failureMessage(Throwable error) {
+        if (error == null) {
+            return "";
+        }
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(error.getMessage(), error.getClass().getName()));
     }
 
     private boolean hasText(String value) {

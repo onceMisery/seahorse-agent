@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.knowledge;
 
 import com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService;
 import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionEngine;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeConfig;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.PipelineDefinition;
@@ -166,7 +167,7 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
             long totalDurationMs = System.currentTimeMillis() - startTimeMs;
             documentRepositoryPort.markSuccess(docId, chunkCount, operator, totalDurationMs);
         } catch (Exception ex) {
-            documentRepositoryPort.markFailed(docId, operator, ex.getMessage());
+            documentRepositoryPort.markFailed(docId, operator, failureMessage(ex));
             throw new IllegalStateException("文档入库失败：" + docId, ex);
         }
     }
@@ -430,5 +431,12 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
             return null;
         }
         return value.trim();
+    }
+
+    private String failureMessage(Throwable error) {
+        if (error == null) {
+            return "";
+        }
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(error.getMessage(), error.getClass().getName()));
     }
 }

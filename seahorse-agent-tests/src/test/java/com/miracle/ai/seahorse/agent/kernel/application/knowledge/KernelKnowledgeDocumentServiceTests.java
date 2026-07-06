@@ -66,6 +66,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class KernelKnowledgeDocumentServiceTests {
 
@@ -126,6 +127,32 @@ class KernelKnowledgeDocumentServiceTests {
         KnowledgeDocumentRecord updated = ports.repository.findById(document.id()).orElseThrow();
         assertThat(updated.process().status()).isEqualTo("success");
         assertThat(ports.repository.successChunkCount).isEqualTo(1);
+    }
+
+    @Test
+    void shouldRedactCredentialTextWhenChunkExecutionFails() {
+        Ports ports = new Ports();
+        ports.storage.openFailure = new IllegalStateException(
+                "storage failed Authorization: Bearer abcdefghijklmnop api_key=plain-doc-secret");
+        KernelKnowledgeDocumentService service = newService(ports);
+        KnowledgeDocumentRecord document = ports.repository.createPendingDocument(new CreateKnowledgeDocumentCommand(
+                1L,
+                "policy.pdf",
+                new KnowledgeDocumentFileRef("local://policy.pdf", "pdf", 7L),
+                new KnowledgeDocumentProcessRef("pending", "pipeline", "pipeline-1"),
+                "tester"));
+
+        assertThatThrownBy(() -> service.executeChunk(document.id(), pipeline(), "tester"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("文档入库失败");
+
+        KnowledgeDocumentRecord updated = ports.repository.findById(document.id()).orElseThrow();
+        assertThat(updated.process().status()).isEqualTo("failed");
+        assertThat(ports.repository.failedMessages)
+                .containsExactly("storage failed [REDACTED] [REDACTED]");
+        assertThat(ports.repository.failedMessages.get(0))
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-doc-secret");
     }
 
     @Test
@@ -387,6 +414,7 @@ class KernelKnowledgeDocumentServiceTests {
         private KnowledgeDocumentDetail detail;
         private List<KnowledgeChunkRecord> enabledChunks = List.of();
         private int successChunkCount;
+        private final List<String> failedMessages = new ArrayList<>();
 
         @Override
         public KnowledgeDocumentRecord createPendingDocument(CreateKnowledgeDocumentCommand command) {
@@ -424,6 +452,7 @@ class KernelKnowledgeDocumentServiceTests {
 
         @Override
         public void markFailed(Long docId, String operator, String errorMessage) {
+            failedMessages.add(errorMessage);
             replaceStatus(docId, "failed");
         }
 
@@ -529,6 +558,7 @@ class KernelKnowledgeDocumentServiceTests {
     private static class InMemoryObjectStorage implements ObjectStoragePort {
 
         private final List<String> uploadedBuckets = new ArrayList<>();
+        private RuntimeException openFailure;
 
         @Override
         public StoredObject upload(String bucketName, InputStream content, long size, String originalFilename,
@@ -545,6 +575,9 @@ class KernelKnowledgeDocumentServiceTests {
 
         @Override
         public InputStream openStream(String url) {
+            if (openFailure != null) {
+                throw openFailure;
+            }
             return new ByteArrayInputStream("content".getBytes());
         }
 
