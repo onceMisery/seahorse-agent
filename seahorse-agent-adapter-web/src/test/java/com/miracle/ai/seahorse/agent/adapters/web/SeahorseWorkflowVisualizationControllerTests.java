@@ -69,6 +69,30 @@ class SeahorseWorkflowVisualizationControllerTests {
         assertThat(result.getResponse().getContentAsString()).contains("Workflow visualization is not available");
     }
 
+    @Test
+    void shouldRedactCredentialTextFromWorkflowStreamErrorPayload() throws Exception {
+        WorkflowEventPublisher publisher = new WorkflowEventPublisher();
+        WorkflowVisualizationInboundPort visualizationPort = runId -> {
+            throw new IllegalStateException(
+                    "workflow failed Authorization: Bearer abcdefghijklmnop token=sk-live-secret");
+        };
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseWorkflowVisualizationController(
+                        provider(WorkflowVisualizationInboundPort.class, visualizationPort),
+                        provider(WorkflowEventPublisher.class, publisher)))
+                .build();
+
+        MvcResult result = mvc.perform(get("/api/workflows/runs/run-1/stream"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(result.getResponse().getContentAsString())
+                .contains("error")
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("sk-live-secret");
+    }
+
     private static <T> ObjectProvider<T> provider(Class<T> type, T instance) {
         StaticListableBeanFactory beanFactory = new StaticListableBeanFactory();
         beanFactory.addBean(type.getName(), instance);

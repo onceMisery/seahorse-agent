@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.application.workflow.WorkflowEventPublisher;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.inbound.workflow.WorkflowVisualizationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.workflow.WorkflowVisualizationInboundPort.WorkflowVisualization;
 import org.springframework.beans.factory.ObjectProvider;
@@ -29,6 +30,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * REST controller for workflow visualization and SSE streaming.
@@ -92,7 +94,7 @@ public class SeahorseWorkflowVisualizationController {
         } catch (RuntimeException ex) {
             try {
                 emitter.send(SseEmitter.event().name("error")
-                        .data(Map.of("error", ex.getMessage())));
+                        .data(Map.of("error", safeErrorMessage(ex))));
                 emitter.complete();
             } catch (IOException ioEx) {
                 emitter.completeWithError(ioEx);
@@ -137,5 +139,14 @@ public class SeahorseWorkflowVisualizationController {
         emitter.onError(ex -> publisher.removeSubscriber(runId, listener));
 
         return emitter;
+    }
+
+    private String safeErrorMessage(RuntimeException ex) {
+        if (ex == null) {
+            return "Unknown workflow stream error";
+        }
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(
+                ex.getMessage(),
+                ex.getClass().getSimpleName()));
     }
 }

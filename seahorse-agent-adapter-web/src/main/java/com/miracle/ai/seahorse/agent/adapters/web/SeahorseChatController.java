@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import cn.hutool.core.util.IdUtil;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.task.TaskTemplateId;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
@@ -471,12 +472,21 @@ public class SeahorseChatController {
                     .data(Map.of("type", "response", "delta", "")));
             emitter.send(SseEmitter.event()
                     .name("error")
-                    .data(Map.of("error", Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getSimpleName()))));
+                    .data(Map.of("error", safeErrorMessage(ex))));
             emitter.send(SseEmitter.event().name(StreamEventType.DONE.value()).data("[DONE]"));
             emitter.complete();
         } catch (IOException sendError) {
             emitter.complete();
         }
+    }
+
+    private String safeErrorMessage(RuntimeException ex) {
+        if (ex == null) {
+            return "Unknown stream error";
+        }
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(
+                ex.getMessage(),
+                ex.getClass().getSimpleName()));
     }
 
     private static Long parseLongOrNull(String value) {

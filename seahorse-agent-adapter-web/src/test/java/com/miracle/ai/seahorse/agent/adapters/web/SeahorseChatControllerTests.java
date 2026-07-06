@@ -42,6 +42,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -327,6 +328,42 @@ class SeahorseChatControllerTests {
         assertThat(body).contains("event:done");
         verify(snapshotPort).getSnapshot("run-1");
         verifyNoInteractions(chatPort, streamTaskPort);
+    }
+
+    @Test
+    void chatSseErrorShouldRedactCredentialTextFromClientPayload() throws Exception {
+        ChatInboundPort chatPort = mock(ChatInboundPort.class);
+        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
+        doThrow(new IllegalStateException(
+                "chat failed Authorization: Bearer abcdefghijklmnop token=sk-live-secret"))
+                .when(chatPort)
+                .streamChat(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseChatController(
+                        provider(ChatInboundPort.class, chatPort),
+                        (emitter, conversationId, taskId) -> new NoopStreamCallback(),
+                        streamTaskPort,
+                        1_000L,
+                        provider(AgentRunSnapshotInboundPort.class, null))).build();
+
+        MvcResult result = mvc.perform(get("/rag/v3/chat")
+                        .param("question", "hello")
+                        .param("conversationId", "conversation-1")
+                        .param("userId", "user-1"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        result.getAsyncResult(1_000L);
+        String body = result.getResponse().getContentAsString();
+
+        assertThat(body)
+                .contains("event:error")
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("sk-live-secret");
+        assertThat(body).contains("event:done");
     }
 
     private static AgentRunSnapshot snapshot() {
