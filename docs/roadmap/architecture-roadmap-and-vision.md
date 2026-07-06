@@ -1154,3 +1154,11 @@ Tool Gateway request audit now includes value-free argument shape metadata for `
 This is a narrow cross-provider audit-hardening slice. It does not change sandbox execution, file conversion behavior, egress policy, approval policy, quota policy, artifact publication, or output redaction.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 26/26, covering sandbox Python and file-conversion argument shape metadata while preserving assertions that raw code/content/host values are excluded from request audit summaries.
+
+## 2026-07-06 Update: Remote A2A Argument Shape Audit
+
+Tool Gateway request audit now includes value-free top-level argument shape metadata for `invoke_remote_a2a_agent`: argument count, value count, total value length, and maximum value length. This complements the existing A2A-specific agent-name, prompt-length, metadata-key, metadata-value, and version-shape fields without storing the raw prompt, target agent name, requested version value, or metadata values.
+
+This is a narrow cross-provider audit-hardening slice. It does not change A2A request validation, signing, connector invocation, failure degradation, approval policy, quota policy, or remote-agent execution behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 26/26, covering remote A2A argument shape metadata while preserving raw prompt, agent-name, version, and metadata value redaction assertions.

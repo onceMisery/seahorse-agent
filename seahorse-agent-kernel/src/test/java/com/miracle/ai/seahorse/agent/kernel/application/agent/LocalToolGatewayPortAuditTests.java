@@ -835,6 +835,10 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"metadataValueMaxLength\":21"));
         assertTrue(summary.contains("\"versionPresent\":true"));
         assertTrue(summary.contains("\"versionLength\":21"));
+        assertTrue(summary.contains("\"argumentCount\":3"));
+        assertTrue(summary.contains("\"argumentValueCount\":3"));
+        assertTrue(summary.contains("\"argumentValueTotalLength\":112"));
+        assertTrue(summary.contains("\"argumentValueMaxLength\":60"));
         assertFalse(summary.contains("planner-secret-agent"));
         assertFalse(summary.contains("confidential launch plan"));
         assertFalse(summary.contains("version-secret-marker"));

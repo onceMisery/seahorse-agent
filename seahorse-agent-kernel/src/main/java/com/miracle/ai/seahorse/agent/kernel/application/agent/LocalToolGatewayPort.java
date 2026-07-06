@@ -599,6 +599,10 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("versionPresent", hasText(metadataVersion));
         summary.put("versionLength", metadataVersion.length());
         summary.put("argumentKeys", safeArgumentKeys(arguments));
+        summary.put("argumentCount", arguments.size());
+        summary.put("argumentValueCount", mapValueCount(arguments));
+        summary.put("argumentValueTotalLength", mapValueTotalLength(arguments));
+        summary.put("argumentValueMaxLength", mapValueMaxLength(arguments));
         try {
             return truncate(OBJECT_MAPPER.writeValueAsString(summary));
         } catch (JsonProcessingException ex) {
@@ -609,7 +613,11 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     + ", metadataKeys=" + safeArgumentKeys(metadata)
                     + ", metadataCount=" + metadata.size()
                     + ", versionPresent=" + hasText(metadataVersion)
-                    + ", versionLength=" + metadataVersion.length());
+                    + ", versionLength=" + metadataVersion.length()
+                    + ", argumentCount=" + arguments.size()
+                    + ", argumentValueCount=" + mapValueCount(arguments)
+                    + ", argumentValueTotalLength=" + mapValueTotalLength(arguments)
+                    + ", argumentValueMaxLength=" + mapValueMaxLength(arguments));
         }
     }
 
