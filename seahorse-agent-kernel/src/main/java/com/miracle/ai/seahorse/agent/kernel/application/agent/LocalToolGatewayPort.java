@@ -513,6 +513,10 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("requestedHostsPresent", !requestedHosts.isEmpty());
         summary.put("requestedHostCount", requestedHosts.size());
         summary.put("argumentKeys", safeArgumentKeys(arguments));
+        summary.put("argumentCount", arguments.size());
+        summary.put("argumentValueCount", mapValueCount(arguments));
+        summary.put("argumentValueTotalLength", mapValueTotalLength(arguments));
+        summary.put("argumentValueMaxLength", mapValueMaxLength(arguments));
         try {
             return truncate(OBJECT_MAPPER.writeValueAsString(summary));
         } catch (JsonProcessingException ex) {
@@ -520,7 +524,11 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     + ", codeLength=" + argumentString(arguments, "code").length()
                     + ", networkRequested=" + booleanArgument(arguments, "networkRequested")
                     + ", requestedHostsPresent=" + !requestedHosts.isEmpty()
-                    + ", requestedHostCount=" + requestedHosts.size());
+                    + ", requestedHostCount=" + requestedHosts.size()
+                    + ", argumentCount=" + arguments.size()
+                    + ", argumentValueCount=" + mapValueCount(arguments)
+                    + ", argumentValueTotalLength=" + mapValueTotalLength(arguments)
+                    + ", argumentValueMaxLength=" + mapValueMaxLength(arguments));
         }
     }
 
@@ -548,6 +556,10 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("binaryInput", "base64".equals(safeContentEncoding));
         summary.put("networkRequested", false);
         summary.put("argumentKeys", safeArgumentKeys(arguments));
+        summary.put("argumentCount", arguments.size());
+        summary.put("argumentValueCount", mapValueCount(arguments));
+        summary.put("argumentValueTotalLength", mapValueTotalLength(arguments));
+        summary.put("argumentValueMaxLength", mapValueMaxLength(arguments));
         try {
             return truncate(OBJECT_MAPPER.writeValueAsString(summary));
         } catch (JsonProcessingException ex) {
@@ -561,7 +573,11 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     + ", contentEncoding=" + safeContentEncoding
                     + ", contentEncodingPresent=" + hasText(contentEncoding)
                     + ", contentEncodingLength=" + contentEncoding.length()
-                    + ", contentLength=" + argumentString(arguments, "content").length());
+                    + ", contentLength=" + argumentString(arguments, "content").length()
+                    + ", argumentCount=" + arguments.size()
+                    + ", argumentValueCount=" + mapValueCount(arguments)
+                    + ", argumentValueTotalLength=" + mapValueTotalLength(arguments)
+                    + ", argumentValueMaxLength=" + mapValueMaxLength(arguments));
         }
     }
 

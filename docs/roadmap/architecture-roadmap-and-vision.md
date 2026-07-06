@@ -1146,3 +1146,11 @@ The repository ignore rule for `output/` is now scoped to the repository root in
 This is a narrow repository-governance slice. It does not change runtime code, redaction semantics, Tool Gateway execution, audit persistence, approval policy, or frontend test behavior.
 
 Fresh evidence: `git check-ignore -v -- output/example.tmp frontend/output/example.tmp seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/domain/agent/output/NewSourceExample.java seahorse-agent-kernel/src/test/java/com/miracle/ai/seahorse/agent/kernel/domain/agent/output/NewSourceExampleTests.java` ignored only root `output/` and `/frontend/output/` paths, while source/test `output` package paths were not ignored.
+
+## 2026-07-06 Update: Sandbox Tool Argument Shape Audit
+
+Tool Gateway request audit now includes value-free argument shape metadata for `sandbox_python` and `sandbox_file_convert`: argument count, value count, total value length, and maximum value length. This aligns the two sandbox-backed tools with the generic/OpenAPI/A2A audit summaries while still excluding raw code, file content, requested host values, and converted document payloads.
+
+This is a narrow cross-provider audit-hardening slice. It does not change sandbox execution, file conversion behavior, egress policy, approval policy, quota policy, artifact publication, or output redaction.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 26/26, covering sandbox Python and file-conversion argument shape metadata while preserving assertions that raw code/content/host values are excluded from request audit summaries.

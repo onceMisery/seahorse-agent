@@ -641,6 +641,10 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"networkRequested\":true"));
         assertTrue(summary.contains("\"requestedHostsPresent\":true"));
         assertTrue(summary.contains("\"requestedHostCount\":1"));
+        assertTrue(summary.contains("\"argumentCount\":3"));
+        assertTrue(summary.contains("\"argumentValueCount\":3"));
+        assertTrue(summary.contains("\"argumentValueTotalLength\":45"));
+        assertTrue(summary.contains("\"argumentValueMaxLength\":27"));
         assertFalse(summary.contains("example.test"));
         assertFalse(summary.contains("secret-code-marker"));
         assertFalse(summary.contains("print("));
@@ -729,6 +733,10 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"contentLength\":26"));
         assertTrue(summary.contains("\"binaryInput\":true"));
         assertTrue(summary.contains("\"networkRequested\":false"));
+        assertTrue(summary.contains("\"argumentCount\":4"));
+        assertTrue(summary.contains("\"argumentValueCount\":4"));
+        assertTrue(summary.contains("\"argumentValueTotalLength\":39"));
+        assertTrue(summary.contains("\"argumentValueMaxLength\":26"));
         assertFalse(summary.contains("UEsDBAo="));
         assertFalse(summary.contains("secret-docx-marker"));
     }
