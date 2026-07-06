@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.web.WebFetchSafetyDecision;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.web.WebFetchSafetyPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebFetchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebFetchRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebFetchResult;
@@ -123,7 +124,8 @@ public class JdkHttpWebFetchPortAdapter implements WebFetchPort {
             }
             return WebFetchResult.failed(request.url(), REASON_WEB_FETCH_FAILED);
         } catch (RuntimeException ex) {
-            String reason = Objects.requireNonNullElse(ex.getMessage(), REASON_WEB_FETCH_FAILED);
+            String reason = CredentialTextRedactor.redact(
+                    Objects.requireNonNullElse(ex.getMessage(), REASON_WEB_FETCH_FAILED));
             return WebFetchResult.failed(request.url(), reason.isBlank() ? REASON_WEB_FETCH_FAILED : reason);
         }
     }

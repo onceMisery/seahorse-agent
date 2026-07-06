@@ -91,6 +91,21 @@ class JdkHttpAdaptersTests {
     }
 
     @Test
+    void shouldRedactCredentialShapedRuntimeFailureReason() {
+        JdkHttpWebFetchPortAdapter adapter = new JdkHttpWebFetchPortAdapter(
+                new FailingHttpClient(
+                        "fetch failed Authorization: Bearer abcdefghijklmnop api_key=plain-fetch-secret"),
+                new WebFetchSafetyPolicy(), Duration.ofSeconds(1), 32, "test");
+
+        WebFetchResult result = adapter.fetch(new WebFetchRequest("http://example.com/failure", 100));
+
+        assertThat(result.status()).isEqualTo(WebFetchStatus.FAILED);
+        assertThat(result.reasonCode()).contains("[REDACTED]");
+        assertThat(result.reasonCode()).doesNotContain("abcdefghijklmnop");
+        assertThat(result.reasonCode()).doesNotContain("plain-fetch-secret");
+    }
+
+    @Test
     void shouldParseDuckDuckGoHtmlSearchResults() {
         String html = """
                 <html><body>
@@ -180,6 +195,78 @@ class JdkHttpAdaptersTests {
                     ? new String(response.body(), StandardCharsets.UTF_8)
                     : response.body();
             return new SimpleHttpResponse<>(request, response.status(), response.headers(), (T) body);
+        }
+
+        @Override
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
+                                                                HttpResponse.BodyHandler<T> responseBodyHandler) {
+            throw new UnsupportedOperationException("sendAsync is not used by these tests");
+        }
+
+        @Override
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
+                                                                HttpResponse.BodyHandler<T> responseBodyHandler,
+                                                                HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+            throw new UnsupportedOperationException("sendAsync is not used by these tests");
+        }
+    }
+
+    private static final class FailingHttpClient extends HttpClient {
+
+        private final String failureMessage;
+
+        private FailingHttpClient(String failureMessage) {
+            this.failureMessage = failureMessage;
+        }
+
+        @Override
+        public Optional<CookieHandler> cookieHandler() {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<Duration> connectTimeout() {
+            return Optional.of(Duration.ofSeconds(1));
+        }
+
+        @Override
+        public Redirect followRedirects() {
+            return Redirect.NEVER;
+        }
+
+        @Override
+        public Optional<ProxySelector> proxy() {
+            return Optional.empty();
+        }
+
+        @Override
+        public SSLContext sslContext() {
+            return null;
+        }
+
+        @Override
+        public SSLParameters sslParameters() {
+            return null;
+        }
+
+        @Override
+        public Optional<Authenticator> authenticator() {
+            return Optional.empty();
+        }
+
+        @Override
+        public Version version() {
+            return Version.HTTP_1_1;
+        }
+
+        @Override
+        public Optional<Executor> executor() {
+            return Optional.empty();
+        }
+
+        @Override
+        public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler) {
+            throw new IllegalStateException(failureMessage);
         }
 
         @Override

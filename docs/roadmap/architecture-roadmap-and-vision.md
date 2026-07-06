@@ -1728,3 +1728,11 @@ Feature health aggregation now redacts credential-shaped exception text before r
 This is a narrow health diagnostics hardening slice. It does not change adapter health aggregation, feature health status semantics, health detail payloads, startup checks, or server-side exception logging with the original exception chain.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=FeatureHealthAggregatorTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 6/6 across kernel redactor and feature health aggregation coverage.
+
+## 2026-07-06 Update: Web Fetch Failure Reason Redaction
+
+JDK HTTP web fetch runtime failure reasons now redact credential-shaped exception text before returning `WebFetchResult.reasonCode` values. This protects `web_fetch` observations, research diagnostics, and downstream run records when URI parsing, HTTP client adapters, proxy setup, or other runtime failures accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow fetch adapter failure-boundary hardening slice. It does not change SSRF safety decisions, DNS private-network blocking, HTTP status handling, MIME filtering, content normalization, truncation behavior, checked exception fallback codes, or server-side exception logging.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-spring-boot-autoconfigure,seahorse-agent-kernel -am "-Dtest=JdkHttpAdaptersTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 7/7 across kernel redactor and JDK HTTP adapter coverage.
