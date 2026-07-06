@@ -73,7 +73,7 @@ class AuditRedactionPolicyTests {
                 {
                   "message":"upstream failed with Bearer abcdefghijklmnop",
                   "url":"https://example.test/callback?access_token=token-secret-value",
-                  "notes":["safe note","api_key: secret-api-key-value","password: hunter2"],
+                  "notes":["safe note","secret_key: secret-api-key-value","session_token: session-token-value","password: hunter2"],
                   "safe":"ordinary business text"
                 }
                 """);
@@ -83,6 +83,7 @@ class AuditRedactionPolicyTests {
         assertFalse(redacted.contains("abcdefghijklmnop"));
         assertFalse(redacted.contains("token-secret-value"));
         assertFalse(redacted.contains("secret-api-key-value"));
+        assertFalse(redacted.contains("session-token-value"));
         assertFalse(redacted.contains("hunter2"));
     }
 }

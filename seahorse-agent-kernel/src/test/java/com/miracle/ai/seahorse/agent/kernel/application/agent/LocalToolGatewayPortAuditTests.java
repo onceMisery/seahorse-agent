@@ -400,7 +400,7 @@ class LocalToolGatewayPortAuditTests {
     @Test
     void shouldRedactCredentialShapedFailedToolErrorBeforeReturningAndAuditing() {
         CountingToolPort tool = new CountingToolPort(
-                ToolInvocationResult.failed("upstream failed api_key: plain-secret-token-123"));
+                ToolInvocationResult.failed("upstream failed secret_key: plain-secret-token-123"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
         LocalToolGatewayPort gateway = new LocalToolGatewayPort(
                 new SingleToolRegistry(tool),

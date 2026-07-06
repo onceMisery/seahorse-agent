@@ -46,8 +46,10 @@ public class AuditRedactionPolicy {
             "setcookie",
             "authorization");
     private static final Pattern CREDENTIAL_VALUE_PATTERN = Pattern.compile(
-            "(?i)(bearer\\s+[a-z0-9._~+/=-]{8,}"
-                    + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id)"
+            "(?i)(authorization\\s*[:=]\\s*(?:bearer|basic)\\s+[a-z0-9._~+/=-]{8,}"
+                    + "|bearer\\s+[a-z0-9._~+/=-]{8,}"
+                    + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id"
+                    + "|session[_-]?token|secret[_-]?key|private[_-]?key|set[_-]?cookie)"
                     + "\\s*[:=]\\s*[^\\s&;]+)");
 
     private final ObjectMapper objectMapper;

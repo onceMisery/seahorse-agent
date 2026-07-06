@@ -1082,3 +1082,11 @@ Tool Gateway output redaction, OpenAPI provider text response redaction, and aud
 This is a narrow credential-pattern hardening slice. It does not change tool execution, OpenAPI request construction, JSON response field vocabulary, audit persistence, approval policy, artifact publication, or the default redaction wiring.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,OpenApiToolPortAdapterTests,AuditRedactionPolicyTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 34/34, covering colon-delimited credential redaction in failed tool errors, OpenAPI text/invalid-JSON response bodies, and audit payload string values.
+
+## 2026-07-06 Update: Header-Style Credential Text Redaction
+
+Tool Gateway output redaction, OpenAPI provider text response redaction, and audit payload redaction now cover additional header/log credential fragments such as `Authorization: Bearer ...`, `secret_key: ...`, `private_key: ...`, `session_token: ...`, and `set-cookie: ...`. Authorization header fragments are replaced as a whole credential-shaped substring instead of leaving the header name visible with only the bearer value redacted.
+
+This is a narrow text-redaction vocabulary hardening slice. It does not change JSON field redaction semantics, OpenAPI request construction, credential injection, audit persistence, approval policy, artifact publication, or default redaction wiring.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,OpenApiToolPortAdapterTests,AuditRedactionPolicyTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 34/34, covering failed tool errors, OpenAPI text/invalid-JSON provider responses, and audit payload string values with header-style credential fragments.
