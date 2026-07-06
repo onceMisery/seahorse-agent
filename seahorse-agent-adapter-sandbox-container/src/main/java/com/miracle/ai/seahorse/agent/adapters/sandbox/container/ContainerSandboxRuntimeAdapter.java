@@ -356,7 +356,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String contentEncoding = normalizedContentEncoding(root.path("contentEncoding").asText(PLAIN_ENCODING));
         if (!isSupportedFileConversion(sourceFormat, targetFormat)) {
             throw new UnsupportedFileConversionException(
-                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pptx/pdf to txt, and xlsx to csv only");
+                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx to html/txt, pptx/pdf to txt, and xlsx to csv only");
         }
         if (isBinaryDocumentFormat(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
             throw new IllegalArgumentException(sourceFormat + " file conversion contentEncoding must be base64");
@@ -1159,6 +1159,15 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     return "\\n".join(output)
 
                 def docx_to_text(path):
+                    paragraphs = docx_paragraphs(path)
+                    return "\\n".join(paragraphs) + ("\\n" if paragraphs else "")
+
+                def docx_to_html(path):
+                    paragraphs = docx_paragraphs(path)
+                    body = "\\n".join("<p>" + html.escape(paragraph) + "</p>" for paragraph in paragraphs)
+                    return "<!doctype html>\\n<html><body>\\n" + body + "\\n</body></html>\\n"
+
+                def docx_paragraphs(path):
                     with zipfile.ZipFile(path) as archive:
                         try:
                             document_info = archive.getinfo("word/document.xml")
@@ -1178,7 +1187,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         text = "".join(parts).strip()
                         if text:
                             paragraphs.append(text)
-                    return "\\n".join(paragraphs) + ("\\n" if paragraphs else "")
+                    return paragraphs
 
                 def xlsx_shared_strings(archive):
                     try:
@@ -1439,6 +1448,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "docx" and target_format == "txt":
                     output_path.write_text(docx_to_text(input_path), encoding="utf-8")
                     print(f"converted docx document to text")
+                elif source_format == "docx" and target_format == "html":
+                    output_path.write_text(docx_to_html(input_path), encoding="utf-8")
+                    print(f"converted docx document to html")
                 elif source_format == "xlsx" and target_format == "csv":
                     output_path.write_text(xlsx_to_csv(input_path), encoding="utf-8")
                     print(f"converted xlsx worksheet to csv")
@@ -1464,7 +1476,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
                 || (MARKDOWN_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
-                || ((DOCX_FORMAT.equals(sourceFormat) || PPTX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat))
+                || (DOCX_FORMAT.equals(sourceFormat) && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
+                || ((PPTX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat))
                 && TXT_FORMAT.equals(targetFormat))
                 || (XLSX_FORMAT.equals(sourceFormat) && CSV_FORMAT.equals(targetFormat));
     }

@@ -963,6 +963,101 @@ try {
         } | Out-Null
     }
 
+    $docxHtmlRunId = $runId
+    $docxHtmlToolCallId = "sandbox-file-convert-docx-html-call-$suffix"
+    $docxHtmlContent = New-DocxBase64 -Paragraphs @(
+        "Sandbox DOCX HTML $Marker",
+        "DOCX HTML conversion renders paragraph text"
+    )
+
+    $docxHtmlObservation = Test-Step "Invoke sandbox_file_convert DOCX to HTML through Tool Gateway" {
+        $requestBody = @{
+            runId = $docxHtmlRunId
+            stepId = "sandbox-file-convert-docx-html-step-$suffix"
+            toolCallId = $docxHtmlToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "docx"
+                targetFormat = "html"
+                contentEncoding = "base64"
+                content = $docxHtmlContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${docxHtmlRunId}:${docxHtmlToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert DOCX to HTML"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert DOCX to HTML failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION") {
+            throw "Expected FILE_CONVERSION runtime for DOCX to HTML: $content"
+        }
+        if ("$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected SUCCEEDED DOCX to HTML execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "docx" -or "$($parsed.conversion.targetFormat)" -ne "html" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected DOCX to HTML conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1) {
+            throw "Expected one DOCX to HTML artifact: $content"
+        }
+        if ("$($artifacts[0].mediaType)" -ne "text/html") {
+            throw "Expected DOCX to HTML artifact mediaType text/html: $content"
+        }
+        if ("$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected CLEAN DOCX to HTML artifact scan status: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed") {
+            throw "Expected DOCX to HTML metadata scan summary: $content"
+        }
+        if ($artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible DOCX to HTML artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $docxHtmlObservation) { exit 1 }
+
+    $docxHtmlArtifactId = "$(@($docxHtmlObservation.artifacts)[0].artifactId)"
+
+    $docxHtmlObjectUri = Test-Step "Verify persisted DOCX to HTML session and artifact" {
+        Assert-PersistedFileConversionArtifact -ArtifactId $docxHtmlArtifactId -ExpectedMediaType "text/html" -Label "DOCX to HTML"
+    }
+    if (-not $docxHtmlObjectUri) { exit 1 }
+
+    Test-Step "Download converted DOCX HTML through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$docxHtmlArtifactId/download" -Headers $headers
+        if ($content -notlike "*<p>Sandbox DOCX HTML $Marker</p>*") {
+            throw "Downloaded DOCX HTML did not include marker paragraph '$Marker': $content"
+        }
+        if ($content -notlike "*<p>DOCX HTML conversion renders paragraph text</p>*") {
+            throw "Downloaded DOCX HTML did not include second paragraph: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded DOCX HTML artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($docxHtmlObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted DOCX HTML object exists in backend storage volume" {
+            $key = $docxHtmlObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote DOCX to HTML key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored DOCX to HTML object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
     $pdfRunId = $runId
     $pdfToolCallId = "sandbox-file-convert-pdf-txt-call-$suffix"
     $pdfContent = New-PdfBase64 -Lines @(

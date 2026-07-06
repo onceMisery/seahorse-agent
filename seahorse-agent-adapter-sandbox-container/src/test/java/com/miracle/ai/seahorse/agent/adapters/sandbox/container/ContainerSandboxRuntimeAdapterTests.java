@@ -394,6 +394,48 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldRunDocxToHtmlFileConversionAndCollectHtmlOutputOnly() throws Exception {
+        byte[] docxBytes = zipBytes("word/document.xml",
+                "<w:document><w:p><w:r><w:t>safe docx title</w:t></w:r></w:p>"
+                        + "<w:p><w:r><w:t>second paragraph</w:t></w:r></w:p></w:document>");
+        String docxBase64 = Base64.getEncoder().encodeToString(docxBytes);
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted docx document to html\n", Duration.ofMillis(190)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("docx_to_html",
+                                    "docx_paragraphs",
+                                    "source_format = \"docx\"",
+                                    "target_format = \"html\"",
+                                    "converted.html")
+                            .doesNotContain(docxBase64);
+                    assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.docx")))
+                            .isEqualTo(docxBytes);
+                    Files.writeString(command.workingDirectory().resolve("converted.html"),
+                            "<!doctype html>\n<html><body><p>safe docx title</p><p>second paragraph</p></body></html>\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"docx","targetFormat":"html","contentEncoding":"base64","content":"%s"}
+                        """.formatted(docxBase64),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted docx document to html");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.html");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/html");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.docx"));
+    }
+
+    @Test
     void shouldRejectDocxWithActiveContentBeforeRunningContainer() throws Exception {
         byte[] docxBytes = zipBytes(
                 "word/vbaProject.bin",
@@ -1342,7 +1384,7 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED);
         assertThat(result.execution().resultSummary())
-                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pptx/pdf to txt, and xlsx to csv only");
+                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx to html/txt, pptx/pdf to txt, and xlsx to csv only");
         assertThat(runner.lastCommand).isNull();
     }
 
