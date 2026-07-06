@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.local;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventSender;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
@@ -122,13 +123,20 @@ public class SpringSseEventSender implements StreamEventSender {
             synchronized (sendLock) {
                 emitter.send(SseEmitter.event()
                         .name("error")
-                        .data(Map.of("error", Objects.requireNonNullElse(error.getMessage(),
-                                error.getClass().getSimpleName()))));
+                        .data(Map.of("error", safeErrorMessage(error))));
                 emitter.send(SseEmitter.event().name(StreamEventType.DONE.value()).data("[DONE]"));
             }
         } catch (Exception sendException) {
             log.debug("Failed to send SSE error payload", sendException);
         }
+    }
+
+    private String safeErrorMessage(Throwable error) {
+        if (error == null) {
+            return "Unknown stream error";
+        }
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(error.getMessage(),
+                error.getClass().getSimpleName()));
     }
 
     private void completeQuietly() {

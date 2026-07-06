@@ -49,6 +49,24 @@ class SpringSseEventSenderTests {
     }
 
     @Test
+    void failShouldRedactCredentialTextFromClientVisibleErrorPayload() throws Exception {
+        RecordingSseEmitter emitter = new RecordingSseEmitter();
+        SpringSseEventSender sender = new SpringSseEventSender(emitter);
+
+        sender.fail(new IllegalStateException(
+                "stream failed Authorization: Bearer abcdefghijklmnop token=sk-live-secret"));
+
+        assertThat(emitter.events).hasSize(2);
+        assertThat(emitter.events.get(0))
+                .contains("error")
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("sk-live-secret");
+        assertThat(emitter.events.get(1)).contains("done").contains("[DONE]");
+        assertThat(emitter.completed).isTrue();
+    }
+
+    @Test
     void sendEventShouldSwallowCompleteFailureAfterEmitterError() throws Exception {
         SseEmitter emitter = mock(SseEmitter.class);
         RuntimeException completeFailure = new IllegalStateException(
