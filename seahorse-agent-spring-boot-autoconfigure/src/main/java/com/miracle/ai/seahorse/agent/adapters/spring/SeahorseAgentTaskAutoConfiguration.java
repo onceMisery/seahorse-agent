@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.task.TaskInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.task.TaskEventPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.task.TaskRepositoryPort;
 import org.springframework.beans.factory.ObjectProvider;
@@ -72,7 +73,8 @@ public class SeahorseAgentTaskAutoConfiguration {
             TaskEventPort eventPort,
             ObjectProvider<ChatInboundPort> chatPort,
             ObjectProvider<AgentRunInboundPort> agentRunPort,
-            ObjectProvider<AgentArtifactQueryInboundPort> artifactQueryPort
+            ObjectProvider<AgentArtifactQueryInboundPort> artifactQueryPort,
+            ObjectProvider<CurrentUserPort> currentUserPort
     ) {
         return new TaskOrchestrationService(
                 taskRepository,
@@ -80,7 +82,8 @@ public class SeahorseAgentTaskAutoConfiguration {
                 chatPort.getIfAvailable(),
                 agentRunPort.getIfAvailable(),
                 artifactQueryPort.getIfAvailable(),
-                eventPort
+                eventPort,
+                currentUserPort.getIfAvailable()
         );
     }
 }

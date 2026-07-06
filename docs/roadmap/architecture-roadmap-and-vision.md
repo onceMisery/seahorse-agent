@@ -858,3 +858,11 @@ Sandbox session execution lookup, artifact listing, artifact detail, artifact do
 This closes a sandbox run-boundary authorization gap. It does not change sandbox policy admission, runtime profile governance, artifact scanner behavior, object-storage copy/download semantics, orphan cleanup, runtime health inspection, or legacy constructor compatibility for tests and embedded use.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelSandboxRuntimeServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 43/43, covering unrelated-user denial before execution repository reads, unreadable session filtering, and artifact download denial. `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-DskipTests" compile` completed with reactor `BUILD SUCCESS` after production wiring was updated to inject `AgentRunRepositoryPort` and `CurrentUserPort`.
+
+## 2026-07-06 Update: Task Facade Ownership Guard
+
+Task detail lookup, cancellation, event history replay, event subscription, and artifact listing now require the target task to be owned by the current user or readable by an admin. Production auto-configuration injects `CurrentUserPort` into `TaskOrchestrationService`, so Task Facade by-id APIs no longer expose or mutate another user's task state before reaching chat cancellation, event bus, or artifact query ports. The owner check accepts both numeric web user IDs and operator-style user IDs to preserve existing web and embedded integrations.
+
+This closes a Task Facade authorization gap. It does not change task creation, user task listing, internal completion callbacks, conversation lookup, Agent run polling, task event payload shape, or legacy constructor compatibility for tests and embedded use.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=TaskOrchestrationServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 9/9, covering owner read, admin read, unrelated-user denial, and denial before downstream cancel/event/artifact access. `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-DskipTests" compile` completed with reactor `BUILD SUCCESS` after production wiring was updated to inject `CurrentUserPort`.

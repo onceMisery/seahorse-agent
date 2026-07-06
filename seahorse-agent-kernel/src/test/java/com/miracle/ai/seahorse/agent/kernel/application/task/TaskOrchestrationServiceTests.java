@@ -4,6 +4,9 @@
  */
 package com.miracle.ai.seahorse.agent.kernel.application.task;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactScanStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
@@ -15,13 +18,17 @@ import com.miracle.ai.seahorse.agent.kernel.domain.task.TaskStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.task.TaskType;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactDownloadDecision;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.task.CreateTaskCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationMessageRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.task.TaskEventPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.task.TaskRepositoryPort;
 import org.junit.jupiter.api.Test;
 
@@ -32,10 +39,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -144,6 +154,148 @@ class TaskOrchestrationServiceTests {
         assertEquals(TaskStatus.SUCCEEDED, repository.findById(task.getTaskId()).orElseThrow().getStatus());
     }
 
+    @Test
+    void ownerCanReadTaskWhenCurrentUserPortIsConfigured() {
+        FakeTaskRepository repository = new FakeTaskRepository();
+        Task task = repository.save(Task.create(
+                TaskType.QUICK_CHAT,
+                "42",
+                "conversation-1",
+                null,
+                "title",
+                "question"
+        ));
+        MutableCurrentUserPort currentUserPort = new MutableCurrentUserPort(new CurrentUser(42L, "owner", "user", null));
+        TaskOrchestrationService service = service(repository, new InMemoryTaskEventBus(), null, null, currentUserPort);
+
+        assertEquals(task.getTaskId(), service.getTask(task.getTaskId()).getTaskId());
+    }
+
+    @Test
+    void adminCanReadTaskForAnotherUser() {
+        FakeTaskRepository repository = new FakeTaskRepository();
+        Task task = repository.save(Task.create(
+                TaskType.QUICK_CHAT,
+                "user-1",
+                "conversation-1",
+                null,
+                "title",
+                "question"
+        ));
+        MutableCurrentUserPort currentUserPort = new MutableCurrentUserPort(
+                new CurrentUser(99L, "admin-1", "admin", null));
+        TaskOrchestrationService service = service(repository, new InMemoryTaskEventBus(), null, null, currentUserPort);
+
+        assertEquals(task.getTaskId(), service.getTask(task.getTaskId()).getTaskId());
+    }
+
+    @Test
+    void unrelatedUserCannotReadTask() {
+        FakeTaskRepository repository = new FakeTaskRepository();
+        Task task = repository.save(Task.create(
+                TaskType.QUICK_CHAT,
+                "user-1",
+                "conversation-1",
+                null,
+                "title",
+                "question"
+        ));
+        MutableCurrentUserPort currentUserPort = new MutableCurrentUserPort(
+                new CurrentUser(99L, "user-99", "user", null));
+        TaskOrchestrationService service = service(repository, new InMemoryTaskEventBus(), null, null, currentUserPort);
+
+        assertThrows(IllegalStateException.class, () -> service.getTask(task.getTaskId()));
+    }
+
+    @Test
+    void unrelatedUserCannotCancelTaskBeforeDownstreamCancellation() {
+        FakeTaskRepository repository = new FakeTaskRepository();
+        Task task = repository.save(Task.create(
+                TaskType.QUICK_CHAT,
+                "user-1",
+                "conversation-1",
+                null,
+                "title",
+                "question"
+        ).transitionTo(TaskStatus.RUNNING));
+        CountingChatPort chatPort = new CountingChatPort();
+        MutableCurrentUserPort currentUserPort = new MutableCurrentUserPort(
+                new CurrentUser(99L, "user-99", "user", null));
+        TaskOrchestrationService service = new TaskOrchestrationService(
+                repository,
+                new StubConversationManagementPort(),
+                chatPort,
+                null,
+                null,
+                new InMemoryTaskEventBus(),
+                currentUserPort
+        );
+
+        assertThrows(IllegalStateException.class, () -> service.cancelTask(task.getTaskId()));
+        assertEquals(0, chatPort.stopTaskCalls.get());
+        assertEquals(TaskStatus.RUNNING, repository.findById(task.getTaskId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void unrelatedUserCannotReadOrSubscribeEventsBeforeEventBusAccess() {
+        FakeTaskRepository repository = new FakeTaskRepository();
+        Task task = repository.save(Task.create(
+                TaskType.QUICK_CHAT,
+                "user-1",
+                "conversation-1",
+                null,
+                "title",
+                "question"
+        ));
+        CountingTaskEventPort eventPort = new CountingTaskEventPort();
+        MutableCurrentUserPort currentUserPort = new MutableCurrentUserPort(
+                new CurrentUser(99L, "user-99", "user", null));
+        TaskOrchestrationService service = service(repository, eventPort, null, null, currentUserPort);
+
+        assertThrows(IllegalStateException.class, () -> service.listEvents(task.getTaskId()));
+        assertThrows(IllegalStateException.class, () -> service.subscribeEvents(task.getTaskId(), ignored -> {
+        }));
+        assertEquals(0, eventPort.historyCalls.get());
+        assertEquals(0, eventPort.subscribeCalls.get());
+    }
+
+    @Test
+    void unrelatedUserCannotListArtifactsBeforeArtifactQuery() {
+        FakeTaskRepository repository = new FakeTaskRepository();
+        Task task = repository.save(Task.create(
+                TaskType.AGENT_RUN,
+                "user-1",
+                "conversation-1",
+                "agent-1",
+                "title",
+                "question"
+        ).withRunId("run-1"));
+        CountingArtifactQueryPort artifactQueryPort = new CountingArtifactQueryPort();
+        MutableCurrentUserPort currentUserPort = new MutableCurrentUserPort(
+                new CurrentUser(99L, "user-99", "user", null));
+        TaskOrchestrationService service = service(repository, new InMemoryTaskEventBus(), artifactQueryPort, null,
+                currentUserPort);
+
+        assertThrows(IllegalStateException.class, () -> service.listArtifacts(task.getTaskId()));
+        assertEquals(0, artifactQueryPort.listByRunIdCalls.get());
+    }
+
+    private static TaskOrchestrationService service(FakeTaskRepository repository,
+                                                    TaskEventPort eventPort,
+                                                    AgentArtifactQueryInboundPort artifactQueryPort,
+                                                    AgentRunInboundPort agentRunPort,
+                                                    CurrentUserPort currentUserPort) {
+        return new TaskOrchestrationService(
+                repository,
+                new StubConversationManagementPort(),
+                null,
+                agentRunPort,
+                artifactQueryPort,
+                eventPort,
+                currentUserPort
+        );
+    }
+
     private static boolean awaitStatus(FakeTaskRepository repository, String taskId, TaskStatus status)
             throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
@@ -241,6 +393,93 @@ class TaskOrchestrationServiceTests {
 
         @Override
         public void stopTask(String taskId) {
+        }
+    }
+
+    private static final class CountingChatPort implements ChatInboundPort {
+        private final AtomicInteger stopTaskCalls = new AtomicInteger();
+
+        @Override
+        public void streamChat(StreamChatCommand command, StreamCallback callback) {
+        }
+
+        @Override
+        public void stopTask(String taskId) {
+            stopTaskCalls.incrementAndGet();
+        }
+    }
+
+    private static final class MutableCurrentUserPort implements CurrentUserPort {
+        private CurrentUser currentUser;
+
+        private MutableCurrentUserPort(CurrentUser currentUser) {
+            this.currentUser = currentUser;
+        }
+
+        @Override
+        public Optional<CurrentUser> currentUser() {
+            return Optional.ofNullable(currentUser);
+        }
+    }
+
+    private static final class CountingTaskEventPort implements TaskEventPort {
+        private final AtomicInteger historyCalls = new AtomicInteger();
+        private final AtomicInteger subscribeCalls = new AtomicInteger();
+
+        @Override
+        public TaskEvent publish(String taskId, String type, String message, Map<String, Object> data) {
+            return new TaskEvent(taskId, 1L, type, message, data, Instant.now());
+        }
+
+        @Override
+        public List<TaskEvent> history(String taskId) {
+            historyCalls.incrementAndGet();
+            return List.of();
+        }
+
+        @Override
+        public AutoCloseable subscribe(String taskId, Consumer<TaskEvent> listener) {
+            subscribeCalls.incrementAndGet();
+            return () -> {
+            };
+        }
+
+        @Override
+        public void complete(String taskId) {
+        }
+    }
+
+    private static final class CountingArtifactQueryPort implements AgentArtifactQueryInboundPort {
+        private final AtomicInteger listByRunIdCalls = new AtomicInteger();
+
+        @Override
+        public Optional<AgentArtifact> findById(String artifactId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<AgentArtifact> listByRunId(String runId) {
+            listByRunIdCalls.incrementAndGet();
+            return List.of(new AgentArtifact(
+                    "artifact-1",
+                    runId,
+                    null,
+                    "default",
+                    "user-1",
+                    AgentArtifactType.REPORT,
+                    "Report",
+                    "text/markdown",
+                    "memory://artifact-1",
+                    "preview",
+                    null,
+                    AgentArtifactScanStatus.CLEAN,
+                    Instant.now()
+            ));
+        }
+
+        @Override
+        public AgentArtifactDownloadDecision downloadDecision(String artifactId) {
+            throw new UnsupportedOperationException();
         }
     }
 

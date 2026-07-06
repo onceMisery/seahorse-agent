@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationMana
 import com.miracle.ai.seahorse.agent.ports.inbound.task.CreateTaskCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.task.TaskInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.task.TaskEventPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.task.TaskRepositoryPort;
 import org.slf4j.Logger;
@@ -50,6 +51,8 @@ public class TaskOrchestrationService implements TaskInboundPort {
 
     private static final Logger LOG = LoggerFactory.getLogger(TaskOrchestrationService.class);
 
+    private static final String ADMIN_ROLE = "admin";
+
     /** AgentRun 终态轮询间隔与上限（默认最长约 10 分钟）。 */
     private static final long POLL_INTERVAL_MS = 2000L;
     private static final int MAX_POLLS = 300;
@@ -60,6 +63,7 @@ public class TaskOrchestrationService implements TaskInboundPort {
     private final AgentRunInboundPort agentRunPort;
     private final AgentArtifactQueryInboundPort artifactQueryPort;
     private final TaskEventPort eventPort;
+    private final CurrentUserPort currentUserPort;
 
     public TaskOrchestrationService(TaskRepositoryPort taskRepository,
                                     ConversationManagementInboundPort conversationPort,
@@ -67,12 +71,23 @@ public class TaskOrchestrationService implements TaskInboundPort {
                                     AgentRunInboundPort agentRunPort,
                                     AgentArtifactQueryInboundPort artifactQueryPort,
                                     TaskEventPort eventPort) {
+        this(taskRepository, conversationPort, chatPort, agentRunPort, artifactQueryPort, eventPort, null);
+    }
+
+    public TaskOrchestrationService(TaskRepositoryPort taskRepository,
+                                    ConversationManagementInboundPort conversationPort,
+                                    ChatInboundPort chatPort,
+                                    AgentRunInboundPort agentRunPort,
+                                    AgentArtifactQueryInboundPort artifactQueryPort,
+                                    TaskEventPort eventPort,
+                                    CurrentUserPort currentUserPort) {
         this.taskRepository = Objects.requireNonNull(taskRepository, "taskRepository");
         this.conversationPort = Objects.requireNonNull(conversationPort, "conversationPort");
         this.chatPort = chatPort;
         this.agentRunPort = agentRunPort;
         this.artifactQueryPort = artifactQueryPort;
         this.eventPort = Objects.requireNonNull(eventPort, "eventPort");
+        this.currentUserPort = currentUserPort;
     }
 
     @Override
@@ -119,8 +134,7 @@ public class TaskOrchestrationService implements TaskInboundPort {
     @Override
     public Task getTask(String taskId) {
         Objects.requireNonNull(taskId, "taskId");
-        return taskRepository.findById(taskId)
-                .orElseThrow(() -> new IllegalArgumentException("Task not found: " + taskId));
+        return getReadableTask(taskId);
     }
 
     @Override
@@ -133,7 +147,7 @@ public class TaskOrchestrationService implements TaskInboundPort {
     @Override
     public Task cancelTask(String taskId) {
         Objects.requireNonNull(taskId, "taskId");
-        Task task = getTask(taskId);
+        Task task = getReadableTask(taskId);
 
         if (task.getStatus().isTerminal()) {
             LOG.warn("Task {} is already terminal (status={})", taskId, task.getStatus());
@@ -160,19 +174,21 @@ public class TaskOrchestrationService implements TaskInboundPort {
     @Override
     public List<TaskEvent> listEvents(String taskId) {
         Objects.requireNonNull(taskId, "taskId");
+        getReadableTask(taskId);
         return eventPort.history(taskId);
     }
 
     @Override
     public AutoCloseable subscribeEvents(String taskId, Consumer<TaskEvent> listener) {
         Objects.requireNonNull(taskId, "taskId");
+        getReadableTask(taskId);
         return eventPort.subscribe(taskId, listener);
     }
 
     @Override
     public List<AgentArtifact> listArtifacts(String taskId) {
         Objects.requireNonNull(taskId, "taskId");
-        Task task = getTask(taskId);
+        Task task = getReadableTask(taskId);
         if (task.getRunId() == null || artifactQueryPort == null) {
             return List.of();
         }
@@ -363,6 +379,31 @@ public class TaskOrchestrationService implements TaskInboundPort {
             // Keep string user IDs as operator names for non-web tests and integrations.
         }
         return new CurrentUser(userId, command.userId(), null, null, "default");
+    }
+
+    private Task getReadableTask(String taskId) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new IllegalArgumentException("Task not found: " + taskId));
+        requireTaskAccess(task);
+        return task;
+    }
+
+    private void requireTaskAccess(Task task) {
+        if (currentUserPort == null) {
+            return;
+        }
+        CurrentUser currentUser = currentUserPort.requireCurrentUser();
+        if (currentUser.hasRole(ADMIN_ROLE) || ownsTask(task, currentUser)) {
+            return;
+        }
+        throw new IllegalStateException("权限不足");
+    }
+
+    private boolean ownsTask(Task task, CurrentUser currentUser) {
+        String taskUserId = task.getUserId();
+        String numericUserId = currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
+        return Objects.equals(taskUserId, numericUserId)
+                || Objects.equals(taskUserId, currentUser.operator());
     }
 
     private void publishArtifactEvents(String taskId, String runId) {
