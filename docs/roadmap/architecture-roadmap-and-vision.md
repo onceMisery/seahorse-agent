@@ -1414,3 +1414,11 @@ Run context snapshot persistence now redacts credential-shaped snapshot fields b
 This is a narrow run-context snapshot write-boundary hardening slice. It does not change agent run creation, chat streaming behavior, Run Experiment executor invocation, snapshot schema, repository ports, authorization checks, non-sensitive snapshot metadata, or downstream trace/profile lookup semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunContextSnapshotServiceTests,KernelAgentRunServiceTests,KernelChatAgentRunStoreTests,CredentialTextRedactorTests,CredentialJsonFieldClassifierTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 56/56, covering shared snapshot redaction, query projection immutability, agent-run snapshot write redaction, chat snapshot write redaction, existing run-context authorization behavior, and shared credential redaction/classifier behavior.
+
+## 2026-07-06 Update: Agent Run Step Write Redaction
+
+Agent run step recording now redacts credential-shaped step payloads before persisting `AgentStep` records from `RepositoryAgentRunStepRecorder`. The write boundary covers model-turn input/output JSON, model-turn error messages, tool-call argument snapshots, tool observation output JSON, and failed tool observation error messages, recursively redacting sensitive JSON field names and credential-shaped string values.
+
+This is a narrow agent-run step write-boundary hardening slice. It does not change model/tool execution inputs, Tool Gateway invocation behavior, step numbering, status transitions, snapshot/workflow/query projection defenses, repository schema, or caller-visible observations during the active run loop.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=RepositoryAgentRunStepRecorderTests,KernelAgentRunServiceTests,KernelAgentRunSnapshotServiceTests,KernelAgentRunWorkflowServiceTests,CredentialTextRedactorTests,CredentialJsonFieldClassifierTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 41/41, covering model-turn and tool-call step write redaction, existing run query projection redaction, snapshot/workflow historical redaction, and shared credential redaction/classifier behavior.

@@ -22,6 +22,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentObservation;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialJsonFieldClassifier;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeConstants;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus;
@@ -31,6 +33,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort
 import java.time.Clock;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -64,10 +67,10 @@ public class RepositoryAgentRunStepRecorder implements AgentRunStepRecorder {
                 nextStepNo(runId),
                 AgentStepType.MODEL_TURN,
                 error == null ? AgentStepStatus.SUCCEEDED : AgentStepStatus.FAILED,
-                inputJson,
-                outputJson,
+                safeJsonText(inputJson),
+                safeJsonText(outputJson),
                 error == null ? null : AgentRuntimeConstants.AGENT_STEP_FAILURE_CODE,
-                error == null ? null : errorMessage(error),
+                error == null ? null : safeText(errorMessage(error)),
                 now,
                 now));
     }
@@ -85,10 +88,10 @@ public class RepositoryAgentRunStepRecorder implements AgentRunStepRecorder {
                 nextStepNo(runId),
                 AgentStepType.TOOL_CALL,
                 succeeded ? AgentStepStatus.SUCCEEDED : AgentStepStatus.FAILED,
-                toolCallJson(toolCall),
-                observationJson(observation),
+                safeJsonText(toolCallJson(toolCall)),
+                safeJsonText(observationJson(observation)),
                 succeeded ? null : AgentRuntimeConstants.AGENT_STEP_FAILURE_CODE,
-                succeeded ? null : observationError(observation),
+                succeeded ? null : safeText(observationError(observation)),
                 now,
                 now));
     }
@@ -139,6 +142,46 @@ public class RepositoryAgentRunStepRecorder implements AgentRunStepRecorder {
     private String errorMessage(Throwable error) {
         String message = error.getMessage();
         return isBlank(message) ? error.getClass().getName() : message;
+    }
+
+    private String safeJsonText(String value) {
+        if (isBlank(value)) {
+            return null;
+        }
+        String text = value.trim();
+        try {
+            Object parsed = objectMapper.readValue(text, Object.class);
+            return objectMapper.writeValueAsString(safeJsonValue(null, parsed));
+        } catch (Exception ignored) {
+            return safeText(text);
+        }
+    }
+
+    private Object safeJsonValue(String key, Object value) {
+        if (key != null && CredentialJsonFieldClassifier.isSensitiveOutputField(key)) {
+            return CredentialTextRedactor.REDACTED_VALUE;
+        }
+        if (value instanceof String text) {
+            return safeText(text);
+        }
+        if (value instanceof Map<?, ?> map) {
+            LinkedHashMap<String, Object> safe = new LinkedHashMap<>();
+            map.forEach((nestedKey, nestedValue) -> {
+                String safeKey = nestedKey == null ? null : String.valueOf(nestedKey);
+                safe.put(safeKey, safeJsonValue(safeKey, nestedValue));
+            });
+            return safe;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(item -> safeJsonValue(null, item))
+                    .toList();
+        }
+        return value;
+    }
+
+    private String safeText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private boolean isBlank(String value) {
