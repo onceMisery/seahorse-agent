@@ -21,6 +21,8 @@ import com.miracle.ai.seahorse.agent.adapters.cache.local.LocalCacheAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.consistency.CompensationRetryService;
 import com.miracle.ai.seahorse.agent.kernel.application.consistency.ConcurrencyControlService;
 import com.miracle.ai.seahorse.agent.kernel.application.consistency.IdempotencyService;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.common.exception.ExternalServiceException;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -32,7 +34,11 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SeahorseAgentPhase1AutoConfigurationTests {
 
@@ -73,6 +79,30 @@ class SeahorseAgentPhase1AutoConfigurationTests {
                     assertThat(context.getBean(ChatModelPort.class))
                             .isInstanceOf(ResilientChatModelAdapter.class);
                 });
+    }
+
+    @Test
+    void resilientChatModelAdapterShouldRedactCredentialShapedWrappedFailures() {
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        try {
+            ResilientChatModelAdapter adapter = new ResilientChatModelAdapter(
+                    (request, modelId) -> {
+                        throw new IllegalStateException(
+                                "provider rejected Authorization: Bearer abcdefghijklmnop api_key=plain-model-secret");
+                    },
+                    CircuitBreakerRegistry.ofDefaults(),
+                    RetryRegistry.ofDefaults(),
+                    TimeLimiterRegistry.ofDefaults(),
+                    executorService);
+
+            assertThatThrownBy(() -> adapter.chat(ChatRequest.builder().build(), "model-a"))
+                    .isInstanceOf(ExternalServiceException.class)
+                    .hasMessageContaining("[REDACTED]")
+                    .hasMessageNotContaining("abcdefghijklmnop")
+                    .hasMessageNotContaining("plain-model-secret");
+        } finally {
+            executorService.shutdownNow();
+        }
     }
 
     @Configuration(proxyBeanMethods = false)

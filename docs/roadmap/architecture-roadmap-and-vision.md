@@ -1736,3 +1736,11 @@ JDK HTTP web fetch runtime failure reasons now redact credential-shaped exceptio
 This is a narrow fetch adapter failure-boundary hardening slice. It does not change SSRF safety decisions, DNS private-network blocking, HTTP status handling, MIME filtering, content normalization, truncation behavior, checked exception fallback codes, or server-side exception logging.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-spring-boot-autoconfigure,seahorse-agent-kernel -am "-Dtest=JdkHttpAdaptersTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 7/7 across kernel redactor and JDK HTTP adapter coverage.
+
+## 2026-07-06 Update: Resilient Model Failure Redaction
+
+Resilient chat model wrapping now redacts credential-shaped exception text before creating `ExternalServiceException` messages for failed non-streaming model calls. This protects agent loop failures, streaming error derivation, retry diagnostics, and API error surfaces when provider SDKs or HTTP clients accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow model adapter failure-boundary hardening slice. It does not change retry, timeout, circuit breaker fallback, delegate call behavior, existing `ExternalServiceException` propagation, or server-side exception logging with the original exception chain.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-spring-boot-autoconfigure,seahorse-agent-kernel -am "-Dtest=SeahorseAgentPhase1AutoConfigurationTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 7/7 across kernel redactor and resilience auto-configuration/model adapter coverage.

@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.common.exception.ExternalServiceException;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -91,7 +92,7 @@ public class ResilientChatModelAdapter implements ChatModelPort {
             throw e;
         } catch (Exception e) {
             LOGGER.error("Chat model call failed after retries for model={}", modelId, e);
-            throw new ExternalServiceException("ChatModel", e.getMessage(), e);
+            throw new ExternalServiceException("ChatModel", failureMessage(e), e);
         }
     }
 
@@ -101,5 +102,10 @@ public class ResilientChatModelAdapter implements ChatModelPort {
                 .messages(messages)
                 .build();
         return chat(request, modelId);
+    }
+
+    private String failureMessage(Exception error) {
+        String message = error.getMessage() == null ? error.getClass().getName() : error.getMessage();
+        return CredentialTextRedactor.redact(message);
     }
 }
