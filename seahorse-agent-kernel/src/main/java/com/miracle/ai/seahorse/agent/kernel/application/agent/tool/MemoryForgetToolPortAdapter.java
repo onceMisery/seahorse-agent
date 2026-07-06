@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
@@ -77,7 +78,11 @@ public class MemoryForgetToolPortAdapter implements DescribedToolPort {
                     "layer", layer)));
         } catch (Exception ex) {
             return ToolInvocationResult.failed("memory_forget failed: "
-                    + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    + redactDisplayText(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
+    }
+
+    private String redactDisplayText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 }

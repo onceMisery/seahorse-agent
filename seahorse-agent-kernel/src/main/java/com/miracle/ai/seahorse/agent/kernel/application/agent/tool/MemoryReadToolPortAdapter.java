@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLayer;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
@@ -75,8 +76,12 @@ public class MemoryReadToolPortAdapter implements DescribedToolPort {
                     "memories", items.stream().map(this::memory).toList())));
         } catch (Exception ex) {
             return ToolInvocationResult.failed("memory_read failed: "
-                    + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    + redactDisplayText(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
+    }
+
+    private String redactDisplayText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private Map<String, Object> memory(MemoryItem item) {

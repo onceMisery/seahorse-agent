@@ -1470,3 +1470,11 @@ MCP, Web Search, Web Fetch, and Knowledge Base Search tool adapters now redact c
 This is a narrow tool-adapter display-boundary hardening slice. It does not change MCP orchestration, Web fetch SSRF policy, search/retrieval execution, successful tool output redaction, Tool Gateway audit persistence, approval policy, quota policy, or base `ToolInvocationResult` semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=WebResearchToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 8/8; `.\mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=McpToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 5/5; `.\mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=AgentToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 11/11. Coverage includes MCP failed results, MCP exceptions, Web Search exceptions, Web Fetch exceptions, Knowledge Base retrieval exceptions, and shared credential text redaction behavior.
+
+## 2026-07-06 Update: Memory Tool Failure Redaction
+
+Memory Read, Memory Write, and Memory Forget tool adapters now redact credential-shaped text before returning failed tool errors from memory engine, ingestion, governance, or management exceptions. Memory Write also redacts credential-shaped text in model-visible `governanceErrors` and `governanceError` observation fields.
+
+This is a narrow memory-tool display-boundary hardening slice. It does not change memory read/write/delete execution inputs, user-scope enforcement, ingestion workflow behavior, governance execution, memory persistence, successful memory content observations, Tool Gateway audit persistence, approval policy, quota policy, or base `ToolInvocationResult` semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=AgentToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with `CredentialTextRedactorTests` 3/3 and `AgentToolPortAdapterTests` 16/16. Coverage includes Memory Read exception redaction, Memory Write exception redaction with raw execution input preservation, Memory Write governance error-list redaction, Memory Write governance exception redaction, Memory Forget exception redaction, and existing memory tool behavior.

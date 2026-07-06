@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
@@ -32,6 +33,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -112,7 +114,7 @@ public class MemoryWriteToolPortAdapter implements DescribedToolPort {
             return ToolInvocationResult.ok(jsonSupport.write(response));
         } catch (Exception ex) {
             return ToolInvocationResult.failed("memory_write failed: "
-                    + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    + redactDisplayText(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
     }
 
@@ -128,10 +130,21 @@ public class MemoryWriteToolPortAdapter implements DescribedToolPort {
             response.put("promotedCount", result.promotedCount());
             response.put("semanticUpsertCount", result.semanticUpsertCount());
             response.put("inferredCount", result.inferredCount());
-            response.put("governanceErrors", result.errors());
+            response.put("governanceErrors", redactDisplayTexts(result.errors()));
         } catch (RuntimeException ex) {
             response.put("governanceStatus", "FAILED");
-            response.put("governanceError", Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+            response.put("governanceError", redactDisplayText(
+                    Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
+    }
+
+    private List<String> redactDisplayTexts(List<String> values) {
+        return Objects.requireNonNullElse(values, List.<String>of()).stream()
+                .map(this::redactDisplayText)
+                .toList();
+    }
+
+    private String redactDisplayText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 }

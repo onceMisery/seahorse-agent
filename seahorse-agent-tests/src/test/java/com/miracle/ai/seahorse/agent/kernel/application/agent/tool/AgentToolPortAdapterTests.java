@@ -46,6 +46,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -281,5 +282,118 @@ class AgentToolPortAdapterTests {
 
         assertThat(result.success()).isTrue();
         verify(memoryManagementPort).deleteMemory("short_term", "mem-1");
+    }
+    @Test
+    void memoryReadRedactsCredentialShapedFailureMessages() {
+        MemoryEnginePort memoryEnginePort = mock(MemoryEnginePort.class);
+        when(memoryEnginePort.retrieveMemories(any(MemoryLoadRequest.class)))
+                .thenThrow(new IllegalStateException(
+                        "memory store failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-read-secret"));
+
+        ToolInvocationResult result = new MemoryReadToolPortAdapter(memoryEnginePort, jsonSupport)
+                .invoke("call-1", MemoryReadToolPortAdapter.TOOL_ID, Map.of(
+                        "_seahorseUserId", "admin-user",
+                        "query", "profile"));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.error()).contains("[REDACTED]");
+        assertThat(result.error()).doesNotContain("abcdefghijklmnop");
+        assertThat(result.error()).doesNotContain("plain-memory-read-secret");
+    }
+
+    @Test
+    void memoryWriteRedactsCredentialShapedFailureMessagesWhilePreservingExecutionInput() {
+        MemoryEnginePort memoryEnginePort = mock(MemoryEnginePort.class);
+        doThrow(new IllegalStateException(
+                "write failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-write-secret"))
+                .when(memoryEnginePort).writeMemory(any(MemoryWriteRequest.class));
+
+        ToolInvocationResult result = new MemoryWriteToolPortAdapter(memoryEnginePort, jsonSupport)
+                .invoke("call-1", MemoryWriteToolPortAdapter.TOOL_ID, Map.of(
+                        "_seahorseUserId", "admin-user",
+                        "_seahorseConversationId", "conversation-a",
+                        "content", "remember api_key=raw-user-memory-value",
+                        "reason", "profile fact"));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.error()).contains("[REDACTED]");
+        assertThat(result.error()).doesNotContain("abcdefghijklmnop");
+        assertThat(result.error()).doesNotContain("plain-memory-write-secret");
+        ArgumentCaptor<MemoryWriteRequest> captor = ArgumentCaptor.forClass(MemoryWriteRequest.class);
+        verify(memoryEnginePort).writeMemory(captor.capture());
+        assertThat(captor.getValue().message().getContent()).isEqualTo("remember api_key=raw-user-memory-value");
+    }
+
+    @Test
+    void memoryWriteRedactsCredentialShapedGovernanceErrors() throws Exception {
+        MemoryEnginePort memoryEnginePort = mock(MemoryEnginePort.class);
+        MemoryGovernanceInboundPort governancePort = mock(MemoryGovernanceInboundPort.class);
+        when(governancePort.runGovernance("admin-user", "agent-memory-write", false))
+                .thenReturn(new MemoryGovernanceRunResult(
+                        "admin-user",
+                        "agent-memory-write",
+                        0,
+                        0,
+                        0,
+                        false,
+                        false,
+                        List.of("promote failed Authorization: Bearer abcdefghijklmnop api_key=plain-governance-list-secret"),
+                        Instant.now()));
+
+        ToolInvocationResult result = new MemoryWriteToolPortAdapter(memoryEnginePort, governancePort, jsonSupport)
+                .invoke("call-1", MemoryWriteToolPortAdapter.TOOL_ID, Map.of(
+                        "_seahorseUserId", "admin-user",
+                        "_seahorseConversationId", "conversation-a",
+                        "content", "profile fact",
+                        "reason", "profile fact"));
+
+        assertThat(result.success()).isTrue();
+        JsonNode body = objectMapper.readTree(result.content());
+        String governanceError = body.path("governanceErrors").get(0).asText();
+        assertThat(governanceError).contains("[REDACTED]");
+        assertThat(governanceError).doesNotContain("abcdefghijklmnop");
+        assertThat(governanceError).doesNotContain("plain-governance-list-secret");
+    }
+
+    @Test
+    void memoryWriteRedactsCredentialShapedGovernanceExceptionMessage() throws Exception {
+        MemoryEnginePort memoryEnginePort = mock(MemoryEnginePort.class);
+        MemoryGovernanceInboundPort governancePort = mock(MemoryGovernanceInboundPort.class);
+        when(governancePort.runGovernance("admin-user", "agent-memory-write", false))
+                .thenThrow(new IllegalStateException(
+                        "governance failed Authorization: Bearer abcdefghijklmnop api_key=plain-governance-secret"));
+
+        ToolInvocationResult result = new MemoryWriteToolPortAdapter(memoryEnginePort, governancePort, jsonSupport)
+                .invoke("call-1", MemoryWriteToolPortAdapter.TOOL_ID, Map.of(
+                        "_seahorseUserId", "admin-user",
+                        "_seahorseConversationId", "conversation-a",
+                        "content", "profile fact",
+                        "reason", "profile fact"));
+
+        assertThat(result.success()).isTrue();
+        JsonNode body = objectMapper.readTree(result.content());
+        assertThat(body.path("governanceError").asText()).contains("[REDACTED]");
+        assertThat(body.path("governanceError").asText()).doesNotContain("abcdefghijklmnop");
+        assertThat(body.path("governanceError").asText()).doesNotContain("plain-governance-secret");
+    }
+
+    @Test
+    void memoryForgetRedactsCredentialShapedFailureMessages() {
+        MemoryManagementInboundPort memoryManagementPort = mock(MemoryManagementInboundPort.class);
+        when(memoryManagementPort.findMemory("short_term", "mem-1"))
+                .thenThrow(new IllegalStateException(
+                        "delete failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-forget-secret"));
+
+        ToolInvocationResult result = new MemoryForgetToolPortAdapter(memoryManagementPort, jsonSupport)
+                .invoke("call-1", MemoryForgetToolPortAdapter.TOOL_ID, Map.of(
+                        "_seahorseUserId", "admin-user",
+                        "layer", "short_term",
+                        "memoryId", "mem-1",
+                        "reason", "cleanup"));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.error()).contains("[REDACTED]");
+        assertThat(result.error()).doesNotContain("abcdefghijklmnop");
+        assertThat(result.error()).doesNotContain("plain-memory-forget-secret");
     }
 }
