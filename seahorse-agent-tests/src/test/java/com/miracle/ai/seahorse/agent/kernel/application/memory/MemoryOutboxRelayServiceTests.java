@@ -157,6 +157,35 @@ class MemoryOutboxRelayServiceTests {
     }
 
     @Test
+    void shouldRedactCredentialLikeFailureTextBeforePersistingAndTracingTaskFailure() {
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort(List.of(
+                task("outbox-keyword", "KEYWORD_UPSERT", Map.of("memoryId", "stm-1"))));
+        RecordingTaskHandler keywordHandler = new RecordingTaskHandler("KEYWORD_UPSERT");
+        keywordHandler.failureMessage = "handler failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret";
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        MemoryOutboxRelayService service = new MemoryOutboxRelayService(
+                outboxPort,
+                List.of(keywordHandler),
+                traceRecorder);
+
+        int processed = service.processBatch(10);
+
+        assertThat(processed).isEqualTo(1);
+        assertThat(outboxPort.failed).containsKey("outbox-keyword");
+        assertThat(outboxPort.failed.get("outbox-keyword"))
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-memory-secret");
+        assertThat(traceRecorder.events)
+                .filteredOn(event -> MemoryTraceEvent.STATUS_FAILED.equals(event.status()))
+                .singleElement()
+                .satisfies(event -> assertThat(event.details().get("error").toString())
+                        .contains("[REDACTED]")
+                        .doesNotContain("abcdefghijklmnop")
+                        .doesNotContain("plain-memory-secret"));
+    }
+
+    @Test
     void shouldPreferCustomHandlerOverBuiltInHandlerForSameTaskType() {
         RecordingOutboxPort outboxPort = new RecordingOutboxPort(List.of(
                 task("outbox-vector-delete", MemoryOutboxTaskTypes.VECTOR_DELETE, Map.of("memoryId", "stm-1"))));
@@ -422,6 +451,7 @@ class MemoryOutboxRelayServiceTests {
         private final List<String> handledTaskIds = new ArrayList<>();
         private boolean builtIn;
         private boolean fail;
+        private String failureMessage = "handler down";
 
         private RecordingTaskHandler(String taskType) {
             this.taskType = taskType;
@@ -440,8 +470,8 @@ class MemoryOutboxRelayServiceTests {
         @Override
         public void handle(MemoryOutboxPort.MemoryOutboxTask task) {
             handledTaskIds.add(task.id());
-            if (fail) {
-                throw new RuntimeException("handler down");
+            if (fail || failureMessage != null && !"handler down".equals(failureMessage)) {
+                throw new RuntimeException(failureMessage);
             }
         }
     }

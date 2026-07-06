@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskHandler;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskTypes;
@@ -97,7 +98,7 @@ public class MemoryOutboxRelayService {
             recordTask(task, MemoryTraceEvent.STATUS_SUCCESS, "");
             emitTaskMetric(task, OBSERVATION_OUTCOME_SUCCESS);
         } catch (RuntimeException ex) {
-            String errorMessage = Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName());
+            String errorMessage = failureMessage(ex);
             outboxPort.markFailed(task.id(), errorMessage);
             recordTask(task, MemoryTraceEvent.STATUS_FAILED, errorMessage);
             emitTaskMetric(task, OBSERVATION_OUTCOME_FAILED);
@@ -166,6 +167,10 @@ public class MemoryOutboxRelayService {
                         "targetId", task.targetId(),
                         "error", Objects.requireNonNullElse(errorMessage, "")),
                 Instant.now()));
+    }
+
+    private String failureMessage(RuntimeException ex) {
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
     }
 
     private Map<String, MemoryOutboxTaskHandler> registerHandlers(List<MemoryOutboxTaskHandler> handlers) {

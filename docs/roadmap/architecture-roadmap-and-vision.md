@@ -1566,3 +1566,11 @@ Keyword index rebuild failures now redact credential-shaped exception text befor
 This is a narrow keyword maintenance result hardening slice. It does not change keyword index delete/index execution order, document/chunk snapshot loading, rebuild counters, observation event names, repository interfaces, raw exception logging, or successful/skip rebuild behavior.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelKeywordIndexMaintenanceServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 6/6, covering keyword rebuild failure-summary redaction, existing document/kb rebuild behavior, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Memory Outbox Failure Redaction
+
+Memory outbox relay failures now redact credential-shaped exception text before marking outbox tasks failed or writing failed relay-task trace details. This protects memory outbox operations and trace surfaces when vector or custom task handlers accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow memory-outbox relay hardening slice. It does not change outbox polling, handler dispatch precedence, vector upsert/delete execution, retry state semantics, observation counters, raw handler inputs, or successful task tracing.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=MemoryOutboxRelayServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new regression with raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 17/17 across kernel redactor and memory outbox relay coverage.
