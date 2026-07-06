@@ -99,6 +99,52 @@ class MemoryAliasResolutionServiceMaintenanceTests {
         assertThat(command.metadata()).containsEntry("normalizationStrategy", "trim_case_whitespace");
     }
 
+    @Test
+    void shouldRedactCredentialLikeScanFailureErrors() {
+        RecordingAliasPort aliasPort = new RecordingAliasPort();
+        aliasPort.failOnGlobalScanMessage =
+                "scan failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret";
+        MemoryAliasResolutionService service = new MemoryAliasResolutionService(
+                aliasPort,
+                new MemoryAliasResolutionOptions(20, "", "default", 0.95D, Map.of()));
+
+        MemoryAliasResolutionRunResult result = service.run("manual-maintenance");
+
+        assertThat(result.errors()).hasSize(1);
+        assertThat(result.errors().get(0))
+                .startsWith("scan:")
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-memory-secret");
+    }
+
+    @Test
+    void shouldRedactCredentialLikeUpsertFailureErrors() {
+        RecordingAliasPort aliasPort = new RecordingAliasPort();
+        aliasPort.globalCandidates.add(new MemoryAliasCandidate(
+                "user-9",
+                "tenant-9",
+                "  Alpha Team  ",
+                "entity-alpha",
+                "Alpha Team",
+                "PROJECT",
+                0.99D));
+        aliasPort.failOnUpsertMessage =
+                "upsert failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret";
+        MemoryAliasResolutionService service = new MemoryAliasResolutionService(
+                aliasPort,
+                new MemoryAliasResolutionOptions(20, "", "default", 0.95D, Map.of()));
+
+        MemoryAliasResolutionRunResult result = service.run("manual-maintenance");
+
+        assertThat(result.errors()).hasSize(1);
+        assertThat(result.errors().get(0))
+                .startsWith("alpha team:")
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-memory-secret");
+    }
+
     private static final class RecordingAliasPort implements MemoryAliasPort {
 
         private final List<String> scopedScanRequests = new ArrayList<>();
@@ -106,6 +152,8 @@ class MemoryAliasResolutionServiceMaintenanceTests {
         private final List<MemoryAliasCandidate> scopedCandidates = new ArrayList<>();
         private final List<MemoryAliasCandidate> globalCandidates = new ArrayList<>();
         private final List<MemoryAliasCommand> commands = new ArrayList<>();
+        private String failOnGlobalScanMessage;
+        private String failOnUpsertMessage;
 
         @Override
         public Optional<MemoryAliasResolution> resolveAlias(String userId, String tenantId, String aliasText) {
@@ -114,6 +162,9 @@ class MemoryAliasResolutionServiceMaintenanceTests {
 
         @Override
         public void upsertAlias(MemoryAliasCommand command) {
+            if (failOnUpsertMessage != null) {
+                throw new IllegalStateException(failOnUpsertMessage);
+            }
             commands.add(command);
         }
 
@@ -125,6 +176,9 @@ class MemoryAliasResolutionServiceMaintenanceTests {
 
         @Override
         public List<MemoryAliasCandidate> findMergeCandidates(int limit) {
+            if (failOnGlobalScanMessage != null) {
+                throw new IllegalStateException(failOnGlobalScanMessage);
+            }
             globalScanLimits.add(limit);
             return globalCandidates.stream().limit(limit).toList();
         }

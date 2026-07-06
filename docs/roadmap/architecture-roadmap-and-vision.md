@@ -1614,3 +1614,11 @@ Memory aggregation flush failures now redact credential-shaped exception text be
 This is a narrow aggregation trace-boundary hardening slice. It does not change turn buffering, explicit/idle/topic-shift/force flush policy, ingestion command construction, raw context-block content, failed `MemoryIngestionResult` reason, observation counters, or server-side warn logging with the original exception chain.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=MemoryAggregationServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new regression because failed submit trace `details.message` returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 15/15 across kernel redactor and memory aggregation coverage.
+
+## 2026-07-06 Update: Memory Alias Maintenance Failure Redaction
+
+Memory alias maintenance scan and upsert failures now redact credential-shaped exception text before returning `MemoryAliasResolutionRunResult.errors()`. This protects memory maintenance result surfaces and upstream maintenance aggregation when alias repository failures accidentally include bearer tokens, API keys, or similar material.
+
+This is a narrow alias-maintenance result-boundary hardening slice. It does not change alias candidate scanning, scoped/global scan selection, alias normalization, dictionary matching, auto-resolve thresholds, upsert command construction, missing user-scope handling, or raw repository exception logging.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=MemoryAliasResolutionServiceMaintenanceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new scan/upsert regressions because `MemoryAliasResolutionRunResult.errors()` returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 7/7 across kernel redactor and memory alias maintenance coverage.

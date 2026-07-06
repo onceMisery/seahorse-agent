@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
@@ -169,7 +170,7 @@ public class MemoryAliasResolutionService {
     }
 
     private String errorMessage(RuntimeException ex) {
-        return ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage();
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
     }
 
     private record ApplyResult(boolean applied, boolean skipped) {
