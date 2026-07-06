@@ -1542,3 +1542,11 @@ Knowledge document chunk execution failures and metadata backfill document/batch
 This is a narrow persistence/display-boundary hardening slice. It does not change pipeline execution inputs, raw exception chains, server logs, document status transitions, retry/checkpoint behavior, quarantine schema, repository interfaces, metadata extraction semantics, or successful ingestion/backfill outputs.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelKnowledgeDocumentServiceTests,KernelMetadataBackfillServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 28/28, covering knowledge chunk failure-message redaction, metadata backfill repository/job/quarantine failure redaction, existing ingestion/backfill behavior, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Metadata Review Quarantine Failure Redaction
+
+Metadata review index-compensation failures now redact credential-shaped exception text before writing quarantine `reasonMessage` or `sourceSnapshot.errorMessage`. This closes the review-side metadata operations surface that complements the knowledge-document and metadata-backfill failure persistence hardening.
+
+This is a narrow metadata-review quarantine hardening slice. It does not change approve/correct/re-extract decision semantics, canonical metadata writes, index compensation execution, review audit records, quarantine schema, raw exception logging, or the rule that quarantine write failures cannot roll back a completed review decision.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelMetadataReviewServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 11/11, covering metadata review compensation-failure quarantine redaction, existing review decision behavior, and shared credential text redactor behavior.

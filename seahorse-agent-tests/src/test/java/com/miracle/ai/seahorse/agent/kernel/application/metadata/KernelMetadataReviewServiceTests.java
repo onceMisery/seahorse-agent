@@ -210,7 +210,9 @@ class KernelMetadataReviewServiceTests {
                 repository, canonicalWritePort, quarantines::add, new MetadataIndexCompensationPort() {
                     @Override
                     public void rebuildDocument(Long documentId) {
-                        throw new IllegalStateException("keyword rebuild failed");
+                        throw new IllegalStateException(
+                                "keyword rebuild failed Authorization: Bearer abcdefghijklmnop "
+                                        + "api_key=plain-review-secret");
                     }
                 });
 
@@ -224,7 +226,14 @@ class KernelMetadataReviewServiceTests {
         assertThat(quarantine.stage()).isEqualTo("INDEX");
         assertThat(quarantine.reasonCode()).isEqualTo("METADATA_INDEX_COMPENSATION_FAILED");
         assertThat(quarantine.taskId()).isEqualTo("result-1");
-        assertThat(quarantine.sourceSnapshot()).containsEntry("reviewItemId", "review-1");
+        assertThat(quarantine.reasonMessage())
+                .isEqualTo("keyword rebuild failed [REDACTED] [REDACTED]");
+        assertThat(quarantine.sourceSnapshot())
+                .containsEntry("reviewItemId", "review-1")
+                .containsEntry("errorMessage", "keyword rebuild failed [REDACTED] [REDACTED]");
+        assertThat(quarantine.sourceSnapshot().toString())
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-review-secret");
     }
 
     @Test

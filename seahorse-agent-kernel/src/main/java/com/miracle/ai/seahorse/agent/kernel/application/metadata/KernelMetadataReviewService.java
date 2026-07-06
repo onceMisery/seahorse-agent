@@ -1,5 +1,6 @@
 package com.miracle.ai.seahorse.agent.kernel.application.metadata;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
@@ -281,7 +282,7 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         snapshot.put("reviewStatus", record.reviewStatus().name());
         snapshot.put("resultId", record.resultId());
         snapshot.put("errorType", ex.getClass().getName());
-        snapshot.put("errorMessage", Objects.requireNonNullElse(ex.getMessage(), ""));
+        snapshot.put("errorMessage", failureMessage(ex));
         try {
             quarantinePort.quarantine(new MetadataQuarantineItem(
                     record.tenantId(),
@@ -290,7 +291,7 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
                     record.resultId(),
                     "INDEX",
                     "METADATA_INDEX_COMPENSATION_FAILED",
-                    firstText(ex.getMessage(), "元数据复核后的索引补偿失败"),
+                    firstText(failureMessage(ex), "元数据复核后的索引补偿失败"),
                     snapshot));
         } catch (RuntimeException ignored) {
             // 隔离写入失败也不能覆盖已经完成的复核决策和 canonical metadata 写回。
@@ -336,6 +337,13 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
 
     private String firstText(String first, String second) {
         return first == null || first.isBlank() ? Objects.requireNonNullElse(second, "") : first;
+    }
+
+    private String failureMessage(Throwable error) {
+        if (error == null) {
+            return "";
+        }
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(error.getMessage(), error.getClass().getName()));
     }
 
     private void requireText(String value, String message) {
