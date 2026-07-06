@@ -1438,3 +1438,11 @@ Agent Loop timeout recovery now redacts credential-shaped text before rendering 
 This is a narrow active-run display-boundary hardening slice. It does not change model turn timeout detection, tool execution inputs, successful observation storage, stream event ordering, output artifact emission, repository schema, or the existing agent-run step write redaction defenses.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentLoopToolGatewayTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 27/27, covering degraded final-answer redaction for credential-bearing tool observations, existing timeout fallback behavior, Tool Gateway loop behavior, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Sandbox Browser Runtime Summary Redaction
+
+`sandbox_browser` observations now redact credential-shaped runtime `resultSummary` text before returning successful or failed Tool Gateway results. This covers runtime stdout/stderr summaries that may echo bearer tokens, cookies, or browser session/localStorage values, while preserving raw cookie/session-state inputs passed to the request-scoped browser runtime.
+
+This is a narrow browser-tool display-boundary hardening slice. It does not change URL validation, allowed-host enforcement, cookie/session-state validation, browser runtime input JSON, artifact collection, scanner decisions, object storage copy rules, or Tool Gateway audit write paths.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=SandboxBrowserToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 37/37, covering successful and failed browser runtime summary redaction, execution-input preservation for cookie/session-state values, existing URL/session validation, and shared credential text redactor behavior.

@@ -644,6 +644,88 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldRedactCredentialShapedRuntimeSummaryFromObservation() throws Exception {
+        String cookieValue = "cookie-secret-value";
+        String storageValue = "local-storage-secret-value";
+        String bearerValue = "abcdefghijklmnop";
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
+                new SandboxExecution(
+                        "exec-1",
+                        "session-1",
+                        SandboxRuntimeType.BROWSER_AUTOMATION,
+                        SandboxExecutionStatus.SUCCEEDED,
+                        "stdout=Authorization: Bearer " + bearerValue
+                                + " cookie=" + cookieValue
+                                + " localStorage=" + storageValue,
+                        SandboxPolicyReasonCode.VALID_REQUEST,
+                        NOW,
+                        NOW),
+                List.of()));
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/page",
+                "allowedHosts", List.of("example.test"),
+                "cookies", List.of(Map.of(
+                        "name", "seahorse_session",
+                        "value", cookieValue,
+                        "domain", "example.test",
+                        "path", "/")),
+                "sessionState", Map.of(
+                        "origins", List.of(Map.of(
+                                "origin", "http://example.test",
+                                "localStorage", List.of(Map.of(
+                                        "name", "seahorse_session_marker",
+                                        "value", storageValue))))))));
+
+        assertTrue(result.success());
+        JsonNode browserInput = objectMapper.readTree(runtime.executeCommand.input());
+        assertEquals(cookieValue, browserInput.path("cookies").get(0).path("value").asText());
+        assertEquals(storageValue, browserInput.path("sessionState").path("origins").get(0)
+                .path("localStorage").get(0).path("value").asText());
+
+        JsonNode root = objectMapper.readTree(result.content());
+        assertEquals("stdout=[REDACTED] [REDACTED] [REDACTED]", root.path("resultSummary").asText());
+        assertFalse(result.content().contains(bearerValue));
+        assertFalse(result.content().contains(cookieValue));
+        assertFalse(result.content().contains(storageValue));
+    }
+
+    @Test
+    void shouldRedactCredentialShapedRuntimeFailureSummaryFromErrorObservation() {
+        String cookieValue = "cookie-secret-value";
+        String bearerValue = "abcdefghijklmnop";
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.failed(
+                new SandboxExecution(
+                        "exec-1",
+                        "session-1",
+                        SandboxRuntimeType.BROWSER_AUTOMATION,
+                        SandboxExecutionStatus.FAILED,
+                        "stderr=Authorization: Bearer " + bearerValue + " cookie=" + cookieValue,
+                        SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED,
+                        NOW,
+                        NOW),
+                SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED));
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/page",
+                "allowedHosts", List.of("example.test"),
+                "cookies", List.of(Map.of(
+                        "name", "seahorse_session",
+                        "value", cookieValue,
+                        "domain", "example.test",
+                        "path", "/")))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("stderr=[REDACTED] [REDACTED]"), result.error());
+        assertFalse(result.error().contains(bearerValue));
+        assertFalse(result.error().contains(cookieValue));
+    }
+
+    @Test
     void shouldRejectCookieWhenDomainIsNotAllowlistedBeforeCreatingSession() {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);

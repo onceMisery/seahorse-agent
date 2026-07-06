@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
@@ -44,6 +45,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInvocationRequestAwarePort {
 
@@ -100,6 +102,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             "sessionid",
             "sessiontoken",
             "token");
+    private static final Pattern BROWSER_SESSION_VALUE_PATTERN = Pattern.compile(
+            "(?i)\\b(?:localstorage|storage[_-]?state)\\s*[:=]\\s*[^\\s&;]+");
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
             "Sandbox Browser",
@@ -282,7 +286,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             return failed(observation, "sandbox browser " + result.execution().status() + ": " + result.reasonCode());
         } catch (Exception ex) {
             return ToolInvocationResult.failed("sandbox_browser failed: "
-                    + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    + redactRuntimeDisplayText(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         } finally {
             closeQuietly(session);
         }
@@ -348,7 +352,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         observation.put("executionId", execution == null ? null : execution.executionId());
         observation.put("executionStatus", execution == null ? null : execution.status().name());
         observation.put("reasonCode", execution == null ? null : execution.reasonCode().name());
-        observation.put("resultSummary", execution == null ? null : execution.resultSummary());
+        observation.put("resultSummary", execution == null ? null : redactRuntimeDisplayText(execution.resultSummary()));
         observation.put("browser", browser(action, url, allowedHosts, cookies, sessionState, networkRequested, viewportWidth, viewportHeight, har, video, captureSessionState));
         observation.put("artifacts", artifacts(artifacts));
         return observation;
@@ -403,6 +407,14 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         } catch (URISyntaxException ex) {
             return "<redacted-url>";
         }
+    }
+
+    private String redactRuntimeDisplayText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String redacted = CredentialTextRedactor.redact(value);
+        return BROWSER_SESSION_VALUE_PATTERN.matcher(redacted).replaceAll(CredentialTextRedactor.REDACTED_VALUE);
     }
 
     private List<Map<String, Object>> artifacts(List<SandboxArtifact> artifacts) {
