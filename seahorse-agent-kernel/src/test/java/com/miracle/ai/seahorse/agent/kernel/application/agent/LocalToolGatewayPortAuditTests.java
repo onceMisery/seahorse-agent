@@ -343,6 +343,8 @@ class LocalToolGatewayPortAuditTests {
                         + "\"Authorization\":\"Bearer plain-authorization-token\","
                         + "\"Cookie\":\"sid=plain-cookie-header\","
                         + "\"cookieCount\":1,"
+                        + "\"sessionToken\":\"plain-session-token\","
+                        + "\"tokenCount\":2,"
                         + "\"setCookie\":\"sid=plain-cookie-value\","
                         + "\"nested\":{\"clientSecret\":\"plain-client-secret\",\"password\":\"plain-password\","
                         + "\"private_key\":\"plain-private-key\"},"
@@ -363,6 +365,8 @@ class LocalToolGatewayPortAuditTests {
                         + "\"Authorization\":\"[REDACTED]\","
                         + "\"Cookie\":\"[REDACTED]\","
                         + "\"cookieCount\":1,"
+                        + "\"sessionToken\":\"[REDACTED]\","
+                        + "\"tokenCount\":2,"
                         + "\"setCookie\":\"[REDACTED]\","
                         + "\"nested\":{\"clientSecret\":\"[REDACTED]\",\"password\":\"[REDACTED]\","
                         + "\"private_key\":\"[REDACTED]\"},"
@@ -372,6 +376,7 @@ class LocalToolGatewayPortAuditTests {
         assertFalse(result.content().contains("plain-api-key"));
         assertFalse(result.content().contains("plain-authorization-token"));
         assertFalse(result.content().contains("plain-cookie-header"));
+        assertFalse(result.content().contains("plain-session-token"));
         assertFalse(result.content().contains("plain-cookie-value"));
         assertFalse(result.content().contains("plain-client-secret"));
         assertFalse(result.content().contains("plain-password"));

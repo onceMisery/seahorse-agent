@@ -1114,3 +1114,11 @@ Tool Gateway JSON output redaction, OpenAPI provider JSON response redaction, an
 This is a narrow JSON field vocabulary hardening slice. It does not change text credential redaction, sandbox browser cookie injection/replay, cookie count summaries, OpenAPI request construction, credential injection, audit persistence, approval policy, artifact publication, or default redaction wiring.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,OpenApiToolPortAdapterTests,AuditRedactionPolicyTests,SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 66/66, covering exact Cookie JSON field redaction in Tool Gateway/OpenAPI/audit paths while preserving cookie count governance metadata.
+
+## 2026-07-06 Update: Tool Gateway Session Token JSON Field Redaction
+
+Tool Gateway JSON output redaction now treats `sessionToken` / `session_token` fields as sensitive, aligning the fallback redactor with the OpenAPI provider and audit payload redaction vocabularies. The match is limited to session-token field names instead of every token-containing field, so value-free metadata such as `tokenCount` remains visible.
+
+This is a narrow Tool Gateway JSON field vocabulary hardening slice. It does not change text credential redaction, OpenAPI provider redaction, audit payload redaction, sandbox browser token/query guards, result-summary shape, approval policy, artifact publication, or default redaction wiring.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 26/26, covering `sessionToken` JSON output redaction while preserving `tokenCount` metadata.
