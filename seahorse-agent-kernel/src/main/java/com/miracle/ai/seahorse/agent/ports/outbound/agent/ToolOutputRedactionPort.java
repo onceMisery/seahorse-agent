@@ -90,7 +90,7 @@ public interface ToolOutputRedactionPort {
             var fields = objectNode.fields();
             while (fields.hasNext()) {
                 var field = fields.next();
-                if (SECRET_FIELD_PATTERN.matcher(field.getKey()).matches()) {
+                if (secretField(field.getKey())) {
                     changed |= redactField(objectNode, field.getKey());
                 } else {
                     changed |= redactSecretJsonFields(field.getValue());
@@ -104,6 +104,14 @@ public interface ToolOutputRedactionPort {
             }
         }
         return changed;
+    }
+
+    private static boolean secretField(String fieldName) {
+        if (fieldName == null) {
+            return false;
+        }
+        String normalized = fieldName.trim().replace("-", "").replace("_", "").toLowerCase();
+        return "cookie".equals(normalized) || SECRET_FIELD_PATTERN.matcher(fieldName).matches();
     }
 
     private static boolean redactField(ObjectNode node, String fieldName) {

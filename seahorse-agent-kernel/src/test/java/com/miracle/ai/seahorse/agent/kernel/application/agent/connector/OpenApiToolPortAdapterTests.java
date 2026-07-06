@@ -172,6 +172,8 @@ class OpenApiToolPortAdapterTests {
         try (TestHttpApi api = TestHttpApi.start("/api/customers", exchange -> respond(exchange, 200,
                 "{\"secretRef\":\"secret://tenant/openapi\","
                         + "\"Authorization\":\"Bearer upstream-authorization-token\","
+                        + "\"Cookie\":\"sid=upstream-cookie-header\","
+                        + "\"cookieCount\":1,"
                         + "\"setCookie\":\"sid=upstream-cookie-value\","
                         + "\"nested\":{\"clientSecret\":\"upstream-client-secret\","
                         + "\"private_key\":\"upstream-private-key\"},"
@@ -201,12 +203,15 @@ class OpenApiToolPortAdapterTests {
             assertTrue(result.content().contains("\"secretRef\":\"secret://tenant/openapi\""));
             assertTrue(result.content().contains("\"label\":\"safe\""));
             assertTrue(result.content().contains("\"Authorization\":\"[REDACTED]\""));
+            assertTrue(result.content().contains("\"Cookie\":\"[REDACTED]\""));
+            assertTrue(result.content().contains("\"cookieCount\":1"));
             assertTrue(result.content().contains("\"setCookie\":\"[REDACTED]\""));
             assertTrue(result.content().contains("\"clientSecret\":\"[REDACTED]\""));
             assertTrue(result.content().contains("\"private_key\":\"[REDACTED]\""));
             assertTrue(result.content().contains("\"sessionToken\":\"[REDACTED]\""));
             assertTrue(result.content().contains("\"secretKey\":\"[REDACTED]\""));
             assertFalse(result.content().contains("upstream-authorization-token"));
+            assertFalse(result.content().contains("upstream-cookie-header"));
             assertFalse(result.content().contains("upstream-cookie-value"));
             assertFalse(result.content().contains("upstream-client-secret"));
             assertFalse(result.content().contains("upstream-private-key"));

@@ -110,6 +110,9 @@ public class AuditRedactionPolicy {
         if (SECRET_REF_KEY.equals(normalized)) {
             return false;
         }
+        if ("cookie".equals(normalized)) {
+            return true;
+        }
         return SENSITIVE_KEYWORDS.stream().anyMatch(normalized::contains);
     }
 }

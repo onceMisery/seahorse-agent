@@ -341,6 +341,8 @@ class LocalToolGatewayPortAuditTests {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
                 "{\"status\":\"ok\",\"apiKey\":\"plain-api-key\","
                         + "\"Authorization\":\"Bearer plain-authorization-token\","
+                        + "\"Cookie\":\"sid=plain-cookie-header\","
+                        + "\"cookieCount\":1,"
                         + "\"setCookie\":\"sid=plain-cookie-value\","
                         + "\"nested\":{\"clientSecret\":\"plain-client-secret\",\"password\":\"plain-password\","
                         + "\"private_key\":\"plain-private-key\"},"
@@ -359,6 +361,8 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(result.success());
         assertEquals("{\"status\":\"ok\",\"apiKey\":\"[REDACTED]\","
                         + "\"Authorization\":\"[REDACTED]\","
+                        + "\"Cookie\":\"[REDACTED]\","
+                        + "\"cookieCount\":1,"
                         + "\"setCookie\":\"[REDACTED]\","
                         + "\"nested\":{\"clientSecret\":\"[REDACTED]\",\"password\":\"[REDACTED]\","
                         + "\"private_key\":\"[REDACTED]\"},"
@@ -367,6 +371,7 @@ class LocalToolGatewayPortAuditTests {
                 result.content());
         assertFalse(result.content().contains("plain-api-key"));
         assertFalse(result.content().contains("plain-authorization-token"));
+        assertFalse(result.content().contains("plain-cookie-header"));
         assertFalse(result.content().contains("plain-cookie-value"));
         assertFalse(result.content().contains("plain-client-secret"));
         assertFalse(result.content().contains("plain-password"));

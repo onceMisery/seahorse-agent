@@ -427,6 +427,9 @@ public class OpenApiToolPortAdapter implements ToolPort {
         if ("secretref".equals(normalized)) {
             return false;
         }
+        if ("cookie".equals(normalized)) {
+            return true;
+        }
         return SENSITIVE_FIELD_NAMES.stream().anyMatch(normalized::contains);
     }
 

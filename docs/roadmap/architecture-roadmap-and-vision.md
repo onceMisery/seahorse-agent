@@ -1106,3 +1106,11 @@ Credential-shaped text redaction is now centralized in the domain-level `Credent
 This is a narrow maintainability hardening slice. It does not change JSON field redaction semantics, OpenAPI request construction, credential injection, audit persistence, approval policy, artifact publication, sandbox browser cookie/session metadata, or default redaction wiring.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=CredentialTextRedactorTests,LocalToolGatewayPortAuditTests,OpenApiToolPortAdapterTests,AuditRedactionPolicyTests,SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 69/69, covering the shared redactor directly plus the three existing caller paths and sandbox browser cookie/session metadata behavior.
+
+## 2026-07-06 Update: Cookie JSON Field Redaction
+
+Tool Gateway JSON output redaction, OpenAPI provider JSON response redaction, and audit payload redaction now treat exact `Cookie` / `cookie` fields as sensitive while preserving value-free governance fields such as `cookieCount`. This closes the JSON response/audit path that could otherwise retain raw cookie header values when providers serialize headers as ordinary object fields.
+
+This is a narrow JSON field vocabulary hardening slice. It does not change text credential redaction, sandbox browser cookie injection/replay, cookie count summaries, OpenAPI request construction, credential injection, audit persistence, approval policy, artifact publication, or default redaction wiring.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,OpenApiToolPortAdapterTests,AuditRedactionPolicyTests,SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 66/66, covering exact Cookie JSON field redaction in Tool Gateway/OpenAPI/audit paths while preserving cookie count governance metadata.
