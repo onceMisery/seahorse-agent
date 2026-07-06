@@ -1462,3 +1462,11 @@ Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=SandboxPythonT
 This is a narrow AgentScope A2A tool hardening slice. It does not change remote agent discovery, tenant propagation, prompt/metadata validation, A2A request execution, shared-secret or tenant-signed authentication, release-gate coverage, or live Studio/OTEL integration behavior.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-agent-agentscope -am "-Dtest=AgentScopeA2AToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 8/8, covering prompt redaction, credential-shaped failure-message redaction, existing metadata validation, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Cross-Provider Tool Failure Redaction
+
+MCP, Web Search, Web Fetch, and Knowledge Base Search tool adapters now redact credential-shaped text before returning failed tool errors from upstream execution results or exceptions. This closes the active-run failure display boundary for common cross-provider tools while preserving raw execution arguments and successful observations.
+
+This is a narrow tool-adapter display-boundary hardening slice. It does not change MCP orchestration, Web fetch SSRF policy, search/retrieval execution, successful tool output redaction, Tool Gateway audit persistence, approval policy, quota policy, or base `ToolInvocationResult` semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=WebResearchToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 8/8; `.\mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=McpToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 5/5; `.\mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=AgentToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 11/11. Coverage includes MCP failed results, MCP exceptions, Web Search exceptions, Web Fetch exceptions, Knowledge Base retrieval exceptions, and shared credential text redaction behavior.

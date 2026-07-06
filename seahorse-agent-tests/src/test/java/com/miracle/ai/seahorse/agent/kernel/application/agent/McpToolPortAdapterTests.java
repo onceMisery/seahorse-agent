@@ -71,6 +71,22 @@ class McpToolPortAdapterTests {
     }
 
     @Test
+    void failedMcpExecutionRedactsCredentialShapedMessage() {
+        KernelMcpOrchestrator orchestrator = mock(KernelMcpOrchestrator.class);
+        when(orchestrator.execute(any(McpToolExecutionRequest.class)))
+                .thenReturn(McpToolExecutionResult.failed("weather",
+                        "upstream rejected Authorization: Bearer abcdefghijklmnop api_key=plain-mcp-secret"));
+
+        ToolInvocationResult result = new McpToolPortAdapter(orchestrator)
+                .invoke("call-1", "weather", Map.of());
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("[REDACTED]"));
+        assertFalse(result.error().contains("abcdefghijklmnop"));
+        assertFalse(result.error().contains("plain-mcp-secret"));
+    }
+
+    @Test
     void orchestratorExceptionReturnsFailedResult() {
         KernelMcpOrchestrator orchestrator = mock(KernelMcpOrchestrator.class);
         when(orchestrator.execute(any(McpToolExecutionRequest.class)))
@@ -81,5 +97,21 @@ class McpToolPortAdapterTests {
 
         assertFalse(result.success());
         assertEquals("boom", result.error());
+    }
+
+    @Test
+    void orchestratorExceptionRedactsCredentialShapedMessage() {
+        KernelMcpOrchestrator orchestrator = mock(KernelMcpOrchestrator.class);
+        when(orchestrator.execute(any(McpToolExecutionRequest.class)))
+                .thenThrow(new IllegalStateException(
+                        "remote failed Authorization: Bearer abcdefghijklmnop api_key=plain-mcp-secret"));
+
+        ToolInvocationResult result = new McpToolPortAdapter(orchestrator)
+                .invoke("call-1", "weather", Map.of());
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("[REDACTED]"));
+        assertFalse(result.error().contains("abcdefghijklmnop"));
+        assertFalse(result.error().contains("plain-mcp-secret"));
     }
 }

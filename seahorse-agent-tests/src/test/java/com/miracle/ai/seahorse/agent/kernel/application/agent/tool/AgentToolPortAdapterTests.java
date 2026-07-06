@@ -93,6 +93,22 @@ class AgentToolPortAdapterTests {
     }
 
     @Test
+    void searchKnowledgeBaseRedactsCredentialShapedFailureMessages() {
+        KernelRetrievalEngine retrievalEngine = mock(KernelRetrievalEngine.class);
+        when(retrievalEngine.retrieveKnowledgeChannels(any(), anyInt()))
+                .thenThrow(new IllegalStateException(
+                        "retrieval failed Authorization: Bearer abcdefghijklmnop api_key=plain-rag-secret"));
+
+        ToolInvocationResult result = new SearchKnowledgeBaseToolPortAdapter(retrievalEngine, jsonSupport)
+                .invoke("call-1", SearchKnowledgeBaseToolPortAdapter.TOOL_ID, Map.of("query", "student policy"));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.error()).contains("[REDACTED]");
+        assertThat(result.error()).doesNotContain("abcdefghijklmnop");
+        assertThat(result.error()).doesNotContain("plain-rag-secret");
+    }
+
+    @Test
     void memoryReadUsesServerInjectedUserScope() throws Exception {
         MemoryEnginePort memoryEnginePort = mock(MemoryEnginePort.class);
         when(memoryEnginePort.retrieveMemories(any(MemoryLoadRequest.class)))

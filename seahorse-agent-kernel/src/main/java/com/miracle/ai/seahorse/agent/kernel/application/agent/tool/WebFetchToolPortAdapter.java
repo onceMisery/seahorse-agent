@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.web.WebFetchSafetyDecision;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.web.WebFetchSafetyPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
@@ -77,8 +78,12 @@ public class WebFetchToolPortAdapter implements DescribedToolPort {
                     webFetchPort.fetch(new WebFetchRequest(url, maxChars)))));
         } catch (Exception ex) {
             return ToolInvocationResult.failed("web_fetch failed: "
-                    + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    + redactError(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
+    }
+
+    private String redactError(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private Map<String, Object> observation(WebFetchResult result) {

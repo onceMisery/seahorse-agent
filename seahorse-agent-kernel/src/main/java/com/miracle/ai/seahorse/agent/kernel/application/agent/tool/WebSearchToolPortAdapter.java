@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
@@ -71,8 +72,12 @@ public class WebSearchToolPortAdapter implements DescribedToolPort {
             return ToolInvocationResult.ok(jsonSupport.write(observation(query, maxResults, result)));
         } catch (Exception ex) {
             return ToolInvocationResult.failed("web_search failed: "
-                    + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    + redactError(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
+    }
+
+    private String redactError(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private Map<String, Object> observation(String query, int maxResults, WebSearchResult result) {

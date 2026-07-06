@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
@@ -70,8 +71,12 @@ public class SearchKnowledgeBaseToolPortAdapter implements DescribedToolPort {
             return ToolInvocationResult.ok(jsonSupport.write(observation(query, topK, chunks)));
         } catch (Exception ex) {
             return ToolInvocationResult.failed("search_knowledge_base failed: "
-                    + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    + redactError(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
+    }
+
+    private String redactError(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private Map<String, Object> observation(String query, int topK, List<RetrievedChunk> chunks) {

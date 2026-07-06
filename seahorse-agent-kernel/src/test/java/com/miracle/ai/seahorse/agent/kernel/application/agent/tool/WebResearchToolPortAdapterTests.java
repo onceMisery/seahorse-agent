@@ -63,6 +63,22 @@ class WebResearchToolPortAdapterTests {
     }
 
     @Test
+    void webSearchShouldRedactCredentialShapedFailureMessages() {
+        WebSearchToolPortAdapter tool = new WebSearchToolPortAdapter(request -> {
+            throw new IllegalStateException(
+                    "provider rejected Authorization: Bearer abcdefghijklmnop api_key=plain-search-secret");
+        }, jsonSupport);
+
+        ToolInvocationResult result = tool.invoke("call-1", WebSearchToolPortAdapter.TOOL_ID,
+                Map.of("query", "AI infra"));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("[REDACTED]"));
+        assertFalse(result.error().contains("abcdefghijklmnop"));
+        assertFalse(result.error().contains("plain-search-secret"));
+    }
+
+    @Test
     void webFetchShouldRejectUnsafeUrlsBeforeCallingFetcher() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         WebFetchToolPortAdapter tool = new WebFetchToolPortAdapter(request -> {
@@ -78,6 +94,22 @@ class WebResearchToolPortAdapterTests {
         JsonNode root = objectMapper.readTree(result.content());
         assertEquals("REJECTED", root.path("status").asText());
         assertEquals("LOCALHOST_BLOCKED", root.path("reasonCode").asText());
+    }
+
+    @Test
+    void webFetchShouldRedactCredentialShapedFailureMessages() {
+        WebFetchToolPortAdapter tool = new WebFetchToolPortAdapter(request -> {
+            throw new IllegalStateException(
+                    "fetcher rejected Authorization: Bearer abcdefghijklmnop api_key=plain-fetch-secret");
+        }, new WebFetchSafetyPolicy(), jsonSupport);
+
+        ToolInvocationResult result = tool.invoke("call-1", WebFetchToolPortAdapter.TOOL_ID,
+                Map.of("url", "https://example.com/research"));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("[REDACTED]"));
+        assertFalse(result.error().contains("abcdefghijklmnop"));
+        assertFalse(result.error().contains("plain-fetch-secret"));
     }
 
     @Test

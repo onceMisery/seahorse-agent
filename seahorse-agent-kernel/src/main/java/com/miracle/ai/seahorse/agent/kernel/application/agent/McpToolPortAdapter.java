@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionRequest;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
@@ -44,9 +45,14 @@ public class McpToolPortAdapter implements ToolPort {
                     new McpToolExecutionRequest(toolId, "", arguments));
             return result.success()
                     ? ToolInvocationResult.ok(result.content())
-                    : ToolInvocationResult.failed(result.message());
+                    : ToolInvocationResult.failed(redactError(result.message()));
         } catch (Exception ex) {
-            return ToolInvocationResult.failed(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+            return ToolInvocationResult.failed(redactError(
+                    Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
+    }
+
+    private String redactError(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 }
