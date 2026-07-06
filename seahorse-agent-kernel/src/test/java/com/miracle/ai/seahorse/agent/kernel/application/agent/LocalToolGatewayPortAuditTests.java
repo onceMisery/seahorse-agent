@@ -358,7 +358,7 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
-    void shouldRedactCredentialShapedFailedToolErrorBeforeAuditing() {
+    void shouldRedactCredentialShapedFailedToolErrorBeforeReturningAndAuditing() {
         CountingToolPort tool = new CountingToolPort(
                 ToolInvocationResult.failed("upstream failed api_key=plain-secret-token-123"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
@@ -366,14 +366,16 @@ class LocalToolGatewayPortAuditTests {
                 new SingleToolRegistry(tool),
                 new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
                 audit,
+                ToolOutputRedactionPort.basicSecretPatterns(),
                 FIXED_CLOCK);
 
         ToolInvocationResult result = gateway.invoke(request("weather"));
 
         assertFalse(result.success());
-        assertEquals("upstream failed api_key=plain-secret-token-123", result.error());
+        assertEquals("upstream failed [REDACTED]", result.error());
         assertEquals(ToolInvocationStatus.FAILED, audit.completed.get(0).status());
         assertEquals("upstream failed [REDACTED]", audit.completed.get(0).errorMessage());
+        assertFalse(result.error().contains("plain-secret-token-123"));
         assertFalse(audit.completed.get(0).errorMessage().contains("plain-secret-token-123"));
     }
 

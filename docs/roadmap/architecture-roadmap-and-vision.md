@@ -1018,3 +1018,11 @@ Tool Gateway completion audit now redacts obvious credential-shaped substrings f
 This is a narrow completion-audit hardening slice. It does not change tool execution, failure propagation to the Agent loop, output redaction for successful observations, approval decisions, quota policy, or request audit summaries.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 25/25, covering failed-tool credential-shaped error redaction in completion audit while preserving caller-visible failure text.
+
+## 2026-07-06 Update: Tool Failure Error Output Redaction
+
+`ToolOutputRedactionPort.basicSecretPatterns()` now redacts obvious credential-shaped substrings from failed tool errors as well as successful tool content. When the basic redactor is installed, caller-visible failed tool errors and completion audit errors both replace patterns such as `api_key=...`, bearer tokens, and OpenAI-style `sk-...` keys with `[REDACTED]`.
+
+This is a narrow output-redaction hardening slice. It does not change the `ToolInvocationResult` contract, noop redaction behavior, approval/policy failures, tool execution, artifact publication, or success-content base64 redaction behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 25/25, covering caller-visible and audit-visible failed tool error redaction; `.\mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=ToolPortContractTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 4/4, preserving the base `ToolInvocationResult.failed` contract.

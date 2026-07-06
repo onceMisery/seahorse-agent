@@ -31,6 +31,10 @@ public interface ToolOutputRedactionPort {
 
     String REDACTED_VALUE = "[REDACTED]";
     Pattern OPENAI_KEY_PATTERN = Pattern.compile("sk-[A-Za-z0-9][A-Za-z0-9_-]*");
+    Pattern CREDENTIAL_VALUE_PATTERN = Pattern.compile(
+            "(?i)(bearer\\s+[a-z0-9._~+/=-]{8,}"
+                    + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id)"
+                    + "\\s*=\\s*[^\\s&;]+)");
 
     ToolInvocationResult redact(ToolInvocationRequest request, ToolInvocationResult result);
 
@@ -41,16 +45,33 @@ public interface ToolOutputRedactionPort {
     static ToolOutputRedactionPort basicSecretPatterns() {
         ObjectMapper objectMapper = new ObjectMapper();
         return (request, result) -> {
-            if (result == null || !result.success() || result.content() == null) {
+            if (result == null) {
+                return result;
+            }
+            if (!result.success()) {
+                String redactedError = redactSecretPatterns(result.error());
+                return Objects.equals(redactedError, result.error())
+                        ? result
+                        : ToolInvocationResult.failed(redactedError, result.approvalId());
+            }
+            if (result.content() == null) {
                 return result;
             }
             String redacted = redactBase64JsonFields(objectMapper, result.content());
-            redacted = OPENAI_KEY_PATTERN.matcher(redacted).replaceAll(REDACTED_VALUE);
+            redacted = redactSecretPatterns(redacted);
             if (Objects.equals(redacted, result.content())) {
                 return result;
             }
             return ToolInvocationResult.ok(redacted);
         };
+    }
+
+    private static String redactSecretPatterns(String value) {
+        if (value == null) {
+            return null;
+        }
+        String redacted = OPENAI_KEY_PATTERN.matcher(value).replaceAll(REDACTED_VALUE);
+        return CREDENTIAL_VALUE_PATTERN.matcher(redacted).replaceAll(REDACTED_VALUE);
     }
 
     private static String redactBase64JsonFields(ObjectMapper objectMapper, String content) {
