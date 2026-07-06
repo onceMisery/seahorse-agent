@@ -461,11 +461,13 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             ApprovalRequestQueryPort approvalRequestQueryPort,
             ApprovalRequestDecisionPort approvalRequestDecisionPort,
             CurrentUserPort currentUserPort,
+            ObjectProvider<AgentRunRepositoryPort> agentRunRepositoryPort,
             ObjectProvider<Clock> clockProvider) {
         return new KernelApprovalManagementService(
                 approvalRequestQueryPort,
                 approvalRequestDecisionPort,
                 currentUserPort,
+                agentRunRepositoryPort.getIfAvailable(),
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 

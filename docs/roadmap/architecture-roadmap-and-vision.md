@@ -842,3 +842,11 @@ The legacy workflow visualization service now applies the Agent run owner/admin 
 This closes an older workflow visualization authorization gap for `GET /api/workflows/runs/{runId}/visualization` and `/stream`. It does not change the newer Agent run workflow projection shape, workflow step storage, event payload shape, or workflow publisher semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel,seahorse-agent-adapter-web,seahorse-agent-spring-boot-autoconfigure -am "-Dtest=KernelWorkflowVisualizationServiceTests,SeahorseWorkflowVisualizationControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` completed with reactor `BUILD SUCCESS`, covering owner access, admin access, unrelated-user denial before workflow steps load, legacy constructor compatibility, and SSE stream gating.
+
+## 2026-07-06 Update: Pending Approval Run Ownership Guard
+
+Pending approval lookup by Agent run now requires the requested run to be readable before querying approval records. Production auto-configuration injects `AgentRunRepositoryPort` into `KernelApprovalManagementService`, so `/api/agent-runs/{runId}/pending-approvals` no longer lets an unrelated user probe another user's run approval state before the existing approval-owner filter is applied.
+
+This closes a narrow pending-approval run-boundary gap. It does not change admin approval paging, approval detail admin semantics, approve/reject/modify ownership checks, approval decision persistence, or modified-argument validation.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelApprovalManagementServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 12/12, covering readable-run pending approval lookup and denial before approval repository query for unreadable runs. `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-DskipTests" compile` completed with reactor `BUILD SUCCESS` after the production bean was updated to inject the run repository.

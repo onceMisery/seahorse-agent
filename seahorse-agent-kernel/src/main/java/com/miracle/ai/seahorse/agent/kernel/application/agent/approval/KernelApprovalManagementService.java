@@ -30,6 +30,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestDecisio
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 
@@ -62,6 +63,7 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
     private final ApprovalRequestQueryPort queryPort;
     private final ApprovalRequestDecisionPort decisionPort;
     private final CurrentUserPort currentUserPort;
+    private final AgentRunRepositoryPort runRepository;
     private final Clock clock;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -69,9 +71,18 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
                                            ApprovalRequestDecisionPort decisionPort,
                                            CurrentUserPort currentUserPort,
                                            Clock clock) {
+        this(queryPort, decisionPort, currentUserPort, null, clock);
+    }
+
+    public KernelApprovalManagementService(ApprovalRequestQueryPort queryPort,
+                                           ApprovalRequestDecisionPort decisionPort,
+                                           CurrentUserPort currentUserPort,
+                                           AgentRunRepositoryPort runRepository,
+                                           Clock clock) {
         this.queryPort = Objects.requireNonNull(queryPort, "queryPort must not be null");
         this.decisionPort = Objects.requireNonNull(decisionPort, "decisionPort must not be null");
         this.currentUserPort = Objects.requireNonNull(currentUserPort, "currentUserPort must not be null");
+        this.runRepository = runRepository;
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
@@ -84,15 +95,31 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
     @Override
     public List<ApprovalRequest> listPendingByRunId(String runId) {
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
+        String safeRunId = requireText(runId, "runId must not be blank");
+        requireReadableRunIfConfigured(safeRunId, currentUser);
         ApprovalRequestPage page = queryPort.page(new ApprovalRequestQuery(
                 null,
-                requireText(runId, "runId 不能为空"),
+                safeRunId,
                 ApprovalRequestStatus.PENDING,
                 ApprovalRequestQuery.DEFAULT_CURRENT,
                 RUN_PENDING_APPROVAL_PAGE_SIZE));
         return page.records().stream()
                 .filter(approval -> isAdmin(currentUser) || currentUserId(currentUser).equals(approval.userId()))
                 .toList();
+    }
+
+    private void requireReadableRunIfConfigured(String runId, CurrentUser currentUser) {
+        if (runRepository == null) {
+            return;
+        }
+        runRepository.findRunById(runId)
+                .map(run -> {
+                    if (isAdmin(currentUser) || currentUserId(currentUser).equals(run.userId())) {
+                        return run;
+                    }
+                    throw new IllegalStateException(ACCESS_DENIED);
+                })
+                .orElseThrow(() -> new IllegalArgumentException("Agent run not found"));
     }
 
     @Override

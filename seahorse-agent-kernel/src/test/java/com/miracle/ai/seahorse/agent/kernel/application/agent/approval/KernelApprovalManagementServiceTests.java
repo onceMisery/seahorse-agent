@@ -20,10 +20,15 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.approval;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalModifyCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestDecisionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
@@ -33,6 +38,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -86,6 +92,41 @@ class KernelApprovalManagementServiceTests {
         assertEquals("run-1", repository.lastQuery.runId());
         assertEquals(ApprovalRequestStatus.PENDING, repository.lastQuery.status());
         assertEquals(List.of("approval-1"), approvals.stream().map(ApprovalRequest::approvalId).toList());
+    }
+
+    @Test
+    void shouldListPendingApprovalsOnlyAfterRunIsReadable() {
+        MemoryApprovalRepository repository = new MemoryApprovalRepository(List.of(
+                approval("approval-1", "run-1", "2", ApprovalRequestStatus.PENDING)));
+        ApprovalManagementInboundPort service = new KernelApprovalManagementService(
+                repository,
+                repository,
+                user(),
+                new MemoryRunRepository(run("run-1", "2")),
+                FIXED_CLOCK);
+
+        List<ApprovalRequest> approvals = service.listPendingByRunId(" run-1 ");
+
+        assertEquals(List.of("approval-1"), approvals.stream().map(ApprovalRequest::approvalId).toList());
+        assertEquals("run-1", repository.lastQuery.runId());
+    }
+
+    @Test
+    void shouldDenyPendingApprovalListBeforeQueryingUnreadableRun() {
+        MemoryApprovalRepository repository = new MemoryApprovalRepository(List.of(
+                approval("approval-1", "run-1", "3", ApprovalRequestStatus.PENDING)));
+        ApprovalManagementInboundPort service = new KernelApprovalManagementService(
+                repository,
+                repository,
+                user(),
+                new MemoryRunRepository(run("run-1", "3")),
+                FIXED_CLOCK);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> service.listPendingByRunId("run-1"));
+
+        assertEquals("权限不足", error.getMessage());
+        assertNull(repository.lastQuery);
     }
 
     @Test
@@ -278,6 +319,60 @@ class KernelApprovalManagementServiceTests {
 
     private static CurrentUserPort user() {
         return () -> Optional.of(new CurrentUser(2L, "alice", "user", null));
+    }
+
+    private static AgentRun run(String runId, String userId) {
+        return new AgentRun(
+                runId,
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                userId,
+                "conversation-1",
+                AgentRunTriggerType.CHAT,
+                "input",
+                AgentRunStatus.WAITING_APPROVAL,
+                "trace-1",
+                0L,
+                0L,
+                BigDecimal.ZERO,
+                null,
+                null,
+                NOW,
+                null);
+    }
+
+    private static final class MemoryRunRepository implements AgentRunRepositoryPort {
+        private final AgentRun run;
+
+        private MemoryRunRepository(AgentRun run) {
+            this.run = run;
+        }
+
+        @Override
+        public void createRun(AgentRun run) {
+        }
+
+        @Override
+        public void updateRun(AgentRun run) {
+        }
+
+        @Override
+        public Optional<AgentRun> findRunById(String runId) {
+            if (run == null || !run.runId().equals(runId)) {
+                return Optional.empty();
+            }
+            return Optional.of(run);
+        }
+
+        @Override
+        public void appendStep(AgentStep step) {
+        }
+
+        @Override
+        public List<AgentStep> listSteps(String runId) {
+            return List.of();
+        }
     }
 
     private static final class MemoryApprovalRepository
