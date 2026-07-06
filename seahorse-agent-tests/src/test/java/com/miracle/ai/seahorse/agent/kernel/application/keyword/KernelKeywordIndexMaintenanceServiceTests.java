@@ -100,7 +100,10 @@ class KernelKeywordIndexMaintenanceServiceTests {
         assertThat(result.indexedDocuments()).isEqualTo(1);
         assertThat(result.indexedChunks()).isEqualTo(1);
         assertThat(result.failedDocuments()).isEqualTo(1);
-        assertThat(result.failures()).singleElement().asString().contains("2");
+        assertThat(result.failures()).singleElement().asString()
+                .isEqualTo("2: index failed [REDACTED] [REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-keyword-secret");
         assertThat(observationPort.events)
                 .extracting(ObservationEvent::name)
                 .contains("keyword.index.rebuild.failure");
@@ -214,7 +217,8 @@ class KernelKeywordIndexMaintenanceServiceTests {
         public void indexDocumentChunks(String kbId, String docId, List<VectorChunk> chunks) {
             operations.add("index:" + kbId + ":" + docId + ":" + chunks.size());
             if (docId.equals(failOnDocId)) {
-                throw new IllegalStateException("index failed");
+                throw new IllegalStateException(
+                        "index failed Authorization: Bearer abcdefghijklmnop api_key=plain-keyword-secret");
             }
             lastChunks = chunks;
         }

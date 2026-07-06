@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.keyword;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexRebuildResult;
@@ -140,7 +141,7 @@ public class KernelKeywordIndexMaintenanceService implements KeywordIndexMainten
             accumulator.indexedChunks += vectorChunks.size();
         } catch (RuntimeException ex) {
             accumulator.failedDocuments++;
-            accumulator.failures.add(String.valueOf(document.getId()) + ": " + Objects.requireNonNullElse(ex.getMessage(), ""));
+            accumulator.failures.add(String.valueOf(document.getId()) + ": " + failureMessage(ex));
         }
     }
 
@@ -200,6 +201,13 @@ public class KernelKeywordIndexMaintenanceService implements KeywordIndexMainten
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private String failureMessage(RuntimeException error) {
+        if (error == null) {
+            return "";
+        }
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(error.getMessage(), error.getClass().getName()));
     }
 
     private ObservationScope startObservation(String scope) {

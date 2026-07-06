@@ -1558,3 +1558,11 @@ Scheduled document refresh failures now redact credential-shaped exception text 
 This is a narrow document-refresh failure-state hardening slice. It does not change fetch requests, object storage uploads, document file switching, chunk execution inputs, schedule timing, lock behavior, repository interfaces, raw exception logging, or successful/skipped refresh outcomes.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelDocumentRefreshServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 6/6, covering refresh result/schedule/execution failure-message redaction, existing refresh success/skip behavior, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Keyword Index Rebuild Failure Redaction
+
+Keyword index rebuild failures now redact credential-shaped exception text before returning `KeywordIndexRebuildResult.failures()`. This protects keyword-index maintenance and knowledge-operations surfaces when search backend failures accidentally include bearer tokens, API keys, or similar values in exception messages.
+
+This is a narrow keyword maintenance result hardening slice. It does not change keyword index delete/index execution order, document/chunk snapshot loading, rebuild counters, observation event names, repository interfaces, raw exception logging, or successful/skip rebuild behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelKeywordIndexMaintenanceServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 6/6, covering keyword rebuild failure-summary redaction, existing document/kb rebuild behavior, and shared credential text redactor behavior.
