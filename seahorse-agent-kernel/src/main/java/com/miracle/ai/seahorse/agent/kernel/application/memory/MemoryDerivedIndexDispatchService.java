@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
@@ -83,14 +84,15 @@ public final class MemoryDerivedIndexDispatchService {
             memoryVectorPort.upsert(record.id(), userId, record.content(), embeddingModel);
             operations.add(OPERATION_VECTOR_UPSERT);
         } catch (RuntimeException ex) {
+            String errorMessage = failureMessage(ex);
             LOG.warn("记忆向量索引失败，已转入outbox: memoryId={}, userId={}, error={}",
-                    record.id(), userId, Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    record.id(), userId, errorMessage);
             memoryOutboxPort.enqueue(MemoryOutboxPort.MemoryOutboxTask.vectorUpsert(
                     record,
                     userId,
                     tenantId,
                     embeddingModel,
-                    Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
+                    errorMessage));
             operations.add(OPERATION_VECTOR_OUTBOX_ENQUEUE);
         }
         if (keywordIndexOutboxEnabled) {
@@ -113,8 +115,9 @@ public final class MemoryDerivedIndexDispatchService {
             memoryVectorPort.delete(memoryId, userId, tenantId);
             operations.add(OPERATION_VECTOR_DELETE);
         } catch (RuntimeException ex) {
+            String errorMessage = failureMessage(ex);
             LOG.warn("记忆向量删除失败，已转入outbox: memoryId={}, userId={}, error={}",
-                    memoryId, userId, Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    memoryId, userId, errorMessage);
             memoryOutboxPort.enqueue(MemoryOutboxPort.MemoryOutboxTask.vectorDelete(memoryId, userId, tenantId));
             operations.add(OPERATION_VECTOR_DELETE_OUTBOX_ENQUEUE);
         }
@@ -127,5 +130,9 @@ public final class MemoryDerivedIndexDispatchService {
             operations.add(OPERATION_GRAPH_DELETE_OUTBOX_ENQUEUE);
         }
         return operations;
+    }
+
+    private String failureMessage(RuntimeException ex) {
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
     }
 }

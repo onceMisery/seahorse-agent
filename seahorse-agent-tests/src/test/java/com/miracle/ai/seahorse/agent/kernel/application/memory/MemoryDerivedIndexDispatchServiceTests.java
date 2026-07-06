@@ -74,6 +74,25 @@ class MemoryDerivedIndexDispatchServiceTests {
     }
 
     @Test
+    void dispatchUpsertRedactsCredentialLikeVectorFailureBeforeOutbox() {
+        vectorPort.upsertException = new IllegalStateException(
+                "milvus failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret");
+        MemoryDerivedIndexDispatchService service = newService(false, false);
+        MemoryRecord record = newRecord("memory-secret", "fail");
+
+        List<String> operations = service.dispatchUpsert(record, USER_ID, TENANT_ID);
+
+        Assertions.assertEquals(
+                List.of(MemoryDerivedIndexDispatchService.OPERATION_VECTOR_OUTBOX_ENQUEUE),
+                operations);
+        Assertions.assertEquals(1, outboxPort.tasks.size());
+        String errorMessage = outboxPort.tasks.get(0).errorMessage();
+        Assertions.assertTrue(errorMessage.contains("[REDACTED]"));
+        Assertions.assertFalse(errorMessage.contains("abcdefghijklmnop"));
+        Assertions.assertFalse(errorMessage.contains("plain-memory-secret"));
+    }
+
+    @Test
     void dispatchDeleteEmitsAllOpsWhenFlagsEnabled() {
         MemoryDerivedIndexDispatchService service = newService(true, true);
 

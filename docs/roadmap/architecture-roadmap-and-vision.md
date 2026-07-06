@@ -1582,3 +1582,11 @@ Memory ingestion failures now redact credential-shaped exception text before mar
 This is a narrow memory-operation persistence hardening slice. It does not change ingestion classification, durable memory write inputs, operation start/completion semantics, raw exception propagation, server logging, refiner fail-open/fail-closed decisions, or successful operation decision details.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=DefaultMemoryEnginePortTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the corrected regression because the operation failure reason lacked `[REDACTED]`, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 68/68 across kernel redactor and default memory engine coverage.
+
+## 2026-07-06 Update: Memory Derived Index Failure Redaction
+
+Memory derived-index dispatch failures now redact credential-shaped exception text before writing vector-upsert fallback outbox task `errorMessage` values and warn-log failure summaries. This protects memory outbox backlog and operational log surfaces when vector backends accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow derived-index dispatch hardening slice. It does not change vector upsert/delete inputs, memory record content, outbox task type selection, keyword/graph outbox flags, retry behavior, or successful derived-index operation strings.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=MemoryDerivedIndexDispatchServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new regression because the vector fallback outbox `errorMessage` lacked `[REDACTED]`, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 9/9 across kernel redactor and derived-index dispatch coverage.
