@@ -304,6 +304,47 @@ class KernelMemoryReviewServiceTests {
     }
 
     @Test
+    void shouldRedactCredentialLikeAliasApplyFailureErrors() {
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review(
+                "review-alias",
+                MemoryReviewStatus.PENDING,
+                "K8s",
+                "REVIEW",
+                "ALIAS",
+                "K8s",
+                Map.of(
+                        "canonicalEntityId", "ent-core-k8s",
+                        "canonicalName", "Kubernetes",
+                        "entityType", "TECHNOLOGY",
+                        "confidenceLevel", 0.96D)));
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        KernelMemoryReviewService service = new KernelMemoryReviewService(
+                repository,
+                new RecordingIngestionWorkflow(MemoryIngestionResult.accepted(List.of("SHORT_TERM_SAVE"))),
+                new RecordingReviewFeedbackRepository(),
+                traceRecorder,
+                new FailingAliasPort(
+                        "alias store failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret"));
+
+        assertThatThrownBy(() -> service.approve("review-alias",
+                new MemoryReviewDecisionCommand("auditor", "alias confirmed", "", Map.of())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("[REDACTED]")
+                .hasMessageNotContaining("abcdefghijklmnop")
+                .hasMessageNotContaining("plain-memory-secret");
+
+        assertThat(traceRecorder.events)
+                .filteredOn(event -> "memory-review".equals(event.component())
+                        && "approve".equals(event.eventType()))
+                .singleElement()
+                .satisfies(event -> assertThat(event.details().get("reason").toString())
+                        .contains("[REDACTED]")
+                        .doesNotContain("abcdefghijklmnop")
+                        .doesNotContain("plain-memory-secret"));
+    }
+
+    @Test
     void shouldRejectCandidateWithoutCallingIngestionWorkflow() {
         InMemoryReviewRepository repository = new InMemoryReviewRepository();
         repository.put(review("review-1", MemoryReviewStatus.PENDING, "do not write"));
@@ -960,6 +1001,25 @@ class KernelMemoryReviewServiceTests {
         @Override
         public void upsertAlias(MemoryAliasCommand command) {
             commands.add(command);
+        }
+    }
+
+    private static final class FailingAliasPort implements MemoryAliasPort {
+
+        private final String message;
+
+        private FailingAliasPort(String message) {
+            this.message = message;
+        }
+
+        @Override
+        public Optional<MemoryAliasResolution> resolveAlias(String userId, String tenantId, String aliasText) {
+            return Optional.empty();
+        }
+
+        @Override
+        public void upsertAlias(MemoryAliasCommand command) {
+            throw new IllegalStateException(message);
         }
     }
 

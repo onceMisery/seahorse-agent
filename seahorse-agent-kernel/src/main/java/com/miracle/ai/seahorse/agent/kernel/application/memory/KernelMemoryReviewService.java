@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewDecisionCommand;
@@ -556,7 +557,7 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
     }
 
     private String errorMessage(RuntimeException ex) {
-        return ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage();
+        return CredentialTextRedactor.redact(ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage());
     }
 
     private void recordTrace(String eventType,

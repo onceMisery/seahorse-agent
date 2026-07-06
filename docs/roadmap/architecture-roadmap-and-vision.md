@@ -1646,3 +1646,11 @@ Default memory maintenance service-level failures now redact credential-shaped e
 This is a narrow maintenance aggregation result-boundary hardening slice. It does not change maintenance task selection, skip/not-requested outcome semantics, subservice execution order, result aggregation, run-record persistence, trace/observation schemas, raw subservice inputs, or raw exception logging.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=DefaultMemoryMaintenanceServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new compaction/garbage-collection/alias service-level regressions because aggregate errors returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 20/20 across kernel redactor and default memory maintenance coverage.
+
+## 2026-07-06 Update: Memory Review Alias Apply Failure Redaction
+
+Memory review alias apply failures now redact credential-shaped exception text before throwing review approval errors or writing failed `approve` trace `details.reason` values. This protects review operation and trace surfaces when alias store failures accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow review alias-apply hardening slice. It does not change review decision semantics, alias command construction, claim/release behavior, feedback persistence, raw alias command inputs, successful approve tracing, or server-side exception logging with the original exception chain.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelMemoryReviewServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new alias apply regression because the thrown review error returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 23/23 across kernel redactor and memory review coverage.
