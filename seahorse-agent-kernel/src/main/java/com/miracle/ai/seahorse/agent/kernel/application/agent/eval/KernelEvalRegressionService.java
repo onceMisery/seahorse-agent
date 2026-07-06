@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent.eval;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 
 import java.time.Instant;
@@ -80,8 +81,13 @@ public class KernelEvalRegressionService {
 
             return new EvalResult(sample.sampleId(), matches, actualResponse, null, citationComplete, taskCompleted);
         } catch (Exception e) {
-            return new EvalResult(sample.sampleId(), false, null, e.getMessage(), false, false);
+            return new EvalResult(sample.sampleId(), false, null, failureMessage(e), false, false);
         }
+    }
+
+    private String failureMessage(Exception error) {
+        String message = error.getMessage() == null ? error.getClass().getName() : error.getMessage();
+        return CredentialTextRedactor.redact(message);
     }
 
     private boolean hasExpectedCitations(String actual, String expected) {

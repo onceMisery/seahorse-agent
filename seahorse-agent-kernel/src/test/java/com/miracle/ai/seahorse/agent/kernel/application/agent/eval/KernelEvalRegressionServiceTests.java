@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -63,5 +64,28 @@ class KernelEvalRegressionServiceTests {
         assertTrue(report.dimensions().get(0).automated());
         assertEquals(1.0d, report.dimensions().get(1).score());
         assertFalse(report.dimensions().get(2).automated());
+    }
+
+    @Test
+    void runRegressionShouldRedactCredentialShapedFailureErrors() throws Exception {
+        EvalDatasetQueryPort datasetQueryPort = datasetId -> List.of();
+        ChatModelPort chatModel = (request, modelId) -> {
+            throw new IllegalStateException(
+                    "provider rejected Authorization: Bearer abcdefghijklmnop api_key=plain-eval-secret");
+        };
+        KernelEvalRegressionService service = new KernelEvalRegressionService(datasetQueryPort, chatModel);
+        Method replaySample = KernelEvalRegressionService.class
+                .getDeclaredMethod("replaySample", EvalSample.class, String.class);
+        replaySample.setAccessible(true);
+
+        KernelEvalRegressionService.EvalResult result = (KernelEvalRegressionService.EvalResult) replaySample.invoke(
+                service,
+                new EvalSample("sample-1", "ds-1", "write report", "report", "bad", "run-1"),
+                "gpt-4");
+
+        assertFalse(result.passed());
+        assertTrue(result.error().contains("[REDACTED]"));
+        assertFalse(result.error().contains("abcdefghijklmnop"));
+        assertFalse(result.error().contains("plain-eval-secret"));
     }
 }

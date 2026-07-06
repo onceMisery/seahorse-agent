@@ -1744,3 +1744,11 @@ Resilient chat model wrapping now redacts credential-shaped exception text befor
 This is a narrow model adapter failure-boundary hardening slice. It does not change retry, timeout, circuit breaker fallback, delegate call behavior, existing `ExternalServiceException` propagation, or server-side exception logging with the original exception chain.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-spring-boot-autoconfigure,seahorse-agent-kernel -am "-Dtest=SeahorseAgentPhase1AutoConfigurationTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 7/7 across kernel redactor and resilience auto-configuration/model adapter coverage.
+
+## 2026-07-06 Update: Eval Regression Failure Redaction
+
+Eval regression replay failures now redact credential-shaped exception text before returning `EvalResult.error` values. This protects evaluation reports, gate evidence, and regression diagnostics when model providers or test harness adapters accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow eval replay failure-boundary hardening slice. It does not change sample loading, model invocation, citation scoring, semantic-overlap heuristics, report aggregation, baseline comparison, or successful sample outputs.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelEvalRegressionServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 5/5 across kernel redactor and eval regression coverage.
