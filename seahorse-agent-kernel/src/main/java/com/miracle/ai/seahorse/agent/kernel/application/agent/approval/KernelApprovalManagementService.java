@@ -104,7 +104,7 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
                 ApprovalRequestQuery.DEFAULT_CURRENT,
                 RUN_PENDING_APPROVAL_PAGE_SIZE));
         return page.records().stream()
-                .filter(approval -> isAdmin(currentUser) || currentUserId(currentUser).equals(approval.userId()))
+                .filter(approval -> isAdmin(currentUser) || ownsUserId(approval.userId(), currentUser))
                 .toList();
     }
 
@@ -114,7 +114,7 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
         }
         runRepository.findRunById(runId)
                 .map(run -> {
-                    if (isAdmin(currentUser) || currentUserId(currentUser).equals(run.userId())) {
+                    if (isAdmin(currentUser) || ownsUserId(run.userId(), currentUser)) {
                         return run;
                     }
                     throw new IllegalStateException(ACCESS_DENIED);
@@ -153,7 +153,7 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
         String safeApprovalId = requireText(approvalId, "approvalId 不能为空");
         ApprovalRequest current = queryPort.findById(safeApprovalId)
                 .orElseThrow(() -> new IllegalArgumentException(APPROVAL_NOT_FOUND));
-        if (!isAdmin(currentUser) && !currentUserId(currentUser).equals(current.userId())) {
+        if (!isAdmin(currentUser) && !ownsUserId(current.userId(), currentUser)) {
             throw new IllegalStateException(ACCESS_DENIED);
         }
         if (current.status() != ApprovalRequestStatus.PENDING) {
@@ -214,6 +214,15 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
             throw new IllegalStateException(ACCESS_DENIED);
         }
         return String.valueOf(userId);
+    }
+
+    private boolean ownsUserId(String resourceUserId, CurrentUser currentUser) {
+        if (currentUser == null) {
+            return false;
+        }
+        String numericUserId = currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
+        return Objects.equals(resourceUserId, numericUserId)
+                || Objects.equals(resourceUserId, currentUser.operator());
     }
 
     private String decisionComment(ApprovalDecisionCommand command) {

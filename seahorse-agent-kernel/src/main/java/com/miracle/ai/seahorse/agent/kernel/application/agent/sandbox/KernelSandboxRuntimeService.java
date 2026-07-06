@@ -40,6 +40,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeP
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicyStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
@@ -680,7 +681,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
         runRepository.findRunById(session.runId())
                 .map(run -> {
-                    if (isAdmin(currentUser) || currentUserId(currentUser).equals(run.userId())) {
+                    if (isAdmin(currentUser) || ownsRun(run, currentUser)) {
                         return run;
                     }
                     throw new IllegalStateException(ACCESS_DENIED);
@@ -704,6 +705,15 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
 
     private String currentUserId(CurrentUser currentUser) {
         return currentUser == null ? null : currentUser.operator();
+    }
+
+    private boolean ownsRun(AgentRun run, CurrentUser currentUser) {
+        if (currentUser == null) {
+            return false;
+        }
+        String numericUserId = currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
+        return Objects.equals(run.userId(), numericUserId)
+                || Objects.equals(run.userId(), currentUserId(currentUser));
     }
 
     private SandboxExecution failedExecution(SandboxSession session, SandboxPolicyReasonCode reasonCode) {

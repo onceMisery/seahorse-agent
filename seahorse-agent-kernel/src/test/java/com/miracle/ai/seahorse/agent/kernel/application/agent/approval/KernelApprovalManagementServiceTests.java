@@ -112,6 +112,23 @@ class KernelApprovalManagementServiceTests {
     }
 
     @Test
+    void shouldListPendingApprovalsForOperatorStyleOwnerAfterRunIsReadable() {
+        MemoryApprovalRepository repository = new MemoryApprovalRepository(List.of(
+                approval("approval-1", "run-1", "alice", ApprovalRequestStatus.PENDING)));
+        ApprovalManagementInboundPort service = new KernelApprovalManagementService(
+                repository,
+                repository,
+                user(),
+                new MemoryRunRepository(run("run-1", "alice")),
+                FIXED_CLOCK);
+
+        List<ApprovalRequest> approvals = service.listPendingByRunId("run-1");
+
+        assertEquals(List.of("approval-1"), approvals.stream().map(ApprovalRequest::approvalId).toList());
+        assertEquals("run-1", repository.lastQuery.runId());
+    }
+
+    @Test
     void shouldDenyPendingApprovalListBeforeQueryingUnreadableRun() {
         MemoryApprovalRepository repository = new MemoryApprovalRepository(List.of(
                 approval("approval-1", "run-1", "3", ApprovalRequestStatus.PENDING)));
@@ -169,6 +186,25 @@ class KernelApprovalManagementServiceTests {
         assertEquals("2", decided.decidedBy());
         assertEquals(NOW, decided.decidedAt());
         assertEquals("Confirmed from chat", decided.decisionComment());
+        assertEquals(ApprovalRequestStatus.APPROVED, repository.lastDecision.toStatus());
+    }
+
+    @Test
+    void shouldApprovePendingApprovalWithOperatorStyleOwningUser() {
+        MemoryApprovalRepository repository = new MemoryApprovalRepository(
+                List.of(approval("approval-1", "run-1", "alice", ApprovalRequestStatus.PENDING)));
+        ApprovalManagementInboundPort service = new KernelApprovalManagementService(
+                repository,
+                repository,
+                user(),
+                FIXED_CLOCK);
+
+        ApprovalRequest decided = service.approve(
+                "approval-1",
+                new ApprovalDecisionCommand("Confirmed from chat"));
+
+        assertEquals(ApprovalRequestStatus.APPROVED, decided.status());
+        assertEquals("2", decided.decidedBy());
         assertEquals(ApprovalRequestStatus.APPROVED, repository.lastDecision.toStatus());
     }
 

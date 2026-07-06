@@ -778,6 +778,34 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldAllowNumericWebUserIdOwnerSandboxExecutionLookup() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        sessionRepository.saveSession(SandboxSession.created(
+                "session-1",
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW));
+        MemorySandboxExecutionRepository executionRepository = new MemorySandboxExecutionRepository();
+        SandboxExecution execution = SandboxExecution.created(
+                "exec-1",
+                "session-1",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW);
+        executionRepository.saveExecution(execution);
+        KernelSandboxRuntimeService service = guardedService(
+                sessionRepository,
+                executionRepository,
+                new EmptySandboxArtifactQueryPort(),
+                currentUser(42L, "owner", "user"),
+                run("run-1", "42"));
+
+        List<SandboxExecution> executions = service.listExecutions("session-1");
+
+        assertEquals(List.of("exec-1"), executions.stream().map(SandboxExecution::executionId).toList());
+    }
+
+    @Test
     void shouldFilterUnreadableSandboxSessionsFromTenantList() {
         MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
         sessionRepository.saveSession(SandboxSession.created(
@@ -1745,6 +1773,10 @@ class KernelSandboxRuntimeServiceTests {
 
     private static CurrentUserPort currentUser(String userId, String role) {
         return () -> Optional.of(new CurrentUser(1L, userId, role, null));
+    }
+
+    private static CurrentUserPort currentUser(Long userId, String operator, String role) {
+        return () -> Optional.of(new CurrentUser(userId, operator, role, null));
     }
 
     private static AgentRun run(String runId, String userId) {

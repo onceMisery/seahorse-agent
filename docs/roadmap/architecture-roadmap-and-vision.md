@@ -906,3 +906,11 @@ Run context snapshot lookup and the legacy workflow visualization service now ac
 This is a narrow authorization-compatibility slice. It does not change legacy task snapshot fallback, workflow step ordering, SSE gating, admin access, unrelated-user denial, snapshot persistence, or repository schema.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunContextSnapshotServiceTests,KernelWorkflowVisualizationServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 10/10, covering numeric web user ID owners for run context snapshots and legacy workflow visualization while preserving unrelated-user denial and legacy ungated constructor behavior.
+
+## 2026-07-06 Update: Approval and Sandbox Numeric Owner Compatibility
+
+Pending approval lookup/decision ownership and sandbox session read guards now accept both the current user's numeric primary-key string and operator username when comparing against Agent run or approval `userId` values. This keeps the existing owner/admin boundary while allowing web-created numeric-owner runs and older operator-style approval records to remain operable by the real owner.
+
+This is a narrow authorization-compatibility slice. It does not change approval state transitions, approval paging admin semantics, sandbox execution policy, artifact download eligibility, scan status handling, tenant session ordering, or repository schema.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelApprovalManagementServiceTests,KernelSandboxRuntimeServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 58/58, covering operator-style approval ownership, numeric web user ID sandbox session ownership, unrelated-user denial, and the existing sandbox runtime behaviors.
