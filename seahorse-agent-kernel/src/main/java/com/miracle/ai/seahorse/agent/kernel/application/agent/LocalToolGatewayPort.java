@@ -953,6 +953,11 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("contentPresent", result.content() != null);
         summary.put("contentLength", content.length());
         summary.put("contentJsonType", result.content() == null ? "none" : resultContentJsonType(content));
+        JsonTopLevelShape jsonTopLevelShape = resultContentJsonTopLevelShape(content);
+        if (jsonTopLevelShape != null) {
+            summary.put("contentJsonTopLevelFieldCount", jsonTopLevelShape.fieldCount());
+            summary.put("contentJsonTopLevelElementCount", jsonTopLevelShape.elementCount());
+        }
         JsonValueShape jsonValueShape = resultContentJsonValueShape(content);
         if (jsonValueShape != null) {
             summary.put("contentJsonValueCount", jsonValueShape.count());
@@ -966,6 +971,27 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     + ", contentLength=" + content.length()
                     + ", contentJsonType=" + resultContentJsonType(content));
         }
+    }
+
+    private JsonTopLevelShape resultContentJsonTopLevelShape(String content) {
+        if (!hasText(content)) {
+            return null;
+        }
+        try {
+            JsonNode node = OBJECT_MAPPER.readTree(content);
+            if (node.isObject()) {
+                return new JsonTopLevelShape(node.size(), 0);
+            }
+            if (node.isArray()) {
+                return new JsonTopLevelShape(0, node.size());
+            }
+            return new JsonTopLevelShape(0, 0);
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+
+    private record JsonTopLevelShape(int fieldCount, int elementCount) {
     }
 
     private String summarizeFailedResult(ToolInvocationResult result, String auditError) {

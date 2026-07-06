@@ -1202,3 +1202,11 @@ Tool Gateway failed completion audit now uses the shared `CredentialTextRedactor
 This is a narrow maintainability and audit-hardening slice. It does not change tool execution, approval decisions, caller-visible non-credential errors, successful output redaction, artifact publication, result-summary schema, or the shared credential redaction vocabulary itself.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 30/30, covering shared failed-error credential redaction while preserving Tool Gateway audit and shared redactor behavior.
+
+## 2026-07-06 Update: Tool Gateway JSON Top-Level Shape Audit
+
+Tool Gateway successful completion audit now adds value-free top-level JSON shape metadata for successful tool observations: `contentJsonTopLevelFieldCount` for object responses and `contentJsonTopLevelElementCount` for array responses. This complements the existing JSON type and leaf-value length/count metadata without storing response field names or raw values.
+
+This is a narrow completion-audit hardening slice. It does not change tool execution, output redaction, artifact publication, result-summary storage schema, failure summaries, approval policy, quota policy, or caller-visible tool observations.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 28/28, covering object and array top-level JSON shape metadata while preserving assertions that raw JSON field names and values are excluded from completion summaries.

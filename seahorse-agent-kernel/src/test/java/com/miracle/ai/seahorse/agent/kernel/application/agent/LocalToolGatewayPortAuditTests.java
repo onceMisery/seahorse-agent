@@ -95,10 +95,39 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(audit.completed.get(0).resultSummary().contains("\"contentPresent\":true"));
         assertTrue(audit.completed.get(0).resultSummary().contains("\"contentLength\":11"));
         assertTrue(audit.completed.get(0).resultSummary().contains("\"contentJsonType\":\"object\""));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentJsonTopLevelFieldCount\":1"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentJsonTopLevelElementCount\":0"));
         assertTrue(audit.completed.get(0).resultSummary().contains("\"contentJsonValueCount\":1"));
         assertTrue(audit.completed.get(0).resultSummary().contains("\"contentJsonValueTotalLength\":4"));
         assertTrue(audit.completed.get(0).resultSummary().contains("\"contentJsonValueMaxLength\":4"));
         assertEquals(FIXED_CLOCK.instant(), audit.completed.get(0).finishedAt());
+    }
+
+    @Test
+    void shouldSummarizeSuccessfulJsonArrayTopLevelShapeWithoutRawValues() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
+                "[{\"secretName\":\"alpha-secret\"},{\"safeName\":\"beta-value\"}]"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("weather"));
+
+        assertTrue(result.success());
+        String summary = audit.completed.get(0).resultSummary();
+        assertTrue(summary.contains("\"contentJsonType\":\"array\""));
+        assertTrue(summary.contains("\"contentJsonTopLevelFieldCount\":0"));
+        assertTrue(summary.contains("\"contentJsonTopLevelElementCount\":2"));
+        assertTrue(summary.contains("\"contentJsonValueCount\":2"));
+        assertTrue(summary.contains("\"contentJsonValueTotalLength\":22"));
+        assertTrue(summary.contains("\"contentJsonValueMaxLength\":12"));
+        assertFalse(summary.contains("secretName"));
+        assertFalse(summary.contains("safeName"));
+        assertFalse(summary.contains("alpha-secret"));
+        assertFalse(summary.contains("beta-value"));
     }
 
     @Test
