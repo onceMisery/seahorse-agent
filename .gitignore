@@ -39,12 +39,13 @@ build/
 ### VS Code ###
 .vscode/
 scripts/logs/
-output/
+/output/
 
 ### Frontend ###
 node_modules/
 dist/
 .vite/
+/frontend/output/
 .env
 .env.local
 

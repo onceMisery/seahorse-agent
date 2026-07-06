@@ -1138,3 +1138,11 @@ Credential-shaped JSON field classification is now centralized in the domain-lev
 This is a narrow maintainability hardening slice. It does not change text credential redaction, OpenAPI request construction, credential injection, audit persistence, approval policy, artifact publication, sandbox browser metadata, or default redaction wiring.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=CredentialJsonFieldClassifierTests,CredentialTextRedactorTests,LocalToolGatewayPortAuditTests,OpenApiToolPortAdapterTests,AuditRedactionPolicyTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 40/40, covering the shared classifier directly plus Tool Gateway, OpenAPI, and audit caller paths.
+
+## 2026-07-06 Update: Scoped Output Ignore Rule
+
+The repository ignore rule for `output/` is now scoped to the repository root instead of every nested directory named `output`, and the frontend Playwright output directory is ignored explicitly. This prevents domain source and test packages such as `.../agent/output` from being silently excluded while keeping generated frontend evidence artifacts out of ordinary Git status noise.
+
+This is a narrow repository-governance slice. It does not change runtime code, redaction semantics, Tool Gateway execution, audit persistence, approval policy, or frontend test behavior.
+
+Fresh evidence: `git check-ignore -v -- output/example.tmp frontend/output/example.tmp seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/domain/agent/output/NewSourceExample.java seahorse-agent-kernel/src/test/java/com/miracle/ai/seahorse/agent/kernel/domain/agent/output/NewSourceExampleTests.java` ignored only root `output/` and `/frontend/output/` paths, while source/test `output` package paths were not ignored.
