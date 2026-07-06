@@ -23,12 +23,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 public class AuditRedactionPolicy {
 
@@ -45,12 +45,6 @@ public class AuditRedactionPolicy {
             "sessionid",
             "setcookie",
             "authorization");
-    private static final Pattern CREDENTIAL_VALUE_PATTERN = Pattern.compile(
-            "(?i)(authorization\\s*[:=]\\s*(?:bearer|basic)\\s+[a-z0-9._~+/=-]{8,}"
-                    + "|bearer\\s+[a-z0-9._~+/=-]{8,}"
-                    + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id"
-                    + "|session[_-]?token|secret[_-]?key|private[_-]?key|set[_-]?cookie|cookie)"
-                    + "\\s*[:=]\\s*[^\\s&;]+)");
 
     private final ObjectMapper objectMapper;
 
@@ -105,7 +99,7 @@ public class AuditRedactionPolicy {
     private boolean credentialValue(JsonNode node) {
         return node != null
                 && node.isTextual()
-                && CREDENTIAL_VALUE_PATTERN.matcher(node.asText("")).find();
+                && CredentialTextRedactor.containsCredential(node.asText(""));
     }
 
     private boolean sensitive(String key) {

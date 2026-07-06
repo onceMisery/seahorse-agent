@@ -1098,3 +1098,11 @@ Tool Gateway output redaction, OpenAPI provider text response redaction, and aud
 This is a narrow text-redaction vocabulary hardening slice. It does not change sandbox browser cookie injection/replay, cookie count summaries, JSON field redaction, OpenAPI request construction, audit persistence, approval policy, artifact publication, or default redaction wiring.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,OpenApiToolPortAdapterTests,AuditRedactionPolicyTests,SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 66/66, covering Cookie header text redaction in Tool Gateway/OpenAPI/audit paths while preserving sandbox browser cookie/session metadata behavior.
+
+## 2026-07-06 Update: Shared Credential Text Redactor
+
+Credential-shaped text redaction is now centralized in the domain-level `CredentialTextRedactor` used by Tool Gateway output redaction, OpenAPI provider text response redaction, and audit payload credential detection. This removes three duplicated regex copies so future credential vocabulary changes land in one place instead of drifting across gateway, provider, and audit paths.
+
+This is a narrow maintainability hardening slice. It does not change JSON field redaction semantics, OpenAPI request construction, credential injection, audit persistence, approval policy, artifact publication, sandbox browser cookie/session metadata, or default redaction wiring.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=CredentialTextRedactorTests,LocalToolGatewayPortAuditTests,OpenApiToolPortAdapterTests,AuditRedactionPolicyTests,SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 69/69, covering the shared redactor directly plus the three existing caller paths and sandbox browser cookie/session metadata behavior.

@@ -29,6 +29,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.ConnectorCred
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.ConnectorOperation;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.ConnectorOperationStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.OpenApiHttpMethod;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ConnectorCredentialBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ConnectorPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ConnectorQuery;
@@ -60,7 +61,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 public class OpenApiToolPortAdapter implements ToolPort {
 
@@ -88,14 +88,6 @@ public class OpenApiToolPortAdapter implements ToolPort {
             "sessionid",
             "secretkey",
             "privatekey");
-    private static final Pattern CREDENTIAL_VALUE_PATTERN = Pattern.compile(
-            "(?i)(authorization\\s*[:=]\\s*(?:bearer|basic)\\s+[a-z0-9._~+/=-]{8,}"
-                    + "|bearer\\s+[a-z0-9._~+/=-]{8,}"
-                    + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id"
-                    + "|session[_-]?token|secret[_-]?key|private[_-]?key|set[_-]?cookie|cookie)"
-                    + "\\s*[:=]\\s*[^\\s&;]+)");
-    private static final Pattern OPENAI_KEY_PATTERN = Pattern.compile("sk-[A-Za-z0-9][A-Za-z0-9_-]*");
-
     private final ConnectorRepositoryPort connectorRepository;
     private final ConnectorCredentialBindingRepositoryPort credentialBindingRepository;
     private final CredentialProviderPort credentialProvider;
@@ -399,11 +391,7 @@ public class OpenApiToolPortAdapter implements ToolPort {
     }
 
     private String redactText(String value) {
-        if (value == null) {
-            return null;
-        }
-        String redacted = OPENAI_KEY_PATTERN.matcher(value).replaceAll("[REDACTED]");
-        return CREDENTIAL_VALUE_PATTERN.matcher(redacted).replaceAll("[REDACTED]");
+        return CredentialTextRedactor.redact(value);
     }
 
     private JsonNode redact(JsonNode node) {

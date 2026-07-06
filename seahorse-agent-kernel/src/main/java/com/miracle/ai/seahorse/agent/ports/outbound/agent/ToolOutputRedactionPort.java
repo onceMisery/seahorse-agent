@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -30,13 +31,6 @@ import java.util.regex.Pattern;
 public interface ToolOutputRedactionPort {
 
     String REDACTED_VALUE = "[REDACTED]";
-    Pattern OPENAI_KEY_PATTERN = Pattern.compile("sk-[A-Za-z0-9][A-Za-z0-9_-]*");
-    Pattern CREDENTIAL_VALUE_PATTERN = Pattern.compile(
-            "(?i)(authorization\\s*[:=]\\s*(?:bearer|basic)\\s+[a-z0-9._~+/=-]{8,}"
-                    + "|bearer\\s+[a-z0-9._~+/=-]{8,}"
-                    + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id"
-                    + "|session[_-]?token|secret[_-]?key|private[_-]?key|set[_-]?cookie|cookie)"
-                    + "\\s*[:=]\\s*[^\\s&;]+)");
     Pattern SECRET_FIELD_PATTERN = Pattern.compile(
             "(?i).*(access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id"
                     + "|authorization|set[_-]?cookie|secret[_-]?key|private[_-]?key).*");
@@ -72,11 +66,7 @@ public interface ToolOutputRedactionPort {
     }
 
     private static String redactSecretPatterns(String value) {
-        if (value == null) {
-            return null;
-        }
-        String redacted = OPENAI_KEY_PATTERN.matcher(value).replaceAll(REDACTED_VALUE);
-        return CREDENTIAL_VALUE_PATTERN.matcher(redacted).replaceAll(REDACTED_VALUE);
+        return CredentialTextRedactor.redact(value);
     }
 
     private static String redactJsonSecretFields(ObjectMapper objectMapper, String content) {
