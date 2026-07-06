@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.handoff;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
@@ -77,8 +78,13 @@ public class LocalAgentAsToolPort implements DescribedToolPort {
             payload.put("status", handoff.status().name());
             return ToolInvocationResult.ok(json(payload));
         } catch (RuntimeException ex) {
-            return ToolInvocationResult.failed(ex.getMessage());
+            return ToolInvocationResult.failed(redactDisplayText(
+                    Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
+    }
+
+    private static String redactDisplayText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private static String text(Map<String, Object> arguments, String key) {

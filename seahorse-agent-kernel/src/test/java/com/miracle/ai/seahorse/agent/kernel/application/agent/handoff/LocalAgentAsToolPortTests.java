@@ -41,6 +41,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LocalAgentAsToolPortTests {
@@ -114,6 +115,37 @@ class LocalAgentAsToolPortTests {
         assertEquals("RUNNING", json.get("status").asText());
     }
 
+    @Test
+    void shouldRedactCredentialShapedFailureMessagesWhilePreservingExecutionInput() {
+        MemoryAgentHandoffRepository repository = new MemoryAgentHandoffRepository();
+        RecordingRunPort runPort = new RecordingRunPort();
+        runPort.startFailure = new IllegalStateException(
+                "child run failed Authorization: Bearer abcdefghijklmnop api_key=plain-local-agent-secret");
+        KernelAgentHandoffService service = new KernelAgentHandoffService(
+                repository,
+                runPort,
+                new DefaultMeshPolicyPort(),
+                FIXED_CLOCK);
+        LocalAgentAsToolPort tool = new LocalAgentAsToolPort(service);
+
+        ToolInvocationResult result = tool.invoke("call-1", LocalAgentAsToolPort.TOOL_ID, Map.of(
+                "tenantId", "tenant-1",
+                "parentRunId", "parent-run-1",
+                "sourceAgentId", "source-agent",
+                "targetAgentId", "target-agent",
+                "targetVersionId", "target-version-1",
+                "inputSummary", "delegate api_key=raw-handoff-input-secret",
+                "depth", 1,
+                "ancestorAgentIds", List.of("source-agent")));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("[REDACTED]"));
+        assertFalse(result.error().contains("abcdefghijklmnop"));
+        assertFalse(result.error().contains("plain-local-agent-secret"));
+        assertEquals(1, runPort.startedCommands.size());
+        assertEquals("delegate api_key=raw-handoff-input-secret", runPort.startedCommands.get(0).inputSummary());
+    }
+
     private static final class MemoryAgentHandoffRepository implements AgentHandoffRepositoryPort {
         private final Map<String, AgentHandoff> handoffs = new LinkedHashMap<>();
 
@@ -145,10 +177,14 @@ class LocalAgentAsToolPortTests {
 
     private static final class RecordingRunPort implements AgentRunInboundPort {
         private final List<AgentRunStartCommand> startedCommands = new ArrayList<>();
+        private RuntimeException startFailure;
 
         @Override
         public AgentRun startRun(AgentRunStartCommand command) {
             startedCommands.add(command);
+            if (startFailure != null) {
+                throw startFailure;
+            }
             return new AgentRun(
                     "child-run-1",
                     command.agentId(),

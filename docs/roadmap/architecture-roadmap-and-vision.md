@@ -1486,3 +1486,11 @@ Newsletter, PPT, chart visualization, frontend design, image generation, and Git
 This is a narrow generation-tool display-boundary hardening slice. It does not change prompt construction, model selection, image request fields, GitHub repository fetch parameters, successful generation observations, artifact publication, Tool Gateway audit persistence, approval policy, quota policy, or base `ToolInvocationResult` semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=ContentGenerationToolPortAdapterTests,GitHubProjectGenerationToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 15/15. Coverage includes chat-backed generation exception redaction with raw prompt preservation, GitHub repository reader exception redaction with raw repository URL preservation, image generation exception redaction with raw prompt preservation, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Local Agent-as-Tool Failure Redaction
+
+Local Agent-as-Tool handoff failures now redact credential-shaped text before returning failed tool errors from child-run creation or handoff execution exceptions. This keeps the local delegation failure path diagnostic enough for active runs while preventing bearer tokens, API keys, or similar material from flowing back through the model-visible error channel.
+
+This is a narrow local handoff display-boundary hardening slice. It does not change handoff policy, child run creation inputs, repository schema, audit ledger shape, successful handoff JSON, Tool Gateway audit persistence, approval/quota policy, or base `ToolInvocationResult` semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalAgentAsToolPortTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 6/6, covering local handoff failure redaction, raw input-summary preservation for child run creation, existing successful handoff behavior, and shared credential text redactor behavior.
