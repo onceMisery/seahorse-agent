@@ -1194,3 +1194,11 @@ Tool Gateway completion audit now emits a value-free result summary for successf
 This is a narrow completion-audit hardening slice. It does not change tool execution, caller-visible tool results, output redaction, artifact publication, failure summaries, approval policy, or quota policy.
 
 Fresh evidence: the regression first failed because successful null-content results produced a null `resultSummary`; after the fix, `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 27/27, covering successful empty-content completion summaries while preserving existing success/failure audit coverage.
+
+## 2026-07-06 Update: Shared Failed-Error Credential Redaction
+
+Tool Gateway failed completion audit now uses the shared `CredentialTextRedactor` for failed-tool error redaction instead of keeping a local regex copy. Failed tool observations, completion `errorMessage`, and result-summary error length now stay aligned with the shared credential-text vocabulary for header-style authorization, cookie, secret-key, and OpenAI-style key fragments.
+
+This is a narrow maintainability and audit-hardening slice. It does not change tool execution, approval decisions, caller-visible non-credential errors, successful output redaction, artifact publication, result-summary schema, or the shared credential redaction vocabulary itself.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 30/30, covering shared failed-error credential redaction while preserving Tool Gateway audit and shared redactor behavior.

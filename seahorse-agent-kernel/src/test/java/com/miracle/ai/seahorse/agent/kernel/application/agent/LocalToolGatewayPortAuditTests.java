@@ -444,7 +444,10 @@ class LocalToolGatewayPortAuditTests {
     @Test
     void shouldRedactCredentialShapedFailedToolErrorBeforeReturningAndAuditing() {
         CountingToolPort tool = new CountingToolPort(
-                ToolInvocationResult.failed("upstream failed Cookie: plain-secret-token-123"));
+                ToolInvocationResult.failed("upstream failed "
+                        + "Authorization: Bearer abcdefghijklmnop "
+                        + "Cookie: plain-secret-token-123 "
+                        + "sk-live-secret"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
         LocalToolGatewayPort gateway = new LocalToolGatewayPort(
                 new SingleToolRegistry(tool),
@@ -456,15 +459,22 @@ class LocalToolGatewayPortAuditTests {
         ToolInvocationResult result = gateway.invoke(request("weather"));
 
         assertFalse(result.success());
-        assertEquals("upstream failed [REDACTED]", result.error());
+        assertEquals("upstream failed [REDACTED] [REDACTED] [REDACTED]", result.error());
         assertEquals(ToolInvocationStatus.FAILED, audit.completed.get(0).status());
-        assertEquals("upstream failed [REDACTED]", audit.completed.get(0).errorMessage());
+        assertEquals("upstream failed [REDACTED] [REDACTED] [REDACTED]",
+                audit.completed.get(0).errorMessage());
         assertTrue(audit.completed.get(0).resultSummary().contains("\"contentPresent\":false"));
         assertTrue(audit.completed.get(0).resultSummary().contains("\"errorPresent\":true"));
-        assertTrue(audit.completed.get(0).resultSummary().contains("\"errorLength\":26"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"errorLength\":48"));
+        assertFalse(audit.completed.get(0).resultSummary().contains("abcdefghijklmnop"));
         assertFalse(audit.completed.get(0).resultSummary().contains("plain-secret-token-123"));
+        assertFalse(audit.completed.get(0).resultSummary().contains("sk-live-secret"));
+        assertFalse(result.error().contains("abcdefghijklmnop"));
         assertFalse(result.error().contains("plain-secret-token-123"));
+        assertFalse(result.error().contains("sk-live-secret"));
+        assertFalse(audit.completed.get(0).errorMessage().contains("abcdefghijklmnop"));
         assertFalse(audit.completed.get(0).errorMessage().contains("plain-secret-token-123"));
+        assertFalse(audit.completed.get(0).errorMessage().contains("sk-live-secret"));
     }
 
     @Test
