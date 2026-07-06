@@ -169,6 +169,50 @@ class KernelApprovalManagementServiceTests {
     }
 
     @Test
+    void shouldRedactCredentialDecisionCommentsBeforePersistingDecision() {
+        MemoryApprovalRepository approveRepository = new MemoryApprovalRepository(
+                List.of(approval("approval-1", ApprovalRequestStatus.PENDING)));
+        MemoryApprovalRepository rejectRepository = new MemoryApprovalRepository(
+                List.of(approval("approval-2", ApprovalRequestStatus.PENDING)));
+        MemoryApprovalRepository modifyRepository = new MemoryApprovalRepository(
+                List.of(approval("approval-3", ApprovalRequestStatus.PENDING)));
+        ApprovalManagementInboundPort approveService = new KernelApprovalManagementService(
+                approveRepository,
+                approveRepository,
+                adminUser(),
+                FIXED_CLOCK);
+        ApprovalManagementInboundPort rejectService = new KernelApprovalManagementService(
+                rejectRepository,
+                rejectRepository,
+                adminUser(),
+                FIXED_CLOCK);
+        ApprovalManagementInboundPort modifyService = new KernelApprovalManagementService(
+                modifyRepository,
+                modifyRepository,
+                adminUser(),
+                FIXED_CLOCK);
+
+        ApprovalRequest approved = approveService.approve(
+                "approval-1",
+                new ApprovalDecisionCommand("approved with access_token=secret-marker"));
+        ApprovalRequest rejected = rejectService.reject(
+                "approval-2",
+                new ApprovalDecisionCommand("rejected with Authorization: Bearer secretmarker123"));
+        ApprovalRequest modified = modifyService.modify(
+                "approval-3",
+                new ApprovalModifyCommand(
+                        "{\"argumentKeys\":[\"input\"],\"modified\":true}",
+                        "modified with sessionToken=secret-marker"));
+
+        assertEquals("approved with [REDACTED]", approved.decisionComment());
+        assertEquals("approved with [REDACTED]", approveRepository.lastDecision.decisionComment());
+        assertEquals("rejected with [REDACTED]", rejected.decisionComment());
+        assertEquals("rejected with [REDACTED]", rejectRepository.lastDecision.decisionComment());
+        assertEquals("modified with [REDACTED]", modified.decisionComment());
+        assertEquals("modified with [REDACTED]", modifyRepository.lastDecision.decisionComment());
+    }
+
+    @Test
     void shouldApprovePendingApprovalWithOwningUser() {
         MemoryApprovalRepository repository = new MemoryApprovalRepository(
                 List.of(approval("approval-1", "run-1", "2", ApprovalRequestStatus.PENDING)));

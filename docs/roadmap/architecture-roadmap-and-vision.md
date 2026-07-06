@@ -1242,3 +1242,11 @@ Governed tool preflight permissions now redact credential-shaped policy reason m
 This is a narrow governed-preflight display hardening slice. It does not change policy decisions, approval matching, pending approval persistence, approval summaries, Tool Gateway invocation, request audit summaries, arguments preview JSON, or resume behavior.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalGovernedToolExecutionPortTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 5/5, covering reason-message credential redaction across allow, deny, and approval-required preflight outcomes.
+
+## 2026-07-06 Update: Approval Decision Comment Redaction
+
+Approval management now redacts credential-shaped decision comments before persisting approve, reject, or modified decisions. This protects the operator-visible `decisionComment` and resume-facing rejection/expiration comment path while preserving approval status transitions, decision timestamps, modified-argument validation, and ownership/admin authorization checks.
+
+This is a narrow approval-management display hardening slice. It does not change approval request creation, policy decisions, approval matching, Tool Gateway invocation, arguments preview validation, request audit summaries, or frontend approval workflows.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelApprovalManagementServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 18/18, covering approve, reject, and modify decision-comment redaction plus shared credential text redactor behavior.

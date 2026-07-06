@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalModifyCommand;
@@ -168,7 +169,7 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
                 toStatus,
                 currentUser.userId(),
                 clock.instant(),
-                decisionComment,
+                safeDecisionComment(decisionComment),
                 safeArgumentsPreviewJson);
         return decisionPort.decide(decision)
                 .orElseThrow(() -> new IllegalStateException(APPROVAL_STATE_CHANGED));
@@ -227,6 +228,10 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
 
     private String decisionComment(ApprovalDecisionCommand command) {
         return command == null ? null : command.decisionComment();
+    }
+
+    private String safeDecisionComment(String decisionComment) {
+        return CredentialTextRedactor.redact(decisionComment);
     }
 
     private String requireText(String value, String message) {
