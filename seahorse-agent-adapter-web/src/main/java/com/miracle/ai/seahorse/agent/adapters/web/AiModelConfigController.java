@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import cn.dev33.satoken.stp.StpUtil;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.model.AiModelConfig;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResults;
@@ -28,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -59,7 +61,7 @@ public class AiModelConfigController {
                     .collect(Collectors.toList());
             return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, data);
         } catch (Exception e) {
-            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Failed to list configs: " + e.getMessage());
+            return failure("Failed to list configs", e);
         }
     }
 
@@ -72,7 +74,7 @@ public class AiModelConfigController {
                     .map(config -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, toResponseMap(config)))
                     .orElse(Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Config not found"));
         } catch (Exception e) {
-            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Failed to get config: " + e.getMessage());
+            return failure("Failed to get config", e);
         }
     }
 
@@ -85,7 +87,7 @@ public class AiModelConfigController {
                     .map(config -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, GateResults.fromAiModelConfig(config)))
                     .orElse(Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Config not found"));
         } catch (Exception e) {
-            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Failed to get config gate result: " + e.getMessage());
+            return failure("Failed to get config gate result", e);
         }
     }
 
@@ -105,7 +107,7 @@ public class AiModelConfigController {
 
             return Map.of(KEY_CODE, SUCCESS_CODE, KEY_MESSAGE, "Config updated successfully");
         } catch (Exception e) {
-            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Failed to update config: " + e.getMessage());
+            return failure("Failed to update config", e);
         }
     }
 
@@ -132,7 +134,7 @@ public class AiModelConfigController {
 
             return Map.of(KEY_CODE, SUCCESS_CODE, KEY_MESSAGE, "Config created successfully", KEY_DATA, toResponseMap(config));
         } catch (Exception e) {
-            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Failed to create config: " + e.getMessage());
+            return failure("Failed to create config", e);
         }
     }
 
@@ -144,8 +146,13 @@ public class AiModelConfigController {
             configRepository.delete(normalizeTenantId(tenantId), key);
             return Map.of(KEY_CODE, SUCCESS_CODE, KEY_MESSAGE, "Config deleted successfully");
         } catch (Exception e) {
-            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Failed to delete config: " + e.getMessage());
+            return failure("Failed to delete config", e);
         }
+    }
+
+    private Map<String, Object> failure(String prefix, Exception error) {
+        String message = Objects.requireNonNullElse(error.getMessage(), error.getClass().getSimpleName());
+        return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, prefix + ": " + CredentialTextRedactor.redact(message));
     }
 
     private Map<String, Object> toResponseMap(AiModelConfig config) {

@@ -1808,3 +1808,11 @@ Plugin status management requests now redact credential-shaped diagnostic text b
 This is a narrow Web adapter boundary hardening slice. It does not change plugin health reporting, registry listing, status identity fields, capability sets, enabled/healthy semantics, repository persistence shape, or non-string diagnostic detail values.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-adapter-web,seahorse-agent-kernel -am "-Dtest=SeahorseWebApiContractTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes covered kernel redactor plus plugin status POST response/persistence redaction and existing Web API contracts.
+
+## 2026-07-06 Update: AI Model Config API Error Redaction
+
+AI model config admin API failures now redact credential-shaped exception text before returning JSON `message` values from list, get, gate-result, update, create, or delete operations. This protects model configuration administration screens and API clients when repository or provider failures accidentally include bearer tokens, API keys, cookies, or similar material.
+
+This is a narrow Web adapter error-response hardening slice. It does not change login checks, repository calls, successful response payloads, encrypted config masking, gate-result construction, tenant normalization, or server-side exception handling.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-web,seahorse-agent-kernel -am "-Dtest=AiModelConfigControllerTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with `BUILD SUCCESS`; targeted test classes covered kernel redactor plus AI model config gate-result behavior and API failure-message redaction.

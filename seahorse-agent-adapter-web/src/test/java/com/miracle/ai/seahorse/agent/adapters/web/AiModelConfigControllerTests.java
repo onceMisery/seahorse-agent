@@ -61,6 +61,25 @@ class AiModelConfigControllerTests {
         verify(repository).findByKey("tenant-a", "openai.apiKey");
     }
 
+    @Test
+    void shouldRedactCredentialShapedAiModelConfigErrors() throws Exception {
+        AiModelConfigRepositoryPort repository = mock(AiModelConfigRepositoryPort.class);
+        when(repository.findAll("tenant-a")).thenThrow(new IllegalStateException(
+                "provider failed Authorization: Bearer abcdefghijklmnop api_key=plain-ai-config-secret"));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new AiModelConfigController(repository)).build();
+
+        try (MockedStatic<StpUtil> stp = mockStatic(StpUtil.class)) {
+            mvc.perform(get("/admin/ai-config").param("tenantId", "tenant-a"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("1"))
+                    .andExpect(jsonPath("$.message").value("Failed to list configs: provider failed [REDACTED] [REDACTED]"))
+                    .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.not(
+                            org.hamcrest.Matchers.containsString("abcdefghijklmnop"))))
+                    .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.not(
+                            org.hamcrest.Matchers.containsString("plain-ai-config-secret"))));
+        }
+    }
+
     private static AiModelConfig config() {
         AiModelConfig config = new AiModelConfig();
         config.setId("cfg-1");
