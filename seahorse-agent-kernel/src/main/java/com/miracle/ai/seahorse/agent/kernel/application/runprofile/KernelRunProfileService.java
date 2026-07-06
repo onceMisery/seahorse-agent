@@ -45,6 +45,7 @@ import java.util.stream.Collectors;
 public class KernelRunProfileService implements RunProfileInboundPort {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final int MAX_TOOL_ID_PREVIEW_LENGTH = 64;
 
     @NonNull
     private final RunProfileRepositoryPort repositoryPort;
@@ -291,6 +292,7 @@ public class KernelRunProfileService implements RunProfileInboundPort {
                     })
                     .map(RunProfileToolBindingRecord::getToolId)
                     .filter(Objects::nonNull)
+                    .map(this::safeToolIdPreview)
                     .toList();
             RunProfileRiskSummary summary = riskSummary(userId, id).orElseGet(() -> RunProfileRiskSummary.builder()
                     .riskLevel("LOW")
@@ -407,7 +409,7 @@ public class KernelRunProfileService implements RunProfileInboundPort {
                 .map(RunProfileToolBindingRecord::getToolId)
                 .filter(Objects::nonNull)
                 .findFirst()
-                .ifPresent(toolId -> items.add(risk(code, level, messagePrefix + toolId)));
+                .ifPresent(toolId -> items.add(risk(code, level, messagePrefix + safeToolIdPreview(toolId))));
     }
 
     private RunProfileRiskSummary.RiskItem risk(String code, String level, String message) {
@@ -517,6 +519,34 @@ public class KernelRunProfileService implements RunProfileInboundPort {
     private String safeComment(String value) {
         String text = blankToNull(value);
         return text == null ? null : CredentialTextRedactor.redact(text);
+    }
+
+    private String safeToolIdPreview(String toolId) {
+        String value = blankToNull(toolId);
+        return isSafeToolIdPreview(value) ? value : "unsafe-tool-id";
+    }
+
+    private boolean isSafeToolIdPreview(String value) {
+        if (value == null || value.length() > MAX_TOOL_ID_PREVIEW_LENGTH) {
+            return false;
+        }
+        String lower = value.toLowerCase(Locale.ROOT);
+        if (lower.contains("secret") || lower.contains("token") || lower.contains("password")) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            boolean safe = (ch >= 'a' && ch <= 'z')
+                    || (ch >= 'A' && ch <= 'Z')
+                    || (ch >= '0' && ch <= '9')
+                    || ch == '_'
+                    || ch == '-'
+                    || ch == '.';
+            if (!safe) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String requireText(String value, String message) {

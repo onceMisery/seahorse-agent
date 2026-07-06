@@ -1342,3 +1342,11 @@ Run profile approval status updates now redact credential-shaped approval commen
 This is a narrow run-profile governance write-boundary hardening slice. It does not change run-profile config persistence, Tool Gateway policy decisions, production-gate checks, conversation profile binding, runtime execution config resolution, repository schema, or the Web adapter projection defense.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunProfileServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 15/15, covering submit/approve/reject approval-comment write redaction, existing run-profile lifecycle behavior, governance summaries, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Run Profile Summary Tool ID Preview Guard
+
+Run profile risk and audit summaries now filter tool-id display values through the same safe-preview posture used by Tool Gateway approval summaries. Unsafe high-risk tool identifiers containing credential-shaped markers, whitespace, unsupported characters, or excessive length are rendered as `unsafe-tool-id` in `RunProfileRiskSummary` messages and `RunProfileAuditSummary.highRiskToolIds`, while the underlying run-profile tool bindings keep their real tool ids for execution and management semantics.
+
+This is a narrow run-profile governance display-boundary hardening slice. It does not change tool binding persistence, resolve-preview tool allowlists, Tool Gateway invocation, approval matching, risk-code computation, production-gate blocking codes, repository schema, or Web adapter projection redaction.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunProfileServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 16/16, covering unsafe tool-id suppression in run-profile risk/audit summaries, binding immutability, existing run-profile lifecycle behavior, and shared credential text redactor behavior.

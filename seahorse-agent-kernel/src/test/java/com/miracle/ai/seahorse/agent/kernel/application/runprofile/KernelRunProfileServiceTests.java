@@ -372,6 +372,48 @@ class KernelRunProfileServiceTests {
         assertEquals("reject with [REDACTED]", repository.records.get(id).getApprovalComment());
     }
 
+    @Test
+    void shouldSuppressUnsafeToolIdPreviewInRiskAndAuditSummaries() {
+        InMemoryRunProfileRepository repository = new InMemoryRunProfileRepository();
+        KernelRunProfileService service = new KernelRunProfileService(repository, Set.of("kernel", "agentscope"));
+        Long id = service.save(RunProfileCommand.builder()
+                .userId("100")
+                .name("Governed AgentScope")
+                .executorEngine("agentscope")
+                .guardrailConfigJson("{\"highRiskToolApproval\":false}")
+                .toolBindings(List.of(
+                        RunProfileToolBindingCommand.builder()
+                                .toolId("mcp-secret-token-tool")
+                                .provider("MCP")
+                                .enabled(true)
+                                .build(),
+                        RunProfileToolBindingCommand.builder()
+                                .toolId("a2a tool with spaces")
+                                .provider("A2A")
+                                .enabled(true)
+                                .build()))
+                .build());
+
+        RunProfileRiskSummary riskSummary = service.riskSummary("100", id).orElseThrow();
+        RunProfileAuditSummary auditSummary = service.auditSummary("100", id).orElseThrow();
+
+        assertEquals("MCP tool is enabled: unsafe-tool-id", riskSummary.getRiskItems().stream()
+                .filter(item -> "TOOL_MCP".equals(item.getCode()))
+                .findFirst()
+                .orElseThrow()
+                .getMessage());
+        assertEquals("A2A remote agent is enabled: unsafe-tool-id", riskSummary.getRiskItems().stream()
+                .filter(item -> "TOOL_A2A".equals(item.getCode()))
+                .findFirst()
+                .orElseThrow()
+                .getMessage());
+        assertIterableEquals(List.of("unsafe-tool-id", "unsafe-tool-id"), auditSummary.getHighRiskToolIds());
+        assertIterableEquals(List.of("mcp-secret-token-tool", "a2a tool with spaces"),
+                repository.toolsByProfile.get(id).stream()
+                        .map(RunProfileToolBindingRecord::getToolId)
+                        .toList());
+    }
+
     private static final class InMemoryRunProfileRepository implements RunProfileRepositoryPort {
         private final LinkedHashMap<Long, RunProfileRecord> records = new LinkedHashMap<>();
         private final LinkedHashMap<Long, List<RunProfileToolBindingRecord>> toolsByProfile = new LinkedHashMap<>();
