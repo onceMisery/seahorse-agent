@@ -62,6 +62,23 @@ class KernelRunContextSnapshotServiceTests {
     }
 
     @Test
+    void shouldReturnSnapshotForNumericWebUserIdOwner() {
+        MemorySnapshotRepository snapshotRepository = new MemorySnapshotRepository();
+        snapshotRepository.save(snapshot("run-1"));
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("run-1", "42"));
+        KernelRunContextSnapshotService service = new KernelRunContextSnapshotService(
+                snapshotRepository,
+                runRepository,
+                currentUser(42L, "owner", "user"));
+
+        Optional<RunContextSnapshotRecord> snapshot = service.findByRunId("run-1");
+
+        assertTrue(snapshot.isPresent());
+        assertEquals("run-1", snapshot.orElseThrow().getRunId());
+    }
+
+    @Test
     void shouldDenySnapshotForUnrelatedAgentRunUser() {
         MemorySnapshotRepository snapshotRepository = new MemorySnapshotRepository();
         snapshotRepository.save(snapshot("run-1"));
@@ -142,6 +159,10 @@ class KernelRunContextSnapshotServiceTests {
 
     private static CurrentUserPort currentUser(String operator, String role) {
         return () -> Optional.of(new CurrentUser(1L, operator, role, null));
+    }
+
+    private static CurrentUserPort currentUser(Long userId, String operator, String role) {
+        return () -> Optional.of(new CurrentUser(userId, operator, role, null));
     }
 
     private static final class MemorySnapshotRepository implements RunContextSnapshotRepositoryPort {

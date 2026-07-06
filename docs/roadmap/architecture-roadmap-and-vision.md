@@ -898,3 +898,11 @@ Agent run snapshot and run workflow lookups now accept both the current user's n
 This is a narrow authorization-compatibility slice. It does not change snapshot assembly, checkpoint sanitization, workflow graph layout, admin access, unrelated-user denial, artifact scan filtering, approval state transitions, or repository schema.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunSnapshotServiceTests,KernelAgentRunWorkflowServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 7/7, covering numeric web user ID owners for snapshot detail and workflow graph while preserving unrelated-user denial.
+
+## 2026-07-06 Update: Run Context and Legacy Workflow Numeric Owner Compatibility
+
+Run context snapshot lookup and the legacy workflow visualization service now accept both the current user's numeric primary-key string and operator username when comparing against the owning Agent run `userId`. This keeps the same owner/admin boundary while allowing web-created numeric-owner runs to expose their prompt/tool/model context snapshot and legacy workflow steps to the real owner.
+
+This is a narrow authorization-compatibility slice. It does not change legacy task snapshot fallback, workflow step ordering, SSE gating, admin access, unrelated-user denial, snapshot persistence, or repository schema.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunContextSnapshotServiceTests,KernelWorkflowVisualizationServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 10/10, covering numeric web user ID owners for run context snapshots and legacy workflow visualization while preserving unrelated-user denial and legacy ungated constructor behavior.

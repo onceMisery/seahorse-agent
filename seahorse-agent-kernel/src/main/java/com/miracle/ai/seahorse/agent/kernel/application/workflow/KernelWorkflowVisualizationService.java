@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.workflow;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.workflow.ExecutionStepAggregate;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.ports.inbound.workflow.WorkflowVisualizationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
@@ -99,7 +100,7 @@ public class KernelWorkflowVisualizationService implements WorkflowVisualization
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
         runRepository.findRunById(runId)
                 .map(run -> {
-                    if (isAdmin(currentUser) || run.userId().equals(currentUserId(currentUser))) {
+                    if (isAdmin(currentUser) || ownsRun(run, currentUser)) {
                         return run;
                     }
                     throw new IllegalStateException(ACCESS_DENIED);
@@ -127,6 +128,15 @@ public class KernelWorkflowVisualizationService implements WorkflowVisualization
 
     private String currentUserId(CurrentUser currentUser) {
         return currentUser == null ? null : currentUser.operator();
+    }
+
+    private boolean ownsRun(AgentRun run, CurrentUser currentUser) {
+        if (currentUser == null) {
+            return false;
+        }
+        String numericUserId = currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
+        return Objects.equals(run.userId(), numericUserId)
+                || Objects.equals(run.userId(), currentUserId(currentUser));
     }
 
     private String requireText(String value, String message) {

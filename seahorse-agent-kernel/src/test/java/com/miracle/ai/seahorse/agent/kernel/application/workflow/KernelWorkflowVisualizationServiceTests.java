@@ -62,6 +62,21 @@ class KernelWorkflowVisualizationServiceTests {
     }
 
     @Test
+    void shouldReturnVisualizationForNumericWebUserIdOwner() {
+        RecordingWorkflowRepository workflowRepository = new RecordingWorkflowRepository();
+        workflowRepository.steps.add(step("step-1", NOW));
+        KernelWorkflowVisualizationService service = new KernelWorkflowVisualizationService(
+                workflowRepository,
+                new MemoryRunRepository(run("run-1", "42")),
+                currentUser(42L, "owner", "user"));
+
+        WorkflowVisualization visualization = service.getVisualization("run-1");
+
+        assertEquals(1, visualization.nodes().size());
+        assertEquals(List.of("run-1"), workflowRepository.requestedRunIds);
+    }
+
+    @Test
     void shouldReturnVisualizationForAdmin() {
         RecordingWorkflowRepository workflowRepository = new RecordingWorkflowRepository();
         workflowRepository.steps.add(step("step-1", NOW));
@@ -139,6 +154,10 @@ class KernelWorkflowVisualizationServiceTests {
 
     private static CurrentUserPort currentUser(String operator, String role) {
         return () -> Optional.of(new CurrentUser(1L, operator, role, null));
+    }
+
+    private static CurrentUserPort currentUser(Long userId, String operator, String role) {
+        return () -> Optional.of(new CurrentUser(userId, operator, role, null));
     }
 
     private static final class RecordingWorkflowRepository implements WorkflowVisualizationRepositoryPort {

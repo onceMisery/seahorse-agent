@@ -72,7 +72,7 @@ public class KernelRunContextSnapshotService implements RunContextSnapshotInboun
         }
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
         AgentRun run = maybeRun.orElseThrow();
-        if (isAdmin(currentUser) || run.userId().equals(currentUserId(currentUser))) {
+        if (isAdmin(currentUser) || ownsRun(run, currentUser)) {
             return;
         }
         throw new IllegalStateException(ACCESS_DENIED);
@@ -84,5 +84,14 @@ public class KernelRunContextSnapshotService implements RunContextSnapshotInboun
 
     private String currentUserId(CurrentUser currentUser) {
         return currentUser == null ? null : currentUser.operator();
+    }
+
+    private boolean ownsRun(AgentRun run, CurrentUser currentUser) {
+        if (currentUser == null) {
+            return false;
+        }
+        String numericUserId = currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
+        return Objects.equals(run.userId(), numericUserId)
+                || Objects.equals(run.userId(), currentUserId(currentUser));
     }
 }
