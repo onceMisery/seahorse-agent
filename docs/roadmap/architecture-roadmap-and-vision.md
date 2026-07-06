@@ -946,3 +946,11 @@ Tool Gateway request audit now includes value-free inline HTML shape evidence fo
 This is a narrow audit-hardening slice. It does not change browser execution, inline HTML validation, URL mode, egress policy, approval policy, quota policy, or artifact governance.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering sandbox browser inline HTML length metadata while excluding the inline HTML marker value and preserving the existing URL/session audit redaction coverage.
+
+## 2026-07-06 Update: Sandbox Browser Audit Capture Shape Summary
+
+Tool Gateway request audit now includes value-free capture shape evidence for `sandbox_browser`: screenshot flag, HAR/video flags, viewport-width presence/value, and viewport-height presence/value. Invalid or absent viewport inputs are recorded as `0`, so the audit keeps bounded numeric posture evidence without persisting browser content, URL values, cookies, localStorage values, or raw HTML.
+
+This is a narrow audit-hardening slice. It does not change browser execution, viewport validation, capture artifact collection, URL mode, egress policy, approval policy, quota policy, or artifact governance.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering screenshot and viewport metadata for URL mode plus default inline screenshot/absent viewport metadata while preserving existing URL, HTML, and session redaction coverage.

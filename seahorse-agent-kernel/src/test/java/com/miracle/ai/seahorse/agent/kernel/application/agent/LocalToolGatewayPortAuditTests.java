@@ -376,8 +376,11 @@ class LocalToolGatewayPortAuditTests {
                                                 "name", "seahorse_session_marker",
                                                 "value", "storage-secret-value"))))),
                         "captureSessionState", true,
+                        "screenshot", false,
                         "har", true,
-                        "video", true),
+                        "video", true,
+                        "viewportWidth", 1366,
+                        "viewportHeight", "768"),
                 Map.of(),
                 "run-1:call-1",
                 List.of("sandbox_browser")));
@@ -398,10 +401,15 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"sessionStateCookieCount\":1"));
         assertTrue(summary.contains("\"sessionStateOriginCount\":1"));
         assertTrue(summary.contains("\"captureSessionState\":true"));
+        assertTrue(summary.contains("\"screenshot\":false"));
         assertTrue(summary.contains("\"har\":true"));
         assertTrue(summary.contains("\"video\":true"));
-        assertTrue(summary.contains("\"argumentKeys\":[\"url\",\"allowedHosts\",\"cookies\",\"sessionState\",\"captureSessionState\",\"har\",\"video\"]"));
-        assertTrue(summary.contains("\"argumentCount\":7"));
+        assertTrue(summary.contains("\"viewportWidthPresent\":true"));
+        assertTrue(summary.contains("\"viewportWidth\":1366"));
+        assertTrue(summary.contains("\"viewportHeightPresent\":true"));
+        assertTrue(summary.contains("\"viewportHeight\":768"));
+        assertTrue(summary.contains("\"argumentKeys\":[\"url\",\"allowedHosts\",\"cookies\",\"sessionState\",\"captureSessionState\",\"screenshot\",\"har\",\"video\",\"viewportWidth\",\"viewportHeight\"]"));
+        assertTrue(summary.contains("\"argumentCount\":10"));
         assertFalse(summary.contains("cookie-secret-value"));
         assertFalse(summary.contains("restored-secret-value"));
         assertFalse(summary.contains("storage-secret-value"));
@@ -448,6 +456,11 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"urlQueryLength\":0"));
         assertTrue(summary.contains("\"htmlPresent\":true"));
         assertTrue(summary.contains("\"htmlLength\":" + html.length()));
+        assertTrue(summary.contains("\"screenshot\":true"));
+        assertTrue(summary.contains("\"viewportWidthPresent\":false"));
+        assertTrue(summary.contains("\"viewportWidth\":0"));
+        assertTrue(summary.contains("\"viewportHeightPresent\":false"));
+        assertTrue(summary.contains("\"viewportHeight\":0"));
         assertTrue(summary.contains("\"argumentKeys\":[\"html\",\"action\",\"har\"]"));
         assertFalse(summary.contains("inline-html-marker"));
         assertFalse(summary.contains(html));

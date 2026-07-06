@@ -572,8 +572,13 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("sessionStateCookieCount", sessionCookieCount);
         summary.put("sessionStateOriginCount", sessionOriginCount);
         summary.put("captureSessionState", booleanArgument(arguments, "captureSessionState"));
+        summary.put("screenshot", booleanArgument(arguments, "screenshot", true));
         summary.put("har", booleanArgument(arguments, "har"));
         summary.put("video", booleanArgument(arguments, "video"));
+        summary.put("viewportWidthPresent", arguments.containsKey("viewportWidth"));
+        summary.put("viewportWidth", positiveIntArgument(arguments, "viewportWidth"));
+        summary.put("viewportHeightPresent", arguments.containsKey("viewportHeight"));
+        summary.put("viewportHeight", positiveIntArgument(arguments, "viewportHeight"));
         summary.put("argumentKeys", safeSandboxBrowserArgumentKeys(arguments));
         summary.put("argumentCount", arguments.size());
         try {
@@ -717,11 +722,30 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     }
 
     private boolean booleanArgument(Map<String, Object> arguments, String name) {
+        return booleanArgument(arguments, name, false);
+    }
+
+    private boolean booleanArgument(Map<String, Object> arguments, String name, boolean defaultValue) {
         Object value = arguments == null ? null : arguments.get(name);
         if (value instanceof Boolean bool) {
             return bool;
         }
-        return value != null && Boolean.parseBoolean(value.toString());
+        return value == null ? defaultValue : Boolean.parseBoolean(value.toString());
+    }
+
+    private int positiveIntArgument(Map<String, Object> arguments, String name) {
+        Object value = arguments == null ? null : arguments.get(name);
+        if (value instanceof Number number) {
+            return Math.max(0, number.intValue());
+        }
+        if (value == null) {
+            return 0;
+        }
+        try {
+            return Math.max(0, Integer.parseInt(value.toString().trim()));
+        } catch (NumberFormatException ex) {
+            return 0;
+        }
     }
 
     private int listSize(Object value) {
