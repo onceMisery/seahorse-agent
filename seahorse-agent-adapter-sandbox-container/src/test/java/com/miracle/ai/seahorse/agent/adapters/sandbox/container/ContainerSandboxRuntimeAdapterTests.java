@@ -1037,6 +1037,28 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldFailClosedWhenBrowserUrlQueryExceedsLimitBeforeRunningContainer() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+        String queryMarker = "oversized-query-marker-" + "a".repeat(513);
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","url":"http://example.test/search?q=%s","allowedHosts":["example.test"]}
+                        """.formatted(queryMarker),
+                true,
+                List.of("example.test")));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("url query exceeds 512 chars");
+        assertThat(result.execution().resultSummary()).doesNotContain(queryMarker);
+        assertThat(runner.lastCommand).isNull();
+    }
+
+    @Test
     void shouldFailClosedWhenBrowserUrlUsesEncodedCredentialQueryBeforeRunningContainer() {
         RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
         ContainerSandboxRuntimeAdapter adapter = adapter(runner);

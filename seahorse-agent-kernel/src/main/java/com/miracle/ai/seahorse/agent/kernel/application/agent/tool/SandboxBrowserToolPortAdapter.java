@@ -50,6 +50,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     public static final String TOOL_ID = "sandbox_browser";
     private static final int MAX_HTML_CHARS = 256 * 1024;
     private static final int MAX_URL_CHARS = 2048;
+    private static final int MAX_URL_QUERY_CHARS = 512;
     private static final int MAX_ALLOWED_HOSTS = 16;
     private static final int MAX_COOKIES = 16;
     private static final int MAX_COOKIE_NAME_CHARS = 128;
@@ -463,6 +464,10 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         String rawQuery = uri.getRawQuery();
         if (!hasText(rawQuery)) {
             return;
+        }
+        if (rawQuery.length() > MAX_URL_QUERY_CHARS) {
+            throw new IllegalArgumentException(
+                    "sandbox_browser failed: url query exceeds " + MAX_URL_QUERY_CHARS + " chars");
         }
         for (String parameter : rawQuery.split("[&;]")) {
             if (!hasText(parameter)) {

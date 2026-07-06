@@ -501,6 +501,23 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldRejectOverlongQueryBrowserUrlBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+        String queryMarker = "oversized-query-marker-" + "a".repeat(513);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/search?q=" + queryMarker,
+                "allowedHosts", List.of("example.test"))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("url query exceeds 512 chars"));
+        assertFalse(result.error().contains(queryMarker));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
     void shouldRejectEncodedCredentialQueryBrowserUrlBeforeCreatingSession() {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);

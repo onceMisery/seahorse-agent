@@ -914,3 +914,11 @@ Pending approval lookup/decision ownership and sandbox session read guards now a
 This is a narrow authorization-compatibility slice. It does not change approval state transitions, approval paging admin semantics, sandbox execution policy, artifact download eligibility, scan status handling, tenant session ordering, or repository schema.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelApprovalManagementServiceTests,KernelSandboxRuntimeServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 58/58, covering operator-style approval ownership, numeric web user ID sandbox session ownership, unrelated-user denial, and the existing sandbox runtime behaviors.
+
+## 2026-07-06 Update: Sandbox Browser URL Query Length Guard
+
+The `sandbox_browser` tool adapter and container browser automation runtime now reject URL-mode requests whose raw query string exceeds 512 characters before creating a sandbox session or starting a container command. This keeps the existing 2048-character total URL cap while adding a tighter query-specific bound for prompt-visible tool input, runtime script generation, audit summaries, and HAR-adjacent URL handling.
+
+This is a narrow URL hygiene slice. It does not change host allowlisting, egress policy, cookie/session-state replay, credential-parameter detection, inline HTML mode, screenshot/HAR/video capture, or browser action semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 31/31, and `.\mvnw.cmd -pl seahorse-agent-adapter-sandbox-container -am "-Dtest=ContainerSandboxRuntimeAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 57/57, covering tool-layer rejection before sandbox session creation and runtime-layer rejection before container command execution.

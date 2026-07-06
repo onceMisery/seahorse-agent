@@ -86,6 +86,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final int MAX_FILE_CONVERSION_BINARY_SCAN_BYTES = 256 * 1024;
     private static final int MAX_BROWSER_HTML_CHARS = 256 * 1024;
     private static final int MAX_BROWSER_URL_CHARS = 2048;
+    private static final int MAX_BROWSER_URL_QUERY_CHARS = 512;
     private static final int MAX_BROWSER_ALLOWED_HOSTS = 16;
     private static final int MAX_BROWSER_COOKIES = 16;
     private static final int MAX_BROWSER_COOKIE_NAME_CHARS = 128;
@@ -1369,6 +1370,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String rawQuery = uri.getRawQuery();
         if (!hasText(rawQuery)) {
             return;
+        }
+        if (rawQuery.length() > MAX_BROWSER_URL_QUERY_CHARS) {
+            throw new IllegalArgumentException(
+                    "browser automation url query exceeds " + MAX_BROWSER_URL_QUERY_CHARS + " chars");
         }
         for (String parameter : rawQuery.split("[&;]")) {
             if (!hasText(parameter)) {
