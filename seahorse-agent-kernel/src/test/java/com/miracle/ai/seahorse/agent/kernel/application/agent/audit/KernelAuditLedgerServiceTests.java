@@ -80,6 +80,41 @@ class KernelAuditLedgerServiceTests {
         assertEquals(null, noopRepository.saved);
     }
 
+    @Test
+    void shouldRedactHistoricalAuditPayloadsWhenQuerying() {
+        AuditEvent historical = event("""
+                {"message":"failed with Authorization: Bearer abcdefghijklmnop",
+                 "nested":{"apiKey":"secret-api-key-value","safe":"ok"}}
+                """);
+        RecordingAuditRepository repository = new RecordingAuditRepository(false);
+        repository.saved = historical;
+        KernelAuditLedgerService service = new KernelAuditLedgerService(
+                repository,
+                new AuditRedactionPolicy(),
+                AuditWriteFailurePolicy.FAIL_CLOSED);
+
+        AuditEvent found = service.findById("audit-1").orElseThrow();
+        AuditEventPage page = service.page(
+                "tenant-a",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                1L,
+                10L);
+
+        assertTrue(found.redactedPayload().contains(AuditRedactionPolicy.REDACTED_VALUE));
+        assertTrue(found.redactedPayload().contains("ok"));
+        assertFalse(found.redactedPayload().contains("abcdefghijklmnop"));
+        assertFalse(found.redactedPayload().contains("secret-api-key-value"));
+        assertEquals(found, page.records().get(0));
+        assertTrue(repository.saved.redactedPayload().contains("abcdefghijklmnop"));
+        assertTrue(repository.saved.redactedPayload().contains("secret-api-key-value"));
+    }
+
     private static AuditEvent event(String payload) {
         return new AuditEvent(
                 "audit-1",

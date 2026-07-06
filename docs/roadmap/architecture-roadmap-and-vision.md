@@ -1292,3 +1292,11 @@ Modified approval decisions also sanitize the allowed `argumentsPreviewJson` pay
 This is a narrow approval-query and modify-preview hardening slice. It does not change approval authorization, approval status transitions, approval matching, Tool Gateway invocation, resume execution, or the approval repository schema.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelApprovalManagementServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 20/20, covering historical query projection redaction, modified-preview write redaction, decision-comment write redaction, owner/admin access, and existing malformed-preview validation.
+
+## 2026-07-06 Update: Audit Query Projection Redaction
+
+Audit ledger queries now defensively reapply `AuditRedactionPolicy` before returning records from `findById` and `page`. This protects historical or externally written audit rows whose `redactedPayload` may still contain credential-shaped values, while keeping the repository record unchanged.
+
+This is a narrow audit-query hardening slice. It does not change audit write failure policy, audit event metadata, query filters, repository schema, Tool Gateway invocation behavior, or the redaction vocabulary itself.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAuditLedgerServiceTests,AuditRedactionPolicyTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 6/6, covering append-time redaction, query-time projection redaction for historical payloads, write failure policies, and shared audit redaction behavior.

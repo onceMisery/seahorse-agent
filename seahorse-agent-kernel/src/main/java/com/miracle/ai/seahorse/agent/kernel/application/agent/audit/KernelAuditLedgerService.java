@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventRepositoryPort;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -62,7 +63,8 @@ public class KernelAuditLedgerService implements AuditQueryInboundPort {
 
     @Override
     public Optional<AuditEvent> findById(String auditId) {
-        return repository.findById(auditId);
+        return repository.findById(auditId)
+                .map(this::safeAuditEvent);
     }
 
     @Override
@@ -76,7 +78,7 @@ public class KernelAuditLedgerService implements AuditQueryInboundPort {
                                Instant occurredTo,
                                long current,
                                long size) {
-        return repository.page(new AuditEventQuery(
+        return safeAuditPage(repository.page(new AuditEventQuery(
                 tenantId,
                 runId,
                 agentId,
@@ -86,6 +88,27 @@ public class KernelAuditLedgerService implements AuditQueryInboundPort {
                 occurredFrom,
                 occurredTo,
                 current,
-                size));
+                size)));
+    }
+
+    private AuditEventPage safeAuditPage(AuditEventPage page) {
+        if (page == null) {
+            return new AuditEventPage(List.of(), 0L, 0L, 1L, 0L);
+        }
+        return new AuditEventPage(
+                page.records().stream()
+                        .map(this::safeAuditEvent)
+                        .toList(),
+                page.total(),
+                page.size(),
+                page.current(),
+                page.pages());
+    }
+
+    private AuditEvent safeAuditEvent(AuditEvent event) {
+        if (event == null) {
+            return null;
+        }
+        return event.withRedactedPayload(redactionPolicy.redact(event.redactedPayload()));
     }
 }
