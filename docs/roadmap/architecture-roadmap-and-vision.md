@@ -1454,3 +1454,11 @@ Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=SandboxBrowser
 This is a narrow sandbox-backed tool display-boundary hardening slice. It does not change code/content validation, sandbox session creation, network policy enforcement, runtime execution input JSON, artifact collection, scanner decisions, object storage copy rules, or Tool Gateway audit write paths.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=SandboxPythonToolPortAdapterTests,SandboxFileConvertToolPortAdapterTests,SandboxBrowserToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 56/56, covering successful and failed runtime summary redaction for Python, file conversion, and browser tools, execution-input preservation, existing sandbox tool behavior, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: AgentScope A2A Tool Failure Redaction
+
+`invoke_remote_a2a_agent` failure degradation now redacts credential-shaped text in upstream connector exception messages after replacing the request prompt with `[redacted-prompt]`. This keeps the existing agent-name diagnostic and remote failure context while preventing bearer tokens, API keys, or similar material from returning through the tool error channel.
+
+This is a narrow AgentScope A2A tool hardening slice. It does not change remote agent discovery, tenant propagation, prompt/metadata validation, A2A request execution, shared-secret or tenant-signed authentication, release-gate coverage, or live Studio/OTEL integration behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-agent-agentscope -am "-Dtest=AgentScopeA2AToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 8/8, covering prompt redaction, credential-shaped failure-message redaction, existing metadata validation, and shared credential text redactor behavior.

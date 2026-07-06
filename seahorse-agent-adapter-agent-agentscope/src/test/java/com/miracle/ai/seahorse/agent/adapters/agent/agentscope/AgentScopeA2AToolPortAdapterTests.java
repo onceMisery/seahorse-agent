@@ -81,6 +81,29 @@ class AgentScopeA2AToolPortAdapterTests {
     }
 
     @Test
+    void degradesRemoteInvocationFailuresWithoutLeakingCredentialShapedErrorText() {
+        TenantContext.set("tenant-a");
+        CapturingConnector connector = new CapturingConnector();
+        connector.failure = new IllegalStateException(
+                "remote unavailable for draft a confidential launch plan "
+                        + "Authorization: Bearer abcdefghijklmnop api_key=plain-a2a-secret");
+        AgentScopeA2AToolPortAdapter adapter = new AgentScopeA2AToolPortAdapter(connector);
+
+        var result = adapter.invoke("call-1", AgentScopeA2AToolPortAdapter.TOOL_ID, Map.of(
+                "agentName", "planner",
+                "prompt", "draft a confidential launch plan"));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("agentName=planner"));
+        assertTrue(result.error().contains("remote unavailable"));
+        assertTrue(result.error().contains("[redacted-prompt]"));
+        assertTrue(result.error().contains("[REDACTED]"));
+        assertFalse(result.error().contains("confidential launch plan"));
+        assertFalse(result.error().contains("abcdefghijklmnop"));
+        assertFalse(result.error().contains("plain-a2a-secret"));
+    }
+
+    @Test
     void rejectsOversizedMetadataBeforeInvokingConnector() {
         TenantContext.set("tenant-a");
         CapturingConnector connector = new CapturingConnector();

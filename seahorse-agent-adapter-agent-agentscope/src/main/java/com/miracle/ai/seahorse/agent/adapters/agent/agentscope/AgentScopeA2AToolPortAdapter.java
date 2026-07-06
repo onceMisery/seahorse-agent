@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.A2AAgentConnectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.A2AAgentRequest;
@@ -84,9 +85,9 @@ public class AgentScopeA2AToolPortAdapter implements DescribedToolPort {
     private String safeErrorMessage(Exception ex, String prompt) {
         String message = Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName());
         if (prompt == null || prompt.isBlank()) {
-            return message;
+            return CredentialTextRedactor.redact(message);
         }
-        return message.replace(prompt, "[redacted-prompt]");
+        return CredentialTextRedactor.redact(message.replace(prompt, "[redacted-prompt]"));
     }
 
     private String requiredText(Map<String, Object> arguments, String key) {
