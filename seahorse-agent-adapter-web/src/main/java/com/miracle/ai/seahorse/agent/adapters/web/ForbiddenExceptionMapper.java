@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.exception.ForbiddenException;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -43,7 +44,7 @@ public class ForbiddenExceptionMapper {
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("code", "FORBIDDEN");
-        body.put("message", ex.getMessage());
+        body.put("message", CredentialTextRedactor.redact(ex.getMessage()));
         if (ex.resourceType() != null) {
             body.put("resourceType", ex.resourceType());
         }

@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import cn.dev33.satoken.exception.NotLoginException;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.QuotaExceededException;
 import com.miracle.ai.seahorse.agent.kernel.domain.common.exception.DatabaseTimeoutException;
 import com.miracle.ai.seahorse.agent.kernel.domain.common.exception.ExternalServiceException;
@@ -36,6 +37,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -171,10 +174,28 @@ public class SeahorseWebExceptionHandler {
                                    Map<String, Object> details) {
         return ErrorResponse.of(
                 code,
-                message == null || message.isBlank() ? code : message,
-                request == null ? null : request.getRequestURI(),
+                safeMessage(code, message),
+                request == null ? null : safePath(request.getRequestURI()),
                 request == null ? null : request.getHeader("X-Request-Id"),
                 TenantContext.get(),
                 details == null ? Map.of() : new LinkedHashMap<>(details));
+    }
+
+    private String safeMessage(String code, String message) {
+        if (message == null || message.isBlank()) {
+            return code;
+        }
+        return CredentialTextRedactor.redact(message);
+    }
+
+    private String safePath(String path) {
+        if (path == null || path.isBlank()) {
+            return path;
+        }
+        try {
+            return CredentialTextRedactor.redact(URLDecoder.decode(path, StandardCharsets.UTF_8));
+        } catch (IllegalArgumentException ex) {
+            return CredentialTextRedactor.redact(path);
+        }
     }
 }

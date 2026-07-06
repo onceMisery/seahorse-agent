@@ -18,10 +18,13 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import cn.dev33.satoken.exception.NotLoginException;
+import com.miracle.ai.seahorse.agent.kernel.domain.common.exception.ExternalServiceException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -60,5 +63,35 @@ class SeahorseWebExceptionHandlerTests {
         assertThat(response.getBody().message()).contains("tenantId");
         assertThat(response.getBody().path()).isEqualTo("/metadata-extraction/results");
         assertThat(response.getBody().details()).containsEntry("parameter", "tenantId");
+    }
+
+    @Test
+    void shouldRedactCredentialTextFromClientVisibleErrorMessages() {
+        SeahorseWebExceptionHandler handler = new SeahorseWebExceptionHandler();
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "POST", "/api/tools/token=sk-live-secret");
+
+        ResponseEntity<ErrorResponse> badRequest = handler.badRequest(
+                new IllegalArgumentException("invalid Authorization: Bearer abcdefghijklmnop"),
+                request);
+        ResponseEntity<ErrorResponse> conflict = handler.conflict(
+                new IllegalStateException("state failed secret_key: plain-secret"),
+                request);
+        ResponseEntity<ErrorResponse> external = handler.externalServiceError(
+                new ExternalServiceException("openapi", "upstream Cookie: sid=plain-cookie"),
+                request);
+        ResponseEntity<ErrorResponse> responseStatus = handler.responseStatus(
+                new ResponseStatusException(HttpStatus.BAD_GATEWAY, "proxy token=sk-live-secret"),
+                request);
+
+        assertThat(badRequest.getBody()).isNotNull();
+        assertThat(conflict.getBody()).isNotNull();
+        assertThat(external.getBody()).isNotNull();
+        assertThat(responseStatus.getBody()).isNotNull();
+        assertThat(badRequest.getBody().message()).doesNotContain("abcdefghijklmnop").contains("[REDACTED]");
+        assertThat(badRequest.getBody().path()).doesNotContain("sk-live-secret").contains("[REDACTED]");
+        assertThat(conflict.getBody().message()).doesNotContain("plain-secret").contains("[REDACTED]");
+        assertThat(external.getBody().message()).doesNotContain("plain-cookie").contains("[REDACTED]");
+        assertThat(responseStatus.getBody().message()).doesNotContain("sk-live-secret").contains("[REDACTED]");
     }
 }

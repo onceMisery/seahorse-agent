@@ -1816,3 +1816,11 @@ AI model config admin API failures now redact credential-shaped exception text b
 This is a narrow Web adapter error-response hardening slice. It does not change login checks, repository calls, successful response payloads, encrypted config masking, gate-result construction, tenant normalization, or server-side exception handling.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-web,seahorse-agent-kernel -am "-Dtest=AiModelConfigControllerTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with `BUILD SUCCESS`; targeted test classes covered kernel redactor plus AI model config gate-result behavior and API failure-message redaction.
+
+## 2026-07-06 Update: Web Error Response Redaction
+
+Global Web adapter error responses now redact credential-shaped text before returning client-visible `ErrorResponse.message`, decoded `ErrorResponse.path`, and forbidden response `message` values. This protects frontend, API clients, negative-path diagnostics, and access-denied surfaces when validation, response-status, external-service, or authorization exceptions accidentally include bearer tokens, API keys, cookies, or secret-bearing request paths.
+
+This is a narrow Web adapter boundary hardening slice. It does not change HTTP status selection, structured error codes, request-id propagation, tenant context, details payloads, server-side exception logging, or access-denied resource/action metadata.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-web,seahorse-agent-kernel -am "-Dtest=SeahorseWebExceptionHandlerTests,ForbiddenExceptionMapperTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with `BUILD SUCCESS`; `docker compose -f docker-compose.full.yml build --build-arg HTTP_PROXY= --build-arg HTTPS_PROXY= backend` rebuilt the backend image with the in-image Maven reactor passing; a real HTTP negative-path request against `http://127.0.0.1:9090/knowledge-base/token%3Dsk-live-secret` returned `400` with `[REDACTED]` in both `message` and `path` and no raw secret; `.\scripts\e2e-backend-smoke.ps1 -BaseUrl http://localhost:9090 -RuntimeProfile full-compose` passed 20/20 checks across full-compose health, auth, knowledge CRUD/upload/chunk, RAG SSE/trace, memory/profile, catalogs, audit, metadata governance, and SRE health.
