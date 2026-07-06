@@ -1226,3 +1226,11 @@ Tool approval request summaries now filter the human-readable tool-id preview th
 This is a narrow approval-governance hardening slice. It does not change approval matching, pending approval persistence, tool execution, request audit summaries, arguments preview JSON, policy decisions, or resume behavior.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 30/30, covering unsafe tool-id suppression in approval summaries while preserving the real persisted `toolId`.
+
+## 2026-07-06 Update: Tool Approval Summary Reason Preview
+
+Tool approval request summaries now also filter the human-readable policy reason-code preview through the safe preview boundary. Both direct Tool Gateway approvals and governed preflight approvals fall back to `unsafe-reason-code` when a policy adapter returns a reason code with unsafe characters or credential-shaped markers, while the underlying policy decision remains unchanged for machine handling.
+
+This is a narrow approval-governance hardening slice. It does not change policy decisions, approval matching, pending approval persistence, tool execution, request audit summaries, arguments preview JSON, persisted tool ids, or resume behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,LocalGovernedToolExecutionPortTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 35/35, covering unsafe reason-code suppression in both direct Tool Gateway and governed preflight approval summaries.

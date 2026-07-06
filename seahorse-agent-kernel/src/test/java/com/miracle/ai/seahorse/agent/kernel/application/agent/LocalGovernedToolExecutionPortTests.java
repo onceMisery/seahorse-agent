@@ -161,6 +161,37 @@ class LocalGovernedToolExecutionPortTests {
         assertFalse(approval.argumentsPreviewJson().contains("resource-secret-value"));
     }
 
+    @Test
+    void approvalSummaryFiltersUnsafeToolIdAndReasonCodePreview() {
+        CountingGateway gateway = new CountingGateway();
+        CapturingApprovalRepository approvals = new CapturingApprovalRepository();
+        ToolPolicyPort policy = request -> PolicyDecision.approvalRequired(
+                "decision-1",
+                "TOOL_APPROVAL_REQUIRED\naccess_token=secret-marker",
+                "approval required");
+        LocalGovernedToolExecutionPort port = new LocalGovernedToolExecutionPort(
+                new SingleToolRegistry(),
+                gateway,
+                policy,
+                approvals,
+                ApprovalRequestQueryPort.empty(),
+                new ObjectMapper(),
+                FIXED_CLOCK);
+
+        port.preflight(request(
+                "weather\nsessionToken=secret-marker",
+                Map.of("city", "Hangzhou")));
+
+        ApprovalRequest approval = approvals.request.get();
+        assertNotNull(approval);
+        assertEquals("weather\nsessionToken=secret-marker", approval.toolId());
+        assertEquals("Tool unsafe-tool-id requires approval: unsafe-reason-code", approval.summary());
+        assertFalse(approval.summary().contains("weather"));
+        assertFalse(approval.summary().contains("sessionToken"));
+        assertFalse(approval.summary().contains("access_token"));
+        assertFalse(approval.summary().contains("secret-marker"));
+    }
+
     private static ToolInvocationRequest request(String toolId, Map<String, Object> arguments) {
         return request(toolId, arguments, Map.of());
     }

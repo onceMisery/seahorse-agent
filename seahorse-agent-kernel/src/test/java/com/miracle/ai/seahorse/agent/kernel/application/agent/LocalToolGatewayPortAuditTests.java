@@ -362,6 +362,42 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldFilterUnsafeReasonCodeFromApprovalSummary() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
+        RecordingToolApprovalRequestRepositoryPort approvals = new RecordingToolApprovalRequestRepositoryPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
+                        "TOOL_APPROVAL_REQUIRED\naccess_token=secret-marker",
+                        "Tool requires approval")),
+                ToolInvocationAuditPort.noop(),
+                approvals,
+                FIXED_CLOCK);
+
+        gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "memory-forget",
+                Map.of("input", "value"),
+                Map.of(),
+                "run-1:call-1",
+                List.of("memory-forget")));
+
+        assertEquals(1, approvals.saved.size());
+        ApprovalRequest approval = approvals.saved.get(0);
+        assertEquals("memory-forget", approval.toolId());
+        assertTrue(approval.summary().contains("Tool memory-forget requires approval: unsafe-reason-code"));
+        assertFalse(approval.summary().contains("access_token"));
+        assertFalse(approval.summary().contains("secret-marker"));
+    }
+
+    @Test
     void shouldExecuteToolWhenApprovalWasAlreadyApprovedForRunStep() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();

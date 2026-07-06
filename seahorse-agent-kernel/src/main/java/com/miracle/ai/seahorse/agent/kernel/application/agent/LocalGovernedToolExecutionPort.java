@@ -182,7 +182,8 @@ public class LocalGovernedToolExecutionPort implements GovernedToolExecutionPort
                 invocationRequest.toolId(),
                 ApprovalType.TOOL_EXECUTION,
                 ToolRiskLevel.HIGH,
-                truncate("Tool " + invocationRequest.toolId() + " requires approval: " + decision.reasonCode()),
+                truncate("Tool " + safeToolIdPreview(invocationRequest.toolId())
+                        + " requires approval: " + safeReasonCodePreview(decision.reasonCode())),
                 argumentsPreviewJson(invocationRequest),
                 ApprovalRequestStatus.PENDING,
                 requestedAt,
@@ -190,6 +191,16 @@ public class LocalGovernedToolExecutionPort implements GovernedToolExecutionPort
                 null,
                 null,
                 null);
+    }
+
+    private String safeToolIdPreview(String toolId) {
+        String value = Objects.requireNonNullElse(toolId, "").trim();
+        return isSafePreviewArgumentKey(value) ? value : "unsafe-tool-id";
+    }
+
+    private String safeReasonCodePreview(String reasonCode) {
+        String value = Objects.requireNonNullElse(reasonCode, "").trim();
+        return isSafePreviewArgumentKey(value) ? value : "unsafe-reason-code";
     }
 
     private String argumentsPreviewJson(ToolInvocationRequest invocationRequest) {
