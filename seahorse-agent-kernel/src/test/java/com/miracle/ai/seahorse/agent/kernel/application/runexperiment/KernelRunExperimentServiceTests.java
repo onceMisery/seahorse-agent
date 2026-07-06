@@ -276,6 +276,12 @@ class KernelRunExperimentServiceTests {
         assertTrue(report.markdown().contains("### Score Leaderboard"));
         assertTrue(report.markdown().contains("| Rank | Trial | Run Profile | Score | Status | Score Evidence |"));
         assertTrue(report.markdown().contains("| 1 | 10 | 12 | 4 | SUCCEEDED | verdict=smoke-pass |"));
+        assertTrue(report.markdown().contains("## Cost Summary"));
+        assertTrue(report.markdown().contains("- Costed trials: 1"));
+        assertTrue(report.markdown().contains("- Total cost: 0.42"));
+        assertTrue(report.markdown().contains("- Total tokens: 123"));
+        assertTrue(report.markdown().contains("- Total calls: 2"));
+        assertTrue(report.markdown().contains("- Cost records: 1"));
         assertTrue(report.markdown().contains("## Evidence Index"));
         assertTrue(report.markdown().contains("## Reproduction Appendix"));
         assertTrue(report.markdown().contains("run-exp-1-trial-10"));

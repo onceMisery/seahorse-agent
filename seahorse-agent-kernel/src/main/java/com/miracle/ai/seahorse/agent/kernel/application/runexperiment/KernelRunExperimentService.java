@@ -219,6 +219,7 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         report.append("- Generated at: ").append(Instant.now()).append("\n\n");
 
         appendExecutiveSummary(report, trials, outputMessages);
+        appendCostSummary(report, trials, snapshots);
         appendEvidenceIndex(report, trials, snapshots, outputMessages);
         appendTrialExport(report, trials, snapshots, outputMessages);
         appendOutputComparison(report, trials, outputMessages);
@@ -279,6 +280,23 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                     .append(" |\n");
         }
         report.append("\n");
+    }
+
+    private void appendCostSummary(
+            StringBuilder report,
+            List<RunExperimentTrialRecord> trials,
+            Map<String, RunContextSnapshotRecord> snapshots) {
+        CostSummary summary = costSummary(trials, snapshots);
+        report.append("## Cost Summary\n\n");
+        if (summary.costedTrials() == 0) {
+            report.append("- No cost usage records resolved.\n\n");
+            return;
+        }
+        report.append("- Costed trials: ").append(summary.costedTrials()).append("\n");
+        report.append("- Total cost: ").append(decimalText(summary.totalCost())).append("\n");
+        report.append("- Total tokens: ").append(summary.totalTokens()).append("\n");
+        report.append("- Total calls: ").append(summary.totalCalls()).append("\n");
+        report.append("- Cost records: ").append(summary.recordCount()).append("\n\n");
     }
 
     private void appendEvidenceIndex(
@@ -620,6 +638,29 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         return "not recorded";
     }
 
+    private CostSummary costSummary(
+            List<RunExperimentTrialRecord> trials,
+            Map<String, RunContextSnapshotRecord> snapshots) {
+        long costedTrials = 0;
+        long totalTokens = 0;
+        long totalCalls = 0;
+        double totalCost = 0D;
+        long recordCount = 0;
+        for (RunExperimentTrialRecord trial : Objects.requireNonNullElse(trials, List.<RunExperimentTrialRecord>of())) {
+            Optional<CostUsageAggregate> aggregate = aggregateCost(trial, snapshotFor(snapshots, trial));
+            if (aggregate.isEmpty() || aggregate.get().recordCount() <= 0) {
+                continue;
+            }
+            CostUsageAggregate value = aggregate.get();
+            costedTrials++;
+            totalTokens += value.totalTokens();
+            totalCalls += value.totalCalls();
+            totalCost += value.totalCost();
+            recordCount += value.recordCount();
+        }
+        return new CostSummary(costedTrials, totalTokens, totalCalls, totalCost, recordCount);
+    }
+
     private Optional<CostUsageAggregate> aggregateCost(RunExperimentTrialRecord trial, RunContextSnapshotRecord snapshot) {
         if (costUsageRepositoryPort == null || trial == null || trial.getRunId() == null || trial.getRunId().isBlank()) {
             return Optional.empty();
@@ -639,6 +680,13 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         } catch (RuntimeException ex) {
             return Optional.empty();
         }
+    }
+
+    private record CostSummary(long costedTrials,
+                               long totalTokens,
+                               long totalCalls,
+                               double totalCost,
+                               long recordCount) {
     }
 
     private String forkTarget(RunExperimentTrialRecord trial) {
