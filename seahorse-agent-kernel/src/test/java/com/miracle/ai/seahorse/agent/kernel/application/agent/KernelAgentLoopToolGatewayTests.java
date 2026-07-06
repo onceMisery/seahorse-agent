@@ -760,6 +760,59 @@ class KernelAgentLoopToolGatewayTests {
     }
 
     @Test
+    void shouldRedactCredentialsWhenDegradingToCompletedToolResultsAfterModelTurnTimeout() {
+        AgentToolCall toolCall = AgentToolCall.of("call-secret", "newsletter_generation",
+                Map.of("topic", "Seahorse"));
+        StreamingChatModelPort hangingModel = new StreamingChatModelPort() {
+            private int calls;
+
+            @Override
+            public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public StreamCancellationHandle streamChatWithTools(
+                    ChatRequest request,
+                    StreamCallback callback,
+                    ToolCallCollector toolCallCollector) {
+                calls++;
+                if (calls == 1) {
+                    callback.onContent("need generated article");
+                    toolCallCollector.onToolCalls(List.of(toolCall));
+                    callback.onComplete();
+                }
+                return () -> {
+                };
+            }
+        };
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("""
+                {"content":"Authorization: Bearer abcdefghijklmnop api_key=plain-secret # Seahorse article"}
+                """));
+        KernelAgentLoop loop = kernelLoop(
+                hangingModel,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.builder()
+                        .modelTurnTimeout(Duration.ofMillis(50))
+                        .build());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("write article")
+                .allowedToolIds(List.of("newsletter_generation"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-timeout-after-tool-secret")
+                .build());
+
+        assertTrue(result.truncated());
+        assertTrue(result.finalAnswer().contains("Completed Tool Results"), result.finalAnswer());
+        assertTrue(result.finalAnswer().contains("[REDACTED]"), result.finalAnswer());
+        assertTrue(result.finalAnswer().contains("Seahorse article"), result.finalAnswer());
+        assertFalse(result.finalAnswer().contains("abcdefghijklmnop"), result.finalAnswer());
+        assertFalse(result.finalAnswer().contains("plain-secret"), result.finalAnswer());
+    }
+
+    @Test
     void shouldEmitSkillRuntimeDiagnosticsWithoutSkillContentDuringStreamingExecution() {
         AgentToolCall loadSkill = AgentToolCall.of("call-skill", LoadSkillResourceToolPortAdapter.TOOL_ID,
                 Map.of("skillName", "research", "resourcePath", "SKILL.md"));

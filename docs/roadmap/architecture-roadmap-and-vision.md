@@ -1430,3 +1430,11 @@ Agent run resume now redacts credential-shaped step payloads before persisting t
 This is a narrow resume-write hardening slice. It does not change approval matching, modified-argument execution semantics, Tool Gateway invocation, model resume context, run status transitions, repository schema, or the existing snapshot/workflow/query projection defenses.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunResumeServiceTests,KernelAgentRunSnapshotServiceTests,KernelAgentRunWorkflowServiceTests,CredentialTextRedactorTests,CredentialJsonFieldClassifierTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 21/21, covering resumed step write redaction, execution-input preservation, rejected/expired decision-comment redaction, snapshot/workflow historical redaction, and shared credential redaction/classifier behavior.
+
+## 2026-07-06 Update: Agent Loop Degraded Answer Redaction
+
+Agent Loop timeout recovery now redacts credential-shaped text before rendering degraded final answers from `KernelAgentLoop.degradedFinalAnswer`. This covers the timeout message, tool id display text, and successful tool observation content returned as Markdown when the model times out after tool execution, while preserving the existing completed-tool-results fallback behavior.
+
+This is a narrow active-run display-boundary hardening slice. It does not change model turn timeout detection, tool execution inputs, successful observation storage, stream event ordering, output artifact emission, repository schema, or the existing agent-run step write redaction defenses.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentLoopToolGatewayTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 27/27, covering degraded final-answer redaction for credential-bearing tool observations, existing timeout fallback behavior, Tool Gateway loop behavior, and shared credential text redactor behavior.
