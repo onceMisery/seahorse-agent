@@ -307,6 +307,104 @@ class DefaultMemoryMaintenanceServiceTests {
     }
 
     @Test
+    void shouldRedactCredentialLikeCompactionServiceFailureErrors() {
+        ThrowingCompactionService compactionService = new ThrowingCompactionService(
+                "compaction failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret");
+        DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(
+                new RecordingGarbageCollectionService(),
+                compactionService,
+                MemoryMaintenanceRunRepositoryPort.noop(),
+                true,
+                false,
+                false);
+
+        MemoryMaintenanceRunResult result = service.runMaintenance(new MemoryMaintenanceRunCommand(
+                "scheduled-maintenance",
+                true,
+                false,
+                false));
+
+        assertThat(result.errors()).singleElement()
+                .asString()
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-memory-secret");
+        assertThat(result.taskOutcomes())
+                .filteredOn(outcome -> outcome.status().equals(MemoryMaintenanceTaskOutcome.STATUS_FAILED))
+                .singleElement()
+                .extracting(MemoryMaintenanceTaskOutcome::reason)
+                .asString()
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-memory-secret");
+    }
+
+    @Test
+    void shouldRedactCredentialLikeGarbageCollectionServiceFailureErrors() {
+        ThrowingGarbageCollectionService garbageCollectionService = new ThrowingGarbageCollectionService(
+                "gc failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret");
+        DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(
+                garbageCollectionService,
+                false,
+                false,
+                true);
+
+        MemoryMaintenanceRunResult result = service.runMaintenance(new MemoryMaintenanceRunCommand(
+                "scheduled-maintenance",
+                false,
+                false,
+                true));
+
+        assertThat(result.errors()).singleElement()
+                .asString()
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-memory-secret");
+        assertThat(result.taskOutcomes())
+                .filteredOn(outcome -> outcome.status().equals(MemoryMaintenanceTaskOutcome.STATUS_FAILED))
+                .singleElement()
+                .extracting(MemoryMaintenanceTaskOutcome::reason)
+                .asString()
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-memory-secret");
+    }
+
+    @Test
+    void shouldRedactCredentialLikeAliasServiceFailureErrors() {
+        ThrowingAliasResolutionService aliasResolutionService = new ThrowingAliasResolutionService(
+                "alias failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret");
+        DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(
+                new RecordingGarbageCollectionService(),
+                null,
+                aliasResolutionService,
+                MemoryMaintenanceRunRepositoryPort.noop(),
+                false,
+                true,
+                false);
+
+        MemoryMaintenanceRunResult result = service.runMaintenance(new MemoryMaintenanceRunCommand(
+                "scheduled-maintenance",
+                false,
+                true,
+                false));
+
+        assertThat(result.errors()).singleElement()
+                .asString()
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-memory-secret");
+        assertThat(result.taskOutcomes())
+                .filteredOn(outcome -> outcome.status().equals(MemoryMaintenanceTaskOutcome.STATUS_FAILED))
+                .singleElement()
+                .extracting(MemoryMaintenanceTaskOutcome::reason)
+                .asString()
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-memory-secret");
+    }
+
+    @Test
     void shouldAggregateMaintenanceRunStatusAndStageCountsOverRecentWindow() {
         RecordingMaintenanceRunRepository repository = new RecordingMaintenanceRunRepository();
         repository.save(maintenanceRunRecord("run-1",
@@ -551,15 +649,38 @@ class DefaultMemoryMaintenanceServiceTests {
     private static class ThrowingCompactionService extends MemoryCompactionService {
 
         private final List<String> reasons = new ArrayList<>();
+        private final String message;
 
         private ThrowingCompactionService() {
+            this("compaction boom");
+        }
+
+        private ThrowingCompactionService(String message) {
             super();
+            this.message = message;
         }
 
         @Override
         public MemoryCompactionResult run(String reason) {
             reasons.add(reason);
-            throw new IllegalStateException("compaction boom");
+            throw new IllegalStateException(message);
+        }
+    }
+
+    private static class ThrowingGarbageCollectionService extends MemoryGarbageCollectionService {
+
+        private final String message;
+
+        private ThrowingGarbageCollectionService(String message) {
+            super(MemoryGarbageCollectionPort.noop(),
+                    MemoryOutboxPort.noop(),
+                    MemoryGarbageCollectionOptions.vectorOnly());
+            this.message = message;
+        }
+
+        @Override
+        public MemoryGarbageCollectionResult run(String reason) {
+            throw new IllegalStateException(message);
         }
     }
 
@@ -575,6 +696,21 @@ class DefaultMemoryMaintenanceServiceTests {
         public MemoryAliasResolutionRunResult run(String reason) {
             reasons.add(reason);
             return new MemoryAliasResolutionRunResult(reason, 2, 1, 0, 0, List.of(), Instant.EPOCH);
+        }
+    }
+
+    private static class ThrowingAliasResolutionService extends MemoryAliasResolutionService {
+
+        private final String message;
+
+        private ThrowingAliasResolutionService(String message) {
+            super(MemoryAliasPort.noop(), MemoryAliasResolutionOptions.defaults());
+            this.message = message;
+        }
+
+        @Override
+        public MemoryAliasResolutionRunResult run(String reason) {
+            throw new IllegalStateException(message);
         }
     }
 

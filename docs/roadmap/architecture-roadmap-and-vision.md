@@ -1638,3 +1638,11 @@ Memory compaction scan, group compaction, and derived-index outbox enqueue failu
 This is a narrow compaction result-boundary hardening slice. It does not change candidate scanning, compaction grouping, summary generation, master memory construction, source fragment metadata, mark-compacted behavior, outbox task construction, observation emission, raw compaction inputs, or raw repository/outbox exception logging.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=MemoryCompactionServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new scan/outbox regressions because `MemoryCompactionResult.errors()` returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 8/8 across kernel redactor and memory compaction coverage.
+
+## 2026-07-06 Update: Memory Maintenance Aggregation Failure Redaction
+
+Default memory maintenance service-level failures now redact credential-shaped exception text before returning aggregate `MemoryMaintenanceRunResult.errors()` or failed `MemoryMaintenanceTaskOutcome.reason` values. This protects maintenance run, trace, repository, and operations surfaces when compaction, alias resolution, or garbage collection services throw before producing their own redacted result objects.
+
+This is a narrow maintenance aggregation result-boundary hardening slice. It does not change maintenance task selection, skip/not-requested outcome semantics, subservice execution order, result aggregation, run-record persistence, trace/observation schemas, raw subservice inputs, or raw exception logging.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=DefaultMemoryMaintenanceServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new compaction/garbage-collection/alias service-level regressions because aggregate errors returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 20/20 across kernel redactor and default memory maintenance coverage.

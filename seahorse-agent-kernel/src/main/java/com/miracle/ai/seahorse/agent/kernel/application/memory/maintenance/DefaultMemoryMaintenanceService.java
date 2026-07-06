@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCommand;
@@ -427,7 +428,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
     }
 
     private String errorMessage(RuntimeException ex) {
-        return ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage();
+        return CredentialTextRedactor.redact(ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage());
     }
 
     private MemoryMaintenanceTaskOutcome outcomeFromErrors(String task, List<String> errors) {
