@@ -447,6 +447,9 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         } else if (!bodyMap.isEmpty()) {
             summary.put("requestBodyKeys", safeArgumentKeys(bodyMap));
             summary.put("requestBodyFieldCount", bodyMap.size());
+            summary.put("requestBodyValueCount", mapValueCount(bodyMap));
+            summary.put("requestBodyValueTotalLength", mapValueTotalLength(bodyMap));
+            summary.put("requestBodyValueMaxLength", mapValueMaxLength(bodyMap));
         }
         try {
             return truncate(OBJECT_MAPPER.writeValueAsString(summary));

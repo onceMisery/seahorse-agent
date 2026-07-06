@@ -978,3 +978,11 @@ Tool Gateway request audit now includes value-free OpenAPI value shape evidence 
 This is a narrow cross-provider audit-hardening slice. It does not change OpenAPI connector import, credential injection, HTTP invocation, response redaction, approval policy, quota policy, or request execution behavior.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering OpenAPI value shape metadata while preserving existing path, query, parameter, header, body value, and unsafe-key redaction assertions.
+
+## 2026-07-06 Update: OpenAPI Request Body Audit Value Shape Summary
+
+Tool Gateway request audit now includes value-free object request body value shape evidence for dynamic `openapi_` tools: request body value count, total value length, and maximum value length. String request bodies keep the existing raw-length-only posture, while object bodies gain bounded shape evidence without persisting field values.
+
+This is a narrow cross-provider audit-hardening slice. It does not change OpenAPI connector import, credential injection, HTTP invocation, response redaction, approval policy, quota policy, body serialization, or request execution behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering OpenAPI object request body value shape metadata while preserving existing path, query, parameter, header, body value, and unsafe-key redaction assertions.

@@ -804,6 +804,9 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"requestBodyKeys\":["));
         assertTrue(summary.contains("email"));
         assertTrue(summary.contains("\"requestBodyFieldCount\":2"));
+        assertTrue(summary.contains("\"requestBodyValueCount\":2"));
+        assertTrue(summary.contains("\"requestBodyValueTotalLength\":46"));
+        assertTrue(summary.contains("\"requestBodyValueMaxLength\":28"));
         assertFalse(summary.contains("cust-secret-marker"));
         assertFalse(summary.contains("active-secret-marker"));
         assertFalse(summary.contains("page-secret-marker"));
