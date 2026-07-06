@@ -1034,3 +1034,11 @@ Spring Boot auto-configuration now installs `ToolOutputRedactionPort.basicSecret
 This is a narrow production-wiring hardening slice. It does not change redaction pattern semantics, Tool Gateway execution flow, approval policy, audit summaries, artifact publication, or the ability to provide a custom/noop redaction bean.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-Dtest=SeahorseAgentChatRunStoreAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 23/23, covering default redaction injection into `ToolGatewayPort` and custom redaction override behavior.
+
+## 2026-07-06 Update: Tool Output JSON Secret Field Redaction
+
+`ToolOutputRedactionPort.basicSecretPatterns()` now recursively redacts successful JSON tool output fields whose names match credential-shaped concepts such as `apiKey`, `access_token`, `clientSecret`, `password`, and `session_id`. Existing `b64Json`/`b64_json` redaction and credential-shaped text/error redaction remain in place, while non-sensitive JSON fields are preserved.
+
+This is a narrow output-redaction hardening slice. It does not change Tool Gateway execution, result summary shape, approval policy, artifact publication ordering, noop redaction behavior, or the configured default redaction wiring.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 26/26, covering nested successful JSON secret-field redaction while preserving existing output, audit, approval, and artifact behaviors.

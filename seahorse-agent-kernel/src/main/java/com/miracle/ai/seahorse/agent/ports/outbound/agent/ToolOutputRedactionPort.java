@@ -35,6 +35,8 @@ public interface ToolOutputRedactionPort {
             "(?i)(bearer\\s+[a-z0-9._~+/=-]{8,}"
                     + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id)"
                     + "\\s*=\\s*[^\\s&;]+)");
+    Pattern SECRET_FIELD_PATTERN = Pattern.compile(
+            "(?i).*(access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id).*");
 
     ToolInvocationResult redact(ToolInvocationRequest request, ToolInvocationResult result);
 
@@ -57,7 +59,7 @@ public interface ToolOutputRedactionPort {
             if (result.content() == null) {
                 return result;
             }
-            String redacted = redactBase64JsonFields(objectMapper, result.content());
+            String redacted = redactJsonSecretFields(objectMapper, result.content());
             redacted = redactSecretPatterns(redacted);
             if (Objects.equals(redacted, result.content())) {
                 return result;
@@ -74,17 +76,17 @@ public interface ToolOutputRedactionPort {
         return CREDENTIAL_VALUE_PATTERN.matcher(redacted).replaceAll(REDACTED_VALUE);
     }
 
-    private static String redactBase64JsonFields(ObjectMapper objectMapper, String content) {
+    private static String redactJsonSecretFields(ObjectMapper objectMapper, String content) {
         try {
             JsonNode root = objectMapper.readTree(content);
-            boolean changed = redactBase64JsonFields(root);
+            boolean changed = redactSecretJsonFields(root);
             return changed ? objectMapper.writeValueAsString(root) : content;
         } catch (JsonProcessingException ex) {
             return content;
         }
     }
 
-    private static boolean redactBase64JsonFields(JsonNode node) {
+    private static boolean redactSecretJsonFields(JsonNode node) {
         if (node == null) {
             return false;
         }
@@ -94,13 +96,18 @@ public interface ToolOutputRedactionPort {
             changed |= redactField(objectNode, "b64_json");
             var fields = objectNode.fields();
             while (fields.hasNext()) {
-                changed |= redactBase64JsonFields(fields.next().getValue());
+                var field = fields.next();
+                if (SECRET_FIELD_PATTERN.matcher(field.getKey()).matches()) {
+                    changed |= redactField(objectNode, field.getKey());
+                } else {
+                    changed |= redactSecretJsonFields(field.getValue());
+                }
             }
             return changed;
         }
         if (node.isArray()) {
             for (JsonNode child : node) {
-                changed |= redactBase64JsonFields(child);
+                changed |= redactSecretJsonFields(child);
             }
         }
         return changed;

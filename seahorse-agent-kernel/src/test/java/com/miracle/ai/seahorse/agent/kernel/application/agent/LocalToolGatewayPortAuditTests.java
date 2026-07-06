@@ -337,6 +337,34 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldRedactSecretJsonFieldsBeforeReturningSuccessfulToolOutput() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
+                "{\"status\":\"ok\",\"apiKey\":\"plain-api-key\","
+                        + "\"nested\":{\"clientSecret\":\"plain-client-secret\",\"password\":\"plain-password\"},"
+                        + "\"items\":[{\"access_token\":\"plain-access-token\",\"label\":\"safe\"}]}"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                ToolOutputRedactionPort.basicSecretPatterns(),
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("weather"));
+
+        assertTrue(result.success());
+        assertEquals("{\"status\":\"ok\",\"apiKey\":\"[REDACTED]\","
+                        + "\"nested\":{\"clientSecret\":\"[REDACTED]\",\"password\":\"[REDACTED]\"},"
+                        + "\"items\":[{\"access_token\":\"[REDACTED]\",\"label\":\"safe\"}]}",
+                result.content());
+        assertFalse(result.content().contains("plain-api-key"));
+        assertFalse(result.content().contains("plain-client-secret"));
+        assertFalse(result.content().contains("plain-password"));
+        assertFalse(result.content().contains("plain-access-token"));
+        assertFalse(audit.completed.get(0).resultSummary().contains("plain-api-key"));
+    }
+
+    @Test
     void shouldRecordFailedCompletionWhenToolThrowsException() {
         ThrowingToolPort tool = new ThrowingToolPort();
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
