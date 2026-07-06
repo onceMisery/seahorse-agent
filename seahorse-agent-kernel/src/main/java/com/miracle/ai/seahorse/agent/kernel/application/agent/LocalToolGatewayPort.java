@@ -46,6 +46,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -544,7 +546,8 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
 
     private String summarizeSandboxBrowserArguments(ToolInvocationRequest request) {
         Map<String, Object> arguments = request.arguments();
-        boolean urlMode = hasText(argumentString(arguments, "url"));
+        String url = argumentString(arguments, "url");
+        boolean urlMode = hasText(url);
         List<String> allowedHosts = argumentStringList(arguments.get("allowedHosts"));
         int cookieCount = listSize(arguments.get("cookies"));
         Map<String, Object> sessionState = mapValue(arguments.get("sessionState"));
@@ -555,6 +558,10 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("mode", urlMode ? "url" : "inline");
         summary.put("action", safeSandboxBrowserAction(arguments));
         summary.put("networkRequested", urlMode);
+        summary.put("urlPresent", urlMode);
+        summary.put("urlLength", url.length());
+        summary.put("urlQueryPresent", hasUrlQuery(url));
+        summary.put("urlQueryLength", urlQueryLength(url));
         summary.put("allowedHostCount", allowedHosts.size());
         summary.put("allowedHostsPresent", !allowedHosts.isEmpty());
         summary.put("cookieCount", cookieCount);
@@ -582,6 +589,27 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         return SANDBOX_BROWSER_ARGUMENT_KEYS.stream()
                 .filter(arguments::containsKey)
                 .toList();
+    }
+
+    private boolean hasUrlQuery(String value) {
+        return urlQueryLength(value) > 0;
+    }
+
+    private int urlQueryLength(String value) {
+        if (!hasText(value)) {
+            return 0;
+        }
+        try {
+            String rawQuery = new URI(value).getRawQuery();
+            return rawQuery == null ? 0 : rawQuery.length();
+        } catch (URISyntaxException ex) {
+            int queryStart = value.indexOf('?');
+            if (queryStart < 0 || queryStart == value.length() - 1) {
+                return 0;
+            }
+            int fragmentStart = value.indexOf('#', queryStart + 1);
+            return (fragmentStart < 0 ? value.length() : fragmentStart) - queryStart - 1;
+        }
     }
 
     private List<String> safeArgumentKeys(Map<String, Object> arguments) {

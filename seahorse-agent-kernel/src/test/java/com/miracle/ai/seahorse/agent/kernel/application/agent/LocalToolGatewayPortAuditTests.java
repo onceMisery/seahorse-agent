@@ -359,7 +359,7 @@ class LocalToolGatewayPortAuditTests {
                 "agent-identity-1",
                 "sandbox_browser",
                 Map.of(
-                        "url", "https://example.test/page",
+                        "url", "https://example.test/page?q=customer-search-marker",
                         "allowedHosts", List.of("example.test"),
                         "cookies", List.of(Map.of(
                                 "name", "seahorse_session",
@@ -387,6 +387,10 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"toolId\":\"sandbox_browser\""));
         assertTrue(summary.contains("\"mode\":\"url\""));
         assertTrue(summary.contains("\"networkRequested\":true"));
+        assertTrue(summary.contains("\"urlPresent\":true"));
+        assertTrue(summary.contains("\"urlLength\":50"));
+        assertTrue(summary.contains("\"urlQueryPresent\":true"));
+        assertTrue(summary.contains("\"urlQueryLength\":24"));
         assertTrue(summary.contains("\"allowedHostCount\":1"));
         assertTrue(summary.contains("\"allowedHostsPresent\":true"));
         assertTrue(summary.contains("\"cookieCount\":1"));
@@ -401,6 +405,7 @@ class LocalToolGatewayPortAuditTests {
         assertFalse(summary.contains("cookie-secret-value"));
         assertFalse(summary.contains("restored-secret-value"));
         assertFalse(summary.contains("storage-secret-value"));
+        assertFalse(summary.contains("customer-search-marker"));
     }
 
     @Test
@@ -437,6 +442,9 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"toolId\":\"sandbox_browser\""));
         assertTrue(summary.contains("\"mode\":\"url\""));
         assertTrue(summary.contains("\"action\":\"unsupported\""));
+        assertTrue(summary.contains("\"urlPresent\":true"));
+        assertTrue(summary.contains("\"urlQueryPresent\":false"));
+        assertTrue(summary.contains("\"urlQueryLength\":0"));
         assertTrue(summary.contains("\"allowedHostCount\":1"));
         assertTrue(summary.contains("\"allowedHostsPresent\":true"));
         assertTrue(summary.contains("\"argumentKeys\":[\"url\",\"allowedHosts\",\"action\"]"));

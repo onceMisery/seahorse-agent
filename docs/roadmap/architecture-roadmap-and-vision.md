@@ -930,3 +930,11 @@ The `sandbox_browser` tool observation now redacts allowed URL query values befo
 This is a narrow observation hardening slice. It does not change URL validation, runtime input, host allowlisting, egress policy, HAR capture, session-state replay/capture, or browser navigation behavior.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=SandboxBrowserToolPortAdapterTests#shouldRedactAllowedUrlQueryFromObservation" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 1/1, and `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=SandboxBrowserToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 32/32, covering full runtime URL preservation while excluding the allowed query value from the tool result observation.
+
+## 2026-07-06 Update: Sandbox Browser Audit URL Shape Summary
+
+Tool Gateway request audit now includes value-free URL shape evidence for `sandbox_browser`: URL presence, total URL length, query presence, and raw query length. The audit summary still excludes URL host/path/query values, cookies, localStorage values, pre-validation allowed host values, and unsupported action values.
+
+This is a narrow audit-hardening slice. It does not change tool execution, URL validation, browser runtime input, approval policy, quota policy, or artifact governance.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 23/23, covering sandbox browser URL/query length metadata while excluding the allowed query marker and existing cookie/session-state secret values.
