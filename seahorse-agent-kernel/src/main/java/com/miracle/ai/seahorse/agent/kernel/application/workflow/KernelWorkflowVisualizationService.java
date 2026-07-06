@@ -19,6 +19,9 @@ package com.miracle.ai.seahorse.agent.kernel.application.workflow;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.workflow.ExecutionStepAggregate;
 import com.miracle.ai.seahorse.agent.ports.inbound.workflow.WorkflowVisualizationInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.workflow.WorkflowVisualizationRepositoryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,9 +41,14 @@ import java.util.Objects;
 public class KernelWorkflowVisualizationService implements WorkflowVisualizationInboundPort {
 
     private static final Logger log = LoggerFactory.getLogger(KernelWorkflowVisualizationService.class);
+    private static final String ADMIN_ROLE = "admin";
+    private static final String ACCESS_DENIED = "\u6743\u9650\u4e0d\u8db3";
+    private static final String RUN_NOT_FOUND = "Agent run not found";
     private static final String EDGE_TYPE_SEQUENTIAL = "SEQUENTIAL";
 
     private final WorkflowVisualizationRepositoryPort repository;
+    private final AgentRunRepositoryPort runRepository;
+    private final CurrentUserPort currentUserPort;
 
     /**
      * Create the service with the given repository port.
@@ -49,14 +57,26 @@ public class KernelWorkflowVisualizationService implements WorkflowVisualization
      */
     public KernelWorkflowVisualizationService(WorkflowVisualizationRepositoryPort repository) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
+        this.runRepository = null;
+        this.currentUserPort = null;
+    }
+
+    public KernelWorkflowVisualizationService(WorkflowVisualizationRepositoryPort repository,
+                                              AgentRunRepositoryPort runRepository,
+                                              CurrentUserPort currentUserPort) {
+        this.repository = Objects.requireNonNull(repository, "repository must not be null");
+        this.runRepository = runRepository;
+        this.currentUserPort = currentUserPort;
     }
 
     @Override
     public WorkflowVisualization getVisualization(String runId) {
         Objects.requireNonNull(runId, "runId must not be null");
-        List<ExecutionStepAggregate> steps = repository.findByRunId(runId);
+        String safeRunId = requireText(runId, "runId must not be blank");
+        requireReadableRunIfConfigured(safeRunId);
+        List<ExecutionStepAggregate> steps = repository.findByRunId(safeRunId);
         if (steps == null || steps.isEmpty()) {
-            log.debug("No execution steps found for runId [{}]", runId);
+            log.debug("No execution steps found for runId [{}]", safeRunId);
             return new WorkflowVisualization(List.of(), List.of());
         }
 
@@ -68,8 +88,23 @@ public class KernelWorkflowVisualizationService implements WorkflowVisualization
         List<StepEdge> edges = buildSequentialEdges(sortedSteps);
 
         log.debug("Built visualization for runId [{}]: {} nodes, {} edges",
-                runId, sortedSteps.size(), edges.size());
+                safeRunId, sortedSteps.size(), edges.size());
         return new WorkflowVisualization(sortedSteps, edges);
+    }
+
+    private void requireReadableRunIfConfigured(String runId) {
+        if (runRepository == null || currentUserPort == null) {
+            return;
+        }
+        CurrentUser currentUser = currentUserPort.requireCurrentUser();
+        runRepository.findRunById(runId)
+                .map(run -> {
+                    if (isAdmin(currentUser) || run.userId().equals(currentUserId(currentUser))) {
+                        return run;
+                    }
+                    throw new IllegalStateException(ACCESS_DENIED);
+                })
+                .orElseThrow(() -> new IllegalArgumentException(RUN_NOT_FOUND));
     }
 
     private List<StepEdge> buildSequentialEdges(List<ExecutionStepAggregate> sortedSteps) {
@@ -84,5 +119,20 @@ public class KernelWorkflowVisualizationService implements WorkflowVisualization
                     EDGE_TYPE_SEQUENTIAL));
         }
         return List.copyOf(edges);
+    }
+
+    private boolean isAdmin(CurrentUser currentUser) {
+        return currentUser != null && currentUser.hasRole(ADMIN_ROLE);
+    }
+
+    private String currentUserId(CurrentUser currentUser) {
+        return currentUser == null ? null : currentUser.operator();
+    }
+
+    private String requireText(String value, String message) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException(message);
+        }
+        return value.trim();
     }
 }

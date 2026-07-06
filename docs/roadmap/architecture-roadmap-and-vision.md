@@ -834,3 +834,11 @@ Agent handoff creation, detail lookup, parent-run listing, and cancellation now 
 This closes a handoff run-boundary authorization gap. It does not change mesh policy decisions, child run metadata shape, handoff audit payload shape, repository schema, or local Agent-as-Tool response contracts.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentHandoffServiceTests,LocalAgentAsToolPortTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 9/9, covering parent-run authorization for create/list/detail/cancel and preserving the local handoff tool success path when the parent run is readable.
+
+## 2026-07-06 Update: Workflow Visualization Run Ownership Guard
+
+The legacy workflow visualization service now applies the Agent run owner/admin boundary before loading persisted workflow steps. Production RAG/workflow auto-configuration injects `AgentRunRepositoryPort` and `CurrentUserPort` into `KernelWorkflowVisualizationService`, and the workflow SSE endpoint reuses the same visualization port as a gate before subscribing to run-specific step updates.
+
+This closes an older workflow visualization authorization gap for `GET /api/workflows/runs/{runId}/visualization` and `/stream`. It does not change the newer Agent run workflow projection shape, workflow step storage, event payload shape, or workflow publisher semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel,seahorse-agent-adapter-web,seahorse-agent-spring-boot-autoconfigure -am "-Dtest=KernelWorkflowVisualizationServiceTests,SeahorseWorkflowVisualizationControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` completed with reactor `BUILD SUCCESS`, covering owner access, admin access, unrelated-user denial before workflow steps load, legacy constructor compatibility, and SSE stream gating.

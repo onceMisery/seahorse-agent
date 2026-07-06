@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.application.workflow.WorkflowEventPublisher;
 import com.miracle.ai.seahorse.agent.ports.inbound.workflow.WorkflowVisualizationInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.workflow.WorkflowVisualizationInboundPort.WorkflowVisualization;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
@@ -26,14 +27,34 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class SeahorseWorkflowVisualizationControllerTests {
 
     @Test
     void shouldStartWorkflowStreamWithConnectedEvent() throws Exception {
+        WorkflowEventPublisher publisher = new WorkflowEventPublisher();
+        RecordingVisualizationPort visualizationPort = new RecordingVisualizationPort();
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseWorkflowVisualizationController(
+                        provider(WorkflowVisualizationInboundPort.class, visualizationPort),
+                        provider(WorkflowEventPublisher.class, publisher)))
+                .build();
+
+        MvcResult result = mvc.perform(get("/api/workflows/runs/run-1/stream"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(result.getResponse().getContentAsString()).contains("connected");
+        assertThat(visualizationPort.requestedRunIds).containsExactly("run-1");
+    }
+
+    @Test
+    void shouldRejectWorkflowStreamWhenVisualizationGateIsUnavailable() throws Exception {
         WorkflowEventPublisher publisher = new WorkflowEventPublisher();
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseWorkflowVisualizationController(
@@ -42,10 +63,10 @@ class SeahorseWorkflowVisualizationControllerTests {
                 .build();
 
         MvcResult result = mvc.perform(get("/api/workflows/runs/run-1/stream"))
-                .andExpect(request().asyncStarted())
+                .andExpect(status().isOk())
                 .andReturn();
 
-        assertThat(result.getResponse().getContentAsString()).contains("connected");
+        assertThat(result.getResponse().getContentAsString()).contains("Workflow visualization is not available");
     }
 
     private static <T> ObjectProvider<T> provider(Class<T> type, T instance) {
@@ -56,5 +77,15 @@ class SeahorseWorkflowVisualizationControllerTests {
 
     private static <T> ObjectProvider<T> emptyProvider(Class<T> type) {
         return new StaticListableBeanFactory().getBeanProvider(type);
+    }
+
+    private static final class RecordingVisualizationPort implements WorkflowVisualizationInboundPort {
+        private final List<String> requestedRunIds = new java.util.ArrayList<>();
+
+        @Override
+        public WorkflowVisualization getVisualization(String runId) {
+            requestedRunIds.add(runId);
+            return new WorkflowVisualization(List.of(), List.of());
+        }
     }
 }

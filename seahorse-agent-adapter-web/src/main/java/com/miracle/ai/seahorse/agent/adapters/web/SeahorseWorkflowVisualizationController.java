@@ -76,6 +76,29 @@ public class SeahorseWorkflowVisualizationController {
     @GetMapping(value = "/api/workflows/runs/{runId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter streamWorkflowUpdates(@PathVariable String runId) {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
+        WorkflowVisualizationInboundPort visualizationPort = visualizationPortProvider.getIfAvailable();
+        if (visualizationPort == null) {
+            try {
+                emitter.send(SseEmitter.event().name("error")
+                        .data(Map.of("error", "Workflow visualization is not available")));
+                emitter.complete();
+            } catch (IOException ex) {
+                emitter.completeWithError(ex);
+            }
+            return emitter;
+        }
+        try {
+            visualizationPort.getVisualization(runId);
+        } catch (RuntimeException ex) {
+            try {
+                emitter.send(SseEmitter.event().name("error")
+                        .data(Map.of("error", ex.getMessage())));
+                emitter.complete();
+            } catch (IOException ioEx) {
+                emitter.completeWithError(ioEx);
+            }
+            return emitter;
+        }
         WorkflowEventPublisher publisher = eventPublisherProvider.getIfAvailable();
         if (publisher == null) {
             try {

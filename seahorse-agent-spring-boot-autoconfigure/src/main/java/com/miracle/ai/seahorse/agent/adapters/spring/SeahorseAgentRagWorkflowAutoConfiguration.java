@@ -25,7 +25,10 @@ import com.miracle.ai.seahorse.agent.kernel.application.workflow.WorkflowEventPu
 import com.miracle.ai.seahorse.agent.ports.inbound.workflow.WorkflowVisualizationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.QueryRewritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RerankModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.workflow.WorkflowVisualizationRepositoryPort;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -89,8 +92,13 @@ public class SeahorseAgentRagWorkflowAutoConfiguration {
     @ConditionalOnBean(WorkflowVisualizationRepositoryPort.class)
     @ConditionalOnMissingBean(WorkflowVisualizationInboundPort.class)
     public KernelWorkflowVisualizationService workflowVisualizationService(
-            WorkflowVisualizationRepositoryPort repository) {
-        return new KernelWorkflowVisualizationService(repository);
+            WorkflowVisualizationRepositoryPort repository,
+            ObjectProvider<AgentRunRepositoryPort> agentRunRepositoryPort,
+            ObjectProvider<CurrentUserPort> currentUserPort) {
+        return new KernelWorkflowVisualizationService(
+                repository,
+                agentRunRepositoryPort.getIfAvailable(),
+                currentUserPort.getIfAvailable());
     }
 
     /**
