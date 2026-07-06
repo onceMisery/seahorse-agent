@@ -568,6 +568,32 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldRedactCredentialShapedThrownToolErrorBeforeReturningAndAuditing() {
+        ThrowingToolPort tool = new ThrowingToolPort("tool failed "
+                + "Authorization: Bearer abcdefghijklmnop "
+                + "api_key=plain-thrown-tool-secret");
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("weather"));
+
+        assertFalse(result.success());
+        assertEquals("tool failed [REDACTED] [REDACTED]", result.error());
+        assertEquals(ToolInvocationStatus.FAILED, audit.completed.get(0).status());
+        assertEquals("tool failed [REDACTED] [REDACTED]", audit.completed.get(0).errorMessage());
+        assertFalse(result.error().contains("abcdefghijklmnop"));
+        assertFalse(result.error().contains("plain-thrown-tool-secret"));
+        assertFalse(audit.completed.get(0).errorMessage().contains("abcdefghijklmnop"));
+        assertFalse(audit.completed.get(0).errorMessage().contains("plain-thrown-tool-secret"));
+        assertFalse(audit.completed.get(0).resultSummary().contains("abcdefghijklmnop"));
+        assertFalse(audit.completed.get(0).resultSummary().contains("plain-thrown-tool-secret"));
+    }
+
+    @Test
     void shouldRedactCredentialShapedFailedToolErrorBeforeReturningAndAuditing() {
         CountingToolPort tool = new CountingToolPort(
                 ToolInvocationResult.failed("upstream failed "
@@ -1449,10 +1475,19 @@ class LocalToolGatewayPortAuditTests {
     }
 
     private static final class ThrowingToolPort implements ToolPort {
+        private final String message;
+
+        private ThrowingToolPort() {
+            this("tool boom");
+        }
+
+        private ThrowingToolPort(String message) {
+            this.message = message;
+        }
 
         @Override
         public ToolInvocationResult invoke(String toolCallId, String toolId, Map<String, Object> arguments) {
-            throw new IllegalStateException("tool boom");
+            throw new IllegalStateException(message);
         }
     }
 }

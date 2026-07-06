@@ -1502,3 +1502,11 @@ OpenAPI dynamic-tool failures now redact credential-shaped text in the shared er
 This is a narrow OpenAPI tool display-boundary hardening slice. It does not change OpenAPI import, operation enablement, URI/request construction, credential binding storage, credential provider request fields, HTTP execution, response payload redaction, Tool Gateway audit persistence, approval/quota policy, or base `ToolInvocationResult` semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=OpenApiToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 9/9, covering OpenAPI failure-message redaction, raw credential-reference preservation for provider resolution, existing bearer injection behavior, response JSON/text redaction, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Tool Gateway Exception Observation Redaction
+
+Tool Gateway execution failures now redact credential-shaped text before returning failed tool errors when a `ToolPort` throws, and the Agent Loop applies the same redaction before turning failed Tool Gateway results or custom gateway exceptions into model-visible observations and stream tool-call events. This closes the active-run catch-all failure boundary without changing successful observations or raw tool execution inputs.
+
+This is a narrow Tool Gateway and Agent Loop display-boundary hardening slice. It does not change policy decisions, approval creation, idempotency, tool registry lookup, artifact publication, output redaction configuration, audit shape summaries, run-step persistence redaction, successful tool result content, or base `ToolInvocationResult` semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests,KernelAgentLoopToolGatewayTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 60/60, covering thrown ToolPort exception redaction before return/audit, Agent Loop failed-observation redaction for custom gateway results, stream tool-call event redaction, existing Tool Gateway audit behavior, and shared credential text redactor behavior.

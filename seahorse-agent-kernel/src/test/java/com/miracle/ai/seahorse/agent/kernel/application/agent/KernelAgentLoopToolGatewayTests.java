@@ -896,6 +896,65 @@ class KernelAgentLoopToolGatewayTests {
     }
 
     @Test
+    void shouldRedactCredentialShapedFailedToolErrorsBeforeModelContextAndEvents() {
+        AgentToolCall toolCall = AgentToolCall.of("call-1", "web_search", Map.of("query", "seahorse ai"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need search", List.of(toolCall)),
+                Turn.finalAnswer("done")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.failed(
+                "provider failed Authorization: Bearer abcdefghijklmnop api_key=plain-loop-tool-secret"));
+        KernelAgentLoop loop = kernelLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("research")
+                .allowedToolIds(List.of("web_search"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-tool-secret-failed")
+                .build());
+
+        String observationError = result.steps().get(0).observations().get(0).error();
+        assertEquals("provider failed [REDACTED] [REDACTED]", observationError);
+        ChatRequest secondTurn = model.requests.get(1);
+        String toolMessage = secondTurn.getMessages().get(secondTurn.getMessages().size() - 1).getContent();
+        assertEquals("provider failed [REDACTED] [REDACTED]", toolMessage);
+        assertFalse(observationError.contains("abcdefghijklmnop"));
+        assertFalse(observationError.contains("plain-loop-tool-secret"));
+
+        ScriptedModel streamModel = new ScriptedModel(List.of(
+                Turn.toolCalls("need search", List.of(toolCall)),
+                Turn.finalAnswer("done")));
+        KernelAgentLoop streamLoop = kernelLoop(
+                streamModel,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+        RecordingStreamCallback callback = new RecordingStreamCallback();
+        streamLoop.streamExecute(AgentLoopRequest.builder()
+                .question("research")
+                .allowedToolIds(List.of("web_search"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-tool-secret-failed-stream")
+                .build(), callback);
+
+        assertTrue(callback.awaitTerminal());
+        StreamToolCallEvent finishedEvent = callback.events.stream()
+                .filter(event -> StreamEventType.TOOL_CALL_FINISHED.value().equals(event.eventName()))
+                .map(StreamEvent::payload)
+                .filter(StreamToolCallEvent.class::isInstance)
+                .map(StreamToolCallEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("provider failed [REDACTED] [REDACTED]", finishedEvent.errorCode());
+        assertEquals("provider failed [REDACTED] [REDACTED]", finishedEvent.summary());
+        assertFalse(finishedEvent.summary().contains("abcdefghijklmnop"));
+        assertFalse(finishedEvent.summary().contains("plain-loop-tool-secret"));
+    }
+
+    @Test
     void shouldEmitSourcesFromWebSearchObservationDuringStreamingExecution() {
         AgentToolCall toolCall = AgentToolCall.of("call-1", "web_search", Map.of("query", "seahorse ai"));
         ScriptedModel model = new ScriptedModel(List.of(

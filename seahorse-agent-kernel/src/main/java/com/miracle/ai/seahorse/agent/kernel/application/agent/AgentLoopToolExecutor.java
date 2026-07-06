@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceReco
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentObservation;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillInjectMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock;
@@ -240,11 +241,11 @@ final class AgentLoopToolExecutor {
                     ? AgentObservation.ok(toolCall.id(), truncateObservationText(result.content()))
                     : AgentObservation.failed(
                             toolCall.id(),
-                            truncateObservationText(result.error()),
+                            redactObservationText(result.error()),
                             result.approvalId());
         } catch (Exception ex) {
             return AgentObservation.failed(toolCall.id(),
-                    truncateObservationText(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
+                    redactObservationText(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
     }
 
@@ -370,6 +371,10 @@ final class AgentLoopToolExecutor {
             return text;
         }
         return text.substring(0, MAX_TOOL_OBSERVATION_CHARS) + TOOL_OBSERVATION_TRUNCATED_SUFFIX;
+    }
+
+    private String redactObservationText(String text) {
+        return truncateObservationText(CredentialTextRedactor.redact(text));
     }
 
     private String unavailableToolMessage(String toolId, Set<String> exposedToolIds) {

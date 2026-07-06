@@ -279,7 +279,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             return result;
         } catch (Exception ex) {
             ToolInvocationResult result = ToolInvocationResult.failed(
-                    Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    redactFailureText(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
             String auditError = auditErrorMessage(result.error());
             auditPort.recordCompleted(new ToolInvocationAuditCompletion(
                     invocationId,
@@ -1123,7 +1123,11 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         if (!hasText(errorMessage)) {
             return errorMessage;
         }
-        return truncate(CredentialTextRedactor.redact(errorMessage));
+        return truncate(redactFailureText(errorMessage));
+    }
+
+    private String redactFailureText(String errorMessage) {
+        return CredentialTextRedactor.redact(errorMessage);
     }
 
     private String truncate(String value) {
