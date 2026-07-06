@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
@@ -909,7 +910,48 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         if (result == null || result.content() == null) {
             return null;
         }
-        return truncate("length=" + result.content().length());
+        String content = result.content();
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("contentPresent", true);
+        summary.put("contentLength", content.length());
+        summary.put("contentJsonType", resultContentJsonType(content));
+        try {
+            return truncate(OBJECT_MAPPER.writeValueAsString(summary));
+        } catch (JsonProcessingException ex) {
+            return truncate("contentPresent=true"
+                    + ", contentLength=" + content.length()
+                    + ", contentJsonType=" + resultContentJsonType(content));
+        }
+    }
+
+    private String resultContentJsonType(String content) {
+        if (!hasText(content)) {
+            return "empty";
+        }
+        try {
+            JsonNode node = OBJECT_MAPPER.readTree(content);
+            if (node.isObject()) {
+                return "object";
+            }
+            if (node.isArray()) {
+                return "array";
+            }
+            if (node.isTextual()) {
+                return "string";
+            }
+            if (node.isNumber()) {
+                return "number";
+            }
+            if (node.isBoolean()) {
+                return "boolean";
+            }
+            if (node.isNull()) {
+                return "null";
+            }
+            return "json";
+        } catch (JsonProcessingException ex) {
+            return "text";
+        }
     }
 
     private String truncate(String value) {

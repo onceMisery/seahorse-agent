@@ -92,7 +92,9 @@ class LocalToolGatewayPortAuditTests {
         assertEquals(ToolInvocationStatus.ALLOWED, audit.decisions.get(0).status());
         assertEquals(audit.requested.get(0).invocationId(), audit.completed.get(0).invocationId());
         assertEquals(ToolInvocationStatus.SUCCEEDED, audit.completed.get(0).status());
-        assertTrue(audit.completed.get(0).resultSummary().contains("length"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentPresent\":true"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentLength\":11"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentJsonType\":\"object\""));
         assertEquals(FIXED_CLOCK.instant(), audit.completed.get(0).finishedAt());
     }
 
@@ -304,7 +306,10 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(result.success());
         assertEquals("token=[REDACTED]", result.content());
         assertEquals(ToolInvocationStatus.SUCCEEDED, audit.completed.get(0).status());
-        assertEquals("length=16", audit.completed.get(0).resultSummary());
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentPresent\":true"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentLength\":16"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentJsonType\":\"text\""));
+        assertFalse(audit.completed.get(0).resultSummary().contains("token"));
     }
 
     @Test
@@ -324,7 +329,11 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(result.success());
         assertEquals("{\"status\":\"GENERATED\",\"b64Json\":\"[REDACTED]\",\"mimeType\":\"image/png\"}",
                 result.content());
-        assertEquals("length=68", audit.completed.get(0).resultSummary());
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentPresent\":true"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentLength\":68"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentJsonType\":\"object\""));
+        assertFalse(audit.completed.get(0).resultSummary().contains("GENERATED"));
+        assertFalse(audit.completed.get(0).resultSummary().contains("b64Json"));
     }
 
     @Test

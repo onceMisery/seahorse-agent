@@ -1002,3 +1002,11 @@ Tool approval request previews now include value-free argument shape evidence: a
 This is a narrow approval-governance hardening slice. It does not change approval decisions, pending approval persistence, resource-ref hashing, tool execution, Tool Gateway request audits, output redaction, or approval paging behavior.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering approval preview argument value shape metadata while preserving existing secret argument and resource-reference minimization assertions.
+
+## 2026-07-06 Update: Tool Completion Result Shape Summary
+
+Tool Gateway completion audit summaries now record structured value-free result shape metadata for successful tool observations: content presence, content length, and coarse JSON type. The summary is derived after output redaction and still excludes raw tool output values, JSON field names, redacted secret placeholders, and binary payload values.
+
+This is a narrow completion-audit hardening slice. It does not change tool execution, output redaction, artifact publication, failure error recording, approval policy, quota policy, or request audit summaries.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering JSON-object and redacted-text result shape summaries while preserving existing output redaction assertions.
