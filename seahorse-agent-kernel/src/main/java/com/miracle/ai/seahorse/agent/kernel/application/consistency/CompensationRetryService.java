@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.consistency;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -97,7 +98,7 @@ public class CompensationRetryService {
                         "Retry returned false");
             }
         } catch (Exception e) {
-            String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            String errorMsg = failureMessage(e);
             if (log.getRetryCount() + 1 >= log.getMaxRetries()) {
                 compensationLogPort.updateStatus(log.getId(), CompensationLog.CompensationStatus.FAILED, errorMsg);
                 LOGGER.error("Compensation retry FAILED permanently: type={}, id={}", log.getOperationType(), log.getOperationId(), e);
@@ -106,5 +107,10 @@ public class CompensationRetryService {
                 LOGGER.warn("Compensation retry failed (will retry): type={}, id={}", log.getOperationType(), log.getOperationId(), e);
             }
         }
+    }
+
+    private String failureMessage(Exception error) {
+        String message = error.getMessage() != null ? error.getMessage() : error.getClass().getSimpleName();
+        return CredentialTextRedactor.redact(message);
     }
 }

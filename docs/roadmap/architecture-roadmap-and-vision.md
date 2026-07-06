@@ -1678,3 +1678,11 @@ Ingestion task failures now redact credential-shaped exception text before retur
 This is a narrow ingestion task failure-boundary hardening slice. It does not change pipeline execution, node result semantics, retry/rollback behavior, source metadata, node output payloads, raw engine exceptions, or server-side exception logging with the original exception chain.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelIngestionTaskServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new regression because the execution result returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 10/10 across kernel redactor and ingestion task service coverage.
+
+## 2026-07-06 Update: Compensation Retry Failure Redaction
+
+Compensation retry handler failures now redact credential-shaped exception text before updating durable `CompensationLog.lastError` values for pending or permanently failed retries. This protects compensation operations and retry backlog surfaces when repair handlers, downstream repositories, or external systems accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow compensation retry persistence-boundary hardening slice. It does not change distributed locking, retry batching, handler lookup, retry count semantics, pending versus failed status selection, static retry failure reasons, payload handling, or server-side exception logging with the original exception chain.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=CompensationRetryServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new regression because `CompensationLog.lastError` captured raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 4/4 across kernel redactor and compensation retry coverage.
