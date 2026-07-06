@@ -1630,3 +1630,11 @@ Memory garbage collection scan, archive, physical-delete, outbox enqueue, and ma
 This is a narrow garbage-collection result-boundary hardening slice. It does not change candidate scanning, lifecycle archive/delete semantics, physical delete enablement, outbox task construction, mark-deleted behavior, dry-run behavior, raw repository/outbox exception logging, or raw candidate/task inputs.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=MemoryGarbageCollectionServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new scan/outbox regressions because `MemoryGarbageCollectionResult.errors()` returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 12/12 across kernel redactor and memory garbage collection coverage.
+
+## 2026-07-06 Update: Memory Compaction Failure Redaction
+
+Memory compaction scan, group compaction, and derived-index outbox enqueue failures now redact credential-shaped exception text before returning `MemoryCompactionResult.errors()`. This protects memory maintenance result surfaces when compaction repositories, long-term memory writes, or derived-index outbox writes accidentally include bearer tokens, API keys, or similar material.
+
+This is a narrow compaction result-boundary hardening slice. It does not change candidate scanning, compaction grouping, summary generation, master memory construction, source fragment metadata, mark-compacted behavior, outbox task construction, observation emission, raw compaction inputs, or raw repository/outbox exception logging.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=MemoryCompactionServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new scan/outbox regressions because `MemoryCompactionResult.errors()` returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 8/8 across kernel redactor and memory compaction coverage.

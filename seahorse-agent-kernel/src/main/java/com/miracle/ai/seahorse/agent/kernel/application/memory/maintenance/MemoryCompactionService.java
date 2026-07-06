@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionCandidate;
@@ -274,7 +275,7 @@ public class MemoryCompactionService {
     }
 
     private String errorMessage(RuntimeException ex) {
-        return ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage();
+        return CredentialTextRedactor.redact(ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage());
     }
 
     private void emitRunMetric(List<MemoryCompactionCandidate> candidates,

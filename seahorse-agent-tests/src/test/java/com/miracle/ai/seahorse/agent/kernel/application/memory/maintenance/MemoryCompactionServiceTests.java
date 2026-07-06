@@ -169,15 +169,80 @@ class MemoryCompactionServiceTests {
         assertThat(compactionPort.requestedMinGroupSize).isEqualTo(5);
     }
 
+    @Test
+    void shouldRedactCredentialLikeScanFailureErrors() {
+        RecordingCompactionPort compactionPort = new RecordingCompactionPort();
+        compactionPort.scanFailure = "scan failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret";
+        MemoryCompactionService service = new MemoryCompactionService(
+                compactionPort,
+                new RecordingLongTermMemoryPort(),
+                new RecordingOutboxPort(),
+                new MemoryCompactionOptions(25, 2, false, false, false, "default"));
+
+        MemoryCompactionResult result = service.run("scan-failure");
+
+        assertThat(result.errors()).singleElement()
+                .asString()
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-memory-secret");
+    }
+
+    @Test
+    void shouldRedactCredentialLikeOutboxFailureErrors() {
+        RecordingCompactionPort compactionPort = new RecordingCompactionPort();
+        RecordingLongTermMemoryPort longTermPort = new RecordingLongTermMemoryPort();
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort();
+        outboxPort.failureMessage = "outbox failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret";
+        compactionPort.candidates.add(new MemoryCompactionCandidate(
+                "user-1",
+                "default",
+                "semanticKey:project.alpha",
+                "semanticKey",
+                List.of(
+                        new MemoryCompactionFragment(
+                                "stm-1",
+                                "short_term",
+                                "PROJECT_FACT",
+                                "Alpha project uses Spring.",
+                                Map.of("semanticKey", "project.alpha"),
+                                Instant.EPOCH),
+                        new MemoryCompactionFragment(
+                                "sem-1",
+                                "semantic",
+                                "PROJECT_FACT",
+                                "Alpha project target is May.",
+                                Map.of("semanticKey", "project.alpha"),
+                                Instant.EPOCH))));
+        MemoryCompactionService service = new MemoryCompactionService(
+                compactionPort,
+                longTermPort,
+                outboxPort,
+                new MemoryCompactionOptions(10, 2, true, false, false, "text-embedding-test"));
+
+        MemoryCompactionResult result = service.run("outbox-failure");
+
+        assertThat(result.errors()).hasSize(3);
+        assertThat(result.errors())
+                .allSatisfy(error -> assertThat(error)
+                        .contains("[REDACTED]")
+                        .doesNotContain("abcdefghijklmnop")
+                        .doesNotContain("plain-memory-secret"));
+    }
+
     private static class RecordingCompactionPort implements MemoryCompactionPort {
 
         final List<MemoryCompactionCandidate> candidates = new ArrayList<>();
         final List<String> markedMasterIds = new ArrayList<>();
         int requestedLimit;
         int requestedMinGroupSize;
+        String scanFailure;
 
         @Override
         public List<MemoryCompactionCandidate> scanCandidates(int limit) {
+            if (scanFailure != null) {
+                throw new RuntimeException(scanFailure);
+            }
             return candidates.stream().limit(limit).toList();
         }
 
@@ -228,9 +293,13 @@ class MemoryCompactionServiceTests {
     private static class RecordingOutboxPort implements MemoryOutboxPort {
 
         final List<MemoryOutboxTask> tasks = new ArrayList<>();
+        String failureMessage;
 
         @Override
         public void enqueue(MemoryOutboxTask task) {
+            if (failureMessage != null) {
+                throw new RuntimeException(failureMessage);
+            }
             tasks.add(task);
         }
     }
