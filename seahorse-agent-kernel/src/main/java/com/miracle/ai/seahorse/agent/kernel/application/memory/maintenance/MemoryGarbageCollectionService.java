@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionResult;
@@ -244,7 +245,7 @@ public class MemoryGarbageCollectionService {
     }
 
     private String errorMessage(RuntimeException ex) {
-        return Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName());
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
     }
 
     private record EnqueueResult(int queuedCount, boolean completed) {

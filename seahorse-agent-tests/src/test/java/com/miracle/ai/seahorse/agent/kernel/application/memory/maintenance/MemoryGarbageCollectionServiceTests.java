@@ -228,6 +228,47 @@ class MemoryGarbageCollectionServiceTests {
         assertThat(gcPort.markedIds).isEmpty();
     }
 
+    @Test
+    void shouldRedactCredentialLikeScanFailureErrors() {
+        RecordingGarbageCollectionPort gcPort = new RecordingGarbageCollectionPort();
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort();
+        gcPort.scanFailure = "scan failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret";
+        MemoryGarbageCollectionService service = new MemoryGarbageCollectionService(
+                gcPort,
+                outboxPort,
+                new MemoryGarbageCollectionOptions(20, Duration.ofDays(7), false, true, true, true));
+
+        MemoryGarbageCollectionResult result = service.run("scan-failure");
+
+        assertThat(result.errors()).singleElement()
+                .asString()
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-memory-secret");
+    }
+
+    @Test
+    void shouldRedactCredentialLikeOutboxFailureErrors() {
+        RecordingGarbageCollectionPort gcPort = new RecordingGarbageCollectionPort();
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort();
+        outboxPort.failTaskTypes.add(MemoryOutboxTaskTypes.KEYWORD_DELETE);
+        outboxPort.failureMessage = "outbox failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret";
+        gcPort.candidates.add(new MemoryGarbageCollectionCandidate(
+                "m-obsolete", "user-1", "tenant-1", "long_term", "OBSOLETE", Instant.now()));
+        MemoryGarbageCollectionService service = new MemoryGarbageCollectionService(
+                gcPort,
+                outboxPort,
+                new MemoryGarbageCollectionOptions(20, Duration.ofDays(7), false, true, true, true));
+
+        MemoryGarbageCollectionResult result = service.run("outbox-failure");
+
+        assertThat(result.errors()).singleElement()
+                .asString()
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-memory-secret");
+    }
+
     private static class RecordingGarbageCollectionPort implements MemoryGarbageCollectionPort {
 
         final List<MemoryGarbageCollectionCandidate> candidates = new ArrayList<>();
@@ -236,12 +277,16 @@ class MemoryGarbageCollectionServiceTests {
         final List<String> markedIds = new ArrayList<>();
         final List<String> archivedIds = new ArrayList<>();
         final List<String> physicallyDeletedIds = new ArrayList<>();
+        String scanFailure;
 
         @Override
         public List<MemoryGarbageCollectionCandidate> scanDerivedIndexDeleteCandidates(
                 Instant now,
                 Duration retention,
                 int limit) {
+            if (scanFailure != null) {
+                throw new RuntimeException(scanFailure);
+            }
             return candidates.stream().limit(limit).toList();
         }
 
@@ -285,11 +330,12 @@ class MemoryGarbageCollectionServiceTests {
 
         final List<MemoryOutboxTask> tasks = new ArrayList<>();
         final List<String> failTaskTypes = new ArrayList<>();
+        String failureMessage = "outbox down";
 
         @Override
         public void enqueue(MemoryOutboxTask task) {
             if (failTaskTypes.contains(task.taskType())) {
-                throw new RuntimeException("outbox down");
+                throw new RuntimeException(failureMessage);
             }
             tasks.add(task);
         }

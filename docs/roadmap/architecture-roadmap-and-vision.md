@@ -1622,3 +1622,11 @@ Memory alias maintenance scan and upsert failures now redact credential-shaped e
 This is a narrow alias-maintenance result-boundary hardening slice. It does not change alias candidate scanning, scoped/global scan selection, alias normalization, dictionary matching, auto-resolve thresholds, upsert command construction, missing user-scope handling, or raw repository exception logging.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=MemoryAliasResolutionServiceMaintenanceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new scan/upsert regressions because `MemoryAliasResolutionRunResult.errors()` returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 7/7 across kernel redactor and memory alias maintenance coverage.
+
+## 2026-07-06 Update: Memory Garbage Collection Failure Redaction
+
+Memory garbage collection scan, archive, physical-delete, outbox enqueue, and mark failures now redact credential-shaped exception text before returning `MemoryGarbageCollectionResult.errors()`. This protects memory maintenance result surfaces and upstream maintenance aggregation when lifecycle repositories or derived-index outbox writes accidentally include bearer tokens, API keys, or similar material.
+
+This is a narrow garbage-collection result-boundary hardening slice. It does not change candidate scanning, lifecycle archive/delete semantics, physical delete enablement, outbox task construction, mark-deleted behavior, dry-run behavior, raw repository/outbox exception logging, or raw candidate/task inputs.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=MemoryGarbageCollectionServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new scan/outbox regressions because `MemoryGarbageCollectionResult.errors()` returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 12/12 across kernel redactor and memory garbage collection coverage.
