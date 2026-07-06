@@ -1768,3 +1768,11 @@ The built-in `get_current_datetime` tool now redacts credential-shaped exception
 This is a narrow built-in tool failure-boundary hardening slice. It does not change the normal date/time response shape, tool descriptor, default `Asia/Shanghai` zone, tool registration, or agent loop execution semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=GetDateTimeToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran across kernel redactor and date-time tool success/failure coverage.
+
+## 2026-07-06 Update: Output Governance Failure Redaction
+
+Output governance validators now redact credential-shaped exception text before returning validation issues for JSON parse failures, invalid configured JSON schemas, invalid Markdown heading schemas, validator `supports` failures, or validator runtime failures. This protects validation records, output-governance diagnostics, gate evidence, and operator-facing validation issue surfaces when malformed content, schemas, or validator adapters accidentally include bearer tokens, API keys, cookies, or similar material in exception messages.
+
+This is a narrow output-governance failure-boundary hardening slice. It does not change validator selection, PASS/BLOCK/WARN decisions, self-heal retry semantics, normalized content, observation event names, or the block fallback message.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=JsonSchemaOutputValidatorTests,MarkdownAndMermaidValidatorTests,OutputGovernanceServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes covered kernel redactor plus JSON, Markdown, and output-governance validator failure boundaries.

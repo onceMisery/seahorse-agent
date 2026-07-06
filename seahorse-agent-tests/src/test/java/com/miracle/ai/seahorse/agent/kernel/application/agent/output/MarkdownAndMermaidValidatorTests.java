@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.output;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationRequest;
@@ -79,6 +81,14 @@ class MarkdownAndMermaidValidatorTests {
 
     @Test
     void markdownBlocksWhenSchemaJsonIsNotArray() {
+        MarkdownStructureOutputValidator markdownValidator = new MarkdownStructureOutputValidator(new ObjectMapper() {
+            @Override
+            public com.fasterxml.jackson.databind.JsonNode readTree(String content) throws JsonProcessingException {
+                throw new JsonProcessingException(
+                        "Authorization: Bearer markdown-schema-token api_key=markdown-schema-secret") {
+                };
+            }
+        });
         OutputValidationRequest request = newMarkdownRequest(
                 "{\"requiredSections\":[\"## Overview\"]}",
                 "## Overview\n",
@@ -89,6 +99,10 @@ class MarkdownAndMermaidValidatorTests {
         assertThat(result.decision()).isEqualTo(OutputValidationDecision.BLOCK);
         assertThat(result.issues().get(0).code())
                 .isEqualTo(MarkdownStructureOutputValidator.CODE_MARKDOWN_SCHEMA_INVALID);
+        assertThat(result.issues().get(0).message())
+                .contains("[REDACTED]")
+                .doesNotContain("markdown-schema-token")
+                .doesNotContain("markdown-schema-secret");
     }
 
     @Test

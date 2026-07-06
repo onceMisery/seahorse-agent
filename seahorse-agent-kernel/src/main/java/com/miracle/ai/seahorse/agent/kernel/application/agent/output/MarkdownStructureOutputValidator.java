@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.output;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationIssue;
@@ -85,7 +86,7 @@ public final class MarkdownStructureOutputValidator implements OutputValidatorPo
                     CODE_MARKDOWN_SCHEMA_INVALID,
                     "$schema",
                     "Markdown schemaJson must be a JSON array of required heading strings: "
-                            + (ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage()),
+                            + safeMessage(ex),
                     OutputValidationDecision.BLOCK)));
         }
         if (required.isEmpty()) {
@@ -141,5 +142,9 @@ public final class MarkdownStructureOutputValidator implements OutputValidatorPo
             }
         }
         return headings;
+    }
+
+    private String safeMessage(Exception ex) {
+        return CredentialTextRedactor.redact(ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage());
     }
 }

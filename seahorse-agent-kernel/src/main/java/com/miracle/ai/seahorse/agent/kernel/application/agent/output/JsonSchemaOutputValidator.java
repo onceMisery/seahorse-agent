@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.output;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationIssue;
@@ -96,8 +97,7 @@ public final class JsonSchemaOutputValidator implements OutputValidatorPort {
             return OutputValidationResult.block(List.of(new OutputValidationIssue(
                     CODE_JSON_PARSE_FAILED,
                     "$",
-                    "Final answer is not valid JSON: "
-                            + (ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage()),
+                    "Final answer is not valid JSON: " + safeMessage(ex),
                     OutputValidationDecision.BLOCK)));
         }
 
@@ -108,8 +108,7 @@ public final class JsonSchemaOutputValidator implements OutputValidatorPort {
             return OutputValidationResult.block(List.of(new OutputValidationIssue(
                     CODE_JSON_SCHEMA_INVALID,
                     "$schema",
-                    "Configured schemaJson is not parseable: "
-                            + (ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage()),
+                    "Configured schemaJson is not parseable: " + safeMessage(ex),
                     OutputValidationDecision.BLOCK)));
         }
 
@@ -209,5 +208,9 @@ public final class JsonSchemaOutputValidator implements OutputValidatorPort {
 
     private String stripWhitespace(String content) {
         return content == null ? "" : content.strip();
+    }
+
+    private String safeMessage(Exception ex) {
+        return CredentialTextRedactor.redact(ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage());
     }
 }

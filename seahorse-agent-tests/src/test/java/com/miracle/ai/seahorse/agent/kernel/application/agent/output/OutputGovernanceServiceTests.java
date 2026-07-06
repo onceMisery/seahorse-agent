@@ -149,7 +149,7 @@ class OutputGovernanceServiceTests {
 
             @Override
             public OutputValidationResult validate(OutputValidationRequest request) {
-                throw new IllegalStateException("boom");
+                throw new IllegalStateException("Authorization: Bearer validator-runtime-token api_key=runtime-secret");
             }
         };
         OutputGovernanceService service = new OutputGovernanceService(
@@ -164,6 +164,46 @@ class OutputGovernanceServiceTests {
         assertThat(result.issues())
                 .extracting(OutputValidationIssue::code)
                 .contains("VALIDATOR_RUNTIME_FAILURE");
+        assertThat(result.issues().get(0).message())
+                .contains("[REDACTED]")
+                .doesNotContain("validator-runtime-token")
+                .doesNotContain("runtime-secret");
+    }
+
+    @Test
+    void validatorSupportsFailureMessageIsRedactedBeforeObservation() {
+        RecordingObservation observation = new RecordingObservation();
+        OutputValidatorPort explodingSupports = new OutputValidatorPort() {
+            @Override
+            public String name() {
+                return "exploding-supports";
+            }
+
+            @Override
+            public boolean supports(OutputValidationRequest request) {
+                throw new IllegalStateException("Authorization: Bearer validator-support-token api_key=support-secret");
+            }
+
+            @Override
+            public OutputValidationResult validate(OutputValidationRequest request) {
+                return OutputValidationResult.pass();
+            }
+        };
+        OutputGovernanceService service = new OutputGovernanceService(
+                List.of(explodingSupports),
+                OutputValidationRecordPort.noop(),
+                observation);
+
+        OutputGovernanceResult result = service.governFinalAnswer(plainTextRequest("hello"));
+
+        assertThat(result.decision()).isEqualTo(OutputValidationDecision.PASS);
+        assertThat(observation.events).hasSize(2);
+        assertThat(observation.events.get(0).attributes())
+                .containsEntry(OutputGovernanceService.OBSERVATION_ATTR_VALIDATOR, "exploding-supports");
+        assertThat(observation.events.get(0).attributes().values())
+                .allSatisfy(value -> assertThat(value)
+                        .doesNotContain("validator-support-token")
+                        .doesNotContain("support-secret"));
     }
 
     @Test

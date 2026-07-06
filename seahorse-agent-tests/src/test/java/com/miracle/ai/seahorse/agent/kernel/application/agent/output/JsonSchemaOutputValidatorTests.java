@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.output;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationRequest;
@@ -24,6 +26,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidation
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -89,6 +92,13 @@ class JsonSchemaOutputValidatorTests {
 
     @Test
     void blocksWhenJsonContentIsNotParseable() {
+        JsonSchemaOutputValidator validator = new JsonSchemaOutputValidator(new ObjectMapper() {
+            @Override
+            public com.fasterxml.jackson.databind.JsonNode readTree(String content) throws JsonProcessingException {
+                throw new JsonProcessingException("Authorization: Bearer json-content-token api_key=json-content-secret") {
+                };
+            }
+        });
         OutputValidationRequest request = request(
                 OutputArtifactType.JSON,
                 "{\"type\":\"object\"}",
@@ -100,6 +110,10 @@ class JsonSchemaOutputValidatorTests {
         assertThat(result.issues()).hasSize(1);
         assertThat(result.issues().get(0).code())
                 .isEqualTo(JsonSchemaOutputValidator.CODE_JSON_PARSE_FAILED);
+        assertThat(result.issues().get(0).message())
+                .contains("[REDACTED]")
+                .doesNotContain("json-content-token")
+                .doesNotContain("json-content-secret");
     }
 
     @Test
@@ -133,6 +147,17 @@ class JsonSchemaOutputValidatorTests {
 
     @Test
     void blocksWhenConfiguredSchemaIsItselfInvalid() {
+        AtomicInteger invocations = new AtomicInteger();
+        JsonSchemaOutputValidator validator = new JsonSchemaOutputValidator(new ObjectMapper() {
+            @Override
+            public com.fasterxml.jackson.databind.JsonNode readTree(String content) throws JsonProcessingException {
+                if (invocations.incrementAndGet() == 1) {
+                    return super.readTree(content);
+                }
+                throw new JsonProcessingException("Authorization: Bearer json-schema-token api_key=json-schema-secret") {
+                };
+            }
+        });
         OutputValidationRequest request = request(
                 OutputArtifactType.JSON,
                 "{not a schema",
@@ -143,6 +168,10 @@ class JsonSchemaOutputValidatorTests {
         assertThat(result.decision()).isEqualTo(OutputValidationDecision.BLOCK);
         assertThat(result.issues().get(0).code())
                 .isEqualTo(JsonSchemaOutputValidator.CODE_JSON_SCHEMA_INVALID);
+        assertThat(result.issues().get(0).message())
+                .contains("[REDACTED]")
+                .doesNotContain("json-schema-token")
+                .doesNotContain("json-schema-secret");
     }
 
     @Test

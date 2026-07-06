@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent.output;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputGovernanceResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationIssue;
@@ -278,7 +279,7 @@ public final class OutputGovernanceService {
                                 List.of(new OutputValidationIssue(
                                         "VALIDATOR_SUPPORTS_FAILED",
                                         "",
-                                        ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage(),
+                                        safeMessage(ex),
                                         OutputValidationDecision.WARN)),
                                 validator.name()),
                         null);
@@ -295,7 +296,7 @@ public final class OutputGovernanceService {
             OutputValidationIssue issue = new OutputValidationIssue(
                     "VALIDATOR_RUNTIME_FAILURE",
                     validator.name(),
-                    ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage(),
+                    safeMessage(ex),
                     OutputValidationDecision.WARN);
             return OutputValidationResult.warn(List.of(issue));
         }
@@ -371,6 +372,10 @@ public final class OutputGovernanceService {
             // FAILED_AFTER_HEAL 仅由 governance 汇总后产生，validator 不会返回此值；映射为最严重等级。
             case FAILED_AFTER_HEAL -> 3;
         };
+    }
+
+    private static String safeMessage(RuntimeException ex) {
+        return CredentialTextRedactor.redact(ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage());
     }
 
     private record ValidatorRunOutcome(OutputValidationDecision decision,
