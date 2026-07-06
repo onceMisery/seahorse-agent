@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.adapters.spring.mq;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.mq.direct.DirectMessageQueueAdapter;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
+import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventStatus;
@@ -51,6 +53,49 @@ class ReliableMessageQueueAdapterTests {
         assertThat(received).extracting(SamplePayload::docId).containsExactly("doc-1");
         assertThat(repository.events).extracting(event -> event.delivery().status()).containsExactly(OutboxEventStatus.SENT);
         assertThat(delegate.messages()).hasSize(1);
+    }
+
+    @Test
+    void shouldRedactCredentialTextFromRelayFailureSurfaces() {
+        InMemoryOutboxRepository repository = new InMemoryOutboxRepository();
+        DirectMessageQueueAdapter delegate = new DirectMessageQueueAdapter();
+        ReliableMessageQueueAdapter adapter = new ReliableMessageQueueAdapter(
+                delegate, delegate, () -> repository, () -> OBJECT_MAPPER);
+        List<MetadataQuarantineItem> quarantined = new ArrayList<>();
+        MessageQueuePort failingQueue = new MessageQueuePort() {
+            @Override
+            public com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSendReceipt send(String topic,
+                                                                                           String key,
+                                                                                           String bizDesc,
+                                                                                           Object body) {
+                throw new IllegalStateException(
+                        "mq failed Authorization: Bearer abcdefghijklmnop api_key=plain-outbox-secret");
+            }
+
+            @Override
+            public void publishReliable(String topic, String key, String bizDesc, Object body) {
+                throw new UnsupportedOperationException("publishReliable is not used by relay");
+            }
+        };
+        SeahorseOutboxRelayJob relayJob = new SeahorseOutboxRelayJob(
+                repository, failingQueue, OBJECT_MAPPER, com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort.noop(),
+                quarantined::add, 10);
+
+        adapter.publishReliable("topic-a", "kb-1:doc-1", "biz", new SamplePayload("doc-1"));
+        relayJob.relay();
+
+        assertThat(repository.events).extracting(event -> event.delivery().status())
+                .containsExactly(OutboxEventStatus.FAILED);
+        assertThat(repository.events.get(0).delivery().lastError())
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop", "plain-outbox-secret");
+        assertThat(quarantined).hasSize(1);
+        assertThat(quarantined.get(0).reasonMessage())
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop", "plain-outbox-secret");
+        assertThat(String.valueOf(quarantined.get(0).sourceSnapshot().get("error")))
+                .contains("[REDACTED]")
+                .doesNotContain("abcdefghijklmnop", "plain-outbox-secret");
     }
 
     private record SamplePayload(String docId) {

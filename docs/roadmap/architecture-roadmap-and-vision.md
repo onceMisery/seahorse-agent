@@ -1686,3 +1686,11 @@ Compensation retry handler failures now redact credential-shaped exception text 
 This is a narrow compensation retry persistence-boundary hardening slice. It does not change distributed locking, retry batching, handler lookup, retry count semantics, pending versus failed status selection, static retry failure reasons, payload handling, or server-side exception logging with the original exception chain.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=CompensationRetryServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new regression because `CompensationLog.lastError` captured raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 4/4 across kernel redactor and compensation retry coverage.
+
+## 2026-07-06 Update: Outbox Relay Failure Redaction
+
+Outbox relay failures now redact credential-shaped exception text before writing durable outbox `lastError` values, metadata quarantine `reasonMessage` values, or quarantine snapshot `error` fields. This protects retry backlog, metadata quarantine, and operations surfaces when MQ adapters or downstream brokers accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow outbox relay persistence-boundary hardening slice. It does not change relay batching, distributed locking, retry delay/status semantics, envelope parsing, message send behavior, quarantine identity extraction, or server-side exception logging with the original exception chain.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-spring-boot-autoconfigure,seahorse-agent-kernel -am "-Dtest=ReliableMessageQueueAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new regression because outbox `lastError` captured raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 5/5 across kernel redactor and reliable message relay coverage.

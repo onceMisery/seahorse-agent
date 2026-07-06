@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.spring.mq;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
@@ -123,14 +124,15 @@ public class SeahorseOutboxRelayJob {
     private void markFailed(OutboxEvent event, Exception ex) {
         int retryCount = event.delivery().retryCount() + 1;
         long delaySeconds = Math.min(MAX_RETRY_DELAY_SECONDS, retryCount * RETRY_DELAY_STEP_SECONDS);
-        repositoryPort.markFailed(event.id(), retryCount, Instant.now().plusSeconds(delaySeconds), ex.getMessage());
-        quarantineOutboxFailure(event, ex, retryCount);
+        String failureMessage = failureMessage(ex);
+        repositoryPort.markFailed(event.id(), retryCount, Instant.now().plusSeconds(delaySeconds), failureMessage);
+        quarantineOutboxFailure(event, ex, retryCount, failureMessage);
         LOG.error("Seahorse outbox relay failed, id={}, topic={}", event.id(), event.topic(), ex);
     }
 
-    private void quarantineOutboxFailure(OutboxEvent event, Exception ex, int retryCount) {
+    private void quarantineOutboxFailure(OutboxEvent event, Exception ex, int retryCount, String failureMessage) {
         try {
-            Map<String, Object> snapshot = outboxSnapshot(event, ex, retryCount);
+            Map<String, Object> snapshot = outboxSnapshot(event, ex, retryCount, failureMessage);
             quarantinePort.quarantine(new MetadataQuarantineItem(
                     text(snapshot.get("tenantId")),
                     text(snapshot.get("kbId")),
@@ -138,14 +140,14 @@ public class SeahorseOutboxRelayJob {
                     event.id(),
                     STAGE_INDEX,
                     REASON_OUTBOX_RELAY_FAILED,
-                    Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getSimpleName()),
+                    failureMessage,
                     snapshot));
         } catch (RuntimeException ignored) {
             // 隔离记录失败不能覆盖 Outbox 原始重试状态。
         }
     }
 
-    private Map<String, Object> outboxSnapshot(OutboxEvent event, Exception ex, int retryCount) {
+    private Map<String, Object> outboxSnapshot(OutboxEvent event, Exception ex, int retryCount, String failureMessage) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("eventId", event.id());
         snapshot.put("topic", event.topic());
@@ -153,10 +155,15 @@ public class SeahorseOutboxRelayJob {
         snapshot.put("eventType", event.eventType());
         snapshot.put("retryCount", retryCount);
         snapshot.put("exception", ex.getClass().getSimpleName());
-        snapshot.put("error", Objects.requireNonNullElse(ex.getMessage(), ""));
+        snapshot.put("error", failureMessage);
         addMessageKeyParts(event.messageKey(), snapshot);
         addPayloadIdentity(event.payloadJson(), snapshot);
         return snapshot;
+    }
+
+    private String failureMessage(Exception ex) {
+        return CredentialTextRedactor.redact(
+                Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getSimpleName()));
     }
 
     private void addMessageKeyParts(String messageKey, Map<String, Object> snapshot) {
