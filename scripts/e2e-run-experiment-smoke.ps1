@@ -266,6 +266,8 @@ $report = Test-Step "Export run experiment report" {
             "Total cost:",
             "Total tokens:",
             "Cost records:",
+            "Trace Summary",
+            "Traced trials:",
             "Evidence Index",
             "$($scored.experiment.id)",
             "$($fork.TrialId)",

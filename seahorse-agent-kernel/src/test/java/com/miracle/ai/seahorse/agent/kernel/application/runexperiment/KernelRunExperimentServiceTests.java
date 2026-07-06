@@ -282,6 +282,11 @@ class KernelRunExperimentServiceTests {
         assertTrue(report.markdown().contains("- Total tokens: 123"));
         assertTrue(report.markdown().contains("- Total calls: 2"));
         assertTrue(report.markdown().contains("- Cost records: 1"));
+        assertTrue(report.markdown().contains("## Trace Summary"));
+        assertTrue(report.markdown().contains("- Traced trials: 1"));
+        assertTrue(report.markdown().contains("| Trial | Run ID | Trace Evidence |"));
+        assertTrue(report.markdown().contains(
+                "| 10 | run-exp-1-trial-10 | studio=[studio-success](http://studio.local/traces/studio-success) |"));
         assertTrue(report.markdown().contains("## Evidence Index"));
         assertTrue(report.markdown().contains("## Reproduction Appendix"));
         assertTrue(report.markdown().contains("run-exp-1-trial-10"));

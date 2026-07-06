@@ -220,6 +220,7 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
 
         appendExecutiveSummary(report, trials, outputMessages);
         appendCostSummary(report, trials, snapshots);
+        appendTraceSummary(report, trials, snapshots);
         appendEvidenceIndex(report, trials, snapshots, outputMessages);
         appendTrialExport(report, trials, snapshots, outputMessages);
         appendOutputComparison(report, trials, outputMessages);
@@ -297,6 +298,31 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         report.append("- Total tokens: ").append(summary.totalTokens()).append("\n");
         report.append("- Total calls: ").append(summary.totalCalls()).append("\n");
         report.append("- Cost records: ").append(summary.recordCount()).append("\n\n");
+    }
+
+    private void appendTraceSummary(
+            StringBuilder report,
+            List<RunExperimentTrialRecord> trials,
+            Map<String, RunContextSnapshotRecord> snapshots) {
+        TraceSummary summary = traceSummary(trials, snapshots);
+        report.append("## Trace Summary\n\n");
+        if (summary.tracedTrials() == 0) {
+            report.append("- No trace evidence resolved.\n\n");
+            return;
+        }
+        report.append("- Traced trials: ").append(summary.tracedTrials()).append("\n\n");
+        report.append("| Trial | Run ID | Trace Evidence |\n");
+        report.append("|---|---|---|\n");
+        for (TraceSummaryItem item : summary.items()) {
+            report.append("| ")
+                    .append(tableCell(item.trialId()))
+                    .append(" | ")
+                    .append(tableCell(item.runId()))
+                    .append(" | ")
+                    .append(tableCell(item.traceEvidence()))
+                    .append(" |\n");
+        }
+        report.append("\n");
     }
 
     private void appendEvidenceIndex(
@@ -638,6 +664,23 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         return "not recorded";
     }
 
+    private TraceSummary traceSummary(
+            List<RunExperimentTrialRecord> trials,
+            Map<String, RunContextSnapshotRecord> snapshots) {
+        List<TraceSummaryItem> items = Objects.requireNonNullElse(trials, List.<RunExperimentTrialRecord>of())
+                .stream()
+                .map(trial -> {
+                    String evidence = traceEvidence(trial, snapshotFor(snapshots, trial));
+                    return new TraceSummaryItem(
+                            valueOrDash(trial == null ? null : trial.getId()),
+                            valueOrDash(trial == null ? null : trial.getRunId()),
+                            evidence);
+                })
+                .filter(item -> !"not recorded".equals(item.traceEvidence()))
+                .toList();
+        return new TraceSummary(items.size(), items);
+    }
+
     private CostSummary costSummary(
             List<RunExperimentTrialRecord> trials,
             Map<String, RunContextSnapshotRecord> snapshots) {
@@ -687,6 +730,12 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                                long totalCalls,
                                double totalCost,
                                long recordCount) {
+    }
+
+    private record TraceSummary(long tracedTrials, List<TraceSummaryItem> items) {
+    }
+
+    private record TraceSummaryItem(String trialId, String runId, String traceEvidence) {
     }
 
     private String forkTarget(RunExperimentTrialRecord trial) {
