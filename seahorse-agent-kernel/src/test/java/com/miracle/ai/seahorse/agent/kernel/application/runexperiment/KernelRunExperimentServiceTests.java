@@ -273,6 +273,9 @@ class KernelRunExperimentServiceTests {
         assertTrue(report.markdown().contains("Template Version: run-experiment-report-v1"));
         assertTrue(report.markdown().contains("## Executive Summary"));
         assertTrue(report.markdown().contains("Recommended trial: trial 10 score=4"));
+        assertTrue(report.markdown().contains("### Score Leaderboard"));
+        assertTrue(report.markdown().contains("| Rank | Trial | Run Profile | Score | Status | Score Evidence |"));
+        assertTrue(report.markdown().contains("| 1 | 10 | 12 | 4 | SUCCEEDED | verdict=smoke-pass |"));
         assertTrue(report.markdown().contains("## Evidence Index"));
         assertTrue(report.markdown().contains("## Reproduction Appendix"));
         assertTrue(report.markdown().contains("run-exp-1-trial-10"));

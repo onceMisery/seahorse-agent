@@ -244,6 +244,41 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         report.append("- Scored trials: ").append(scored).append("\n");
         report.append("- Output messages resolved: ").append(outputCount).append("\n");
         report.append("- Recommended trial: ").append(recommendedTrial(trials)).append("\n\n");
+        appendScoreLeaderboard(report, trials);
+    }
+
+    private void appendScoreLeaderboard(StringBuilder report, List<RunExperimentTrialRecord> trials) {
+        report.append("### Score Leaderboard\n\n");
+        List<RunExperimentTrialRecord> scoredTrials = Objects.requireNonNullElse(trials, List.<RunExperimentTrialRecord>of())
+                .stream()
+                .filter(trial -> scoreValue(trial).isPresent())
+                .sorted((left, right) -> Double.compare(
+                        scoreValue(right).orElse(Double.NEGATIVE_INFINITY),
+                        scoreValue(left).orElse(Double.NEGATIVE_INFINITY)))
+                .toList();
+        if (scoredTrials.isEmpty()) {
+            report.append("- No scored trials yet.\n\n");
+            return;
+        }
+        report.append("| Rank | Trial | Run Profile | Score | Status | Score Evidence |\n");
+        report.append("|---|---|---|---|---|---|\n");
+        int rank = 1;
+        for (RunExperimentTrialRecord trial : scoredTrials) {
+            report.append("| ")
+                    .append(rank++)
+                    .append(" | ")
+                    .append(tableCell(trial.getId()))
+                    .append(" | ")
+                    .append(tableCell(trial.getRunProfileId()))
+                    .append(" | ")
+                    .append(tableCell(decimalText(scoreValue(trial).orElse(0D))))
+                    .append(" | ")
+                    .append(tableCell(trial.getStatus()))
+                    .append(" | ")
+                    .append(tableCell(scoreEvidence(trial)))
+                    .append(" |\n");
+        }
+        report.append("\n");
     }
 
     private void appendEvidenceIndex(
@@ -451,6 +486,19 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
             }
         }
         return Optional.empty();
+    }
+
+    private String scoreEvidence(RunExperimentTrialRecord trial) {
+        if (trial == null || trial.getScoreJson() == null || trial.getScoreJson().isBlank()) {
+            return "not recorded";
+        }
+        for (String key : List.of("verdict", "reason", "comment", "summary")) {
+            String value = jsonScalar(trial.getScoreJson(), key);
+            if (value != null && !value.isBlank()) {
+                return key + "=" + value;
+            }
+        }
+        return trial.getScoreJson();
     }
 
     private Map<String, RunContextSnapshotRecord> loadRunSnapshots(List<RunExperimentTrialRecord> trials) {
