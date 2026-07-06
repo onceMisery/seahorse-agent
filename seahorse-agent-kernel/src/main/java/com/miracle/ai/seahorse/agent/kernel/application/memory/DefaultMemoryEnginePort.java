@@ -1265,7 +1265,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                 MemoryIngestionAction.IGNORE,
                                 "",
                                 "",
-                                "refiner_failed:" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()),
+                                "refiner_failed:" + failureMessage(ex),
                                 Map.of("status", "failed_closed")),
                         "refiner_failed");
             }
@@ -1274,7 +1274,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     MemoryIngestionAction.IGNORE,
                     "",
                     "",
-                    "failed_open:" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()),
+                    "failed_open:" + failureMessage(ex),
                     Map.of("status", "failed_open"));
         }
     }

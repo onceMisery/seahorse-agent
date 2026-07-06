@@ -1598,3 +1598,11 @@ Memory governance promotion, quality snapshot, inference, conflict detection, an
 This is a narrow governance result-boundary hardening slice. It does not change promotion, semantic upsert, quality report generation, inference, conflict detection, decay logic, raw execution inputs, repository semantics, server logs beyond returned error text, or the quality snapshot schema.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelMemoryGovernanceServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new regression because a promotion failure returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 9/9 across kernel redactor and memory governance coverage.
+
+## 2026-07-06 Update: Memory Refiner Failure Redaction
+
+Memory refiner fail-open and fail-closed paths now redact credential-shaped exception text before storing `RefinedMemoryDelta.reason` values that flow into operation decision metadata such as `refinerReason`. This protects memory ingestion operation history and refiner diagnostics when model/provider failures accidentally include bearer tokens, API keys, or similar material.
+
+This is a narrow refiner failure-reason hardening slice. It does not change baseline classification, refiner request construction, raw memory/refiner inputs, fail-open versus fail-closed policy, schema validation, memory write behavior, operation status semantics, or server-side exception logging.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=DefaultMemoryEnginePortTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new fail-open/fail-closed regressions because `refinerReason` lacked `[REDACTED]`, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 70/70 across kernel redactor and default memory engine coverage.

@@ -928,6 +928,65 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldRedactCredentialLikeRefinerFailureWhenFailOpen() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryRefinerPort refinerPort = RecordingMemoryRefinerPort.failing(
+                "refiner failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret");
+        DefaultMemoryEnginePort engine = engineWithRefiner(shortTermPort, refinerPort, true, operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-fail-open-secret", "default",
+                "chat-completed",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-fail-open-secret")
+                        .messageId("msg-refiner-fail-open-secret")
+                        .message(ChatMessage.user("i prefer concise answers"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, result.status());
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        String refinerReason = operationLogPort.decisionById.get("op-refiner-fail-open-secret")
+                .get("refinerReason").toString();
+        Assertions.assertTrue(refinerReason.contains("failed_open:"));
+        Assertions.assertTrue(refinerReason.contains("[REDACTED]"));
+        Assertions.assertFalse(refinerReason.contains("abcdefghijklmnop"));
+        Assertions.assertFalse(refinerReason.contains("plain-memory-secret"));
+    }
+
+    @Test
+    void shouldRedactCredentialLikeRefinerFailureWhenFailClosed() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryRefinerPort refinerPort = RecordingMemoryRefinerPort.failing(
+                "refiner failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret");
+        DefaultMemoryEnginePort engine = engineWithRefiner(
+                shortTermPort,
+                refinerPort,
+                true,
+                false,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-fail-closed-secret", "default",
+                "chat-completed",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-fail-closed-secret")
+                        .messageId("msg-refiner-fail-closed-secret")
+                        .message(ChatMessage.user("i prefer concise answers"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.IGNORED, result.status());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        String refinerReason = operationLogPort.decisionById.get("op-refiner-fail-closed-secret")
+                .get("refinerReason").toString();
+        Assertions.assertTrue(refinerReason.contains("refiner_failed:"));
+        Assertions.assertTrue(refinerReason.contains("[REDACTED]"));
+        Assertions.assertFalse(refinerReason.contains("abcdefghijklmnop"));
+        Assertions.assertFalse(refinerReason.contains("plain-memory-secret"));
+    }
+
+    @Test
     void shouldUseEnabledRefinerStructuredAddBeforeSchemaValidationAndWrite() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
@@ -2588,12 +2647,20 @@ class DefaultMemoryEnginePortTests {
                                                       MemoryRefinerPort refinerPort,
                                                       boolean enabled,
                                                       MemoryOperationLogPort operationLogPort) {
+        return engineWithRefiner(shortTermPort, refinerPort, enabled, true, operationLogPort);
+    }
+
+    private DefaultMemoryEnginePort engineWithRefiner(ShortTermMemoryPort shortTermPort,
+                                                      MemoryRefinerPort refinerPort,
+                                                      boolean enabled,
+                                                      boolean failOpen,
+                                                      MemoryOperationLogPort operationLogPort) {
         return DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
                 OBJECT_MAPPER,
-                new MemoryEngineOptions(5, 3, 10, true, enabled, true),
+                new MemoryEngineOptions(5, 3, 10, true, enabled, failOpen),
                 ProfileMemoryPort.noop(),
                 CorrectionLedgerPort.noop(),
                 new DefaultMemoryRouter(),
@@ -2930,14 +2997,28 @@ class DefaultMemoryEnginePortTests {
 
         private final MemoryRefinementResult result;
         private final List<MemoryRefinementRequest> requests = new ArrayList<>();
+        private final String failMessage;
 
         RecordingMemoryRefinerPort(MemoryRefinementResult result) {
             this.result = result;
+            this.failMessage = null;
+        }
+
+        private RecordingMemoryRefinerPort(String failMessage) {
+            this.result = null;
+            this.failMessage = failMessage;
+        }
+
+        static RecordingMemoryRefinerPort failing(String failMessage) {
+            return new RecordingMemoryRefinerPort(failMessage);
         }
 
         @Override
         public MemoryRefinementResult refine(MemoryRefinementRequest request) {
             requests.add(request);
+            if (failMessage != null) {
+                throw new IllegalStateException(failMessage);
+            }
             return result;
         }
     }
