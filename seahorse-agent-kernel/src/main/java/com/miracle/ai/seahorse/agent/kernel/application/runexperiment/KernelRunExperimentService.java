@@ -499,9 +499,32 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         if (content == null || content.isBlank()) {
             return "output not available";
         }
-        return Objects.equals(normalizeWhitespace(baseline), normalizeWhitespace(content))
+        String summary = Objects.equals(normalizeWhitespace(baseline), normalizeWhitespace(content))
                 ? "same as first trial"
                 : "differs from first trial";
+        int baselineChars = baseline.length();
+        int contentChars = content.length();
+        int baselineLines = lineCount(baseline);
+        int contentLines = lineCount(content);
+        return summary
+                + "; chars baseline=" + baselineChars
+                + " current=" + contentChars
+                + " delta=" + signedDelta(contentChars - baselineChars)
+                + "; lines baseline=" + baselineLines
+                + " current=" + contentLines
+                + " delta=" + signedDelta(contentLines - baselineLines);
+    }
+
+    private int lineCount(String value) {
+        String safe = Objects.requireNonNullElse(value, "");
+        if (safe.isEmpty()) {
+            return 0;
+        }
+        return safe.split("\\R", -1).length;
+    }
+
+    private String signedDelta(int value) {
+        return value > 0 ? "+" + value : Integer.toString(value);
     }
 
     private String traceEvidence(RunExperimentTrialRecord trial, RunContextSnapshotRecord snapshot) {

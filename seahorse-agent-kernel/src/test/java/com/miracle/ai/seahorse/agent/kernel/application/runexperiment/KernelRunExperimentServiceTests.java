@@ -284,6 +284,10 @@ class KernelRunExperimentServiceTests {
         assertTrue(report.markdown().contains("studio=[studio-success](http://studio.local/traces/studio-success)"));
         assertTrue(report.markdown().contains("sa_cost_usage_record cost=0.42 tokens=123 calls=2 records=1"));
         assertTrue(report.markdown().contains("Kernel output with audit trail"));
+        assertTrue(report.markdown().contains(
+                "Diff vs first trial: same as first trial; chars baseline=30 current=30 delta=0; lines baseline=1 current=1 delta=0"));
+        assertTrue(report.markdown().contains(
+                "Diff vs first trial: output not available"));
         assertTrue(report.markdown().contains("AgentScope timeout"));
         assertNotNull(costRepository.query);
         assertEquals("default", costRepository.query.tenantId());
