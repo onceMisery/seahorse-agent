@@ -954,14 +954,11 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         if (!result.success()) {
             return summarizeFailedResult(result, auditError);
         }
-        if (result.content() == null) {
-            return null;
-        }
-        String content = result.content();
+        String content = Objects.requireNonNullElse(result.content(), "");
         Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("contentPresent", true);
+        summary.put("contentPresent", result.content() != null);
         summary.put("contentLength", content.length());
-        summary.put("contentJsonType", resultContentJsonType(content));
+        summary.put("contentJsonType", result.content() == null ? "none" : resultContentJsonType(content));
         JsonValueShape jsonValueShape = resultContentJsonValueShape(content);
         if (jsonValueShape != null) {
             summary.put("contentJsonValueCount", jsonValueShape.count());

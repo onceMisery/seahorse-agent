@@ -123,6 +123,25 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldSummarizeSuccessfulNullContentWithoutRawValues() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(null));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("weather"));
+
+        assertTrue(result.success());
+        assertEquals(ToolInvocationStatus.SUCCEEDED, audit.completed.get(0).status());
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentPresent\":false"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentLength\":0"));
+        assertTrue(audit.completed.get(0).resultSummary().contains("\"contentJsonType\":\"none\""));
+    }
+
+    @Test
     void shouldRecordDeniedDecisionAndCompletionWithoutExecutingTool() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
