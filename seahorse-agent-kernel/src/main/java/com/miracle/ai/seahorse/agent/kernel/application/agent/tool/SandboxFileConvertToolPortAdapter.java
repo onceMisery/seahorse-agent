@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
@@ -159,7 +160,7 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
                     "sandbox file conversion " + result.execution().status() + ": " + result.reasonCode());
         } catch (Exception ex) {
             return ToolInvocationResult.failed("sandbox_file_convert failed: "
-                    + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    + redactRuntimeDisplayText(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         } finally {
             closeQuietly(session);
         }
@@ -194,10 +195,14 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
         observation.put("executionId", execution == null ? null : execution.executionId());
         observation.put("executionStatus", execution == null ? null : execution.status().name());
         observation.put("reasonCode", execution == null ? null : execution.reasonCode().name());
-        observation.put("resultSummary", execution == null ? null : execution.resultSummary());
+        observation.put("resultSummary", execution == null ? null : redactRuntimeDisplayText(execution.resultSummary()));
         observation.put("conversion", conversion(sourceFormat, targetFormat, contentEncoding));
         observation.put("artifacts", artifacts(artifacts));
         return observation;
+    }
+
+    private String redactRuntimeDisplayText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private Map<String, Object> conversion(String sourceFormat, String targetFormat, String contentEncoding) {

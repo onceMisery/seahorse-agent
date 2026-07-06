@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutio
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
@@ -120,7 +121,7 @@ public class SandboxPythonToolPortAdapter implements DescribedToolPort, ToolInvo
                     "sandbox execution " + result.execution().status() + ": " + result.reasonCode());
         } catch (Exception ex) {
             return ToolInvocationResult.failed("sandbox_python failed: "
-                    + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    + redactRuntimeDisplayText(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         } finally {
             closeQuietly(session);
         }
@@ -144,12 +145,16 @@ public class SandboxPythonToolPortAdapter implements DescribedToolPort, ToolInvo
         observation.put("executionId", execution == null ? null : execution.executionId());
         observation.put("executionStatus", execution == null ? null : execution.status().name());
         observation.put("reasonCode", execution == null ? null : execution.reasonCode().name());
-        observation.put("resultSummary", execution == null ? null : execution.resultSummary());
+        observation.put("resultSummary", execution == null ? null : redactRuntimeDisplayText(execution.resultSummary()));
         observation.put("artifacts", artifacts(artifacts));
         if (closeStatus != null) {
             observation.put("closeStatus", closeStatus);
         }
         return observation;
+    }
+
+    private String redactRuntimeDisplayText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private List<Map<String, Object>> artifacts(List<SandboxArtifact> artifacts) {

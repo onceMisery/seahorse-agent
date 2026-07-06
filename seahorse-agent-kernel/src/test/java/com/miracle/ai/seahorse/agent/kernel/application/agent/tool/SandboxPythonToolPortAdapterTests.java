@@ -123,6 +123,63 @@ class SandboxPythonToolPortAdapterTests {
         assertEquals("session-1", runtime.closedSessionId);
     }
 
+    @Test
+    void shouldRedactCredentialShapedRuntimeSummaryFromObservation() throws Exception {
+        String secretValue = "plain-python-secret";
+        String bearerValue = "abcdefghijklmnop";
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
+                new SandboxExecution(
+                        "exec-1",
+                        "session-1",
+                        SandboxRuntimeType.CODE_INTERPRETER,
+                        SandboxExecutionStatus.SUCCEEDED,
+                        "exitCode=0; stdout=Authorization: Bearer " + bearerValue
+                                + " api_key=" + secretValue,
+                        SandboxPolicyReasonCode.VALID_REQUEST,
+                        NOW,
+                        NOW),
+                List.of()));
+        SandboxPythonToolPortAdapter adapter = new SandboxPythonToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "code", "api_key = '" + secretValue + "'\nprint('done')")));
+
+        assertTrue(result.success());
+        assertTrue(runtime.executeCommand.input().contains(secretValue));
+        JsonNode root = objectMapper.readTree(result.content());
+        assertEquals("exitCode=0; stdout=[REDACTED] [REDACTED]", root.path("resultSummary").asText());
+        assertFalse(result.content().contains(bearerValue));
+        assertFalse(result.content().contains(secretValue));
+    }
+
+    @Test
+    void shouldRedactCredentialShapedRuntimeFailureSummaryFromErrorObservation() {
+        String secretValue = "plain-python-secret";
+        String bearerValue = "abcdefghijklmnop";
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.failed(
+                new SandboxExecution(
+                        "exec-1",
+                        "session-1",
+                        SandboxRuntimeType.CODE_INTERPRETER,
+                        SandboxExecutionStatus.FAILED,
+                        "exitCode=1; stderr=Authorization: Bearer " + bearerValue
+                                + " api_key=" + secretValue,
+                        SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED,
+                        NOW,
+                        NOW),
+                SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED));
+        SandboxPythonToolPortAdapter adapter = new SandboxPythonToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "code", "api_key = '" + secretValue + "'\nraise Exception('boom')")));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("stderr=[REDACTED] [REDACTED]"), result.error());
+        assertTrue(runtime.executeCommand.input().contains(secretValue));
+        assertFalse(result.error().contains(bearerValue));
+        assertFalse(result.error().contains(secretValue));
+    }
+
     private ToolInvocationRequest request(Map<String, Object> arguments) {
         return new ToolInvocationRequest(
                 "run-1",

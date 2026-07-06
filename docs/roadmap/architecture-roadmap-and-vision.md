@@ -1446,3 +1446,11 @@ Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentLoo
 This is a narrow browser-tool display-boundary hardening slice. It does not change URL validation, allowed-host enforcement, cookie/session-state validation, browser runtime input JSON, artifact collection, scanner decisions, object storage copy rules, or Tool Gateway audit write paths.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=SandboxBrowserToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 37/37, covering successful and failed browser runtime summary redaction, execution-input preservation for cookie/session-state values, existing URL/session validation, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Sandbox Tool Runtime Summary Redaction
+
+`sandbox_python` and `sandbox_file_convert` observations now redact credential-shaped runtime `resultSummary` text before returning successful or failed Tool Gateway results. This closes the same stdout/stderr display boundary as the browser tool for code interpreter and file-conversion sandbox runs, while preserving raw code/content inputs passed to the sandbox runtime for execution.
+
+This is a narrow sandbox-backed tool display-boundary hardening slice. It does not change code/content validation, sandbox session creation, network policy enforcement, runtime execution input JSON, artifact collection, scanner decisions, object storage copy rules, or Tool Gateway audit write paths.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=SandboxPythonToolPortAdapterTests,SandboxFileConvertToolPortAdapterTests,SandboxBrowserToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 56/56, covering successful and failed runtime summary redaction for Python, file conversion, and browser tools, execution-input preservation, existing sandbox tool behavior, and shared credential text redactor behavior.
