@@ -394,6 +394,13 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
 
     @Bean
     @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnMissingBean
+    public ToolOutputRedactionPort seahorseToolOutputRedactionPort() {
+        return ToolOutputRedactionPort.basicSecretPatterns();
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(ToolRegistryPort.class)
     @ConditionalOnMissingBean
     public ToolGatewayPort seahorseToolGatewayPort(ToolRegistryPort toolRegistry,

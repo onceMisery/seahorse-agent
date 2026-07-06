@@ -379,10 +379,11 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
     }
 
     @Test
-    void shouldWireOutputRedactionIntoToolGateway() {
-        contextRunner.withUserConfiguration(TestOutputRedactionGatewayConfiguration.class)
+    void shouldWireDefaultOutputRedactionIntoToolGateway() {
+        contextRunner.withUserConfiguration(TestDefaultOutputRedactionGatewayConfiguration.class)
                 .run(context -> {
                     assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(ToolOutputRedactionPort.class);
 
                     ToolInvocationResult result = context.getBean(ToolGatewayPort.class)
                             .invoke(new ToolInvocationRequest(
@@ -402,6 +403,34 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
 
                     assertThat(result.success()).isTrue();
                     assertThat(result.content()).isEqualTo("token=[REDACTED]");
+                });
+    }
+
+    @Test
+    void shouldLetCustomOutputRedactionOverrideDefault() {
+        contextRunner.withUserConfiguration(TestNoopOutputRedactionGatewayConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(ToolOutputRedactionPort.class);
+
+                    ToolInvocationResult result = context.getBean(ToolGatewayPort.class)
+                            .invoke(new ToolInvocationRequest(
+                                    "run-1",
+                                    "step-1",
+                                    "call-1",
+                                    "agent-1",
+                                    "version-1",
+                                    "tenant-1",
+                                    "user-1",
+                                    "agent-identity-1",
+                                    "memory-write",
+                                    Map.of(),
+                                    Map.of(),
+                                    "run-1:call-1",
+                                    List.of("memory-write")));
+
+                    assertThat(result.success()).isTrue();
+                    assertThat(result.content()).isEqualTo("token=sk-live-secret");
                 });
     }
 
@@ -845,7 +874,7 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
     }
 
     @Configuration(proxyBeanMethods = false)
-    static class TestOutputRedactionGatewayConfiguration {
+    static class TestDefaultOutputRedactionGatewayConfiguration {
 
         @Bean
         Clock clock() {
@@ -861,10 +890,14 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         ToolPolicyPort toolPolicyPort() {
             return request -> PolicyDecision.allow("allow-1");
         }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TestNoopOutputRedactionGatewayConfiguration extends TestDefaultOutputRedactionGatewayConfiguration {
 
         @Bean
         ToolOutputRedactionPort toolOutputRedactionPort() {
-            return ToolOutputRedactionPort.basicSecretPatterns();
+            return ToolOutputRedactionPort.noop();
         }
     }
 

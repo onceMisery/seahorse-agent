@@ -1026,3 +1026,11 @@ Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatew
 This is a narrow output-redaction hardening slice. It does not change the `ToolInvocationResult` contract, noop redaction behavior, approval/policy failures, tool execution, artifact publication, or success-content base64 redaction behavior.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 25/25, covering caller-visible and audit-visible failed tool error redaction; `.\mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=ToolPortContractTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 4/4, preserving the base `ToolInvocationResult.failed` contract.
+
+## 2026-07-06 Update: Default Tool Output Redaction Wiring
+
+Spring Boot auto-configuration now installs `ToolOutputRedactionPort.basicSecretPatterns()` by default for the agent runtime when no custom `ToolOutputRedactionPort` bean exists. This makes the production Tool Gateway use the basic successful-content and failed-error redactor without requiring application-level test wiring, while preserving user override behavior via `@ConditionalOnMissingBean`.
+
+This is a narrow production-wiring hardening slice. It does not change redaction pattern semantics, Tool Gateway execution flow, approval policy, audit summaries, artifact publication, or the ability to provide a custom/noop redaction bean.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-Dtest=SeahorseAgentChatRunStoreAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 23/23, covering default redaction injection into `ToolGatewayPort` and custom redaction override behavior.
