@@ -24,6 +24,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcement
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialJsonFieldClassifier;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeConstants;
@@ -373,14 +375,14 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     public Optional<AgentRun> findRunById(String runId) {
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
         return findRunByIdInternal(runId)
-                .map(run -> requireReadable(run, currentUser));
+                .map(run -> safeRun(requireReadable(run, currentUser)));
     }
 
     @Override
     public Optional<AgentRun> findRunById(String runId, CurrentUser currentUser) {
         CurrentUser safeUser = currentUser(currentUser);
         return findRunByIdInternal(runId)
-                .map(run -> requireReadable(run, safeUser));
+                .map(run -> safeRun(requireReadable(run, safeUser)));
     }
 
     private Optional<AgentRun> findRunByIdInternal(String runId) {
@@ -394,7 +396,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
                 ? new AgentRunQuery(null, null, null, null, null, 1L, 15L)
                 : query;
         String userId = isAdmin(currentUser) ? safeQuery.userId() : currentUserId(currentUser);
-        return runRepository.page(new AgentRunQuery(
+        return safeRunPage(runRepository.page(new AgentRunQuery(
                 safeQuery.agentId(),
                 safeQuery.runId(),
                 safeQuery.rolloutId(),
@@ -404,14 +406,16 @@ public class KernelAgentRunService implements AgentRunInboundPort {
                 safeQuery.tenantId(),
                 userId,
                 safeQuery.current(),
-                safeQuery.size()));
+                safeQuery.size())));
     }
 
     @Override
     public List<AgentStep> listSteps(String runId) {
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
         AgentRun run = loadReadableRun(runId, currentUser);
-        return runRepository.listSteps(run.runId());
+        return runRepository.listSteps(run.runId()).stream()
+                .map(this::safeStep)
+                .toList();
     }
 
     @Override
@@ -452,7 +456,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
         AgentRun failed = current.withStatus(
                 AgentRunStatus.FAILED,
                 defaultText(errorCode, AgentRuntimeConstants.DEFAULT_AGENT_RUN_FAILURE_CODE),
-                errorMessage,
+                safeText(errorMessage),
                 clock.instant());
         runRepository.updateRun(failed);
         return failed;
@@ -520,6 +524,105 @@ public class KernelAgentRunService implements AgentRunInboundPort {
             return defaultValue;
         }
         return trimmed;
+    }
+
+    private AgentRunPage safeRunPage(AgentRunPage page) {
+        if (page == null) {
+            return new AgentRunPage(List.of(), 0L, 0L, 1L, 0L);
+        }
+        return new AgentRunPage(
+                page.records().stream()
+                        .map(this::safeRun)
+                        .toList(),
+                page.total(),
+                page.size(),
+                page.current(),
+                page.pages());
+    }
+
+    private AgentRun safeRun(AgentRun run) {
+        if (run == null) {
+            return null;
+        }
+        return new AgentRun(
+                run.runId(),
+                run.agentId(),
+                run.versionId(),
+                run.rolloutId(),
+                run.tenantId(),
+                run.userId(),
+                run.conversationId(),
+                run.triggerType(),
+                safeText(run.inputSummary()),
+                run.status(),
+                run.traceId(),
+                run.tokenInput(),
+                run.tokenOutput(),
+                run.costTotal(),
+                run.errorCode(),
+                safeText(run.errorMessage()),
+                run.startedAt(),
+                run.finishedAt(),
+                safeJsonText(run.metadataJson()));
+    }
+
+    private AgentStep safeStep(AgentStep step) {
+        if (step == null) {
+            return null;
+        }
+        return new AgentStep(
+                step.stepId(),
+                step.runId(),
+                step.stepNo(),
+                step.stepType(),
+                step.status(),
+                safeJsonText(step.inputJson()),
+                safeJsonText(step.outputJson()),
+                step.errorCode(),
+                safeText(step.errorMessage()),
+                step.startedAt(),
+                step.finishedAt());
+    }
+
+    private String safeJsonText(String value) {
+        String text = trimToNull(value);
+        if (text == null) {
+            return null;
+        }
+        try {
+            Object parsed = objectMapper.readValue(text, Object.class);
+            return writeJson(safeJsonValue(null, parsed));
+        } catch (Exception ignored) {
+            return safeText(text);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object safeJsonValue(String key, Object value) {
+        if (key != null && CredentialJsonFieldClassifier.isSensitiveOutputField(key)) {
+            return CredentialTextRedactor.REDACTED_VALUE;
+        }
+        if (value instanceof String text) {
+            return safeText(text);
+        }
+        if (value instanceof Map<?, ?> map) {
+            LinkedHashMap<String, Object> safe = new LinkedHashMap<>();
+            map.forEach((nestedKey, nestedValue) -> {
+                String safeKey = nestedKey == null ? null : String.valueOf(nestedKey);
+                safe.put(safeKey, safeJsonValue(safeKey, nestedValue));
+            });
+            return safe;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(item -> safeJsonValue(null, item))
+                    .toList();
+        }
+        return value;
+    }
+
+    private String safeText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private String trimToNull(String value) {

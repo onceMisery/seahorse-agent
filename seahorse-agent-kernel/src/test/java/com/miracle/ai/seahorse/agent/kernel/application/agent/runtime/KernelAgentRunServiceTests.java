@@ -323,6 +323,31 @@ class KernelAgentRunServiceTests {
     }
 
     @Test
+    void shouldRedactCredentialTextWhenMarkingRunFailed() {
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.save(agent("ops-agent", AgentStatus.PUBLISHED, "version-1"));
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        KernelAgentRunService service = new KernelAgentRunService(
+                definitionRepository, runRepository, currentUser(), FIXED_CLOCK);
+        AgentRun run = service.startRun(new AgentRunStartCommand(
+                "ops-agent",
+                null,
+                AgentDefinition.DEFAULT_TENANT_ID,
+                null,
+                AgentRunTriggerType.API,
+                "summary",
+                null));
+
+        AgentRun failed = service.fail(
+                run.runId(),
+                "AGENT_LOOP_FAILED",
+                "tool failed with Authorization: Bearer abcdefghijklmnop");
+
+        assertEquals("tool failed with [REDACTED]", failed.errorMessage());
+        assertEquals("tool failed with [REDACTED]", runRepository.runs.get(run.runId()).errorMessage());
+    }
+
+    @Test
     void shouldRetryFailedRunIdempotently() {
         MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
         definitionRepository.save(agent("ops-agent", AgentStatus.PUBLISHED, "version-1"));
@@ -453,6 +478,60 @@ class KernelAgentRunServiceTests {
         assertTrue(run.isPresent());
         assertEquals(List.of("step-1"), steps.stream().map(AgentStep::stepId).toList());
         assertEquals(AgentRunStatus.CANCELLED, cancelled.status());
+    }
+
+    @Test
+    void shouldRedactHistoricalRunAndStepTextWhenQuerying() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        AgentRun historicalRun = new AgentRun(
+                "run-1",
+                "ops-agent",
+                "version-1",
+                null,
+                AgentDefinition.DEFAULT_TENANT_ID,
+                "user-1",
+                "conversation-1",
+                AgentRunTriggerType.CHAT,
+                "input has api_key=secret-api-key-value",
+                AgentRunStatus.FAILED,
+                "trace-1",
+                0L,
+                0L,
+                AgentRun.ZERO_COST,
+                "FAILED",
+                "failed with Authorization: Bearer abcdefghijklmnop",
+                FIXED_CLOCK.instant(),
+                FIXED_CLOCK.instant(),
+                "{\"authorization\":\"Bearer secretmarker123\",\"safe\":\"ok\"}");
+        runRepository.createRun(historicalRun);
+        runRepository.appendStep(new AgentStep(
+                "step-1",
+                "run-1",
+                1,
+                AgentStepType.TOOL_CALL,
+                AgentStepStatus.FAILED,
+                "{\"password\":\"hunter2\",\"note\":\"Bearer tokenvalue123\"}",
+                "{\"accessToken\":\"token-secret-value\",\"safe\":\"ok\"}",
+                "FAILED",
+                "step failed with session_token=session-secret-value",
+                FIXED_CLOCK.instant(),
+                FIXED_CLOCK.instant()));
+        KernelAgentRunService service = new KernelAgentRunService(
+                new MemoryAgentDefinitionRepository(), runRepository, currentUser(), FIXED_CLOCK);
+
+        AgentRun detail = service.findRunById("run-1").orElseThrow();
+        AgentRunPage page = service.page(new AgentRunQuery(null, null, null, null, null, 1L, 15L));
+        List<AgentStep> steps = service.listSteps("run-1");
+
+        assertEquals("input has [REDACTED]", detail.inputSummary());
+        assertEquals("failed with [REDACTED]", detail.errorMessage());
+        assertEquals("{\"authorization\":\"[REDACTED]\",\"safe\":\"ok\"}", detail.metadataJson());
+        assertEquals(detail, page.records().get(0));
+        assertEquals("{\"password\":\"[REDACTED]\",\"note\":\"[REDACTED]\"}", steps.get(0).inputJson());
+        assertEquals("{\"accessToken\":\"[REDACTED]\",\"safe\":\"ok\"}", steps.get(0).outputJson());
+        assertEquals("step failed with [REDACTED]", steps.get(0).errorMessage());
+        assertEquals("failed with Authorization: Bearer abcdefghijklmnop",
+                runRepository.runs.get("run-1").errorMessage());
     }
 
     @Test

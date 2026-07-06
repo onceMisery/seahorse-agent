@@ -1300,3 +1300,13 @@ Audit ledger queries now defensively reapply `AuditRedactionPolicy` before retur
 This is a narrow audit-query hardening slice. It does not change audit write failure policy, audit event metadata, query filters, repository schema, Tool Gateway invocation behavior, or the redaction vocabulary itself.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAuditLedgerServiceTests,AuditRedactionPolicyTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 6/6, covering append-time redaction, query-time projection redaction for historical payloads, write failure policies, and shared audit redaction behavior.
+
+## 2026-07-06 Update: Agent Run Query Projection Redaction
+
+Legacy Agent run queries now defensively redact credential-shaped run and step display text before returning records from `findRunById`, `page`, and `listSteps`. The projection covers historical `AgentRun.inputSummary`, `AgentRun.errorMessage`, `AgentRun.metadataJson`, and `AgentStep.inputJson` / `outputJson` / `errorMessage` values while leaving repository records unchanged.
+
+Run failure writes now also redact credential-shaped `errorMessage` values before persisting the failed terminal state, aligning the older `AgentRunInboundPort.fail` path with the snapshot/workflow/resume display hardening.
+
+This is a narrow legacy run-query and fail-write hardening slice. It does not change run ownership checks, paging filters, worker lifecycle transitions, retry/cancel/succeed semantics, snapshot assembly, workflow projections, or repository schema.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 27/27, covering run detail/page/step projection redaction, fail-write error redaction, owner/admin authorization, numeric owner compatibility, and existing run lifecycle behavior.
