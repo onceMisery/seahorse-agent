@@ -568,6 +568,27 @@ class MetadataGovernanceNodeFeatureTests {
     }
 
     @Test
+    void shouldRedactCredentialTextFromRegexExtractionIssueMessages() {
+        MetadataSchema schema = new MetadataSchema("tenant-a", "1", 1, List.of(
+                field("department", MetadataValueType.STRING, false,
+                        Map.of("ruleRegex", "(Bearer abcdefghijklmnop api_key=plain-regex-secret"))));
+        IngestionContext context = IngestionContext.builder()
+                .taskId("1")
+                .rawText("finance budget note")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "1"))
+                .build();
+
+        NodeResult result = new MetadataExtractorNodeFeature((tenantId, knowledgeBaseId) -> schema)
+                .execute(context, NodeConfig.builder().nodeType("metadata_extractor").build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(context.getMetadataIssues()).singleElement()
+                .satisfies(issue -> assertThat(issue.message())
+                        .contains("[REDACTED]")
+                        .doesNotContain("abcdefghijklmnop", "plain-regex-secret"));
+    }
+
+    @Test
     void shouldRedactCredentialTextFromNormalizationFailureMessages() {
         MetadataSchema schema = new MetadataSchema("tenant-a", "1", 1, List.of(
                 field("publishedAt", MetadataValueType.DATE_TIME, false, Map.of())));

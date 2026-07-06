@@ -385,7 +385,7 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                         pattern, schemaVersion, extractorVersion));
             }
         } catch (RuntimeException ex) {
-            issues.add(MetadataIssue.warn(field.fieldKey(), NODE_TYPE, "REGEX_FAILED", ex.getMessage()));
+            issues.add(MetadataIssue.warn(field.fieldKey(), NODE_TYPE, "REGEX_FAILED", failureMessage(ex)));
         }
     }
 
