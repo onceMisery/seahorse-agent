@@ -59,7 +59,9 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KernelAgentRunResumeServiceTests {
 
@@ -122,6 +124,58 @@ class KernelAgentRunResumeServiceTests {
         assertEquals(AgentRunStatus.SUCCEEDED, resumed.status());
         assertEquals(1, toolGateway.requests.size());
         assertEquals("mem-2", toolGateway.requests.get(0).arguments().get("memoryId"));
+    }
+
+    @Test
+    void shouldRedactResumedStepWritesWithoutChangingExecutionInputs() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(waitingRun());
+        MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();
+        checkpointRepository.save(waitingCheckpoint(
+                """
+                        [{"role":"USER","content":"Forget memory with api_key=history-secret-value"},
+                         {"role":"ASSISTANT","content":"need approval","toolCalls":[
+                           {"toolCallId":"call-1","toolId":"memory-forget","arguments":{"memoryId":"mem-1"}}
+                         ]}]
+                        """,
+                """
+                        {"toolId":"memory-forget","toolCallId":"call-1","arguments":{"memoryId":"mem-1"},
+                         "resourceRefs":{},"idempotencyKey":"run-1:call-1","agentId":"agent-1",
+                         "versionId":"version-1","runId":"run-1","tenantId":"tenant-1",
+                         "userId":"user-1","agentIdentityId":"user-1","allowedToolIds":["memory-forget"]}
+                        """));
+        MemoryApprovalQueryPort approvals = new MemoryApprovalQueryPort(
+                approval(ApprovalRequestStatus.MODIFIED,
+                        "{\"arguments\":{\"memoryId\":\"mem-2\",\"apiKey\":\"secret-api-key-value\"}}"));
+        RecordingToolGateway toolGateway = new RecordingToolGateway(
+                ToolInvocationResult.ok("{\"authorization\":\"Bearer tool-secret-123456\",\"deleted\":true}"));
+        SingleTurnModel model = new SingleTurnModel("Memory deleted with session_token=model-secret-value");
+        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+                runRepository,
+                checkpointRepository,
+                approvals,
+                toolGateway,
+                model,
+                currentUser(),
+                FIXED_CLOCK);
+
+        AgentRun resumed = service.resume("run-1");
+
+        assertEquals(AgentRunStatus.SUCCEEDED, resumed.status());
+        assertEquals("secret-api-key-value", toolGateway.requests.get(0).arguments().get("apiKey"));
+        assertEquals("{\"authorization\":\"Bearer tool-secret-123456\",\"deleted\":true}",
+                model.requests.get(0).getMessages().get(2).getContent());
+        List<AgentStep> steps = runRepository.listSteps("run-1");
+        assertEquals(2, steps.size());
+        assertEquals(AgentStepType.TOOL_CALL, steps.get(0).stepType());
+        assertEquals(AgentStepType.MODEL_TURN, steps.get(1).stepType());
+        assertFalse(steps.get(0).inputJson().contains("secret-api-key-value"));
+        assertFalse(steps.get(0).outputJson().contains("tool-secret-123456"));
+        assertFalse(steps.get(1).inputJson().contains("history-secret-value"));
+        assertFalse(steps.get(1).outputJson().contains("model-secret-value"));
+        assertTrue(steps.get(0).inputJson().contains("\"apiKey\":\"[REDACTED]\""), steps.get(0).inputJson());
+        assertTrue(steps.get(0).inputJson().contains("\"memoryId\":\"mem-2\""), steps.get(0).inputJson());
+        assertFalse(steps.get(1).outputJson().contains("session_token=model-secret-value"));
     }
 
     @Test
@@ -246,6 +300,22 @@ class KernelAgentRunResumeServiceTests {
     }
 
     private static AgentCheckpoint waitingCheckpoint() {
+        return waitingCheckpoint(
+                """
+                        [{"role":"USER","content":"Forget memory"},
+                         {"role":"ASSISTANT","content":"need approval","toolCalls":[
+                           {"toolCallId":"call-1","toolId":"memory-forget","arguments":{"memoryId":"mem-1"}}
+                         ]}]
+                        """,
+                """
+                        {"toolId":"memory-forget","toolCallId":"call-1","arguments":{"memoryId":"mem-1"},
+                         "resourceRefs":{},"idempotencyKey":"run-1:call-1","agentId":"agent-1",
+                         "versionId":"version-1","runId":"run-1","tenantId":"tenant-1",
+                         "userId":"user-1","agentIdentityId":"user-1","allowedToolIds":["memory-forget"]}
+                        """);
+    }
+
+    private static AgentCheckpoint waitingCheckpoint(String messageHistoryJson, String pendingToolCallJson) {
         return new AgentCheckpoint(
                 "checkpoint-1",
                 "run-1",
@@ -253,19 +323,9 @@ class KernelAgentRunResumeServiceTests {
                 1L,
                 AgentCheckpointType.WAITING_APPROVAL,
                 "{\"exitReason\":\"WAITING_APPROVAL\"}",
-                """
-                        [{"role":"USER","content":"Forget memory"},
-                         {"role":"ASSISTANT","content":"need approval","toolCalls":[
-                           {"toolCallId":"call-1","toolId":"memory-forget","arguments":{"memoryId":"mem-1"}}
-                         ]}]
-                        """,
+                messageHistoryJson,
                 null,
-                """
-                        {"toolId":"memory-forget","toolCallId":"call-1","arguments":{"memoryId":"mem-1"},
-                         "resourceRefs":{},"idempotencyKey":"run-1:call-1","agentId":"agent-1",
-                         "versionId":"version-1","runId":"run-1","tenantId":"tenant-1",
-                         "userId":"user-1","agentIdentityId":"user-1","allowedToolIds":["memory-forget"]}
-                        """,
+                pendingToolCallJson,
                 FIXED_CLOCK.instant());
     }
 

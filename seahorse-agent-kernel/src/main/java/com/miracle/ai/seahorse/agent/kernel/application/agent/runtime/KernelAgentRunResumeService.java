@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopException
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialJsonFieldClassifier;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpointType;
@@ -239,16 +240,16 @@ public class KernelAgentRunResumeService implements AgentRunResumeInboundPort {
                 nextStepNo(runId),
                 AgentStepType.TOOL_CALL,
                 result.success() ? AgentStepStatus.SUCCEEDED : AgentStepStatus.FAILED,
-                toJson(Map.of(
+                safeJsonText(toJson(Map.of(
                         "toolCallId", request.toolCallId(),
                         "toolId", request.toolId(),
-                        "arguments", request.arguments())),
-                toJson(Map.of(
+                        "arguments", request.arguments()))),
+                safeJsonText(toJson(Map.of(
                         "success", result.success(),
                         "content", Objects.requireNonNullElse(result.content(), ""),
-                        "error", Objects.requireNonNullElse(result.error(), ""))),
+                        "error", Objects.requireNonNullElse(result.error(), "")))),
                 result.success() ? null : AgentRuntimeConstants.AGENT_STEP_FAILURE_CODE,
-                result.success() ? null : result.error(),
+                result.success() ? null : safeText(result.error()),
                 now,
                 now));
     }
@@ -261,8 +262,8 @@ public class KernelAgentRunResumeService implements AgentRunResumeInboundPort {
                 nextStepNo(runId),
                 AgentStepType.MODEL_TURN,
                 AgentStepStatus.SUCCEEDED,
-                checkpoint.messageHistoryJson(),
-                toJson(Map.of("content", Objects.requireNonNullElse(finalAnswer, ""))),
+                safeJsonText(checkpoint.messageHistoryJson()),
+                safeJsonText(toJson(Map.of("content", Objects.requireNonNullElse(finalAnswer, "")))),
                 null,
                 null,
                 now,
@@ -389,6 +390,46 @@ public class KernelAgentRunResumeService implements AgentRunResumeInboundPort {
         } catch (JsonProcessingException ex) {
             return "{\"serializationError\":\"" + escape(ex.getMessage()) + "\"}";
         }
+    }
+
+    private String safeJsonText(String value) {
+        if (isBlank(value)) {
+            return null;
+        }
+        String text = value.trim();
+        try {
+            Object parsed = objectMapper.readValue(text, Object.class);
+            return objectMapper.writeValueAsString(safeJsonValue(null, parsed));
+        } catch (Exception ignored) {
+            return safeText(text);
+        }
+    }
+
+    private Object safeJsonValue(String key, Object value) {
+        if (key != null && CredentialJsonFieldClassifier.isSensitiveOutputField(key)) {
+            return CredentialTextRedactor.REDACTED_VALUE;
+        }
+        if (value instanceof String text) {
+            return safeText(text);
+        }
+        if (value instanceof Map<?, ?> map) {
+            LinkedHashMap<String, Object> safe = new LinkedHashMap<>();
+            map.forEach((nestedKey, nestedValue) -> {
+                String safeKey = nestedKey == null ? null : String.valueOf(nestedKey);
+                safe.put(safeKey, safeJsonValue(safeKey, nestedValue));
+            });
+            return safe;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(item -> safeJsonValue(null, item))
+                    .toList();
+        }
+        return value;
+    }
+
+    private String safeText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private String requireText(String value, String message) {

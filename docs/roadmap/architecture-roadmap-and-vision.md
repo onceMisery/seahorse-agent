@@ -1422,3 +1422,11 @@ Agent run step recording now redacts credential-shaped step payloads before pers
 This is a narrow agent-run step write-boundary hardening slice. It does not change model/tool execution inputs, Tool Gateway invocation behavior, step numbering, status transitions, snapshot/workflow/query projection defenses, repository schema, or caller-visible observations during the active run loop.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=RepositoryAgentRunStepRecorderTests,KernelAgentRunServiceTests,KernelAgentRunSnapshotServiceTests,KernelAgentRunWorkflowServiceTests,CredentialTextRedactorTests,CredentialJsonFieldClassifierTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 41/41, covering model-turn and tool-call step write redaction, existing run query projection redaction, snapshot/workflow historical redaction, and shared credential redaction/classifier behavior.
+
+## 2026-07-06 Update: Agent Run Resume Step Write Redaction
+
+Agent run resume now redacts credential-shaped step payloads before persisting the direct `AgentStep` records written by `KernelAgentRunResumeService`. This covers resumed tool-call argument snapshots, tool result content/error JSON, resumed model-turn message history, and resumed final-answer output, while preserving the original modified approval arguments, tool result content, and model context used during execution.
+
+This is a narrow resume-write hardening slice. It does not change approval matching, modified-argument execution semantics, Tool Gateway invocation, model resume context, run status transitions, repository schema, or the existing snapshot/workflow/query projection defenses.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunResumeServiceTests,KernelAgentRunSnapshotServiceTests,KernelAgentRunWorkflowServiceTests,CredentialTextRedactorTests,CredentialJsonFieldClassifierTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 21/21, covering resumed step write redaction, execution-input preservation, rejected/expired decision-comment redaction, snapshot/workflow historical redaction, and shared credential redaction/classifier behavior.
