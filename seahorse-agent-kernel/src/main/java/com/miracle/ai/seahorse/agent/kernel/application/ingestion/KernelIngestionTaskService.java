@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.ingestion;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeConfig;
@@ -458,8 +459,8 @@ public class KernelIngestionTaskService implements IngestionTaskInboundPort {
         values.setInputSummary(inputSummary(input));
         values.setOutputSummary(outputSummary(safeLog.getOutput()));
         values.setErrorCode(errorCode(safeLog));
-        values.setMessage(safeLog.getMessage());
-        values.setErrorMessage(safeLog.getError());
+        values.setMessage(safeFailureText(safeLog.getMessage()));
+        values.setErrorMessage(safeFailureText(safeLog.getError()));
         values.setRetryCount(retryCount(input));
         values.setDownstreamImpact(downstreamImpact(nodeOrderMap, safeLog));
         values.setOutput(safeLog.getOutput());
@@ -591,10 +592,10 @@ public class KernelIngestionTaskService implements IngestionTaskInboundPort {
         return NodeLog.builder()
                 .nodeId(log.getNodeId())
                 .nodeType(log.getNodeType())
-                .message(log.getMessage())
+                .message(safeFailureText(log.getMessage()))
                 .durationMs(log.getDurationMs())
                 .success(log.isSuccess())
-                .error(log.getError())
+                .error(safeFailureText(log.getError()))
                 .build();
     }
 
@@ -927,7 +928,11 @@ public class KernelIngestionTaskService implements IngestionTaskInboundPort {
 
     private String errorMessage(IngestionContext context) {
         Throwable error = context.getError();
-        return error == null ? null : error.getMessage();
+        return error == null ? null : safeFailureText(error.getMessage());
+    }
+
+    private String safeFailureText(String value) {
+        return value == null ? null : CredentialTextRedactor.redact(value);
     }
 
     private String requireText(String value, String name) {

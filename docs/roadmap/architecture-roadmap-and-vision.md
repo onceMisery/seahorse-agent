@@ -1670,3 +1670,11 @@ RAG trace run/node failure messages and retrieval channel failure `extraData.err
 This is a narrow trace persistence hardening slice. It does not change trace sampling, run/node lifecycle recording, retrieval fallback behavior, channel timeout policy, trace hit metadata, successful trace payloads, or server-side exception logging with the original exception chain.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelRagTraceRecorderTests,KernelMultiChannelRetrievalEngineTraceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new trace regressions because node/run failure errors and channel `extraData.errorMessage` lacked `[REDACTED]`, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 12/12 across kernel redactor, trace recorder, and retrieval trace coverage.
+
+## 2026-07-06 Update: Ingestion Task Failure Redaction
+
+Ingestion task failures now redact credential-shaped exception text before returning execution result messages, persisting task-level `errorMessage` values, persisting task log summaries, or replacing node log `message`/`errorMessage` values. This protects ingestion task repository, task detail, node diagnostics, and upload/execute response surfaces when parser, embedding, indexing, or pipeline failures accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow ingestion task failure-boundary hardening slice. It does not change pipeline execution, node result semantics, retry/rollback behavior, source metadata, node output payloads, raw engine exceptions, or server-side exception logging with the original exception chain.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelIngestionTaskServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new regression because the execution result returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 10/10 across kernel redactor and ingestion task service coverage.
