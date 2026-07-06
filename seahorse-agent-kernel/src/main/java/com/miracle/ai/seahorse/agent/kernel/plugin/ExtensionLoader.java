@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.plugin;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
@@ -165,9 +167,13 @@ public class ExtensionLoader {
             return 1;
         } catch (RuntimeException ex) {
             diagnostics.add(new ExtensionLoadDiagnostic(
-                    context.resourceName(), name, className, ex.getMessage()));
+                    context.resourceName(), name, className, diagnosticMessage(ex)));
             throw ex;
         }
+    }
+
+    private String diagnosticMessage(RuntimeException ex) {
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
     }
 
     private String className(Properties properties, String name) {

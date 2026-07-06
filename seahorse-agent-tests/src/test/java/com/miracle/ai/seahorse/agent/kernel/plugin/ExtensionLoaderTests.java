@@ -49,7 +49,24 @@ class ExtensionLoaderTests {
         Assertions.assertTrue(primary.descriptor().enabledByDefault());
     }
 
+    @Test
+    void shouldRedactCredentialShapedExtensionLoadDiagnostics() {
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        ExtensionLoader loader = ExtensionLoader.usingContextClassLoader();
+
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> loader.load(BadPort.class, FeatureType.SEARCH_CHANNEL, registry));
+
+        ExtensionLoadDiagnostic diagnostic = loader.diagnostics().get(0);
+        Assertions.assertTrue(diagnostic.message().contains("[REDACTED]"), diagnostic.message());
+        Assertions.assertFalse(diagnostic.message().contains("plain-extension-secret"), diagnostic.message());
+        Assertions.assertFalse(diagnostic.message().contains("abcdefghijklmnop"), diagnostic.message());
+    }
+
     interface SamplePort {
+    }
+
+    interface BadPort {
     }
 
     public static class PrimaryExtension implements SamplePort {
@@ -62,5 +79,8 @@ class ExtensionLoaderTests {
 
         public ManagedExtension(String ignored) {
         }
+    }
+
+    public static class BadExtension implements BadPort {
     }
 }

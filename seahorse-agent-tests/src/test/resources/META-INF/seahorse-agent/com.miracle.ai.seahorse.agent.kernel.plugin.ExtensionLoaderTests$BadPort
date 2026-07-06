@@ -1,0 +1,2 @@
+bad=com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionLoaderTests$BadExtension
+bad.order=Authorization: Bearer abcdefghijklmnop api_key=plain-extension-secret

@@ -1792,3 +1792,11 @@ Agent loop tool-thread failures now redact credential-shaped exception text befo
 This is a narrow executor-boundary hardening slice. It does not change Tool Gateway invocation, successful observation content, timeout/interruption messages, trace recorder fail-open behavior, tool policy decisions, approval handling, or server-side exception causes.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentLoopToolGatewayTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with `BUILD SUCCESS`; targeted test classes ran 30/30 across kernel redactor and agent loop tool gateway/future-failure coverage.
+
+## 2026-07-06 Update: Extension Loader Diagnostic Redaction
+
+Extension loader failure diagnostics now redact credential-shaped text before retaining `ExtensionLoadDiagnostic.message` values. This protects plugin/extension startup diagnostics and downstream operations surfaces when descriptor values or reflection failures accidentally include bearer tokens, API keys, cookies, or similar material.
+
+This is a narrow extension-loading diagnostics hardening slice. It does not change extension discovery, descriptor parsing semantics, activation ordering, managed-by-container handling, registry registration, thrown exception types, or server-side exception causes.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=ExtensionLoaderTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes covered kernel redactor plus successful classpath extension loading and failure diagnostic redaction.
