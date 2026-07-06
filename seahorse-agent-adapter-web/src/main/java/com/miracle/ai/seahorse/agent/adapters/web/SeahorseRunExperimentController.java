@@ -25,6 +25,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationBran
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentReport;
+import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationMessageRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.conversation.MessageTreeNode;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentDetails;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentTrialRecord;
@@ -171,10 +173,10 @@ public class SeahorseRunExperimentController {
                 Map.of(
                         "trialId", trialId,
                         "outputMessageId", trial.getOutputMessageId(),
-                        "branch", branchPort().switchBranch(
+                        "branch", safeBranch(branchPort().switchBranch(
                                 String.valueOf(details.getExperiment().getConversationId()),
                                 safeUserId,
-                                trial.getOutputMessageId())));
+                                trial.getOutputMessageId()))));
     }
 
     private RunExperimentCommand command(String userId, RunExperimentRequest request) {
@@ -278,6 +280,47 @@ public class SeahorseRunExperimentController {
 
     private String safeText(String value) {
         return CredentialTextRedactor.redact(value);
+    }
+
+    private List<MessageTreeNode> safeBranch(List<MessageTreeNode> branch) {
+        return Objects.requireNonNullElse(branch, List.<MessageTreeNode>of())
+                .stream()
+                .map(this::safeBranchNode)
+                .toList();
+    }
+
+    private MessageTreeNode safeBranchNode(MessageTreeNode node) {
+        if (node == null) {
+            return null;
+        }
+        return new MessageTreeNode(
+                safeMessage(node.message()),
+                node.preSiblings(),
+                node.nextSiblings(),
+                node.branchIndex(),
+                node.branchTotal());
+    }
+
+    private ConversationMessageRecord safeMessage(ConversationMessageRecord record) {
+        if (record == null) {
+            return null;
+        }
+        ConversationMessageRecord safe = new ConversationMessageRecord();
+        safe.setId(record.getId());
+        safe.setConversationId(record.getConversationId());
+        safe.setUserId(record.getUserId());
+        safe.setRole(record.getRole());
+        safe.setContent(safeText(record.getContent()));
+        safe.setAgentRunId(record.getAgentRunId());
+        safe.setThinkingContent(safeText(record.getThinkingContent()));
+        safe.setThinkingDuration(record.getThinkingDuration());
+        safe.setVote(record.getVote());
+        safe.setCreateTime(record.getCreateTime());
+        safe.setParentId(record.getParentId());
+        safe.setActive(record.getActive());
+        safe.setBranchRootId(record.getBranchRootId());
+        safe.setSiblingSeq(record.getSiblingSeq());
+        return safe;
     }
 
     private String blankToNull(String value) {

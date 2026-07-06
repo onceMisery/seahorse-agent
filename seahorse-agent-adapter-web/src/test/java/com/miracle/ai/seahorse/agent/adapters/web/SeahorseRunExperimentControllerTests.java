@@ -166,9 +166,16 @@ class SeahorseRunExperimentControllerTests {
     void shouldForkRunExperimentTrialToBranch() throws Exception {
         RunExperimentInboundPort port = mock(RunExperimentInboundPort.class);
         ConversationBranchInboundPort branchPort = mock(ConversationBranchInboundPort.class);
+        ConversationMessageRecord output = message(
+                "301",
+                202L,
+                "assistant",
+                "trial output password=branch-output-secret",
+                1);
+        output.setThinkingContent("thinking with Bearer branch-thinking-secret-123456");
         when(port.findById("100", 1L)).thenReturn(Optional.of(detailsWithOutputMessage()));
         when(branchPort.switchBranch("101", "100", 301L)).thenReturn(List.of(new MessageTreeNode(
-                message("301", 202L, "assistant", "trial output", 1),
+                output,
                 List.of(),
                 List.of(),
                 0,
@@ -183,8 +190,12 @@ class SeahorseRunExperimentControllerTests {
                 .andExpect(jsonPath("$.data.trialId").value(10))
                 .andExpect(jsonPath("$.data.outputMessageId").value(301))
                 .andExpect(jsonPath("$.data.branch[0].message.id").value("301"))
+                .andExpect(jsonPath("$.data.branch[0].message.content").value("trial output [REDACTED]"))
+                .andExpect(jsonPath("$.data.branch[0].message.thinkingContent").value("thinking with [REDACTED]"))
                 .andExpect(jsonPath("$.data.branch[0].message.active").value(1));
 
+        assertThat(output.getContent()).contains("branch-output-secret");
+        assertThat(output.getThinkingContent()).contains("branch-thinking-secret-123456");
         verify(port).findById("100", 1L);
         verify(branchPort).switchBranch("101", "100", 301L);
     }

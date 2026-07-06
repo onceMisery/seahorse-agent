@@ -1366,3 +1366,11 @@ Run Experiment HTTP responses now defensively redact credential-shaped display t
 This is a narrow Web adapter display-boundary hardening slice. It does not change Run Experiment command input semantics, kernel persistence, scoring writes, cancellation behavior, report export rendering, trial fork-to-branch behavior, repository schema, or frontend response contracts.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseRunExperimentControllerTests,CredentialTextRedactorTests,CredentialJsonFieldClassifierTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 12/12, covering HTTP projection redaction for credential-bearing experiment names, score JSON, metric JSON, failure text, projection immutability, existing Run Experiment controller routes, and shared credential redaction/classifier behavior.
+
+## 2026-07-06 Update: Run Experiment Fork Branch Projection Redaction
+
+Run Experiment trial fork-to-branch responses now defensively redact credential-shaped message display text before returning the switched branch tree from `SeahorseRunExperimentController`. The projection covers branch message `content` and `thinkingContent` for the trial output branch preview while preserving branch ids, parent ids, active flags, sibling metadata, and the underlying `ConversationBranchInboundPort` result objects.
+
+This is a narrow Run Experiment Web adapter hardening slice. It does not change normal conversation tree APIs, branch switching semantics, persisted conversation messages, trial output message ids, Run Experiment detail/report projections, repository schema, or frontend response shape.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseRunExperimentControllerTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 9/9, covering fork-to-branch message content/thinking-content redaction, branch projection immutability, existing Run Experiment controller routes, and shared credential text redactor behavior.
