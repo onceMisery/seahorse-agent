@@ -79,7 +79,14 @@ class LocalToolGatewayPortAuditTests {
         assertEquals(1, audit.completed.size());
         assertEquals(ToolInvocationStatus.REQUESTED, audit.requested.get(0).status());
         assertEquals("run-1", audit.requested.get(0).runId());
-        assertTrue(audit.requested.get(0).argumentsSummary().contains("input"));
+        String argumentsSummary = audit.requested.get(0).argumentsSummary();
+        assertTrue(argumentsSummary.contains("\"toolId\":\"weather\""));
+        assertTrue(argumentsSummary.contains("\"argumentKeys\":[\"input\"]"));
+        assertTrue(argumentsSummary.contains("\"argumentCount\":1"));
+        assertTrue(argumentsSummary.contains("\"argumentValueCount\":1"));
+        assertTrue(argumentsSummary.contains("\"argumentValueTotalLength\":5"));
+        assertTrue(argumentsSummary.contains("\"argumentValueMaxLength\":5"));
+        assertFalse(argumentsSummary.contains("value"));
         assertEquals(audit.requested.get(0).invocationId(), audit.decisions.get(0).invocationId());
         assertEquals("allow-1", audit.decisions.get(0).policyDecisionId());
         assertEquals(ToolInvocationStatus.ALLOWED, audit.decisions.get(0).status());

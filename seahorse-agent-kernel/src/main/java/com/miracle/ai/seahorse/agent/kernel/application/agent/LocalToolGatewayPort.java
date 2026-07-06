@@ -404,7 +404,28 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         if (request.toolId() != null && request.toolId().startsWith("openapi_")) {
             return summarizeOpenApiArguments(request);
         }
-        return truncate("keys=" + safeArgumentKeys(request.arguments()) + ", size=" + request.arguments().size());
+        return summarizeGenericArguments(request);
+    }
+
+    private String summarizeGenericArguments(ToolInvocationRequest request) {
+        Map<String, Object> arguments = request.arguments();
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("toolId", request.toolId());
+        summary.put("argumentKeys", safeArgumentKeys(arguments));
+        summary.put("argumentCount", arguments.size());
+        summary.put("argumentValueCount", mapValueCount(arguments));
+        summary.put("argumentValueTotalLength", mapValueTotalLength(arguments));
+        summary.put("argumentValueMaxLength", mapValueMaxLength(arguments));
+        try {
+            return truncate(OBJECT_MAPPER.writeValueAsString(summary));
+        } catch (JsonProcessingException ex) {
+            return truncate("toolId=" + request.toolId()
+                    + ", argumentKeys=" + safeArgumentKeys(arguments)
+                    + ", argumentCount=" + arguments.size()
+                    + ", argumentValueCount=" + mapValueCount(arguments)
+                    + ", argumentValueTotalLength=" + mapValueTotalLength(arguments)
+                    + ", argumentValueMaxLength=" + mapValueMaxLength(arguments));
+        }
     }
 
     private String summarizeOpenApiArguments(ToolInvocationRequest request) {

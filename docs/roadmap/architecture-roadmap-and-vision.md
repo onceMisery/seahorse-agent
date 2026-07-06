@@ -986,3 +986,11 @@ Tool Gateway request audit now includes value-free object request body value sha
 This is a narrow cross-provider audit-hardening slice. It does not change OpenAPI connector import, credential injection, HTTP invocation, response redaction, approval policy, quota policy, body serialization, or request execution behavior.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering OpenAPI object request body value shape metadata while preserving existing path, query, parameter, header, body value, and unsafe-key redaction assertions.
+
+## 2026-07-06 Update: Generic Tool Audit Value Shape Summary
+
+Tool Gateway request audit now emits a value-free structured summary for non-specialized tools. The generic summary records tool id, safe argument keys, argument count, value count, total value length, and maximum value length while excluding raw argument values.
+
+This is a narrow audit-hardening slice. It does not change tool execution, specialized sandbox/OpenAPI/A2A summaries, approval policy, quota policy, output redaction, or request routing behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering generic tool argument value shape metadata while preserving the existing specialized tool audit redaction coverage.
