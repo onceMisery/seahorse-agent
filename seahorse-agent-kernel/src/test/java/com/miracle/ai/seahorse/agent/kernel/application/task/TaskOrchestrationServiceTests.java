@@ -45,6 +45,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -116,6 +117,75 @@ class TaskOrchestrationServiceTests {
                         TaskEvent.MODEL_SELECTED,
                         TaskEvent.COMPLETED),
                 eventBus.history(task.getTaskId()).stream().map(TaskEvent::type).toList());
+    }
+
+    @Test
+    void createAgentRunTaskRedactsCredentialShapedChatStartFailureEvent() {
+        FakeTaskRepository repository = new FakeTaskRepository();
+        InMemoryTaskEventBus eventBus = new InMemoryTaskEventBus();
+        TaskOrchestrationService service = new TaskOrchestrationService(
+                repository,
+                new StubConversationManagementPort(),
+                new ThrowingAgentChatPort(
+                        "provider failed Authorization: Bearer abcdefghijklmnop api_key=plain-task-start-secret"),
+                new FailingAgentRunPort(),
+                null,
+                eventBus
+        );
+
+        Task task = service.createTask(new CreateTaskCommand(
+                TaskType.AGENT_RUN,
+                "42",
+                "Generate Mermaid architecture",
+                "conversation-1",
+                "github-visual-project-intro-agent",
+                "Mermaid architecture"
+        ));
+
+        TaskEvent failed = lastEvent(eventBus, task.getTaskId());
+        assertEquals(TaskStatus.FAILED, repository.findById(task.getTaskId()).orElseThrow().getStatus());
+        assertEquals(TaskEvent.FAILED, failed.type());
+        assertEquals("Agent start failed: provider failed [REDACTED] [REDACTED]", failed.message());
+        assertEquals("provider failed [REDACTED] [REDACTED]", failed.data().get("error"));
+        assertFalse(failed.message().contains("abcdefghijklmnop"));
+        assertFalse(failed.message().contains("plain-task-start-secret"));
+        assertFalse(String.valueOf(failed.data().get("error")).contains("abcdefghijklmnop"));
+        assertFalse(String.valueOf(failed.data().get("error")).contains("plain-task-start-secret"));
+    }
+
+    @Test
+    void createAgentRunTaskRedactsCredentialShapedStreamErrorEvent() {
+        FakeTaskRepository repository = new FakeTaskRepository();
+        InMemoryTaskEventBus eventBus = new InMemoryTaskEventBus();
+        TaskOrchestrationService service = new TaskOrchestrationService(
+                repository,
+                new StubConversationManagementPort(),
+                new ErroringAgentChatPort(
+                        "stream failed Authorization: Bearer qwertyuiopasdfgh password=plain-task-stream-secret"),
+                new FailingAgentRunPort(),
+                null,
+                eventBus
+        );
+
+        Task task = service.createTask(new CreateTaskCommand(
+                TaskType.AGENT_RUN,
+                "42",
+                "Generate Mermaid architecture",
+                "conversation-1",
+                "github-visual-project-intro-agent",
+                "Mermaid architecture"
+        ));
+
+        TaskEvent failed = lastEvent(eventBus, task.getTaskId());
+        assertEquals(TaskStatus.FAILED, repository.findById(task.getTaskId()).orElseThrow().getStatus());
+        assertEquals(TaskEvent.FAILED, failed.type());
+        assertEquals("Task failed: stream failed [REDACTED] [REDACTED]", failed.message());
+        assertEquals("stream failed [REDACTED] [REDACTED]", failed.data().get("error"));
+        assertEquals("run-chat-1", failed.data().get("runId"));
+        assertFalse(failed.message().contains("qwertyuiopasdfgh"));
+        assertFalse(failed.message().contains("plain-task-stream-secret"));
+        assertFalse(String.valueOf(failed.data().get("error")).contains("qwertyuiopasdfgh"));
+        assertFalse(String.valueOf(failed.data().get("error")).contains("plain-task-stream-secret"));
     }
 
     @Test
@@ -308,6 +378,11 @@ class TaskOrchestrationServiceTests {
         return false;
     }
 
+    private static TaskEvent lastEvent(InMemoryTaskEventBus eventBus, String taskId) {
+        List<TaskEvent> events = eventBus.history(taskId);
+        return events.get(events.size() - 1);
+    }
+
     private static final class FakeTaskRepository implements TaskRepositoryPort {
         private final Map<String, Task> tasks = new ConcurrentHashMap<>();
 
@@ -389,6 +464,41 @@ class TaskOrchestrationServiceTests {
             callback.onRunStarted("run-chat-1");
             callback.onContent("Generated report");
             callback.onComplete();
+        }
+
+        @Override
+        public void stopTask(String taskId) {
+        }
+    }
+
+    private static final class ThrowingAgentChatPort implements ChatInboundPort {
+        private final String message;
+
+        private ThrowingAgentChatPort(String message) {
+            this.message = message;
+        }
+
+        @Override
+        public void streamChat(StreamChatCommand command, StreamCallback callback) {
+            throw new IllegalStateException(message);
+        }
+
+        @Override
+        public void stopTask(String taskId) {
+        }
+    }
+
+    private static final class ErroringAgentChatPort implements ChatInboundPort {
+        private final String message;
+
+        private ErroringAgentChatPort(String message) {
+            this.message = message;
+        }
+
+        @Override
+        public void streamChat(StreamChatCommand command, StreamCallback callback) {
+            callback.onRunStarted("run-chat-1");
+            callback.onError(new IllegalStateException(message));
         }
 
         @Override

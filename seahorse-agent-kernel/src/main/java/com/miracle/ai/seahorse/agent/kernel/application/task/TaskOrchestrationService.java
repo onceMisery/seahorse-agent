@@ -5,6 +5,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.task;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
@@ -263,8 +264,9 @@ public class TaskOrchestrationService implements TaskInboundPort {
         } catch (Exception e) {
             LOG.error("Failed to start agent chat for task {}", taskId, e);
             taskRepository.updateStatus(taskId, TaskStatus.FAILED);
-            eventPort.publish(taskId, TaskEvent.FAILED, "Agent start failed: " + e.getMessage(),
-                    Map.of("error", String.valueOf(e.getMessage())));
+            String message = failureMessage(e);
+            eventPort.publish(taskId, TaskEvent.FAILED, "Agent start failed: " + message,
+                    Map.of("error", message));
             eventPort.complete(taskId);
             return running.transitionTo(TaskStatus.FAILED);
         }
@@ -313,8 +315,9 @@ public class TaskOrchestrationService implements TaskInboundPort {
             } catch (Exception e) {
                 LOG.error("Failed to start agent run for task {}", taskId, e);
                 taskRepository.updateStatus(taskId, TaskStatus.FAILED);
-                eventPort.publish(taskId, TaskEvent.FAILED, "Agent 启动失败: " + e.getMessage(),
-                        Map.of("error", String.valueOf(e.getMessage())));
+                String message = failureMessage(e);
+                eventPort.publish(taskId, TaskEvent.FAILED, "Agent 启动失败: " + message,
+                        Map.of("error", message));
                 eventPort.complete(taskId);
             }
         });
@@ -491,7 +494,7 @@ public class TaskOrchestrationService implements TaskInboundPort {
 
         @Override
         public void onError(Throwable error) {
-            String message = error == null ? "unknown error" : Objects.toString(error.getMessage(), error.toString());
+            String message = failureMessage(error);
             taskRepository.updateStatus(taskId, TaskStatus.FAILED);
             eventPort.publish(taskId, TaskEvent.FAILED, "Task failed: " + message,
                     Map.of("runId", runId == null ? "" : runId, "error", message));
@@ -505,5 +508,13 @@ public class TaskOrchestrationService implements TaskInboundPort {
             String trimmed = value.trim();
             return trimmed.length() <= 500 ? trimmed : trimmed.substring(0, 500);
         }
+    }
+
+    private String failureMessage(Throwable error) {
+        if (error == null) {
+            return "unknown error";
+        }
+        String message = Objects.requireNonNullElse(error.getMessage(), error.getClass().getName());
+        return CredentialTextRedactor.redact(message);
     }
 }

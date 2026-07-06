@@ -1518,3 +1518,11 @@ Kernel MCP orchestration now redacts credential-shaped executor exception messag
 This is a narrow MCP orchestration display-boundary hardening slice. It does not change MCP registry lookup, parameter extraction, executor invocation, concurrent intent execution, successful MCP content, ToolPort adapter behavior, Tool Gateway audit persistence, approval/quota policy, or base MCP result semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=KernelMcpOrchestratorTests,McpToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 10/10, covering MCP executor exception redaction, existing MCP adapter redaction, tool-not-found/success behavior, intent-tool execution, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Task Event Failure Redaction
+
+Task orchestration failure events now redact credential-shaped exception messages before publishing task failure `message` text or `error` metadata. This covers chat-backed Agent task start failures, asynchronous AgentRun start failures, and streaming Agent callback errors, keeping task history/subscription surfaces safe without suppressing server logs.
+
+This is a narrow task-event display-boundary hardening slice. It does not change task creation, conversation routing, AgentRun command inputs, stream callback sequencing, task status transitions, artifact publication, event bus storage semantics, or raw exception logging for operators.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=TaskOrchestrationServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 14/14, covering task failure event redaction for chat start exceptions, stream callback errors, existing task orchestration behavior, access checks, artifact listing guards, and shared credential text redactor behavior.
