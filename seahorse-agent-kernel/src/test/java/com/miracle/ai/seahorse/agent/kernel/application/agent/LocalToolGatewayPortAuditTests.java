@@ -372,6 +372,30 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldSummarizeSuccessfulTextShapeWithoutRawTextValues() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
+                "first secret line\nsecond longer secret line\nx"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("weather"));
+
+        assertTrue(result.success());
+        String summary = audit.completed.get(0).resultSummary();
+        assertTrue(summary.contains("\"contentPresent\":true"));
+        assertTrue(summary.contains("\"contentLength\":45"));
+        assertTrue(summary.contains("\"contentJsonType\":\"text\""));
+        assertTrue(summary.contains("\"contentTextLineCount\":3"));
+        assertTrue(summary.contains("\"contentTextMaxLineLength\":25"));
+        assertFalse(summary.contains("first secret line"));
+        assertFalse(summary.contains("second longer secret line"));
+    }
+
+    @Test
     void shouldRedactBase64ImagePayloadBeforeReturningAndAuditing() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
                 "{\"status\":\"GENERATED\",\"b64Json\":\"large-base64-payload\",\"mimeType\":\"image/png\"}"));

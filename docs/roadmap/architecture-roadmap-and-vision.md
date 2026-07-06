@@ -1210,3 +1210,11 @@ Tool Gateway successful completion audit now adds value-free top-level JSON shap
 This is a narrow completion-audit hardening slice. It does not change tool execution, output redaction, artifact publication, result-summary storage schema, failure summaries, approval policy, quota policy, or caller-visible tool observations.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 28/28, covering object and array top-level JSON shape metadata while preserving assertions that raw JSON field names and values are excluded from completion summaries.
+
+## 2026-07-06 Update: Tool Gateway Text Result Shape Audit
+
+Tool Gateway successful completion audit now adds value-free text shape metadata for non-JSON text observations: `contentTextLineCount` and `contentTextMaxLineLength`. This gives operators bounded diagnostic shape for plain-text tool output without storing any text snippets, line content, or credential-bearing values in the completion summary.
+
+This is a narrow completion-audit hardening slice. It does not change tool execution, output redaction, JSON result summaries, artifact publication, failure summaries, approval policy, quota policy, or caller-visible tool observations.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 29/29, covering multi-line text shape metadata while preserving assertions that raw text values are excluded from completion summaries.

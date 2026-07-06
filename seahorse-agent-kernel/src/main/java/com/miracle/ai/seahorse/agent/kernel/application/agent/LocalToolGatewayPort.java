@@ -952,7 +952,13 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("contentPresent", result.content() != null);
         summary.put("contentLength", content.length());
-        summary.put("contentJsonType", result.content() == null ? "none" : resultContentJsonType(content));
+        String contentJsonType = result.content() == null ? "none" : resultContentJsonType(content);
+        summary.put("contentJsonType", contentJsonType);
+        TextShape textShape = resultContentTextShape(content, contentJsonType);
+        if (textShape != null) {
+            summary.put("contentTextLineCount", textShape.lineCount());
+            summary.put("contentTextMaxLineLength", textShape.maxLineLength());
+        }
         JsonTopLevelShape jsonTopLevelShape = resultContentJsonTopLevelShape(content);
         if (jsonTopLevelShape != null) {
             summary.put("contentJsonTopLevelFieldCount", jsonTopLevelShape.fieldCount());
@@ -971,6 +977,21 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     + ", contentLength=" + content.length()
                     + ", contentJsonType=" + resultContentJsonType(content));
         }
+    }
+
+    private TextShape resultContentTextShape(String content, String contentJsonType) {
+        if (!"text".equals(contentJsonType)) {
+            return null;
+        }
+        String[] lines = content.split("\\R", -1);
+        int maxLineLength = 0;
+        for (String line : lines) {
+            maxLineLength = Math.max(maxLineLength, line.length());
+        }
+        return new TextShape(lines.length, maxLineLength);
+    }
+
+    private record TextShape(int lineCount, int maxLineLength) {
     }
 
     private JsonTopLevelShape resultContentJsonTopLevelShape(String content) {
