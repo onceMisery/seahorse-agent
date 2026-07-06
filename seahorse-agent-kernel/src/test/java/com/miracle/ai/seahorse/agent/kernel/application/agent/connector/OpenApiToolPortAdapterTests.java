@@ -168,6 +168,52 @@ class OpenApiToolPortAdapterTests {
     }
 
     @Test
+    void shouldRedactCredentialShapedFailureMessagesWhilePreservingCredentialRequest() {
+        MemoryConnectorRepository connectorRepository = new MemoryConnectorRepository();
+        Connector connector = connector("https://api.example.test");
+        ConnectorOperation operation = operation(connector.connectorId(), CredentialAuthType.STATIC_BEARER);
+        connectorRepository.saveConnector(connector);
+        connectorRepository.saveVersion(version(connector.connectorId()));
+        connectorRepository.saveOperation(operation);
+        MemoryConnectorCredentialBindingRepository bindings = new MemoryConnectorCredentialBindingRepository();
+        bindings.save(new ConnectorCredentialBinding(
+                "binding-1",
+                connector.tenantId(),
+                connector.connectorId(),
+                operation.operationId(),
+                CredentialAuthType.STATIC_BEARER,
+                "secret://tenant/openapi/raw-provider-ref",
+                ConnectorCredentialBindingStatus.ACTIVE,
+                "admin-1",
+                NOW,
+                null));
+        AtomicReference<String> observedSecretRef = new AtomicReference<>("");
+        OpenApiToolPortAdapter adapter = new OpenApiToolPortAdapter(
+                connectorRepository,
+                bindings,
+                request -> {
+                    observedSecretRef.set(request.secretRef());
+                    throw new IllegalStateException(
+                            "credential provider failed Authorization: Bearer abcdefghijklmnop api_key=plain-openapi-secret");
+                },
+                null,
+                new ObjectMapper(),
+                Duration.ofSeconds(5),
+                64 * 1024);
+
+        ToolInvocationResult result = adapter.invoke(
+                "call-1",
+                operation.toolId(),
+                Map.of("customerId", "c1"));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("[REDACTED]"));
+        assertFalse(result.error().contains("abcdefghijklmnop"));
+        assertFalse(result.error().contains("plain-openapi-secret"));
+        assertEquals("secret://tenant/openapi/raw-provider-ref", observedSecretRef.get());
+    }
+
+    @Test
     void shouldRedactCredentialShapedOpenApiResponseFieldsBeforeGatewayFallback() throws Exception {
         try (TestHttpApi api = TestHttpApi.start("/api/customers", exchange -> respond(exchange, 200,
                 "{\"secretRef\":\"secret://tenant/openapi\","

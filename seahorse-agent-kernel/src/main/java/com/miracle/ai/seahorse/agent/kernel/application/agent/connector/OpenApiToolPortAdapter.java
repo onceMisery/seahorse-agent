@@ -438,7 +438,7 @@ public class OpenApiToolPortAdapter implements ToolPort {
     private String error(String reasonCode, String detail) {
         ObjectNode node = objectMapper.createObjectNode();
         node.put("reasonCode", reasonCode);
-        node.put("message", Objects.requireNonNullElse(detail, reasonCode));
+        node.put("message", redactText(Objects.requireNonNullElse(detail, reasonCode)));
         try {
             return objectMapper.writeValueAsString(node);
         } catch (JsonProcessingException ex) {

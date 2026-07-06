@@ -1494,3 +1494,11 @@ Local Agent-as-Tool handoff failures now redact credential-shaped text before re
 This is a narrow local handoff display-boundary hardening slice. It does not change handoff policy, child run creation inputs, repository schema, audit ledger shape, successful handoff JSON, Tool Gateway audit persistence, approval/quota policy, or base `ToolInvocationResult` semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalAgentAsToolPortTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 6/6, covering local handoff failure redaction, raw input-summary preservation for child run creation, existing successful handoff behavior, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: OpenAPI Tool Failure Error Redaction
+
+OpenAPI dynamic-tool failures now redact credential-shaped text in the shared error JSON message before returning failed tool results. This covers invalid request construction, credential resolution/provider failures, HTTP request failures, and runtime execution failures while preserving raw credential references and request arguments for the actual invocation path.
+
+This is a narrow OpenAPI tool display-boundary hardening slice. It does not change OpenAPI import, operation enablement, URI/request construction, credential binding storage, credential provider request fields, HTTP execution, response payload redaction, Tool Gateway audit persistence, approval/quota policy, or base `ToolInvocationResult` semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=OpenApiToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 9/9, covering OpenAPI failure-message redaction, raw credential-reference preservation for provider resolution, existing bearer injection behavior, response JSON/text redaction, and shared credential text redactor behavior.
