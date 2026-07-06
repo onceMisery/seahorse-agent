@@ -1606,3 +1606,11 @@ Memory refiner fail-open and fail-closed paths now redact credential-shaped exce
 This is a narrow refiner failure-reason hardening slice. It does not change baseline classification, refiner request construction, raw memory/refiner inputs, fail-open versus fail-closed policy, schema validation, memory write behavior, operation status semantics, or server-side exception logging.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=DefaultMemoryEnginePortTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new fail-open/fail-closed regressions because `refinerReason` lacked `[REDACTED]`, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 70/70 across kernel redactor and default memory engine coverage.
+
+## 2026-07-06 Update: Memory Aggregation Trace Failure Redaction
+
+Memory aggregation flush failures now redact credential-shaped exception text before writing failed `submit` trace `details.message` values. This protects memory aggregation trace and operations surfaces when ingestion workflow failures accidentally include bearer tokens, API keys, or similar material.
+
+This is a narrow aggregation trace-boundary hardening slice. It does not change turn buffering, explicit/idle/topic-shift/force flush policy, ingestion command construction, raw context-block content, failed `MemoryIngestionResult` reason, observation counters, or server-side warn logging with the original exception chain.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=MemoryAggregationServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new regression because failed submit trace `details.message` returned raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 15/15 across kernel redactor and memory aggregation coverage.

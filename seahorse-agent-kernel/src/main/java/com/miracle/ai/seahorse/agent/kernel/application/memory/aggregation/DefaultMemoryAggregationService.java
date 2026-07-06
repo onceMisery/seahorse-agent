@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationAppendResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationSchedulerPort;
@@ -374,9 +375,13 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
                     traceContext(snapshot), details(
                     DETAIL_OPERATION_ID, operationId(snapshot),
                     DETAIL_ERROR, ex.getClass().getSimpleName(),
-                    DETAIL_MESSAGE, Objects.requireNonNullElse(ex.getMessage(), "")));
+                    DETAIL_MESSAGE, failureMessage(ex)));
             return MemoryIngestionResult.failed(REASON_AGGREGATION_FLUSH_FAILED);
         }
+    }
+
+    private String failureMessage(Exception ex) {
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
     }
 
     private String operationId(MemoryBufferSnapshot snapshot) {

@@ -233,6 +233,32 @@ class MemoryAggregationServiceTests {
     }
 
     @Test
+    void shouldRedactCredentialLikeFlushFailureTraceMessage() {
+        RecordingWorkflow workflow = new RecordingWorkflow();
+        workflow.failMessage = "aggregation failed Authorization: Bearer abcdefghijklmnop api_key=plain-memory-secret";
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        DefaultMemoryAggregationService service = service(policy(2, 60_000), workflow, new RecordingScheduler(),
+                traceRecorder);
+
+        service.appendTurn(turn("task-1", "Remember I use Java", "Noted", 8));
+        MemoryAggregationAppendResult result = service.appendTurn(
+                turn("task-2", "I prefer concise answers", "Understood", 9));
+
+        assertThat(result.ingestionResult().status()).isEqualTo(MemoryIngestionStatus.FAILED);
+        assertThat(traceRecorder.events)
+                .filteredOn(event -> "submit".equals(event.eventType())
+                        && MemoryTraceEvent.STATUS_FAILED.equals(event.status()))
+                .singleElement()
+                .satisfies(event -> {
+                    String message = event.details().get("message").toString();
+                    assertThat(message)
+                            .contains("[REDACTED]")
+                            .doesNotContain("abcdefghijklmnop")
+                            .doesNotContain("plain-memory-secret");
+                });
+    }
+
+    @Test
     void shouldEmitFlushObservationCounterTaggedWithTriggerAndStatus() {
         RecordingWorkflow workflow = new RecordingWorkflow();
         RecordingObservationPort observationPort = new RecordingObservationPort();
@@ -330,10 +356,14 @@ class MemoryAggregationServiceTests {
     private static final class RecordingWorkflow implements MemoryIngestionWorkflowPort {
 
         private final List<MemoryIngestionCommand> commands = new ArrayList<>();
+        private String failMessage;
 
         @Override
         public MemoryIngestionResult ingest(MemoryIngestionCommand command) {
             commands.add(command);
+            if (failMessage != null) {
+                throw new IllegalStateException(failMessage);
+            }
             return MemoryIngestionResult.accepted(List.of("aggregate"));
         }
     }
