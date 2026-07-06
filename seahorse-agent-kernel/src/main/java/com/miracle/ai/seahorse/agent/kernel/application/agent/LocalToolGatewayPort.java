@@ -660,6 +660,9 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("viewportHeight", positiveIntArgument(arguments, "viewportHeight"));
         summary.put("argumentKeys", safeSandboxBrowserArgumentKeys(arguments));
         summary.put("argumentCount", arguments.size());
+        summary.put("argumentValueCount", mapValueCount(arguments));
+        summary.put("argumentValueTotalLength", mapValueTotalLength(arguments));
+        summary.put("argumentValueMaxLength", mapValueMaxLength(arguments));
         try {
             return truncate(OBJECT_MAPPER.writeValueAsString(summary));
         } catch (JsonProcessingException ex) {
@@ -668,7 +671,11 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     + ", cookieCount=" + cookieCount
                     + ", sessionStateReplayRequested=" + !sessionState.isEmpty()
                     + ", sessionStateCookieCount=" + sessionCookieCount
-                    + ", sessionStateOriginCount=" + sessionOriginCount);
+                    + ", sessionStateOriginCount=" + sessionOriginCount
+                    + ", argumentCount=" + arguments.size()
+                    + ", argumentValueCount=" + mapValueCount(arguments)
+                    + ", argumentValueTotalLength=" + mapValueTotalLength(arguments)
+                    + ", argumentValueMaxLength=" + mapValueMaxLength(arguments));
         }
     }
 

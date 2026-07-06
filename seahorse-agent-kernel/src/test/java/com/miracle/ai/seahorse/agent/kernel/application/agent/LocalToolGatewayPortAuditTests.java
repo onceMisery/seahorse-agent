@@ -555,6 +555,10 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"viewportHeightPresent\":false"));
         assertTrue(summary.contains("\"viewportHeight\":0"));
         assertTrue(summary.contains("\"argumentKeys\":[\"html\",\"action\",\"har\"]"));
+        assertTrue(summary.contains("\"argumentCount\":3"));
+        assertTrue(summary.contains("\"argumentValueCount\":3"));
+        assertTrue(summary.contains("\"argumentValueTotalLength\":" + (html.length() + 12)));
+        assertTrue(summary.contains("\"argumentValueMaxLength\":" + html.length()));
         assertFalse(summary.contains("inline-html-marker"));
         assertFalse(summary.contains(html));
     }
