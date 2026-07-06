@@ -501,6 +501,77 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldRunPptxToTextFileConversionAndCollectTextOutputOnly() throws Exception {
+        byte[] pptxBytes = pptxBytes();
+        String pptxBase64 = Base64.getEncoder().encodeToString(pptxBytes);
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted pptx presentation to text\n", Duration.ofMillis(190)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("pptx_to_text",
+                                    "source_format = \"pptx\"",
+                                    "ppt/slides/slide",
+                                    "converted.txt")
+                            .doesNotContain(pptxBase64);
+                    assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.pptx")))
+                            .isEqualTo(pptxBytes);
+                    Files.writeString(command.workingDirectory().resolve("converted.txt"),
+                            "Sandbox PPTX Title\nSlide body\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"pptx","targetFormat":"txt","contentEncoding":"base64","content":"%s"}
+                        """.formatted(pptxBase64),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted pptx presentation to text");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.txt");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/plain");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.pptx"));
+    }
+
+    @Test
+    void shouldRejectPptxWithActiveContentBeforeRunningContainer() throws Exception {
+        byte[] pptxBytes = zipBytes(
+                "ppt/slides/slide1.xml",
+                """
+                        <p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                          <p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>unsafe pptx</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld>
+                        </p:sld>
+                        """,
+                "ppt/vbaProject.bin",
+                "macro bytes");
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"pptx","targetFormat":"txt","contentEncoding":"base64","content":"%s"}
+                        """.formatted(Base64.getEncoder().encodeToString(pptxBytes)),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("pptx active content is not supported");
+        assertThat(runner.lastCommand).isNull();
+        assertThat(tempDir.resolve(session.sessionId()).resolve("main.py")).doesNotExist();
+        assertThat(tempDir.resolve(session.sessionId()).resolve("input.pptx")).doesNotExist();
+    }
+
+    @Test
     void shouldRejectPdfWithActiveContentBeforeRunningContainer() {
         shouldRejectPdfActiveContentMarkerBeforeRunningContainer("/OpenAction");
         shouldRejectPdfActiveContentMarkerBeforeRunningContainer("/ImportData");
@@ -1271,7 +1342,7 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED);
         assertThat(result.execution().resultSummary())
-                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to txt, and xlsx to csv only");
+                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pptx/pdf to txt, and xlsx to csv only");
         assertThat(runner.lastCommand).isNull();
     }
 
@@ -1651,6 +1722,30 @@ class ContainerSandboxRuntimeAdapterTests {
                                 <row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>42</v></c></row>
                               </sheetData>
                             </worksheet>
+                            """);
+        }
+        return bytes.toByteArray();
+    }
+
+    private static byte[] pptxBytes() throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream archive = new ZipOutputStream(bytes)) {
+            writeZipEntry(archive, "[Content_Types].xml", "<Types/>");
+            writeZipEntry(archive, "ppt/presentation.xml",
+                    """
+                            <p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>
+                            """);
+            writeZipEntry(archive, "ppt/slides/slide1.xml",
+                    """
+                            <p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                                   xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                              <p:cSld>
+                                <p:spTree>
+                                  <p:sp><p:txBody><a:p><a:r><a:t>Sandbox PPTX Title</a:t></a:r></a:p></p:txBody></p:sp>
+                                  <p:sp><p:txBody><a:p><a:r><a:t>Slide body</a:t></a:r></a:p></p:txBody></p:sp>
+                                </p:spTree>
+                              </p:cSld>
+                            </p:sld>
                             """);
         }
         return bytes.toByteArray();

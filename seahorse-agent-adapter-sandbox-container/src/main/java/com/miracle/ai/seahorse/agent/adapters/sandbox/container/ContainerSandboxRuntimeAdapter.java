@@ -75,6 +75,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final String MARKDOWN_FORMAT = "markdown";
     private static final String DOCX_FORMAT = "docx";
     private static final String XLSX_FORMAT = "xlsx";
+    private static final String PPTX_FORMAT = "pptx";
     private static final String PDF_FORMAT = "pdf";
     private static final String BASE64_ENCODING = "base64";
     private static final String PLAIN_ENCODING = "plain";
@@ -355,13 +356,13 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String contentEncoding = normalizedContentEncoding(root.path("contentEncoding").asText(PLAIN_ENCODING));
         if (!isSupportedFileConversion(sourceFormat, targetFormat)) {
             throw new UnsupportedFileConversionException(
-                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to txt, and xlsx to csv only");
+                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pptx/pdf to txt, and xlsx to csv only");
         }
         if (isBinaryDocumentFormat(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
             throw new IllegalArgumentException(sourceFormat + " file conversion contentEncoding must be base64");
         }
         if (!isBinaryDocumentFormat(sourceFormat) && BASE64_ENCODING.equals(contentEncoding)) {
-            throw new IllegalArgumentException("base64 contentEncoding is only supported for docx/xlsx/pdf input");
+            throw new IllegalArgumentException("base64 contentEncoding is only supported for docx/xlsx/pptx/pdf input");
         }
         String content = root.path("content").asText("");
         if (!hasText(content)) {
@@ -380,6 +381,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
         if (XLSX_FORMAT.equals(sourceFormat)) {
             validateXlsxFileConversionInput(content);
+        }
+        if (PPTX_FORMAT.equals(sourceFormat)) {
+            validatePptxFileConversionInput(content);
         }
         if (PDF_FORMAT.equals(sourceFormat)) {
             validatePdfFileConversionInput(content);
@@ -458,6 +462,34 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
     }
 
+    private void validatePptxFileConversionInput(byte[] content) {
+        boolean slideXmlFound = false;
+        int inspectedEntries = 0;
+        try (ZipInputStream archive = new ZipInputStream(new ByteArrayInputStream(content))) {
+            ZipEntry entry;
+            while ((entry = archive.getNextEntry()) != null) {
+                if (++inspectedEntries > MAX_FILE_CONVERSION_ARCHIVE_ENTRIES) {
+                    throw new IllegalArgumentException("pptx archive exceeds entry scan budget");
+                }
+                String entryName = normalizedArchiveEntryName(entry.getName());
+                if (hasUnsafeArchivePath(entryName)) {
+                    throw new IllegalArgumentException("pptx archive contains unsafe entry");
+                }
+                if (hasPptxActiveContentEntry(entryName)) {
+                    throw new IllegalArgumentException("pptx active content is not supported");
+                }
+                if (entryName.matches("ppt/slides/slide\\d+\\.xml")) {
+                    slideXmlFound = true;
+                }
+            }
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("pptx archive could not be inspected", ex);
+        }
+        if (!slideXmlFound) {
+            throw new IllegalArgumentException("pptx ppt/slides/slide*.xml not found");
+        }
+    }
+
     private String normalizedArchiveEntryName(String value) {
         return nullToEmpty(value).replace('\\', '/').trim().toLowerCase(Locale.ROOT);
     }
@@ -495,6 +527,18 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || value.startsWith("xl/activex/")
                 || value.startsWith("xl/embeddings/")
                 || value.startsWith("xl/externallinks/")
+                || value.contains("/oleobject");
+    }
+
+    private boolean hasPptxActiveContentEntry(String value) {
+        if (!hasText(value)) {
+            return false;
+        }
+        return value.equals("vbaproject.bin")
+                || value.endsWith("/vbaproject.bin")
+                || value.startsWith("ppt/activex/")
+                || value.startsWith("ppt/embeddings/")
+                || value.startsWith("ppt/externallinks/")
                 || value.contains("/oleobject");
     }
 
@@ -1217,6 +1261,37 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         writer.writerow(row + [""] * (max_width - len(row)))
                     return output.getvalue()
 
+                def pptx_slide_sort_key(name):
+                    match = re.search(r"slide(\\d+)\\.xml$", name)
+                    return int(match.group(1)) if match else 0
+
+                def pptx_to_text(path):
+                    with zipfile.ZipFile(path) as archive:
+                        slide_names = [
+                            name for name in archive.namelist()
+                            if re.match(r"ppt/slides/slide\\d+\\.xml$", name)
+                        ]
+                        if not slide_names:
+                            raise ValueError("pptx ppt/slides/slide*.xml not found")
+                        slide_names.sort(key=pptx_slide_sort_key)
+                        ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
+                        slides = []
+                        for name in slide_names:
+                            info = archive.getinfo(name)
+                            if info.file_size > 1048576:
+                                raise ValueError("pptx slide xml exceeds extraction budget")
+                            root = ET.fromstring(archive.read(info))
+                            parts = []
+                            for node in root.findall(".//a:t", ns):
+                                if node.text:
+                                    parts.append(node.text)
+                            text = " ".join(part.strip() for part in parts if part.strip()).strip()
+                            if text:
+                                slides.append(text)
+                    if not slides:
+                        raise ValueError("pptx slide text not found")
+                    return "\\n".join(slides) + "\\n"
+
                 def pdf_unescape_literal(value):
                     output = bytearray()
                     index = 0
@@ -1367,6 +1442,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "xlsx" and target_format == "csv":
                     output_path.write_text(xlsx_to_csv(input_path), encoding="utf-8")
                     print(f"converted xlsx worksheet to csv")
+                elif source_format == "pptx" and target_format == "txt":
+                    output_path.write_text(pptx_to_text(input_path), encoding="utf-8")
+                    print(f"converted pptx presentation to text")
                 elif source_format == "pdf" and target_format == "txt":
                     output_path.write_text(pdf_to_text(input_path), encoding="utf-8")
                     print(f"converted pdf document to text")
@@ -1386,7 +1464,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
                 || (MARKDOWN_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
-                || ((DOCX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat)) && TXT_FORMAT.equals(targetFormat))
+                || ((DOCX_FORMAT.equals(sourceFormat) || PPTX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat))
+                && TXT_FORMAT.equals(targetFormat))
                 || (XLSX_FORMAT.equals(sourceFormat) && CSV_FORMAT.equals(targetFormat));
     }
 
@@ -1395,7 +1474,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     }
 
     private boolean isBinaryDocumentFormat(String sourceFormat) {
-        return DOCX_FORMAT.equals(sourceFormat) || XLSX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat);
+        return DOCX_FORMAT.equals(sourceFormat)
+                || XLSX_FORMAT.equals(sourceFormat)
+                || PPTX_FORMAT.equals(sourceFormat)
+                || PDF_FORMAT.equals(sourceFormat);
     }
 
     private String fileConversionInputName(String sourceFormat) {
@@ -1405,6 +1487,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             case HTML_FORMAT -> "html";
             case DOCX_FORMAT -> "docx";
             case XLSX_FORMAT -> "xlsx";
+            case PPTX_FORMAT -> "pptx";
             case PDF_FORMAT -> "pdf";
             default -> sourceFormat;
         };

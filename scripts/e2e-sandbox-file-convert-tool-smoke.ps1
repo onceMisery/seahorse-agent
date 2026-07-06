@@ -423,6 +423,60 @@ function New-XlsxBase64 {
     }
 }
 
+function New-PptxBase64 {
+    param(
+        [string]$Marker,
+        [string]$SecondValue = "PPTX conversion extracts slide text"
+    )
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $tempPath = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "seahorse-pptx-$([guid]::NewGuid().ToString('N')).pptx")
+    $fileStream = [System.IO.File]::Open($tempPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite)
+    $archive = [System.IO.Compression.ZipArchive]::new($fileStream, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        Add-ZipTextEntry -Archive $archive -Name "[Content_Types].xml" -Content @'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
+  <Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>
+</Types>
+'@
+        Add-ZipTextEntry -Archive $archive -Name "_rels/.rels" -Content @'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>
+</Relationships>
+'@
+        Add-ZipTextEntry -Archive $archive -Name "ppt/presentation.xml" -Content @'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>
+'@
+        $escapedMarker = [System.Security.SecurityElement]::Escape("Sandbox PPTX $Marker")
+        $escapedSecondValue = [System.Security.SecurityElement]::Escape($SecondValue)
+        Add-ZipTextEntry -Archive $archive -Name "ppt/slides/slide1.xml" -Content @"
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <p:cSld>
+    <p:spTree>
+      <p:sp><p:txBody><a:p><a:r><a:t>$escapedMarker</a:t></a:r></a:p></p:txBody></p:sp>
+      <p:sp><p:txBody><a:p><a:r><a:t>$escapedSecondValue</a:t></a:r></a:p></p:txBody></p:sp>
+    </p:spTree>
+  </p:cSld>
+</p:sld>
+"@
+    } finally {
+        $archive.Dispose()
+        $fileStream.Dispose()
+    }
+    try {
+        return [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($tempPath))
+    } finally {
+        Remove-Item -LiteralPath $tempPath -ErrorAction SilentlyContinue
+    }
+}
+
 function ConvertTo-PdfLiteral {
     param([string]$Value)
     return $Value.Replace('\', '\\').Replace('(', '\(').Replace(')', '\)')
@@ -1094,6 +1148,99 @@ try {
             & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
             if ($LASTEXITCODE -ne 0) {
                 throw "Stored XLSX to CSV object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
+    $pptxRunId = $runId
+    $pptxToolCallId = "sandbox-file-convert-pptx-txt-call-$suffix"
+    $pptxContent = New-PptxBase64 -Marker $Marker -SecondValue "PPTX conversion extracts slide text"
+
+    $pptxObservation = Test-Step "Invoke sandbox_file_convert PPTX to TXT through Tool Gateway" {
+        $requestBody = @{
+            runId = $pptxRunId
+            stepId = "sandbox-file-convert-pptx-txt-step-$suffix"
+            toolCallId = $pptxToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "pptx"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $pptxContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${pptxRunId}:${pptxToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert PPTX to TXT"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert PPTX to TXT failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION") {
+            throw "Expected FILE_CONVERSION runtime for PPTX to TXT: $content"
+        }
+        if ("$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected SUCCEEDED PPTX to TXT execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "pptx" -or "$($parsed.conversion.targetFormat)" -ne "txt" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected PPTX to TXT conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1) {
+            throw "Expected one PPTX to TXT artifact: $content"
+        }
+        if ("$($artifacts[0].mediaType)" -ne "text/plain") {
+            throw "Expected PPTX to TXT artifact mediaType text/plain: $content"
+        }
+        if ("$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected CLEAN PPTX to TXT artifact scan status: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed") {
+            throw "Expected PPTX to TXT metadata scan summary: $content"
+        }
+        if ($artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible PPTX to TXT artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $pptxObservation) { exit 1 }
+
+    $pptxSessionId = "$($pptxObservation.sessionId)"
+    $pptxArtifactId = "$(@($pptxObservation.artifacts)[0].artifactId)"
+
+    $pptxObjectUri = Test-Step "Verify persisted PPTX to TXT session and artifact" {
+        Assert-PersistedFileConversionArtifact -ArtifactId $pptxArtifactId -ExpectedMediaType "text/plain" -Label "PPTX to TXT"
+    }
+    if (-not $pptxObjectUri) { exit 1 }
+
+    Test-Step "Download converted PPTX TXT through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$pptxArtifactId/download" -Headers $headers
+        if ($content -notlike "*Sandbox PPTX $Marker*") {
+            throw "Downloaded PPTX TXT did not include marker '$Marker': $content"
+        }
+        if ($content -notlike "*PPTX conversion extracts slide text*") {
+            throw "Downloaded PPTX TXT did not include slide value: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded PPTX TXT artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($pptxObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted PPTX TXT object exists in backend storage volume" {
+            $key = $pptxObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote PPTX to TXT key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored PPTX to TXT object not found or marker missing at $path"
             }
         } | Out-Null
     }
