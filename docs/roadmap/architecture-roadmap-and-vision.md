@@ -1066,3 +1066,11 @@ Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=OpenApiToolPor
 This is a narrow audit-ledger redaction hardening slice. It does not change audit event persistence, invalid-JSON fail-closed behavior, Tool Gateway request/completion summaries, output redaction wiring, approval policy, or provider execution.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=AuditRedactionPolicyTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 3/3, covering nested authorization, cookie, private-key, and session-id payload redaction while preserving `secretRef`.
+
+## 2026-07-06 Update: OpenAPI Provider Text Response Redaction
+
+`OpenApiToolPortAdapter` now redacts credential-shaped substrings from non-JSON and invalid-JSON provider response bodies before returning the tool observation. This closes the provider-layer path where text responses could otherwise carry `api_key=...`, bearer tokens, OpenAI-style `sk-...` keys, or malformed JSON credential fragments and rely only on the Tool Gateway fallback redactor.
+
+This is a narrow provider-layer output-redaction hardening slice. It does not change HTTP invocation, JSON response field redaction, credential injection, response truncation, Tool Gateway policy/audit flow, or generic output redaction wiring.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=OpenApiToolPortAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 5/5, covering text/plain and invalid application/json response redaction before any gateway-level fallback.

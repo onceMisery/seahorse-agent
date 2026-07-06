@@ -215,6 +215,44 @@ class OpenApiToolPortAdapterTests {
         }
     }
 
+    @Test
+    void shouldRedactCredentialShapedOpenApiTextResponseBeforeGatewayFallback() throws Exception {
+        try (TestHttpApi api = TestHttpApi.start("/api/customers", exchange -> respond(exchange, 200,
+                "text/plain",
+                "upstream failed api_key=plain-api-key Bearer abcdefghijklmnop sk-live-secret"))) {
+            OpenApiToolPortAdapter adapter = adapterFor(api.baseUrl(), CredentialAuthType.NONE);
+
+            ToolInvocationResult result = adapter.invoke(
+                    "call-1",
+                    TOOL_ID,
+                    Map.of("status", "active"));
+
+            assertTrue(result.success());
+            assertTrue(result.content().contains("upstream failed [REDACTED] [REDACTED] [REDACTED]"));
+            assertFalse(result.content().contains("plain-api-key"));
+            assertFalse(result.content().contains("abcdefghijklmnop"));
+            assertFalse(result.content().contains("sk-live-secret"));
+        }
+    }
+
+    @Test
+    void shouldRedactCredentialShapedInvalidJsonResponseBeforeGatewayFallback() throws Exception {
+        try (TestHttpApi api = TestHttpApi.start("/api/customers", exchange -> respond(exchange, 200,
+                "application/json",
+                "{\"error\":\"partial\", \"message\":\"access_token=plain-access-token"))) {
+            OpenApiToolPortAdapter adapter = adapterFor(api.baseUrl(), CredentialAuthType.NONE);
+
+            ToolInvocationResult result = adapter.invoke(
+                    "call-1",
+                    TOOL_ID,
+                    Map.of("status", "active"));
+
+            assertTrue(result.success());
+            assertTrue(result.content().contains("[REDACTED]"));
+            assertFalse(result.content().contains("plain-access-token"));
+        }
+    }
+
     private static ToolInvocationRequest request(String toolId, Map<String, Object> arguments) {
         return new ToolInvocationRequest(
                 "run-openapi",
@@ -230,6 +268,23 @@ class OpenApiToolPortAdapterTests {
                 Map.of(),
                 "run-openapi:call-openapi",
                 List.of(toolId));
+    }
+
+    private static OpenApiToolPortAdapter adapterFor(String baseUrl, CredentialAuthType authType) {
+        MemoryConnectorRepository connectorRepository = new MemoryConnectorRepository();
+        Connector connector = connector(baseUrl);
+        ConnectorOperation operation = operation(connector.connectorId(), authType);
+        connectorRepository.saveConnector(connector);
+        connectorRepository.saveVersion(version(connector.connectorId()));
+        connectorRepository.saveOperation(operation);
+        return new OpenApiToolPortAdapter(
+                connectorRepository,
+                ConnectorCredentialBindingRepositoryPort.empty(),
+                request -> CredentialMaterial.none(),
+                null,
+                new ObjectMapper(),
+                Duration.ofSeconds(5),
+                64 * 1024);
     }
 
     private static Connector connector(String baseUrl) {
@@ -302,8 +357,12 @@ class OpenApiToolPortAdapterTests {
     }
 
     private static void respond(HttpExchange exchange, int status, String body) throws IOException {
+        respond(exchange, status, "application/json", body);
+    }
+
+    private static void respond(HttpExchange exchange, int status, String contentType, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().add("Content-Type", "application/json");
+        exchange.getResponseHeaders().add("Content-Type", contentType);
         exchange.sendResponseHeaders(status, bytes.length);
         exchange.getResponseBody().write(bytes);
         exchange.close();

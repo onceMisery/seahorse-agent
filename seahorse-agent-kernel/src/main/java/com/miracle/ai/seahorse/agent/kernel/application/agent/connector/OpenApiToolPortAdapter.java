@@ -60,6 +60,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public class OpenApiToolPortAdapter implements ToolPort {
 
@@ -87,6 +88,11 @@ public class OpenApiToolPortAdapter implements ToolPort {
             "sessionid",
             "secretkey",
             "privatekey");
+    private static final Pattern CREDENTIAL_VALUE_PATTERN = Pattern.compile(
+            "(?i)(bearer\\s+[a-z0-9._~+/=-]{8,}"
+                    + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id)"
+                    + "\\s*=\\s*[^\\s&;]+)");
+    private static final Pattern OPENAI_KEY_PATTERN = Pattern.compile("sk-[A-Za-z0-9][A-Za-z0-9_-]*");
 
     private final ConnectorRepositoryPort connectorRepository;
     private final ConnectorCredentialBindingRepositoryPort credentialBindingRepository;
@@ -382,12 +388,20 @@ public class OpenApiToolPortAdapter implements ToolPort {
             try {
                 result.set("body", redact(objectMapper.readTree(text)));
             } catch (JsonProcessingException ex) {
-                result.put("body", text);
+                result.put("body", redactText(text));
             }
         } else {
-            result.put("body", text);
+            result.put("body", redactText(text));
         }
         return objectMapper.writeValueAsString(result);
+    }
+
+    private String redactText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String redacted = OPENAI_KEY_PATTERN.matcher(value).replaceAll("[REDACTED]");
+        return CREDENTIAL_VALUE_PATTERN.matcher(redacted).replaceAll("[REDACTED]");
     }
 
     private JsonNode redact(JsonNode node) {
