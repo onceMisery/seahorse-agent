@@ -19,10 +19,15 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialJsonFieldClassifier;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResults;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileResolvedPreview;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileToolBindingCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileDetails;
+import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileRecord;
 import lombok.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
@@ -36,6 +41,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -70,7 +76,11 @@ public class SeahorseRunProfileController {
     public Map<String, Object> list(@RequestParam(required = false) String userId,
                                     @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
                                     String headerUserId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, runProfilePort().list(resolveUserId(userId, headerUserId)));
+        return Map.of(
+                KEY_CODE,
+                SUCCESS_CODE,
+                KEY_DATA,
+                safeProfiles(runProfilePort().list(resolveUserId(userId, headerUserId))));
     }
 
     @GetMapping({"/run-profiles/executor-engines", "/api/run-profiles/executor-engines"})
@@ -85,7 +95,7 @@ public class SeahorseRunProfileController {
                                    String headerUserId) {
         return runProfilePort()
                 .findById(resolveUserId(userId, headerUserId), id)
-                .<Map<String, Object>>map(details -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, details))
+                .<Map<String, Object>>map(details -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, safeDetails(details)))
                 .orElseGet(() -> Map.of(KEY_CODE, SUCCESS_CODE));
     }
 
@@ -124,7 +134,7 @@ public class SeahorseRunProfileController {
                                                String headerUserId) {
         return runProfilePort()
                 .resolvePreview(resolveUserId(userId, headerUserId), id)
-                .<Map<String, Object>>map(preview -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, preview))
+                .<Map<String, Object>>map(preview -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, safePreview(preview)))
                 .orElseGet(() -> Map.of(KEY_CODE, SUCCESS_CODE));
     }
 
@@ -227,7 +237,7 @@ public class SeahorseRunProfileController {
                 KEY_CODE,
                 SUCCESS_CODE,
                 KEY_DATA,
-                runProfilePort().applyToConversation(resolveUserId(userId, headerUserId), conversationId, id));
+                safePreview(runProfilePort().applyToConversation(resolveUserId(userId, headerUserId), conversationId, id)));
     }
 
     @GetMapping({
@@ -241,7 +251,7 @@ public class SeahorseRunProfileController {
                                                         String headerUserId) {
         return runProfilePort()
                 .findAppliedToConversation(resolveUserId(userId, headerUserId), conversationId)
-                .<Map<String, Object>>map(details -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, details))
+                .<Map<String, Object>>map(details -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, safeDetails(details)))
                 .orElseGet(() -> Map.of(KEY_CODE, SUCCESS_CODE));
     }
 
@@ -281,6 +291,117 @@ public class SeahorseRunProfileController {
                         .enabled(request.isEnabled())
                         .build())
                 .toList();
+    }
+
+    private List<RunProfileRecord> safeProfiles(List<RunProfileRecord> profiles) {
+        return Objects.requireNonNullElse(profiles, List.<RunProfileRecord>of())
+                .stream()
+                .map(this::safeProfile)
+                .toList();
+    }
+
+    private RunProfileDetails safeDetails(RunProfileDetails details) {
+        if (details == null) {
+            return null;
+        }
+        return RunProfileDetails.builder()
+                .profile(safeProfile(details.getProfile()))
+                .toolBindings(details.getToolBindings())
+                .build();
+    }
+
+    private RunProfileRecord safeProfile(RunProfileRecord record) {
+        if (record == null) {
+            return null;
+        }
+        RunProfileRecord safe = new RunProfileRecord();
+        safe.setId(record.getId());
+        safe.setTenantId(record.getTenantId());
+        safe.setUserId(record.getUserId());
+        safe.setName(safeText(record.getName()));
+        safe.setDescription(safeText(record.getDescription()));
+        safe.setRoleCardId(record.getRoleCardId());
+        safe.setExecutorEngine(record.getExecutorEngine());
+        safe.setExecutorConfigJson(safeJsonText(record.getExecutorConfigJson()));
+        safe.setModelConfigJson(safeJsonText(record.getModelConfigJson()));
+        safe.setMemoryScopeJson(safeJsonText(record.getMemoryScopeJson()));
+        safe.setGuardrailConfigJson(safeJsonText(record.getGuardrailConfigJson()));
+        safe.setApprovalStatus(record.getApprovalStatus());
+        safe.setApprovalOperator(safeText(record.getApprovalOperator()));
+        safe.setApprovalComment(safeText(record.getApprovalComment()));
+        safe.setApprovalTime(record.getApprovalTime());
+        safe.setAssetSource(record.getAssetSource());
+        safe.setPresetKey(record.getPresetKey());
+        safe.setPresetVersion(record.getPresetVersion());
+        safe.setReadonly(record.getReadonly());
+        safe.setEnabled(record.getEnabled());
+        safe.setCreateTime(record.getCreateTime());
+        safe.setUpdateTime(record.getUpdateTime());
+        safe.setDeleted(record.getDeleted());
+        return safe;
+    }
+
+    private RunProfileResolvedPreview safePreview(RunProfileResolvedPreview preview) {
+        if (preview == null) {
+            return null;
+        }
+        return RunProfileResolvedPreview.builder()
+                .runProfileId(preview.getRunProfileId())
+                .roleCardId(preview.getRoleCardId())
+                .executorEngine(preview.getExecutorEngine())
+                .executorConfigJson(safeJsonText(preview.getExecutorConfigJson()))
+                .modelConfigJson(safeJsonText(preview.getModelConfigJson()))
+                .memoryScopeJson(safeJsonText(preview.getMemoryScopeJson()))
+                .guardrailConfigJson(safeJsonText(preview.getGuardrailConfigJson()))
+                .explicitToolAllowlist(preview.isExplicitToolAllowlist())
+                .toolIds(preview.getToolIds())
+                .mcpToolIds(preview.getMcpToolIds())
+                .a2aAgentIds(preview.getA2aAgentIds())
+                .build();
+    }
+
+    private String safeJsonText(String value) {
+        String text = blankToNull(value);
+        if (text == null) {
+            return null;
+        }
+        try {
+            Object parsed = objectMapper.readValue(text, Object.class);
+            return objectMapper.writeValueAsString(safeJsonValue(null, parsed));
+        } catch (JsonProcessingException ignored) {
+            return safeText(text);
+        }
+    }
+
+    private Object safeJsonValue(String key, Object value) {
+        if (key != null && CredentialJsonFieldClassifier.isSensitiveOutputField(key)) {
+            return CredentialTextRedactor.REDACTED_VALUE;
+        }
+        if (value instanceof String text) {
+            return safeText(text);
+        }
+        if (value instanceof Map<?, ?> map) {
+            LinkedHashMap<String, Object> safe = new LinkedHashMap<>();
+            map.forEach((nestedKey, nestedValue) -> {
+                String safeKey = nestedKey == null ? null : String.valueOf(nestedKey);
+                safe.put(safeKey, safeJsonValue(safeKey, nestedValue));
+            });
+            return safe;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(item -> safeJsonValue(null, item))
+                    .toList();
+        }
+        return value;
+    }
+
+    private String safeText(String value) {
+        return CredentialTextRedactor.redact(value);
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private String jsonOrNull(Map<String, Object> value) {

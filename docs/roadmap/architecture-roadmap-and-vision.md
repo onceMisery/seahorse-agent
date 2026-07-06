@@ -1326,3 +1326,11 @@ Run context snapshot queries now defensively redact credential-shaped JSON/text 
 This is a narrow run-context query hardening slice. It does not change snapshot write paths, owner/admin authorization, legacy task snapshot lookup compatibility, run-profile selection, AgentScope trace metadata writing, or repository schema.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunContextSnapshotServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 9/9, covering query-time projection redaction for historical credential-bearing run context snapshots, repository immutability, owner/admin access, unrelated-user denial, numeric owner compatibility, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Run Profile Web Projection Redaction
+
+Run profile HTTP projections now defensively redact credential-shaped display/config fields before returning `list`, `detail`, `resolve-preview`, conversation apply, and applied conversation responses from `SeahorseRunProfileController`. The projection covers `executorConfigJson`, `modelConfigJson`, `memoryScopeJson`, `guardrailConfigJson`, profile name/description, and approval display text, recursively redacting sensitive JSON field names and credential-shaped string values while leaving the underlying `RunProfileInboundPort` objects unchanged.
+
+This is a narrow Web adapter display-boundary hardening slice. It does not change run profile save/update semantics, kernel `RunProfileInboundPort` runtime reads, chat/agent-run execution config resolution, risk summary, production gate checks, repository schema, or frontend request contracts.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseRunProfileControllerTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 16/16, covering HTTP projection redaction for run profile list/detail/preview/apply/applied-profile responses, port-object immutability, existing run-profile controller routes, and shared credential text redactor behavior.

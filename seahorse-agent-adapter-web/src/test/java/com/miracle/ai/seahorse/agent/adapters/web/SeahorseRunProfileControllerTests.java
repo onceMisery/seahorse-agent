@@ -209,6 +209,97 @@ class SeahorseRunProfileControllerTests {
     }
 
     @Test
+    void shouldRedactRunProfileDisplayConfigWithoutMutatingPortObjects() throws Exception {
+        RunProfileInboundPort port = mock(RunProfileInboundPort.class);
+        RunProfileRecord profile = profile(12L);
+        profile.setName("Bearer profile-name-secret-123456");
+        profile.setDescription("api_key=profile-description-secret");
+        profile.setExecutorConfigJson("{\"apiKey\":\"executor-secret-value\",\"safe\":\"ok\"}");
+        profile.setModelConfigJson("{\"authorization\":\"Bearer model-secret-123456\",\"model\":\"gpt\"}");
+        profile.setMemoryScopeJson("{\"note\":\"Bearer memory-secret-123456\",\"longTerm\":true}");
+        profile.setGuardrailConfigJson("{\"password\":\"guard-secret-value\",\"highRiskToolApproval\":true}");
+        profile.setApprovalComment("client_secret=approval-secret-value");
+        RunProfileResolvedPreview preview = RunProfileResolvedPreview.builder()
+                .runProfileId(12L)
+                .roleCardId(9L)
+                .executorEngine("agentscope")
+                .executorConfigJson("{\"apiKey\":\"preview-executor-secret\",\"safe\":\"ok\"}")
+                .modelConfigJson("{\"authorization\":\"Bearer preview-model-secret-123456\"}")
+                .memoryScopeJson("{\"note\":\"Bearer preview-memory-secret-123456\"}")
+                .guardrailConfigJson("{\"password\":\"preview-guard-secret\"}")
+                .explicitToolAllowlist(true)
+                .toolIds(List.of("get_current_datetime"))
+                .mcpToolIds(List.of("filesystem.read_file"))
+                .a2aAgentIds(List.of())
+                .build();
+        RunProfileDetails details = RunProfileDetails.builder()
+                .profile(profile)
+                .toolBindings(List.of())
+                .build();
+        when(port.list("100")).thenReturn(List.of(profile));
+        when(port.findById("100", 12L)).thenReturn(Optional.of(details));
+        when(port.resolvePreview("100", 12L)).thenReturn(Optional.of(preview));
+        when(port.applyToConversation("100", "101", 12L)).thenReturn(preview);
+        when(port.findAppliedToConversation("100", "101")).thenReturn(Optional.of(details));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseRunProfileController(provider(port))).build();
+
+        String listJson = mvc.perform(get("/api/run-profiles").param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].name").value("[REDACTED]"))
+                .andExpect(jsonPath("$.data[0].description").value("[REDACTED]"))
+                .andExpect(jsonPath("$.data[0].executorConfigJson").value("{\"apiKey\":\"[REDACTED]\",\"safe\":\"ok\"}"))
+                .andExpect(jsonPath("$.data[0].modelConfigJson").value("{\"authorization\":\"[REDACTED]\",\"model\":\"gpt\"}"))
+                .andExpect(jsonPath("$.data[0].memoryScopeJson").value("{\"note\":\"[REDACTED]\",\"longTerm\":true}"))
+                .andExpect(jsonPath("$.data[0].guardrailConfigJson").value("{\"password\":\"[REDACTED]\",\"highRiskToolApproval\":true}"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String detailJson = mvc.perform(get("/api/run-profiles/12").param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.profile.executorConfigJson")
+                        .value("{\"apiKey\":\"[REDACTED]\",\"safe\":\"ok\"}"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String previewJson = mvc.perform(post("/api/run-profiles/12/resolve-preview").param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.executorConfigJson")
+                        .value("{\"apiKey\":\"[REDACTED]\",\"safe\":\"ok\"}"))
+                .andExpect(jsonPath("$.data.modelConfigJson").value("{\"authorization\":\"[REDACTED]\"}"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String applyJson = mvc.perform(post("/api/conversations/101/run-profile/12/apply").param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.guardrailConfigJson").value("{\"password\":\"[REDACTED]\"}"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String appliedJson = mvc.perform(get("/api/conversations/101/run-profile").param("userId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.profile.approvalComment").value("[REDACTED]"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String combinedJson = listJson + detailJson + previewJson + applyJson + appliedJson;
+        assertThat(combinedJson).doesNotContain(
+                "profile-name-secret",
+                "profile-description-secret",
+                "executor-secret-value",
+                "model-secret",
+                "memory-secret",
+                "guard-secret",
+                "approval-secret",
+                "preview-executor-secret",
+                "preview-model-secret",
+                "preview-memory-secret",
+                "preview-guard-secret");
+        assertThat(profile.getExecutorConfigJson()).contains("executor-secret-value");
+        assertThat(preview.getExecutorConfigJson()).contains("preview-executor-secret");
+    }
+
+    @Test
     void shouldApplyRunProfileToConversation() throws Exception {
         RunProfileInboundPort port = mock(RunProfileInboundPort.class);
         when(port.applyToConversation("100", "101", 12L)).thenReturn(RunProfileResolvedPreview.builder()
