@@ -219,6 +219,7 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         report.append("- Generated at: ").append(Instant.now()).append("\n\n");
 
         appendExecutiveSummary(report, trials, outputMessages);
+        appendEvidenceCompletenessSummary(report, trials, snapshots, outputMessages);
         appendCostSummary(report, trials, snapshots);
         appendTraceSummary(report, trials, snapshots);
         appendEvidenceIndex(report, trials, snapshots, outputMessages);
@@ -248,6 +249,52 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         report.append("- Output messages resolved: ").append(outputCount).append("\n");
         report.append("- Recommended trial: ").append(recommendedTrial(trials)).append("\n\n");
         appendScoreLeaderboard(report, trials);
+    }
+
+    private void appendEvidenceCompletenessSummary(
+            StringBuilder report,
+            List<RunExperimentTrialRecord> trials,
+            Map<String, RunContextSnapshotRecord> snapshots,
+            Map<Long, ConversationMessageRecord> outputMessages) {
+        int total = Objects.requireNonNullElse(trials, List.<RunExperimentTrialRecord>of()).size();
+        long outputResolved = trials.stream()
+                .filter(trial -> outputMessage(outputMessages, trial.getOutputMessageId()) != null)
+                .count();
+        long scored = trials.stream().filter(trial -> scoreValue(trial).isPresent()).count();
+        long traced = trials.stream()
+                .filter(trial -> !"not recorded".equals(traceEvidence(trial, snapshotFor(snapshots, trial))))
+                .count();
+        long costed = trials.stream()
+                .filter(trial -> !"not recorded".equals(costEvidence(trial, snapshotFor(snapshots, trial))))
+                .count();
+        long branchResolved = trials.stream()
+                .filter(trial -> !"not resolved".equals(branchEvidence(outputMessage(outputMessages, trial.getOutputMessageId()))))
+                .count();
+        List<RunExperimentTrialRecord> failedTrials = failedTrials(trials);
+        long failureReasons = failedTrials.stream()
+                .filter(trial -> !failureExplanation(trial).isBlank())
+                .count();
+
+        report.append("## Evidence Completeness Summary\n\n");
+        report.append("| Evidence | Resolved | Total |\n");
+        report.append("|---|---:|---:|\n");
+        appendCompletenessRow(report, "Output messages", outputResolved, total);
+        appendCompletenessRow(report, "Scores", scored, total);
+        appendCompletenessRow(report, "Trace evidence", traced, total);
+        appendCompletenessRow(report, "Cost evidence", costed, total);
+        appendCompletenessRow(report, "Message branches", branchResolved, total);
+        appendCompletenessRow(report, "Failure reasons", failureReasons, failedTrials.size());
+        report.append("\n");
+    }
+
+    private void appendCompletenessRow(StringBuilder report, String label, long resolved, long total) {
+        report.append("| ")
+                .append(tableCell(label))
+                .append(" | ")
+                .append(resolved)
+                .append(" | ")
+                .append(total)
+                .append(" |\n");
     }
 
     private void appendScoreLeaderboard(StringBuilder report, List<RunExperimentTrialRecord> trials) {

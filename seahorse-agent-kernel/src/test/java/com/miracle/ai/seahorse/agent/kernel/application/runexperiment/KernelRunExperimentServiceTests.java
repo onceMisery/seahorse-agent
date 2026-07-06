@@ -273,6 +273,14 @@ class KernelRunExperimentServiceTests {
         assertTrue(report.markdown().contains("Template Version: run-experiment-report-v1"));
         assertTrue(report.markdown().contains("## Executive Summary"));
         assertTrue(report.markdown().contains("Recommended trial: trial 10 score=4"));
+        assertTrue(report.markdown().contains("## Evidence Completeness Summary"));
+        assertTrue(report.markdown().contains("| Evidence | Resolved | Total |"));
+        assertTrue(report.markdown().contains("| Output messages | 1 | 2 |"));
+        assertTrue(report.markdown().contains("| Scores | 1 | 2 |"));
+        assertTrue(report.markdown().contains("| Trace evidence | 1 | 2 |"));
+        assertTrue(report.markdown().contains("| Cost evidence | 1 | 2 |"));
+        assertTrue(report.markdown().contains("| Message branches | 1 | 2 |"));
+        assertTrue(report.markdown().contains("| Failure reasons | 1 | 1 |"));
         assertTrue(report.markdown().contains("### Score Leaderboard"));
         assertTrue(report.markdown().contains("| Rank | Trial | Run Profile | Score | Status | Score Evidence |"));
         assertTrue(report.markdown().contains("| 1 | 10 | 12 | 4 | SUCCEEDED | verdict=smoke-pass |"));
@@ -330,6 +338,8 @@ class KernelRunExperimentServiceTests {
         RunExperimentReport report = service.exportReport("100", details.getExperiment().getId());
 
         assertTrue(report.markdown().contains("- Failed: 1"));
+        assertTrue(report.markdown().contains("## Evidence Completeness Summary"));
+        assertTrue(report.markdown().contains("| Failure reasons | 1 | 1 |"));
         assertTrue(report.markdown().contains("## Failure Reason Summary"));
         assertTrue(report.markdown().contains("| FAILED - no failure message recorded | 1 | 10 |"));
         assertTrue(report.markdown().contains("Trial 10: FAILED - no failure message recorded"));
@@ -363,6 +373,9 @@ class KernelRunExperimentServiceTests {
         RunExperimentReport report = service.exportReport("100", details.getExperiment().getId());
 
         assertTrue(report.markdown().contains("- Failed: 1"));
+        assertTrue(report.markdown().contains("## Evidence Completeness Summary"));
+        assertTrue(report.markdown().contains("| Output messages | 0 | 1 |"));
+        assertTrue(report.markdown().contains("| Failure reasons | 1 | 1 |"));
         assertTrue(report.markdown().contains("## Failure Reason Summary"));
         assertTrue(report.markdown().contains("| base leaf message not found | 1 | 10 |"));
         assertTrue(report.markdown().contains("Trial 10: base leaf message not found"));
