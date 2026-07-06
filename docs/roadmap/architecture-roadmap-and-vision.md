@@ -1478,3 +1478,11 @@ Memory Read, Memory Write, and Memory Forget tool adapters now redact credential
 This is a narrow memory-tool display-boundary hardening slice. It does not change memory read/write/delete execution inputs, user-scope enforcement, ingestion workflow behavior, governance execution, memory persistence, successful memory content observations, Tool Gateway audit persistence, approval policy, quota policy, or base `ToolInvocationResult` semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=AgentToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with `CredentialTextRedactorTests` 3/3 and `AgentToolPortAdapterTests` 16/16. Coverage includes Memory Read exception redaction, Memory Write exception redaction with raw execution input preservation, Memory Write governance error-list redaction, Memory Write governance exception redaction, Memory Forget exception redaction, and existing memory tool behavior.
+
+## 2026-07-06 Update: Generation Tool Failure Redaction
+
+Newsletter, PPT, chart visualization, frontend design, image generation, and GitHub repository reader tools now redact credential-shaped text before returning failed tool errors from model or repository provider exceptions. The raw generation prompt and repository URL are still passed unchanged to the execution ports, while only the model-visible failure text is minimized.
+
+This is a narrow generation-tool display-boundary hardening slice. It does not change prompt construction, model selection, image request fields, GitHub repository fetch parameters, successful generation observations, artifact publication, Tool Gateway audit persistence, approval policy, quota policy, or base `ToolInvocationResult` semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=ContentGenerationToolPortAdapterTests,GitHubProjectGenerationToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 15/15. Coverage includes chat-backed generation exception redaction with raw prompt preservation, GitHub repository reader exception redaction with raw repository URL preservation, image generation exception redaction with raw prompt preservation, and shared credential text redactor behavior.

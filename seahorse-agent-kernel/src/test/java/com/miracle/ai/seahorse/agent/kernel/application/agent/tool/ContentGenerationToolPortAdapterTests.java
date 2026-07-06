@@ -160,6 +160,26 @@ class ContentGenerationToolPortAdapterTests {
         assertTrue(result.error().contains("topic is required"));
     }
 
+    @Test
+    void generationToolsShouldRedactCredentialShapedFailureMessagesWhilePreservingPromptInput() {
+        FailingChatModel chatModel = new FailingChatModel(
+                "model failed Authorization: Bearer abcdefghijklmnop api_key=plain-generation-secret");
+        NewsletterGenerationToolPortAdapter tool = new NewsletterGenerationToolPortAdapter(
+                chatModel, "agnes-2.0-flash", jsonSupport);
+
+        ToolInvocationResult result = tool.invoke("call-1", NewsletterGenerationToolPortAdapter.TOOL_ID,
+                Map.of(
+                        "topic", "launch notes api_key=raw-topic-secret",
+                        "sourceMaterial", "README.md"));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("[REDACTED]"));
+        assertFalse(result.error().contains("abcdefghijklmnop"));
+        assertFalse(result.error().contains("plain-generation-secret"));
+        assertTrue(chatModel.request.get().getMessages().get(1).getContent()
+                .contains("launch notes api_key=raw-topic-secret"));
+    }
+
     private static final class CapturingChatModel implements ChatModelPort {
 
         private final String response;
@@ -175,6 +195,22 @@ class ContentGenerationToolPortAdapterTests {
             this.request.set(request);
             this.modelId.set(modelId);
             return response;
+        }
+    }
+
+    private static final class FailingChatModel implements ChatModelPort {
+
+        private final String message;
+        private final AtomicReference<ChatRequest> request = new AtomicReference<>();
+
+        private FailingChatModel(String message) {
+            this.message = message;
+        }
+
+        @Override
+        public String chat(ChatRequest request, String modelId) {
+            this.request.set(request);
+            throw new IllegalStateException(message);
         }
     }
 }

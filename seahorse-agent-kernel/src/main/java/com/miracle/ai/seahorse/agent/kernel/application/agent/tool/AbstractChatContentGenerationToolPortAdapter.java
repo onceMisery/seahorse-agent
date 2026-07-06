@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
@@ -78,8 +79,12 @@ abstract class AbstractChatContentGenerationToolPortAdapter implements Described
             return ToolInvocationResult.ok(jsonSupport.write(observation(content)));
         } catch (Exception ex) {
             return ToolInvocationResult.failed(descriptor.toolId() + " failed: "
-                    + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    + redactDisplayText(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
+    }
+
+    private String redactDisplayText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private ChatRequest request(Map<String, Object> arguments) {

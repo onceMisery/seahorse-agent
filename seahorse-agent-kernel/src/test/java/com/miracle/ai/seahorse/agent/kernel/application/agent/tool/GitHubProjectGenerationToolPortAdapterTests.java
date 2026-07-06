@@ -142,4 +142,42 @@ class GitHubProjectGenerationToolPortAdapterTests {
         assertTrue(result.success());
         assertEquals("agnes-image-2.0-flash", captured.get().model());
     }
+
+    @Test
+    void githubRepositoryReaderShouldRedactCredentialShapedFailureMessages() {
+        AtomicReference<GitHubRepositoryRequest> captured = new AtomicReference<>();
+        GitHubRepositoryReaderToolPortAdapter tool = new GitHubRepositoryReaderToolPortAdapter(request -> {
+            captured.set(request);
+            throw new IllegalStateException(
+                    "github rejected Authorization: Bearer abcdefghijklmnop api_key=plain-github-secret");
+        }, jsonSupport);
+
+        ToolInvocationResult result = tool.invoke("call-1", GitHubRepositoryReaderToolPortAdapter.TOOL_ID,
+                Map.of("repositoryUrl", "https://github.com/acme/private?api_key=raw-url-secret"));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("[REDACTED]"));
+        assertFalse(result.error().contains("abcdefghijklmnop"));
+        assertFalse(result.error().contains("plain-github-secret"));
+        assertEquals("https://github.com/acme/private?api_key=raw-url-secret", captured.get().repositoryUrl());
+    }
+
+    @Test
+    void imageGenerationShouldRedactCredentialShapedFailureMessagesWhilePreservingPromptInput() {
+        AtomicReference<ImageGenerationRequest> captured = new AtomicReference<>();
+        ImageGenerationToolPortAdapter tool = new ImageGenerationToolPortAdapter(request -> {
+            captured.set(request);
+            throw new IllegalStateException(
+                    "image provider rejected Authorization: Bearer abcdefghijklmnop api_key=plain-image-secret");
+        }, "agnes-image-2.0-flash", jsonSupport);
+
+        ToolInvocationResult result = tool.invoke("call-1", ImageGenerationToolPortAdapter.TOOL_ID,
+                Map.of("prompt", "draw diagram api_key=raw-image-prompt-secret"));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("[REDACTED]"));
+        assertFalse(result.error().contains("abcdefghijklmnop"));
+        assertFalse(result.error().contains("plain-image-secret"));
+        assertEquals("draw diagram api_key=raw-image-prompt-secret", captured.get().prompt());
+    }
 }

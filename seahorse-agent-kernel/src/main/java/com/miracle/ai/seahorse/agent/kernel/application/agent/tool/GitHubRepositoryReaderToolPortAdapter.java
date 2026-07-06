@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
@@ -72,8 +73,12 @@ public class GitHubRepositoryReaderToolPortAdapter implements DescribedToolPort 
             return ToolInvocationResult.ok(jsonSupport.write(observation(snapshot)));
         } catch (Exception ex) {
             return ToolInvocationResult.failed("github_repository_reader failed: "
-                    + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                    + redactDisplayText(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
+    }
+
+    private String redactDisplayText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private Map<String, Object> observation(GitHubRepositorySnapshot snapshot) {
