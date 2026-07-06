@@ -532,6 +532,74 @@ class MetadataGovernanceNodeFeatureTests {
                 .anySatisfy(issue -> assertThat(issue.code()).isEqualTo("LLM_EVIDENCE_MISSING"));
     }
 
+    @Test
+    void shouldRedactCredentialTextFromLlmExtractionIssueMessages() throws Exception {
+        MetadataSchema schema = new MetadataSchema("tenant-a", "1", 1, List.of(
+                field("department", MetadataValueType.STRING, false, Map.of("description", "department"))));
+        ChatModelPort modelPort = (request, modelId) -> {
+            throw new IllegalStateException(
+                    "llm failed Authorization: Bearer abcdefghijklmnop api_key=plain-metadata-secret");
+        };
+        IngestionContext context = IngestionContext.builder()
+                .taskId("1")
+                .rawText("finance budget note")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "1"))
+                .build();
+        NodeConfig config = NodeConfig.builder()
+                .nodeType("metadata_extractor")
+                .settings(objectMapper.readTree("""
+                        {
+                          "tenantId": "tenant-a",
+                          "kbId": "1",
+                          "llmEnabled": true,
+                          "llmModel": "metadata-model"
+                        }
+                        """))
+                .build();
+
+        NodeResult result = new MetadataExtractorNodeFeature((tenantId, knowledgeBaseId) -> schema, modelPort)
+                .execute(context, config);
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(context.getMetadataIssues()).singleElement()
+                .satisfies(issue -> assertThat(issue.message())
+                        .contains("[REDACTED]")
+                        .doesNotContain("abcdefghijklmnop", "plain-metadata-secret"));
+    }
+
+    @Test
+    void shouldRedactCredentialTextFromNormalizationFailureMessages() {
+        MetadataSchema schema = new MetadataSchema("tenant-a", "1", 1, List.of(
+                field("publishedAt", MetadataValueType.DATE_TIME, false, Map.of())));
+        MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
+        IngestionContext context = IngestionContext.builder()
+                .taskId("1")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "1"))
+                .metadataCandidates(List.of(new MetadataFieldCandidate(
+                        "publishedAt",
+                        "Bearer abcdefghijklmnop api_key=plain-metadata-secret",
+                        "source",
+                        "SourceMetadataExtractor",
+                        0.99D,
+                        "publishedAt",
+                        1,
+                        "deterministic-1")))
+                .build();
+
+        NodeResult result = new MetadataNormalizerNodeFeature(schemaRegistry, MetadataDictionaryPort.noop())
+                .execute(context, NodeConfig.builder().nodeType("metadata_normalizer").build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(context.getMetadataIssues()).singleElement()
+                .satisfies(issue -> assertThat(issue.message())
+                        .contains("[REDACTED]")
+                        .doesNotContain("abcdefghijklmnop", "plain-metadata-secret"));
+        assertThat(context.getMetadataFieldQualities()).singleElement()
+                .satisfies(quality -> assertThat(quality.message())
+                        .contains("[REDACTED]")
+                        .doesNotContain("abcdefghijklmnop", "plain-metadata-secret"));
+    }
+
     private static final class RecordingObservationPort implements ObservationPort {
 
         private final List<ObservationEvent> events = new ArrayList<>();

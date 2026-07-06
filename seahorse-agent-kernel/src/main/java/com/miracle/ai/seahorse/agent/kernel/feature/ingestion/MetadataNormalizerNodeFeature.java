@@ -1,6 +1,7 @@
 package com.miracle.ai.seahorse.agent.kernel.feature.ingestion;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeConfig;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeResult;
@@ -155,9 +156,10 @@ public class MetadataNormalizerNodeFeature implements IngestionNodeFeature {
                         candidate.sourceType(), candidate.extractorName(), true, ""));
             }
         } catch (RuntimeException ex) {
-            issues.add(MetadataIssue.warn(field.fieldKey(), NODE_TYPE, "NORMALIZE_FAILED", ex.getMessage()));
+            String failureMessage = failureMessage(ex);
+            issues.add(MetadataIssue.warn(field.fieldKey(), NODE_TYPE, "NORMALIZE_FAILED", failureMessage));
             qualities.add(new MetadataFieldQuality(field.fieldKey(), candidate.confidence(), candidate.sourceType(),
-                    candidate.extractorName(), false, ex.getMessage()));
+                    candidate.extractorName(), false, failureMessage));
         }
     }
 
@@ -349,6 +351,11 @@ public class MetadataNormalizerNodeFeature implements IngestionNodeFeature {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private String failureMessage(RuntimeException ex) {
+        return CredentialTextRedactor.redact(
+                Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getSimpleName()));
     }
 
     private int candidateCount(IngestionContext context) {

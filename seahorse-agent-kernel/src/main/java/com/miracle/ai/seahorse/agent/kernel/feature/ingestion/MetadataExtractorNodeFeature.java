@@ -7,6 +7,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeConfig;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldCandidate;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldDescriptor;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIssue;
@@ -237,7 +238,7 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
             }
             collectLlmCandidates(schema, config, root, llmExtractorVersion, llmPromptVersion, candidates, issues);
         } catch (RuntimeException ex) {
-            issues.add(MetadataIssue.warn("", NODE_TYPE, "LLM_EXTRACT_FAILED", ex.getMessage()));
+            issues.add(MetadataIssue.warn("", NODE_TYPE, "LLM_EXTRACT_FAILED", failureMessage(ex)));
         }
     }
 
@@ -564,6 +565,11 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private String failureMessage(RuntimeException ex) {
+        return CredentialTextRedactor.redact(
+                Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getSimpleName()));
     }
 
     private boolean present(Object value) {

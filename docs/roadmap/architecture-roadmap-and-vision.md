@@ -1694,3 +1694,11 @@ Outbox relay failures now redact credential-shaped exception text before writing
 This is a narrow outbox relay persistence-boundary hardening slice. It does not change relay batching, distributed locking, retry delay/status semantics, envelope parsing, message send behavior, quarantine identity extraction, or server-side exception logging with the original exception chain.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-spring-boot-autoconfigure,seahorse-agent-kernel -am "-Dtest=ReliableMessageQueueAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new regression because outbox `lastError` captured raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 5/5 across kernel redactor and reliable message relay coverage.
+
+## 2026-07-06 Update: Metadata Governance Issue Redaction
+
+Metadata extraction and normalization soft-failure diagnostics now redact credential-shaped exception text before adding `MetadataIssue.message` values or failed `MetadataFieldQuality.message` values. This protects ingestion task detail, metadata review/quarantine context, and governance diagnostics surfaces when LLM providers, regex/conversion logic, or source metadata values accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow metadata-governance diagnostics hardening slice. It does not change schema loading, candidate extraction, LLM prompt construction, normalization conversion semantics, accepted metadata, validation decisions, observation counters, or raw candidate values.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=MetadataGovernanceNodeFeatureTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` first failed on the new LLM extraction and normalization regressions because metadata issue/quality messages captured raw `Authorization: Bearer ... api_key=...` text, then passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 18/18 across kernel redactor and metadata governance node coverage.
