@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.workflow;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialJsonFieldClassifier;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.workflow.ExecutionStepAggregate;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.ports.inbound.workflow.WorkflowVisualizationInboundPort;
@@ -28,8 +30,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -84,6 +89,7 @@ public class KernelWorkflowVisualizationService implements WorkflowVisualization
         List<ExecutionStepAggregate> sortedSteps = steps.stream()
                 .sorted(Comparator.comparing(
                         s -> s.startedAt() != null ? s.startedAt() : java.time.Instant.EPOCH))
+                .map(this::safeStep)
                 .toList();
 
         List<StepEdge> edges = buildSequentialEdges(sortedSteps);
@@ -120,6 +126,58 @@ public class KernelWorkflowVisualizationService implements WorkflowVisualization
                     EDGE_TYPE_SEQUENTIAL));
         }
         return List.copyOf(edges);
+    }
+
+    private ExecutionStepAggregate safeStep(ExecutionStepAggregate step) {
+        if (step == null) {
+            return null;
+        }
+        return new ExecutionStepAggregate(
+                safeText(step.stepId()),
+                safeText(step.runId()),
+                safeText(step.stepType()),
+                safeText(step.status()),
+                step.startedAt(),
+                step.completedAt(),
+                step.durationMs(),
+                safeResultData(step.resultData()),
+                step.positionX(),
+                step.positionY());
+    }
+
+    private Map<String, Object> safeResultData(Map<String, Object> resultData) {
+        if (resultData == null) {
+            return null;
+        }
+        Map<String, Object> safe = new LinkedHashMap<>();
+        resultData.forEach((key, value) -> safe.put(key, safeResultValue(key, value)));
+        return Collections.unmodifiableMap(safe);
+    }
+
+    private Object safeResultValue(String key, Object value) {
+        if (key != null && CredentialJsonFieldClassifier.isSensitiveOutputField(key)) {
+            return CredentialTextRedactor.REDACTED_VALUE;
+        }
+        if (value instanceof String text) {
+            return safeText(text);
+        }
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> safe = new LinkedHashMap<>();
+            map.forEach((nestedKey, nestedValue) -> safe.put(
+                    nestedKey == null ? null : String.valueOf(nestedKey),
+                    safeResultValue(nestedKey == null ? null : String.valueOf(nestedKey), nestedValue)));
+            return Collections.unmodifiableMap(safe);
+        }
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(item -> safeResultValue(null, item))
+                    .toList();
+        }
+        return value;
+    }
+
+    private String safeText(String value) {
+        return CredentialTextRedactor.redact(value);
     }
 
     private boolean isAdmin(CurrentUser currentUser) {

@@ -117,6 +117,40 @@ class KernelWorkflowVisualizationServiceTests {
         assertEquals(1, visualization.nodes().size());
     }
 
+    @Test
+    void shouldRedactCredentialTextFromLegacyVisualizationResultData() {
+        RecordingWorkflowRepository workflowRepository = new RecordingWorkflowRepository();
+        workflowRepository.steps.add(new ExecutionStepAggregate(
+                "step-1",
+                "run-1",
+                ExecutionStepAggregate.STEP_TYPE_HTTP_REQUEST,
+                ExecutionStepAggregate.STATUS_FAILED,
+                NOW,
+                NOW.plusSeconds(1),
+                1000L,
+                Map.of(
+                        "summary", "failed Authorization: Bearer abcdefghijklmnop",
+                        "accessToken", "token-secret-value",
+                        "nested", Map.of("cookie", "plain-cookie-header", "note", "kept"),
+                        "items", List.of("api_key=secret-api-key-value", Map.of("password", "hunter2"))),
+                null,
+                null));
+        KernelWorkflowVisualizationService service = new KernelWorkflowVisualizationService(
+                workflowRepository,
+                new MemoryRunRepository(run("run-1", "alice")),
+                currentUser("alice", "user"));
+
+        WorkflowVisualization visualization = service.getVisualization("run-1");
+
+        Map<String, Object> resultData = visualization.nodes().get(0).resultData();
+        assertEquals("failed [REDACTED]", resultData.get("summary"));
+        assertEquals("[REDACTED]", resultData.get("accessToken"));
+        assertEquals(Map.of("cookie", "[REDACTED]", "note", "kept"), resultData.get("nested"));
+        assertEquals(List.of("[REDACTED]", Map.of("password", "[REDACTED]")), resultData.get("items"));
+        assertEquals("failed Authorization: Bearer abcdefghijklmnop",
+                workflowRepository.steps.get(0).resultData().get("summary"));
+    }
+
     private static ExecutionStepAggregate step(String stepId, Instant startedAt) {
         return new ExecutionStepAggregate(
                 stepId,

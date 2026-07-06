@@ -1274,3 +1274,11 @@ Agent run workflow projections now redact credential-shaped node display text be
 This is a narrow workflow-projection hardening slice. It does not mutate stored `AgentStep` records, change workflow graph layout, alter owner/admin authorization, modify snapshot projections, or change run execution/resume behavior.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunWorkflowServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 6/6, covering workflow node label, description, and error-message redaction while preserving owner access and unrelated-user denial.
+
+## 2026-07-06 Update: Legacy Workflow Visualization Result Data Redaction
+
+Legacy workflow visualizations now redact credential-shaped `ExecutionStepAggregate.resultData` before returning nodes from `KernelWorkflowVisualizationService`. The projection recursively handles nested maps/lists, redacts sensitive field names such as `accessToken`, `cookie`, and `password`, and applies credential-pattern redaction to ordinary string values.
+
+This is a narrow legacy visualization-boundary hardening slice. It does not mutate stored workflow step aggregates, change workflow ordering, alter sequential edge construction, modify owner/admin authorization, or affect the newer Agent run workflow projection.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelWorkflowVisualizationServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 9/9, covering result-data redaction for historical credential-bearing workflow aggregates while preserving owner/admin access, unrelated-user denial, numeric user-id compatibility, and legacy ungated constructor behavior.
