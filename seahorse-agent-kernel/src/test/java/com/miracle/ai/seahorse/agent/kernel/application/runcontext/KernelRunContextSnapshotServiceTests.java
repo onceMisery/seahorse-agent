@@ -126,6 +126,35 @@ class KernelRunContextSnapshotServiceTests {
         assertEquals("task-1", snapshot.orElseThrow().getRunId());
     }
 
+    @Test
+    void shouldRedactSnapshotQueryProjectionWithoutMutatingRepositoryRecord() {
+        MemorySnapshotRepository snapshotRepository = new MemorySnapshotRepository();
+        RunContextSnapshotRecord stored = snapshot("run-1");
+        stored.setExecutorConfigJson("{\"apiKey\":\"secret-api-key-value\",\"safe\":\"ok\"}");
+        stored.setTraceContextJson("{\"authorization\":\"Bearer trace-secret-123456\",\"traceId\":\"trace-1\"}");
+        stored.setSnapshotJson("{\"prompt\":\"Bearer prompt-secret-123456\","
+                + "\"metadata\":{\"password\":\"hunter2\",\"safe\":\"ok\"}}");
+        snapshotRepository.save(stored);
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("run-1", "user-1"));
+        KernelRunContextSnapshotService service = new KernelRunContextSnapshotService(
+                snapshotRepository,
+                runRepository,
+                currentUser("user-1", "user"));
+
+        RunContextSnapshotRecord snapshot = service.findByRunId("run-1").orElseThrow();
+
+        assertEquals("{\"apiKey\":\"[REDACTED]\",\"safe\":\"ok\"}", snapshot.getExecutorConfigJson());
+        assertEquals("{\"authorization\":\"[REDACTED]\",\"traceId\":\"trace-1\"}", snapshot.getTraceContextJson());
+        assertEquals("{\"prompt\":\"[REDACTED]\",\"metadata\":{\"password\":\"[REDACTED]\",\"safe\":\"ok\"}}",
+                snapshot.getSnapshotJson());
+        RunContextSnapshotRecord repositoryRecord = snapshotRepository.findByRunId("run-1").orElseThrow();
+        assertTrue(repositoryRecord.getExecutorConfigJson().contains("secret-api-key-value"));
+        assertTrue(repositoryRecord.getTraceContextJson().contains("trace-secret-123456"));
+        assertTrue(repositoryRecord.getSnapshotJson().contains("prompt-secret-123456"));
+        assertTrue(repositoryRecord.getSnapshotJson().contains("hunter2"));
+    }
+
     private static RunContextSnapshotRecord snapshot(String runId) {
         RunContextSnapshotRecord record = new RunContextSnapshotRecord();
         record.setTenantId(AgentDefinition.DEFAULT_TENANT_ID);

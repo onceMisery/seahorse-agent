@@ -1318,3 +1318,11 @@ Tool invocation audit queries now defensively redact credential-shaped display t
 This is a narrow Tool Gateway audit-query hardening slice. It does not change admin authorization, query filters, audit write paths, completion summary generation, policy decisions, Tool Gateway execution, or repository schema.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelToolInvocationAuditQueryServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 6/6, covering query-time redaction for historical credential-bearing tool invocation audit entries, admin-only access, query parameter propagation, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Run Context Snapshot Query Projection Redaction
+
+Run context snapshot queries now defensively redact credential-shaped JSON/text fields before returning `RunContextSnapshotRecord` from `KernelRunContextSnapshotService.findByRunId`. The projection covers historical `executorConfigJson`, `traceContextJson`, and `snapshotJson` values, recursively redacts sensitive JSON field names such as `apiKey`, `authorization`, and `password`, and applies shared credential-text redaction to ordinary string values while leaving the underlying snapshot repository record unchanged.
+
+This is a narrow run-context query hardening slice. It does not change snapshot write paths, owner/admin authorization, legacy task snapshot lookup compatibility, run-profile selection, AgentScope trace metadata writing, or repository schema.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunContextSnapshotServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 9/9, covering query-time projection redaction for historical credential-bearing run context snapshots, repository immutability, owner/admin access, unrelated-user denial, numeric owner compatibility, and shared credential text redactor behavior.

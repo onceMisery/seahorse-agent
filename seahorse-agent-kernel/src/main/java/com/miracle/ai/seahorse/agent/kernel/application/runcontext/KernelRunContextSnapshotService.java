@@ -17,6 +17,10 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.runcontext;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialJsonFieldClassifier;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.ports.inbound.runcontext.RunContextSnapshotInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
@@ -25,6 +29,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRepositoryPort;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -39,6 +46,7 @@ public class KernelRunContextSnapshotService implements RunContextSnapshotInboun
     private final RunContextSnapshotRepositoryPort repositoryPort;
     private final AgentRunRepositoryPort runRepository;
     private final CurrentUserPort currentUserPort;
+    private final ObjectMapper objectMapper;
 
     public KernelRunContextSnapshotService(RunContextSnapshotRepositoryPort repositoryPort) {
         this(repositoryPort, null, null);
@@ -50,6 +58,7 @@ public class KernelRunContextSnapshotService implements RunContextSnapshotInboun
         this.repositoryPort = Objects.requireNonNull(repositoryPort, "repositoryPort must not be null");
         this.runRepository = runRepository;
         this.currentUserPort = currentUserPort;
+        this.objectMapper = new ObjectMapper();
     }
 
     @Override
@@ -59,7 +68,76 @@ public class KernelRunContextSnapshotService implements RunContextSnapshotInboun
         }
         String safeRunId = runId.trim();
         requireReadableAgentRunIfPresent(safeRunId);
-        return repositoryPort.findByRunId(safeRunId);
+        return repositoryPort.findByRunId(safeRunId)
+                .map(this::safeSnapshot);
+    }
+
+    private RunContextSnapshotRecord safeSnapshot(RunContextSnapshotRecord record) {
+        if (record == null) {
+            return null;
+        }
+        RunContextSnapshotRecord safe = new RunContextSnapshotRecord();
+        safe.setId(record.getId());
+        safe.setTenantId(record.getTenantId());
+        safe.setRunId(record.getRunId());
+        safe.setConversationId(record.getConversationId());
+        safe.setBranchLeafMessageId(record.getBranchLeafMessageId());
+        safe.setRoleCardId(record.getRoleCardId());
+        safe.setRunProfileId(record.getRunProfileId());
+        safe.setExecutorEngine(record.getExecutorEngine());
+        safe.setExecutorConfigJson(safeJsonText(record.getExecutorConfigJson()));
+        safe.setTraceContextJson(safeJsonText(record.getTraceContextJson()));
+        safe.setSnapshotJson(safeJsonText(record.getSnapshotJson()));
+        safe.setCreateTime(record.getCreateTime());
+        safe.setDeleted(record.getDeleted());
+        return safe;
+    }
+
+    private String safeJsonText(String value) {
+        String text = trimToNull(value);
+        if (text == null) {
+            return null;
+        }
+        try {
+            Object parsed = objectMapper.readValue(text, Object.class);
+            return objectMapper.writeValueAsString(safeJsonValue(null, parsed));
+        } catch (JsonProcessingException ignored) {
+            return safeText(text);
+        }
+    }
+
+    private Object safeJsonValue(String key, Object value) {
+        if (key != null && CredentialJsonFieldClassifier.isSensitiveOutputField(key)) {
+            return CredentialTextRedactor.REDACTED_VALUE;
+        }
+        if (value instanceof String text) {
+            return safeText(text);
+        }
+        if (value instanceof Map<?, ?> map) {
+            LinkedHashMap<String, Object> safe = new LinkedHashMap<>();
+            map.forEach((nestedKey, nestedValue) -> {
+                String safeKey = nestedKey == null ? null : String.valueOf(nestedKey);
+                safe.put(safeKey, safeJsonValue(safeKey, nestedValue));
+            });
+            return safe;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(item -> safeJsonValue(null, item))
+                    .toList();
+        }
+        return value;
+    }
+
+    private String safeText(String value) {
+        return CredentialTextRedactor.redact(value);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private void requireReadableAgentRunIfPresent(String runId) {
