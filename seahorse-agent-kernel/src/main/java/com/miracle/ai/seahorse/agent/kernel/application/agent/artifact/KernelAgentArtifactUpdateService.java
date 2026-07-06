@@ -99,7 +99,7 @@ public class KernelAgentArtifactUpdateService implements AgentArtifactUpdateInbo
     }
 
     private AgentArtifact requireWritable(AgentArtifact artifact, CurrentUser currentUser) {
-        if (isAdmin(currentUser) || Objects.equals(currentUserId(currentUser), artifact.userId())) {
+        if (isAdmin(currentUser) || ownsArtifact(artifact, currentUser)) {
             return artifact;
         }
         throw new IllegalStateException(ACCESS_DENIED);
@@ -114,8 +114,13 @@ public class KernelAgentArtifactUpdateService implements AgentArtifactUpdateInbo
         return currentUser != null && currentUser.hasRole(ADMIN_ROLE);
     }
 
-    private String currentUserId(CurrentUser currentUser) {
-        return currentUser == null ? null : currentUser.operator();
+    private boolean ownsArtifact(AgentArtifact artifact, CurrentUser currentUser) {
+        if (currentUser == null) {
+            return false;
+        }
+        String numericUserId = currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
+        return Objects.equals(artifact.userId(), numericUserId)
+                || Objects.equals(artifact.userId(), currentUser.operator());
     }
 
     private String requireText(String value, String message) {

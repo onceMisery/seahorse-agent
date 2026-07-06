@@ -64,6 +64,25 @@ class KernelAgentArtifactUpdateServiceTests {
         assertEquals("s3://agent-artifacts/artifact-1", storagePort.deletedUrl);
     }
 
+    @Test
+    void shouldUpdateArtifactOwnedByNumericWebUserId() {
+        MemoryArtifactRepository artifactRepository = new MemoryArtifactRepository(List.of(
+                artifact("artifact-1", "42", AgentArtifactScanStatus.CLEAN)));
+        CapturingObjectStoragePort storagePort = new CapturingObjectStoragePort();
+        KernelAgentArtifactUpdateService service = new KernelAgentArtifactUpdateService(
+                artifactRepository,
+                storagePort,
+                currentUser(42L, "owner"));
+
+        AgentArtifact updated = service.updateContent(
+                "artifact-1",
+                new AgentArtifactUpdateCommand("numeric owner content"));
+
+        assertEquals(AgentArtifactScanStatus.PENDING, updated.scanStatus());
+        assertEquals("numeric owner content", updated.previewText());
+        assertEquals("numeric owner content", storagePort.uploadedContent);
+    }
+
     private static AgentArtifact artifact(String artifactId, String userId, AgentArtifactScanStatus scanStatus) {
         return new AgentArtifact(
                 artifactId,

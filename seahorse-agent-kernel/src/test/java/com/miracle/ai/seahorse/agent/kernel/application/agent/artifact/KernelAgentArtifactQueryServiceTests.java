@@ -72,6 +72,24 @@ class KernelAgentArtifactQueryServiceTests {
     }
 
     @Test
+    void shouldListAndReadArtifactsForNumericWebUserIdOwner() {
+        MemoryRunRepository runRepository = new MemoryRunRepository(run("42"));
+        MemoryArtifactRepository artifactRepository = new MemoryArtifactRepository(List.of(
+                artifact("artifact-1", "42", AgentArtifactType.REPORT, "text/markdown",
+                        AgentArtifactScanStatus.CLEAN)));
+        KernelAgentArtifactQueryService service = new KernelAgentArtifactQueryService(
+                artifactRepository,
+                runRepository,
+                currentUser(42L, "owner"));
+
+        List<AgentArtifact> artifacts = service.listByRunId("run-1");
+        AgentArtifact artifact = service.getById("artifact-1");
+
+        assertEquals(List.of("artifact-1"), artifacts.stream().map(AgentArtifact::artifactId).toList());
+        assertEquals("artifact-1", artifact.artifactId());
+    }
+
+    @Test
     void shouldDenyUnrelatedUserArtifactAccess() {
         KernelAgentArtifactQueryService service = new KernelAgentArtifactQueryService(
                 new MemoryArtifactRepository(List.of(artifact("artifact-1", "user-1", AgentArtifactType.REPORT,

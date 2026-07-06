@@ -866,3 +866,11 @@ Task detail lookup, cancellation, event history replay, event subscription, and 
 This closes a Task Facade authorization gap. It does not change task creation, user task listing, internal completion callbacks, conversation lookup, Agent run polling, task event payload shape, or legacy constructor compatibility for tests and embedded use.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=TaskOrchestrationServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 9/9, covering owner read, admin read, unrelated-user denial, and denial before downstream cancel/event/artifact access. `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-DskipTests" compile` completed with reactor `BUILD SUCCESS` after production wiring was updated to inject `CurrentUserPort`.
+
+## 2026-07-06 Update: Agent Artifact Numeric Owner Compatibility
+
+Agent artifact query and update ownership checks now accept both the current user's numeric primary-key string and operator username when comparing against persisted artifact/run `userId` values. This keeps the existing owner/admin boundary intact while matching the web adapter's `CurrentUser(userId=id, username=name)` shape and older operator-style artifact records.
+
+This is a narrow authorization-compatibility slice. It does not change artifact persistence, download eligibility, scan status transitions, object storage behavior, admin access, or unrelated-user denial.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentArtifactQueryServiceTests,KernelAgentArtifactUpdateServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 8/8, covering numeric web user ID owners for artifact list/read/update while preserving unrelated-user denial and existing download guards.

@@ -85,7 +85,7 @@ public class KernelAgentArtifactQueryService implements AgentArtifactQueryInboun
                 .orElseThrow(() -> new IllegalArgumentException("Agent run not found"));
         requireReadable(run, currentUser);
         return artifactRepository.listByRunId(safeRunId).stream()
-                .filter(artifact -> isAdmin(currentUser) || currentUserId(currentUser).equals(artifact.userId()))
+                .filter(artifact -> isAdmin(currentUser) || ownsResource(artifact.userId(), currentUser))
                 .toList();
     }
 
@@ -109,14 +109,14 @@ public class KernelAgentArtifactQueryService implements AgentArtifactQueryInboun
     }
 
     private AgentArtifact requireReadable(AgentArtifact artifact, CurrentUser currentUser) {
-        if (isAdmin(currentUser) || currentUserId(currentUser).equals(artifact.userId())) {
+        if (isAdmin(currentUser) || ownsResource(artifact.userId(), currentUser)) {
             return artifact;
         }
         throw new IllegalStateException(ACCESS_DENIED);
     }
 
     private AgentRun requireReadable(AgentRun run, CurrentUser currentUser) {
-        if (isAdmin(currentUser) || currentUserId(currentUser).equals(run.userId())) {
+        if (isAdmin(currentUser) || ownsResource(run.userId(), currentUser)) {
             return run;
         }
         throw new IllegalStateException(ACCESS_DENIED);
@@ -149,8 +149,13 @@ public class KernelAgentArtifactQueryService implements AgentArtifactQueryInboun
         return currentUser != null && currentUser.hasRole(ADMIN_ROLE);
     }
 
-    private String currentUserId(CurrentUser currentUser) {
-        return currentUser == null ? null : currentUser.operator();
+    private boolean ownsResource(String resourceUserId, CurrentUser currentUser) {
+        if (currentUser == null) {
+            return false;
+        }
+        String numericUserId = currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
+        return Objects.equals(resourceUserId, numericUserId)
+                || Objects.equals(resourceUserId, currentUser.operator());
     }
 
     private String requireText(String value, String message) {
