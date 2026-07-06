@@ -356,7 +356,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String contentEncoding = normalizedContentEncoding(root.path("contentEncoding").asText(PLAIN_ENCODING));
         if (!isSupportedFileConversion(sourceFormat, targetFormat)) {
             throw new UnsupportedFileConversionException(
-                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to html/txt, xlsx to csv/html, and pptx to txt only");
+                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to html/txt, xlsx to csv/html, and pptx to html/txt only");
         }
         if (isBinaryDocumentFormat(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
             throw new IllegalArgumentException(sourceFormat + " file conversion contentEncoding must be base64");
@@ -1286,7 +1286,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     match = re.search(r"slide(\\d+)\\.xml$", name)
                     return int(match.group(1)) if match else 0
 
-                def pptx_to_text(path):
+                def pptx_slide_texts(path):
                     with zipfile.ZipFile(path) as archive:
                         slide_names = [
                             name for name in archive.namelist()
@@ -1311,7 +1311,16 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                                 slides.append(text)
                     if not slides:
                         raise ValueError("pptx slide text not found")
+                    return slides
+
+                def pptx_to_text(path):
+                    slides = pptx_slide_texts(path)
                     return "\\n".join(slides) + "\\n"
+
+                def pptx_to_html(path):
+                    slides = pptx_slide_texts(path)
+                    body = "\\n".join("<p>" + html.escape(slide) + "</p>" for slide in slides)
+                    return "<!doctype html>\\n<html><body>\\n" + body + "\\n</body></html>\\n"
 
                 def pdf_unescape_literal(value):
                     output = bytearray()
@@ -1477,6 +1486,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "pptx" and target_format == "txt":
                     output_path.write_text(pptx_to_text(input_path), encoding="utf-8")
                     print(f"converted pptx presentation to text")
+                elif source_format == "pptx" and target_format == "html":
+                    output_path.write_text(pptx_to_html(input_path), encoding="utf-8")
+                    print(f"converted pptx presentation to html")
                 elif source_format == "pdf" and target_format == "txt":
                     output_path.write_text(pdf_to_text(input_path), encoding="utf-8")
                     print(f"converted pdf document to text")
@@ -1502,7 +1514,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || ((DOCX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat))
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
                 || (PPTX_FORMAT.equals(sourceFormat)
-                && TXT_FORMAT.equals(targetFormat))
+                && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
                 || (XLSX_FORMAT.equals(sourceFormat)
                 && (CSV_FORMAT.equals(targetFormat) || HTML_FORMAT.equals(targetFormat)));
     }

@@ -661,6 +661,45 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldRunPptxToHtmlFileConversionAndCollectHtmlOutputOnly() throws Exception {
+        byte[] pptxBytes = pptxBytes();
+        String pptxBase64 = Base64.getEncoder().encodeToString(pptxBytes);
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted pptx presentation to html\n", Duration.ofMillis(190)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("pptx_to_html",
+                                    "source_format = \"pptx\"",
+                                    "ppt/slides/slide",
+                                    "converted.html")
+                            .doesNotContain(pptxBase64);
+                    assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.pptx")))
+                            .isEqualTo(pptxBytes);
+                    Files.writeString(command.workingDirectory().resolve("converted.html"),
+                            "<!doctype html>\n<html><body>\n<p>Sandbox PPTX Title</p>\n<p>Slide body</p>\n</body></html>\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"pptx","targetFormat":"html","contentEncoding":"base64","content":"%s"}
+                        """.formatted(pptxBase64),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted pptx presentation to html");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.html");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/html");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.pptx"));
+    }
+
+    @Test
     void shouldRejectPptxWithActiveContentBeforeRunningContainer() throws Exception {
         byte[] pptxBytes = zipBytes(
                 "ppt/slides/slide1.xml",
@@ -1463,7 +1502,7 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED);
         assertThat(result.execution().resultSummary())
-                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to html/txt, xlsx to csv/html, and pptx to txt only");
+                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to html/txt, xlsx to csv/html, and pptx to html/txt only");
         assertThat(runner.lastCommand).isNull();
     }
 

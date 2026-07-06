@@ -1530,6 +1530,98 @@ try {
         } | Out-Null
     }
 
+    $pptxHtmlRunId = $runId
+    $pptxHtmlToolCallId = "sandbox-file-convert-pptx-html-call-$suffix"
+    $pptxHtmlContent = New-PptxBase64 -Marker $Marker -SecondValue "PPTX HTML conversion renders slide text"
+
+    $pptxHtmlObservation = Test-Step "Invoke sandbox_file_convert PPTX to HTML through Tool Gateway" {
+        $requestBody = @{
+            runId = $pptxHtmlRunId
+            stepId = "sandbox-file-convert-pptx-html-step-$suffix"
+            toolCallId = $pptxHtmlToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "pptx"
+                targetFormat = "html"
+                contentEncoding = "base64"
+                content = $pptxHtmlContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${pptxHtmlRunId}:${pptxHtmlToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert PPTX to HTML"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert PPTX to HTML failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION") {
+            throw "Expected FILE_CONVERSION runtime for PPTX to HTML: $content"
+        }
+        if ("$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected SUCCEEDED PPTX to HTML execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "pptx" -or "$($parsed.conversion.targetFormat)" -ne "html" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected PPTX to HTML conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1) {
+            throw "Expected one PPTX to HTML artifact: $content"
+        }
+        if ("$($artifacts[0].mediaType)" -ne "text/html") {
+            throw "Expected PPTX to HTML artifact mediaType text/html: $content"
+        }
+        if ("$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected CLEAN PPTX to HTML artifact scan status: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed") {
+            throw "Expected PPTX to HTML metadata scan summary: $content"
+        }
+        if ($artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible PPTX to HTML artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $pptxHtmlObservation) { exit 1 }
+
+    $pptxHtmlArtifactId = "$(@($pptxHtmlObservation.artifacts)[0].artifactId)"
+
+    $pptxHtmlObjectUri = Test-Step "Verify persisted PPTX to HTML session and artifact" {
+        Assert-PersistedFileConversionArtifact -ArtifactId $pptxHtmlArtifactId -ExpectedMediaType "text/html" -Label "PPTX to HTML"
+    }
+    if (-not $pptxHtmlObjectUri) { exit 1 }
+
+    Test-Step "Download converted PPTX HTML through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$pptxHtmlArtifactId/download" -Headers $headers
+        if ($content -notlike "*<p>Sandbox PPTX $Marker PPTX HTML conversion renders slide text</p>*") {
+            throw "Downloaded PPTX HTML did not include slide paragraph '$Marker': $content"
+        }
+        if ($content -notlike "*<!doctype html>*" -or $content -notlike "*</html>*") {
+            throw "Downloaded PPTX HTML did not include HTML document wrapper: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded PPTX HTML artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($pptxHtmlObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted PPTX HTML object exists in backend storage volume" {
+            $key = $pptxHtmlObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote PPTX to HTML key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored PPTX to HTML object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Host "Backend: $BaseUrl"
     Write-Host "Conversation: $($smokeRun.ConversationId)"
