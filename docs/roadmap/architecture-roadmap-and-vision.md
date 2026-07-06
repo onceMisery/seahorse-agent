@@ -818,3 +818,11 @@ Agent run event replay now requires the target run to be readable before returni
 This closes a run-boundary authorization gap for replayed stream events. It does not change chat SSE resume internals, event buffer persistence, event payload shape, snapshot/workflow/cost-summary authorization, or long-lived event retention semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseAgentControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 18/18 after adding regression coverage that unreadable runs return `权限不足` and do not call `AgentRunEventBufferPort.getAfter`.
+
+## 2026-07-06 Update: Run Context Snapshot Ownership Guard
+
+Run context snapshot queries now apply the agent-run owner/admin boundary when the requested `runId` exists in the AgentRun repository. The production auto-configuration injects `AgentRunRepositoryPort` and `CurrentUserPort` into `KernelRunContextSnapshotService`, so `GET /api/agent-runs/{runId}/context-snapshot` no longer returns Agent run prompt/tool/model/trace snapshot material to unrelated users. Legacy chat task snapshots that do not have an AgentRun record keep the existing lookup behavior.
+
+This closes an Agent run context snapshot authorization gap. It does not change snapshot persistence, snapshot JSON shape, chat task snapshot compatibility, run experiment internal snapshot reads, or retention semantics.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunContextSnapshotServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 4/4, covering owner access, unrelated-user denial, admin access, and legacy task snapshot compatibility. `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am "-DskipTests" compile` completed with reactor `BUILD SUCCESS` after the production bean was updated to inject the run repository and current-user port.

@@ -48,6 +48,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentIn
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationBranchRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationAttachmentRepositoryPort;
@@ -144,11 +145,13 @@ public class SeahorseAgentKernelOpsAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(RunContextSnapshotRepositoryPort.class)
+    @ConditionalOnBean({RunContextSnapshotRepositoryPort.class, AgentRunRepositoryPort.class, CurrentUserPort.class})
     @ConditionalOnMissingBean(RunContextSnapshotInboundPort.class)
     public KernelRunContextSnapshotService seahorseRunContextSnapshotInboundPort(
-            RunContextSnapshotRepositoryPort repositoryPort) {
-        return new KernelRunContextSnapshotService(repositoryPort);
+            RunContextSnapshotRepositoryPort repositoryPort,
+            AgentRunRepositoryPort agentRunRepositoryPort,
+            CurrentUserPort currentUserPort) {
+        return new KernelRunContextSnapshotService(repositoryPort, agentRunRepositoryPort, currentUserPort);
     }
 
     @Bean

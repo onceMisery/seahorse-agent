@@ -17,26 +17,72 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.runcontext;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.ports.inbound.runcontext.RunContextSnapshotInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRepositoryPort;
-import lombok.RequiredArgsConstructor;
 
+import java.util.Objects;
 import java.util.Optional;
 
 /**
  * Kernel query service for persisted run context snapshots.
  */
-@RequiredArgsConstructor
 public class KernelRunContextSnapshotService implements RunContextSnapshotInboundPort {
 
+    private static final String ADMIN_ROLE = "admin";
+    private static final String ACCESS_DENIED = "鏉冮檺涓嶈冻";
+
     private final RunContextSnapshotRepositoryPort repositoryPort;
+    private final AgentRunRepositoryPort runRepository;
+    private final CurrentUserPort currentUserPort;
+
+    public KernelRunContextSnapshotService(RunContextSnapshotRepositoryPort repositoryPort) {
+        this(repositoryPort, null, null);
+    }
+
+    public KernelRunContextSnapshotService(RunContextSnapshotRepositoryPort repositoryPort,
+                                           AgentRunRepositoryPort runRepository,
+                                           CurrentUserPort currentUserPort) {
+        this.repositoryPort = Objects.requireNonNull(repositoryPort, "repositoryPort must not be null");
+        this.runRepository = runRepository;
+        this.currentUserPort = currentUserPort;
+    }
 
     @Override
     public Optional<RunContextSnapshotRecord> findByRunId(String runId) {
         if (runId == null || runId.isBlank()) {
             return Optional.empty();
         }
-        return repositoryPort.findByRunId(runId.trim());
+        String safeRunId = runId.trim();
+        requireReadableAgentRunIfPresent(safeRunId);
+        return repositoryPort.findByRunId(safeRunId);
+    }
+
+    private void requireReadableAgentRunIfPresent(String runId) {
+        if (runRepository == null || currentUserPort == null) {
+            return;
+        }
+        Optional<AgentRun> maybeRun = runRepository.findRunById(runId);
+        if (maybeRun.isEmpty()) {
+            return;
+        }
+        CurrentUser currentUser = currentUserPort.requireCurrentUser();
+        AgentRun run = maybeRun.orElseThrow();
+        if (isAdmin(currentUser) || run.userId().equals(currentUserId(currentUser))) {
+            return;
+        }
+        throw new IllegalStateException(ACCESS_DENIED);
+    }
+
+    private boolean isAdmin(CurrentUser currentUser) {
+        return currentUser != null && currentUser.hasRole(ADMIN_ROLE);
+    }
+
+    private String currentUserId(CurrentUser currentUser) {
+        return currentUser == null ? null : currentUser.operator();
     }
 }
