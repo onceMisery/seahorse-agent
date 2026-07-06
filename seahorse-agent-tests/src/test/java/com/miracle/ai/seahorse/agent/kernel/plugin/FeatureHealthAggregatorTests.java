@@ -50,6 +50,19 @@ class FeatureHealthAggregatorTests {
         Assertions.assertEquals("broken", report.features().get(0).message());
     }
 
+    @Test
+    void shouldRedactCredentialTextFromFeatureHealthFailureMessages() {
+        FeatureHealthAggregator aggregator = new FeatureHealthAggregator(
+                List.of(new CredentialFailingFeature()), List.of());
+
+        FeatureHealthReport report = aggregator.health();
+
+        Assertions.assertFalse(report.up());
+        Assertions.assertTrue(report.features().get(0).message().contains("[REDACTED]"));
+        Assertions.assertFalse(report.features().get(0).message().contains("health-secret-123456"));
+        Assertions.assertFalse(report.features().get(0).message().contains("plain-health-secret"));
+    }
+
     private static final class HealthyFeature implements AgentFeature {
 
         @Override
@@ -78,6 +91,25 @@ class FeatureHealthAggregatorTests {
         @Override
         public FeatureHealth health() {
             throw new IllegalStateException("broken");
+        }
+    }
+
+    private static final class CredentialFailingFeature implements AgentFeature {
+
+        @Override
+        public String name() {
+            return "credential-failing";
+        }
+
+        @Override
+        public FeatureType type() {
+            return FeatureType.SEARCH_CHANNEL;
+        }
+
+        @Override
+        public FeatureHealth health() {
+            throw new IllegalStateException(
+                    "health failed Authorization: Bearer health-secret-123456 api_key=plain-health-secret");
         }
     }
 }

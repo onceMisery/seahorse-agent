@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.plugin;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AdapterHealthIndicatorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AdapterHealthStatus;
 
@@ -56,8 +57,13 @@ public class FeatureHealthAggregator {
         try {
             return feature.health();
         } catch (RuntimeException ex) {
-            return FeatureHealth.down(feature.name(), ex.getMessage());
+            return FeatureHealth.down(feature.name(), failureMessage(ex));
         }
+    }
+
+    private String failureMessage(RuntimeException ex) {
+        return CredentialTextRedactor.redact(
+                Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getSimpleName()));
     }
 }
 

@@ -1720,3 +1720,11 @@ Agent run runtime JSON serialization fallback messages now redact credential-sha
 This is a narrow runtime persistence hardening slice. It does not change normal JSON payload shape, checkpoint sequencing, approval wait transitions, resume execution semantics, step status handling, or server-side exception logging with the original exception chain.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=RepositoryAgentRunStepRecorderTests,RepositoryAgentApprovalWaitHandlerTests,KernelAgentRunResumeServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with `BUILD SUCCESS`; targeted test classes ran 13/13 across kernel redactor, run step recorder serialization fallback, approval wait checkpoint serialization fallback, and existing resume behavior coverage.
+
+## 2026-07-06 Update: Feature Health Failure Redaction
+
+Feature health aggregation now redacts credential-shaped exception text before returning failed `FeatureHealth.message` values. This protects diagnostics, readiness-adjacent, and admin health surfaces when feature health probes accidentally include bearer tokens, API keys, or similar material in exception messages.
+
+This is a narrow health diagnostics hardening slice. It does not change adapter health aggregation, feature health status semantics, health detail payloads, startup checks, or server-side exception logging with the original exception chain.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=FeatureHealthAggregatorTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 6/6 across kernel redactor and feature health aggregation coverage.
