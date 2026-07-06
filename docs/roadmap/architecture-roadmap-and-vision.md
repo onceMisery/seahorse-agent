@@ -1526,3 +1526,11 @@ Task orchestration failure events now redact credential-shaped exception message
 This is a narrow task-event display-boundary hardening slice. It does not change task creation, conversation routing, AgentRun command inputs, stream callback sequencing, task status transitions, artifact publication, event bus storage semantics, or raw exception logging for operators.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=TaskOrchestrationServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 14/14, covering task failure event redaction for chat start exceptions, stream callback errors, existing task orchestration behavior, access checks, artifact listing guards, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Sandbox Browser Preflight Failure Redaction
+
+`sandbox_browser` parameter preflight failures now pass URL, allowed-host, cookie, and session-state validation exception text through the same browser display redactor used for runtime summaries. Existing validation messages are intentionally value-free, and this keeps that failure boundary hardened if future validation diagnostics accidentally include credential-shaped input.
+
+This is a narrow browser-tool preflight display-boundary hardening slice. It does not change URL policy, allowed-host enforcement, cookie/session-state validation rules, request-scoped runtime input preservation, artifact collection, scanner decisions, Tool Gateway audit summaries, or runtime execution behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=SandboxBrowserToolPortAdapterTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 38/38, covering preflight failure redaction, existing URL/query/cookie/session-state guards, runtime summary redaction, execution-input preservation, and shared credential text redactor behavior.

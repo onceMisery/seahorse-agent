@@ -165,7 +165,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             urlHost = hasText(url) ? urlHost(url) : "";
             urlOrigin = hasText(url) ? urlOrigin(url, "url") : "";
         } catch (IllegalArgumentException ex) {
-            return ToolInvocationResult.failed(ex.getMessage());
+            return ToolInvocationResult.failed(redactRuntimeDisplayText(
+                    Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
         boolean urlMode = hasText(url);
         List<BrowserCookie> cookies;
@@ -176,7 +177,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                     allowedHosts,
                     urlMode);
         } catch (IllegalArgumentException ex) {
-            return ToolInvocationResult.failed(ex.getMessage());
+            return ToolInvocationResult.failed(redactRuntimeDisplayText(
+                    Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
         Object sessionState;
         try {
@@ -187,7 +189,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                     urlOrigin,
                     urlMode);
         } catch (IllegalArgumentException ex) {
-            return ToolInvocationResult.failed(ex.getMessage());
+            return ToolInvocationResult.failed(redactRuntimeDisplayText(
+                    Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
         if (!urlMode && html.isBlank()) {
             return ToolInvocationResult.failed("sandbox_browser failed: html is required");

@@ -453,6 +453,23 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldRedactCredentialShapedAllowedHostsPreflightFailureBeforeCreatingSession() {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/admin",
+                "allowedHosts", List.of("example.test?api_key=plain-browser-preflight-secret"))));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("allowedHosts must contain host names only"));
+        assertFalse(result.error().contains("api_key=plain-browser-preflight-secret"));
+        assertFalse(result.error().contains("plain-browser-preflight-secret"));
+        assertEquals(0, runtime.createCalls);
+    }
+
+    @Test
     void shouldRejectUserinfoBrowserUrlBeforeCreatingSession() {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(null);
         SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
