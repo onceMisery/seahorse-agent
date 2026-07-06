@@ -124,6 +124,22 @@ class KernelAgentCheckpointQueryServiceTests {
     }
 
     @Test
+    void shouldAllowNumericWebUserIdOwnerToQueryCheckpoints() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("42"));
+        MemoryCheckpointRepository checkpointRepository = new MemoryCheckpointRepository();
+        checkpointRepository.save(checkpoint("{\"toolId\":\"memory-forget\"}"));
+        KernelAgentCheckpointQueryService service = new KernelAgentCheckpointQueryService(
+                runRepository,
+                checkpointRepository,
+                currentUser(42L, "owner"));
+
+        List<AgentCheckpoint> checkpoints = service.listByRunId("run-1");
+
+        assertEquals(1, checkpoints.size());
+    }
+
+    @Test
     void shouldFailClosedWhenRunDoesNotExist() {
         KernelAgentCheckpointQueryService service = new KernelAgentCheckpointQueryService(
                 new MemoryAgentRunRepository(),

@@ -882,3 +882,11 @@ Agent run by-id operations now accept both the current user's numeric primary-ke
 This is a narrow authorization-compatibility slice for by-id run operations. It does not change run creation attribution, admin access, unrelated-user denial, worker terminal transitions, run paging query semantics, snapshot persistence, or repository schema.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 22/22, covering numeric web user ID owners for run detail, step listing, and cancellation while preserving unrelated-user denial, admin read access, and current-user page scoping.
+
+## 2026-07-06 Update: Agent Run Adjacent Numeric Owner Compatibility
+
+Agent checkpoint history and run cost summary lookups now accept both the current user's numeric primary-key string and operator username when comparing against the owning Agent run `userId`. This extends the same owner/admin boundary compatibility from run detail and artifacts to two sensitive run-adjacent read surfaces.
+
+This is a narrow authorization-compatibility slice. It does not change checkpoint persistence, checkpoint sanitization, cost aggregation dimensions, admin access, unrelated-user denial, run paging semantics, or repository schema.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentCheckpointQueryServiceTests,KernelAgentRunCostSummaryServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 10/10, covering numeric web user ID owners for checkpoint history and run cost summary while preserving unrelated-user denial and admin read access.

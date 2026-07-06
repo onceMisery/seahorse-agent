@@ -75,6 +75,18 @@ class KernelAgentRunCostSummaryServiceTests {
     }
 
     @Test
+    void shouldAllowNumericWebUserIdOwnerToReadRunCostSummary() {
+        KernelAgentRunCostSummaryService service = new KernelAgentRunCostSummaryService(
+                new MemoryAgentRunRepository(run("42")),
+                new CapturingCostUsageRepository(),
+                currentUser(42L, "owner"));
+
+        CostUsageAggregate aggregate = service.getCostSummary("run-1");
+
+        assertEquals(321L, aggregate.totalTokens());
+    }
+
+    @Test
     void shouldRejectUnrelatedUserRunCostSummary() {
         KernelAgentRunCostSummaryService service = new KernelAgentRunCostSummaryService(
                 new MemoryAgentRunRepository(run("user-1")),

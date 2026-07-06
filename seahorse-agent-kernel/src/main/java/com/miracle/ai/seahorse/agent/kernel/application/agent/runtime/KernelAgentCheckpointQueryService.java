@@ -62,7 +62,7 @@ public class KernelAgentCheckpointQueryService implements AgentCheckpointQueryIn
     }
 
     private void requireReadable(AgentRun run, CurrentUser currentUser) {
-        if (isAdmin(currentUser) || currentUserId(currentUser).equals(run.userId())) {
+        if (isAdmin(currentUser) || ownsRun(run, currentUser)) {
             return;
         }
         throw new IllegalStateException(ACCESS_DENIED);
@@ -74,6 +74,15 @@ public class KernelAgentCheckpointQueryService implements AgentCheckpointQueryIn
 
     private String currentUserId(CurrentUser currentUser) {
         return currentUser == null ? null : currentUser.operator();
+    }
+
+    private boolean ownsRun(AgentRun run, CurrentUser currentUser) {
+        if (currentUser == null) {
+            return false;
+        }
+        String numericUserId = currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
+        return Objects.equals(run.userId(), numericUserId)
+                || Objects.equals(run.userId(), currentUserId(currentUser));
     }
 
     private String requireText(String value, String message) {
