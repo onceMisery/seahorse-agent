@@ -95,6 +95,27 @@ class KernelKnowledgeDocumentServiceTests {
     }
 
     @Test
+    void shouldStartChunkImmediatelyWhenUploadingInChunkMode() {
+        Ports ports = new Ports();
+        KernelKnowledgeDocumentService service = newService(ports);
+
+        KnowledgeDocumentRecord document = service.upload(new UploadKnowledgeDocumentCommand(
+                1L,
+                new UploadFileContent(new ByteArrayInputStream("content".getBytes()), 7L, "policy.pdf", "pdf"),
+                "tester",
+                new UploadProcessOptions("chunk", "")));
+
+        assertThat(document.process().status()).isEqualTo("running");
+        assertThat(ports.repository.records).hasSize(1);
+        assertThat(ports.repository.records.get(0).process().status()).isEqualTo("running");
+        assertThat(ports.messageQueue.messages).hasSize(1);
+        assertThat(ports.messageQueue.messages.get(0).body()).isInstanceOf(KnowledgeDocumentChunkEvent.class);
+        KnowledgeDocumentChunkEvent event = (KnowledgeDocumentChunkEvent) ports.messageQueue.messages.get(0).body();
+        assertThat(event.docId()).isEqualTo(document.id());
+        assertThat(event.pipelineId()).isEmpty();
+    }
+
+    @Test
     void shouldUploadDocumentBeforeKnowledgeBaseHasAnyChunks() {
         Ports ports = new Ports(new UploadableOnlyKnowledgeBaseQueryPort());
         KernelKnowledgeDocumentService service = newService(ports);

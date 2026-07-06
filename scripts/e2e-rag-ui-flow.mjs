@@ -87,6 +87,17 @@ function psql(sql) {
   return result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 }
 
+function idFromPayload(payload) {
+  const data = payload?.data;
+  if (data == null) {
+    return "";
+  }
+  if (typeof data === "string" || typeof data === "number" || typeof data === "bigint") {
+    return String(data);
+  }
+  return String(data.id ?? data.docId ?? data.kbId ?? "");
+}
+
 async function shot(page, name) {
   const file = path.join(artifactDir, `${startedAt}-${name}.png`);
   await page.screenshot({ path: file, fullPage: true });
@@ -163,8 +174,9 @@ async function createKnowledgeBase(page) {
   if (!createResponse.ok() || createPayload?.code !== "0") {
     throw new Error(`Create knowledge base failed: HTTP ${createResponse.status()} ${JSON.stringify(createPayload)}`);
   }
-  const kbId = await waitForDbValue(
-    "select id from t_knowledge_base order by create_time desc limit 1;",
+  const responseKbId = idFromPayload(createPayload);
+  const kbId = responseKbId || await waitForDbValue(
+    `select id from t_knowledge_base where collection_name like 'oa%' order by create_time desc limit 1;`,
     (value) => value.trim().length > 0,
     20000
   );
@@ -194,45 +206,37 @@ async function uploadAndChunkDocument(page, kbId) {
   if (!uploadResponse.ok() || uploadPayload?.code !== "0") {
     throw new Error(`Upload document failed: HTTP ${uploadResponse.status()} ${JSON.stringify(uploadPayload)}`);
   }
-  const docId = await waitForDbValue(
-    "select id from t_knowledge_document order by create_time desc limit 1;",
+  const responseDocId = idFromPayload(uploadPayload);
+  const docId = responseDocId || await waitForDbValue(
+    `select id from t_knowledge_document where kb_id = '${kbId}' order by create_time desc limit 1;`,
     (value) => value.trim().length > 0,
     20000
   );
   await shot(page, "document-uploaded");
 
-  await page.reload({ waitUntil: "networkidle" });
-  console.log("document row buttons", JSON.stringify(await visibleTexts(page, "tbody button"), null, 2));
-  const chunkButton = page.locator("tbody tr").first().locator('button[title="分块"]').first();
-  await chunkButton.click();
-  await page.locator('[role="alertdialog"]').waitFor({ state: "visible", timeout: 10000 });
-  await shot(page, "chunk-confirm-open");
-  await Promise.all([
-    page.waitForResponse(
-      (response) => response.url().includes(`/api/knowledge-base/docs/${docId}/chunk`),
-      { timeout: 30000 }
-    ),
-    page.locator('[role="alertdialog"] button').last().click()
-  ]);
-  const chunkCount = await waitForDbValue(
-    `select count(*) from t_knowledge_chunk where doc_id = '${docId}';`,
-    (value) => Number(value.trim()) > 0,
-    120000
+  await waitForDbValue(
+    `select status || '|' || coalesce(chunk_count, 0) from t_knowledge_document where id = '${docId}';`,
+    (value) => {
+      const [status, count] = value.trim().split("|");
+      return status === "success" && Number(count) > 0;
+    },
+    180000
   );
-  const vectorCount = await waitForDbValue(
-    `select count(*) from t_knowledge_vector where metadata->>'doc_id' = '${docId}';`,
+  const chunkCount = await waitForDbValue(
+    `select count(*) from t_knowledge_chunk where doc_id = '${docId}' and deleted = 0;`,
     (value) => Number(value.trim()) > 0,
-    120000
+    30000
   );
   await page.reload({ waitUntil: "networkidle" });
   await shot(page, "chunk-success");
-  return { docId, chunkCount: Number(chunkCount.trim()), vectorCount: Number(vectorCount.trim()) };
+  return { docId, chunkCount: Number(chunkCount.trim()) };
 }
 
-async function askRagQuestion(page) {
+async function askRagQuestion(page, docId, kbId) {
   await page.goto(`${baseUrl}/chat`, { waitUntil: "networkidle" });
   await shot(page, "chat-ready");
   const beforeAssistantId = psql("select coalesce(max(id), 0) from t_message where role = 'assistant';")[0] || "0";
+  const beforeTraceNodeId = psql("select coalesce(max(id), 0) from t_rag_trace_node;")[0] || "0";
   const textarea = page.locator("textarea").first();
   await textarea.fill("请只基于知识库回答：OA 系统中 L4 高敏数据需要哪些控制措施？规范明确写出的 RPO 和 RTO 指标分别是多少？");
   await Promise.all([
@@ -251,7 +255,8 @@ async function askRagQuestion(page) {
     { timeout: 60000 }
   ).catch(() => null);
   await shot(page, "rag-answer-l4-rpo-rto");
-  return answer;
+  const traceRow = await verifyTraceHit(beforeTraceNodeId, docId, kbId);
+  return { answer, traceRow };
 }
 
 function assertRagFacts(answer) {
@@ -267,20 +272,46 @@ function assertRagFacts(answer) {
   return facts;
 }
 
-function verifyTraceHit() {
-  const rows = psql(`
-select node_name, extra_data::jsonb ->> 'hitCount'
+function hitReferencesDocument(extraData, docId, kbId) {
+  if (!extraData || Number(extraData.hitCount || 0) <= 0) {
+    return false;
+  }
+  return (extraData.hits || []).some((hit) =>
+    String(hit?.docId || "") === String(docId) || String(hit?.kbId || "") === String(kbId)
+  );
+}
+
+async function verifyTraceHit(afterNodeId, docId, kbId) {
+  const row = await waitForDbValue(`
+select id, trace_id, node_name, extra_data::text
 from t_rag_trace_node
-where node_name like '%VectorGlobalSearch'
+where id > ${afterNodeId}
+  and node_name like '%VectorGlobalSearch'
+  and (
+    extra_data::jsonb @? '$.hits[*] ? (@.docId == "${docId}")'
+    or extra_data::jsonb @? '$.hits[*] ? (@.kbId == "${kbId}")'
+  )
 order by create_time desc
 limit 1;
-`);
-  const row = rows[0] || "";
-  const hitCount = Number(row.split("|")[1] || 0);
-  if (hitCount <= 0) {
-    throw new Error(`VectorGlobalSearch did not return hits: ${row}`);
+`, (value, rows) => {
+    const extraText = (rows[0] || "").split("|").slice(3).join("|");
+    if (!extraText) {
+      return false;
+    }
+    return hitReferencesDocument(JSON.parse(extraText), docId, kbId);
+  }, 90000);
+  const extraText = row.split("|").slice(3).join("|");
+  const extraData = JSON.parse(extraText);
+  if (!hitReferencesDocument(extraData, docId, kbId)) {
+    throw new Error(`VectorGlobalSearch did not return hits for docId=${docId}, kbId=${kbId}: ${row}`);
   }
-  return row;
+  return {
+    row,
+    hitCount: Number(extraData.hitCount || 0),
+    matchedHit: (extraData.hits || []).find((hit) =>
+      String(hit?.docId || "") === String(docId) || String(hit?.kbId || "") === String(kbId)
+    )
+  };
 }
 
 const browser = await chromium.launch({ headless });
@@ -297,9 +328,8 @@ try {
   await shot(page, "login-success");
   const kb = await createKnowledgeBase(page);
   const doc = await uploadAndChunkDocument(page, kb.kbId);
-  const answer = await askRagQuestion(page);
-  const facts = assertRagFacts(answer);
-  const traceRow = verifyTraceHit();
+  const rag = await askRagQuestion(page, doc.docId, kb.kbId);
+  const facts = assertRagFacts(rag.answer);
   console.log(JSON.stringify({
     ok: true,
     marker,
@@ -307,8 +337,9 @@ try {
     embeddingLabel: kb.embeddingLabel,
     docId: doc.docId,
     chunkCount: doc.chunkCount,
-    vectorCount: doc.vectorCount,
-    traceRow,
+    traceRow: rag.traceRow.row,
+    traceHitCount: rag.traceRow.hitCount,
+    traceMatchedHit: rag.traceRow.matchedHit,
     facts,
     artifactDir
   }, null, 2));

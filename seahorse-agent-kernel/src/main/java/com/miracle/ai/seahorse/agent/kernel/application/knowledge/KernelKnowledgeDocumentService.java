@@ -133,13 +133,18 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
         }
 
         StoredObject storedObject = uploadToStorage(knowledgeBase.collectionName(), safeCommand);
-        return documentRepositoryPort.createPendingDocument(new CreateKnowledgeDocumentCommand(
+        KnowledgeDocumentRecord document = documentRepositoryPort.createPendingDocument(new CreateKnowledgeDocumentCommand(
                 knowledgeBase.id(),
                 storedObject.originalFilename(),
                 new KnowledgeDocumentFileRef(storedObject.url(), storedObject.detectedType(), storedObject.size()),
                 new KnowledgeDocumentProcessRef("pending",
                         safeCommand.options().processMode(), safeCommand.options().pipelineId()),
                 safeCommand.operator()));
+        if ("chunk".equalsIgnoreCase(safeCommand.options().processMode())) {
+            startChunk(document.id(), safeCommand.operator());
+            return documentRepositoryPort.findById(document.id()).orElse(document);
+        }
+        return document;
     }
 
     @Override
