@@ -177,8 +177,9 @@ class OpenApiToolPortAdapterTests {
                         + "\"setCookie\":\"sid=upstream-cookie-value\","
                         + "\"nested\":{\"clientSecret\":\"upstream-client-secret\","
                         + "\"private_key\":\"upstream-private-key\"},"
-                        + "\"items\":[{\"sessionToken\":\"upstream-session-token\","
-                        + "\"secretKey\":\"upstream-secret-key\",\"label\":\"safe\"}]}"))) {
+                        + "\"items\":[{\"token\":\"upstream-token\","
+                        + "\"sessionToken\":\"upstream-session-token\","
+                        + "\"tokenCount\":2,\"secretKey\":\"upstream-secret-key\",\"label\":\"safe\"}]}"))) {
             MemoryConnectorRepository connectorRepository = new MemoryConnectorRepository();
             Connector connector = connector(api.baseUrl());
             ConnectorOperation operation = operation(connector.connectorId(), CredentialAuthType.NONE);
@@ -208,13 +209,16 @@ class OpenApiToolPortAdapterTests {
             assertTrue(result.content().contains("\"setCookie\":\"[REDACTED]\""));
             assertTrue(result.content().contains("\"clientSecret\":\"[REDACTED]\""));
             assertTrue(result.content().contains("\"private_key\":\"[REDACTED]\""));
+            assertTrue(result.content().contains("\"token\":\"[REDACTED]\""));
             assertTrue(result.content().contains("\"sessionToken\":\"[REDACTED]\""));
+            assertTrue(result.content().contains("\"tokenCount\":2"));
             assertTrue(result.content().contains("\"secretKey\":\"[REDACTED]\""));
             assertFalse(result.content().contains("upstream-authorization-token"));
             assertFalse(result.content().contains("upstream-cookie-header"));
             assertFalse(result.content().contains("upstream-cookie-value"));
             assertFalse(result.content().contains("upstream-client-secret"));
             assertFalse(result.content().contains("upstream-private-key"));
+            assertFalse(result.content().contains("upstream-token"));
             assertFalse(result.content().contains("upstream-session-token"));
             assertFalse(result.content().contains("upstream-secret-key"));
         }

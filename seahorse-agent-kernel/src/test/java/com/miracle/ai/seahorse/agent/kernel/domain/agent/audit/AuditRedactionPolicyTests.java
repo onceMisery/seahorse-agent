@@ -37,20 +37,24 @@ class AuditRedactionPolicyTests {
                     "Cookie":"sid=plain-cookie-header",
                     "cookieCount":1,
                     "setCookie":"sid=plain-cookie",
+                    "token":"plain-token",
                     "private_key":"plain-private-key",
                     "sessionId":"plain-session-id",
                     "safe":"visible"
                   },
                   "items":[{"apiKey":"abc123"},{"password":"pw"}]
+                  ,"usage":{"tokenCount":2}
                 }
                 """);
 
         assertTrue(redacted.contains("secret://tenant/a"));
         assertTrue(redacted.contains("visible"));
         assertTrue(redacted.contains("\"cookieCount\":1"));
+        assertTrue(redacted.contains("\"tokenCount\":2"));
         assertTrue(redacted.contains(AuditRedactionPolicy.REDACTED_VALUE));
         assertFalse(redacted.contains("plain-secret"));
         assertFalse(redacted.contains("token-value"));
+        assertFalse(redacted.contains("plain-token"));
         assertFalse(redacted.contains("plain-cookie-header"));
         assertFalse(redacted.contains("plain-cookie"));
         assertFalse(redacted.contains("plain-private-key"));

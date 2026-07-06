@@ -38,7 +38,9 @@ public class AuditRedactionPolicy {
     private static final String REDACTED_PAYLOAD = "{\"redacted\":\"" + REDACTED_VALUE + "\"}";
     private static final Set<String> SENSITIVE_KEYWORDS = Set.of(
             "secret",
-            "token",
+            "accesstoken",
+            "refreshtoken",
+            "sessiontoken",
             "password",
             "apikey",
             "privatekey",
@@ -110,7 +112,7 @@ public class AuditRedactionPolicy {
         if (SECRET_REF_KEY.equals(normalized)) {
             return false;
         }
-        if ("cookie".equals(normalized)) {
+        if ("cookie".equals(normalized) || "token".equals(normalized)) {
             return true;
         }
         return SENSITIVE_KEYWORDS.stream().anyMatch(normalized::contains);

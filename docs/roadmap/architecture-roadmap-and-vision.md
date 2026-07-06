@@ -1122,3 +1122,11 @@ Tool Gateway JSON output redaction now treats `sessionToken` / `session_token` f
 This is a narrow Tool Gateway JSON field vocabulary hardening slice. It does not change text credential redaction, OpenAPI provider redaction, audit payload redaction, sandbox browser token/query guards, result-summary shape, approval policy, artifact publication, or default redaction wiring.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 26/26, covering `sessionToken` JSON output redaction while preserving `tokenCount` metadata.
+
+## 2026-07-06 Update: OpenAPI and Audit Token Metadata Preservation
+
+OpenAPI provider JSON response redaction and audit payload redaction now treat exact `token` fields and concrete credential token fields such as `accessToken`, `refreshToken`, and `sessionToken` as sensitive without using a broad contains-`token` match. This preserves value-free metadata such as `tokenCount` while continuing to redact raw token fields.
+
+This is a narrow JSON field vocabulary hardening slice. It does not change Tool Gateway fallback redaction, text credential redaction, OpenAPI request construction, credential injection, audit persistence, approval policy, artifact publication, or default redaction wiring.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=OpenApiToolPortAdapterTests,AuditRedactionPolicyTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 8/8, covering exact token redaction and `tokenCount` preservation in OpenAPI provider and audit payload paths.
