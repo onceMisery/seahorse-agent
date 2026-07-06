@@ -20,8 +20,9 @@ package com.miracle.ai.seahorse.agent.kernel.application.runexperiment;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageAggregate;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialJsonFieldClassifier;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.runexperiment.RunExperimentReport;
@@ -142,9 +143,9 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         RunExperimentDetails created = repositoryPort.create(experiment, trials);
         RunExperimentTrialExecutorPort trialExecutorPort = resolveTrialExecutor();
         if (!trialExecutorPort.enabled()) {
-            return created;
+            return safeDetails(created);
         }
-        return executeCreatedExperiment(userId, created, trialExecutorPort);
+        return safeDetails(executeCreatedExperiment(userId, created, trialExecutorPort));
     }
 
     @Override
@@ -152,7 +153,8 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         if (id == null) {
             return Optional.empty();
         }
-        return repositoryPort.findById(requireText(userId, "userId must not be blank"), id);
+        return repositoryPort.findById(requireText(userId, "userId must not be blank"), id)
+                .map(this::safeDetails);
     }
 
     @Override
@@ -160,11 +162,11 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         if (id == null) {
             throw new IllegalArgumentException("experimentId must not be null");
         }
-        return repositoryPort.updateExperimentStatus(
+        return safeDetails(repositoryPort.updateExperimentStatus(
                         requireText(userId, "userId must not be blank"),
                         id,
                         STATUS_CANCELLED)
-                .orElseThrow(() -> new IllegalArgumentException("run experiment not found"));
+                .orElseThrow(() -> new IllegalArgumentException("run experiment not found")));
     }
 
     @Override
@@ -175,12 +177,12 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
         if (trialId == null) {
             throw new IllegalArgumentException("trialId must not be null");
         }
-        return repositoryPort.updateTrialScore(
+        return safeDetails(repositoryPort.updateTrialScore(
                         requireText(userId, "userId must not be blank"),
                         experimentId,
                         trialId,
                         requireText(scoreJson, "scoreJson must not be blank"))
-                .orElseThrow(() -> new IllegalArgumentException("run experiment trial not found"));
+                .orElseThrow(() -> new IllegalArgumentException("run experiment trial not found")));
     }
 
     @Override
@@ -672,6 +674,102 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
 
     private String reportText(String value) {
         return CredentialTextRedactor.redact(Objects.requireNonNullElse(value, ""));
+    }
+
+    private RunExperimentDetails safeDetails(RunExperimentDetails details) {
+        if (details == null) {
+            return null;
+        }
+        return RunExperimentDetails.builder()
+                .experiment(safeExperiment(details.getExperiment()))
+                .trials(Objects.requireNonNullElse(details.getTrials(), List.<RunExperimentTrialRecord>of())
+                        .stream()
+                        .map(this::safeTrial)
+                        .toList())
+                .build();
+    }
+
+    private RunExperimentRecord safeExperiment(RunExperimentRecord record) {
+        if (record == null) {
+            return null;
+        }
+        return RunExperimentRecord.builder()
+                .id(record.getId())
+                .tenantId(record.getTenantId())
+                .userId(record.getUserId())
+                .conversationId(record.getConversationId())
+                .baseLeafMessageId(record.getBaseLeafMessageId())
+                .name(safeText(record.getName()))
+                .status(record.getStatus())
+                .createTime(record.getCreateTime())
+                .updateTime(record.getUpdateTime())
+                .deleted(record.getDeleted())
+                .build();
+    }
+
+    private RunExperimentTrialRecord safeTrial(RunExperimentTrialRecord record) {
+        if (record == null) {
+            return null;
+        }
+        return RunExperimentTrialRecord.builder()
+                .id(record.getId())
+                .tenantId(record.getTenantId())
+                .experimentId(record.getExperimentId())
+                .runProfileId(record.getRunProfileId())
+                .runId(record.getRunId())
+                .outputMessageId(record.getOutputMessageId())
+                .scoreJson(safeJsonText(record.getScoreJson()))
+                .metricJson(safeJsonText(record.getMetricJson()))
+                .status(record.getStatus())
+                .errorMessage(safeText(record.getErrorMessage()))
+                .createTime(record.getCreateTime())
+                .updateTime(record.getUpdateTime())
+                .deleted(record.getDeleted())
+                .build();
+    }
+
+    private String safeJsonText(String value) {
+        String text = blankToNull(value);
+        if (text == null) {
+            return null;
+        }
+        try {
+            Object parsed = OBJECT_MAPPER.readValue(text, Object.class);
+            return OBJECT_MAPPER.writeValueAsString(safeJsonValue(null, parsed));
+        } catch (JsonProcessingException ignored) {
+            return safeText(text);
+        }
+    }
+
+    private Object safeJsonValue(String key, Object value) {
+        if (key != null && CredentialJsonFieldClassifier.isSensitiveOutputField(key)) {
+            return CredentialTextRedactor.REDACTED_VALUE;
+        }
+        if (value instanceof String text) {
+            return safeText(text);
+        }
+        if (value instanceof Map<?, ?> map) {
+            LinkedHashMap<String, Object> safe = new LinkedHashMap<>();
+            map.forEach((nestedKey, nestedValue) -> {
+                String safeKey = nestedKey == null ? null : String.valueOf(nestedKey);
+                safe.put(safeKey, safeJsonValue(safeKey, nestedValue));
+            });
+            return safe;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(item -> safeJsonValue(null, item))
+                    .toList();
+        }
+        return value;
+    }
+
+    private String safeText(String value) {
+        return CredentialTextRedactor.redact(value);
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private String truncate(String value, int maxLength) {

@@ -1374,3 +1374,11 @@ Run Experiment trial fork-to-branch responses now defensively redact credential-
 This is a narrow Run Experiment Web adapter hardening slice. It does not change normal conversation tree APIs, branch switching semantics, persisted conversation messages, trial output message ids, Run Experiment detail/report projections, repository schema, or frontend response shape.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseRunExperimentControllerTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 9/9, covering fork-to-branch message content/thinking-content redaction, branch projection immutability, existing Run Experiment controller routes, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Run Experiment Kernel Projection Redaction
+
+Run Experiment kernel inbound responses now defensively redact credential-shaped display text before returning `RunExperimentDetails` from `KernelRunExperimentService.create`, `findById`, `cancel`, and `scoreTrial`. The projection covers experiment names, trial `scoreJson`, trial `metricJson`, and trial failure messages, recursively redacts sensitive JSON field names, and applies shared credential-text redaction to ordinary string values while leaving repository records unchanged.
+
+This is a narrow kernel-boundary hardening slice for non-Web callers of `RunExperimentInboundPort`. It does not change Run Experiment execution inputs, persistence semantics, score writes, metric writes, cancellation behavior, report format, Web adapter projections, trial fork-to-branch behavior, repository schema, or stored experiment/trial values.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunExperimentServiceTests,CredentialTextRedactorTests,CredentialJsonFieldClassifierTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 16/16, covering kernel inbound projection redaction for credential-bearing experiment names, score JSON, metric JSON, failure text, repository immutability, existing Run Experiment execution/report behavior, and shared credential redaction/classifier behavior.
