@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.runprofile;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileAuditSummary;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
@@ -317,7 +318,7 @@ public class KernelRunProfileService implements RunProfileInboundPort {
         }
         repositoryPort.findById(safeUserId, id)
                 .orElseThrow(() -> new IllegalArgumentException("run profile not found"));
-        repositoryPort.updateApprovalStatus(safeUserId, id, status, operator, blankToNull(comment));
+        repositoryPort.updateApprovalStatus(safeUserId, id, status, operator, safeComment(comment));
     }
 
     private List<RunProfileToolBindingRecord> toolRecords(
@@ -511,6 +512,11 @@ public class KernelRunProfileService implements RunProfileInboundPort {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private String safeComment(String value) {
+        String text = blankToNull(value);
+        return text == null ? null : CredentialTextRedactor.redact(text);
     }
 
     private String requireText(String value, String message) {

@@ -352,6 +352,26 @@ class KernelRunProfileServiceTests {
         assertIterableEquals(List.of("filesystem.read_file"), summary.getHighRiskToolIds());
     }
 
+    @Test
+    void shouldRedactApprovalCommentsBeforePersistence() {
+        InMemoryRunProfileRepository repository = new InMemoryRunProfileRepository();
+        KernelRunProfileService service = new KernelRunProfileService(repository, Set.of("kernel", "agentscope"));
+        Long id = service.save(RunProfileCommand.builder()
+                .userId("100")
+                .name("Governed AgentScope")
+                .executorEngine("agentscope")
+                .build());
+
+        service.submitApproval("100", id, "submit with api_key=submit-secret-value");
+        assertEquals("submit with [REDACTED]", repository.records.get(id).getApprovalComment());
+
+        service.approve("100", id, "admin", "approve with Bearer approve-secret-123456");
+        assertEquals("approve with [REDACTED]", repository.records.get(id).getApprovalComment());
+
+        service.reject("100", id, "security", "reject with password=reject-secret-value");
+        assertEquals("reject with [REDACTED]", repository.records.get(id).getApprovalComment());
+    }
+
     private static final class InMemoryRunProfileRepository implements RunProfileRepositoryPort {
         private final LinkedHashMap<Long, RunProfileRecord> records = new LinkedHashMap<>();
         private final LinkedHashMap<Long, List<RunProfileToolBindingRecord>> toolsByProfile = new LinkedHashMap<>();

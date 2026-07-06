@@ -1334,3 +1334,11 @@ Run profile HTTP projections now defensively redact credential-shaped display/co
 This is a narrow Web adapter display-boundary hardening slice. It does not change run profile save/update semantics, kernel `RunProfileInboundPort` runtime reads, chat/agent-run execution config resolution, risk summary, production gate checks, repository schema, or frontend request contracts.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseRunProfileControllerTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 16/16, covering HTTP projection redaction for run profile list/detail/preview/apply/applied-profile responses, port-object immutability, existing run-profile controller routes, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Run Profile Approval Comment Write Redaction
+
+Run profile approval status updates now redact credential-shaped approval comments before persistence in `KernelRunProfileService.submitApproval`, `approve`, and `reject`. This protects newly written run-profile governance history even before Web projection redaction is applied, while preserving approval status transitions, operator recording, approval timestamps, audit-summary shape, and readonly profile protections.
+
+This is a narrow run-profile governance write-boundary hardening slice. It does not change run-profile config persistence, Tool Gateway policy decisions, production-gate checks, conversation profile binding, runtime execution config resolution, repository schema, or the Web adapter projection defense.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunProfileServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 15/15, covering submit/approve/reject approval-comment write redaction, existing run-profile lifecycle behavior, governance summaries, and shared credential text redactor behavior.
