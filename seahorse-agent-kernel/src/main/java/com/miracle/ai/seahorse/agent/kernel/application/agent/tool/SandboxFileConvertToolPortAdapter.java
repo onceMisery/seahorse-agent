@@ -57,6 +57,7 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
     private static final String HTML_FORMAT = "html";
     private static final String MARKDOWN_FORMAT = "markdown";
     private static final String DOCX_FORMAT = "docx";
+    private static final String ODT_FORMAT = "odt";
     private static final String XLSX_FORMAT = "xlsx";
     private static final String PPTX_FORMAT = "pptx";
     private static final String PDF_FORMAT = "pdf";
@@ -64,9 +65,9 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
             "Sandbox File Convert",
-            "Convert bounded file content through the Seahorse sandbox runtime. Supports CSV/TSV to JSON, JSON to CSV/TSV, text to HTML, HTML to text, Markdown to HTML/text, base64 DOCX/PDF to HTML/text, base64 XLSX to CSV/HTML, and base64 PPTX to HTML/text with network disabled.",
+            "Convert bounded file content through the Seahorse sandbox runtime. Supports CSV/TSV to JSON, JSON to CSV/TSV, text to HTML, HTML to text, Markdown to HTML/text, base64 DOCX/ODT/PDF to HTML/text, base64 XLSX to CSV/HTML, and base64 PPTX to HTML/text with network disabled.",
             """
-                    {"type":"object","required":["sourceFormat","targetFormat","content"],"properties":{"sourceFormat":{"type":"string","enum":["csv","tsv","json","txt","html","markdown","md","docx","xlsx","pptx","pdf"]},"targetFormat":{"type":"string","enum":["json","csv","tsv","txt","html"]},"contentEncoding":{"type":"string","enum":["plain","base64"],"default":"plain","description":"Use base64 for binary DOCX/XLSX/PPTX/PDF input; plain is used for text inputs."},"content":{"type":"string","minLength":1,"maxLength":262144}}}
+                    {"type":"object","required":["sourceFormat","targetFormat","content"],"properties":{"sourceFormat":{"type":"string","enum":["csv","tsv","json","txt","html","markdown","md","docx","odt","xlsx","pptx","pdf"]},"targetFormat":{"type":"string","enum":["json","csv","tsv","txt","html"]},"contentEncoding":{"type":"string","enum":["plain","base64"],"default":"plain","description":"Use base64 for binary DOCX/ODT/XLSX/PPTX/PDF input; plain is used for text inputs."},"content":{"type":"string","minLength":1,"maxLength":262144}}}
                     """);
 
     private final SandboxRuntimeInboundPort sandboxRuntime;
@@ -114,7 +115,7 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
         String content = argumentStringPreservingWhitespace(safeRequest.arguments(), CONTENT_ARGUMENT);
         if (!isSupportedConversion(sourceFormat, targetFormat)) {
             return ToolInvocationResult.failed(
-                    "sandbox_file_convert failed: supported conversions are csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to html/txt, xlsx to csv/html, and pptx to html/txt");
+                    "sandbox_file_convert failed: supported conversions are csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/odt/pdf to html/txt, xlsx to csv/html, and pptx to html/txt");
         }
         if (isBinaryDocumentFormat(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
             return ToolInvocationResult.failed("sandbox_file_convert failed: "
@@ -122,7 +123,7 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
         }
         if (!isBinaryDocumentFormat(sourceFormat) && BASE64_ENCODING.equals(contentEncoding)) {
             return ToolInvocationResult.failed(
-                    "sandbox_file_convert failed: base64 contentEncoding is only supported for docx/xlsx/pptx/pdf input");
+                    "sandbox_file_convert failed: base64 contentEncoding is only supported for docx/odt/xlsx/pptx/pdf input");
         }
         if (content.isBlank()) {
             return ToolInvocationResult.failed("sandbox_file_convert failed: content is required");
@@ -275,7 +276,7 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
                 || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
                 || (MARKDOWN_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
-                || ((DOCX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat))
+                || ((DOCX_FORMAT.equals(sourceFormat) || ODT_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat))
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
                 || (PPTX_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
@@ -285,6 +286,7 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
 
     private boolean isBinaryDocumentFormat(String sourceFormat) {
         return DOCX_FORMAT.equals(sourceFormat)
+                || ODT_FORMAT.equals(sourceFormat)
                 || XLSX_FORMAT.equals(sourceFormat)
                 || PPTX_FORMAT.equals(sourceFormat)
                 || PDF_FORMAT.equals(sourceFormat);

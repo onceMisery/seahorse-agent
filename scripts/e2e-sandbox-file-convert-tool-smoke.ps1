@@ -360,6 +360,37 @@ function New-DocxBase64 {
     }
 }
 
+function New-OdtBase64 {
+    param([string[]]$Paragraphs)
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $tempPath = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "seahorse-odt-$([guid]::NewGuid().ToString('N')).odt")
+    $fileStream = [System.IO.File]::Open($tempPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite)
+    $archive = [System.IO.Compression.ZipArchive]::new($fileStream, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        Add-ZipTextEntry -Archive $archive -Name "mimetype" -Content "application/vnd.oasis.opendocument.text"
+        $body = ($Paragraphs | ForEach-Object {
+                $escaped = [System.Security.SecurityElement]::Escape($_)
+                "<text:p>$escaped</text:p>"
+            }) -join ""
+        $contentXml = @"
+<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body><office:text>$body</office:text></office:body>
+</office:document-content>
+"@
+        Add-ZipTextEntry -Archive $archive -Name "content.xml" -Content $contentXml
+    } finally {
+        $archive.Dispose()
+        $fileStream.Dispose()
+    }
+    try {
+        return [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($tempPath))
+    } finally {
+        Remove-Item -LiteralPath $tempPath -ErrorAction SilentlyContinue
+    }
+}
+
 function New-XlsxBase64 {
     param(
         [string]$Marker,
@@ -1054,6 +1085,164 @@ try {
             & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
             if ($LASTEXITCODE -ne 0) {
                 throw "Stored DOCX to HTML object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
+    $odtRunId = $runId
+    $odtToolCallId = "sandbox-file-convert-odt-txt-call-$suffix"
+    $odtContent = New-OdtBase64 -Paragraphs @(
+        "Sandbox ODT $Marker",
+        "ODT conversion extracts paragraph text"
+    )
+
+    $odtObservation = Test-Step "Invoke sandbox_file_convert ODT to TXT through Tool Gateway" {
+        $requestBody = @{
+            runId = $odtRunId
+            stepId = "sandbox-file-convert-odt-txt-step-$suffix"
+            toolCallId = $odtToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "odt"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $odtContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${odtRunId}:${odtToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert ODT to TXT"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert ODT to TXT failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION" -or "$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected succeeded FILE_CONVERSION ODT to TXT execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "odt" -or "$($parsed.conversion.targetFormat)" -ne "txt" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected ODT to TXT conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1 -or "$($artifacts[0].mediaType)" -ne "text/plain" -or "$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected one clean ODT TXT artifact: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed" -or $artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible ODT TXT metadata-scanned artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $odtObservation) { exit 1 }
+
+    $odtArtifactId = "$(@($odtObservation.artifacts)[0].artifactId)"
+    $odtObjectUri = Test-Step "Verify persisted ODT to TXT session and artifact" {
+        Assert-PersistedFileConversionArtifact -ArtifactId $odtArtifactId -ExpectedMediaType "text/plain" -Label "ODT to TXT"
+    }
+    if (-not $odtObjectUri) { exit 1 }
+
+    Test-Step "Download converted ODT TXT through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$odtArtifactId/download" -Headers $headers
+        if ($content -notlike "*Sandbox ODT $Marker*" -or $content -notlike "*ODT conversion extracts paragraph text*") {
+            throw "Downloaded ODT TXT did not include expected paragraphs: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded ODT TXT artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($odtObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted ODT TXT object exists in backend storage volume" {
+            $key = $odtObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote ODT to TXT key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored ODT to TXT object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
+    $odtHtmlRunId = $runId
+    $odtHtmlToolCallId = "sandbox-file-convert-odt-html-call-$suffix"
+    $odtHtmlContent = New-OdtBase64 -Paragraphs @(
+        "Sandbox ODT HTML $Marker",
+        "ODT HTML conversion renders paragraph text"
+    )
+
+    $odtHtmlObservation = Test-Step "Invoke sandbox_file_convert ODT to HTML through Tool Gateway" {
+        $requestBody = @{
+            runId = $odtHtmlRunId
+            stepId = "sandbox-file-convert-odt-html-step-$suffix"
+            toolCallId = $odtHtmlToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "odt"
+                targetFormat = "html"
+                contentEncoding = "base64"
+                content = $odtHtmlContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${odtHtmlRunId}:${odtHtmlToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert ODT to HTML"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert ODT to HTML failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION" -or "$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected succeeded FILE_CONVERSION ODT to HTML execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "odt" -or "$($parsed.conversion.targetFormat)" -ne "html" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected ODT to HTML conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1 -or "$($artifacts[0].mediaType)" -ne "text/html" -or "$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected one clean ODT HTML artifact: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed" -or $artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible ODT HTML metadata-scanned artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $odtHtmlObservation) { exit 1 }
+
+    $odtHtmlArtifactId = "$(@($odtHtmlObservation.artifacts)[0].artifactId)"
+    $odtHtmlObjectUri = Test-Step "Verify persisted ODT to HTML session and artifact" {
+        Assert-PersistedFileConversionArtifact -ArtifactId $odtHtmlArtifactId -ExpectedMediaType "text/html" -Label "ODT to HTML"
+    }
+    if (-not $odtHtmlObjectUri) { exit 1 }
+
+    Test-Step "Download converted ODT HTML through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$odtHtmlArtifactId/download" -Headers $headers
+        if ($content -notlike "*<p>Sandbox ODT HTML $Marker</p>*" -or $content -notlike "*<p>ODT HTML conversion renders paragraph text</p>*") {
+            throw "Downloaded ODT HTML did not include expected paragraphs: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded ODT HTML artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($odtHtmlObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted ODT HTML object exists in backend storage volume" {
+            $key = $odtHtmlObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote ODT to HTML key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored ODT to HTML object not found or marker missing at $path"
             }
         } | Out-Null
     }

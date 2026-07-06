@@ -463,6 +463,118 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldRunOdtToTextFileConversionAndCollectTextOutputOnly() throws Exception {
+        byte[] odtBytes = odtBytes("safe odt title", "second odt paragraph");
+        String odtBase64 = Base64.getEncoder().encodeToString(odtBytes);
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted odt document to text\n", Duration.ofMillis(190)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("odt_to_text",
+                                    "odt_paragraphs",
+                                    "source_format = \"odt\"",
+                                    "odt content.xml exceeds extraction budget",
+                                    "converted.txt")
+                            .doesNotContain(odtBase64);
+                    assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.odt")))
+                            .isEqualTo(odtBytes);
+                    Files.writeString(command.workingDirectory().resolve("converted.txt"),
+                            "safe odt title\nsecond odt paragraph\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"odt","targetFormat":"txt","contentEncoding":"base64","content":"%s"}
+                        """.formatted(odtBase64),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted odt document to text");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.txt");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/plain");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.odt"));
+    }
+
+    @Test
+    void shouldRunOdtToHtmlFileConversionAndCollectHtmlOutputOnly() throws Exception {
+        byte[] odtBytes = odtBytes("safe odt html title", "second odt html paragraph");
+        String odtBase64 = Base64.getEncoder().encodeToString(odtBytes);
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted odt document to html\n", Duration.ofMillis(190)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("odt_to_html",
+                                    "odt_paragraphs",
+                                    "source_format = \"odt\"",
+                                    "target_format = \"html\"",
+                                    "converted.html")
+                            .doesNotContain(odtBase64);
+                    assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.odt")))
+                            .isEqualTo(odtBytes);
+                    Files.writeString(command.workingDirectory().resolve("converted.html"),
+                            "<!doctype html>\n<html><body><p>safe odt html title</p><p>second odt html paragraph</p></body></html>\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"odt","targetFormat":"html","contentEncoding":"base64","content":"%s"}
+                        """.formatted(odtBase64),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted odt document to html");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.html");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/html");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.odt"));
+    }
+
+    @Test
+    void shouldRejectOdtWithActiveContentBeforeRunningContainer() throws Exception {
+        byte[] odtBytes = zipBytes(
+                "content.xml",
+                """
+                        <office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                                                 xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+                          <office:body><office:text><text:p>unsafe odt</text:p></office:text></office:body>
+                        </office:document-content>
+                        """,
+                "Scripts/macro.js",
+                "alert('macro')");
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"odt","targetFormat":"txt","contentEncoding":"base64","content":"%s"}
+                        """.formatted(Base64.getEncoder().encodeToString(odtBytes)),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("odt active content is not supported");
+        assertThat(runner.lastCommand).isNull();
+        assertThat(tempDir.resolve(session.sessionId()).resolve("main.py")).doesNotExist();
+        assertThat(tempDir.resolve(session.sessionId()).resolve("input.odt")).doesNotExist();
+    }
+
+    @Test
     void shouldRunPdfToTextFileConversionAndCollectTextOutputOnly() throws Exception {
         String pdfBase64 = Base64.getEncoder().encodeToString("%PDF-1.4\nfake-pdf-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         RecordingRunner runner = new RecordingRunner(
@@ -1502,7 +1614,7 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED);
         assertThat(result.execution().resultSummary())
-                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to html/txt, xlsx to csv/html, and pptx to html/txt only");
+                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/odt/pdf to html/txt, xlsx to csv/html, and pptx to html/txt only");
         assertThat(runner.lastCommand).isNull();
     }
 
@@ -1883,6 +1995,26 @@ class ContainerSandboxRuntimeAdapterTests {
                               </sheetData>
                             </worksheet>
                             """);
+        }
+        return bytes.toByteArray();
+    }
+
+    private static byte[] odtBytes(String firstParagraph, String secondParagraph) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream archive = new ZipOutputStream(bytes)) {
+            writeZipEntry(archive, "mimetype", "application/vnd.oasis.opendocument.text");
+            writeZipEntry(archive, "content.xml",
+                    """
+                            <office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                                                     xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+                              <office:body>
+                                <office:text>
+                                  <text:p>%s</text:p>
+                                  <text:p>%s</text:p>
+                                </office:text>
+                              </office:body>
+                            </office:document-content>
+                            """.formatted(firstParagraph, secondParagraph));
         }
         return bytes.toByteArray();
     }

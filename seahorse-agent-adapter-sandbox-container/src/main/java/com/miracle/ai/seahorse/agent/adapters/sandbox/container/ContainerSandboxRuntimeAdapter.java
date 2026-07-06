@@ -74,6 +74,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final String HTML_FORMAT = "html";
     private static final String MARKDOWN_FORMAT = "markdown";
     private static final String DOCX_FORMAT = "docx";
+    private static final String ODT_FORMAT = "odt";
     private static final String XLSX_FORMAT = "xlsx";
     private static final String PPTX_FORMAT = "pptx";
     private static final String PDF_FORMAT = "pdf";
@@ -356,13 +357,13 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String contentEncoding = normalizedContentEncoding(root.path("contentEncoding").asText(PLAIN_ENCODING));
         if (!isSupportedFileConversion(sourceFormat, targetFormat)) {
             throw new UnsupportedFileConversionException(
-                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/pdf to html/txt, xlsx to csv/html, and pptx to html/txt only");
+                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/odt/pdf to html/txt, xlsx to csv/html, and pptx to html/txt only");
         }
         if (isBinaryDocumentFormat(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
             throw new IllegalArgumentException(sourceFormat + " file conversion contentEncoding must be base64");
         }
         if (!isBinaryDocumentFormat(sourceFormat) && BASE64_ENCODING.equals(contentEncoding)) {
-            throw new IllegalArgumentException("base64 contentEncoding is only supported for docx/xlsx/pptx/pdf input");
+            throw new IllegalArgumentException("base64 contentEncoding is only supported for docx/odt/xlsx/pptx/pdf input");
         }
         String content = root.path("content").asText("");
         if (!hasText(content)) {
@@ -378,6 +379,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private void validateBinaryFileConversionInput(String sourceFormat, byte[] content) {
         if (DOCX_FORMAT.equals(sourceFormat)) {
             validateDocxFileConversionInput(content);
+        }
+        if (ODT_FORMAT.equals(sourceFormat)) {
+            validateOdtFileConversionInput(content);
         }
         if (XLSX_FORMAT.equals(sourceFormat)) {
             validateXlsxFileConversionInput(content);
@@ -415,6 +419,34 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
         if (!documentXmlFound) {
             throw new IllegalArgumentException("docx word/document.xml not found");
+        }
+    }
+
+    private void validateOdtFileConversionInput(byte[] content) {
+        boolean contentXmlFound = false;
+        int inspectedEntries = 0;
+        try (ZipInputStream archive = new ZipInputStream(new ByteArrayInputStream(content))) {
+            ZipEntry entry;
+            while ((entry = archive.getNextEntry()) != null) {
+                if (++inspectedEntries > MAX_FILE_CONVERSION_ARCHIVE_ENTRIES) {
+                    throw new IllegalArgumentException("odt archive exceeds entry scan budget");
+                }
+                String entryName = normalizedArchiveEntryName(entry.getName());
+                if (hasUnsafeArchivePath(entryName)) {
+                    throw new IllegalArgumentException("odt archive contains unsafe entry");
+                }
+                if (hasOdtActiveContentEntry(entryName)) {
+                    throw new IllegalArgumentException("odt active content is not supported");
+                }
+                if ("content.xml".equals(entryName)) {
+                    contentXmlFound = true;
+                }
+            }
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("odt archive could not be inspected", ex);
+        }
+        if (!contentXmlFound) {
+            throw new IllegalArgumentException("odt content.xml not found");
         }
     }
 
@@ -516,6 +548,22 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || value.startsWith("word/embeddings/")
                 || value.startsWith("word/externallinks/")
                 || value.contains("/oleobject");
+    }
+
+    private boolean hasOdtActiveContentEntry(String value) {
+        if (!hasText(value)) {
+            return false;
+        }
+        return value.equals("scripts/")
+                || value.startsWith("scripts/")
+                || value.endsWith(".class")
+                || value.endsWith(".jar")
+                || value.endsWith(".js")
+                || value.endsWith(".sh")
+                || value.endsWith(".bat")
+                || value.endsWith(".cmd")
+                || value.contains("basic/")
+                || value.contains("objectreplacements/");
     }
 
     private boolean hasXlsxActiveContentEntry(String value) {
@@ -1189,6 +1237,41 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             paragraphs.append(text)
                     return paragraphs
 
+                def odt_to_text(path):
+                    paragraphs = odt_paragraphs(path)
+                    return "\\n".join(paragraphs) + ("\\n" if paragraphs else "")
+
+                def odt_to_html(path):
+                    paragraphs = odt_paragraphs(path)
+                    body = "\\n".join("<p>" + html.escape(paragraph) + "</p>" for paragraph in paragraphs)
+                    return "<!doctype html>\\n<html><body>\\n" + body + "\\n</body></html>\\n"
+
+                def odt_paragraphs(path):
+                    with zipfile.ZipFile(path) as archive:
+                        try:
+                            content_info = archive.getinfo("content.xml")
+                        except KeyError as exc:
+                            raise ValueError("odt content.xml not found") from exc
+                        if content_info.file_size > 1048576:
+                            raise ValueError("odt content.xml exceeds extraction budget")
+                        content_xml = archive.read(content_info)
+                    root = ET.fromstring(content_xml)
+                    ns = {
+                        "office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
+                        "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
+                    }
+                    body = root.find(".//office:text", ns)
+                    if body is None:
+                        raise ValueError("odt office text body not found")
+                    paragraphs = []
+                    for paragraph in body.findall(".//text:p", ns):
+                        text = "".join(paragraph.itertext()).strip()
+                        if text:
+                            paragraphs.append(text)
+                    if not paragraphs:
+                        raise ValueError("odt paragraph text not found")
+                    return paragraphs
+
                 def xlsx_shared_strings(archive):
                     try:
                         info = archive.getinfo("xl/sharedStrings.xml")
@@ -1477,6 +1560,12 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "docx" and target_format == "html":
                     output_path.write_text(docx_to_html(input_path), encoding="utf-8")
                     print(f"converted docx document to html")
+                elif source_format == "odt" and target_format == "txt":
+                    output_path.write_text(odt_to_text(input_path), encoding="utf-8")
+                    print(f"converted odt document to text")
+                elif source_format == "odt" and target_format == "html":
+                    output_path.write_text(odt_to_html(input_path), encoding="utf-8")
+                    print(f"converted odt document to html")
                 elif source_format == "xlsx" and target_format == "csv":
                     output_path.write_text(xlsx_to_csv(input_path), encoding="utf-8")
                     print(f"converted xlsx worksheet to csv")
@@ -1511,7 +1600,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
                 || (MARKDOWN_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
-                || ((DOCX_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat))
+                || ((DOCX_FORMAT.equals(sourceFormat) || ODT_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat))
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
                 || (PPTX_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
@@ -1525,6 +1614,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
     private boolean isBinaryDocumentFormat(String sourceFormat) {
         return DOCX_FORMAT.equals(sourceFormat)
+                || ODT_FORMAT.equals(sourceFormat)
                 || XLSX_FORMAT.equals(sourceFormat)
                 || PPTX_FORMAT.equals(sourceFormat)
                 || PDF_FORMAT.equals(sourceFormat);
@@ -1536,6 +1626,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             case TXT_FORMAT -> "txt";
             case HTML_FORMAT -> "html";
             case DOCX_FORMAT -> "docx";
+            case ODT_FORMAT -> "odt";
             case XLSX_FORMAT -> "xlsx";
             case PPTX_FORMAT -> "pptx";
             case PDF_FORMAT -> "pdf";
