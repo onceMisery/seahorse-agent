@@ -422,12 +422,24 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("argumentCount", arguments.size());
         summary.put("pathKeys", safeArgumentKeys(path));
         summary.put("pathCount", path.size());
+        summary.put("pathValueCount", mapValueCount(path));
+        summary.put("pathValueTotalLength", mapValueTotalLength(path));
+        summary.put("pathValueMaxLength", mapValueMaxLength(path));
         summary.put("queryKeys", safeArgumentKeys(query));
         summary.put("queryCount", query.size());
+        summary.put("queryValueCount", mapValueCount(query));
+        summary.put("queryValueTotalLength", mapValueTotalLength(query));
+        summary.put("queryValueMaxLength", mapValueMaxLength(query));
         summary.put("parameterKeys", safeArgumentKeys(parameters));
         summary.put("parameterCount", parameters.size());
+        summary.put("parameterValueCount", mapValueCount(parameters));
+        summary.put("parameterValueTotalLength", mapValueTotalLength(parameters));
+        summary.put("parameterValueMaxLength", mapValueMaxLength(parameters));
         summary.put("headerKeys", safeArgumentKeys(headers));
         summary.put("headerCount", headers.size());
+        summary.put("headerValueCount", mapValueCount(headers));
+        summary.put("headerValueTotalLength", mapValueTotalLength(headers));
+        summary.put("headerValueMaxLength", mapValueMaxLength(headers));
         summary.put("requestBodyPresent", body != null);
         summary.put("requestBodyType", valueType(body));
         if (body instanceof String text) {
@@ -527,9 +539,9 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("promptLength", argumentString(arguments, "prompt").length());
         summary.put("metadataKeys", safeArgumentKeys(metadata));
         summary.put("metadataCount", metadata.size());
-        summary.put("metadataValueCount", metadataValueCount(metadata));
-        summary.put("metadataValueTotalLength", metadataValueTotalLength(metadata));
-        summary.put("metadataValueMaxLength", metadataValueMaxLength(metadata));
+        summary.put("metadataValueCount", mapValueCount(metadata));
+        summary.put("metadataValueTotalLength", mapValueTotalLength(metadata));
+        summary.put("metadataValueMaxLength", mapValueMaxLength(metadata));
         summary.put("versionPresent", hasText(metadataVersion));
         summary.put("versionLength", metadataVersion.length());
         summary.put("argumentKeys", safeArgumentKeys(arguments));
@@ -773,25 +785,25 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         return count;
     }
 
-    private int metadataValueCount(Map<String, Object> metadata) {
-        return metadata == null ? 0 : metadata.size();
+    private int mapValueCount(Map<String, Object> values) {
+        return values == null ? 0 : values.size();
     }
 
-    private int metadataValueTotalLength(Map<String, Object> metadata) {
-        if (metadata == null || metadata.isEmpty()) {
+    private int mapValueTotalLength(Map<String, Object> values) {
+        if (values == null || values.isEmpty()) {
             return 0;
         }
-        return metadata.values().stream()
+        return values.values().stream()
                 .filter(Objects::nonNull)
                 .mapToInt(value -> value.toString().length())
                 .sum();
     }
 
-    private int metadataValueMaxLength(Map<String, Object> metadata) {
-        if (metadata == null || metadata.isEmpty()) {
+    private int mapValueMaxLength(Map<String, Object> values) {
+        if (values == null || values.isEmpty()) {
             return 0;
         }
-        return metadata.values().stream()
+        return values.values().stream()
                 .filter(Objects::nonNull)
                 .mapToInt(value -> value.toString().length())
                 .max()

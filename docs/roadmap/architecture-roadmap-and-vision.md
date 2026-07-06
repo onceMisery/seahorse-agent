@@ -970,3 +970,11 @@ Tool Gateway request audit now includes value-free metadata value shape evidence
 This is a narrow cross-provider audit-hardening slice. It does not change A2A request validation, connector invocation, signing, approval policy, quota policy, or remote-agent execution behavior.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering A2A metadata value shape metadata while preserving existing prompt, agent-name, version, and metadata value redaction assertions.
+
+## 2026-07-06 Update: OpenAPI Audit Value Shape Summary
+
+Tool Gateway request audit now includes value-free OpenAPI value shape evidence for dynamic `openapi_` tools: path/query/parameter/header value count, total value length, and maximum value length. The summary still excludes raw path/query/header/parameter/body values and unsafe argument keys.
+
+This is a narrow cross-provider audit-hardening slice. It does not change OpenAPI connector import, credential injection, HTTP invocation, response redaction, approval policy, quota policy, or request execution behavior.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering OpenAPI value shape metadata while preserving existing path, query, parameter, header, body value, and unsafe-key redaction assertions.
