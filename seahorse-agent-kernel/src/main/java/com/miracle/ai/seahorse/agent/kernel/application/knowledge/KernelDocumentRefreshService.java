@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.knowledge;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.PipelineDefinition;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.DocumentRefreshInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.DocumentRefreshResult;
@@ -212,7 +213,7 @@ public class KernelDocumentRefreshService implements DocumentRefreshInboundPort 
             documentInboundPort.executeChunk(document.getId(), requirePipeline(document), operator);
             return RefreshOutcome.success(hash, stored.originalFilename(), stored.size());
         } catch (Exception ex) {
-            return RefreshOutcome.failed(ex.getMessage());
+            return RefreshOutcome.failed(failureMessage(ex));
         }
     }
 
@@ -283,6 +284,13 @@ public class KernelDocumentRefreshService implements DocumentRefreshInboundPort 
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private String failureMessage(Throwable error) {
+        if (error == null) {
+            return "";
+        }
+        return CredentialTextRedactor.redact(Objects.requireNonNullElse(error.getMessage(), error.getClass().getName()));
     }
 
     private record RefreshOutcome(

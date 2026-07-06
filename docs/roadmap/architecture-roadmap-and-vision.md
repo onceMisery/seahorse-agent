@@ -1550,3 +1550,11 @@ Metadata review index-compensation failures now redact credential-shaped excepti
 This is a narrow metadata-review quarantine hardening slice. It does not change approve/correct/re-extract decision semantics, canonical metadata writes, index compensation execution, review audit records, quarantine schema, raw exception logging, or the rule that quarantine write failures cannot roll back a completed review decision.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelMetadataReviewServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 11/11, covering metadata review compensation-failure quarantine redaction, existing review decision behavior, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Document Refresh Failure State Redaction
+
+Scheduled document refresh failures now redact credential-shaped exception text before returning `DocumentRefreshResult` or persisting refresh execution/schedule failure messages. This protects knowledge refresh operations surfaces when upstream fetchers, storage, metadata switching, or chunk execution errors include bearer tokens, API keys, or similar material.
+
+This is a narrow document-refresh failure-state hardening slice. It does not change fetch requests, object storage uploads, document file switching, chunk execution inputs, schedule timing, lock behavior, repository interfaces, raw exception logging, or successful/skipped refresh outcomes.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=KernelDocumentRefreshServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes ran 6/6, covering refresh result/schedule/execution failure-message redaction, existing refresh success/skip behavior, and shared credential text redactor behavior.

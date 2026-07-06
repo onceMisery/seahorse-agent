@@ -96,18 +96,28 @@ class KernelDocumentRefreshServiceTests {
     @Test
     void shouldRecordFailedStateWhenFetchFails() {
         Ports ports = new Ports();
-        ports.fetcher.failure = new IllegalStateException("remote unavailable");
+        ports.fetcher.failure = new IllegalStateException(
+                "remote unavailable Authorization: Bearer abcdefghijklmnop api_key=plain-refresh-secret");
         KernelDocumentRefreshService service = newService(ports);
 
         DocumentRefreshResult result = service.refreshDocument("1", "system");
 
         assertThat(result.status()).isEqualTo("failed");
-        assertThat(result.message()).contains("remote unavailable");
+        assertThat(result.message())
+                .isEqualTo("remote unavailable [REDACTED] [REDACTED]")
+                .doesNotContain("abcdefghijklmnop")
+                .doesNotContain("plain-refresh-secret");
         assertThat(ports.repository.replacedFile).isNull();
-        assertThat(ports.schedulePort.updates).extracting(DocumentRefreshScheduleUpdate::status)
-                .containsExactly("failed");
-        assertThat(ports.stateRepository.finishes).extracting(DocumentRefreshExecutionFinish::status)
-                .containsExactly("failed");
+        assertThat(ports.schedulePort.updates).singleElement()
+                .satisfies(update -> {
+                    assertThat(update.status()).isEqualTo("failed");
+                    assertThat(update.message()).isEqualTo("remote unavailable [REDACTED] [REDACTED]");
+                });
+        assertThat(ports.stateRepository.finishes).singleElement()
+                .satisfies(finish -> {
+                    assertThat(finish.status()).isEqualTo("failed");
+                    assertThat(finish.message()).isEqualTo("remote unavailable [REDACTED] [REDACTED]");
+                });
     }
 
     private KernelDocumentRefreshService newService(Ports ports) {
