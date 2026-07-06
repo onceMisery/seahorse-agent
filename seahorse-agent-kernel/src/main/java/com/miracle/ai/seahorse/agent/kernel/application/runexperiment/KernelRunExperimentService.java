@@ -821,8 +821,8 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                     trialStatus,
                     result.getRunId(),
                     result.getOutputMessageId(),
-                    result.getMetricJson(),
-                    result.getErrorMessage());
+                    safeJsonText(result.getMetricJson()),
+                    safeText(result.getErrorMessage()));
         }
         String finalStatus = failed ? STATUS_FAILED : STATUS_SUCCEEDED;
         return repositoryPort.updateExperimentOnlyStatus(userId, experiment.getId(), finalStatus)

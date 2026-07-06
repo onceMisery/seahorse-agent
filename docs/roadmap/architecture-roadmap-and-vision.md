@@ -1398,3 +1398,11 @@ Run Experiment creation now redacts credential-shaped experiment names before pe
 This is a narrow experiment-name write hardening slice. It does not change trial score writes, trial metric/error persistence, execution status transitions, report format, Web adapter response shape, repository schema, or run-profile selection semantics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunExperimentServiceTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 15/15, covering experiment-name write redaction before repository persistence, existing Run Experiment execution/report behavior, score write redaction, and shared credential text redactor behavior.
+
+## 2026-07-06 Update: Run Experiment Trial Execution Write Redaction
+
+Run Experiment trial execution updates now redact credential-shaped executor output before persistence in `KernelRunExperimentService.executeCreatedExperiment`. The write boundary parses trial `metricJson` when possible, recursively redacts sensitive JSON field names, applies shared credential-text redaction to string values, and redacts trial `errorMessage` text before storing the trial record.
+
+This is a narrow trial-execution write hardening slice. It does not change trial status normalization, run/output message ids, score writes, experiment-name writes, report format, Web adapter response shape, repository schema, or executor invocation inputs.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelRunExperimentServiceTests,CredentialTextRedactorTests,CredentialJsonFieldClassifierTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 18/18, covering trial metric/error write redaction before repository persistence, inbound projection redaction, existing Run Experiment execution/report behavior, and shared credential redaction/classifier behavior.

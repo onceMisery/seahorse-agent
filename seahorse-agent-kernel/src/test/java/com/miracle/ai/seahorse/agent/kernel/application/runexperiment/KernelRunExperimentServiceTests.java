@@ -402,7 +402,7 @@ class KernelRunExperimentServiceTests {
     }
 
     @Test
-    void shouldRedactCredentialTextFromInboundDetailsWithoutMutatingRepository() {
+    void shouldRedactCredentialTextFromInboundDetailsAndTrialExecutionWrites() {
         InMemoryRunExperimentRepository repository = new InMemoryRunExperimentRepository();
         RunExperimentTrialExecutorPort executor = request -> RunExperimentTrialExecutionResult.builder()
                 .status("FAILED")
@@ -436,9 +436,9 @@ class KernelRunExperimentServiceTests {
         assertEquals("{\"verdict\":\"[REDACTED]\",\"cost\":0.11}", found.getTrials().get(0).getScoreJson());
 
         assertEquals("Profile compare [REDACTED]", repository.details.getExperiment().getName());
-        assertTrue(repository.details.getTrials().get(0).getMetricJson().contains("metric-secret-123456"));
-        assertTrue(repository.details.getTrials().get(0).getMetricJson().contains("nested-secret-value"));
-        assertTrue(repository.details.getTrials().get(0).getErrorMessage().contains("trial-error-secret"));
+        assertEquals("{\"traceId\":\"[REDACTED]\",\"nested\":{\"apiKey\":\"[REDACTED]\"}}",
+                repository.details.getTrials().get(0).getMetricJson());
+        assertEquals("failed with [REDACTED]", repository.details.getTrials().get(0).getErrorMessage());
         assertEquals("{\"verdict\":\"[REDACTED]\",\"cost\":0.11}", repository.details.getTrials().get(0).getScoreJson());
     }
 
