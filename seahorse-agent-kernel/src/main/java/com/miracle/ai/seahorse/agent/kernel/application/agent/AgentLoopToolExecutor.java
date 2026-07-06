@@ -216,7 +216,7 @@ final class AgentLoopToolExecutor {
         } catch (ExecutionException ex) {
             Throwable cause = Objects.requireNonNullElse(ex.getCause(), ex);
             return AgentObservation.failed(toolCall.id(),
-                    Objects.requireNonNullElse(cause.getMessage(), cause.getClass().getName()));
+                    redactObservationText(Objects.requireNonNullElse(cause.getMessage(), cause.getClass().getName())));
         }
     }
 

@@ -1784,3 +1784,11 @@ Research report streaming failures now redact credential-shaped exception text b
 This is a narrow write-report streaming failure-boundary hardening slice. It does not change report prompt construction, streaming lifecycle events, artifact persistence, retry classification, timeout handling, cancellation behavior, or the original exception cause retained for server-side diagnostics.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-tests,seahorse-agent-kernel -am "-Dtest=WriteReportStepHandlerStreamingTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with the full reactor `BUILD SUCCESS`; targeted test classes covered kernel redactor plus write-report streaming success, blocking compatibility, and streaming failure redaction.
+
+## 2026-07-06 Update: Agent Tool Future Failure Redaction
+
+Agent loop tool-thread failures now redact credential-shaped exception text before converting `ExecutionException` causes into failed tool observations. This protects model-visible tool messages, run steps, and downstream stream/tool diagnostics if a tool execution thread fails outside the normal Tool Gateway result/exception handling path.
+
+This is a narrow executor-boundary hardening slice. It does not change Tool Gateway invocation, successful observation content, timeout/interruption messages, trace recorder fail-open behavior, tool policy decisions, approval handling, or server-side exception causes.
+
+Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentLoopToolGatewayTests,CredentialTextRedactorTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed with `BUILD SUCCESS`; targeted test classes ran 30/30 across kernel redactor and agent loop tool gateway/future-failure coverage.

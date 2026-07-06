@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillReso
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
+import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopExitReason;
@@ -43,6 +44,10 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamApprovalRequiredEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamAgentStepEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
@@ -58,6 +63,13 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ToolCallCollector;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNode;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNodeFinish;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTracePage;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTracePageRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRun;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRunFinish;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -956,6 +968,36 @@ class KernelAgentLoopToolGatewayTests {
     }
 
     @Test
+    void shouldRedactCredentialShapedToolThreadFailuresBeforeModelContext() {
+        AgentToolCall toolCall = AgentToolCall.of("call-1", "web_search", Map.of("query", "seahorse ai"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need search", List.of(toolCall)),
+                Turn.finalAnswer("done")));
+        KernelAgentLoop loop = kernelLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                new RecordingToolGateway(ToolInvocationResult.ok("unused")),
+                KernelAgentLoopOptions.defaults(),
+                new ThrowingToolTraceRecorder(
+                        "trace failed Authorization: Bearer abcdefghijklmnop api_key=plain-loop-future-secret"));
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("research")
+                .allowedToolIds(List.of("web_search"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-tool-future-secret-failed")
+                .build());
+
+        String observationError = result.steps().get(0).observations().get(0).error();
+        assertEquals("trace failed [REDACTED] [REDACTED]", observationError);
+        ChatRequest secondTurn = model.requests.get(1);
+        String toolMessage = secondTurn.getMessages().get(secondTurn.getMessages().size() - 1).getContent();
+        assertEquals("trace failed [REDACTED] [REDACTED]", toolMessage);
+        assertFalse(observationError.contains("abcdefghijklmnop"));
+        assertFalse(observationError.contains("plain-loop-future-secret"));
+    }
+
+    @Test
     void shouldRedactCredentialShapedModelErrorsFromStreamingStepEvents() {
         StreamingChatModelPort model = new FailingModel(
                 "model failed Authorization: Bearer abcdefghijklmnop api_key=plain-loop-model-secret");
@@ -1062,7 +1104,7 @@ class KernelAgentLoopToolGatewayTests {
             ToolRegistryPort toolRegistry,
             ToolGatewayPort toolGateway,
             KernelAgentLoopOptions options) {
-        return kernelLoop(modelPort, toolRegistry, toolGateway, options, null);
+        return kernelLoop(modelPort, toolRegistry, toolGateway, options, (AgentApprovalWaitHandler) null);
     }
 
     private static KernelAgentLoop kernelLoop(
@@ -1071,12 +1113,31 @@ class KernelAgentLoopToolGatewayTests {
             ToolGatewayPort toolGateway,
             KernelAgentLoopOptions options,
             AgentApprovalWaitHandler approvalWaitHandler) {
+        return kernelLoop(modelPort, toolRegistry, toolGateway, options, approvalWaitHandler, null);
+    }
+
+    private static KernelAgentLoop kernelLoop(
+            StreamingChatModelPort modelPort,
+            ToolRegistryPort toolRegistry,
+            ToolGatewayPort toolGateway,
+            KernelAgentLoopOptions options,
+            KernelRagTraceRecorder traceRecorder) {
+        return kernelLoop(modelPort, toolRegistry, toolGateway, options, null, traceRecorder);
+    }
+
+    private static KernelAgentLoop kernelLoop(
+            StreamingChatModelPort modelPort,
+            ToolRegistryPort toolRegistry,
+            ToolGatewayPort toolGateway,
+            KernelAgentLoopOptions options,
+            AgentApprovalWaitHandler approvalWaitHandler,
+            KernelRagTraceRecorder traceRecorder) {
         return new KernelAgentLoop(new AgentLoopDependencies(
                 modelPort,
                 toolRegistry,
                 toolGateway,
                 options,
-                null,
+                traceRecorder,
                 null,
                 null,
                 approvalWaitHandler,
@@ -1102,6 +1163,61 @@ class KernelAgentLoopToolGatewayTests {
         public ToolInvocationResult invoke(ToolInvocationRequest request) {
             requests.add(request);
             return result;
+        }
+    }
+
+    private static final class ThrowingToolTraceRecorder extends KernelRagTraceRecorder {
+        private final String message;
+
+        private ThrowingToolTraceRecorder(String message) {
+            super(new NoopTraceRepository());
+            this.message = message;
+        }
+
+        @Override
+        public TraceRunScope startRun(TraceRunStartCommand command) {
+            return TraceRunScope.active("trace-1", Instant.now());
+        }
+
+        @Override
+        public TraceNodeScope startNode(TraceRunScope runScope, TraceNodeStartCommand command) {
+            if (command != null && command.nodeName().startsWith("agent-tool-")) {
+                throw new IllegalStateException(message);
+            }
+            return TraceNodeScope.disabled();
+        }
+    }
+
+    private static final class NoopTraceRepository implements RagTraceRepositoryPort {
+        @Override
+        public RagTracePage<RagTraceRun> pageRuns(RagTracePageRequest request) {
+            return new RagTracePage<>(1, 0, 0, List.of());
+        }
+
+        @Override
+        public Optional<RagTraceRun> findRun(String traceId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<RagTraceNode> listNodes(String traceId) {
+            return List.of();
+        }
+
+        @Override
+        public void startRun(RagTraceRun run) {
+        }
+
+        @Override
+        public void finishRun(RagTraceRunFinish finish) {
+        }
+
+        @Override
+        public void startNode(RagTraceNode node) {
+        }
+
+        @Override
+        public void finishNode(RagTraceNodeFinish finish) {
         }
     }
 
