@@ -239,6 +239,7 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                 archiveScannedMediaTypes(),
                 List.of(
                         "ARCHIVE_EXECUTABLE_BINARY",
+                        "ARCHIVE_NESTED_ARCHIVE",
                         "ARCHIVE_PDF_ACTIVE_CONTENT",
                         "ARCHIVE_SCAN_ERROR",
                         "ARCHIVE_SCAN_LIMIT",
@@ -518,6 +519,9 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                     true,
                     List.of("ARCHIVE_EXECUTABLE_BINARY"));
         }
+        if (hasNestedArchiveEntryName(entryName)) {
+            return nestedArchiveContent();
+        }
         return null;
     }
 
@@ -528,6 +532,9 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                     "archive executable content",
                     true,
                     List.of("ARCHIVE_EXECUTABLE_BINARY"));
+        }
+        if (hasZipSignature(prefix) || hasGzipSignature(prefix) || hasTarSignature(prefix)) {
+            return nestedArchiveContent();
         }
         if ((hasPdfSignature(prefix) || hasPdfArchiveEntryName(entryName))
                 && containsPdfActiveContent(prefix)) {
@@ -554,6 +561,14 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                 "archive content scan failed",
                 true,
                 List.of("ARCHIVE_SCAN_ERROR"));
+    }
+
+    private static SandboxArtifactScanResult nestedArchiveContent() {
+        return SandboxArtifactScanResult.blocked(
+                ContextSensitivity.CONFIDENTIAL,
+                "nested archive content",
+                true,
+                List.of("ARCHIVE_NESTED_ARCHIVE"));
     }
 
     private static byte[] readPrefix(Path path, int maxBytes) throws IOException {
@@ -805,6 +820,19 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
         return startsWith(content, (byte) '%', (byte) 'P', (byte) 'D', (byte) 'F', (byte) '-');
     }
 
+    private static boolean hasGzipSignature(byte[] content) {
+        return startsWith(content, (byte) 0x1F, (byte) 0x8B);
+    }
+
+    private static boolean hasTarSignature(byte[] content) {
+        return content.length >= 262
+                && content[257] == (byte) 'u'
+                && content[258] == (byte) 's'
+                && content[259] == (byte) 't'
+                && content[260] == (byte) 'a'
+                && content[261] == (byte) 'r';
+    }
+
     private static boolean hasEbmlSignature(byte[] content) {
         return startsWith(content, (byte) 0x1A, (byte) 0x45, (byte) 0xDF, (byte) 0xA3);
     }
@@ -838,6 +866,18 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
 
     private static boolean hasPdfArchiveEntryName(String value) {
         return "pdf".equals(archiveEntryExtension(value));
+    }
+
+    private static boolean hasNestedArchiveEntryName(String value) {
+        if (!hasText(value)) {
+            return false;
+        }
+        String normalized = value.replace('\\', '/').toLowerCase(Locale.ROOT);
+        return normalized.endsWith(".tar.gz")
+                || normalized.endsWith(".zip")
+                || normalized.endsWith(".tar")
+                || normalized.endsWith(".tgz")
+                || normalized.endsWith(".gz");
     }
 
     private static boolean hasOfficeMacroArchiveEntryName(String value) {

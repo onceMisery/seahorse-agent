@@ -376,6 +376,16 @@ The new smoke step verifies `BLOCKED|SECRET`, summary `archive content scan fail
 
 Fresh evidence: PowerShell parsing returned `PSParser OK`; backend health returned `{"status":"UP"}` before the run; `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-plain-gzip-failclosed-smoke-rerun` passed 45/45 against the local full-Docker backend, including the new "Verify plain GZIP archive is blocked before object storage" step. Cleanup confirmed no `seahorse-sandbox-*` containers, PostgreSQL reported zero non-terminal sandbox sessions, and backend health remained `UP`.
 
+## 2026-07-07 Update: Sandbox Nested Archive Fail-Closed Scan
+
+`DefaultSandboxArtifactScannerPort` now fails closed when a scanned ZIP/TAR/TAR.GZ archive contains a nested archive entry. The scanner blocks nested archive filenames (`.zip`, `.tar`, `.tar.gz`, `.tgz`, `.gz`) and nested archive content signatures (ZIP, GZIP, TAR `ustar`) inside regular archive entries with value-free category `ARCHIVE_NESTED_ARCHIVE`.
+
+Blocked nested archives are recorded as `BLOCKED|CONFIDENTIAL`, summary `nested archive content`, `contentScanned=true`, and are not copied to governed object storage or made downloadable. The redaction summary does not persist raw inner filenames such as `inner.zip` or test content markers. This is deliberately fail-closed and non-recursive: it does not add recursive extraction, generic container unpacking, external scanner engines, ClamAV, full PDF rendering/OCR, Office rendering/editing, LibreOffice/Tika conversion, or general binary conversion.
+
+The artifact-storage full-Docker smoke was also updated to follow the current governed tool path: it creates a real persisted agent run, handles `sandbox_python` approval, binds tool invocations to that run, and reads session ids from persisted artifact/session state instead of relying on prompt observation leakage.
+
+Fresh evidence: PowerShell parsing returned `ps1 parse ok`; focused scanner tests passed 41/41 via `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=DefaultSandboxArtifactScannerPortTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`; the bootstrap package rebuilt with reactor `BUILD SUCCESS`; `seahorse-backend` was hot-deployed and `/actuator/health` returned `{"status":"UP"}`; `.\scripts\e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-nested-archive-smoke` passed 49/49 against the local full-Docker backend, including "Verify nested ZIP archive is blocked before object storage"; and `.\scripts\e2e-backend-smoke.ps1 -BaseUrl http://localhost:9090 -RuntimeProfile full-compose` passed 20/20.
+
 ## 2026-07-04 Update: Sandbox Archive Unsafe Path E2E Guard
 
 The artifact-storage full-Docker smoke now verifies unsafe archive entry paths through the real runtime path. The sandbox run creates `path-traversal-bundle.zip` with `../outside.txt`; the scanner blocks it before object storage copy as `BLOCKED|CONFIDENTIAL`, summary `unsafe archive entry`, and value-free `ARCHIVE_UNSAFE_ENTRY` metadata.

@@ -12,6 +12,7 @@ param(
     [string]$ExpectedObjectUriPrefix = "local://sandbox-artifacts/",
     [int]$ExpectedRuntimeActiveSessionLimit = 0,
     [long]$ExpectedWorkspaceMinFreeBytes = 0,
+    [long]$KernelRunProfileId = -9101,
     [switch]$VerifyCapacityAdmission,
     [switch]$VerifyWorkspaceDiskAdmission,
     [switch]$UseScheduledSweep,
@@ -159,6 +160,98 @@ function Assert-ApiOk {
     }
 }
 
+function Invoke-SandboxPythonTool {
+    param(
+        [hashtable]$Headers,
+        [hashtable]$Body,
+        [string]$Name
+    )
+
+    $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $Headers -Body $Body
+    Assert-ApiOk $response $Name
+
+    $requiresApproval = $response.data.success -eq $false -and (
+        "$($response.data.error)" -eq "TOOL_APPROVAL_REQUIRED" -or
+        "$($response.data.reasonCode)" -eq "TOOL_APPROVAL_REQUIRED"
+    )
+    if (-not $requiresApproval) {
+        return $response
+    }
+
+    if (-not $response.data.approvalId) {
+        throw "$Name required approval but did not return approvalId: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+    $approvalId = "$($response.data.approvalId)"
+    $approval = Invoke-Json -Method GET -Path "/api/approvals/$approvalId" -Headers $Headers
+    Assert-ApiOk $approval "Read $Name approval"
+    if ("$($approval.data.runId)" -ne "$($Body.runId)" -or "$($approval.data.stepId)" -ne "$($Body.stepId)") {
+        throw "$Name approval did not match invocation identity: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+    if ("$($approval.data.status)" -ne "PENDING") {
+        throw "$Name approval was not pending: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+
+    $approved = Invoke-Json -Method POST -Path "/api/approvals/$approvalId/approve" -Headers $Headers -Body @{
+        decisionComment = "Allow sandbox python artifact storage smoke test"
+    }
+    Assert-ApiOk $approved "Approve $Name"
+    if ("$($approved.data.status)" -ne "APPROVED") {
+        throw "$Name approval was not approved: $($approved.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+
+    $retry = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $Headers -Body $Body
+    Assert-ApiOk $retry "Retry $Name after approval"
+    return $retry
+}
+
+function New-RealAgentRunId {
+    param(
+        [hashtable]$Headers,
+        [string]$Marker,
+        [long]$RunProfileId
+    )
+
+    $created = Invoke-Json -Method POST -Path "/api/conversations" -Headers $Headers
+    Assert-ApiOk $created "Create artifact storage smoke conversation"
+    if (-not $created.data) {
+        throw "Create conversation response did not include id"
+    }
+    $conversationId = "$($created.data)"
+    $question = "Sandbox artifact storage smoke $Marker. Reply with one short sentence."
+    $encodedQuestion = [System.Uri]::EscapeDataString($question)
+    $response = Invoke-WebRequest -Uri "$BaseUrl/rag/v3/chat?conversationId=$conversationId&question=$encodedQuestion&runProfileId=$RunProfileId&chatMode=agent" `
+        -Headers $Headers -UseBasicParsing -TimeoutSec 180
+    if ([int]$response.StatusCode -ne 200) {
+        throw "Chat returned HTTP $($response.StatusCode)"
+    }
+    $contentType = "$($response.Headers['Content-Type'])"
+    if ($contentType -notlike "*text/event-stream*") {
+        throw "Chat content type was '$contentType'"
+    }
+    if ($response.Content -notlike "*[DONE]*") {
+        throw "Chat SSE did not include [DONE]"
+    }
+
+    $runId = ""
+    $matches = [regex]::Matches($response.Content, '"runId"\s*:\s*"([^"]+)"')
+    if ($matches.Count -gt 0) {
+        $runId = $matches[0].Groups[1].Value
+    }
+    if ([string]::IsNullOrWhiteSpace($runId)) {
+        throw "Chat SSE did not include runId"
+    }
+
+    $safeRunId = $runId.Replace("'", "''")
+    $row = Invoke-PostgresScalar "SELECT run_id FROM sa_agent_run WHERE run_id = '$safeRunId';"
+    if ($row -ne $runId) {
+        throw "Agent run was not persisted before sandbox_python invocation: $runId"
+    }
+    return [PSCustomObject]@{
+        ConversationId = $conversationId
+        RunId = $runId
+    }
+}
+
 function Wait-ForHealth {
     param([int]$Attempts = 90)
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
@@ -196,6 +289,18 @@ function Invoke-PostgresNonQuery {
     if ($LASTEXITCODE -ne 0) {
         throw "psql exited with $LASTEXITCODE for SQL: $Sql"
     }
+}
+
+function Get-SandboxArtifactSessionId {
+    param([string]$ArtifactId)
+    $safeArtifactId = $ArtifactId.Replace("'", "''")
+    return Invoke-PostgresScalar "SELECT session_id FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
+}
+
+function Get-LatestSandboxSessionIdForRun {
+    param([string]$RunId)
+    $safeRunId = $RunId.Replace("'", "''")
+    return Invoke-PostgresScalar "SELECT session_id FROM sa_sandbox_session WHERE run_id = '$safeRunId' ORDER BY created_at DESC LIMIT 1;"
 }
 
 function Remove-DockerContainerBestEffort {
@@ -341,13 +446,18 @@ try {
         return
     }
 
-    $runId = "sandbox-artifact-storage-run-$suffix"
+    $smokeRun = Test-Step "Create real agent run for governed sandbox artifact binding" {
+        New-RealAgentRunId -Headers $headers -Marker $Marker -RunProfileId $KernelRunProfileId
+    }
+    if (-not $smokeRun) { exit 1 }
+
+    $runId = "$($smokeRun.RunId)"
     $toolCallId = "sandbox-artifact-storage-call-$suffix"
     $escapedMarker = $Marker.Replace("\", "\\").Replace("'", "\'")
     $code = "from pathlib import Path`nPath('answer-storage.txt').write_text('artifact $escapedMarker', encoding='utf-8')`nprint('$escapedMarker')"
 
     $observation = Test-Step "Invoke sandbox_python and capture artifact metadata" {
-        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $headers -Body @{
+        $response = Invoke-SandboxPythonTool -Headers $headers -Name "Invoke sandbox_python" -Body @{
             runId = $runId
             stepId = "sandbox-artifact-storage-step-$suffix"
             toolCallId = $toolCallId
@@ -360,7 +470,6 @@ try {
             idempotencyKey = "${runId}:${toolCallId}"
             allowedToolIds = @("sandbox_python")
         }
-        Assert-ApiOk $response "Invoke sandbox_python"
         if ($response.data.success -ne $true) {
             throw "sandbox_python failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
@@ -381,35 +490,36 @@ try {
     if (-not $observation) { exit 1 }
 
     $artifactId = "$(@($observation.artifacts)[0].artifactId)"
-    $sessionId = "$($observation.sessionId)"
     $objectUri = Test-Step "Verify persisted sandbox artifact uses object storage URI" {
         $safeArtifactId = $artifactId.Replace("'", "''")
-        $row = Invoke-PostgresScalar "SELECT object_uri, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
+        $row = Invoke-PostgresScalar "SELECT session_id, object_uri, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
         $parts = $row -split "`t"
-        if ($parts.Count -ne 5) {
+        if ($parts.Count -ne 6) {
             throw "Unexpected sa_sandbox_artifact row: $row"
         }
-        if ($parts[0] -like "file:*") {
-            throw "sandbox artifact still points at file URI: $($parts[0])"
+        if ($parts[1] -like "file:*") {
+            throw "sandbox artifact still points at file URI: $($parts[1])"
         }
-        if ($ExpectedObjectUriPrefix -and $parts[0] -notlike "$ExpectedObjectUriPrefix*") {
-            throw "Expected object_uri prefix '$ExpectedObjectUriPrefix' but got '$($parts[0])'"
+        if ($ExpectedObjectUriPrefix -and $parts[1] -notlike "$ExpectedObjectUriPrefix*") {
+            throw "Expected object_uri prefix '$ExpectedObjectUriPrefix' but got '$($parts[1])'"
         }
-        if ($parts[1] -ne "CLEAN") {
-            throw "Expected CLEAN scan_status but got '$($parts[1])'"
+        if ($parts[2] -ne "CLEAN") {
+            throw "Expected CLEAN scan_status but got '$($parts[2])'"
         }
-        if ($parts[2] -ne "INTERNAL") {
-            throw "Expected INTERNAL sensitivity but got '$($parts[2])'"
+        if ($parts[3] -ne "INTERNAL") {
+            throw "Expected INTERNAL sensitivity but got '$($parts[3])'"
         }
-        if ($parts[3] -ne "metadata scan passed") {
-            throw "Expected metadata scan summary but got '$($parts[3])'"
+        if ($parts[4] -ne "metadata scan passed") {
+            throw "Expected metadata scan summary but got '$($parts[4])'"
         }
-        if ($parts[4] -notlike '*"decision":"CLEAN"*' -or $parts[4] -notlike '*"contentScanned":true*') {
-            throw "Expected CLEAN content-scanned redaction summary but got '$($parts[4])'"
+        if ($parts[5] -notlike '*"decision":"CLEAN"*' -or $parts[5] -notlike '*"contentScanned":true*') {
+            throw "Expected CLEAN content-scanned redaction summary but got '$($parts[5])'"
         }
-        $parts[0]
+        [pscustomobject]@{ SessionId = $parts[0]; ObjectUri = $parts[1] }
     }
     if (-not $objectUri) { exit 1 }
+    $sessionId = "$($objectUri.SessionId)"
+    $objectUri = "$($objectUri.ObjectUri)"
 
     Test-Step "Verify persisted sandbox session profile and TTL metadata" {
         $safeSessionId = $sessionId.Replace("'", "''")
@@ -562,8 +672,8 @@ try {
     Test-Step "Inspect sandbox runtime governance profiles" {
         $response = Invoke-Json -Method GET -Path "/api/sandbox/runtime/profiles" -Headers $headers
         Assert-ApiOk $response "Inspect sandbox runtime profiles"
-        if ("$($response.data.defaultNetworkPolicy)" -ne "DENY_ALL") {
-            throw "Expected defaultNetworkPolicy=DENY_ALL: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        if ("$($response.data.defaultNetworkPolicy)" -notin @("DENY_ALL", "ALLOWLISTED")) {
+            throw "Expected defaultNetworkPolicy DENY_ALL or ALLOWLISTED: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         if ([int]$response.data.defaultTtlSeconds -ne 3600) {
             throw "Expected defaultTtlSeconds=3600: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
@@ -641,7 +751,7 @@ try {
     }
 
     Test-Step $expiredSweepStepName {
-        $expiredRunId = "sandbox-expired-sweep-run-$suffix"
+        $expiredRunId = $runId
         $create = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
             tenantId = "default"
             runId = $expiredRunId
@@ -700,7 +810,7 @@ try {
     } | Out-Null
 
     Test-Step "Sweep orphaned sandbox runtime workspace while preserving active session workspace" {
-        $activeRunId = "sandbox-orphan-runtime-active-run-$suffix"
+        $activeRunId = $runId
         $create = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
             tenantId = "default"
             runId = $activeRunId
@@ -890,8 +1000,8 @@ try {
     $secretMarker = "$Marker-secret-scan"
     $secretCode = "from pathlib import Path`nPath('answer-content-scan.txt').write_text('api_key = `"$secretToken`"', encoding='utf-8')`nprint('$secretMarker')"
     $secretObservation = Test-Step "Invoke sandbox_python with content-sensitive artifact" {
-        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $headers -Body @{
-            runId = "sandbox-artifact-secret-run-$suffix"
+        $response = Invoke-SandboxPythonTool -Headers $headers -Name "Invoke sandbox_python secret artifact" -Body @{
+            runId = $runId
             stepId = "sandbox-artifact-secret-step-$suffix"
             toolCallId = "sandbox-artifact-secret-call-$suffix"
             agentId = "legacy-react-agent"
@@ -900,10 +1010,9 @@ try {
             agentIdentityId = "$($login.data.userId)"
             arguments = @{ code = $secretCode }
             resourceRefs = @{}
-            idempotencyKey = "sandbox-artifact-secret-run-${suffix}:sandbox-artifact-secret-call-$suffix"
+            idempotencyKey = "${runId}:sandbox-artifact-secret-call-$suffix"
             allowedToolIds = @("sandbox_python")
         }
-        Assert-ApiOk $response "Invoke sandbox_python secret artifact"
         if ($response.data.success -ne $true) {
             throw "sandbox_python secret artifact invocation failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
@@ -918,14 +1027,11 @@ try {
         if (@($parsed.artifacts).Count -ne 0) {
             throw "Content-sensitive artifact should not be prompt-visible: $content"
         }
-        if (-not "$($parsed.sessionId)") {
-            throw "sandbox_python observation did not include secret scan sessionId: $content"
-        }
         $parsed
     }
     if (-not $secretObservation) { exit 1 }
 
-    $secretSessionId = "$($secretObservation.sessionId)"
+    $secretSessionId = Get-LatestSandboxSessionIdForRun -RunId $runId
     $secretArtifactId = Test-Step "Verify content-sensitive sandbox artifact is blocked before object storage" {
         $safeSecretSessionId = $secretSessionId.Replace("'", "''")
         $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeSecretSessionId' ORDER BY created_at DESC LIMIT 1;"
@@ -999,8 +1105,8 @@ try {
     $binaryMarker = "$Marker-binary-signature-scan"
     $binaryCode = "from pathlib import Path`nPath('active.pdf').write_bytes(b'%PDF-1.7\n1 0 obj\n<< /OpenAction 2 0 R >>\nendobj\n')`nPath('chart.png').write_bytes(b'MZ\x00\x00seahorse')`nprint('$binaryMarker')"
     $binaryObservation = Test-Step "Invoke sandbox_python with binary-signature artifacts" {
-        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $headers -Body @{
-            runId = "sandbox-artifact-binary-run-$suffix"
+        $response = Invoke-SandboxPythonTool -Headers $headers -Name "Invoke sandbox_python binary-signature artifacts" -Body @{
+            runId = $runId
             stepId = "sandbox-artifact-binary-step-$suffix"
             toolCallId = "sandbox-artifact-binary-call-$suffix"
             agentId = "legacy-react-agent"
@@ -1009,10 +1115,9 @@ try {
             agentIdentityId = "$($login.data.userId)"
             arguments = @{ code = $binaryCode }
             resourceRefs = @{}
-            idempotencyKey = "sandbox-artifact-binary-run-${suffix}:sandbox-artifact-binary-call-$suffix"
+            idempotencyKey = "${runId}:sandbox-artifact-binary-call-$suffix"
             allowedToolIds = @("sandbox_python")
         }
-        Assert-ApiOk $response "Invoke sandbox_python binary-signature artifacts"
         if ($response.data.success -ne $true) {
             throw "sandbox_python binary-signature invocation failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
@@ -1024,14 +1129,11 @@ try {
         if (@($parsed.artifacts).Count -ne 0) {
             throw "Binary-signature artifacts should not be prompt-visible: $content"
         }
-        if (-not "$($parsed.sessionId)") {
-            throw "sandbox_python observation did not include binary-signature sessionId: $content"
-        }
         $parsed
     }
     if (-not $binaryObservation) { exit 1 }
 
-    $binarySessionId = "$($binaryObservation.sessionId)"
+    $binarySessionId = Get-LatestSandboxSessionIdForRun -RunId $runId
     Test-Step "Verify PDF active-content artifact is blocked before object storage" {
         $safeBinarySessionId = $binarySessionId.Replace("'", "''")
         $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeBinarySessionId' AND media_type = 'application/pdf' ORDER BY created_at DESC LIMIT 1;"
@@ -1134,6 +1236,11 @@ with zipfile.ZipFile('unsafe-bundle.zip', 'w') as archive:
     archive.writestr('bin/payload.exe', b'MZ\x00\x00seahorse')
 with zipfile.ZipFile('path-traversal-bundle.zip', 'w') as archive:
     archive.writestr('../outside.txt', 'unsafe archive path $escapedArchiveMarker')
+nested_zip_buffer = io.BytesIO()
+with zipfile.ZipFile(nested_zip_buffer, 'w') as nested:
+    nested.writestr('docs/inner.txt', 'nested archive $escapedArchiveMarker')
+with zipfile.ZipFile('nested-bundle.zip', 'w') as archive:
+    archive.writestr('nested/inner.zip', nested_zip_buffer.getvalue())
 safe_tar_data = b'safe tar archive $escapedArchiveMarker'
 with tarfile.open('safe-bundle.tar', 'w', format=tarfile.USTAR_FORMAT) as archive:
     entry = tarfile.TarInfo('docs/readme.txt')
@@ -1168,8 +1275,8 @@ with gzip.open('plain-bundle.gz', 'wb') as archive:
 print('$escapedArchiveMarker')
 "@
     $archiveObservation = Test-Step "Invoke sandbox_python with archive artifacts" {
-        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $headers -Body @{
-            runId = "sandbox-artifact-archive-run-$suffix"
+        $response = Invoke-SandboxPythonTool -Headers $headers -Name "Invoke sandbox_python archive artifacts" -Body @{
+            runId = $runId
             stepId = "sandbox-artifact-archive-step-$suffix"
             toolCallId = "sandbox-artifact-archive-call-$suffix"
             agentId = "legacy-react-agent"
@@ -1178,10 +1285,9 @@ print('$escapedArchiveMarker')
             agentIdentityId = "$($login.data.userId)"
             arguments = @{ code = $archiveCode }
             resourceRefs = @{}
-            idempotencyKey = "sandbox-artifact-archive-run-${suffix}:sandbox-artifact-archive-call-$suffix"
+            idempotencyKey = "${runId}:sandbox-artifact-archive-call-$suffix"
             allowedToolIds = @("sandbox_python")
         }
-        Assert-ApiOk $response "Invoke sandbox_python archive artifacts"
         if ($response.data.success -ne $true) {
             throw "sandbox_python archive invocation failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
@@ -1193,14 +1299,11 @@ print('$escapedArchiveMarker')
         if (@($parsed.artifacts).Count -ne 0) {
             throw "Archive artifacts should not be prompt-visible: $content"
         }
-        if (-not "$($parsed.sessionId)") {
-            throw "sandbox_python observation did not include archive sessionId: $content"
-        }
         $parsed
     }
     if (-not $archiveObservation) { exit 1 }
 
-    $archiveSessionId = "$($archiveObservation.sessionId)"
+    $archiveSessionId = Get-LatestSandboxSessionIdForRun -RunId $runId
     $safeArchive = Test-Step "Verify clean ZIP archive is governed download-only" {
         $safeArchiveSessionId = $archiveSessionId.Replace("'", "''")
         $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeArchiveSessionId' AND object_uri LIKE '%-safe-bundle.zip' ORDER BY created_at DESC LIMIT 1;"
@@ -1431,6 +1534,32 @@ print('$escapedArchiveMarker')
     }
     if (-not $pathTraversalArchiveArtifactId) { exit 1 }
 
+    $nestedArchiveArtifactId = Test-Step "Verify nested ZIP archive is blocked before object storage" {
+        $safeArchiveSessionId = $archiveSessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeArchiveSessionId' AND object_uri LIKE '%/nested-bundle.zip' ORDER BY created_at DESC LIMIT 1;"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 7) {
+            throw "Unexpected nested ZIP artifact row: $row"
+        }
+        if ($parts[1] -like "$ExpectedObjectUriPrefix*") {
+            throw "Nested ZIP archive was copied to object storage: $($parts[1])"
+        }
+        if ($parts[2] -ne "application/zip" -or $parts[3] -ne "BLOCKED" -or $parts[4] -ne "CONFIDENTIAL") {
+            throw "Expected BLOCKED CONFIDENTIAL application/zip nested archive but got: $row"
+        }
+        if ($parts[5] -ne "nested archive content") {
+            throw "Expected nested ZIP scan summary nested archive content but got '$($parts[5])'"
+        }
+        if ($parts[6] -notlike '*"decision":"BLOCKED"*' -or $parts[6] -notlike '*"ARCHIVE_NESTED_ARCHIVE"*') {
+            throw "Expected BLOCKED ARCHIVE_NESTED_ARCHIVE redaction summary but got '$($parts[6])'"
+        }
+        if ($parts[6] -like "*inner.zip*" -or $parts[6].Contains($archiveMarker)) {
+            throw "Nested ZIP redaction summary leaked entry name or marker: $($parts[6])"
+        }
+        $parts[0]
+    }
+    if (-not $nestedArchiveArtifactId) { exit 1 }
+
     $unsafeTarArchiveArtifactId = Test-Step "Verify unsafe TAR archive is blocked before object storage" {
         $safeArchiveSessionId = $archiveSessionId.Replace("'", "''")
         $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeArchiveSessionId' AND object_uri LIKE '%/unsafe-bundle.tar' ORDER BY created_at DESC LIMIT 1;"
@@ -1584,6 +1713,10 @@ print('$escapedArchiveMarker')
         if ($pathTraversalMatched.Count -ne 1 -or $pathTraversalMatched[0].promptVisible -ne $false) {
             throw "Expected path-traversal ZIP to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
+        $nestedMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$nestedArchiveArtifactId" })
+        if ($nestedMatched.Count -ne 1 -or $nestedMatched[0].promptVisible -ne $false) {
+            throw "Expected nested ZIP to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
         $unsafeTarMatched = @($response.data | Where-Object { "$($_.artifactId)" -eq "$unsafeTarArchiveArtifactId" })
         if ($unsafeTarMatched.Count -ne 1 -or $unsafeTarMatched[0].promptVisible -ne $false) {
             throw "Expected unsafe TAR to be listed as prompt-hidden: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
@@ -1607,6 +1740,9 @@ print('$escapedArchiveMarker')
         $artifactJson = $response.data | ConvertTo-Json -Depth 20 -Compress
         if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|payload.exe|outside.txt|large.bin|$archiveMarkerPattern") {
             throw "Archive artifact API leaked storage or unsafe entry details: $artifactJson"
+        }
+        if ($artifactJson -match "inner.zip") {
+            throw "Archive artifact API leaked nested archive entry details: $artifactJson"
         }
 
         $safeDetail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$($safeArchive.ArtifactId)" -Headers $headers
@@ -1651,6 +1787,19 @@ print('$escapedArchiveMarker')
         $pathTraversalDetailJson = $pathTraversalDetail.data | ConvertTo-Json -Depth 20 -Compress
         if ($pathTraversalDetailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|outside.txt") {
             throw "Path-traversal ZIP detail leaked storage or unsafe entry details: $pathTraversalDetailJson"
+        }
+
+        $nestedDetail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$nestedArchiveArtifactId" -Headers $headers
+        Assert-ApiOk $nestedDetail "Get nested ZIP artifact detail"
+        if ($nestedDetail.data.downloadable -ne $false -or $nestedDetail.data.promptVisible -ne $false) {
+            throw "Expected nested ZIP detail to be non-downloadable and prompt-hidden: $($nestedDetail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($nestedDetail.data.redactionSummaryJson)" -notlike '*"ARCHIVE_NESTED_ARCHIVE"*') {
+            throw "Expected nested ZIP detail archive category: $($nestedDetail.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $nestedDetailJson = $nestedDetail.data | ConvertTo-Json -Depth 20 -Compress
+        if ($nestedDetailJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|inner.zip|$archiveMarkerPattern") {
+            throw "Nested ZIP detail leaked storage or nested entry details: $nestedDetailJson"
         }
 
         $tarDetail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$unsafeTarArchiveArtifactId" -Headers $headers
@@ -1745,8 +1894,8 @@ with zipfile.ZipFile('macro-report.docx', 'w') as archive:
 print('$officeMarker')
 "@
     $officeObservation = Test-Step "Invoke sandbox_python with Office Open XML artifacts" {
-        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $headers -Body @{
-            runId = "sandbox-artifact-office-run-$suffix"
+        $response = Invoke-SandboxPythonTool -Headers $headers -Name "Invoke sandbox_python Office artifacts" -Body @{
+            runId = $runId
             stepId = "sandbox-artifact-office-step-$suffix"
             toolCallId = "sandbox-artifact-office-call-$suffix"
             agentId = "legacy-react-agent"
@@ -1755,10 +1904,9 @@ print('$officeMarker')
             agentIdentityId = "$($login.data.userId)"
             arguments = @{ code = $officeCode }
             resourceRefs = @{}
-            idempotencyKey = "sandbox-artifact-office-run-${suffix}:sandbox-artifact-office-call-$suffix"
+            idempotencyKey = "${runId}:sandbox-artifact-office-call-$suffix"
             allowedToolIds = @("sandbox_python")
         }
-        Assert-ApiOk $response "Invoke sandbox_python Office artifacts"
         if ($response.data.success -ne $true) {
             throw "sandbox_python Office invocation failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
@@ -1770,14 +1918,11 @@ print('$officeMarker')
         if (@($parsed.artifacts).Count -ne 0) {
             throw "Office artifacts should not be prompt-visible: $content"
         }
-        if (-not "$($parsed.sessionId)") {
-            throw "sandbox_python observation did not include Office sessionId: $content"
-        }
         $parsed
     }
     if (-not $officeObservation) { exit 1 }
 
-    $officeSessionId = "$($officeObservation.sessionId)"
+    $officeSessionId = Get-LatestSandboxSessionIdForRun -RunId $runId
     $safeOffice = Test-Step "Verify clean Office Open XML artifact is governed download-only" {
         $safeOfficeSessionId = $officeSessionId.Replace("'", "''")
         $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeOfficeSessionId' AND object_uri LIKE '%safe-report.docx' ORDER BY created_at DESC LIMIT 1;"

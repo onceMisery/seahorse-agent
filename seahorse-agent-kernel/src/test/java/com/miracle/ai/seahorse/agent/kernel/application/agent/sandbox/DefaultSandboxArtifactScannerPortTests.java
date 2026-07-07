@@ -77,6 +77,7 @@ class DefaultSandboxArtifactScannerPortTests {
         assertTrue(policy.archiveScannedMediaTypes().contains("application/gzip"));
         assertTrue(policy.archiveScannedMediaTypes().contains("application/x-gzip"));
         assertTrue(policy.archiveScannedMediaTypes().contains("application/x-tar"));
+        assertTrue(policy.blockedCategories().contains("ARCHIVE_NESTED_ARCHIVE"));
         assertTrue(policy.blockedCategories().contains("OFFICE_MACRO"));
         assertTrue(policy.blockedCategories().contains("PDF_ACTIVE_CONTENT"));
         assertTrue(policy.unsupportedCapabilities().contains("external virus scanning"));
@@ -383,6 +384,22 @@ class DefaultSandboxArtifactScannerPortTests {
     }
 
     @Test
+    void shouldBlockZipArchiveWithNestedArchiveEntryName(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.zip");
+        writeZip(output, "nested/inner.zip", "nested marker".getBytes(StandardCharsets.UTF_8));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/zip")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("nested archive content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("ARCHIVE_NESTED_ARCHIVE", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("inner.zip"));
+        assertEquals(-1, result.redactionSummaryJson().indexOf("nested marker"));
+    }
+
+    @Test
     void shouldBlockZipArchiveWithEmbeddedPdfActiveContent(@TempDir Path tempDir) throws Exception {
         Path output = tempDir.resolve("bundle.zip");
         writeZip(output,
@@ -507,6 +524,22 @@ class DefaultSandboxArtifactScannerPortTests {
     }
 
     @Test
+    void shouldBlockTarArchiveWithNestedTarSignature(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.tar");
+        writeTar(output, "nested/inner.bin", tarBytes("docs/readme.txt", "nested marker".getBytes(StandardCharsets.UTF_8), (byte) '0'));
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/x-tar")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("nested archive content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("ARCHIVE_NESTED_ARCHIVE", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("inner.bin"));
+        assertEquals(-1, result.redactionSummaryJson().indexOf("nested marker"));
+    }
+
+    @Test
     void shouldBlockTarArchiveWithUnsafeDirectoryPath(@TempDir Path tempDir) throws Exception {
         Path output = tempDir.resolve("bundle.tar");
         writeTar(output, "../outside/", new byte[0], (byte) '5');
@@ -578,6 +611,28 @@ class DefaultSandboxArtifactScannerPortTests {
         JsonNode redactionSummary = redactionSummary(result);
         assertEquals("ARCHIVE_EXECUTABLE_BINARY", redactionSummary.path("categories").get(0).asText());
         assertEquals(-1, result.redactionSummaryJson().indexOf("payload.exe"));
+    }
+
+    @Test
+    void shouldBlockGzipTarArchiveWithNestedZipSignature(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("bundle.tgz");
+        ByteArrayOutputStream nestedZip = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(nestedZip)) {
+            zip.putNextEntry(new ZipEntry("docs/readme.txt"));
+            zip.write("nested marker".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        writeTarGzip(output, "nested/inner.bin", nestedZip.toByteArray());
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/gzip")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.CONFIDENTIAL, result.sensitivity());
+        assertEquals("nested archive content", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("ARCHIVE_NESTED_ARCHIVE", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("inner.bin"));
+        assertEquals(-1, result.redactionSummaryJson().indexOf("nested marker"));
     }
 
     @Test
