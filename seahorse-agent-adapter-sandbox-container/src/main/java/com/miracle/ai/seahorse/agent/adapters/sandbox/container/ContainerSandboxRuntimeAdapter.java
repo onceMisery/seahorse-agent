@@ -202,7 +202,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     safeRequest.networkRequested(),
                     safeRequest.requestedHosts());
             ContainerCommandResult commandResult = commandRunner.run(
-                    containerCommand(session, workspace, safeRequest.networkRequested()));
+                    containerCommand(session, workspace, safeRequest.networkRequested(), safeRequest.requestedHosts()));
             Instant finishedAt = clock.instant();
             if (commandResult.timedOut()) {
                 SandboxExecution execution = new SandboxExecution(
@@ -751,20 +751,6 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 def utc_now():
                     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
-                def origin_key(url):
-                    parsed = urlparse(url)
-                    scheme = parsed.scheme.lower()
-                    host = (parsed.hostname or "").lower()
-                    if scheme not in ("http", "https") or not host:
-                        return ""
-                    try:
-                        port = parsed.port
-                    except ValueError:
-                        return ""
-                    if port is None:
-                        port = 443 if scheme == "https" else 80
-                    return f"{scheme}://{host}:{port}"
-
                 sensitive_query_parameter_names = {
                     "accesstoken",
                     "apikey",
@@ -831,15 +817,16 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         redacted += "#<redacted-fragment>"
                     return redacted
 
-                target_origin = origin_key(target_url) if target_url else None
-
                 def allowed_url(url):
                     if url.startswith(("about:", "blob:", "data:")):
                         return True
                     if has_credential_url_parts(url):
                         return False
-                    if target_origin:
-                        return origin_key(url) == target_origin
+                    parsed = urlparse(url)
+                    scheme = parsed.scheme.lower()
+                    host = (parsed.hostname or "").lower()
+                    if scheme in ("http", "https") and host:
+                        return host in allowed_hosts
                     return False
 
                 def empty_har_request(method, url):
@@ -2436,7 +2423,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 failureMessages);
     }
 
-    private ContainerCommand containerCommand(SandboxSession session, Path workspace, boolean networkRequested) {
+    private ContainerCommand containerCommand(SandboxSession session,
+                                              Path workspace,
+                                              boolean networkRequested,
+                                              List<String> requestedHosts) {
         List<String> commandLine = new ArrayList<>();
         commandLine.add(properties.getEngine());
         commandLine.add("run");
@@ -2444,8 +2434,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         commandLine.add("--name");
         commandLine.add(containerName(session.sessionId()));
         if (networkRequested) {
-            commandLine.add("--add-host");
-            commandLine.add("host.docker.internal:host-gateway");
+            for (String host : dockerInternalHosts(requestedHosts)) {
+                commandLine.add("--add-host");
+                commandLine.add(host + ":host-gateway");
+            }
         } else {
             commandLine.add("--network");
             commandLine.add("none");
@@ -2469,6 +2461,20 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 properties.getExecutionTimeout(),
                 properties.getStdoutLimitBytes(),
                 properties.getStderrLimitBytes());
+    }
+
+    private List<String> dockerInternalHosts(List<String> requestedHosts) {
+        LinkedHashSet<String> hosts = new LinkedHashSet<>();
+        hosts.add("host.docker.internal");
+        if (requestedHosts != null) {
+            for (String requestedHost : requestedHosts) {
+                String host = nullToEmpty(requestedHost).trim().toLowerCase(Locale.ROOT);
+                if (host.endsWith(".docker.internal")) {
+                    hosts.add(host);
+                }
+            }
+        }
+        return List.copyOf(hosts);
     }
 
     private String imageForRuntime(SandboxRuntimeType runtimeType) {

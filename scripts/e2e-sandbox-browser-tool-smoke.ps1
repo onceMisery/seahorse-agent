@@ -12,8 +12,11 @@ param(
     [string]$BrowserImageBuildContext = ".",
     [string]$ExternalHost = "host.docker.internal",
     [int]$ExternalPort = 18080,
+    [string]$AssetHost = "assets.docker.internal",
+    [int]$AssetPort = 18081,
     [string]$StorageRoot = "/app/seahorse-agent-storage",
     [string]$ExpectedObjectUriPrefix = "local://sandbox-artifacts/",
+    [long]$KernelRunProfileId = -9101,
     [switch]$SkipBrowserImageBuild,
     [switch]$SkipHealth
 )
@@ -24,6 +27,8 @@ $failed = 0
 $total = 0
 $externalHttpContainerName = $null
 $externalHttpRoot = $null
+$assetHttpContainerName = $null
+$assetHttpRoot = $null
 $headers = $null
 $browserProfileNetworkEnabled = $false
 
@@ -133,6 +138,50 @@ function Assert-ApiOk {
     }
 }
 
+function Invoke-SandboxBrowserTool {
+    param(
+        [hashtable]$Headers,
+        [hashtable]$Body,
+        [string]$Name
+    )
+
+    $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_browser/invoke" -Headers $Headers -Body $Body
+    Assert-ApiOk $response $Name
+
+    $requiresApproval = $response.data.success -eq $false -and (
+        "$($response.data.error)" -eq "TOOL_APPROVAL_REQUIRED" -or
+        "$($response.data.reasonCode)" -eq "TOOL_APPROVAL_REQUIRED"
+    )
+    if (-not $requiresApproval) {
+        return $response
+    }
+
+    if (-not $response.data.approvalId) {
+        throw "$Name required approval but did not return approvalId: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+    $approvalId = "$($response.data.approvalId)"
+    $approval = Invoke-Json -Method GET -Path "/api/approvals/$approvalId" -Headers $Headers
+    Assert-ApiOk $approval "Read $Name approval"
+    if ("$($approval.data.runId)" -ne "$($Body.runId)" -or "$($approval.data.stepId)" -ne "$($Body.stepId)") {
+        throw "$Name approval did not match invocation identity: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+    if ("$($approval.data.status)" -ne "PENDING") {
+        throw "$Name approval was not pending: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+
+    $approved = Invoke-Json -Method POST -Path "/api/approvals/$approvalId/approve" -Headers $Headers -Body @{
+        decisionComment = "Allow sandbox browser smoke test"
+    }
+    Assert-ApiOk $approved "Approve $Name"
+    if ("$($approved.data.status)" -ne "APPROVED") {
+        throw "$Name approval was not approved: $($approved.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+
+    $retry = Invoke-Json -Method POST -Path "/api/tools/sandbox_browser/invoke" -Headers $Headers -Body $Body
+    Assert-ApiOk $retry "Retry $Name after approval"
+    return $retry
+}
+
 function Wait-ForHealth {
     param([int]$Attempts = 90)
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
@@ -162,6 +211,64 @@ function Invoke-PostgresScalar {
         throw "SQL returned no rows: $Sql"
     }
     return $rows[0]
+}
+
+function Resolve-SandboxSessionIdFromArtifact {
+    param([string]$ArtifactId, [string]$Label)
+    $safeArtifactId = $ArtifactId.Replace("'", "''")
+    $sessionId = Invoke-PostgresScalar "SELECT session_id FROM sa_sandbox_artifact WHERE artifact_id = '$safeArtifactId';"
+    if ([string]::IsNullOrWhiteSpace($sessionId)) {
+        throw "Could not resolve sandbox session id for ${Label}: $ArtifactId"
+    }
+    return $sessionId
+}
+
+function New-RealAgentRunId {
+    param(
+        [hashtable]$Headers,
+        [string]$Marker,
+        [long]$RunProfileId
+    )
+
+    $created = Invoke-Json -Method POST -Path "/api/conversations" -Headers $Headers
+    Assert-ApiOk $created "Create browser smoke conversation"
+    if (-not $created.data) {
+        throw "Create conversation response did not include id"
+    }
+    $conversationId = "$($created.data)"
+    $question = "Sandbox browser smoke $Marker. Reply with one short sentence."
+    $encodedQuestion = [System.Uri]::EscapeDataString($question)
+    $response = Invoke-WebRequest -Uri "$BaseUrl/rag/v3/chat?conversationId=$conversationId&question=$encodedQuestion&runProfileId=$RunProfileId&chatMode=agent" `
+        -Headers $Headers -UseBasicParsing -TimeoutSec 180
+    if ([int]$response.StatusCode -ne 200) {
+        throw "Chat returned HTTP $($response.StatusCode)"
+    }
+    $contentType = "$($response.Headers['Content-Type'])"
+    if ($contentType -notlike "*text/event-stream*") {
+        throw "Chat content type was '$contentType'"
+    }
+    if ($response.Content -notlike "*[DONE]*") {
+        throw "Chat SSE did not include [DONE]"
+    }
+
+    $runId = ""
+    $matches = [regex]::Matches($response.Content, '"runId"\s*:\s*"([^"]+)"')
+    if ($matches.Count -gt 0) {
+        $runId = $matches[0].Groups[1].Value
+    }
+    if ([string]::IsNullOrWhiteSpace($runId)) {
+        throw "Chat SSE did not include runId"
+    }
+
+    $safeRunId = $runId.Replace("'", "''")
+    $row = Invoke-PostgresScalar "SELECT run_id FROM sa_agent_run WHERE run_id = '$safeRunId';"
+    if ($row -ne $runId) {
+        throw "Agent run was not persisted before tool invocation: $runId"
+    }
+    return [PSCustomObject]@{
+        ConversationId = $conversationId
+        RunId = $runId
+    }
 }
 
 function Invoke-NativeCommandCapture {
@@ -254,7 +361,8 @@ function Start-ExternalHttpFixture {
         [string]$Name,
         [int]$Port,
         [string]$HostName,
-        [string]$Marker
+        [string]$Marker,
+        [string]$AssetUrl = ""
     )
     if ([string]::IsNullOrWhiteSpace($Name)) {
         throw "External HTTP container name must not be blank"
@@ -276,16 +384,26 @@ COOKIE_NAME = "$cookieName"
 COOKIE_VALUE = "$cookieValue"
 STORAGE_VALUE = "$storageValue"
 AUTH_MARKER = "$authMarker"
+ASSET_URL = "$AssetUrl"
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path.startswith("/asset"):
+            body = f"window.__seahorseAssetMarker = 'asset-ok:{MARKER}';".encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/javascript; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         cookie = self.headers.get("Cookie", "")
         authenticated = f"{COOKIE_NAME}={COOKIE_VALUE}" in cookie
         auth_html = f"<p>{AUTH_MARKER}</p>" if authenticated else "<p>anonymous</p>"
+        asset_html = f'<script src="{ASSET_URL}"></script><script>fetch("http://example.invalid/blocked?marker={MARKER}", {{cache: "no-store"}}).catch(() => {{ document.body.dataset.blocked = "true"; }});</script>' if ASSET_URL else ""
         body = f"""<!doctype html>
 <html>
 <head><title>External {MARKER}</title></head>
-<body><main><h1>{MARKER}</h1><p>Seahorse browser sandbox URL mode marker.</p>{auth_html}<p id="storage-status"></p></main><script>const restored = localStorage.getItem("seahorse_session_marker"); document.getElementById("storage-status").textContent = restored ? "storage-restored" : "storage-missing"; localStorage.setItem("seahorse_session_marker", "{STORAGE_VALUE}");</script></body>
+<body><main><h1>{MARKER}</h1><p>Seahorse browser sandbox URL mode marker.</p>{auth_html}<p id="storage-status"></p></main><script>const restored = localStorage.getItem("seahorse_session_marker"); document.getElementById("storage-status").textContent = restored ? "storage-restored" : "storage-missing"; localStorage.setItem("seahorse_session_marker", "{STORAGE_VALUE}");</script>{asset_html}</body>
 </html>
 """.encode("utf-8")
         self.send_response(200)
@@ -334,6 +452,7 @@ ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
                 CookieValue = $cookieValue
                 StorageValue = $storageValue
                 AuthMarker = $authMarker
+                AssetUrl = $AssetUrl
             }
         }
         Start-Sleep -Seconds 1
@@ -393,7 +512,11 @@ try {
 
     $headers = @{ Authorization = "Bearer $($login.data.token)" }
     $suffix = ([guid]::NewGuid().ToString('N')).Substring(0, 8)
-    $runId = "sandbox-browser-run-$suffix"
+    $smokeRun = Test-Step "Create real agent run for governed browser tool binding" {
+        New-RealAgentRunId -Headers $headers -Marker $Marker -RunProfileId $KernelRunProfileId
+    }
+    if (-not $smokeRun) { exit 1 }
+    $runId = "$($smokeRun.RunId)"
     $toolCallId = "sandbox-browser-call-$suffix"
     $html = "<!doctype html><html><head><title>Browser $Marker</title></head><body><main><h1>$Marker</h1><p>Seahorse browser sandbox smoke.</p><img alt='blocked' src='https://example.invalid/$Marker/pixel.png' /></main></body></html>"
 
@@ -414,7 +537,7 @@ try {
     } | Out-Null
 
     $observation = Test-Step "Invoke sandbox_browser through Tool Gateway" {
-        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_browser/invoke" -Headers $headers -Body @{
+        $body = @{
             runId = $runId
             stepId = "sandbox-browser-step-$suffix"
             toolCallId = $toolCallId
@@ -435,6 +558,7 @@ try {
             idempotencyKey = "${runId}:${toolCallId}"
             allowedToolIds = @("sandbox_browser")
         }
+        $response = Invoke-SandboxBrowserTool -Headers $headers -Body $body -Name "Invoke sandbox_browser"
         Assert-ApiOk $response "Invoke sandbox_browser"
         if ($response.data.success -ne $true) {
             throw "sandbox_browser failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
@@ -470,17 +594,26 @@ try {
     }
     if (-not $observation) { exit 1 }
 
-    $sessionId = "$($observation.sessionId)"
     $jsonArtifactId = "$(@($observation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" })[0].artifactId)"
     $pngArtifactId = "$(@($observation.artifacts | Where-Object { "$($_.mediaType)" -eq "image/png" })[0].artifactId)"
     $harArtifactId = "$(@($observation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/har+json" })[0].artifactId)"
+    $sessionId = Resolve-SandboxSessionIdFromArtifact -ArtifactId $jsonArtifactId -Label "inline browser result"
 
     $egressFixture = Test-Step "Start local HTTP fixture for sandbox_browser URL mode" {
+        $assetUrl = "http://${AssetHost}:$AssetPort/asset.txt?marker=$Marker-url-asset"
+        $assetFixture = Start-ExternalHttpFixture `
+            -Name "seahorse-browser-asset-smoke-$suffix" `
+            -Port $AssetPort `
+            -HostName $AssetHost `
+            -Marker "$Marker-url-asset"
+        $script:assetHttpContainerName = "$($assetFixture.Name)"
+        $script:assetHttpRoot = "$($assetFixture.Root)"
         Start-ExternalHttpFixture `
             -Name "seahorse-browser-egress-smoke-$suffix" `
             -Port $ExternalPort `
             -HostName $ExternalHost `
-            -Marker "$Marker-url"
+            -Marker "$Marker-url" `
+            -AssetUrl $assetUrl
     }
     if (-not $egressFixture) { exit 1 }
     $externalHttpContainerName = "$($egressFixture.Name)"
@@ -490,6 +623,7 @@ try {
     $externalCookieValue = "$($egressFixture.CookieValue)"
     $externalStorageValue = "$($egressFixture.StorageValue)"
     $externalAuthMarker = "$($egressFixture.AuthMarker)"
+    $assetUrl = "$($egressFixture.AssetUrl)"
 
     $egressConfigOk = Test-Step "Verify sandbox URL egress allowlist is configured" {
         $profilesResponse = Invoke-Json -Method GET -Path "/api/sandbox/runtime/profiles" -Headers $headers
@@ -500,6 +634,9 @@ try {
         $hosts = @($profilesResponse.data.allowlistedHosts)
         if ($hosts -notcontains $ExternalHost) {
             throw "Expected allowlistedHosts to contain ${ExternalHost}: $($profilesResponse.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($hosts -notcontains $AssetHost) {
+            throw "Expected allowlistedHosts to contain ${AssetHost}: $($profilesResponse.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $true
     }
@@ -524,10 +661,9 @@ try {
     if (-not $profileNetworkEnabled) { exit 1 }
 
     $urlObservation = Test-Step "Invoke sandbox_browser URL mode through Tool Gateway" {
-        $urlRunId = "sandbox-browser-url-run-$suffix"
         $urlToolCallId = "sandbox-browser-url-call-$suffix"
-        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_browser/invoke" -Headers $headers -Body @{
-            runId = $urlRunId
+        $body = @{
+            runId = $runId
             stepId = "sandbox-browser-url-step-$suffix"
             toolCallId = $urlToolCallId
             agentId = "legacy-react-agent"
@@ -537,7 +673,7 @@ try {
             arguments = @{
                 action = "snapshot"
                 url = $externalUrl
-                allowedHosts = @($ExternalHost)
+                allowedHosts = @($ExternalHost, $AssetHost)
                 cookies = @(
                     @{
                         name = $externalCookieName
@@ -557,9 +693,10 @@ try {
                 captureSessionState = $true
             }
             resourceRefs = @{}
-            idempotencyKey = "${urlRunId}:${urlToolCallId}"
+            idempotencyKey = "${runId}:${urlToolCallId}"
             allowedToolIds = @("sandbox_browser")
         }
+        $response = Invoke-SandboxBrowserTool -Headers $headers -Body $body -Name "Invoke sandbox_browser URL mode"
         Assert-ApiOk $response "Invoke sandbox_browser URL mode"
         if ($response.data.success -ne $true) {
             throw "sandbox_browser URL mode failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
@@ -572,11 +709,15 @@ try {
         if ($parsed.browser.networkAllowed -ne $true) {
             throw "Expected browser.networkAllowed=true for URL mode: $content"
         }
-        if ("$($parsed.browser.url)" -ne $externalUrl) {
-            throw "Expected browser URL ${externalUrl}: $content"
+        $redactedExternalUrl = "http://${ExternalHost}:$ExternalPort/index.html?<redacted-query>"
+        if ("$($parsed.browser.url)" -ne $externalUrl -and "$($parsed.browser.url)" -ne $redactedExternalUrl) {
+            throw "Expected browser URL ${externalUrl} or governed redacted URL ${redactedExternalUrl}: $content"
         }
         if (@($parsed.browser.allowedHosts) -notcontains $ExternalHost) {
             throw "Expected browser allowedHosts to contain ${ExternalHost}: $content"
+        }
+        if (@($parsed.browser.allowedHosts) -notcontains $AssetHost) {
+            throw "Expected browser allowedHosts to contain ${AssetHost}: $content"
         }
         if ([int]$parsed.browser.cookieCount -ne 1 -or @($parsed.browser.cookieDomains) -notcontains $ExternalHost) {
             throw "Expected browser cookie metadata for ${ExternalHost}: $content"
@@ -602,12 +743,12 @@ try {
     }
     if (-not $urlObservation) { exit 1 }
 
-    $urlSessionId = "$($urlObservation.sessionId)"
     $urlJsonArtifactIds = @($urlObservation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" } | ForEach-Object { "$($_.artifactId)" })
     $urlJsonArtifactId = $null
     $urlSessionSummaryArtifactId = $null
     $urlSessionStateArtifactId = $null
     $urlHarArtifactId = "$(@($urlObservation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/har+json" })[0].artifactId)"
+    $urlSessionId = Resolve-SandboxSessionIdFromArtifact -ArtifactId $urlHarArtifactId -Label "URL mode HAR"
 
     Test-Step "Verify persisted URL mode browser session" {
         $safeSessionId = $urlSessionId.Replace("'", "''")
@@ -637,6 +778,9 @@ try {
                 if ($content -notlike "*host.docker.internal*") {
                     throw "Downloaded URL mode browser result did not include allowlisted host: $content"
                 }
+                if ($content -notlike "*assets.docker.internal*") {
+                    throw "Downloaded URL mode browser result did not include asset allowlisted host: $content"
+                }
                 $script:urlJsonArtifactId = $artifactId
             } elseif ($content -like "*localStorageCount*" -and ($content -like "*`"count`": 1*" -or $content -like "*`"count`":1*")) {
                 if ($content -notlike "*host.docker.internal*") {
@@ -658,6 +802,8 @@ try {
         $har = $content | ConvertFrom-Json
         $entries = @($har.log.entries)
         $mainRequests = @($entries | Where-Object { "$($_.request.url)" -eq $externalUrl })
+        $assetRequests = @($entries | Where-Object { "$($_.request.url)" -eq $assetUrl })
+        $blockedRequests = @($entries | Where-Object { "$($_.request.url)" -like "http://example.invalid/*$Marker*" })
         if ($mainRequests.Count -lt 1) {
             throw "Downloaded URL mode HAR did not include main URL ${externalUrl}: $content"
         }
@@ -666,6 +812,15 @@ try {
         }
         if ([int]$mainRequests[0].response.status -ne 200) {
             throw "Downloaded URL mode HAR expected main URL status 200: $content"
+        }
+        if ($assetRequests.Count -lt 1) {
+            throw "Downloaded URL mode HAR did not include allowed asset URL ${assetUrl}: $content"
+        }
+        if ($assetRequests[0]._blocked -eq $true -or [int]$assetRequests[0].response.status -ne 200) {
+            throw "Downloaded URL mode HAR expected allowed asset request to return 200 unblocked: $content"
+        }
+        if ($blockedRequests.Count -lt 1 -or $blockedRequests[0]._blocked -ne $true) {
+            throw "Downloaded URL mode HAR did not mark non-allowlisted request as blocked: $content"
         }
         if ($content -like "*$externalCookieValue*") {
             throw "Downloaded URL mode HAR leaked cookie value: $content"
@@ -711,7 +866,6 @@ try {
     } | Out-Null
 
     $replayObservation = Test-Step "Invoke sandbox_browser URL mode with request session state replay" {
-        $replayRunId = "sandbox-browser-replay-run-$suffix"
         $replayToolCallId = "sandbox-browser-replay-call-$suffix"
         $externalOrigin = "http://${ExternalHost}:$ExternalPort"
         $sessionState = @{
@@ -739,8 +893,8 @@ try {
                 }
             )
         }
-        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_browser/invoke" -Headers $headers -Body @{
-            runId = $replayRunId
+        $body = @{
+            runId = $runId
             stepId = "sandbox-browser-replay-step-$suffix"
             toolCallId = $replayToolCallId
             agentId = "legacy-react-agent"
@@ -750,7 +904,7 @@ try {
             arguments = @{
                 action = "snapshot"
                 url = $externalUrl
-                allowedHosts = @($ExternalHost)
+                allowedHosts = @($ExternalHost, $AssetHost)
                 sessionState = $sessionState
                 viewportWidth = 1024
                 viewportHeight = 640
@@ -760,9 +914,10 @@ try {
                 captureSessionState = $false
             }
             resourceRefs = @{}
-            idempotencyKey = "${replayRunId}:${replayToolCallId}"
+            idempotencyKey = "${runId}:${replayToolCallId}"
             allowedToolIds = @("sandbox_browser")
         }
+        $response = Invoke-SandboxBrowserTool -Headers $headers -Body $body -Name "Invoke sandbox_browser URL mode session replay"
         Assert-ApiOk $response "Invoke sandbox_browser URL mode session replay"
         if ($response.data.success -ne $true) {
             throw "sandbox_browser URL mode session replay failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
@@ -797,9 +952,9 @@ try {
     }
     if (-not $replayObservation) { exit 1 }
 
-    $replaySessionId = "$($replayObservation.sessionId)"
     $replayJsonArtifactId = "$(@($replayObservation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" })[0].artifactId)"
     $replayHarArtifactId = "$(@($replayObservation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/har+json" })[0].artifactId)"
+    $replaySessionId = Resolve-SandboxSessionIdFromArtifact -ArtifactId $replayHarArtifactId -Label "replay HAR"
 
     Test-Step "Download governed replay browser JSON artifact" {
         $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$replayJsonArtifactId/download" -Headers $headers
@@ -1057,6 +1212,7 @@ try {
         }
     }
     Stop-ExternalHttpFixture -Name $externalHttpContainerName -Root $externalHttpRoot
+    Stop-ExternalHttpFixture -Name $assetHttpContainerName -Root $assetHttpRoot
 }
 
 if ($failed -gt 0) {

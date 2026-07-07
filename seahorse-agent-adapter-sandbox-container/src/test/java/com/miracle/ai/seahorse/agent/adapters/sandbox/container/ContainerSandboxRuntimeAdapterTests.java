@@ -1071,7 +1071,6 @@ class ContainerSandboxRuntimeAdapterTests {
                             .contains("target_url = \"http://host.docker.internal:18080/page\"",
                                     "allowed_hosts = set([\"host.docker.internal\"])",
                                     "from urllib.parse import unquote_plus, urlparse",
-                                    "target_origin = origin_key(target_url)",
                                     "sensitive_query_parameter_names = {",
                                     "\"sessiontoken\",",
                                     "\"clientsecret\",",
@@ -1090,7 +1089,10 @@ class ContainerSandboxRuntimeAdapterTests {
                                     "\"url\": redacted_har_url(page.url)",
                                     "\"blocked\": blocked",
                                     "if has_credential_url_parts(url):",
-                                    "return origin_key(url) == target_origin",
+                                    "scheme = parsed.scheme.lower()",
+                                    "host = (parsed.hostname or \"\").lower()",
+                                    "if scheme in (\"http\", \"https\") and host:",
+                                    "return host in allowed_hosts",
                                     "cookies_path = Path(\"/workspace/browser-cookies.json\")",
                                     "session_state_input_path = Path(\"/workspace/browser-session-state-input.json\")",
                                     "context_options[\"storage_state\"] = str(session_state_input_path)",
@@ -1104,7 +1106,12 @@ class ContainerSandboxRuntimeAdapterTests {
                                     "browser-session-summary.json",
                                     "page.goto",
                                     "\"source\": \"url\" if target_url else \"html\"")
-                            .doesNotContain("host in allowed_hosts", "url mode marker", cookieValue, storageValue);
+                            .doesNotContain("def origin_key",
+                                    "target_origin",
+                                    "return origin_key(url) == target_origin",
+                                    "url mode marker",
+                                    cookieValue,
+                                    storageValue);
                     assertThat(Files.readString(command.workingDirectory().resolve("browser-cookies.json")))
                             .contains("seahorse_session", cookieValue, "host.docker.internal");
                     assertThat(Files.readString(command.workingDirectory().resolve("browser-session-state-input.json")))
@@ -1160,6 +1167,38 @@ class ContainerSandboxRuntimeAdapterTests {
                 .containsSubsequence("--add-host", "host.docker.internal:host-gateway")
                 .containsSubsequence("--memory", "768m")
                 .containsSubsequence("seahorse-sandbox-browser:playwright-1.48.0", "python", "/workspace/main.py")
+                .doesNotContain("--network");
+    }
+
+    @Test
+    void shouldMapRequestedDockerInternalAllowedHostsForBrowserUrlMode() throws Exception {
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("browser snapshot completed\n", Duration.ofMillis(320)),
+                command -> {
+                    String script = Files.readString(command.workingDirectory().resolve("main.py"));
+                    assertThat(script)
+                            .contains("allowed_hosts = set([\"host.docker.internal\",\"assets.docker.internal\"])",
+                                    "return host in allowed_hosts");
+                    Files.writeString(command.workingDirectory().resolve("browser-result.json"),
+                            """
+                                    {"action":"snapshot","source":"url","url":"http://host.docker.internal:18080/page","allowedHosts":["assets.docker.internal","host.docker.internal"],"text":"url mode marker"}
+                                    """);
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal","assets.docker.internal"],"screenshot":false,"har":false,"video":false}
+                        """,
+                true,
+                List.of("host.docker.internal", "assets.docker.internal")));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(runner.lastCommand.commandLine())
+                .containsSubsequence("--add-host", "host.docker.internal:host-gateway")
+                .containsSubsequence("--add-host", "assets.docker.internal:host-gateway")
                 .doesNotContain("--network");
     }
 
