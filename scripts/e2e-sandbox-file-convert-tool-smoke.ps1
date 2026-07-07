@@ -185,6 +185,31 @@ function Invoke-SandboxFileConvertTool {
     return $retry
 }
 
+function Invoke-ExpectedSandboxFileConvertFailure {
+    param(
+        [hashtable]$Headers,
+        [hashtable]$Body,
+        [string]$Name,
+        [string]$ExpectedError,
+        [string[]]$ForbiddenValues = @()
+    )
+
+    $response = Invoke-SandboxFileConvertTool -Headers $Headers -Body $Body -Name $Name
+    if ($response.data.success -eq $true) {
+        throw "$Name unexpectedly succeeded: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+    $payload = $response.data | ConvertTo-Json -Depth 20 -Compress
+    if ($payload -notlike "*$ExpectedError*") {
+        throw "$Name did not include expected error '$ExpectedError': $payload"
+    }
+    foreach ($forbidden in $ForbiddenValues) {
+        if (-not [string]::IsNullOrWhiteSpace("$forbidden") -and $payload -like "*$forbidden*") {
+            throw "$Name leaked raw file conversion value '$forbidden': $payload"
+        }
+    }
+    return $response
+}
+
 function New-RealAgentRunId {
     param(
         [hashtable]$Headers,
@@ -691,6 +716,88 @@ try {
         }
         if ("$($matched[0].resourceType)" -ne "SANDBOX") {
             throw "Expected sandbox_file_convert resourceType=SANDBOX: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
+        }
+    } | Out-Null
+
+    $unsupportedContent = "<root>file-convert-unsupported-secret-$suffix</root>"
+    $plainPdfContent = "%PDF-1.4 file-convert-pdf-plain-secret-$suffix"
+    $fileConvertFailureCases = @(
+        @{
+            Name = "unsupported-conversion"
+            StepId = "sandbox-file-convert-unsupported-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-unsupported-fail-call-$suffix"
+            ExpectedError = "supported conversions"
+            Arguments = @{
+                sourceFormat = "xml"
+                targetFormat = "json"
+                content = $unsupportedContent
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"unsupported"',
+                '"sourceFormatPresent":true',
+                '"sourceFormatLength":3',
+                '"targetFormat":"json"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"plain"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":false',
+                '"networkRequested":false',
+                '"argumentCount":3',
+                '"contentLength":'
+            )
+            Forbidden = @($unsupportedContent, "file-convert-unsupported-secret-$suffix", "<root>")
+        },
+        @{
+            Name = "pdf-without-base64"
+            StepId = "sandbox-file-convert-pdf-encoding-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-pdf-encoding-fail-call-$suffix"
+            ExpectedError = "pdf contentEncoding must be base64"
+            Arguments = @{
+                sourceFormat = "pdf"
+                targetFormat = "txt"
+                content = $plainPdfContent
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"pdf"',
+                '"sourceFormatPresent":true',
+                '"targetFormat":"txt"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"plain"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":false',
+                '"networkRequested":false',
+                '"argumentCount":3',
+                '"contentLength":'
+            )
+            Forbidden = @($plainPdfContent, "file-convert-pdf-plain-secret-$suffix", "%PDF-1.4")
+        }
+    )
+
+    Test-Step "Verify sandbox_file_convert preflight inputs fail closed" {
+        foreach ($case in @($fileConvertFailureCases)) {
+            $requestBody = @{
+                runId = $runId
+                stepId = "$($case.StepId)"
+                toolCallId = "$($case.ToolCallId)"
+                agentId = "legacy-react-agent"
+                tenantId = "default"
+                userId = "$($login.data.userId)"
+                agentIdentityId = "$($login.data.userId)"
+                arguments = $case.Arguments
+                resourceRefs = @{}
+                idempotencyKey = "${runId}:$($case.ToolCallId)"
+                allowedToolIds = @("sandbox_file_convert")
+            }
+            Invoke-ExpectedSandboxFileConvertFailure `
+                -Headers $headers `
+                -Body $requestBody `
+                -Name "Invoke sandbox_file_convert expected failure $($case.Name)" `
+                -ExpectedError "$($case.ExpectedError)" `
+                -ForbiddenValues @($case.Forbidden) | Out-Null
         }
     } | Out-Null
 
@@ -2221,6 +2328,7 @@ try {
         $expectedSteps = @(
             @{
                 StepId = "sandbox-file-convert-step-$suffix"
+                Status = "SUCCEEDED"
                 Required = @(
                     '"toolId":"sandbox_file_convert"',
                     '"runtimeType":"FILE_CONVERSION"',
@@ -2240,6 +2348,7 @@ try {
             },
             @{
                 StepId = "sandbox-file-convert-markdown-html-step-$suffix"
+                Status = "SUCCEEDED"
                 Required = @(
                     '"toolId":"sandbox_file_convert"',
                     '"runtimeType":"FILE_CONVERSION"',
@@ -2255,6 +2364,7 @@ try {
             },
             @{
                 StepId = "sandbox-file-convert-docx-txt-step-$suffix"
+                Status = "SUCCEEDED"
                 Required = @(
                     '"toolId":"sandbox_file_convert"',
                     '"runtimeType":"FILE_CONVERSION"',
@@ -2271,6 +2381,7 @@ try {
             },
             @{
                 StepId = "sandbox-file-convert-pdf-html-step-$suffix"
+                Status = "SUCCEEDED"
                 Required = @(
                     '"toolId":"sandbox_file_convert"',
                     '"runtimeType":"FILE_CONVERSION"',
@@ -2286,6 +2397,7 @@ try {
             },
             @{
                 StepId = "sandbox-file-convert-xlsx-csv-step-$suffix"
+                Status = "SUCCEEDED"
                 Required = @(
                     '"toolId":"sandbox_file_convert"',
                     '"runtimeType":"FILE_CONVERSION"',
@@ -2301,6 +2413,7 @@ try {
             },
             @{
                 StepId = "sandbox-file-convert-pptx-html-step-$suffix"
+                Status = "SUCCEEDED"
                 Required = @(
                     '"toolId":"sandbox_file_convert"',
                     '"runtimeType":"FILE_CONVERSION"',
@@ -2315,12 +2428,21 @@ try {
                 Forbidden = @($Marker, "Sandbox PPTX", "PPTX HTML conversion renders slide text", $pptxHtmlContent)
             }
         )
+        foreach ($case in @($fileConvertFailureCases)) {
+            $expectedSteps += @{
+                StepId = "$($case.StepId)"
+                Status = "FAILED"
+                Required = @($case.Required)
+                Forbidden = @($case.Forbidden)
+            }
+        }
         foreach ($expected in $expectedSteps) {
             $audit = @($records | Where-Object { "$($_.stepId)" -eq "$($expected.StepId)" -and "$($_.toolId)" -eq "sandbox_file_convert" }) | Select-Object -First 1
             if (-not $audit) {
                 throw "sandbox_file_convert audit record not found for step $($expected.StepId): $($response.data | ConvertTo-Json -Depth 20 -Compress)"
             }
-            if ("$($audit.status)" -ne "SUCCEEDED") {
+            $expectedStatus = if ($expected.Status) { "$($expected.Status)" } else { "SUCCEEDED" }
+            if ("$($audit.status)" -ne $expectedStatus) {
                 throw "sandbox_file_convert audit status mismatch for step $($expected.StepId): $($audit | ConvertTo-Json -Depth 20 -Compress)"
             }
             $summary = "$($audit.argumentsSummary)"
