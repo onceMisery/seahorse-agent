@@ -234,6 +234,10 @@ The sandbox browser audit summary now also filters `argumentKeys` through the su
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 19/19.
 
+The full-Docker `sandbox_browser` smoke now verifies those Tool Gateway audit summaries through the real `/api/tool-invocations` API. It checks inline HTML, URL egress with cookie/session capture, request-scoped session replay, and captured session-state artifact replay records for value-free governance fields while asserting raw marker, URL, cookie, localStorage, auth marker, and session-state artifact id values are absent.
+
+Fresh evidence: PowerShell parsing for `.\scripts\e2e-sandbox-browser-tool-smoke.ps1` passed; `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-audit-smoke -SkipBrowserImageBuild` passed 31/31 against the real full-Docker backend, including the new `Verify sandbox_browser Tool Gateway audit summaries` step; `.\scripts\e2e-backend-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -RuntimeProfile full-compose` passed 20/20 across full-compose health, auth, knowledge CRUD/upload/chunk, real RAG SSE/trace, memory/profile, catalogs, audit, metadata governance, and SRE health. The same backend was `UP` on `127.0.0.1`; attempts through `localhost` were affected by a local IPv6 `::1:9090` listener unrelated to the Docker backend.
+
 ## 2026-07-06 Update: AgentScope A2A Signed Header Boundary Guard
 
 AgentScope inbound A2A `tenant-signed` authentication now rejects malformed signed headers before signature comparison and nonce-cache mutation. Tenant, agent, timestamp, and nonce headers have bounded lengths and control-character rejection; body-hash and signature headers must be 64-character SHA-256 hex strings.

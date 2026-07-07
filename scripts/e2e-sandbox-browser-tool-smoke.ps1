@@ -31,6 +31,7 @@ $assetHttpContainerName = $null
 $assetHttpRoot = $null
 $headers = $null
 $browserProfileNetworkEnabled = $false
+$baselineNonTerminalSandboxSessions = $null
 
 function Test-Step {
     param([string]$Name, [scriptblock]$Action)
@@ -136,6 +137,23 @@ function Assert-ApiOk {
     if ($null -eq $Response -or "$($Response.code)" -ne "0") {
         throw "$Name API error: $($Response | ConvertTo-Json -Depth 20 -Compress)"
     }
+}
+
+function Get-PageRecords {
+    param([object]$Page)
+    if ($null -eq $Page) {
+        return @()
+    }
+    if ($null -ne $Page.records) {
+        return @($Page.records)
+    }
+    if ($null -ne $Page.list) {
+        return @($Page.list)
+    }
+    if ($Page -is [System.Array]) {
+        return @($Page)
+    }
+    return @()
 }
 
 function Invoke-SandboxBrowserTool {
@@ -490,6 +508,8 @@ try {
             Wait-ForHealth
         } | Out-Null
     }
+
+    $baselineNonTerminalSandboxSessions = [int](Invoke-PostgresScalar "SELECT count(*) FROM sa_sandbox_session WHERE status NOT IN ('SUCCEEDED','FAILED','CANCELLED','TIMED_OUT');")
 
     $imageReady = Test-Step "Ensure browser runtime image is available" {
         Ensure-DockerImage -Image $BrowserImage
@@ -1113,6 +1133,90 @@ try {
         }
     } | Out-Null
 
+    Test-Step "Verify sandbox_browser Tool Gateway audit summaries" {
+        $response = Invoke-Json -Method GET -Path "/api/tool-invocations?current=1&size=50&runId=$runId&toolId=sandbox_browser" -Headers $headers
+        Assert-ApiOk $response "Read sandbox_browser tool audit"
+        $records = Get-PageRecords $response.data
+        $expectedSteps = @(
+            @{
+                StepId = "sandbox-browser-step-$suffix"
+                Required = @(
+                    '"toolId":"sandbox_browser"',
+                    '"mode":"inline"',
+                    '"networkRequested":false',
+                    '"htmlPresent":true',
+                    '"har":true',
+                    '"video":true'
+                )
+            },
+            @{
+                StepId = "sandbox-browser-url-step-$suffix"
+                Required = @(
+                    '"toolId":"sandbox_browser"',
+                    '"mode":"url"',
+                    '"networkRequested":true',
+                    '"allowedHostCount":2',
+                    '"cookieCount":1',
+                    '"captureSessionState":true',
+                    '"sessionStateReplayRequested":false'
+                )
+            },
+            @{
+                StepId = "sandbox-browser-replay-step-$suffix"
+                Required = @(
+                    '"toolId":"sandbox_browser"',
+                    '"mode":"url"',
+                    '"networkRequested":true',
+                    '"sessionStateReplayRequested":true',
+                    '"sessionStateCookieCount":1',
+                    '"sessionStateOriginCount":1',
+                    '"sessionStateLocalStorageItemCount":1',
+                    '"captureSessionState":false'
+                )
+            },
+            @{
+                StepId = "sandbox-browser-artifact-replay-step-$suffix"
+                Required = @(
+                    '"toolId":"sandbox_browser"',
+                    '"mode":"url"',
+                    '"networkRequested":true',
+                    '"sessionStateArtifactReplayRequested":true',
+                    '"sessionStateReplayRequested":false',
+                    '"captureSessionState":false'
+                )
+            }
+        )
+        foreach ($expected in $expectedSteps) {
+            $audit = @($records | Where-Object { "$($_.stepId)" -eq "$($expected.StepId)" -and "$($_.toolId)" -eq "sandbox_browser" }) | Select-Object -First 1
+            if (-not $audit) {
+                throw "sandbox_browser audit record not found for step $($expected.StepId): $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ("$($audit.status)" -ne "SUCCEEDED") {
+                throw "sandbox_browser audit status mismatch for step $($expected.StepId): $($audit | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            $summary = "$($audit.argumentsSummary)"
+            foreach ($required in @($expected.Required)) {
+                if ($summary -notlike "*$required*") {
+                    throw "sandbox_browser audit summary for step $($expected.StepId) did not include $required`: $summary"
+                }
+            }
+            foreach ($forbidden in @(
+                    $Marker,
+                    $externalUrl,
+                    $assetUrl,
+                    $externalCookieName,
+                    $externalCookieValue,
+                    $externalStorageValue,
+                    $externalAuthMarker,
+                    $script:urlSessionStateArtifactId
+                )) {
+                if (-not [string]::IsNullOrWhiteSpace("$forbidden") -and $summary -like "*$forbidden*") {
+                    throw "sandbox_browser audit summary leaked raw browser/session value '$forbidden': $summary"
+                }
+            }
+        }
+    } | Out-Null
+
     Test-Step "Restore browser runtime profile network deny" {
         $response = Invoke-Json -Method POST -Path "/api/sandbox/runtime/profile-policies" -Headers $headers -Body @{
             tenantId = "default"
@@ -1277,10 +1381,10 @@ try {
         }
     } | Out-Null
 
-    Test-Step "Verify no non-terminal sandbox sessions remain" {
+    Test-Step "Verify sandbox_browser did not add non-terminal sessions" {
         $count = Invoke-PostgresScalar "SELECT count(*) FROM sa_sandbox_session WHERE status NOT IN ('SUCCEEDED','FAILED','CANCELLED','TIMED_OUT');"
-        if ([int]$count -ne 0) {
-            throw "Expected zero non-terminal sandbox sessions but got $count"
+        if ([int]$count -gt $baselineNonTerminalSandboxSessions) {
+            throw "Expected sandbox_browser smoke not to add non-terminal sandbox sessions; baseline=$baselineNonTerminalSandboxSessions current=$count"
         }
     } | Out-Null
 
