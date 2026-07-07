@@ -765,6 +765,11 @@ try {
         "word/document.xml" = "<w:document><w:p><w:r><w:t>unsafe docx $activeDocxMacroMarker</w:t></w:r></w:p></w:document>"
         "word/vbaProject.bin" = "macro bytes $activeDocxMacroMarker"
     }
+    $activeDocxActiveXMarker = "file-convert-docx-activex-secret-$suffix"
+    $activeDocxActiveXContent = New-ZipBase64 -Entries @{
+        "word/document.xml" = "<w:document><w:p><w:r><w:t>unsafe docx activex $activeDocxActiveXMarker</w:t></w:r></w:p></w:document>"
+        "word/activeX/activeX1.xml" = "<ax:ocx ax:classid=`"clsid:$activeDocxActiveXMarker`" xmlns:ax=`"http://schemas.microsoft.com/office/2006/activeX`" />"
+    }
     $activePptxMacroMarker = "file-convert-pptx-macro-secret-$suffix"
     $activePptxContent = New-ZipBase64 -Entries @{
         "ppt/slides/slide1.xml" = "<p:sld xmlns:p=`"http://schemas.openxmlformats.org/presentationml/2006/main`" xmlns:a=`"http://schemas.openxmlformats.org/drawingml/2006/main`"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>unsafe pptx $activePptxMacroMarker</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"
@@ -939,6 +944,33 @@ try {
                 '"contentLength":'
             )
             Forbidden = @($activeDocxContent, $activeDocxMacroMarker, "vbaProject.bin", "unsafe docx")
+        },
+        @{
+            Name = "docx-activex-content"
+            StepId = "sandbox-file-convert-docx-activex-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-docx-activex-fail-call-$suffix"
+            ExpectedError = "docx active content is not supported"
+            Arguments = @{
+                sourceFormat = "docx"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $activeDocxActiveXContent
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"docx"',
+                '"sourceFormatPresent":true',
+                '"targetFormat":"txt"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"base64"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":true',
+                '"networkRequested":false',
+                '"argumentCount":4',
+                '"contentLength":'
+            )
+            Forbidden = @($activeDocxActiveXContent, $activeDocxActiveXMarker, "word/activeX/activeX1.xml", "word/activex/activex1.xml", "unsafe docx activex")
         },
         @{
             Name = "pptx-active-content"
