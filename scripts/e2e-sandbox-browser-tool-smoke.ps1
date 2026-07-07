@@ -943,6 +943,67 @@ try {
                 )
             }
             ForbiddenValues = @("origin-storage-secret-${suffix}")
+        },
+        @{
+            Name = "origin-host-not-allowed"
+            StepId = "sandbox-browser-session-origin-allowlist-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-session-origin-allowlist-fail-call-$suffix"
+            ExpectedMessage = "sessionState origin host must be included in allowedHosts"
+            SessionState = @{
+                origins = @(
+                    @{
+                        origin = "http://${AssetHost}:$AssetPort"
+                        localStorage = @(
+                            @{
+                                name = "seahorse_session_marker"
+                                value = "origin-allowlist-secret-${suffix}"
+                            }
+                        )
+                    }
+                )
+            }
+            ForbiddenValues = @("origin-allowlist-secret-${suffix}")
+        },
+        @{
+            Name = "origin-host-mismatch"
+            StepId = "sandbox-browser-session-origin-host-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-session-origin-host-fail-call-$suffix"
+            ExpectedMessage = "sessionState origin host must match the target URL host"
+            AllowedHosts = @($ExternalHost, $AssetHost)
+            SessionState = @{
+                origins = @(
+                    @{
+                        origin = "http://${AssetHost}:$AssetPort"
+                        localStorage = @(
+                            @{
+                                name = "seahorse_session_marker"
+                                value = "origin-host-mismatch-secret-${suffix}"
+                            }
+                        )
+                    }
+                )
+            }
+            ForbiddenValues = @("origin-host-mismatch-secret-${suffix}")
+        },
+        @{
+            Name = "origin-credential-parts"
+            StepId = "sandbox-browser-session-origin-credential-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-session-origin-credential-fail-call-$suffix"
+            ExpectedMessage = "sessionState origin must be an origin only"
+            SessionState = @{
+                origins = @(
+                    @{
+                        origin = "http://alice:origin-userinfo-secret-${suffix}@${ExternalHost}:$ExternalPort/path?token=origin-query-secret-${suffix}#fragment"
+                        localStorage = @(
+                            @{
+                                name = "seahorse_session_marker"
+                                value = "origin-credential-secret-${suffix}"
+                            }
+                        )
+                    }
+                )
+            }
+            ForbiddenValues = @("alice:origin-userinfo-secret-${suffix}", "origin-userinfo-secret-${suffix}", "token=origin-query-secret-${suffix}", "origin-query-secret-${suffix}", "origin-credential-secret-${suffix}")
         }
     )
 
@@ -959,7 +1020,7 @@ try {
                 arguments = @{
                     action = "snapshot"
                     url = $externalUrl
-                    allowedHosts = @($ExternalHost)
+                    allowedHosts = @(if ($case.AllowedHosts) { $case.AllowedHosts } else { $ExternalHost })
                     sessionState = $case.SessionState
                     viewportWidth = 1024
                     viewportHeight = 640
@@ -1529,7 +1590,7 @@ try {
                     '"toolId":"sandbox_browser"',
                     '"mode":"url"',
                     '"networkRequested":true',
-                    '"allowedHostCount":1',
+                    """allowedHostCount"":$(if ($case.AllowedHosts) { 2 } else { 1 })",
                     '"cookieCount":0',
                     '"sessionStateReplayRequested":true',
                     '"captureSessionState":false'
