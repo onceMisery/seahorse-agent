@@ -147,6 +147,54 @@ class JdbcTenantSchemaUpgradeTests {
     }
 
     @Test
+    void shouldRepairRemoteA2AToolCatalogGovernanceForExistingVolumes() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:tenant-schema-upgrade-a2a-tool-catalog-" + System.nanoTime()
+                        + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+                "sa",
+                "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        JdbcToolCatalogRepositoryAdapterTests.createToolCatalogSchema(jdbcTemplate);
+        jdbcTemplate.update("""
+                INSERT INTO sa_tool_catalog (
+                    tool_id, provider, name, description, schema_json, output_schema_json, risk_level, action_type,
+                    resource_type, owner_team, enabled, requires_approval, created_at, updated_at
+                )
+                VALUES (
+                    'invoke_remote_a2a_agent', 'BUILTIN', 'Remote A2A Agent', 'stale metadata',
+                    '{}', NULL, 'LOW', 'READ', 'BUILTIN', 'kernel-agent',
+                    FALSE, FALSE, TIMESTAMP '2026-07-01 00:00:00', TIMESTAMP '2026-07-01 00:00:00'
+                )
+                """);
+
+        JdbcTenantSchemaUpgrade upgrade = new JdbcTenantSchemaUpgrade(dataSource);
+        upgrade.upgrade();
+        upgrade.upgrade();
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT provider FROM sa_tool_catalog WHERE tool_id = 'invoke_remote_a2a_agent'",
+                String.class)).isEqualTo("BUILTIN");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT risk_level FROM sa_tool_catalog WHERE tool_id = 'invoke_remote_a2a_agent'",
+                String.class)).isEqualTo("HIGH");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT action_type FROM sa_tool_catalog WHERE tool_id = 'invoke_remote_a2a_agent'",
+                String.class)).isEqualTo("EXECUTE");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT resource_type FROM sa_tool_catalog WHERE tool_id = 'invoke_remote_a2a_agent'",
+                String.class)).isEqualTo("REMOTE_AGENT");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT owner_team FROM sa_tool_catalog WHERE tool_id = 'invoke_remote_a2a_agent'",
+                String.class)).isEqualTo("kernel-agent");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT enabled FROM sa_tool_catalog WHERE tool_id = 'invoke_remote_a2a_agent'",
+                Boolean.class)).isFalse();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT requires_approval FROM sa_tool_catalog WHERE tool_id = 'invoke_remote_a2a_agent'",
+                Boolean.class)).isTrue();
+    }
+
+    @Test
     void shouldAddAgentHandoffContextPackReferenceForExistingTable() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:tenant-schema-upgrade-agent-handoff-" + System.nanoTime()

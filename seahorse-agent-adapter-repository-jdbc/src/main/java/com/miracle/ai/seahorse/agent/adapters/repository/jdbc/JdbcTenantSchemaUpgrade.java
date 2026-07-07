@@ -103,6 +103,7 @@ public class JdbcTenantSchemaUpgrade {
         upgradeSandboxArtifactScanSummary();
         upgradeSandboxArtifactRedactionSummary();
         upgradeToolInvocationRolloutAttribution();
+        repairRemoteA2AToolCatalogGovernance();
         upgradeAgentHandoffContextPackReference();
         upgradeSandboxRuntimeProfilePolicy();
         upgradeAiModelConfigUniqueness();
@@ -218,6 +219,28 @@ public class JdbcTenantSchemaUpgrade {
                     """);
         } catch (Exception e) {
             log.warn("[TenantSchema] repair sa_tool_invocation rollout index failed: {}", e.getMessage());
+        }
+    }
+
+    private void repairRemoteA2AToolCatalogGovernance() {
+        if (!tableExists("sa_tool_catalog")) {
+            return;
+        }
+        try {
+            jdbcTemplate.update("""
+                    UPDATE sa_tool_catalog
+                    SET provider = 'BUILTIN',
+                        risk_level = 'HIGH',
+                        action_type = 'EXECUTE',
+                        resource_type = 'REMOTE_AGENT',
+                        owner_team = 'kernel-agent',
+                        requires_approval = TRUE,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE tool_id = 'invoke_remote_a2a_agent'
+                    """);
+        } catch (Exception e) {
+            log.warn("[TenantSchema] repair invoke_remote_a2a_agent catalog governance failed: {}",
+                    e.getMessage());
         }
     }
 

@@ -192,6 +192,38 @@ class BuiltInAgentToolRegistrarTests {
         context.close();
     }
 
+    @Test
+    void shouldRefreshCatalogWhenBuiltInToolAlreadyExistsInRegistry() {
+        InMemoryToolRegistry registry = new InMemoryToolRegistry();
+        RecordingToolCatalogRepository catalog = new RecordingToolCatalogRepository();
+        RemoteA2AToolPort remoteA2aTool = new RemoteA2AToolPort();
+        registry.register(remoteA2aTool.descriptor(), remoteA2aTool);
+
+        GenericApplicationContext context = new GenericApplicationContext(new DefaultListableBeanFactory());
+        context.registerBean(RemoteA2AToolPort.class, () -> remoteA2aTool);
+        context.refresh();
+
+        BuiltInAgentToolRegistrar registrar = new BuiltInAgentToolRegistrar(
+                registry,
+                context.getBeanProvider(DescribedToolPort.class),
+                catalog,
+                Clock.fixed(FIXED_NOW, ZoneOffset.UTC));
+        registrar.run(null);
+
+        assertThat(registry.find(RemoteA2AToolPort.TOOL_ID)).isPresent();
+        assertThat(catalog.savedEntries()).hasSize(1);
+        assertThat(catalog.findById(RemoteA2AToolPort.TOOL_ID)).hasValueSatisfying(entry -> {
+            assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
+            assertThat(entry.actionType()).isEqualTo(ToolActionType.EXECUTE);
+            assertThat(entry.resourceType()).isEqualTo("REMOTE_AGENT");
+            assertThat(entry.riskLevel()).isEqualTo(ToolRiskLevel.HIGH);
+            assertThat(entry.enabled()).isTrue();
+            assertThat(entry.requiresApproval()).isTrue();
+        });
+
+        context.close();
+    }
+
     private static final class RecordingToolCatalogRepository implements ToolCatalogRepositoryPort {
 
         private final Map<String, ToolCatalogEntry> entries = new LinkedHashMap<>();

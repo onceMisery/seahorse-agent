@@ -85,11 +85,13 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
     }
 
     private void register(ToolDescriptor descriptor, ToolPort toolPort) {
-        if (toolPort == null || toolRegistry.find(descriptor.toolId()).isPresent()) {
+        if (toolPort == null) {
             return;
         }
         try {
-            toolRegistry.register(descriptor, toolPort);
+            if (toolRegistry.find(descriptor.toolId()).isEmpty()) {
+                toolRegistry.register(descriptor, toolPort);
+            }
             toolCatalogRepository.save(toCatalogEntry(descriptor));
         } catch (UnsupportedOperationException ex) {
             LOG.warn("ToolRegistryPort does not support built-in tool registration: toolId={}",
