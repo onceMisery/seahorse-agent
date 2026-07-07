@@ -950,6 +950,47 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldSummarizeExtendedSandboxFileConvertFormatsAsSupportedGovernanceMetadata() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "sandbox_file_convert",
+                Map.of(
+                        "sourceFormat", "xlsx",
+                        "targetFormat", "html",
+                        "contentEncoding", "base64",
+                        "content", "UEsDBAo=secret-xlsx-marker"),
+                Map.of(),
+                "run-1:call-1",
+                List.of("sandbox_file_convert")));
+
+        assertTrue(result.success());
+        String summary = audit.requested.get(0).argumentsSummary();
+        assertTrue(summary.contains("\"toolId\":\"sandbox_file_convert\""));
+        assertTrue(summary.contains("\"sourceFormat\":\"xlsx\""));
+        assertTrue(summary.contains("\"targetFormat\":\"html\""));
+        assertTrue(summary.contains("\"contentEncoding\":\"base64\""));
+        assertTrue(summary.contains("\"binaryInput\":true"));
+        assertFalse(summary.contains("\"sourceFormat\":\"unsupported\""));
+        assertFalse(summary.contains("UEsDBAo="));
+        assertFalse(summary.contains("secret-xlsx-marker"));
+    }
+
+    @Test
     void shouldSummarizeSandboxFileConvertAuditWithoutPrevalidatedFormatValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.failed("unsupported conversion"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();

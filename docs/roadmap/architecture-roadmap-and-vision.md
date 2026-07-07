@@ -771,6 +771,14 @@ This is a narrow cross-tool audit hardening slice. It does not change file conve
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 23/23, including regression coverage that `sandbox_file_convert` audit summaries include governance metadata while excluding raw base64/content markers and caller-controlled pre-validation format/encoding values.
 
+## 2026-07-07 Update: Sandbox File Convert Full-Docker Audit E2E
+
+The full-Docker `sandbox_file_convert` smoke now verifies Tool Gateway audit summaries through the real `/api/tool-invocations` API for plain CSV/JSON and Markdown paths plus base64 DOCX/PDF/XLSX/PPTX paths. The E2E guard asserts value-free `FILE_CONVERSION` governance fields, binary-input classification, network posture, and argument shape metadata while checking that raw marker text, document text, base64 payloads, and storage references do not appear in `argumentsSummary`.
+
+The first real E2E run exposed an audit-projection drift: extended supported formats such as `xlsx` and `pptx` were executed successfully but summarized as `unsupported` because the Tool Gateway audit allowlist lagged behind the sandbox file-conversion tool schema/runtime. The audit allowlist now includes the supported ODF and Office spreadsheet/presentation formats (`odt`, `ods`, `odp`, `xlsx`, `pptx`) without loosening raw-value redaction.
+
+Fresh evidence: PowerShell parsing for `.\scripts\e2e-sandbox-file-convert-tool-smoke.ps1` passed; `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 33/33, including regression coverage for extended file-conversion audit formats; `.\mvnw.cmd package -pl seahorse-agent-bootstrap -am "-DskipTests" "-Dmaven.test.skip=true" "-Dspotless.check.skip=true"` rebuilt the full bootstrap reactor with 28/28 modules passing; the rebuilt jar was copied into the real `seahorse-backend` container and the container returned to `healthy`; `.\scripts\e2e-sandbox-file-convert-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-file-convert-audit-smoke` passed 73/73 against the real full-Docker backend, including the new `Verify sandbox_file_convert Tool Gateway audit summaries` step.
+
 ## 2026-07-06 Update: Sandbox Python Tool Gateway Audit Summary
 
 Tool Gateway request audit now emits a `sandbox_python`-specific value-free argument summary. The summary records `CODE_INTERPRETER` runtime posture, code length, network request posture, requested-host presence, requested-host count, and argument keys while excluding raw Python code and pre-validation requested host values from `argumentsSummary`.

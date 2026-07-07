@@ -124,6 +124,23 @@ function Assert-ApiOk {
     }
 }
 
+function Get-PageRecords {
+    param([object]$Page)
+    if ($null -eq $Page) {
+        return @()
+    }
+    if ($null -ne $Page.records) {
+        return @($Page.records)
+    }
+    if ($null -ne $Page.list) {
+        return @($Page.list)
+    }
+    if ($Page -is [System.Array]) {
+        return @($Page)
+    }
+    return @()
+}
+
 function Invoke-SandboxFileConvertTool {
     param(
         [hashtable]$Headers,
@@ -2196,6 +2213,129 @@ try {
             }
         } | Out-Null
     }
+
+    Test-Step "Verify sandbox_file_convert Tool Gateway audit summaries" {
+        $response = Invoke-Json -Method GET -Path "/api/tool-invocations?current=1&size=100&runId=$runId&toolId=sandbox_file_convert" -Headers $headers
+        Assert-ApiOk $response "Read sandbox_file_convert tool audit"
+        $records = Get-PageRecords $response.data
+        $expectedSteps = @(
+            @{
+                StepId = "sandbox-file-convert-step-$suffix"
+                Required = @(
+                    '"toolId":"sandbox_file_convert"',
+                    '"runtimeType":"FILE_CONVERSION"',
+                    '"sourceFormat":"csv"',
+                    '"sourceFormatPresent":true',
+                    '"targetFormat":"json"',
+                    '"targetFormatPresent":true',
+                    '"contentEncoding":"plain"',
+                    '"contentEncodingPresent":true',
+                    '"binaryInput":false',
+                    '"networkRequested":false',
+                    '"argumentKeys"',
+                    '"argumentCount":3',
+                    '"contentLength":'
+                )
+                Forbidden = @($Marker, "name,score,marker", "Ada", "Grace", $csvContent)
+            },
+            @{
+                StepId = "sandbox-file-convert-markdown-html-step-$suffix"
+                Required = @(
+                    '"toolId":"sandbox_file_convert"',
+                    '"runtimeType":"FILE_CONVERSION"',
+                    '"sourceFormat":"markdown"',
+                    '"targetFormat":"html"',
+                    '"contentEncoding":"plain"',
+                    '"binaryInput":false',
+                    '"networkRequested":false',
+                    '"argumentCount":3',
+                    '"contentLength":'
+                )
+                Forbidden = @($Marker, "Sandbox Document", "Hello **", $markdownContent)
+            },
+            @{
+                StepId = "sandbox-file-convert-docx-txt-step-$suffix"
+                Required = @(
+                    '"toolId":"sandbox_file_convert"',
+                    '"runtimeType":"FILE_CONVERSION"',
+                    '"sourceFormat":"docx"',
+                    '"targetFormat":"txt"',
+                    '"contentEncoding":"base64"',
+                    '"contentEncodingPresent":true',
+                    '"binaryInput":true',
+                    '"networkRequested":false',
+                    '"argumentCount":4',
+                    '"contentLength":'
+                )
+                Forbidden = @($Marker, "Sandbox DOCX", "DOCX conversion preserves paragraph text", $docxContent)
+            },
+            @{
+                StepId = "sandbox-file-convert-pdf-html-step-$suffix"
+                Required = @(
+                    '"toolId":"sandbox_file_convert"',
+                    '"runtimeType":"FILE_CONVERSION"',
+                    '"sourceFormat":"pdf"',
+                    '"targetFormat":"html"',
+                    '"contentEncoding":"base64"',
+                    '"binaryInput":true',
+                    '"networkRequested":false',
+                    '"argumentCount":4',
+                    '"contentLength":'
+                )
+                Forbidden = @($Marker, "Sandbox PDF HTML", "PDF HTML conversion renders literal text", $pdfHtmlContent)
+            },
+            @{
+                StepId = "sandbox-file-convert-xlsx-csv-step-$suffix"
+                Required = @(
+                    '"toolId":"sandbox_file_convert"',
+                    '"runtimeType":"FILE_CONVERSION"',
+                    '"sourceFormat":"xlsx"',
+                    '"targetFormat":"csv"',
+                    '"contentEncoding":"base64"',
+                    '"binaryInput":true',
+                    '"networkRequested":false',
+                    '"argumentCount":4',
+                    '"contentLength":'
+                )
+                Forbidden = @($Marker, "XLSX conversion extracts first worksheet", $xlsxContent)
+            },
+            @{
+                StepId = "sandbox-file-convert-pptx-html-step-$suffix"
+                Required = @(
+                    '"toolId":"sandbox_file_convert"',
+                    '"runtimeType":"FILE_CONVERSION"',
+                    '"sourceFormat":"pptx"',
+                    '"targetFormat":"html"',
+                    '"contentEncoding":"base64"',
+                    '"binaryInput":true',
+                    '"networkRequested":false',
+                    '"argumentCount":4',
+                    '"contentLength":'
+                )
+                Forbidden = @($Marker, "Sandbox PPTX", "PPTX HTML conversion renders slide text", $pptxHtmlContent)
+            }
+        )
+        foreach ($expected in $expectedSteps) {
+            $audit = @($records | Where-Object { "$($_.stepId)" -eq "$($expected.StepId)" -and "$($_.toolId)" -eq "sandbox_file_convert" }) | Select-Object -First 1
+            if (-not $audit) {
+                throw "sandbox_file_convert audit record not found for step $($expected.StepId): $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ("$($audit.status)" -ne "SUCCEEDED") {
+                throw "sandbox_file_convert audit status mismatch for step $($expected.StepId): $($audit | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            $summary = "$($audit.argumentsSummary)"
+            foreach ($required in @($expected.Required)) {
+                if ($summary -notlike "*$required*") {
+                    throw "sandbox_file_convert audit summary for step $($expected.StepId) did not include $required`: $summary"
+                }
+            }
+            foreach ($forbidden in @($expected.Forbidden + @("objectUri", "object_uri", "storageRef", "file:", "local://", "s3://"))) {
+                if (-not [string]::IsNullOrWhiteSpace("$forbidden") -and $summary -like "*$forbidden*") {
+                    throw "sandbox_file_convert audit summary leaked raw file conversion value '$forbidden': $summary"
+                }
+            }
+        }
+    } | Out-Null
 
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Host "Backend: $BaseUrl"

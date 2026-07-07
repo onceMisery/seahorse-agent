@@ -82,6 +82,11 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             "markdown",
             "md",
             "docx",
+            "odt",
+            "ods",
+            "odp",
+            "xlsx",
+            "pptx",
             "pdf");
     private static final List<String> SANDBOX_FILE_CONTENT_ENCODINGS = List.of("plain", "base64");
     private static final List<String> SANDBOX_BROWSER_ARGUMENT_KEYS = List.of(
