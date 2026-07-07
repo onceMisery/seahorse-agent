@@ -732,6 +732,15 @@ try {
             ForbiddenValues = @("access_token=query-secret-${suffix}", "query-secret-${suffix}")
         },
         @{
+            Name = "allowed-host-query-secret"
+            StepId = "sandbox-browser-allowed-host-query-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-allowed-host-query-fail-call-$suffix"
+            Url = $externalUrl
+            AllowedHosts = @("${ExternalHost}?api_key=allowed-host-secret-${suffix}")
+            ExpectedMessage = "allowedHosts must contain host names only"
+            ForbiddenValues = @("api_key=allowed-host-secret-${suffix}", "allowed-host-secret-${suffix}")
+        },
+        @{
             Name = "localhost"
             StepId = "sandbox-browser-url-localhost-fail-step-$suffix"
             ToolCallId = "sandbox-browser-url-localhost-fail-call-$suffix"
