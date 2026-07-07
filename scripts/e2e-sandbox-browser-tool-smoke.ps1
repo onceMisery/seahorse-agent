@@ -730,6 +730,51 @@ try {
             Url = "http://${ExternalHost}:$ExternalPort/index.html?access_token=query-secret-${suffix}"
             ExpectedMessage = "url query must not include credential parameters"
             ForbiddenValues = @("access_token=query-secret-${suffix}", "query-secret-${suffix}")
+        },
+        @{
+            Name = "localhost"
+            StepId = "sandbox-browser-url-localhost-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-url-localhost-fail-call-$suffix"
+            Url = "http://localhost:$ExternalPort/index.html"
+            AllowedHosts = @("localhost")
+            ExpectedMessage = "must be a valid dotted DNS host, not localhost or an IP literal"
+            ForbiddenValues = @()
+        },
+        @{
+            Name = "ipv4-literal"
+            StepId = "sandbox-browser-url-ipv4-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-url-ipv4-fail-call-$suffix"
+            Url = "http://127.0.0.1:$ExternalPort/index.html"
+            AllowedHosts = @("127.0.0.1")
+            ExpectedMessage = "must be a valid dotted DNS host, not localhost or an IP literal"
+            ForbiddenValues = @()
+        },
+        @{
+            Name = "ipv6-literal"
+            StepId = "sandbox-browser-url-ipv6-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-url-ipv6-fail-call-$suffix"
+            Url = "http://[::1]:$ExternalPort/index.html"
+            AllowedHosts = @($ExternalHost)
+            ExpectedMessage = "must be a valid dotted DNS host, not localhost or an IP literal"
+            ForbiddenValues = @()
+        },
+        @{
+            Name = "single-label-host"
+            StepId = "sandbox-browser-url-single-label-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-url-single-label-fail-call-$suffix"
+            Url = "http://metadata/index.html"
+            AllowedHosts = @("metadata")
+            ExpectedMessage = "must be a valid dotted DNS host, not localhost or an IP literal"
+            ForbiddenValues = @()
+        },
+        @{
+            Name = "malformed-dns-host"
+            StepId = "sandbox-browser-url-malformed-host-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-url-malformed-host-fail-call-$suffix"
+            Url = "http://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.test/index.html"
+            AllowedHosts = @("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.test")
+            ExpectedMessage = "must be a valid dotted DNS host, not localhost or an IP literal"
+            ForbiddenValues = @()
         }
     )
 
@@ -746,7 +791,7 @@ try {
                 arguments = @{
                     action = "snapshot"
                     url = "$($case.Url)"
-                    allowedHosts = @($ExternalHost)
+                    allowedHosts = @(if ($case.AllowedHosts) { $case.AllowedHosts } else { $ExternalHost })
                     viewportWidth = 1024
                     viewportHeight = 640
                     screenshot = $false
