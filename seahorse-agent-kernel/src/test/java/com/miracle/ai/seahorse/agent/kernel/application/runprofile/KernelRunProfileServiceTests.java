@@ -312,6 +312,16 @@ class KernelRunProfileServiceTests {
         assertEquals(true, check.isPassed());
         assertEquals(List.of(), check.getBlockingCodes());
         assertEquals("HIGH", check.getRiskLevel());
+        assertIterableEquals(List.of(
+                        "RUN_PROFILE_RISK_ASSESSED",
+                        "RUN_PROFILE_EXECUTOR_SUPPORTED",
+                        "RUN_PROFILE_HIGH_RISK_APPROVAL_GOVERNED",
+                        "AGENTSCOPE_NACOS_NAMESPACE",
+                        "AGENTSCOPE_NACOS_GROUP",
+                        "AGENTSCOPE_STUDIO_TRACE"),
+                check.getCheckItems().stream()
+                        .map(RunProfileProductionGateCheck.CheckItem::getCode)
+                        .toList());
     }
 
     @Test

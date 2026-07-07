@@ -155,11 +155,21 @@ public class KernelRunProfileService implements RunProfileInboundPort {
                     .riskItems(List.of())
                     .build());
             List<RunProfileProductionGateCheck.CheckItem> items = new java.util.ArrayList<>();
+            items.add(pass(
+                    "RUN_PROFILE_RISK_ASSESSED",
+                    "Run profile risk level is " + summary.getRiskLevel()));
+            items.add(pass(
+                    "RUN_PROFILE_EXECUTOR_SUPPORTED",
+                    "Run profile executor engine is supported: " + normalizeEngine(profile.getExecutorEngine())));
             if (Objects.requireNonNullElse(summary.getRiskCodes(), List.<String>of())
                     .contains("APPROVAL_NOT_ENFORCED")) {
                 items.add(block(
                         "APPROVAL_NOT_ENFORCED",
                         "High-risk tool approval must be enabled before production"));
+            } else {
+                items.add(pass(
+                        "RUN_PROFILE_HIGH_RISK_APPROVAL_GOVERNED",
+                        "High-risk tool approval governance is satisfied"));
             }
             if ("agentscope".equalsIgnoreCase(blankToNull(profile.getExecutorEngine()))) {
                 appendAgentScopeGateItems(items, profile.getExecutorConfigJson());
