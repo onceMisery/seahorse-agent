@@ -2113,6 +2113,14 @@ This is a verification-hardening slice for the existing browser session-state re
 
 Fresh evidence: PowerShell parsing for `.\scripts\e2e-sandbox-browser-tool-smoke.ps1` passed; `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-origin-guard-smoke -SkipBrowserImageBuild` passed 34/34 checks against the real full-Docker backend, including sessionState origin allowlist, host-mismatch, credential-parts, and port-mismatch fail-closed cases, cookie domain fail-closed cases, URL host and secret fail-closed cases, successful URL mode, session-state capture/replay, captured artifact replay, governed downloads, audit summaries, Postgres persistence, backend object storage, cleanup, and zero non-terminal sandbox sessions.
 
+## 2026-07-07 Update: Sandbox Browser SessionState Cookie Domain Guard Real E2E
+
+The `sandbox_browser` full-Docker smoke now also verifies request-scoped `sessionState.cookies` domain boundaries through the real Tool Gateway path. The smoke submits URL-mode replay inputs where a session-state cookie domain is absent from `allowedHosts` or present in `allowedHosts` but different from the target URL host. Each call must fail closed before browser execution, and both caller-visible payloads and persisted audit summaries must omit submitted cookie values.
+
+This is a verification-hardening slice for the existing browser session-state replay boundary. It does not change cookie injection semantics, persistent browser profiles, credential vault integration, captured artifact replay, URL egress policy, or runtime execution behavior.
+
+Fresh evidence: PowerShell parsing for `.\scripts\e2e-sandbox-browser-tool-smoke.ps1` passed; `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-session-cookie-domain-smoke -SkipBrowserImageBuild` passed 34/34 checks against the real full-Docker backend, including sessionState cookie domain not-in-`allowedHosts` and host-mismatch fail-closed cases, sessionState origin allowlist/host/credential fail-closed cases, URL host and secret fail-closed cases, successful URL mode, session-state capture/replay, captured artifact replay, governed downloads, audit summaries, Postgres persistence, backend object storage, cleanup, and zero non-terminal sandbox sessions.
+
 ## 2026-07-07 Update: MCP HTTP Tool Gateway Audit Summary E2E
 
 The MCP HTTP smoke now verifies the governed `http.echo` tool through the real Tool Gateway instead of stopping at MCP server discovery and direct diagnostic calls. The smoke starts a temporary HTTP MCP server and backend container on the full-compose Docker network, logs in, verifies `http.echo` is `HIGH` risk and requires approval, executes the diagnostic path through approval, invokes `/api/tools/http.echo/invoke`, then queries `/api/tool-invocations` for the persisted audit record.

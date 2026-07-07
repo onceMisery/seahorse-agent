@@ -925,6 +925,41 @@ try {
             ForbiddenValues = @("unsupported-cookie-secret-${suffix}", "session-storage-ref-secret-${suffix}")
         },
         @{
+            Name = "cookie-domain-not-allowed"
+            StepId = "sandbox-browser-session-cookie-allowlist-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-session-cookie-allowlist-fail-call-$suffix"
+            ExpectedMessage = "sessionState cookie domain must be included in allowedHosts"
+            SessionState = @{
+                cookies = @(
+                    @{
+                        name = "restored_session"
+                        value = "session-cookie-allowlist-secret-${suffix}"
+                        domain = $AssetHost
+                        path = "/"
+                    }
+                )
+            }
+            ForbiddenValues = @("session-cookie-allowlist-secret-${suffix}")
+        },
+        @{
+            Name = "cookie-domain-host-mismatch"
+            StepId = "sandbox-browser-session-cookie-host-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-session-cookie-host-fail-call-$suffix"
+            ExpectedMessage = "sessionState cookie domain must match the target URL host"
+            AllowedHosts = @($ExternalHost, $AssetHost)
+            SessionState = @{
+                cookies = @(
+                    @{
+                        name = "restored_session"
+                        value = "session-cookie-host-mismatch-secret-${suffix}"
+                        domain = $AssetHost
+                        path = "/"
+                    }
+                )
+            }
+            ForbiddenValues = @("session-cookie-host-mismatch-secret-${suffix}")
+        },
+        @{
             Name = "origin-port-mismatch"
             StepId = "sandbox-browser-session-origin-port-fail-step-$suffix"
             ToolCallId = "sandbox-browser-session-origin-port-fail-call-$suffix"
