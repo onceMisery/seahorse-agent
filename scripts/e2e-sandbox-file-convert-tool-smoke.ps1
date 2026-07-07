@@ -780,6 +780,11 @@ try {
         "xl/worksheets/sheet1.xml" = "<worksheet xmlns=`"http://schemas.openxmlformats.org/spreadsheetml/2006/main`"><sheetData><row><c t=`"inlineStr`"><is><t>unsafe xlsx activex $activeXlsxActiveXMarker</t></is></c></row></sheetData></worksheet>"
         "xl/activeX/activeX1.xml" = "<ax:ocx ax:classid=`"clsid:$activeXlsxActiveXMarker`" xmlns:ax=`"http://schemas.microsoft.com/office/2006/activeX`" />"
     }
+    $activeXlsxEmbeddedMarker = "file-convert-xlsx-embedded-secret-$suffix"
+    $activeXlsxEmbeddedContent = New-ZipBase64 -Entries @{
+        "xl/worksheets/sheet1.xml" = "<worksheet xmlns=`"http://schemas.openxmlformats.org/spreadsheetml/2006/main`"><sheetData><row><c t=`"inlineStr`"><is><t>unsafe xlsx embedded $activeXlsxEmbeddedMarker</t></is></c></row></sheetData></worksheet>"
+        "xl/embeddings/oleObject1.bin" = "embedded object bytes $activeXlsxEmbeddedMarker"
+    }
     $activeOdtMacroMarker = "file-convert-odt-macro-secret-$suffix"
     $activeOdtContent = New-ZipBase64 -Entries @{
         "content.xml" = "<office:document-content xmlns:office=`"urn:oasis:names:tc:opendocument:xmlns:office:1.0`" xmlns:text=`"urn:oasis:names:tc:opendocument:xmlns:text:1.0`"><office:body><office:text><text:p>unsafe odt $activeOdtMacroMarker</text:p></office:text></office:body></office:document-content>"
@@ -1010,6 +1015,33 @@ try {
                 '"contentLength":'
             )
             Forbidden = @($activeXlsxActiveXContent, $activeXlsxActiveXMarker, "xl/activeX/activeX1.xml", "xl/activex/activex1.xml", "unsafe xlsx activex")
+        },
+        @{
+            Name = "xlsx-embedded-content"
+            StepId = "sandbox-file-convert-xlsx-embedded-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-xlsx-embedded-fail-call-$suffix"
+            ExpectedError = "xlsx active content is not supported"
+            Arguments = @{
+                sourceFormat = "xlsx"
+                targetFormat = "csv"
+                contentEncoding = "base64"
+                content = $activeXlsxEmbeddedContent
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"xlsx"',
+                '"sourceFormatPresent":true',
+                '"targetFormat":"csv"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"base64"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":true',
+                '"networkRequested":false',
+                '"argumentCount":4',
+                '"contentLength":'
+            )
+            Forbidden = @($activeXlsxEmbeddedContent, $activeXlsxEmbeddedMarker, "xl/embeddings/oleObject1.bin", "xl/embeddings/oleobject1.bin", "unsafe xlsx embedded")
         },
         @{
             Name = "odt-active-content"
