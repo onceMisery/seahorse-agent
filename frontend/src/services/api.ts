@@ -23,12 +23,7 @@ function normalizeApiPath(url?: string, baseURL?: string) {
   }
   let path = url.startsWith("/") ? url : `/${url}`;
 
-  // When baseURL is already set (e.g. Docker build VITE_API_BASE_URL=/api),
-  // strip redundant /api prefix from the path to avoid /api/api/... double prefix.
   if (baseURL) {
-    if (path === API_PROXY_PREFIX || path.startsWith(`${API_PROXY_PREFIX}/`)) {
-      path = path.slice(API_PROXY_PREFIX.length) || "/";
-    }
     return path;
   }
 

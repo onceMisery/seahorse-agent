@@ -53,6 +53,25 @@ describe("api request path normalization", () => {
     expect(seen).toEqual(["/api/audit-events"]);
   });
 
+  it("keeps explicit API-prefixed paths when Docker API base is configured", async () => {
+    const seen: Array<{ baseURL?: string; url?: string }> = [];
+    api.defaults.baseURL = "/api";
+    api.defaults.adapter = async (config) => {
+      seen.push({ baseURL: config.baseURL, url: config.url });
+      return {
+        data: { ok: true },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config
+      };
+    };
+
+    await api.get("/api/skills");
+
+    expect(seen).toEqual([{ baseURL: "/api", url: "/api/skills" }]);
+  });
+
   it("suppresses global error toast when request config opts out", async () => {
     const toastSpy = vi.spyOn(toast, "error").mockImplementation(() => "toast-id");
     api.defaults.adapter = async (config) =>
