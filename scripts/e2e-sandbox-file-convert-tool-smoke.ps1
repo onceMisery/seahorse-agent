@@ -49,43 +49,50 @@ function Invoke-Json {
         $bodyText = if ($Body -is [string]) { $Body } else { $Body | ConvertTo-Json -Depth 20 -Compress }
     }
 
-    $tempBodyFile = $null
-    $silentArg = if ($QuietErrors) { "-s" } else { "-sS" }
-    $args = @($silentArg, "-w", "`n%{http_code}", "-X", $Method, "$BaseUrl$Path")
-    if ($bodyText) {
-        $tempBodyFile = New-TemporaryFile
-        Set-Content -LiteralPath $tempBodyFile.FullName -Value $bodyText -Encoding UTF8 -NoNewline
-        $args += @("-H", "Content-Type: application/json", "--data-binary", "@$($tempBodyFile.FullName)")
-    }
-    foreach ($key in $Headers.Keys) {
-        $args += @("-H", "${key}: $($Headers[$key])")
-    }
-
-    try {
-        $raw = & curl.exe @args
-        $exitCode = $LASTEXITCODE
-    } finally {
-        if ($null -ne $tempBodyFile) {
-            Remove-Item -LiteralPath $tempBodyFile.FullName -ErrorAction SilentlyContinue
+    for ($attempt = 1; $attempt -le 4; $attempt++) {
+        $tempBodyFile = $null
+        $silentArg = if ($QuietErrors) { "-s" } else { "-sS" }
+        $args = @($silentArg, "-w", "`n%{http_code}", "-X", $Method, "$BaseUrl$Path")
+        if ($bodyText) {
+            $tempBodyFile = New-TemporaryFile
+            Set-Content -LiteralPath $tempBodyFile.FullName -Value $bodyText -Encoding UTF8 -NoNewline
+            $args += @("-H", "Content-Type: application/json", "--data-binary", "@$($tempBodyFile.FullName)")
         }
-    }
-    if ($exitCode -ne 0) {
-        throw "curl exited with $exitCode for $Method $Path"
-    }
+        foreach ($key in $Headers.Keys) {
+            $args += @("-H", "${key}: $($Headers[$key])")
+        }
 
-    $lines = @($raw)
-    if ($lines.Count -eq 0) {
-        throw "empty curl output for $Method $Path"
+        try {
+            $raw = & curl.exe @args
+            $exitCode = $LASTEXITCODE
+        } finally {
+            if ($null -ne $tempBodyFile) {
+                Remove-Item -LiteralPath $tempBodyFile.FullName -ErrorAction SilentlyContinue
+            }
+        }
+        if ($exitCode -ne 0) {
+            throw "curl exited with $exitCode for $Method $Path"
+        }
+
+        $lines = @($raw)
+        if ($lines.Count -eq 0) {
+            throw "empty curl output for $Method $Path"
+        }
+        $status = [int]$lines[-1]
+        $content = if ($lines.Count -gt 1) { ($lines[0..($lines.Count - 2)] -join "`n") } else { "" }
+        if ($status -eq 429 -and $attempt -lt 4) {
+            Write-Host "  Rate limited for $Method $Path; waiting for retry window ($attempt/3)" -ForegroundColor Yellow
+            Start-Sleep -Seconds 65
+            continue
+        }
+        if ($status -ne $ExpectedStatus) {
+            throw "Expected HTTP $ExpectedStatus but got $status for $Method $Path body=$content"
+        }
+        if ([string]::IsNullOrWhiteSpace($content)) {
+            return $null
+        }
+        return $content | ConvertFrom-Json
     }
-    $status = [int]$lines[-1]
-    $content = if ($lines.Count -gt 1) { ($lines[0..($lines.Count - 2)] -join "`n") } else { "" }
-    if ($status -ne $ExpectedStatus) {
-        throw "Expected HTTP $ExpectedStatus but got $status for $Method $Path body=$content"
-    }
-    if ([string]::IsNullOrWhiteSpace($content)) {
-        return $null
-    }
-    return $content | ConvertFrom-Json
 }
 
 function Invoke-Text {
@@ -96,25 +103,32 @@ function Invoke-Text {
         [int]$ExpectedStatus = 200
     )
 
-    $args = @("-sS", "-w", "`n%{http_code}", "-X", $Method, "$BaseUrl$Path")
-    foreach ($key in $Headers.Keys) {
-        $args += @("-H", "${key}: $($Headers[$key])")
-    }
+    for ($attempt = 1; $attempt -le 4; $attempt++) {
+        $args = @("-sS", "-w", "`n%{http_code}", "-X", $Method, "$BaseUrl$Path")
+        foreach ($key in $Headers.Keys) {
+            $args += @("-H", "${key}: $($Headers[$key])")
+        }
 
-    $raw = & curl.exe @args
-    if ($LASTEXITCODE -ne 0) {
-        throw "curl exited with $LASTEXITCODE for $Method $Path"
+        $raw = & curl.exe @args
+        if ($LASTEXITCODE -ne 0) {
+            throw "curl exited with $LASTEXITCODE for $Method $Path"
+        }
+        $lines = @($raw)
+        if ($lines.Count -eq 0) {
+            throw "empty curl output for $Method $Path"
+        }
+        $status = [int]$lines[-1]
+        $content = if ($lines.Count -gt 1) { ($lines[0..($lines.Count - 2)] -join "`n") } else { "" }
+        if ($status -eq 429 -and $attempt -lt 4) {
+            Write-Host "  Rate limited for $Method $Path; waiting for retry window ($attempt/3)" -ForegroundColor Yellow
+            Start-Sleep -Seconds 65
+            continue
+        }
+        if ($status -ne $ExpectedStatus) {
+            throw "Expected HTTP $ExpectedStatus but got $status for $Method $Path body=$content"
+        }
+        return $content
     }
-    $lines = @($raw)
-    if ($lines.Count -eq 0) {
-        throw "empty curl output for $Method $Path"
-    }
-    $status = [int]$lines[-1]
-    $content = if ($lines.Count -gt 1) { ($lines[0..($lines.Count - 2)] -join "`n") } else { "" }
-    if ($status -ne $ExpectedStatus) {
-        throw "Expected HTTP $ExpectedStatus but got $status for $Method $Path body=$content"
-    }
-    return $content
 }
 
 function Assert-ApiOk {
@@ -756,6 +770,21 @@ try {
         "ppt/slides/slide1.xml" = "<p:sld xmlns:p=`"http://schemas.openxmlformats.org/presentationml/2006/main`" xmlns:a=`"http://schemas.openxmlformats.org/drawingml/2006/main`"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>unsafe pptx $activePptxMacroMarker</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"
         "ppt/vbaProject.bin" = "macro bytes $activePptxMacroMarker"
     }
+    $activeOdtMacroMarker = "file-convert-odt-macro-secret-$suffix"
+    $activeOdtContent = New-ZipBase64 -Entries @{
+        "content.xml" = "<office:document-content xmlns:office=`"urn:oasis:names:tc:opendocument:xmlns:office:1.0`" xmlns:text=`"urn:oasis:names:tc:opendocument:xmlns:text:1.0`"><office:body><office:text><text:p>unsafe odt $activeOdtMacroMarker</text:p></office:text></office:body></office:document-content>"
+        "Scripts/macro.js" = "alert('$activeOdtMacroMarker')"
+    }
+    $activeOdsMacroMarker = "file-convert-ods-macro-secret-$suffix"
+    $activeOdsContent = New-ZipBase64 -Entries @{
+        "content.xml" = "<office:document-content xmlns:office=`"urn:oasis:names:tc:opendocument:xmlns:office:1.0`" xmlns:table=`"urn:oasis:names:tc:opendocument:xmlns:table:1.0`" xmlns:text=`"urn:oasis:names:tc:opendocument:xmlns:text:1.0`"><office:body><office:spreadsheet><table:table><table:table-row><table:table-cell><text:p>unsafe ods $activeOdsMacroMarker</text:p></table:table-cell></table:table-row></table:table></office:spreadsheet></office:body></office:document-content>"
+        "Scripts/macro.js" = "alert('$activeOdsMacroMarker')"
+    }
+    $activeOdpMacroMarker = "file-convert-odp-macro-secret-$suffix"
+    $activeOdpContent = New-ZipBase64 -Entries @{
+        "content.xml" = "<office:document-content xmlns:office=`"urn:oasis:names:tc:opendocument:xmlns:office:1.0`" xmlns:draw=`"urn:oasis:names:tc:opendocument:xmlns:drawing:1.0`" xmlns:text=`"urn:oasis:names:tc:opendocument:xmlns:text:1.0`"><office:body><office:presentation><draw:page draw:name=`"page1`"><draw:frame><draw:text-box><text:p>unsafe odp $activeOdpMacroMarker</text:p></draw:text-box></draw:frame></draw:page></office:presentation></office:body></office:document-content>"
+        "Scripts/macro.js" = "alert('$activeOdpMacroMarker')"
+    }
     $fileConvertFailureCases = @(
         @{
             Name = "unsupported-conversion"
@@ -917,6 +946,87 @@ try {
                 '"contentLength":'
             )
             Forbidden = @($activePptxContent, $activePptxMacroMarker, "vbaProject.bin", "unsafe pptx")
+        },
+        @{
+            Name = "odt-active-content"
+            StepId = "sandbox-file-convert-odt-active-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-odt-active-fail-call-$suffix"
+            ExpectedError = "odt active content is not supported"
+            Arguments = @{
+                sourceFormat = "odt"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $activeOdtContent
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"odt"',
+                '"sourceFormatPresent":true',
+                '"targetFormat":"txt"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"base64"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":true',
+                '"networkRequested":false',
+                '"argumentCount":4',
+                '"contentLength":'
+            )
+            Forbidden = @($activeOdtContent, $activeOdtMacroMarker, "Scripts/macro.js", "unsafe odt")
+        },
+        @{
+            Name = "ods-active-content"
+            StepId = "sandbox-file-convert-ods-active-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-ods-active-fail-call-$suffix"
+            ExpectedError = "ods active content is not supported"
+            Arguments = @{
+                sourceFormat = "ods"
+                targetFormat = "csv"
+                contentEncoding = "base64"
+                content = $activeOdsContent
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"ods"',
+                '"sourceFormatPresent":true',
+                '"targetFormat":"csv"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"base64"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":true',
+                '"networkRequested":false',
+                '"argumentCount":4',
+                '"contentLength":'
+            )
+            Forbidden = @($activeOdsContent, $activeOdsMacroMarker, "Scripts/macro.js", "unsafe ods")
+        },
+        @{
+            Name = "odp-active-content"
+            StepId = "sandbox-file-convert-odp-active-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-odp-active-fail-call-$suffix"
+            ExpectedError = "odp active content is not supported"
+            Arguments = @{
+                sourceFormat = "odp"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $activeOdpContent
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"odp"',
+                '"sourceFormatPresent":true',
+                '"targetFormat":"txt"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"base64"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":true',
+                '"networkRequested":false',
+                '"argumentCount":4',
+                '"contentLength":'
+            )
+            Forbidden = @($activeOdpContent, $activeOdpMacroMarker, "Scripts/macro.js", "unsafe odp")
         }
     )
 
