@@ -146,6 +146,22 @@ class DefaultSandboxArtifactScannerPortTests {
     }
 
     @Test
+    void shouldBlockBrowserSessionStateArtifactByGovernedName(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("browser-session-state.json");
+        Files.writeString(output, "{\"cookies\":[{\"name\":\"sid\",\"value\":\"secret\"}],\"origins\":[]}", StandardCharsets.UTF_8);
+
+        SandboxArtifactScanResult result = scanner.scan(new SandboxArtifactScanRequest(fileArtifact(output, "application/json")));
+
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, result.scanStatus());
+        assertEquals(ContextSensitivity.SECRET, result.sensitivity());
+        assertEquals("sensitive artifact metadata", result.summary());
+        JsonNode redactionSummary = redactionSummary(result);
+        assertEquals("BLOCKED", redactionSummary.path("decision").asText());
+        assertEquals("SENSITIVE_METADATA", redactionSummary.path("categories").get(0).asText());
+        assertEquals(-1, result.redactionSummaryJson().indexOf("secret"));
+    }
+
+    @Test
     void shouldPassWebmVideoArtifactAsDownloadOnlyMetadataScan(@TempDir Path tempDir) throws Exception {
         Path output = tempDir.resolve("browser-video.webm");
         Files.write(output, new byte[]{0x1A, 0x45, (byte) 0xDF, (byte) 0xA3});

@@ -69,6 +69,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -98,6 +99,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private static final String ARTIFACT_SCAN_FAILED_SUMMARY = "artifact scanner failed";
     private static final String ARTIFACT_FILE_UNAVAILABLE_SUMMARY = "artifact file unavailable before storage copy";
     private static final String ARTIFACT_STORAGE_COPY_FAILED_SUMMARY = "artifact storage copy failed";
+    private static final int MAX_BROWSER_SESSION_STATE_ARTIFACT_BYTES = 128 * 1024;
+    private static final String BROWSER_SESSION_STATE_ARTIFACT_NAME = "browser-session-state.json";
     private static final int DEFAULT_SESSION_LIST_LIMIT = 20;
     private static final int MAX_SESSION_LIST_LIMIT = 100;
     private static final String DOWNLOAD_BLOCKED = "Sandbox artifact is not available for download";
@@ -591,6 +594,28 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 artifact.objectUri());
     }
 
+    @Override
+    public String readBrowserSessionStateArtifact(String artifactId) {
+        SandboxArtifact artifact = findArtifactWithSession(artifactId);
+        if (!isBrowserSessionStateArtifact(artifact)) {
+            throw new IllegalArgumentException("Sandbox browser session-state artifact not found");
+        }
+        if (!"application/json".equals(normalizedMediaType(artifact.mediaType()))
+                || artifact.scanStatus() != SandboxArtifactScanStatus.BLOCKED
+                || artifact.sensitivity() != ContextSensitivity.SECRET) {
+            throw new IllegalStateException("Sandbox browser session-state artifact is not governed for replay");
+        }
+        try (InputStream input = openArtifactObjectStream(artifact)) {
+            byte[] bytes = input.readNBytes(MAX_BROWSER_SESSION_STATE_ARTIFACT_BYTES + 1);
+            if (bytes.length > MAX_BROWSER_SESSION_STATE_ARTIFACT_BYTES) {
+                throw new IllegalStateException("Sandbox browser session-state artifact exceeds replay budget");
+            }
+            return new String(bytes, StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new IllegalStateException("Sandbox browser session-state artifact could not be read", ex);
+        }
+    }
+
     private SandboxArtifact findArtifactWithSession(String artifactId) {
         SandboxArtifact artifact = artifactQueryPort.findArtifactById(
                         requireText(artifactId, "artifactId must not be blank"))
@@ -755,7 +780,9 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     }
 
     private SandboxArtifact copyDownloadableFileArtifact(SandboxArtifact artifact) {
-        if (artifactStoragePort == null || !artifact.downloadable() || !isFileUri(artifact.objectUri())) {
+        if (artifactStoragePort == null
+                || (!artifact.downloadable() && !isBrowserSessionStateArtifact(artifact))
+                || !isFileUri(artifact.objectUri())) {
             return artifact;
         }
         try {
@@ -790,6 +817,32 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                             ARTIFACT_STORAGE_COPY_FAILED_SUMMARY,
                             false,
                             List.of("STORAGE_COPY_FAILED")));
+        }
+    }
+
+    private InputStream openArtifactObjectStream(SandboxArtifact artifact) throws IOException {
+        if (artifactStoragePort != null && !isFileUri(artifact.objectUri())) {
+            return artifactStoragePort.openStream(artifact.objectUri());
+        }
+        if (!isFileUri(artifact.objectUri())) {
+            throw new IllegalStateException("Sandbox browser session-state artifact storage is not available");
+        }
+        Path path = Path.of(URI.create(artifact.objectUri())).toAbsolutePath().normalize();
+        return Files.newInputStream(path);
+    }
+
+    private boolean isBrowserSessionStateArtifact(SandboxArtifact artifact) {
+        try {
+            String path = URI.create(artifact.objectUri()).getPath();
+            if (path == null) {
+                return false;
+            }
+            int slashIndex = path.lastIndexOf('/');
+            String name = slashIndex >= 0 ? path.substring(slashIndex + 1) : path;
+            return BROWSER_SESSION_STATE_ARTIFACT_NAME.equals(name)
+                    || name.endsWith("-" + BROWSER_SESSION_STATE_ARTIFACT_NAME);
+        } catch (RuntimeException ex) {
+            return false;
         }
     }
 

@@ -115,6 +115,7 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
             "vbs");
     private static final Set<String> SENSITIVE_MARKERS = Set.of(
             "api_key",
+            "browser-session-state",
             "credential",
             "private-key",
             "private_key",

@@ -39,6 +39,19 @@ public class AgentToolJsonSupport {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> readMap(String value) {
+        try {
+            Object parsed = objectMapper.readValue(value, Object.class);
+            if (parsed instanceof Map<?, ?> map) {
+                return (Map<String, Object>) map;
+            }
+            throw new IllegalArgumentException("tool JSON object expected");
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("tool JSON object expected", ex);
+        }
+    }
+
     public String string(Map<String, Object> arguments, String name) {
         Object value = arguments == null ? null : arguments.get(name);
         return value == null ? "" : value.toString().trim();

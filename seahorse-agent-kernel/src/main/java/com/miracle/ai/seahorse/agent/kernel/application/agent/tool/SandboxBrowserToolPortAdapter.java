@@ -74,6 +74,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private static final String ALLOWED_HOSTS_ARGUMENT = "allowedHosts";
     private static final String COOKIES_ARGUMENT = "cookies";
     private static final String SESSION_STATE_ARGUMENT = "sessionState";
+    private static final String SESSION_STATE_ARTIFACT_ID_ARGUMENT = "sessionStateArtifactId";
     private static final String SCREENSHOT_ARGUMENT = "screenshot";
     private static final String HAR_ARGUMENT = "har";
     private static final String VIDEO_ARGUMENT = "video";
@@ -107,9 +108,9 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
             TOOL_ID,
             "Sandbox Browser",
-            "Render bounded inline HTML or an explicitly allowlisted HTTP/HTTPS URL through a Playwright browser sandbox. Inline HTML stays no-network; URL mode requires allowedHosts, can inject bounded host-scoped cookies, can replay explicit request-scoped Playwright session state, and can capture governed browser session state without exposing values in observations.",
+            "Render bounded inline HTML or an explicitly allowlisted HTTP/HTTPS URL through a Playwright browser sandbox. Inline HTML stays no-network; URL mode requires allowedHosts, can inject bounded host-scoped cookies, can replay explicit request-scoped Playwright session state or a governed captured session-state artifact, and can capture governed browser session state without exposing values in observations.",
             """
-                    {"type":"object","properties":{"html":{"type":"string","minLength":1,"maxLength":262144},"url":{"type":"string","minLength":1,"maxLength":2048,"description":"HTTP/HTTPS URL to visit. Requires allowedHosts and sandbox egress policy."},"allowedHosts":{"type":"array","items":{"type":"string"},"maxItems":16,"default":[],"description":"Exact host allowlist for URL mode. The URL host must be included."},"cookies":{"type":"array","maxItems":16,"description":"Optional URL-mode cookies. Each cookie domain must match an allowed host; cookie values are injected into the sandbox but omitted from observations.","items":{"type":"object","required":["name","value"],"properties":{"name":{"type":"string","minLength":1,"maxLength":128},"value":{"type":"string","maxLength":4096},"domain":{"type":"string","description":"Host-only cookie domain. Defaults to the URL host and must be in allowedHosts."},"path":{"type":"string","default":"/"},"httpOnly":{"type":"boolean","default":true},"secure":{"type":"boolean","default":false},"sameSite":{"type":"string","enum":["Lax","Strict","None"],"default":"Lax"}}}},"sessionState":{"type":"object","description":"Optional URL-mode Playwright storageState object for one-run replay. Cookie/localStorage values are written only to transient runtime input and omitted from observations and prompt-visible artifacts.","properties":{"cookies":{"type":"array","maxItems":32},"origins":{"type":"array","maxItems":16}}},"captureSessionState":{"type":"boolean","default":false,"description":"URL-mode only. Captures a governed browser storage-state artifact plus a value-free summary; secret values are omitted from observations and prompt-visible artifacts."},"action":{"type":"string","enum":["snapshot","extract_text"],"default":"snapshot"},"screenshot":{"type":"boolean","default":true},"har":{"type":"boolean","default":false},"video":{"type":"boolean","default":false},"viewportWidth":{"type":"integer","minimum":320,"maximum":2400,"default":1280},"viewportHeight":{"type":"integer","minimum":320,"maximum":2400,"default":720}},"anyOf":[{"required":["html"]},{"required":["url","allowedHosts"]}]}
+                    {"type":"object","properties":{"html":{"type":"string","minLength":1,"maxLength":262144},"url":{"type":"string","minLength":1,"maxLength":2048,"description":"HTTP/HTTPS URL to visit. Requires allowedHosts and sandbox egress policy."},"allowedHosts":{"type":"array","items":{"type":"string"},"maxItems":16,"default":[],"description":"Exact host allowlist for URL mode. The URL host must be included."},"cookies":{"type":"array","maxItems":16,"description":"Optional URL-mode cookies. Each cookie domain must match an allowed host; cookie values are injected into the sandbox but omitted from observations.","items":{"type":"object","required":["name","value"],"properties":{"name":{"type":"string","minLength":1,"maxLength":128},"value":{"type":"string","maxLength":4096},"domain":{"type":"string","description":"Host-only cookie domain. Defaults to the URL host and must be in allowedHosts."},"path":{"type":"string","default":"/"},"httpOnly":{"type":"boolean","default":true},"secure":{"type":"boolean","default":false},"sameSite":{"type":"string","enum":["Lax","Strict","None"],"default":"Lax"}}}},"sessionState":{"type":"object","description":"Optional URL-mode Playwright storageState object for one-run replay. Cookie/localStorage values are written only to transient runtime input and omitted from observations and prompt-visible artifacts.","properties":{"cookies":{"type":"array","maxItems":32},"origins":{"type":"array","maxItems":16}}},"sessionStateArtifactId":{"type":"string","minLength":1,"maxLength":128,"description":"Optional URL-mode governed browser-session-state artifact id captured by sandbox_browser. The artifact is read internally for one-run replay; it is not exposed in observations or downloads."},"captureSessionState":{"type":"boolean","default":false,"description":"URL-mode only. Captures a governed browser storage-state artifact plus a value-free summary; secret values are omitted from observations and prompt-visible artifacts."},"action":{"type":"string","enum":["snapshot","extract_text"],"default":"snapshot"},"screenshot":{"type":"boolean","default":true},"har":{"type":"boolean","default":false},"video":{"type":"boolean","default":false},"viewportWidth":{"type":"integer","minimum":320,"maximum":2400,"default":1280},"viewportHeight":{"type":"integer","minimum":320,"maximum":2400,"default":720}},"anyOf":[{"required":["html"]},{"required":["url","allowedHosts"]}]}
                     """);
 
     private final SandboxRuntimeInboundPort sandboxRuntime;
@@ -180,10 +181,26 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             return ToolInvocationResult.failed(redactRuntimeDisplayText(
                     Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
+        String sessionStateArtifactId;
+        try {
+            sessionStateArtifactId = normalizedSessionStateArtifactId(
+                    jsonSupport.string(safeRequest.arguments(), SESSION_STATE_ARTIFACT_ID_ARGUMENT));
+            if (sessionStateArtifactId != null && safeRequest.arguments().containsKey(SESSION_STATE_ARGUMENT)) {
+                return ToolInvocationResult.failed(
+                        "sandbox_browser failed: provide either sessionState or sessionStateArtifactId, not both");
+            }
+        } catch (IllegalArgumentException ex) {
+            return ToolInvocationResult.failed(redactRuntimeDisplayText(
+                    Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
+        }
         Object sessionState;
         try {
+            Object sessionStateValue = safeRequest.arguments().get(SESSION_STATE_ARGUMENT);
+            if (sessionStateArtifactId != null) {
+                sessionStateValue = sessionStateFromArtifact(sessionStateArtifactId);
+            }
             sessionState = normalizedSessionState(
-                    safeRequest.arguments().get(SESSION_STATE_ARGUMENT),
+                    sessionStateValue,
                     allowedHosts,
                     urlHost,
                     urlOrigin,
@@ -260,7 +277,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                 viewportHeight,
                                 har,
                                 video,
-                                captureSessionState),
+                                captureSessionState,
+                                sessionStateArtifactId != null),
                         "sandbox browser session did not start: " + session.reasonCode());
             }
             SandboxExecutionResult result = sandboxRuntime.execute(new SandboxExecutionCommand(
@@ -282,7 +300,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                     viewportHeight,
                     har,
                     video,
-                    captureSessionState);
+                    captureSessionState,
+                    sessionStateArtifactId != null);
             if (result.execution().status() == SandboxExecutionStatus.SUCCEEDED) {
                 return ToolInvocationResult.ok(jsonSupport.write(observation));
             }
@@ -345,7 +364,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                             int viewportHeight,
                                             boolean har,
                                             boolean video,
-                                            boolean captureSessionState) {
+                                            boolean captureSessionState,
+                                            boolean sessionStateArtifactReplay) {
         Map<String, Object> observation = new LinkedHashMap<>();
         observation.put("toolId", TOOL_ID);
         observation.put("sessionId", session == null ? null : session.sessionId());
@@ -356,7 +376,7 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         observation.put("executionStatus", execution == null ? null : execution.status().name());
         observation.put("reasonCode", execution == null ? null : execution.reasonCode().name());
         observation.put("resultSummary", execution == null ? null : redactRuntimeDisplayText(execution.resultSummary()));
-        observation.put("browser", browser(action, url, allowedHosts, cookies, sessionState, networkRequested, viewportWidth, viewportHeight, har, video, captureSessionState));
+        observation.put("browser", browser(action, url, allowedHosts, cookies, sessionState, networkRequested, viewportWidth, viewportHeight, har, video, captureSessionState, sessionStateArtifactReplay));
         observation.put("artifacts", artifacts(artifacts));
         return observation;
     }
@@ -371,7 +391,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
                                         int viewportHeight,
                                         boolean har,
                                         boolean video,
-                                        boolean captureSessionState) {
+                                        boolean captureSessionState,
+                                        boolean sessionStateArtifactReplay) {
         Map<String, Object> browser = new LinkedHashMap<>();
         browser.put("action", action);
         browser.put("url", observationUrl(url));
@@ -385,7 +406,8 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
         browser.put("video", video);
         browser.put("sessionState", Map.of(
                 "captureRequested", captureSessionState,
-                "replayRequested", sessionState != null));
+                "replayRequested", sessionState != null,
+                "artifactReplayRequested", sessionStateArtifactReplay));
         return browser;
     }
 
@@ -453,6 +475,26 @@ public class SandboxBrowserToolPortAdapter implements DescribedToolPort, ToolInv
             return request.runId().trim();
         }
         return "sandbox-browser-" + request.toolCallId();
+    }
+
+    private String normalizedSessionStateArtifactId(String value) {
+        if (!hasText(value)) {
+            return null;
+        }
+        String artifactId = value.trim();
+        if (artifactId.length() > 128 || !artifactId.matches("[A-Za-z0-9._:-]+")) {
+            throw new IllegalArgumentException("sandbox_browser failed: sessionStateArtifactId is invalid");
+        }
+        return artifactId;
+    }
+
+    private Map<String, Object> sessionStateFromArtifact(String artifactId) {
+        try {
+            return jsonSupport.readMap(sandboxRuntime.readBrowserSessionStateArtifact(artifactId));
+        } catch (RuntimeException ex) {
+            throw new IllegalArgumentException(
+                    "sandbox_browser failed: sessionStateArtifactId could not be replayed");
+        }
     }
 
     private boolean booleanArgument(Map<String, Object> arguments, String name, boolean defaultValue) {

@@ -269,6 +269,58 @@ class SandboxBrowserToolPortAdapterTests {
     }
 
     @Test
+    void shouldReplayGovernedSessionStateArtifactThroughBrowserRuntime() throws Exception {
+        RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
+                new SandboxExecution(
+                        "exec-1",
+                        "session-1",
+                        SandboxRuntimeType.BROWSER_AUTOMATION,
+                        SandboxExecutionStatus.SUCCEEDED,
+                        "exitCode=0; stdout=browser snapshot completed",
+                        SandboxPolicyReasonCode.VALID_REQUEST,
+                        NOW,
+                        NOW),
+                List.of(new SandboxArtifact(
+                        "artifact-json",
+                        "session-1",
+                        "exec-1",
+                        "local://sandbox-artifacts/browser-result.json",
+                        "application/json",
+                        SandboxArtifactScanStatus.CLEAN,
+                        ContextSensitivity.INTERNAL,
+                        "metadata scan passed",
+                        NOW))));
+        String cookieValue = "artifact-cookie-secret";
+        String storageValue = "artifact-storage-secret";
+        runtime.browserSessionStateArtifactJson = """
+                {"cookies":[{"name":"restored_session","value":"%s","domain":"example.test","path":"/","httpOnly":true,"secure":false,"sameSite":"Lax"}],"origins":[{"origin":"http://example.test","localStorage":[{"name":"seahorse_session_marker","value":"%s"}]}]}
+                """.formatted(cookieValue, storageValue).trim();
+        SandboxBrowserToolPortAdapter adapter = new SandboxBrowserToolPortAdapter(runtime, jsonSupport);
+
+        ToolInvocationResult result = adapter.invoke(request(Map.of(
+                "action", "snapshot",
+                "url", "http://example.test/page",
+                "allowedHosts", List.of("example.test"),
+                "sessionStateArtifactId", "sandbox_artifact_secret_state",
+                "har", true)));
+
+        assertTrue(result.success());
+        assertEquals("sandbox_artifact_secret_state", runtime.browserSessionStateArtifactId);
+        JsonNode browserInput = objectMapper.readTree(runtime.executeCommand.input());
+        assertEquals("restored_session", browserInput.path("sessionState").path("cookies").get(0).path("name").asText());
+        assertEquals(cookieValue, browserInput.path("sessionState").path("cookies").get(0).path("value").asText());
+        assertEquals(storageValue, browserInput.path("sessionState").path("origins").get(0)
+                .path("localStorage").get(0).path("value").asText());
+
+        JsonNode root = objectMapper.readTree(result.content());
+        assertTrue(root.path("browser").path("sessionState").path("replayRequested").asBoolean());
+        assertTrue(root.path("browser").path("sessionState").path("artifactReplayRequested").asBoolean());
+        assertFalse(result.content().contains("sandbox_artifact_secret_state"));
+        assertFalse(result.content().contains(cookieValue));
+        assertFalse(result.content().contains(storageValue));
+    }
+
+    @Test
     void shouldNormalizeExtractTextActionAndDisableDefaultScreenshot() throws Exception {
         RecordingSandboxRuntime runtime = new RecordingSandboxRuntime(SandboxExecutionResult.succeeded(
                 new SandboxExecution(
@@ -938,6 +990,8 @@ class SandboxBrowserToolPortAdapterTests {
         private SandboxExecutionCommand executeCommand;
         private String closedSessionId;
         private int createCalls;
+        private String browserSessionStateArtifactId;
+        private String browserSessionStateArtifactJson = "{}";
 
         private RecordingSandboxRuntime(SandboxExecutionResult executionResult) {
             this.executionResult = executionResult;
@@ -1011,6 +1065,12 @@ class SandboxBrowserToolPortAdapterTests {
         @Override
         public SandboxArtifactDownloadDecision downloadArtifact(String artifactId) {
             throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public String readBrowserSessionStateArtifact(String artifactId) {
+            browserSessionStateArtifactId = artifactId;
+            return browserSessionStateArtifactJson;
         }
     }
 }

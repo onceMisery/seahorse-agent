@@ -1002,6 +1002,117 @@ try {
         }
     } | Out-Null
 
+    $artifactReplayObservation = Test-Step "Invoke sandbox_browser URL mode with captured session state artifact replay" {
+        $artifactReplayToolCallId = "sandbox-browser-artifact-replay-call-$suffix"
+        $body = @{
+            runId = $runId
+            stepId = "sandbox-browser-artifact-replay-step-$suffix"
+            toolCallId = $artifactReplayToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                action = "snapshot"
+                url = $externalUrl
+                allowedHosts = @($ExternalHost, $AssetHost)
+                sessionStateArtifactId = $script:urlSessionStateArtifactId
+                viewportWidth = 1024
+                viewportHeight = 640
+                screenshot = $true
+                har = $true
+                video = $false
+                captureSessionState = $false
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${runId}:${artifactReplayToolCallId}"
+            allowedToolIds = @("sandbox_browser")
+        }
+        $response = Invoke-SandboxBrowserTool -Headers $headers -Body $body -Name "Invoke sandbox_browser URL mode session artifact replay"
+        Assert-ApiOk $response "Invoke sandbox_browser URL mode session artifact replay"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_browser URL mode session artifact replay failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "BROWSER_AUTOMATION" -or "$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected succeeded BROWSER_AUTOMATION artifact replay execution: $content"
+        }
+        if ($parsed.browser.networkAllowed -ne $true) {
+            throw "Expected browser.networkAllowed=true for artifact replay URL mode: $content"
+        }
+        if ([int]$parsed.browser.cookieCount -ne 0) {
+            throw "Expected no explicit cookie metadata for artifact replay request: $content"
+        }
+        if ($parsed.browser.sessionState.replayRequested -ne $true -or $parsed.browser.sessionState.captureRequested -ne $false -or $parsed.browser.sessionState.artifactReplayRequested -ne $true) {
+            throw "Expected artifact replay-only sessionState metadata: $content"
+        }
+        if ($content -like "*$externalCookieValue*" -or $content -like "*$externalStorageValue*" -or $content -like "*$script:urlSessionStateArtifactId*") {
+            throw "Browser artifact replay observation leaked session value or artifact id: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 3) {
+            throw "Expected artifact replay result JSON, screenshot, and HAR artifacts only: $content"
+        }
+        $jsonArtifacts = @($artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" })
+        $harArtifacts = @($artifacts | Where-Object { "$($_.mediaType)" -eq "application/har+json" })
+        if ($jsonArtifacts.Count -ne 1 -or $harArtifacts.Count -ne 1) {
+            throw "Expected one artifact replay JSON artifact and one artifact replay HAR artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $artifactReplayObservation) { exit 1 }
+
+    $artifactReplayJsonArtifactId = "$(@($artifactReplayObservation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" })[0].artifactId)"
+    $artifactReplayHarArtifactId = "$(@($artifactReplayObservation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/har+json" })[0].artifactId)"
+    $artifactReplaySessionId = Resolve-SandboxSessionIdFromArtifact -ArtifactId $artifactReplayHarArtifactId -Label "artifact replay HAR"
+
+    Test-Step "Download governed artifact replay browser JSON artifact" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$artifactReplayJsonArtifactId/download" -Headers $headers
+        if ($content -notlike "*$externalAuthMarker*") {
+            throw "Artifact replay browser result did not use restored cookie auth marker: $content"
+        }
+        if ($content -notlike "*storage-restored*") {
+            throw "Artifact replay browser result did not show restored localStorage marker: $content"
+        }
+        if ($content -like "*$externalCookieValue*" -or $content -like "*$externalStorageValue*" -or $content -like "*$script:urlSessionStateArtifactId*") {
+            throw "Artifact replay browser result leaked session values or artifact id: $content"
+        }
+        if ($content -notlike "*`"replayed`": true*" -and $content -notlike "*`"replayed`":true*") {
+            throw "Artifact replay browser result did not include safe replay metadata: $content"
+        }
+        if ($content -notlike "*localStorageCount*") {
+            throw "Artifact replay browser result did not include value-free localStorage count: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Artifact replay browser result leaked storage reference: $content"
+        }
+    } | Out-Null
+
+    Test-Step "Download governed artifact replay browser HAR artifact" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$artifactReplayHarArtifactId/download" -Headers $headers
+        $har = $content | ConvertFrom-Json
+        $entries = @($har.log.entries)
+        $mainRequests = @($entries | Where-Object { "$($_.request.url)" -eq $externalUrl })
+        if ($mainRequests.Count -lt 1 -or [int]$mainRequests[0].response.status -ne 200 -or $mainRequests[0]._blocked -eq $true) {
+            throw "Artifact replay HAR did not contain an allowed 200 main request: $content"
+        }
+        if ($content -like "*$externalCookieValue*" -or $content -like "*$externalStorageValue*" -or $content -like "*$script:urlSessionStateArtifactId*") {
+            throw "Artifact replay HAR leaked session values or artifact id: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Artifact replay HAR leaked storage reference: $content"
+        }
+    } | Out-Null
+
+    Test-Step "Verify artifact session state replay inputs stay transient" {
+        $safeArtifactReplaySessionId = $artifactReplaySessionId.Replace("'", "''")
+        $transientCount = Invoke-PostgresScalar "SELECT count(*) FROM sa_sandbox_artifact WHERE session_id = '$safeArtifactReplaySessionId' AND (object_uri LIKE '%browser-session-state-input.json' OR object_uri LIKE '%browser-session-state.json' OR object_uri LIKE '%browser-session-summary.json');"
+        if ([int]$transientCount -ne 0) {
+            throw "Expected no collected session-state artifacts for artifact replay-only request but got $transientCount"
+        }
+    } | Out-Null
+
     Test-Step "Restore browser runtime profile network deny" {
         $response = Invoke-Json -Method POST -Path "/api/sandbox/runtime/profile-policies" -Headers $headers -Body @{
             tenantId = "default"
@@ -1189,6 +1300,9 @@ try {
     Write-Host "Replay URL Session: $replaySessionId"
     Write-Host "Replay URL Result Artifact: $replayJsonArtifactId"
     Write-Host "Replay URL HAR Artifact: $replayHarArtifactId"
+    Write-Host "Artifact Replay URL Session: $artifactReplaySessionId"
+    Write-Host "Artifact Replay URL Result Artifact: $artifactReplayJsonArtifactId"
+    Write-Host "Artifact Replay URL HAR Artifact: $artifactReplayHarArtifactId"
 } catch {
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Error $_.Exception.Message

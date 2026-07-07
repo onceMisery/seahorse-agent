@@ -52,6 +52,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static java.util.Map.entry;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -649,14 +650,14 @@ class LocalToolGatewayPortAuditTests {
                 "user-1",
                 "agent-identity-1",
                 "sandbox_browser",
-                Map.of(
-                        "url", "https://example.test/page?q=customer-search-marker",
-                        "allowedHosts", List.of("example.test"),
-                        "cookies", List.of(Map.of(
+                Map.ofEntries(
+                        entry("url", "https://example.test/page?q=customer-search-marker"),
+                        entry("allowedHosts", List.of("example.test")),
+                        entry("cookies", List.of(Map.of(
                                 "name", "seahorse_session",
                                 "value", "cookie-secret-value",
-                                "domain", "example.test")),
-                        "sessionState", Map.of(
+                                "domain", "example.test"))),
+                        entry("sessionState", Map.of(
                                 "cookies", List.of(Map.of(
                                         "name", "restored_session",
                                         "value", "restored-secret-value",
@@ -665,13 +666,14 @@ class LocalToolGatewayPortAuditTests {
                                         "origin", "https://example.test",
                                         "localStorage", List.of(Map.of(
                                                 "name", "seahorse_session_marker",
-                                                "value", "storage-secret-value"))))),
-                        "captureSessionState", true,
-                        "screenshot", false,
-                        "har", true,
-                        "video", true,
-                        "viewportWidth", 1366,
-                        "viewportHeight", "768"),
+                                                "value", "storage-secret-value")))))),
+                        entry("sessionStateArtifactId", "artifact-secret-session-state-id"),
+                        entry("captureSessionState", true),
+                        entry("screenshot", false),
+                        entry("har", true),
+                        entry("video", true),
+                        entry("viewportWidth", 1366),
+                        entry("viewportHeight", "768")),
                 Map.of(),
                 "run-1:call-1",
                 List.of("sandbox_browser")));
@@ -689,6 +691,7 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"allowedHostsPresent\":true"));
         assertTrue(summary.contains("\"cookieCount\":1"));
         assertTrue(summary.contains("\"sessionStateReplayRequested\":true"));
+        assertTrue(summary.contains("\"sessionStateArtifactReplayRequested\":true"));
         assertTrue(summary.contains("\"sessionStateCookieCount\":1"));
         assertTrue(summary.contains("\"sessionStateOriginCount\":1"));
         assertTrue(summary.contains("\"sessionStateLocalStorageItemCount\":1"));
@@ -700,11 +703,12 @@ class LocalToolGatewayPortAuditTests {
         assertTrue(summary.contains("\"viewportWidth\":1366"));
         assertTrue(summary.contains("\"viewportHeightPresent\":true"));
         assertTrue(summary.contains("\"viewportHeight\":768"));
-        assertTrue(summary.contains("\"argumentKeys\":[\"url\",\"allowedHosts\",\"cookies\",\"sessionState\",\"captureSessionState\",\"screenshot\",\"har\",\"video\",\"viewportWidth\",\"viewportHeight\"]"));
-        assertTrue(summary.contains("\"argumentCount\":10"));
+        assertTrue(summary.contains("\"argumentKeys\":[\"url\",\"allowedHosts\",\"cookies\",\"sessionState\",\"sessionStateArtifactId\",\"captureSessionState\",\"screenshot\",\"har\",\"video\",\"viewportWidth\",\"viewportHeight\"]"));
+        assertTrue(summary.contains("\"argumentCount\":11"));
         assertFalse(summary.contains("cookie-secret-value"));
         assertFalse(summary.contains("restored-secret-value"));
         assertFalse(summary.contains("storage-secret-value"));
+        assertFalse(summary.contains("artifact-secret-session-state-id"));
         assertFalse(summary.contains("customer-search-marker"));
     }
 

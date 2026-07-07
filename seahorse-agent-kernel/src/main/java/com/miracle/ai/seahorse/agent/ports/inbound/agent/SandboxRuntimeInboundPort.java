@@ -71,4 +71,8 @@ public interface SandboxRuntimeInboundPort {
     SandboxArtifactDetailDecision describeArtifact(String artifactId);
 
     SandboxArtifactDownloadDecision downloadArtifact(String artifactId);
+
+    default String readBrowserSessionStateArtifact(String artifactId) {
+        throw new UnsupportedOperationException("Sandbox browser session-state artifact replay is not available");
+    }
 }

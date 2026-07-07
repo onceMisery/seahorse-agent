@@ -208,6 +208,16 @@ Fresh evidence: focused kernel/container tests passed 39/39, compose overlay val
 
 This closes explicit one-run session-state replay. Replaying the previously captured SECRET/BLOCKED artifact, credential storage, operator approval UX, and long-lived browser profile management remain follow-up production work.
 
+## 2026-07-07 Update: Sandbox Browser Governed Session State Artifact Replay
+
+`sandbox_browser` URL mode now accepts `sessionStateArtifactId` for one-run replay from a previously captured `browser-session-state.json` artifact. The tool reads the governed artifact internally through `SandboxRuntimeInboundPort`, validates it with the existing Playwright storage-state shape and allowed-host/origin checks, and forwards it only as transient browser runtime input.
+
+The full session-state artifact remains `SECRET/BLOCKED`, non-downloadable, prompt-hidden, and excluded from tool observations. It is copied into governed object storage for internal replay durability, including local-object-store names with UUID prefixes, but cookie/localStorage values and the artifact id are omitted from observations, audit summaries, HAR downloads, result downloads, and collected replay-session artifacts.
+
+This closes governed replay from a captured session-state artifact. It does not add a long-lived credential store, operator approval UX, arbitrary profile management, or cross-run browser profile persistence.
+
+Fresh evidence: focused kernel tests passed 152/152 via `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelSandboxRuntimeServiceTests,SandboxBrowserToolPortAdapterTests,DefaultSandboxArtifactScannerPortTests,LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`; the bootstrap package rebuilt with reactor `BUILD SUCCESS`; the full-compose backend was hot-deployed and health returned `{"status":"UP"}`; `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-artifact-replay-smoke` passed 30/30 against real Docker browser/runtime/fixture/database/object-storage flows; and `.\scripts\e2e-backend-smoke.ps1 -BaseUrl http://localhost:9090 -RuntimeProfile full-compose` passed 20/20.
+
 ## 2026-07-06 Update: Sandbox Browser Tool Gateway Audit Summary
 
 Tool Gateway request audit now emits a `sandbox_browser`-specific argument summary for browser governance evidence. The summary records value-free execution posture fields such as `mode`, `networkRequested`, allowed-host count/presence, cookie count, session-state replay/capture flags, session-state cookie/origin counts, HAR, and video flags.

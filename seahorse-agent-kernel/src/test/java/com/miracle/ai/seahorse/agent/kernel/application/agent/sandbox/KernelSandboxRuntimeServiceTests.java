@@ -646,6 +646,95 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldCopySecretBrowserSessionStateArtifactForInternalReplay(@TempDir Path tempDir) throws Exception {
+        Path output = tempDir.resolve("browser-session-state.json");
+        String sessionState = """
+                {"cookies":[{"name":"sid","value":"secret-cookie","domain":"example.test","path":"/"}],"origins":[]}
+                """;
+        Files.writeString(output, sessionState, StandardCharsets.UTF_8);
+        MemoryArtifactPort artifactPort = new MemoryArtifactPort();
+        RecordingObjectStoragePort objectStorage = new RecordingObjectStoragePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(List.of(fileArtifact(
+                        "artifact-session-state",
+                        output,
+                        "application/json"))),
+                artifactPort,
+                new MemorySandboxSessionRepository(),
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                new DefaultSandboxArtifactScannerPort(),
+                objectStorage,
+                null,
+                CLOCK);
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.BROWSER_AUTOMATION,
+                false,
+                List.of()));
+
+        SandboxExecutionResult result = service.execute(new SandboxExecutionCommand(
+                session.sessionId(),
+                "{}",
+                false,
+                List.of()));
+
+        assertEquals(0, result.artifacts().size());
+        assertEquals(1, artifactPort.saved.size());
+        SandboxArtifact saved = artifactPort.saved.get(0);
+        assertEquals(SandboxArtifactScanStatus.BLOCKED, saved.scanStatus());
+        assertEquals(ContextSensitivity.SECRET, saved.sensitivity());
+        assertFalse(saved.downloadable());
+        assertEquals(1, objectStorage.uploadCount);
+        assertEquals(sessionState, new String(objectStorage.uploadedBytes, StandardCharsets.UTF_8));
+        assertEquals("local://sandbox-artifacts/browser-session-state.json", saved.objectUri());
+    }
+
+    @Test
+    void shouldReadCopiedSecretBrowserSessionStateArtifactWithStoragePrefix() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        SandboxSession session = SandboxSession.created(
+                "session-1",
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.BROWSER_AUTOMATION,
+                "browser-readonly",
+                CLOCK.instant().plusSeconds(3600),
+                CLOCK.instant());
+        sessionRepository.saveSession(session);
+        String sessionState = "{\"cookies\":[{\"name\":\"sid\",\"value\":\"secret-cookie\",\"domain\":\"example.test\",\"path\":\"/\"}],\"origins\":[]}";
+        RecordingObjectStoragePort objectStorage = new RecordingObjectStoragePort();
+        objectStorage.uploadedBytes = sessionState.getBytes(StandardCharsets.UTF_8);
+        SandboxArtifact artifact = new SandboxArtifact(
+                "artifact-session-state",
+                session.sessionId(),
+                "exec-1",
+                "local://sandbox-artifacts/2f7e6b70-browser-session-state.json",
+                "application/json",
+                SandboxArtifactScanStatus.BLOCKED,
+                ContextSensitivity.SECRET,
+                "sensitive artifact metadata",
+                CLOCK.instant());
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(List.of()),
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new MemorySandboxArtifactQueryPort(artifact),
+                new DefaultSandboxArtifactScannerPort(),
+                objectStorage,
+                null,
+                CLOCK);
+
+        String replayState = service.readBrowserSessionStateArtifact(artifact.artifactId());
+
+        assertEquals(sessionState, replayState);
+    }
+
+    @Test
     void shouldFailClosedWhenPromptVisibleFileArtifactCannotBeCopied(@TempDir Path tempDir) throws Exception {
         Path output = tempDir.resolve("answer.txt");
         Files.writeString(output, "artifact marker", StandardCharsets.UTF_8);
