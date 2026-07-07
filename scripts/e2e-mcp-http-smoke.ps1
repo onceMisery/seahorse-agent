@@ -23,6 +23,7 @@ $total = 0
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $McpServerScript = Join-Path $RepoRoot "resources\docker\mcp-http-echo.js"
+$McpRunSuffix = ([guid]::NewGuid().ToString('N')).Substring(0, 8)
 if ([string]::IsNullOrWhiteSpace($BackendJarPath)) {
     $BackendJarPath = Join-Path $RepoRoot "seahorse-agent-bootstrap\target\seahorse-agent-bootstrap-0.0.1-SNAPSHOT-exec.jar"
 }
@@ -128,6 +129,53 @@ function Assert-ApiOk {
     }
 }
 
+function Invoke-McpHttpTool {
+    param(
+        [hashtable]$Headers,
+        [hashtable]$Body,
+        [string]$Name
+    )
+
+    $response = Invoke-Json -Method POST -Path "/api/tools/http.echo/invoke" -Headers $Headers -Body $Body
+    Assert-ApiOk $response $Name
+
+    $requiresApproval = $response.data.success -eq $false -and (
+        "$($response.data.error)" -eq "TOOL_APPROVAL_REQUIRED" -or
+        "$($response.data.reasonCode)" -eq "TOOL_APPROVAL_REQUIRED"
+    )
+    if (-not $requiresApproval) {
+        return $response
+    }
+
+    if (-not $response.data.approvalId) {
+        throw "$Name required approval but did not return approvalId: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+    $approvalId = "$($response.data.approvalId)"
+    $approval = Invoke-Json -Method GET -Path "/api/approvals/$approvalId" -Headers $Headers
+    Assert-ApiOk $approval "Read $Name approval"
+    if ("$($approval.data.runId)" -ne "$($Body.runId)" -or "$($approval.data.stepId)" -ne "$($Body.stepId)") {
+        throw "$Name approval did not match invocation identity: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+    if ("$($approval.data.toolId)" -ne "http.echo") {
+        throw "$Name approval toolId was not http.echo: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+    if ("$($approval.data.status)" -ne "PENDING") {
+        throw "$Name approval was not pending: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+
+    $approved = Invoke-Json -Method POST -Path "/api/approvals/$approvalId/approve" -Headers $Headers -Body @{
+        decisionComment = "Allow MCP HTTP smoke test"
+    }
+    Assert-ApiOk $approved "Approve $Name"
+    if ("$($approved.data.status)" -ne "APPROVED") {
+        throw "$Name approval was not approved: $($approved.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+
+    $retry = Invoke-Json -Method POST -Path "/api/tools/http.echo/invoke" -Headers $Headers -Body $Body
+    Assert-ApiOk $retry "Retry $Name after approval"
+    return $retry
+}
+
 function Wait-ForHealth {
     param([string]$Url, [int]$Attempts = 90)
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
@@ -211,6 +259,7 @@ try {
             "-e", "SEAHORSE_AGENT_PRODUCT_MODE=enterprise",
             "-e", "SEAHORSE_AGENT_ADVANCED_MCP_TOOL_ENABLED=true",
             "-e", "SEAHORSE_AGENT_ADVANCED_TOOL_CATALOG_MANAGEMENT_ENABLED=true",
+            "-e", "SEAHORSE_AGENT_ADVANCED_AGENT_RUN_MANAGEMENT_ENABLED=true",
             "-e", "SPRING_DATASOURCE_URL=jdbc:postgresql://${PostgresHost}:5432/${PostgresDatabase}",
             "-e", "SPRING_DATASOURCE_USERNAME=$PostgresUsername",
             "-e", "SPRING_DATASOURCE_PASSWORD=$PostgresPassword",
@@ -289,16 +338,51 @@ try {
     }
     if (-not $servers) { exit 1 }
 
-    Test-Step "Run MCP HTTP safe echo test call" {
+    Test-Step "MCP HTTP safe echo test call requires approval" {
         $response = Invoke-Json -Method POST -Path "/api/mcp/servers/http-echo/test" -Headers $headers
         Assert-ApiOk $response "Test MCP HTTP server"
-        if ($response.data.success -ne $true) {
-            throw "MCP HTTP test did not succeed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        if ($response.data.success -ne $false) {
+            throw "MCP HTTP test should be gated before approval: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
-        if ("$($response.data.content)" -ne "http:seahorse mcp health check") {
-            throw "Unexpected MCP HTTP echo content: $($response.data.content)"
+        if ("$($response.data.status)" -ne "APPROVAL_REQUIRED") {
+            throw "MCP HTTP test status was not APPROVAL_REQUIRED: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($response.data.reasonCode)" -ne "TOOL_APPROVAL_REQUIRED") {
+            throw "MCP HTTP test reason was not TOOL_APPROVAL_REQUIRED: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if (-not $response.data.approvalId) {
+            throw "MCP HTTP test did not return approvalId"
         }
         $response.data | ConvertTo-Json -Compress | Write-Host
+    } | Out-Null
+
+    Test-Step "Approve and run MCP HTTP safe echo test call" {
+        $response = Invoke-Json -Method POST -Path "/api/mcp/servers/http-echo/test" -Headers $headers
+        Assert-ApiOk $response "Read MCP HTTP diagnostic approval"
+        if (-not $response.data.approvalId) {
+            throw "MCP HTTP diagnostic approval id missing before approve"
+        }
+        $approvalId = "$($response.data.approvalId)"
+        $approved = Invoke-Json -Method POST -Path "/api/approvals/$approvalId/approve" -Headers $headers -Body @{
+            decisionComment = "Allow MCP HTTP diagnostic smoke test"
+        }
+        Assert-ApiOk $approved "Approve MCP HTTP diagnostic test"
+        if ("$($approved.data.status)" -ne "APPROVED") {
+            throw "MCP HTTP diagnostic approval was not approved: $($approved.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+
+        $result = Invoke-Json -Method POST -Path "/api/mcp/servers/http-echo/test" -Headers $headers
+        Assert-ApiOk $result "Run approved MCP HTTP server test"
+        if ($result.data.success -ne $true) {
+            throw "Approved MCP HTTP test did not succeed: $($result.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($result.data.status)" -ne "SUCCESS") {
+            throw "Approved MCP HTTP test status was not SUCCESS: $($result.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($result.data.content)" -ne "http:seahorse mcp health check") {
+            throw "Unexpected MCP HTTP echo content: $($result.data.content)"
+        }
+        $result.data | ConvertTo-Json -Compress | Write-Host
     } | Out-Null
 
     Test-Step "Verify MCP HTTP tool catalog entry" {
@@ -313,6 +397,69 @@ try {
             throw "MCP HTTP echo tool is not enabled"
         }
         $echo | ConvertTo-Json -Compress | Write-Host
+    } | Out-Null
+
+    $auditRunId = "mcp-http-smoke-run-$McpRunSuffix"
+    $auditText = "seahorse mcp http audit"
+    Test-Step "Invoke MCP HTTP tool through Tool Gateway" {
+        $body = @{
+            runId = $auditRunId
+            stepId = "mcp-http-audit-step-$McpRunSuffix"
+            toolCallId = "mcp-http-audit-call-$McpRunSuffix"
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = $Username
+            agentIdentityId = $Username
+            arguments = @{ text = $auditText }
+            resourceRefs = @{}
+            idempotencyKey = "${auditRunId}:mcp-http-audit-call-$McpRunSuffix"
+            allowedToolIds = @("http.echo")
+        }
+        $response = Invoke-McpHttpTool -Headers $headers -Body $body -Name "Invoke MCP HTTP echo tool"
+        if ($response.data.success -ne $true) {
+            throw "MCP HTTP Tool Gateway invocation did not succeed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($response.data.content)" -notlike "*http:$auditText*") {
+            throw "Unexpected MCP HTTP Tool Gateway content: $($response.data.content)"
+        }
+        $response.data | ConvertTo-Json -Compress | Write-Host
+    } | Out-Null
+
+    Test-Step "Verify MCP HTTP Tool Gateway audit summary" {
+        $response = Invoke-Json -Method GET -Path "/api/tool-invocations?current=1&size=20&runId=$auditRunId&toolId=http.echo" -Headers $headers
+        Assert-ApiOk $response "Read MCP HTTP tool audit"
+        $records = @($response.data.records)
+        $succeeded = @($records | Where-Object { $_.status -eq "SUCCEEDED" -and $_.toolId -eq "http.echo" })[0]
+        if (-not $succeeded) {
+            throw "MCP HTTP Tool Gateway invocation did not create SUCCEEDED tool audit: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $summary = "$($succeeded.argumentsSummary)"
+        $auditTextLength = $auditText.Length
+        $requiredFragments = @(
+            '"toolId":"http.echo"',
+            '"argumentKeys":["text"]',
+            '"argumentCount":1',
+            '"argumentValueCount":1',
+            '"argumentValueTotalLength":' + $auditTextLength,
+            '"argumentValueMaxLength":' + $auditTextLength
+        )
+        foreach ($required in $requiredFragments) {
+            if (-not $summary.Contains($required)) {
+                throw "MCP HTTP audit summary did not include $required`: $summary"
+            }
+        }
+        $forbiddenFragments = @(
+            $auditText,
+            "http:$auditText",
+            "seahorse mcp health check",
+            "http:seahorse mcp health check"
+        )
+        foreach ($forbidden in $forbiddenFragments) {
+            if (-not [string]::IsNullOrWhiteSpace($forbidden) -and $summary.Contains($forbidden)) {
+                throw "MCP HTTP audit summary leaked raw value '$forbidden': $summary"
+            }
+        }
+        $succeeded | ConvertTo-Json -Compress | Write-Host
     } | Out-Null
 
     Test-Step "Refresh and restart MCP HTTP server" {
