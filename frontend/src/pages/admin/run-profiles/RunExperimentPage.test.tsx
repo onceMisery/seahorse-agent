@@ -67,18 +67,20 @@ describe("RunExperimentPage", () => {
   it("creates an experiment from selected run profiles and renders trial rows", async () => {
     render(<RunExperimentPage />);
 
+    const conversationId = "332730494142050304";
+    const baseLeafMessageId = "332730576522375168";
     expect(await screen.findByText("AgentScope Research")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("实验名称"), { target: { value: "Profile compare" } });
-    fireEvent.change(screen.getByLabelText("会话 ID"), { target: { value: "101" } });
-    fireEvent.change(screen.getByLabelText("基准消息 ID"), { target: { value: "202" } });
+    fireEvent.change(screen.getByLabelText("会话 ID"), { target: { value: conversationId } });
+    fireEvent.change(screen.getByLabelText("基准消息 ID"), { target: { value: baseLeafMessageId } });
     fireEvent.click(screen.getByLabelText("AgentScope Research"));
     fireEvent.click(screen.getByLabelText("Kernel Baseline"));
     fireEvent.click(screen.getByRole("button", { name: "发起实验" }));
 
     await waitFor(() => {
       expect(experimentMocks.createRunExperiment).toHaveBeenCalledWith({
-        conversationId: 101,
-        baseLeafMessageId: 202,
+        conversationId,
+        baseLeafMessageId,
         name: "Profile compare",
         runProfileIds: [12, 13]
       });

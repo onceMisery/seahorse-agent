@@ -82,26 +82,24 @@ function trialExecutorEngine(trial: RunExperimentTrialVO, profile?: RunProfileVO
   return trial.executorEngine || profile?.executorEngine || metricExecutorEngine(trial.metricJson) || "kernel";
 }
 
-function toNumber(value: string, label: string) {
+function toIntegerText(value: string, label: string) {
   const trimmed = value.trim();
   if (!trimmed) {
     throw new Error(`${label}不能为空`);
   }
-  const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed)) {
+  if (!/^-?\d+$/.test(trimmed)) {
     throw new Error(`${label}必须是数字`);
   }
-  return parsed;
+  return trimmed;
 }
 
-function optionalNumber(value: string) {
+function optionalIntegerText(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed)) {
+  if (!/^-?\d+$/.test(trimmed)) {
     throw new Error("基准消息 ID 必须是数字");
   }
-  return parsed;
+  return trimmed;
 }
 
 function parseScore(value: string) {
@@ -175,8 +173,8 @@ export function RunExperimentPage() {
     try {
       setSubmitting(true);
       const details = await createRunExperiment({
-        conversationId: toNumber(form.conversationId, "会话 ID"),
-        baseLeafMessageId: optionalNumber(form.baseLeafMessageId),
+        conversationId: toIntegerText(form.conversationId, "会话 ID"),
+        baseLeafMessageId: optionalIntegerText(form.baseLeafMessageId),
         name: form.name.trim() || "Profile compare",
         runProfileIds: form.runProfileIds
       });
