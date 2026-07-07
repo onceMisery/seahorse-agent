@@ -1077,6 +1077,74 @@ try {
         }
     } | Out-Null
 
+    $sessionStateArtifactFailureCases = @(
+        @{
+            Name = "invalid-artifact-id"
+            StepId = "sandbox-browser-session-artifact-id-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-session-artifact-id-fail-call-$suffix"
+            ExpectedMessage = "sessionStateArtifactId is invalid"
+            SessionStateArtifactId = "sandbox_artifact_invalid/session-state-secret-${suffix}"
+            ForbiddenValues = @("sandbox_artifact_invalid/session-state-secret-${suffix}", "session-state-secret-${suffix}")
+        },
+        @{
+            Name = "explicit-and-artifact"
+            StepId = "sandbox-browser-session-artifact-conflict-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-session-artifact-conflict-fail-call-$suffix"
+            ExpectedMessage = "provide either sessionState or sessionStateArtifactId, not both"
+            SessionStateArtifactId = "sandbox_artifact_conflict_secret_${suffix}"
+            SessionState = @{
+                cookies = @(
+                    @{
+                        name = "restored_session"
+                        value = "session-artifact-conflict-cookie-secret-${suffix}"
+                        domain = $ExternalHost
+                        path = "/"
+                    }
+                )
+            }
+            ForbiddenValues = @("sandbox_artifact_conflict_secret_${suffix}", "session-artifact-conflict-cookie-secret-${suffix}")
+        }
+    )
+
+    Test-Step "Verify sandbox_browser sessionState artifact inputs fail closed" {
+        foreach ($case in @($sessionStateArtifactFailureCases)) {
+            $arguments = @{
+                action = "snapshot"
+                url = $externalUrl
+                allowedHosts = @($ExternalHost)
+                sessionStateArtifactId = "$($case.SessionStateArtifactId)"
+                viewportWidth = 1024
+                viewportHeight = 640
+                screenshot = $false
+                har = $false
+                video = $false
+                captureSessionState = $false
+            }
+            if ($case.SessionState) {
+                $arguments.sessionState = $case.SessionState
+            }
+            $body = @{
+                runId = $runId
+                stepId = "$($case.StepId)"
+                toolCallId = "$($case.ToolCallId)"
+                agentId = "legacy-react-agent"
+                tenantId = "default"
+                userId = "$($login.data.userId)"
+                agentIdentityId = "$($login.data.userId)"
+                arguments = $arguments
+                resourceRefs = @{}
+                idempotencyKey = "${runId}:$($case.ToolCallId)"
+                allowedToolIds = @("sandbox_browser")
+            }
+            Invoke-ExpectedSandboxBrowserUrlFailure `
+                -Headers $headers `
+                -Body $body `
+                -Name "Invoke sandbox_browser sessionState artifact $($case.Name) fail-closed" `
+                -ExpectedMessage "$($case.ExpectedMessage)" `
+                -ForbiddenValues @($case.ForbiddenValues) | Out-Null
+        }
+    } | Out-Null
+
     $urlObservation = Test-Step "Invoke sandbox_browser URL mode through Tool Gateway" {
         $urlToolCallId = "sandbox-browser-url-call-$suffix"
         $body = @{
@@ -1628,6 +1696,22 @@ try {
                     """allowedHostCount"":$(if ($case.AllowedHosts) { 2 } else { 1 })",
                     '"cookieCount":0',
                     '"sessionStateReplayRequested":true',
+                    '"captureSessionState":false'
+                )
+                Forbidden = @($case.ForbiddenValues)
+            }
+        }
+        foreach ($case in @($sessionStateArtifactFailureCases)) {
+            $expectedSteps += @{
+                StepId = "$($case.StepId)"
+                Status = "FAILED"
+                Required = @(
+                    '"toolId":"sandbox_browser"',
+                    '"mode":"url"',
+                    '"networkRequested":true',
+                    '"allowedHostCount":1',
+                    '"cookieCount":0',
+                    '"sessionStateArtifactReplayRequested":true',
                     '"captureSessionState":false'
                 )
                 Forbidden = @($case.ForbiddenValues)
