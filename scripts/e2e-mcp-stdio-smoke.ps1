@@ -327,6 +327,32 @@ try {
         if (-not $succeeded) {
             throw "MCP diagnostic test did not create SUCCEEDED tool audit: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
+        $summary = "$($succeeded.argumentsSummary)"
+        $requiredFragments = @(
+            '"toolId":"echo"',
+            '"argumentKeys":["text"]',
+            '"argumentCount":1',
+            '"argumentValueCount":1',
+            '"argumentValueTotalLength":25',
+            '"argumentValueMaxLength":25'
+        )
+        foreach ($required in $requiredFragments) {
+            if (-not $summary.Contains($required)) {
+                throw "MCP diagnostic audit summary did not include $required`: $summary"
+            }
+        }
+        $forbiddenFragments = @(
+            "seahorse mcp health check",
+            "stdio:seahorse mcp health check",
+            $LeakSecret,
+            $ParentOnlyMarker,
+            "MCP_STDIO_PARENT_ONLY_MARKER"
+        )
+        foreach ($forbidden in $forbiddenFragments) {
+            if (-not [string]::IsNullOrWhiteSpace($forbidden) -and $summary.Contains($forbidden)) {
+                throw "MCP diagnostic audit summary leaked raw value '$forbidden': $summary"
+            }
+        }
         $succeeded | ConvertTo-Json -Compress | Write-Host
     } | Out-Null
 
