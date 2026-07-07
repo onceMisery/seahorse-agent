@@ -64,16 +64,17 @@ public class AgentScopeA2AToolPortAdapter implements DescribedToolPort {
             Map<String, Object> safeArguments = arguments == null ? Map.of() : arguments;
             String agentName = requiredText(safeArguments, "agentName");
             String prompt = requiredText(safeArguments, "prompt");
+            Map<String, String> metadata = metadata(safeArguments.get("metadata"));
             A2AAgentResult result;
             try {
                 result = connector.invoke(new A2AAgentRequest(
                         TenantContext.get(),
                         agentName,
                         prompt,
-                        metadata(safeArguments.get("metadata"))));
+                        metadata));
             } catch (Exception ex) {
                 return ToolInvocationResult.failed("invoke_remote_a2a_agent failed for agentName="
-                        + agentName + ": " + safeErrorMessage(ex, prompt));
+                        + agentName + ": " + safeErrorMessage(ex, prompt, metadata));
             }
             return ToolInvocationResult.ok(Objects.requireNonNullElse(result.content(), ""));
         } catch (Exception ex) {
@@ -82,12 +83,19 @@ public class AgentScopeA2AToolPortAdapter implements DescribedToolPort {
         }
     }
 
-    private String safeErrorMessage(Exception ex, String prompt) {
+    private String safeErrorMessage(Exception ex, String prompt, Map<String, String> metadata) {
         String message = Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName());
-        if (prompt == null || prompt.isBlank()) {
-            return CredentialTextRedactor.redact(message);
+        if (prompt != null && !prompt.isBlank()) {
+            message = message.replace(prompt, "[redacted-prompt]");
         }
-        return CredentialTextRedactor.redact(message.replace(prompt, "[redacted-prompt]"));
+        if (metadata != null) {
+            for (String value : metadata.values()) {
+                if (value != null && !value.isBlank()) {
+                    message = message.replace(value, "[redacted-metadata]");
+                }
+            }
+        }
+        return CredentialTextRedactor.redact(message);
     }
 
     private String requiredText(Map<String, Object> arguments, String key) {
