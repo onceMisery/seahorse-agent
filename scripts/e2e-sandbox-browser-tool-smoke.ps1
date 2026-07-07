@@ -820,6 +820,74 @@ try {
         }
     } | Out-Null
 
+    $cookieFailureCases = @(
+        @{
+            Name = "cookie-domain-not-allowed"
+            StepId = "sandbox-browser-cookie-domain-allowlist-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-cookie-domain-allowlist-fail-call-$suffix"
+            ExpectedMessage = "cookie domain must be included in allowedHosts"
+            Cookies = @(
+                @{
+                    name = "seahorse_browser_session"
+                    value = "cookie-domain-allowlist-secret-${suffix}"
+                    domain = $AssetHost
+                    path = "/"
+                }
+            )
+            ForbiddenValues = @("cookie-domain-allowlist-secret-${suffix}")
+        },
+        @{
+            Name = "cookie-domain-host-mismatch"
+            StepId = "sandbox-browser-cookie-domain-mismatch-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-cookie-domain-mismatch-fail-call-$suffix"
+            ExpectedMessage = "cookie domain must match the target URL host"
+            Cookies = @(
+                @{
+                    name = "seahorse_browser_session"
+                    value = "cookie-domain-mismatch-secret-${suffix}"
+                    domain = $AssetHost
+                    path = "/"
+                }
+            )
+            AllowedHosts = @($ExternalHost, $AssetHost)
+            ForbiddenValues = @("cookie-domain-mismatch-secret-${suffix}")
+        }
+    )
+
+    Test-Step "Verify sandbox_browser cookie domain secret inputs fail closed" {
+        foreach ($case in @($cookieFailureCases)) {
+            $body = @{
+                runId = $runId
+                stepId = "$($case.StepId)"
+                toolCallId = "$($case.ToolCallId)"
+                agentId = "legacy-react-agent"
+                tenantId = "default"
+                userId = "$($login.data.userId)"
+                agentIdentityId = "$($login.data.userId)"
+                arguments = @{
+                    action = "snapshot"
+                    url = $externalUrl
+                    allowedHosts = @(if ($case.AllowedHosts) { $case.AllowedHosts } else { $ExternalHost })
+                    cookies = @($case.Cookies)
+                    viewportWidth = 1024
+                    viewportHeight = 640
+                    screenshot = $false
+                    har = $false
+                    video = $false
+                }
+                resourceRefs = @{}
+                idempotencyKey = "${runId}:$($case.ToolCallId)"
+                allowedToolIds = @("sandbox_browser")
+            }
+            Invoke-ExpectedSandboxBrowserUrlFailure `
+                -Headers $headers `
+                -Body $body `
+                -Name "Invoke sandbox_browser cookie $($case.Name) fail-closed" `
+                -ExpectedMessage "$($case.ExpectedMessage)" `
+                -ForbiddenValues @($case.ForbiddenValues) | Out-Null
+        }
+    } | Out-Null
+
     $sessionStateFailureCases = @(
         @{
             Name = "leading-dot-cookie-domain"
@@ -1433,6 +1501,21 @@ try {
                     '"networkRequested":true',
                     '"allowedHostCount":1',
                     '"cookieCount":0',
+                    '"captureSessionState":false'
+                )
+                Forbidden = @($case.ForbiddenValues)
+            }
+        }
+        foreach ($case in @($cookieFailureCases)) {
+            $expectedSteps += @{
+                StepId = "$($case.StepId)"
+                Status = "FAILED"
+                Required = @(
+                    '"toolId":"sandbox_browser"',
+                    '"mode":"url"',
+                    '"networkRequested":true',
+                    """allowedHostCount"":$(if ($case.AllowedHosts) { 2 } else { 1 })",
+                    '"cookieCount":1',
                     '"captureSessionState":false'
                 )
                 Forbidden = @($case.ForbiddenValues)

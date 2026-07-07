@@ -2097,6 +2097,14 @@ This is a verification-hardening slice for the existing browser egress allowlist
 
 Fresh evidence: PowerShell parsing for `.\scripts\e2e-sandbox-browser-tool-smoke.ps1` passed; `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-allowedhost-secret-smoke -SkipBrowserImageBuild` passed 33/33 checks against the real full-Docker backend, including the new credential-shaped `allowedHosts` fail-closed case, URL host fail-closed cases, URL secret fail-closed cases, sessionState fail-closed cases, successful URL mode, session-state capture/replay, captured artifact replay, governed downloads, audit summaries, Postgres persistence, backend object storage, cleanup, and zero non-terminal sandbox sessions.
 
+## 2026-07-07 Update: Sandbox Browser Cookie Domain Guard Real E2E
+
+The `sandbox_browser` full-Docker smoke now verifies explicit `cookies` domain boundaries through the real Tool Gateway path. The smoke submits URL-mode requests where a cookie domain is either absent from `allowedHosts` or present in `allowedHosts` but does not match the target URL host; both calls must fail closed before browser execution, and both the caller-visible payload and persisted audit summary must omit the submitted cookie secret values.
+
+This is a verification-hardening slice for the existing browser session-cookie and egress allowlist contract. It does not add durable browser profiles, credential vault integration, mutable URL policy UI, DNS pinning, CIDR/private-network classification, or new runtime behavior.
+
+Fresh evidence: PowerShell parsing for `.\scripts\e2e-sandbox-browser-tool-smoke.ps1` passed; `.\scripts\e2e-sandbox-browser-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-browser-cookie-domain-smoke -SkipBrowserImageBuild` passed 34/34 checks against the real full-Docker backend, including cookie domain not-in-`allowedHosts` and host-mismatch fail-closed cases, credential-shaped `allowedHosts` fail-closed case, URL host fail-closed cases, URL secret fail-closed cases, sessionState fail-closed cases, successful URL mode, session-state capture/replay, captured artifact replay, governed downloads, audit summaries, Postgres persistence, backend object storage, cleanup, and zero non-terminal sandbox sessions.
+
 ## 2026-07-07 Update: MCP HTTP Tool Gateway Audit Summary E2E
 
 The MCP HTTP smoke now verifies the governed `http.echo` tool through the real Tool Gateway instead of stopping at MCP server discovery and direct diagnostic calls. The smoke starts a temporary HTTP MCP server and backend container on the full-compose Docker network, logs in, verifies `http.echo` is `HIGH` risk and requires approval, executes the diagnostic path through approval, invokes `/api/tools/http.echo/invoke`, then queries `/api/tool-invocations` for the persisted audit record.
