@@ -766,6 +766,99 @@ try {
         }
     } | Out-Null
 
+    $sessionStateFailureCases = @(
+        @{
+            Name = "leading-dot-cookie-domain"
+            StepId = "sandbox-browser-session-cookie-domain-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-session-cookie-domain-fail-call-$suffix"
+            ExpectedMessage = "cookie domain must be a host name only"
+            SessionState = @{
+                cookies = @(
+                    @{
+                        name = "restored_session"
+                        value = "session-cookie-secret-${suffix}"
+                        domain = ".${ExternalHost}"
+                        path = "/"
+                    }
+                )
+            }
+            ForbiddenValues = @("session-cookie-secret-${suffix}")
+        },
+        @{
+            Name = "unsupported-cookie-field"
+            StepId = "sandbox-browser-session-cookie-field-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-session-cookie-field-fail-call-$suffix"
+            ExpectedMessage = "sessionState cookie contains unsupported fields"
+            SessionState = @{
+                cookies = @(
+                    @{
+                        name = "restored_session"
+                        value = "unsupported-cookie-secret-${suffix}"
+                        domain = $ExternalHost
+                        path = "/"
+                        storageRef = "session-storage-ref-secret-${suffix}"
+                    }
+                )
+            }
+            ForbiddenValues = @("unsupported-cookie-secret-${suffix}", "session-storage-ref-secret-${suffix}")
+        },
+        @{
+            Name = "origin-port-mismatch"
+            StepId = "sandbox-browser-session-origin-port-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-session-origin-port-fail-call-$suffix"
+            ExpectedMessage = "sessionState origin must match the target URL origin"
+            SessionState = @{
+                origins = @(
+                    @{
+                        origin = "http://${ExternalHost}:$($ExternalPort + 1)"
+                        localStorage = @(
+                            @{
+                                name = "seahorse_session_marker"
+                                value = "origin-storage-secret-${suffix}"
+                            }
+                        )
+                    }
+                )
+            }
+            ForbiddenValues = @("origin-storage-secret-${suffix}")
+        }
+    )
+
+    Test-Step "Verify sandbox_browser sessionState secret inputs fail closed" {
+        foreach ($case in @($sessionStateFailureCases)) {
+            $body = @{
+                runId = $runId
+                stepId = "$($case.StepId)"
+                toolCallId = "$($case.ToolCallId)"
+                agentId = "legacy-react-agent"
+                tenantId = "default"
+                userId = "$($login.data.userId)"
+                agentIdentityId = "$($login.data.userId)"
+                arguments = @{
+                    action = "snapshot"
+                    url = $externalUrl
+                    allowedHosts = @($ExternalHost)
+                    sessionState = $case.SessionState
+                    viewportWidth = 1024
+                    viewportHeight = 640
+                    screenshot = $false
+                    har = $false
+                    video = $false
+                    captureSessionState = $false
+                }
+                resourceRefs = @{}
+                idempotencyKey = "${runId}:$($case.ToolCallId)"
+                allowedToolIds = @("sandbox_browser")
+            }
+            Invoke-ExpectedSandboxBrowserUrlFailure `
+                -Headers $headers `
+                -Body $body `
+                -Name "Invoke sandbox_browser sessionState $($case.Name) fail-closed" `
+                -ExpectedMessage "$($case.ExpectedMessage)" `
+                -ForbiddenValues @($case.ForbiddenValues) | Out-Null
+        }
+    } | Out-Null
+
     $urlObservation = Test-Step "Invoke sandbox_browser URL mode through Tool Gateway" {
         $urlToolCallId = "sandbox-browser-url-call-$suffix"
         $body = @{
@@ -1286,6 +1379,22 @@ try {
                     '"networkRequested":true',
                     '"allowedHostCount":1',
                     '"cookieCount":0',
+                    '"captureSessionState":false'
+                )
+                Forbidden = @($case.ForbiddenValues)
+            }
+        }
+        foreach ($case in @($sessionStateFailureCases)) {
+            $expectedSteps += @{
+                StepId = "$($case.StepId)"
+                Status = "FAILED"
+                Required = @(
+                    '"toolId":"sandbox_browser"',
+                    '"mode":"url"',
+                    '"networkRequested":true',
+                    '"allowedHostCount":1',
+                    '"cookieCount":0',
+                    '"sessionStateReplayRequested":true',
                     '"captureSessionState":false'
                 )
                 Forbidden = @($case.ForbiddenValues)
