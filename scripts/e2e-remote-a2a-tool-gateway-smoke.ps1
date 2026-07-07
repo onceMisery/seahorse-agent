@@ -4,8 +4,10 @@ param(
     [string]$Password = "admin123",
     [string]$BackendImage = "seahorse-agent-backend:latest",
     [string]$BackendContainerName = "seahorse-remote-a2a-tool-smoke",
+    [string]$RemoteBackendContainerName = "seahorse-remote-a2a-tool-smoke-remote",
     [string]$DockerNetwork = "seahorse-agent_default",
     [int]$HostPort = 19097,
+    [int]$RemoteHostPort = 19098,
     [string]$NacosHost = "seahorse-nacos",
     [string]$PostgresHost = "seahorse-postgres",
     [string]$PostgresDatabase = "seahorse",
@@ -22,6 +24,8 @@ $total = 0
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $RunSuffix = ([guid]::NewGuid().ToString('N')).Substring(0, 8)
+$RemoteAgentName = "seahorse-a2a-tool-remote-$RunSuffix"
+$RemoteBaseUrl = "http://127.0.0.1:$RemoteHostPort"
 if ([string]::IsNullOrWhiteSpace($BackendJarPath)) {
     $BackendJarPath = Join-Path $RepoRoot "seahorse-agent-bootstrap\target\seahorse-agent-bootstrap-0.0.1-SNAPSHOT-exec.jar"
 }
@@ -162,6 +166,86 @@ function Wait-ForHealth {
     throw "Timed out waiting for health at $Url"
 }
 
+function Wait-ForA2aCard {
+    param([string]$Url, [int]$Attempts = 90)
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        try {
+            $response = Invoke-JsonAt -Url $Url -Method GET
+            if (-not [string]::IsNullOrWhiteSpace("$($response.name)")) {
+                return $response
+            }
+        } catch {
+            if ($attempt -ge $Attempts) {
+                throw
+            }
+        }
+        Start-Sleep -Seconds 2
+    }
+    throw "Timed out waiting for A2A card at $Url"
+}
+
+function BackendRunArgs {
+    param(
+        [string]$ContainerName,
+        [int]$PublishedPort,
+        [string]$A2aAgentName,
+        [string]$A2aUrl,
+        [bool]$RegisterEnabled
+    )
+
+    $args = @(
+        "run", "-d",
+        "--name", $ContainerName,
+        "--network", $DockerNetwork,
+        "-p", "${PublishedPort}:9090",
+        "-e", "SERVER_PORT=9090",
+        "-e", "SEAHORSE_AGENT_PRODUCT_MODE=enterprise",
+        "-e", "SEAHORSE_AGENT_ADVANCED_TOOL_CATALOG_MANAGEMENT_ENABLED=true",
+        "-e", "SEAHORSE_AGENT_ADVANCED_AGENT_RUN_MANAGEMENT_ENABLED=true",
+        "-e", "SEAHORSE_AGENT_ADVANCED_REMOTE_AGENT_ENABLED=true",
+        "-e", "SPRING_DATASOURCE_URL=jdbc:postgresql://${PostgresHost}:5432/${PostgresDatabase}",
+        "-e", "SPRING_DATASOURCE_USERNAME=$PostgresUsername",
+        "-e", "SPRING_DATASOURCE_PASSWORD=$PostgresPassword",
+        "-e", "SEAHORSE_AGENT_ADAPTERS_REPOSITORY_TYPE=jdbc",
+        "-e", "SEAHORSE_AGENT_ADAPTERS_AI_TYPE=mock",
+        "-e", "SEAHORSE_AGENT_ADAPTERS_VECTOR_TYPE=noop",
+        "-e", "SEAHORSE_AGENT_ADAPTERS_CACHE_TYPE=local",
+        "-e", "SEAHORSE_AGENT_ADAPTERS_CACHE_REDIS_HOST=redis",
+        "-e", "SEAHORSE_AGENT_ADAPTERS_CACHE_REDIS_PORT=6379",
+        "-e", "SPRING_DATA_REDIS_HOST=redis",
+        "-e", "SPRING_DATA_REDIS_PORT=6379",
+        "-e", "SEAHORSE_AGENT_ADAPTERS_STORAGE_TYPE=local",
+        "-e", "SEAHORSE_AGENT_ADAPTERS_MQ_TYPE=direct",
+        "-e", "SEAHORSE_AGENT_ADAPTERS_OBSERVATION_TYPE=noop",
+        "-e", "SEAHORSE_AGENTSCOPE_A2A_ENABLED=true",
+        "-e", "SEAHORSE_AGENTSCOPE_A2A_REGISTER_ENABLED=$($RegisterEnabled.ToString().ToLowerInvariant())",
+        "-e", "SEAHORSE_AGENTSCOPE_A2A_NACOS_SERVER=${NacosHost}:8848",
+        "-e", "SEAHORSE_AGENTSCOPE_NACOS_SERVER_ADDR=${NacosHost}:8848",
+        "-e", "SEAHORSE_AGENTSCOPE_NACOS_NAMESPACE=public",
+        "-e", "SEAHORSE_AGENTSCOPE_NACOS_GROUP=DEFAULT_GROUP",
+        "-e", "SEAHORSE_AGENTSCOPE_NACOS_M3_ENABLED=true",
+        "-e", "SEAHORSE_AGENTSCOPE_NACOS_M3_MODE=M3",
+        "-e", "SEAHORSE_AGENTSCOPE_NACOS_M3_NAMESPACE=seahorse-agent",
+        "-e", "SEAHORSE_AGENTSCOPE_NACOS_M3_GROUP=DEFAULT_GROUP",
+        "-e", "SEAHORSE_AGENTSCOPE_NACOS_M3_CLUSTER_NAME=local",
+        "-e", "SEAHORSE_AGENTSCOPE_A2A_TENANT_ID=default",
+        "-e", "SEAHORSE_AGENTSCOPE_A2A_AGENT_NAME=$A2aAgentName",
+        "-e", "SEAHORSE_AGENTSCOPE_A2A_URL=$A2aUrl",
+        "-e", "SEAHORSE_AGENTSCOPE_A2A_HOST=${ContainerName}",
+        "-e", "SEAHORSE_AGENTSCOPE_A2A_PORT=9090",
+        "-e", "SEAHORSE_AGENTSCOPE_A2A_PATH=/a2a",
+        "-e", "SEAHORSE_AGENTSCOPE_A2A_AUTH_MODE=shared-secret",
+        "-e", "SEAHORSE_AGENTSCOPE_A2A_AUTH_HEADER_NAME=X-Seahorse-A2A-Token",
+        "-e", "SEAHORSE_AGENTSCOPE_A2A_SHARED_SECRET=seahorse-local-a2a-token",
+        $BackendImage
+    )
+    if (Test-Path -LiteralPath $BackendJarPath) {
+        $jarMount = "$($BackendJarPath):/app/app.jar:ro"
+        $args = $args[0..($args.Count - 2)] + @("-v", $jarMount) + $args[-1]
+    }
+    return $args
+}
+
 function Invoke-RemoteA2aTool {
     param(
         [hashtable]$Headers,
@@ -210,58 +294,38 @@ function Invoke-RemoteA2aTool {
 }
 
 try {
+    Test-Step "Start temporary remote A2A backend" {
+        Remove-SmokeContainer -Name $RemoteBackendContainerName
+        $remoteA2aUrl = "http://${RemoteBackendContainerName}:9090/a2a"
+        $args = BackendRunArgs `
+            -ContainerName $RemoteBackendContainerName `
+            -PublishedPort $RemoteHostPort `
+            -A2aAgentName $RemoteAgentName `
+            -A2aUrl $remoteA2aUrl `
+            -RegisterEnabled $true
+        $output = & docker.exe @args
+        if ($LASTEXITCODE -ne 0) {
+            throw "docker run failed for remote backend: $output"
+        }
+        $output
+    } | Out-Null
+
+    Test-Step "Wait for remote A2A backend health and card" {
+        Wait-ForHealth -Url "$RemoteBaseUrl/actuator/health"
+        $card = Wait-ForA2aCard -Url "$RemoteBaseUrl/a2a"
+        if ("$($card.name)" -ne "default/$RemoteAgentName") {
+            throw "Remote A2A card name mismatch: $($card | ConvertTo-Json -Depth 20 -Compress)"
+        }
+    } | Out-Null
+
     Test-Step "Start temporary A2A-enabled backend" {
         Remove-SmokeContainer -Name $BackendContainerName
-        $args = @(
-            "run", "-d",
-            "--name", $BackendContainerName,
-            "--network", $DockerNetwork,
-            "-p", "${HostPort}:9090",
-            "-e", "SERVER_PORT=9090",
-            "-e", "SEAHORSE_AGENT_PRODUCT_MODE=enterprise",
-            "-e", "SEAHORSE_AGENT_ADVANCED_TOOL_CATALOG_MANAGEMENT_ENABLED=true",
-            "-e", "SEAHORSE_AGENT_ADVANCED_AGENT_RUN_MANAGEMENT_ENABLED=true",
-            "-e", "SEAHORSE_AGENT_ADVANCED_REMOTE_AGENT_ENABLED=true",
-            "-e", "SPRING_DATASOURCE_URL=jdbc:postgresql://${PostgresHost}:5432/${PostgresDatabase}",
-            "-e", "SPRING_DATASOURCE_USERNAME=$PostgresUsername",
-            "-e", "SPRING_DATASOURCE_PASSWORD=$PostgresPassword",
-            "-e", "SEAHORSE_AGENT_ADAPTERS_REPOSITORY_TYPE=jdbc",
-            "-e", "SEAHORSE_AGENT_ADAPTERS_AI_TYPE=mock",
-            "-e", "SEAHORSE_AGENT_ADAPTERS_VECTOR_TYPE=noop",
-            "-e", "SEAHORSE_AGENT_ADAPTERS_CACHE_TYPE=local",
-            "-e", "SEAHORSE_AGENT_ADAPTERS_CACHE_REDIS_HOST=redis",
-            "-e", "SEAHORSE_AGENT_ADAPTERS_CACHE_REDIS_PORT=6379",
-            "-e", "SPRING_DATA_REDIS_HOST=redis",
-            "-e", "SPRING_DATA_REDIS_PORT=6379",
-            "-e", "SEAHORSE_AGENT_ADAPTERS_STORAGE_TYPE=local",
-            "-e", "SEAHORSE_AGENT_ADAPTERS_MQ_TYPE=direct",
-            "-e", "SEAHORSE_AGENT_ADAPTERS_OBSERVATION_TYPE=noop",
-            "-e", "SEAHORSE_AGENTSCOPE_A2A_ENABLED=true",
-            "-e", "SEAHORSE_AGENTSCOPE_A2A_REGISTER_ENABLED=false",
-            "-e", "SEAHORSE_AGENTSCOPE_A2A_NACOS_SERVER=${NacosHost}:8848",
-            "-e", "SEAHORSE_AGENTSCOPE_NACOS_SERVER_ADDR=${NacosHost}:8848",
-            "-e", "SEAHORSE_AGENTSCOPE_NACOS_NAMESPACE=public",
-            "-e", "SEAHORSE_AGENTSCOPE_NACOS_GROUP=DEFAULT_GROUP",
-            "-e", "SEAHORSE_AGENTSCOPE_NACOS_M3_ENABLED=true",
-            "-e", "SEAHORSE_AGENTSCOPE_NACOS_M3_MODE=M3",
-            "-e", "SEAHORSE_AGENTSCOPE_NACOS_M3_NAMESPACE=seahorse-agent",
-            "-e", "SEAHORSE_AGENTSCOPE_NACOS_M3_GROUP=DEFAULT_GROUP",
-            "-e", "SEAHORSE_AGENTSCOPE_NACOS_M3_CLUSTER_NAME=local",
-            "-e", "SEAHORSE_AGENTSCOPE_A2A_TENANT_ID=default",
-            "-e", "SEAHORSE_AGENTSCOPE_A2A_AGENT_NAME=seahorse-a2a-tool-smoke",
-            "-e", "SEAHORSE_AGENTSCOPE_A2A_URL=http://${BackendContainerName}:9090/a2a",
-            "-e", "SEAHORSE_AGENTSCOPE_A2A_HOST=${BackendContainerName}",
-            "-e", "SEAHORSE_AGENTSCOPE_A2A_PORT=9090",
-            "-e", "SEAHORSE_AGENTSCOPE_A2A_PATH=/a2a",
-            "-e", "SEAHORSE_AGENTSCOPE_A2A_AUTH_MODE=shared-secret",
-            "-e", "SEAHORSE_AGENTSCOPE_A2A_AUTH_HEADER_NAME=X-Seahorse-A2A-Token",
-            "-e", "SEAHORSE_AGENTSCOPE_A2A_SHARED_SECRET=seahorse-local-a2a-token",
-            $BackendImage
-        )
-        if (Test-Path -LiteralPath $BackendJarPath) {
-            $jarMount = "$($BackendJarPath):/app/app.jar:ro"
-            $args = $args[0..($args.Count - 2)] + @("-v", $jarMount) + $args[-1]
-        }
+        $args = BackendRunArgs `
+            -ContainerName $BackendContainerName `
+            -PublishedPort $HostPort `
+            -A2aAgentName "seahorse-a2a-tool-smoke" `
+            -A2aUrl "http://${BackendContainerName}:9090/a2a" `
+            -RegisterEnabled $false
         $output = & docker.exe @args
         if ($LASTEXITCODE -ne 0) {
             throw "docker run failed: $output"
@@ -299,6 +363,81 @@ try {
             throw "Remote A2A tool does not require approval: $($tool | ConvertTo-Json -Depth 20 -Compress)"
         }
         $tool | ConvertTo-Json -Compress | Write-Host
+    } | Out-Null
+
+    $successRunId = "remote-a2a-tool-success-run-$RunSuffix"
+    $successStepId = "remote-a2a-tool-success-step-$RunSuffix"
+    $successToolCallId = "remote-a2a-tool-success-call-$RunSuffix"
+    $successPrompt = "remote A2A success prompt $RunSuffix"
+    $successMarker = "mock-streaming-chat"
+    $successBody = @{
+        runId = $successRunId
+        stepId = $successStepId
+        toolCallId = $successToolCallId
+        agentId = "legacy-react-agent"
+        tenantId = "default"
+        userId = $Username
+        agentIdentityId = $Username
+        arguments = @{
+            agentName = $RemoteAgentName
+            prompt = $successPrompt
+            metadata = @{
+                source = "success-source-secret-$RunSuffix"
+            }
+        }
+        resourceRefs = @{}
+        idempotencyKey = "${successRunId}:${successToolCallId}"
+        allowedToolIds = @("invoke_remote_a2a_agent")
+    }
+
+    Test-Step "Invoke registered remote A2A tool successfully through Tool Gateway" {
+        $response = Invoke-RemoteA2aTool -Headers $headers -Body $successBody -Name "Invoke registered remote A2A tool"
+        if ($response.data.success -ne $true) {
+            throw "Remote A2A invocation did not succeed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $observation = "$($response.data.content)"
+        if (-not $observation.Contains($successMarker)) {
+            throw "Remote A2A success observation did not include expected marker '$successMarker': $observation"
+        }
+        foreach ($forbidden in @($successPrompt, "success-source-secret-$RunSuffix")) {
+            if ($observation.Contains($forbidden)) {
+                throw "Remote A2A success observation leaked submitted secret '$forbidden': $observation"
+            }
+        }
+        $response.data | ConvertTo-Json -Compress | Write-Host
+    } | Out-Null
+
+    Test-Step "Verify successful remote A2A Tool Gateway audit summary" {
+        $response = Invoke-Json -Method GET -Path "/api/tool-invocations?current=1&size=20&runId=$successRunId&toolId=invoke_remote_a2a_agent" -Headers $headers
+        Assert-ApiOk $response "Read successful remote A2A tool audit"
+        $records = Get-PageRecords $response.data
+        $audit = @($records | Where-Object { $_.status -eq "SUCCEEDED" -and $_.toolId -eq "invoke_remote_a2a_agent" })[0]
+        if (-not $audit) {
+            throw "Remote A2A Tool Gateway invocation did not create SUCCEEDED tool audit: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $summary = "$($audit.argumentsSummary)"
+        $requiredFragments = @(
+            '"toolId":"invoke_remote_a2a_agent"',
+            '"agentNamePresent":true',
+            """agentNameLength"":$($RemoteAgentName.Length)",
+            """promptLength"":$($successPrompt.Length)",
+            '"metadataKeys":["source"]',
+            '"metadataCount":1',
+            '"metadataValueCount":1',
+            '"versionPresent":false',
+            '"argumentCount":3'
+        )
+        foreach ($required in $requiredFragments) {
+            if (-not $summary.Contains($required)) {
+                throw "Successful remote A2A audit summary did not include $required`: $summary"
+            }
+        }
+        foreach ($forbidden in @($RemoteAgentName, $successPrompt, "success-source-secret-$RunSuffix")) {
+            if (-not [string]::IsNullOrWhiteSpace($forbidden) -and $summary.Contains($forbidden)) {
+                throw "Successful remote A2A audit summary leaked raw value '$forbidden': $summary"
+            }
+        }
+        $audit | ConvertTo-Json -Compress | Write-Host
     } | Out-Null
 
     $runId = "remote-a2a-tool-smoke-run-$RunSuffix"
@@ -397,6 +536,7 @@ try {
 
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Host "Smoke backend: $BaseUrl"
+    Write-Host "Remote backend: $RemoteBaseUrl"
     Write-Host "Remote A2A tool: invoke_remote_a2a_agent"
 } catch {
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
@@ -405,6 +545,7 @@ try {
 } finally {
     if (-not $KeepContainer) {
         Remove-SmokeContainer -Name $BackendContainerName
+        Remove-SmokeContainer -Name $RemoteBackendContainerName
     }
 }
 
