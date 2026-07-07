@@ -3,6 +3,10 @@ param(
     [string]$Username = "admin",
     [string]$Password = "admin123",
     [string]$Marker = "seahorse-sandbox-python-smoke",
+    [string]$PostgresContainer = "seahorse-postgres",
+    [string]$PostgresUser = "seahorse",
+    [string]$PostgresDatabase = "seahorse",
+    [long]$KernelRunProfileId = -9101,
     [switch]$SkipHealth
 )
 
@@ -86,6 +90,128 @@ function Assert-ApiOk {
     }
 }
 
+function Get-PageRecords {
+    param([object]$Page)
+    if ($null -eq $Page) {
+        return @()
+    }
+    if ($null -ne $Page.records) {
+        return @($Page.records)
+    }
+    if ($null -ne $Page.list) {
+        return @($Page.list)
+    }
+    if ($Page -is [System.Array]) {
+        return @($Page)
+    }
+    return @()
+}
+
+function Invoke-SandboxPythonTool {
+    param(
+        [hashtable]$Headers,
+        [hashtable]$Body,
+        [string]$Name
+    )
+
+    $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $Headers -Body $Body
+    Assert-ApiOk $response $Name
+
+    $requiresApproval = $response.data.success -eq $false -and (
+        "$($response.data.error)" -eq "TOOL_APPROVAL_REQUIRED" -or
+        "$($response.data.reasonCode)" -eq "TOOL_APPROVAL_REQUIRED"
+    )
+    if (-not $requiresApproval) {
+        return $response
+    }
+
+    if (-not $response.data.approvalId) {
+        throw "$Name required approval but did not return approvalId: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+    $approvalId = "$($response.data.approvalId)"
+    $approval = Invoke-Json -Method GET -Path "/api/approvals/$approvalId" -Headers $Headers
+    Assert-ApiOk $approval "Read $Name approval"
+    if ("$($approval.data.runId)" -ne "$($Body.runId)" -or "$($approval.data.stepId)" -ne "$($Body.stepId)") {
+        throw "$Name approval did not match invocation identity: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+    if ("$($approval.data.status)" -ne "PENDING") {
+        throw "$Name approval was not pending: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+
+    $approved = Invoke-Json -Method POST -Path "/api/approvals/$approvalId/approve" -Headers $Headers -Body @{
+        decisionComment = "Allow sandbox python smoke test"
+    }
+    Assert-ApiOk $approved "Approve $Name"
+    if ("$($approved.data.status)" -ne "APPROVED") {
+        throw "$Name approval was not approved: $($approved.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+
+    $retry = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $Headers -Body $Body
+    Assert-ApiOk $retry "Retry $Name after approval"
+    return $retry
+}
+
+function Invoke-PostgresScalar {
+    param([string]$Sql)
+    $raw = & docker exec $PostgresContainer psql -U $PostgresUser -d $PostgresDatabase -At -F "`t" -c $Sql
+    if ($LASTEXITCODE -ne 0) {
+        throw "psql exited with $LASTEXITCODE for SQL: $Sql"
+    }
+    $rows = @($raw | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($rows.Count -eq 0) {
+        throw "SQL returned no rows: $Sql"
+    }
+    return $rows[0]
+}
+
+function New-RealAgentRunId {
+    param(
+        [hashtable]$Headers,
+        [string]$Marker,
+        [long]$RunProfileId
+    )
+
+    $created = Invoke-Json -Method POST -Path "/api/conversations" -Headers $Headers
+    Assert-ApiOk $created "Create sandbox python smoke conversation"
+    if (-not $created.data) {
+        throw "Create conversation response did not include id"
+    }
+    $conversationId = "$($created.data)"
+    $question = "Sandbox Python smoke $Marker. Reply with one short sentence."
+    $encodedQuestion = [System.Uri]::EscapeDataString($question)
+    $response = Invoke-WebRequest -Uri "$BaseUrl/rag/v3/chat?conversationId=$conversationId&question=$encodedQuestion&runProfileId=$RunProfileId&chatMode=agent" `
+        -Headers $Headers -UseBasicParsing -TimeoutSec 180
+    if ([int]$response.StatusCode -ne 200) {
+        throw "Chat returned HTTP $($response.StatusCode)"
+    }
+    $contentType = "$($response.Headers['Content-Type'])"
+    if ($contentType -notlike "*text/event-stream*") {
+        throw "Chat content type was '$contentType'"
+    }
+    if ($response.Content -notlike "*[DONE]*") {
+        throw "Chat SSE did not include [DONE]"
+    }
+
+    $runId = ""
+    $matches = [regex]::Matches($response.Content, '"runId"\s*:\s*"([^"]+)"')
+    if ($matches.Count -gt 0) {
+        $runId = $matches[0].Groups[1].Value
+    }
+    if ([string]::IsNullOrWhiteSpace($runId)) {
+        throw "Chat SSE did not include runId"
+    }
+
+    $safeRunId = $runId.Replace("'", "''")
+    $row = Invoke-PostgresScalar "SELECT run_id FROM sa_agent_run WHERE run_id = '$safeRunId';"
+    if ($row -ne $runId) {
+        throw "Agent run was not persisted before tool invocation: $runId"
+    }
+    return [PSCustomObject]@{
+        ConversationId = $conversationId
+        RunId = $runId
+    }
+}
+
 function Wait-ForHealth {
     param([int]$Attempts = 90)
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
@@ -126,13 +252,18 @@ try {
 
     $headers = @{ Authorization = "Bearer $($login.data.token)" }
     $suffix = ([guid]::NewGuid().ToString('N')).Substring(0, 8)
-    $runId = "sandbox-python-smoke-run-$suffix"
+    $smokeRun = Test-Step "Create real agent run for governed sandbox_python binding" {
+        New-RealAgentRunId -Headers $headers -Marker $Marker -RunProfileId $KernelRunProfileId
+    }
+    if (-not $smokeRun) { exit 1 }
+
+    $runId = "$($smokeRun.RunId)"
     $toolCallId = "sandbox-python-smoke-call-$suffix"
     $escapedMarker = $Marker.Replace("\", "\\").Replace("'", "\'")
     $code = "from pathlib import Path`nPath('answer.txt').write_text('artifact $escapedMarker', encoding='utf-8')`nprint('$escapedMarker')"
 
     Test-Step "Invoke sandbox_python through Tool Gateway" {
-        $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_python/invoke" -Headers $headers -Body @{
+        $requestBody = @{
             runId = $runId
             stepId = "sandbox-python-smoke-step-$suffix"
             toolCallId = $toolCallId
@@ -145,6 +276,7 @@ try {
             idempotencyKey = "${runId}:${toolCallId}"
             allowedToolIds = @("sandbox_python")
         }
+        $response = Invoke-SandboxPythonTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_python"
         Assert-ApiOk $response "Invoke sandbox_python"
         if ($response.data.success -ne $true) {
             throw "sandbox_python failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
@@ -168,8 +300,55 @@ try {
         $response.data | ConvertTo-Json -Compress | Write-Host
     } | Out-Null
 
+    Test-Step "Verify sandbox_python Tool Gateway audit summary" {
+        $response = Invoke-Json -Method GET -Path "/api/tool-invocations?current=1&size=20&runId=$runId&toolId=sandbox_python" -Headers $headers
+        Assert-ApiOk $response "Read sandbox_python tool audit"
+        $records = Get-PageRecords $response.data
+        $audit = @($records | Where-Object { "$($_.stepId)" -eq "sandbox-python-smoke-step-$suffix" -and "$($_.toolId)" -eq "sandbox_python" }) | Select-Object -First 1
+        if (-not $audit) {
+            throw "sandbox_python audit record not found for run $runId step sandbox-python-smoke-step-$suffix`: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($audit.status)" -ne "SUCCEEDED") {
+            throw "sandbox_python audit status mismatch: $($audit | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $summary = "$($audit.argumentsSummary)"
+        foreach ($required in @(
+                '"toolId":"sandbox_python"',
+                '"runtimeType":"CODE_INTERPRETER"',
+                '"networkRequested":false',
+                '"requestedHostsPresent":false',
+                '"requestedHostCount":0',
+                '"argumentKeys":["code"]',
+                '"argumentCount":1',
+                '"argumentValueCount":1',
+                '"argumentValueTotalLength":',
+                '"argumentValueMaxLength":',
+                '"codeLength":'
+            )) {
+            if (-not $summary.Contains($required)) {
+                throw "sandbox_python audit summary did not include $required`: $summary"
+            }
+        }
+        foreach ($forbidden in @(
+                $Marker,
+                $escapedMarker,
+                $code,
+                "Path('answer.txt')",
+                "write_text",
+                "print(",
+                "artifact $Marker",
+                "answer.txt"
+            )) {
+            if (-not [string]::IsNullOrWhiteSpace("$forbidden") -and $summary.Contains("$forbidden")) {
+                throw "sandbox_python audit summary leaked raw code value '$forbidden': $summary"
+            }
+        }
+    } | Out-Null
+
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Host "Backend: $BaseUrl"
+    Write-Host "Conversation: $($smokeRun.ConversationId)"
+    Write-Host "Run: $runId"
     Write-Host "Tool: sandbox_python"
 } catch {
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan

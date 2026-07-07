@@ -787,6 +787,12 @@ This is a narrow Tool Gateway audit hardening slice for the existing Code Interp
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 23/23 after adding regression coverage that `sandbox_python` audit summaries include governance metadata while excluding raw code markers and caller-controlled pre-validation host values.
 
+## 2026-07-07 Update: Sandbox Python Full-Docker Audit E2E
+
+The full-Docker `sandbox_python` smoke now exercises the same governed path as the other sandbox-backed tools: it creates a real persisted Agent run, handles the high-risk tool approval round trip, retries the Tool Gateway invocation with the same identity, executes the real Code Interpreter sandbox, and then verifies the real `/api/tool-invocations` audit record. The audit E2E asserts the value-free `CODE_INTERPRETER` posture fields, code length, network/requested-host posture, safe argument key, and argument value shape while checking that raw code, file names, print/write calls, artifact text, and the marker do not appear in `argumentsSummary`.
+
+Fresh evidence: PowerShell parsing for `.\scripts\e2e-sandbox-python-tool-smoke.ps1` passed; `.\scripts\e2e-sandbox-python-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-python-audit-smoke` passed 5/5 against the real full-Docker backend, including real Agent run creation, approval, sandbox execution, and the new `Verify sandbox_python Tool Gateway audit summary` step.
+
 ## 2026-07-06 Update: Sandbox Built-in Tool Catalog Approval Defaults
 
 Built-in sandbox tools now enter the Tool Catalog with `requiresApproval=true` while keeping their existing `HIGH` risk level, `EXECUTE` action type, and `SANDBOX` resource type. This closes the gap where `sandbox_python`, `sandbox_file_convert`, and `sandbox_browser` were cataloged as high-risk but not explicitly approval-required, even though the policy layer only enforces approval from catalog flags, critical risk, or specific action types.
