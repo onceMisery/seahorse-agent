@@ -358,6 +358,28 @@ function Add-ZipTextEntry {
     }
 }
 
+function New-ZipBase64 {
+    param([hashtable]$Entries)
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $tempPath = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "seahorse-zip-$([guid]::NewGuid().ToString('N')).zip")
+    $fileStream = [System.IO.File]::Open($tempPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite)
+    $archive = [System.IO.Compression.ZipArchive]::new($fileStream, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($name in $Entries.Keys) {
+            Add-ZipTextEntry -Archive $archive -Name "$name" -Content "$($Entries[$name])"
+        }
+    } finally {
+        $archive.Dispose()
+        $fileStream.Dispose()
+    }
+    try {
+        return [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($tempPath))
+    } finally {
+        Remove-Item -LiteralPath $tempPath -ErrorAction SilentlyContinue
+    }
+}
+
 function New-DocxBase64 {
     param([string[]]$Paragraphs)
     Add-Type -AssemblyName System.IO.Compression
@@ -724,6 +746,16 @@ try {
     $invalidBase64Content = "not-base64-file-convert-invalid-secret-$suffix!"
     $encryptedPdfText = "%PDF-1.4`n1 0 obj`n<< /Encrypt 2 0 R /Title (file-convert-encrypted-pdf-secret-$suffix) >>`nendobj"
     $encryptedPdfContent = [Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($encryptedPdfText))
+    $activeDocxMacroMarker = "file-convert-docx-macro-secret-$suffix"
+    $activeDocxContent = New-ZipBase64 -Entries @{
+        "word/document.xml" = "<w:document><w:p><w:r><w:t>unsafe docx $activeDocxMacroMarker</w:t></w:r></w:p></w:document>"
+        "word/vbaProject.bin" = "macro bytes $activeDocxMacroMarker"
+    }
+    $activePptxMacroMarker = "file-convert-pptx-macro-secret-$suffix"
+    $activePptxContent = New-ZipBase64 -Entries @{
+        "ppt/slides/slide1.xml" = "<p:sld xmlns:p=`"http://schemas.openxmlformats.org/presentationml/2006/main`" xmlns:a=`"http://schemas.openxmlformats.org/drawingml/2006/main`"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>unsafe pptx $activePptxMacroMarker</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"
+        "ppt/vbaProject.bin" = "macro bytes $activePptxMacroMarker"
+    }
     $fileConvertFailureCases = @(
         @{
             Name = "unsupported-conversion"
@@ -831,6 +863,60 @@ try {
                 '"contentLength":'
             )
             Forbidden = @($encryptedPdfContent, $encryptedPdfText, "file-convert-encrypted-pdf-secret-$suffix", "/Encrypt")
+        },
+        @{
+            Name = "docx-active-content"
+            StepId = "sandbox-file-convert-docx-active-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-docx-active-fail-call-$suffix"
+            ExpectedError = "docx active content is not supported"
+            Arguments = @{
+                sourceFormat = "docx"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $activeDocxContent
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"docx"',
+                '"sourceFormatPresent":true',
+                '"targetFormat":"txt"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"base64"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":true',
+                '"networkRequested":false',
+                '"argumentCount":4',
+                '"contentLength":'
+            )
+            Forbidden = @($activeDocxContent, $activeDocxMacroMarker, "vbaProject.bin", "unsafe docx")
+        },
+        @{
+            Name = "pptx-active-content"
+            StepId = "sandbox-file-convert-pptx-active-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-pptx-active-fail-call-$suffix"
+            ExpectedError = "pptx active content is not supported"
+            Arguments = @{
+                sourceFormat = "pptx"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $activePptxContent
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"pptx"',
+                '"sourceFormatPresent":true',
+                '"targetFormat":"txt"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"base64"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":true',
+                '"networkRequested":false',
+                '"argumentCount":4',
+                '"contentLength":'
+            )
+            Forbidden = @($activePptxContent, $activePptxMacroMarker, "vbaProject.bin", "unsafe pptx")
         }
     )
 
