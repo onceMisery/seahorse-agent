@@ -10,6 +10,7 @@ $failed = 0
 $total = 0
 $createdModelConfigKey = $null
 $createdPipelineId = $null
+$createdKnowledgeBaseId = $null
 
 function Test-Step {
     param([string]$Name, [scriptblock]$Action)
@@ -79,6 +80,43 @@ function Invoke-Api {
     return $content | ConvertFrom-Json
 }
 
+function Invoke-MultipartFile {
+    param(
+        [string]$Path,
+        [string]$FilePath,
+        [hashtable]$Headers = @{},
+        [hashtable]$FormFields = @{}
+    )
+
+    $args = @("-sS", "-w", "`n%{http_code}", "-X", "POST", "$BaseUrl$Path", "-F", "file=@$FilePath")
+    foreach ($key in $FormFields.Keys) {
+        $args += @("-F", "${key}=$($FormFields[$key])")
+    }
+    foreach ($key in $Headers.Keys) {
+        $args += @("-H", "${key}: $($Headers[$key])")
+    }
+
+    $raw = & curl.exe @args
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "curl exited with $exitCode for multipart POST $Path"
+    }
+
+    $lines = @($raw)
+    if ($lines.Count -eq 0) {
+        throw "empty curl output for multipart POST $Path"
+    }
+    $status = [int]$lines[-1]
+    $content = if ($lines.Count -gt 1) { ($lines[0..($lines.Count - 2)] -join "`n") } else { "" }
+    if ($status -ne 200) {
+        throw "Expected HTTP 200 but got $status for multipart POST $Path body=$content"
+    }
+    if ([string]::IsNullOrWhiteSpace($content)) {
+        return $null
+    }
+    return $content | ConvertFrom-Json
+}
+
 function Assert-ApiOk {
     param([object]$Response, [string]$Name)
     if ($null -eq $Response -or "$($Response.code)" -ne "0") {
@@ -140,6 +178,29 @@ function First-Record {
     $records = @($Response.data.records)
     Assert-True ($records.Count -gt 0) "$Name returned no records"
     return $records[0]
+}
+
+function Wait-ForKnowledgeChunks {
+    param(
+        [string]$DocumentId,
+        [hashtable]$Headers,
+        [int]$Attempts = 30,
+        [int]$DelaySeconds = 2
+    )
+
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        $response = Invoke-Api -Method GET -Path "/knowledge-base/docs/$DocumentId/chunks?current=1&size=10" -Headers $Headers
+        Assert-ApiOk $response "Knowledge document chunks"
+        $records = @($response.data.records)
+        if ($records.Count -gt 0) {
+            return $records
+        }
+        if ($attempt -lt $Attempts) {
+            Start-Sleep -Seconds $DelaySeconds
+        }
+    }
+
+    throw "document $DocumentId did not produce chunks after $Attempts attempts"
 }
 
 $login = Test-Step "Login" {
@@ -303,6 +364,117 @@ Test-Step "Model Config GateResult API projects real config" {
         -Name "Model Config GateResult"
 }
 
+$ragComparison = Test-Step "Create real RAG strategy comparison for GateResult" {
+    $kb = Invoke-Api -Method POST -Path "/knowledge-base" -Headers $headers -Body @{
+        name = "$marker-rag-gate"
+        embeddingModel = "nomic-embed-text"
+        collectionName = "gate$($suffix.ToString().Substring([Math]::Max(0, $suffix.ToString().Length - 12)))"
+    }
+    Assert-ApiOk $kb "Create RAG GateResult knowledge base"
+    Assert-True (-not [string]::IsNullOrWhiteSpace([string]$kb.data)) "Create knowledge base did not return id"
+    $script:createdKnowledgeBaseId = [string]$kb.data
+
+    $docFile = New-TemporaryFile
+    Set-Content -LiteralPath $docFile.FullName -Encoding UTF8 -Value @"
+# Seahorse RAG GateResult $marker
+
+Seahorse Agent uses nomic-embed-text for local embedding with dimension 768.
+The retrieval pipeline includes vector search, keyword retrieval, RRF fusion, and rerank.
+Production gates use retrieval evaluation, trace evidence, audit events, and cost checks.
+"@
+    try {
+        $upload = Invoke-MultipartFile `
+            -Path "/knowledge-base/$script:createdKnowledgeBaseId/docs/upload" `
+            -FilePath $docFile.FullName `
+            -Headers $headers `
+            -FormFields @{ chunkSize = "256"; chunkOverlap = "32" }
+        Assert-ApiOk $upload "Upload RAG GateResult document"
+        $docId = [string]$upload.data.id
+        Assert-True (-not [string]::IsNullOrWhiteSpace($docId)) "Upload did not return document id"
+
+        $chunkStart = Invoke-Api -Method POST -Path "/knowledge-base/docs/$docId/chunk" -Headers $headers
+        Assert-ApiOk $chunkStart "Chunk RAG GateResult document"
+        $chunks = @(Wait-ForKnowledgeChunks -DocumentId $docId -Headers $headers)
+        $chunkIds = @($chunks | Select-Object -First 3 | ForEach-Object { [string]$_.id })
+        Assert-True ($chunkIds.Count -gt 0) "RAG GateResult document produced no chunk ids"
+
+        $dataset = Invoke-Api -Method POST -Path "/knowledge-base/$script:createdKnowledgeBaseId/retrieval-evaluation-datasets" -Headers $headers -Body @{
+            datasetId = ""
+            name = "$marker-rag-dataset"
+            description = "Codex real RAG Strategy GateResult smoke dataset"
+            enabled = $true
+            cases = @(
+                @{
+                    caseId = "$marker-case-1"
+                    question = "What embedding model and dimension does Seahorse use?"
+                    expectedKbIds = @($script:createdKnowledgeBaseId)
+                    expectedDocIds = @($docId)
+                    expectedChunkIds = $chunkIds
+                    negativeChunkIds = @()
+                    tags = @("gate-result", "embedding")
+                    minRecall = 0.5
+                },
+                @{
+                    caseId = "$marker-case-2"
+                    question = "What evidence is used for production gates?"
+                    expectedKbIds = @($script:createdKnowledgeBaseId)
+                    expectedDocIds = @($docId)
+                    expectedChunkIds = $chunkIds
+                    negativeChunkIds = @()
+                    tags = @("gate-result", "production-gate")
+                    minRecall = 0.5
+                }
+            )
+        }
+        Assert-ApiOk $dataset "Create RAG GateResult dataset"
+        $datasetId = [string]$dataset.data.datasetId
+        Assert-True (-not [string]::IsNullOrWhiteSpace($datasetId)) "Dataset create did not return datasetId"
+
+        $comparison = Invoke-Api -Method POST -Path "/knowledge-base/$script:createdKnowledgeBaseId/retrieval-evaluation-datasets/$datasetId/compare" -Headers $headers -Body @{
+            baselineStrategyName = "vector_only"
+            topK = 5
+            strategies = @(
+                @{ strategyName = "vector_only"; topK = 5; options = @{} },
+                @{ strategyName = "hybrid_rrf"; topK = 5; options = @{} }
+            )
+        }
+        Assert-ApiOk $comparison "Create RAG GateResult comparison"
+        Assert-True (-not [string]::IsNullOrWhiteSpace([string]$comparison.data.winnerStrategyName)) "Comparison did not return winnerStrategyName"
+
+        $comparisons = Invoke-Api -Method GET -Path "/knowledge-base/$script:createdKnowledgeBaseId/retrieval-evaluation-datasets/$datasetId/comparisons?limit=10" -Headers $headers
+        Assert-ApiOk $comparisons "List RAG GateResult comparisons"
+        $saved = @($comparisons.data | Where-Object {
+                [string]$_.datasetId -eq $datasetId -and
+                [string]$_.winnerStrategyName -eq [string]$comparison.data.winnerStrategyName
+            })[0]
+        Assert-True ($null -ne $saved) "Saved RAG comparison was not returned"
+        Assert-True (-not [string]::IsNullOrWhiteSpace([string]$saved.comparisonId)) "Saved comparison did not include comparisonId"
+        [PSCustomObject]@{
+            kbId = $script:createdKnowledgeBaseId
+            docId = $docId
+            datasetId = $datasetId
+            comparisonId = [string]$saved.comparisonId
+            winner = [string]$saved.winnerStrategyName
+        }
+    } finally {
+        Remove-Item -LiteralPath $docFile.FullName -ErrorAction SilentlyContinue
+    }
+}
+if (-not $ragComparison) { exit 1 }
+
+$ragGateResult = Test-Step "RAG Strategy GateResult API projects real comparison evidence" {
+    $response = Invoke-Api `
+        -Method GET `
+        -Path "/knowledge-base/$($ragComparison.kbId)/retrieval-evaluation-datasets/$($ragComparison.datasetId)/comparisons/$($ragComparison.comparisonId)/gate-result" `
+        -Headers $headers
+    Assert-GateResult `
+        -Response $response `
+        -SubjectType "RAG_STRATEGY" `
+        -SubjectIdPattern "^$([regex]::Escape([string]$ragComparison.kbId)):" `
+        -ExpectedItemCodes @("RAG_BASELINE_PRESENT", "RAG_WINNER_PRESENT", "RAG_EVALUABLE_CASES_PRESENT", "RAG_RECALL_NOT_REGRESSED", "RAG_PRECISION_NOT_REGRESSED") `
+        -Name "RAG Strategy GateResult"
+}
+
 Test-Step "Cleanup temporary model config" {
     if ([string]::IsNullOrWhiteSpace($script:createdModelConfigKey)) {
         return
@@ -320,6 +492,14 @@ Test-Step "Cleanup temporary ingestion pipeline" {
     Assert-ApiOk $response "Delete ingestion pipeline"
 }
 
+Test-Step "Cleanup temporary RAG knowledge base" {
+    if ([string]::IsNullOrWhiteSpace($script:createdKnowledgeBaseId)) {
+        return
+    }
+    $response = Invoke-Api -Method DELETE -Path "/knowledge-base/$script:createdKnowledgeBaseId" -Headers $headers
+    Assert-ApiOk $response "Delete knowledge base"
+}
+
 Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
 Write-Host "Marker: $marker"
 Write-Host "Tool: $($tool.toolId)"
@@ -327,6 +507,7 @@ Write-Host "Skill: $($skill.name)"
 Write-Host "Run profile: $($runProfile.id)"
 Write-Host "Agent: $($agent.agentId)"
 Write-Host "Pipeline: $($pipeline.id)"
+Write-Host "RAG comparison: $($ragComparison.comparisonId)"
 
 if ($failed -gt 0) {
     exit 1
