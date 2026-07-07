@@ -200,6 +200,32 @@ function Invoke-SandboxBrowserTool {
     return $retry
 }
 
+function Invoke-ExpectedSandboxBrowserUrlFailure {
+    param(
+        [hashtable]$Headers,
+        [hashtable]$Body,
+        [string]$Name,
+        [string]$ExpectedMessage,
+        [string[]]$ForbiddenValues = @()
+    )
+
+    $response = Invoke-SandboxBrowserTool -Headers $Headers -Body $Body -Name $Name
+    Assert-ApiOk $response $Name
+    if ($response.data.success -eq $true) {
+        throw "$Name unexpectedly succeeded: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+    }
+    $payload = "$($response.data | ConvertTo-Json -Depth 20 -Compress)"
+    if ($payload -notlike "*$ExpectedMessage*") {
+        throw "$Name did not include expected failure '$ExpectedMessage': $payload"
+    }
+    foreach ($forbidden in @($ForbiddenValues)) {
+        if (-not [string]::IsNullOrWhiteSpace("$forbidden") -and $payload -like "*$forbidden*") {
+            throw "$Name leaked forbidden URL value '$forbidden': $payload"
+        }
+    }
+    return $response
+}
+
 function Wait-ForHealth {
     param([int]$Attempts = 90)
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
@@ -680,6 +706,66 @@ try {
     }
     if (-not $profileNetworkEnabled) { exit 1 }
 
+    $urlFailureCases = @(
+        @{
+            Name = "userinfo"
+            StepId = "sandbox-browser-url-userinfo-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-url-userinfo-fail-call-$suffix"
+            Url = "http://alice:super-secret-userinfo-${suffix}@${ExternalHost}:$ExternalPort/index.html"
+            ExpectedMessage = "must not include userinfo credentials"
+            ForbiddenValues = @("alice:super-secret-userinfo-${suffix}", "super-secret-userinfo-${suffix}")
+        },
+        @{
+            Name = "fragment"
+            StepId = "sandbox-browser-url-fragment-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-url-fragment-fail-call-$suffix"
+            Url = "${externalUrl}#access_token=fragment-secret-${suffix}"
+            ExpectedMessage = "must not include fragment identifiers"
+            ForbiddenValues = @("access_token=fragment-secret-${suffix}", "fragment-secret-${suffix}")
+        },
+        @{
+            Name = "credential-query"
+            StepId = "sandbox-browser-url-query-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-url-query-fail-call-$suffix"
+            Url = "http://${ExternalHost}:$ExternalPort/index.html?access_token=query-secret-${suffix}"
+            ExpectedMessage = "url query must not include credential parameters"
+            ForbiddenValues = @("access_token=query-secret-${suffix}", "query-secret-${suffix}")
+        }
+    )
+
+    Test-Step "Verify sandbox_browser URL secret inputs fail closed" {
+        foreach ($case in @($urlFailureCases)) {
+            $body = @{
+                runId = $runId
+                stepId = "$($case.StepId)"
+                toolCallId = "$($case.ToolCallId)"
+                agentId = "legacy-react-agent"
+                tenantId = "default"
+                userId = "$($login.data.userId)"
+                agentIdentityId = "$($login.data.userId)"
+                arguments = @{
+                    action = "snapshot"
+                    url = "$($case.Url)"
+                    allowedHosts = @($ExternalHost)
+                    viewportWidth = 1024
+                    viewportHeight = 640
+                    screenshot = $false
+                    har = $false
+                    video = $false
+                }
+                resourceRefs = @{}
+                idempotencyKey = "${runId}:$($case.ToolCallId)"
+                allowedToolIds = @("sandbox_browser")
+            }
+            Invoke-ExpectedSandboxBrowserUrlFailure `
+                -Headers $headers `
+                -Body $body `
+                -Name "Invoke sandbox_browser URL $($case.Name) fail-closed" `
+                -ExpectedMessage "$($case.ExpectedMessage)" `
+                -ForbiddenValues @($case.ForbiddenValues) | Out-Null
+        }
+    } | Out-Null
+
     $urlObservation = Test-Step "Invoke sandbox_browser URL mode through Tool Gateway" {
         $urlToolCallId = "sandbox-browser-url-call-$suffix"
         $body = @{
@@ -1140,6 +1226,7 @@ try {
         $expectedSteps = @(
             @{
                 StepId = "sandbox-browser-step-$suffix"
+                Status = "SUCCEEDED"
                 Required = @(
                     '"toolId":"sandbox_browser"',
                     '"mode":"inline"',
@@ -1151,6 +1238,7 @@ try {
             },
             @{
                 StepId = "sandbox-browser-url-step-$suffix"
+                Status = "SUCCEEDED"
                 Required = @(
                     '"toolId":"sandbox_browser"',
                     '"mode":"url"',
@@ -1163,6 +1251,7 @@ try {
             },
             @{
                 StepId = "sandbox-browser-replay-step-$suffix"
+                Status = "SUCCEEDED"
                 Required = @(
                     '"toolId":"sandbox_browser"',
                     '"mode":"url"',
@@ -1176,6 +1265,7 @@ try {
             },
             @{
                 StepId = "sandbox-browser-artifact-replay-step-$suffix"
+                Status = "SUCCEEDED"
                 Required = @(
                     '"toolId":"sandbox_browser"',
                     '"mode":"url"',
@@ -1186,12 +1276,28 @@ try {
                 )
             }
         )
+        foreach ($case in @($urlFailureCases)) {
+            $expectedSteps += @{
+                StepId = "$($case.StepId)"
+                Status = "FAILED"
+                Required = @(
+                    '"toolId":"sandbox_browser"',
+                    '"mode":"url"',
+                    '"networkRequested":true',
+                    '"allowedHostCount":1',
+                    '"cookieCount":0',
+                    '"captureSessionState":false'
+                )
+                Forbidden = @($case.ForbiddenValues)
+            }
+        }
         foreach ($expected in $expectedSteps) {
             $audit = @($records | Where-Object { "$($_.stepId)" -eq "$($expected.StepId)" -and "$($_.toolId)" -eq "sandbox_browser" }) | Select-Object -First 1
             if (-not $audit) {
                 throw "sandbox_browser audit record not found for step $($expected.StepId): $($response.data | ConvertTo-Json -Depth 20 -Compress)"
             }
-            if ("$($audit.status)" -ne "SUCCEEDED") {
+            $expectedStatus = if ($expected.Status) { "$($expected.Status)" } else { "SUCCEEDED" }
+            if ("$($audit.status)" -ne $expectedStatus) {
                 throw "sandbox_browser audit status mismatch for step $($expected.StepId): $($audit | ConvertTo-Json -Depth 20 -Compress)"
             }
             $summary = "$($audit.argumentsSummary)"
@@ -1200,16 +1306,17 @@ try {
                     throw "sandbox_browser audit summary for step $($expected.StepId) did not include $required`: $summary"
                 }
             }
-            foreach ($forbidden in @(
-                    $Marker,
-                    $externalUrl,
-                    $assetUrl,
-                    $externalCookieName,
-                    $externalCookieValue,
-                    $externalStorageValue,
-                    $externalAuthMarker,
-                    $script:urlSessionStateArtifactId
-                )) {
+            $forbiddenValues = @(
+                $Marker,
+                $externalUrl,
+                $assetUrl,
+                $externalCookieName,
+                $externalCookieValue,
+                $externalStorageValue,
+                $externalAuthMarker,
+                $script:urlSessionStateArtifactId
+            ) + @($expected.Forbidden)
+            foreach ($forbidden in $forbiddenValues) {
                 if (-not [string]::IsNullOrWhiteSpace("$forbidden") -and $summary -like "*$forbidden*") {
                     throw "sandbox_browser audit summary leaked raw browser/session value '$forbidden': $summary"
                 }
