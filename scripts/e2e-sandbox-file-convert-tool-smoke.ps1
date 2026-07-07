@@ -721,6 +721,9 @@ try {
 
     $unsupportedContent = "<root>file-convert-unsupported-secret-$suffix</root>"
     $plainPdfContent = "%PDF-1.4 file-convert-pdf-plain-secret-$suffix"
+    $invalidBase64Content = "not-base64-file-convert-invalid-secret-$suffix!"
+    $encryptedPdfText = "%PDF-1.4`n1 0 obj`n<< /Encrypt 2 0 R /Title (file-convert-encrypted-pdf-secret-$suffix) >>`nendobj"
+    $encryptedPdfContent = [Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($encryptedPdfText))
     $fileConvertFailureCases = @(
         @{
             Name = "unsupported-conversion"
@@ -774,10 +777,64 @@ try {
                 '"contentLength":'
             )
             Forbidden = @($plainPdfContent, "file-convert-pdf-plain-secret-$suffix", "%PDF-1.4")
+        },
+        @{
+            Name = "invalid-base64"
+            StepId = "sandbox-file-convert-invalid-base64-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-invalid-base64-fail-call-$suffix"
+            ExpectedError = "file conversion content is not valid base64"
+            Arguments = @{
+                sourceFormat = "pdf"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $invalidBase64Content
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"pdf"',
+                '"sourceFormatPresent":true',
+                '"targetFormat":"txt"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"base64"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":true',
+                '"networkRequested":false',
+                '"argumentCount":4',
+                '"contentLength":'
+            )
+            Forbidden = @($invalidBase64Content, "file-convert-invalid-secret-$suffix")
+        },
+        @{
+            Name = "encrypted-pdf"
+            StepId = "sandbox-file-convert-encrypted-pdf-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-encrypted-pdf-fail-call-$suffix"
+            ExpectedError = "encrypted pdf is not supported"
+            Arguments = @{
+                sourceFormat = "pdf"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $encryptedPdfContent
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"pdf"',
+                '"sourceFormatPresent":true',
+                '"targetFormat":"txt"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"base64"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":true',
+                '"networkRequested":false',
+                '"argumentCount":4',
+                '"contentLength":'
+            )
+            Forbidden = @($encryptedPdfContent, $encryptedPdfText, "file-convert-encrypted-pdf-secret-$suffix", "/Encrypt")
         }
     )
 
-    Test-Step "Verify sandbox_file_convert preflight inputs fail closed" {
+    Test-Step "Verify sandbox_file_convert invalid inputs fail closed" {
         foreach ($case in @($fileConvertFailureCases)) {
             $requestBody = @{
                 runId = $runId
