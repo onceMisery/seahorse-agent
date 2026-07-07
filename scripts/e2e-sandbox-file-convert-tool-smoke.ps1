@@ -770,6 +770,11 @@ try {
         "ppt/slides/slide1.xml" = "<p:sld xmlns:p=`"http://schemas.openxmlformats.org/presentationml/2006/main`" xmlns:a=`"http://schemas.openxmlformats.org/drawingml/2006/main`"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>unsafe pptx $activePptxMacroMarker</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"
         "ppt/vbaProject.bin" = "macro bytes $activePptxMacroMarker"
     }
+    $activeXlsxMacroMarker = "file-convert-xlsx-macro-secret-$suffix"
+    $activeXlsxContent = New-ZipBase64 -Entries @{
+        "xl/worksheets/sheet1.xml" = "<worksheet xmlns=`"http://schemas.openxmlformats.org/spreadsheetml/2006/main`"><sheetData><row><c t=`"inlineStr`"><is><t>unsafe xlsx $activeXlsxMacroMarker</t></is></c></row></sheetData></worksheet>"
+        "xl/vbaProject.bin" = "macro bytes $activeXlsxMacroMarker"
+    }
     $activeOdtMacroMarker = "file-convert-odt-macro-secret-$suffix"
     $activeOdtContent = New-ZipBase64 -Entries @{
         "content.xml" = "<office:document-content xmlns:office=`"urn:oasis:names:tc:opendocument:xmlns:office:1.0`" xmlns:text=`"urn:oasis:names:tc:opendocument:xmlns:text:1.0`"><office:body><office:text><text:p>unsafe odt $activeOdtMacroMarker</text:p></office:text></office:body></office:document-content>"
@@ -946,6 +951,33 @@ try {
                 '"contentLength":'
             )
             Forbidden = @($activePptxContent, $activePptxMacroMarker, "vbaProject.bin", "unsafe pptx")
+        },
+        @{
+            Name = "xlsx-active-content"
+            StepId = "sandbox-file-convert-xlsx-active-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-xlsx-active-fail-call-$suffix"
+            ExpectedError = "xlsx active content is not supported"
+            Arguments = @{
+                sourceFormat = "xlsx"
+                targetFormat = "csv"
+                contentEncoding = "base64"
+                content = $activeXlsxContent
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"xlsx"',
+                '"sourceFormatPresent":true',
+                '"targetFormat":"csv"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"base64"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":true',
+                '"networkRequested":false',
+                '"argumentCount":4',
+                '"contentLength":'
+            )
+            Forbidden = @($activeXlsxContent, $activeXlsxMacroMarker, "vbaProject.bin", "unsafe xlsx")
         },
         @{
             Name = "odt-active-content"
