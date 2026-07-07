@@ -220,6 +220,7 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
 
         appendExecutiveSummary(report, trials, outputMessages);
         appendEvidenceCompletenessSummary(report, trials, snapshots, outputMessages);
+        appendTrialActionChecklist(report, trials, snapshots, outputMessages);
         appendCostSummary(report, trials, snapshots);
         appendTraceSummary(report, trials, snapshots);
         appendEvidenceIndex(report, trials, snapshots, outputMessages);
@@ -295,6 +296,81 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                 .append(" | ")
                 .append(total)
                 .append(" |\n");
+    }
+
+    private void appendTrialActionChecklist(
+            StringBuilder report,
+            List<RunExperimentTrialRecord> trials,
+            Map<String, RunContextSnapshotRecord> snapshots,
+            Map<Long, ConversationMessageRecord> outputMessages) {
+        List<RunExperimentTrialRecord> safeTrials =
+                Objects.requireNonNullElse(trials, List.<RunExperimentTrialRecord>of());
+        String recommended = recommendedTrial(safeTrials);
+        long failed = failedTrials(safeTrials).size();
+        boolean evidenceComplete = !safeTrials.isEmpty() && safeTrials.stream()
+                .allMatch(trial -> outputMessage(outputMessages, trial.getOutputMessageId()) != null
+                        && scoreValue(trial).isPresent()
+                        && !"not recorded".equals(traceEvidence(trial, snapshotFor(snapshots, trial)))
+                        && !"not recorded".equals(costEvidence(trial, snapshotFor(snapshots, trial)))
+                        && !"not resolved".equals(branchEvidence(
+                                outputMessage(outputMessages, trial.getOutputMessageId()))));
+
+        report.append("## Trial Action Checklist\n\n");
+        report.append("- Recommended trial: ").append(markdownText(recommended)).append("\n");
+        report.append("- Evidence complete: ").append(evidenceComplete ? "yes" : "no").append("\n");
+        report.append("- Failed trials: ").append(failed).append("\n\n");
+        report.append("| Trial | Status | Next action |\n");
+        report.append("|---|---|---|\n");
+        if (safeTrials.isEmpty()) {
+            report.append("| - | - | create trials before release review |\n\n");
+            return;
+        }
+        for (RunExperimentTrialRecord trial : safeTrials) {
+            report.append("| ")
+                    .append(tableCell(trial.getId()))
+                    .append(" | ")
+                    .append(tableCell(trial.getStatus()))
+                    .append(" | ")
+                    .append(tableCell(trialAction(trial, snapshots, outputMessages, recommended)))
+                    .append(" |\n");
+        }
+        report.append("\n");
+    }
+
+    private String trialAction(
+            RunExperimentTrialRecord trial,
+            Map<String, RunContextSnapshotRecord> snapshots,
+            Map<Long, ConversationMessageRecord> outputMessages,
+            String recommended) {
+        if (trial == null) {
+            return "inspect trial record";
+        }
+        if (STATUS_FAILED.equalsIgnoreCase(trial.getStatus())
+                || (trial.getErrorMessage() != null && !trial.getErrorMessage().isBlank())) {
+            return "inspect failure reason: " + failureExplanation(trial);
+        }
+        ConversationMessageRecord outputMessage = outputMessage(outputMessages, trial.getOutputMessageId());
+        if (outputMessage == null) {
+            return "resolve output evidence";
+        }
+        if (scoreValue(trial).isEmpty()) {
+            return "score trial";
+        }
+        RunContextSnapshotRecord snapshot = snapshotFor(snapshots, trial);
+        if ("not recorded".equals(traceEvidence(trial, snapshot))) {
+            return "resolve trace evidence";
+        }
+        if ("not recorded".equals(costEvidence(trial, snapshot))) {
+            return "resolve cost evidence";
+        }
+        if ("not resolved".equals(branchEvidence(outputMessage))) {
+            return "resolve branch evidence";
+        }
+        String recommendedPrefix = "trial " + valueOrDash(trial.getId()) + " ";
+        if (recommended != null && recommended.startsWith(recommendedPrefix)) {
+            return "fork recommended trial";
+        }
+        return "review scored trial";
     }
 
     private void appendScoreLeaderboard(StringBuilder report, List<RunExperimentTrialRecord> trials) {

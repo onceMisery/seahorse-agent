@@ -281,6 +281,12 @@ class KernelRunExperimentServiceTests {
         assertTrue(report.markdown().contains("| Cost evidence | 1 | 2 |"));
         assertTrue(report.markdown().contains("| Message branches | 1 | 2 |"));
         assertTrue(report.markdown().contains("| Failure reasons | 1 | 1 |"));
+        assertTrue(report.markdown().contains("## Trial Action Checklist"));
+        assertTrue(report.markdown().contains("- Evidence complete: no"));
+        assertTrue(report.markdown().contains("- Failed trials: 1"));
+        assertTrue(report.markdown().contains("| Trial | Status | Next action |"));
+        assertTrue(report.markdown().contains("| 10 | SUCCEEDED | fork recommended trial |"));
+        assertTrue(report.markdown().contains("| 11 | FAILED | inspect failure reason: AgentScope timeout |"));
         assertTrue(report.markdown().contains("### Score Leaderboard"));
         assertTrue(report.markdown().contains("| Rank | Trial | Run Profile | Score | Status | Score Evidence |"));
         assertTrue(report.markdown().contains("| 1 | 10 | 12 | 4 | SUCCEEDED | verdict=smoke-pass |"));
@@ -340,6 +346,8 @@ class KernelRunExperimentServiceTests {
         assertTrue(report.markdown().contains("- Failed: 1"));
         assertTrue(report.markdown().contains("## Evidence Completeness Summary"));
         assertTrue(report.markdown().contains("| Failure reasons | 1 | 1 |"));
+        assertTrue(report.markdown().contains("## Trial Action Checklist"));
+        assertTrue(report.markdown().contains("| 10 | FAILED | inspect failure reason: FAILED - no failure message recorded |"));
         assertTrue(report.markdown().contains("## Failure Reason Summary"));
         assertTrue(report.markdown().contains("| FAILED - no failure message recorded | 1 | 10 |"));
         assertTrue(report.markdown().contains("Trial 10: FAILED - no failure message recorded"));
@@ -376,6 +384,9 @@ class KernelRunExperimentServiceTests {
         assertTrue(report.markdown().contains("## Evidence Completeness Summary"));
         assertTrue(report.markdown().contains("| Output messages | 0 | 1 |"));
         assertTrue(report.markdown().contains("| Failure reasons | 1 | 1 |"));
+        assertTrue(report.markdown().contains("## Trial Action Checklist"));
+        assertTrue(report.markdown().contains("- Evidence complete: no"));
+        assertTrue(report.markdown().contains("| 10 | FAILED | inspect failure reason: base leaf message not found |"));
         assertTrue(report.markdown().contains("## Failure Reason Summary"));
         assertTrue(report.markdown().contains("| base leaf message not found | 1 | 10 |"));
         assertTrue(report.markdown().contains("Trial 10: base leaf message not found"));
