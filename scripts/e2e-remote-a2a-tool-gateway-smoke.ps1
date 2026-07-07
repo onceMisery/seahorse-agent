@@ -14,6 +14,10 @@ param(
     [string]$PostgresUsername = "seahorse",
     [string]$PostgresPassword = "seahorse",
     [string]$BackendJarPath = "",
+    [ValidateSet("shared-secret", "tenant-signed")]
+    [string]$AuthMode = "shared-secret",
+    [string]$AuthHeaderName = "X-Seahorse-A2A-Token",
+    [string]$SharedSecret = "seahorse-local-a2a-token",
     [switch]$KeepContainer
 )
 
@@ -234,9 +238,9 @@ function BackendRunArgs {
         "-e", "SEAHORSE_AGENTSCOPE_A2A_HOST=${ContainerName}",
         "-e", "SEAHORSE_AGENTSCOPE_A2A_PORT=9090",
         "-e", "SEAHORSE_AGENTSCOPE_A2A_PATH=/a2a",
-        "-e", "SEAHORSE_AGENTSCOPE_A2A_AUTH_MODE=shared-secret",
-        "-e", "SEAHORSE_AGENTSCOPE_A2A_AUTH_HEADER_NAME=X-Seahorse-A2A-Token",
-        "-e", "SEAHORSE_AGENTSCOPE_A2A_SHARED_SECRET=seahorse-local-a2a-token",
+        "-e", "SEAHORSE_AGENTSCOPE_A2A_AUTH_MODE=$AuthMode",
+        "-e", "SEAHORSE_AGENTSCOPE_A2A_AUTH_HEADER_NAME=$AuthHeaderName",
+        "-e", "SEAHORSE_AGENTSCOPE_A2A_SHARED_SECRET=$SharedSecret",
         $BackendImage
     )
     if (Test-Path -LiteralPath $BackendJarPath) {
@@ -315,6 +319,10 @@ try {
         $card = Wait-ForA2aCard -Url "$RemoteBaseUrl/a2a"
         if ("$($card.name)" -ne "default/$RemoteAgentName") {
             throw "Remote A2A card name mismatch: $($card | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $cardText = $card | ConvertTo-Json -Depth 20 -Compress
+        if (-not $cardText.Contains("seahorse:a2a:authMode=$AuthMode")) {
+            throw "Remote A2A card did not expose authMode=$AuthMode`: $cardText"
         }
     } | Out-Null
 
@@ -537,6 +545,7 @@ try {
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Host "Smoke backend: $BaseUrl"
     Write-Host "Remote backend: $RemoteBaseUrl"
+    Write-Host "A2A auth mode: $AuthMode"
     Write-Host "Remote A2A tool: invoke_remote_a2a_agent"
 } catch {
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
