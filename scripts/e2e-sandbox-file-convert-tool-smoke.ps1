@@ -436,6 +436,37 @@ function New-OdsBase64 {
     }
 }
 
+function New-OdpBase64 {
+    param([string[]]$Paragraphs)
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $tempPath = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "seahorse-odp-$([guid]::NewGuid().ToString('N')).odp")
+    $fileStream = [System.IO.File]::Open($tempPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite)
+    $archive = [System.IO.Compression.ZipArchive]::new($fileStream, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        Add-ZipTextEntry -Archive $archive -Name "mimetype" -Content "application/vnd.oasis.opendocument.presentation"
+        $slides = ($Paragraphs | ForEach-Object {
+                $escaped = [System.Security.SecurityElement]::Escape($_)
+                "<draw:page draw:name=`"slide-$([guid]::NewGuid().ToString('N'))`"><draw:frame><draw:text-box><text:p>$escaped</text:p></draw:text-box></draw:frame></draw:page>"
+            }) -join ""
+        $contentXml = @"
+<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body><office:presentation>$slides</office:presentation></office:body>
+</office:document-content>
+"@
+        Add-ZipTextEntry -Archive $archive -Name "content.xml" -Content $contentXml
+    } finally {
+        $archive.Dispose()
+        $fileStream.Dispose()
+    }
+    try {
+        return [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($tempPath))
+    } finally {
+        Remove-Item -LiteralPath $tempPath -ErrorAction SilentlyContinue
+    }
+}
+
 function New-XlsxBase64 {
     param(
         [string]$Marker,
@@ -1288,6 +1319,164 @@ try {
             & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
             if ($LASTEXITCODE -ne 0) {
                 throw "Stored ODT to HTML object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
+    $odpRunId = $runId
+    $odpToolCallId = "sandbox-file-convert-odp-txt-call-$suffix"
+    $odpContent = New-OdpBase64 -Paragraphs @(
+        "Sandbox ODP $Marker",
+        "ODP conversion extracts slide text"
+    )
+
+    $odpObservation = Test-Step "Invoke sandbox_file_convert ODP to TXT through Tool Gateway" {
+        $requestBody = @{
+            runId = $odpRunId
+            stepId = "sandbox-file-convert-odp-txt-step-$suffix"
+            toolCallId = $odpToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "odp"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $odpContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${odpRunId}:${odpToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert ODP to TXT"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert ODP to TXT failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION" -or "$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected succeeded FILE_CONVERSION ODP to TXT execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "odp" -or "$($parsed.conversion.targetFormat)" -ne "txt" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected ODP to TXT conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1 -or "$($artifacts[0].mediaType)" -ne "text/plain" -or "$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected one clean ODP TXT artifact: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed" -or $artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible ODP TXT metadata-scanned artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $odpObservation) { exit 1 }
+
+    $odpArtifactId = "$(@($odpObservation.artifacts)[0].artifactId)"
+    $odpObjectUri = Test-Step "Verify persisted ODP to TXT session and artifact" {
+        Assert-PersistedFileConversionArtifact -ArtifactId $odpArtifactId -ExpectedMediaType "text/plain" -Label "ODP to TXT"
+    }
+    if (-not $odpObjectUri) { exit 1 }
+
+    Test-Step "Download converted ODP TXT through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$odpArtifactId/download" -Headers $headers
+        if ($content -notlike "*Sandbox ODP $Marker*" -or $content -notlike "*ODP conversion extracts slide text*") {
+            throw "Downloaded ODP TXT did not include expected slide text: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded ODP TXT artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($odpObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted ODP TXT object exists in backend storage volume" {
+            $key = $odpObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote ODP to TXT key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored ODP to TXT object not found or marker missing at $path"
+            }
+        } | Out-Null
+    }
+
+    $odpHtmlRunId = $runId
+    $odpHtmlToolCallId = "sandbox-file-convert-odp-html-call-$suffix"
+    $odpHtmlContent = New-OdpBase64 -Paragraphs @(
+        "Sandbox ODP HTML $Marker",
+        "ODP HTML conversion renders slide text"
+    )
+
+    $odpHtmlObservation = Test-Step "Invoke sandbox_file_convert ODP to HTML through Tool Gateway" {
+        $requestBody = @{
+            runId = $odpHtmlRunId
+            stepId = "sandbox-file-convert-odp-html-step-$suffix"
+            toolCallId = $odpHtmlToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = "odp"
+                targetFormat = "html"
+                contentEncoding = "base64"
+                content = $odpHtmlContent
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${odpHtmlRunId}:${odpHtmlToolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert ODP to HTML"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert ODP to HTML failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $content = "$($response.data.content)"
+        $parsed = $content | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION" -or "$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected succeeded FILE_CONVERSION ODP to HTML execution: $content"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne "odp" -or "$($parsed.conversion.targetFormat)" -ne "html" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected ODP to HTML conversion metadata: $content"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1 -or "$($artifacts[0].mediaType)" -ne "text/html" -or "$($artifacts[0].scanStatus)" -ne "CLEAN") {
+            throw "Expected one clean ODP HTML artifact: $content"
+        }
+        if ("$($artifacts[0].scanSummary)" -ne "metadata scan passed" -or $artifacts[0].promptVisible -ne $true) {
+            throw "Expected prompt-visible ODP HTML metadata-scanned artifact: $content"
+        }
+        $parsed
+    }
+    if (-not $odpHtmlObservation) { exit 1 }
+
+    $odpHtmlArtifactId = "$(@($odpHtmlObservation.artifacts)[0].artifactId)"
+    $odpHtmlObjectUri = Test-Step "Verify persisted ODP to HTML session and artifact" {
+        Assert-PersistedFileConversionArtifact -ArtifactId $odpHtmlArtifactId -ExpectedMediaType "text/html" -Label "ODP to HTML"
+    }
+    if (-not $odpHtmlObjectUri) { exit 1 }
+
+    Test-Step "Download converted ODP HTML through governed artifact endpoint" {
+        $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$odpHtmlArtifactId/download" -Headers $headers
+        if ($content -notlike "*<p>Sandbox ODP HTML $Marker</p>*" -or $content -notlike "*<p>ODP HTML conversion renders slide text</p>*") {
+            throw "Downloaded ODP HTML did not include expected paragraphs: $content"
+        }
+        if ($content -match "objectUri|object_uri|storageRef|file:|local://|s3://") {
+            throw "Downloaded ODP HTML artifact body leaked storage metadata: $content"
+        }
+    } | Out-Null
+
+    if ($odpHtmlObjectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted ODP HTML object exists in backend storage volume" {
+            $key = $odpHtmlObjectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'") -or $Marker.Contains("'")) {
+                throw "Cannot safely shell-quote ODP to HTML key or marker"
+            }
+            $path = "$StorageRoot/sandbox-artifacts/$key"
+            & docker exec $BackendContainer sh -lc "test -f '$path' && grep -F -q '$Marker' '$path'"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Stored ODP to HTML object not found or marker missing at $path"
             }
         } | Out-Null
     }

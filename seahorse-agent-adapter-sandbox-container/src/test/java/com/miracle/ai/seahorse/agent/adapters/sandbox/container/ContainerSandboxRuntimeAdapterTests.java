@@ -575,6 +575,119 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldRunOdpToTextFileConversionAndCollectTextOutputOnly() throws Exception {
+        byte[] odpBytes = odpBytes("safe odp title", "second odp slide text");
+        String odpBase64 = Base64.getEncoder().encodeToString(odpBytes);
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted odp presentation to text\n", Duration.ofMillis(190)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("odp_to_text",
+                                    "odp_paragraphs",
+                                    "source_format = \"odp\"",
+                                    "odp content.xml exceeds extraction budget",
+                                    "converted.txt")
+                            .doesNotContain(odpBase64);
+                    assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.odp")))
+                            .isEqualTo(odpBytes);
+                    Files.writeString(command.workingDirectory().resolve("converted.txt"),
+                            "safe odp title\nsecond odp slide text\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"odp","targetFormat":"txt","contentEncoding":"base64","content":"%s"}
+                        """.formatted(odpBase64),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted odp presentation to text");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.txt");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/plain");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.odp"));
+    }
+
+    @Test
+    void shouldRunOdpToHtmlFileConversionAndCollectHtmlOutputOnly() throws Exception {
+        byte[] odpBytes = odpBytes("safe odp html title", "second odp html slide text");
+        String odpBase64 = Base64.getEncoder().encodeToString(odpBytes);
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("converted odp presentation to html\n", Duration.ofMillis(190)),
+                command -> {
+                    assertThat(Files.readString(command.workingDirectory().resolve("main.py")))
+                            .contains("odp_to_html",
+                                    "odp_paragraphs",
+                                    "source_format = \"odp\"",
+                                    "target_format = \"html\"",
+                                    "converted.html")
+                            .doesNotContain(odpBase64);
+                    assertThat(Files.readAllBytes(command.workingDirectory().resolve("input.odp")))
+                            .isEqualTo(odpBytes);
+                    Files.writeString(command.workingDirectory().resolve("converted.html"),
+                            "<!doctype html>\n<html><body><p>safe odp html title</p><p>second odp html slide text</p></body></html>\n");
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"odp","targetFormat":"html","contentEncoding":"base64","content":"%s"}
+                        """.formatted(odpBase64),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.execution().resultSummary()).contains("converted odp presentation to html");
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(result.artifacts().getFirst().objectUri()).contains("converted.html");
+        assertThat(result.artifacts().getFirst().mediaType()).isEqualTo("text/html");
+        assertThat(result.artifacts())
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("main.py"))
+                .noneSatisfy(artifact -> assertThat(artifact.objectUri()).contains("input.odp"));
+    }
+
+    @Test
+    void shouldRejectOdpWithActiveContentBeforeRunningContainer() throws Exception {
+        byte[] odpBytes = zipBytes(
+                "content.xml",
+                """
+                        <office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                                                 xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+                                                 xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+                          <office:body><office:presentation><draw:page draw:name="page1"><draw:frame><draw:text-box><text:p>unsafe odp</text:p></draw:text-box></draw:frame></draw:page></office:presentation></office:body>
+                        </office:document-content>
+                        """,
+                "Scripts/macro.js",
+                "alert('macro')");
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
+        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.FILE_CONVERSION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"sourceFormat":"odp","targetFormat":"txt","contentEncoding":"base64","content":"%s"}
+                        """.formatted(Base64.getEncoder().encodeToString(odpBytes)),
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
+        assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED);
+        assertThat(result.execution().resultSummary()).contains("odp active content is not supported");
+        assertThat(runner.lastCommand).isNull();
+        assertThat(tempDir.resolve(session.sessionId()).resolve("main.py")).doesNotExist();
+        assertThat(tempDir.resolve(session.sessionId()).resolve("input.odp")).doesNotExist();
+    }
+
+    @Test
     void shouldRunOdsToCsvFileConversionAndCollectCsvOutputOnly() throws Exception {
         byte[] odsBytes = odsBytes("safe ods marker", "ODS conversion extracts first table");
         String odsBase64 = Base64.getEncoder().encodeToString(odsBytes);
@@ -1766,7 +1879,7 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED);
         assertThat(result.execution().resultSummary())
-                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/odt/pdf to html/txt, xlsx/ods to csv/html, and pptx to html/txt only");
+                .contains("supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/odt/odp/pdf to html/txt, xlsx/ods to csv/html, and pptx to html/txt only");
         assertThat(runner.lastCommand).isNull();
     }
 
@@ -2196,6 +2309,31 @@ class ContainerSandboxRuntimeAdapterTests {
                               </office:body>
                             </office:document-content>
                             """.formatted(marker, secondValue));
+        }
+        return bytes.toByteArray();
+    }
+
+    private static byte[] odpBytes(String firstSlideText, String secondSlideText) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream archive = new ZipOutputStream(bytes)) {
+            writeZipEntry(archive, "mimetype", "application/vnd.oasis.opendocument.presentation");
+            writeZipEntry(archive, "content.xml",
+                    """
+                            <office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                                                     xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+                                                     xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+                              <office:body>
+                                <office:presentation>
+                                  <draw:page draw:name="page1">
+                                    <draw:frame><draw:text-box><text:p>%s</text:p></draw:text-box></draw:frame>
+                                  </draw:page>
+                                  <draw:page draw:name="page2">
+                                    <draw:frame><draw:text-box><text:p>%s</text:p></draw:text-box></draw:frame>
+                                  </draw:page>
+                                </office:presentation>
+                              </office:body>
+                            </office:document-content>
+                            """.formatted(firstSlideText, secondSlideText));
         }
         return bytes.toByteArray();
     }

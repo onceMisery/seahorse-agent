@@ -76,6 +76,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final String DOCX_FORMAT = "docx";
     private static final String ODT_FORMAT = "odt";
     private static final String ODS_FORMAT = "ods";
+    private static final String ODP_FORMAT = "odp";
     private static final String XLSX_FORMAT = "xlsx";
     private static final String PPTX_FORMAT = "pptx";
     private static final String PDF_FORMAT = "pdf";
@@ -358,13 +359,13 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String contentEncoding = normalizedContentEncoding(root.path("contentEncoding").asText(PLAIN_ENCODING));
         if (!isSupportedFileConversion(sourceFormat, targetFormat)) {
             throw new UnsupportedFileConversionException(
-                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/odt/pdf to html/txt, xlsx/ods to csv/html, and pptx to html/txt only");
+                    "container file conversion supports csv/tsv to json, json to csv/tsv, txt to html, html to txt, markdown/md to html/txt, docx/odt/odp/pdf to html/txt, xlsx/ods to csv/html, and pptx to html/txt only");
         }
         if (isBinaryDocumentFormat(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
             throw new IllegalArgumentException(sourceFormat + " file conversion contentEncoding must be base64");
         }
         if (!isBinaryDocumentFormat(sourceFormat) && BASE64_ENCODING.equals(contentEncoding)) {
-            throw new IllegalArgumentException("base64 contentEncoding is only supported for docx/odt/ods/xlsx/pptx/pdf input");
+            throw new IllegalArgumentException("base64 contentEncoding is only supported for docx/odt/ods/odp/xlsx/pptx/pdf input");
         }
         String content = root.path("content").asText("");
         if (!hasText(content)) {
@@ -386,6 +387,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
         if (ODS_FORMAT.equals(sourceFormat)) {
             validateOdsFileConversionInput(content);
+        }
+        if (ODP_FORMAT.equals(sourceFormat)) {
+            validateOdpFileConversionInput(content);
         }
         if (XLSX_FORMAT.equals(sourceFormat)) {
             validateXlsxFileConversionInput(content);
@@ -479,6 +483,34 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
         if (!contentXmlFound) {
             throw new IllegalArgumentException("ods content.xml not found");
+        }
+    }
+
+    private void validateOdpFileConversionInput(byte[] content) {
+        boolean contentXmlFound = false;
+        int inspectedEntries = 0;
+        try (ZipInputStream archive = new ZipInputStream(new ByteArrayInputStream(content))) {
+            ZipEntry entry;
+            while ((entry = archive.getNextEntry()) != null) {
+                if (++inspectedEntries > MAX_FILE_CONVERSION_ARCHIVE_ENTRIES) {
+                    throw new IllegalArgumentException("odp archive exceeds entry scan budget");
+                }
+                String entryName = normalizedArchiveEntryName(entry.getName());
+                if (hasUnsafeArchivePath(entryName)) {
+                    throw new IllegalArgumentException("odp archive contains unsafe entry");
+                }
+                if (hasOdfActiveContentEntry(entryName)) {
+                    throw new IllegalArgumentException("odp active content is not supported");
+                }
+                if ("content.xml".equals(entryName)) {
+                    contentXmlFound = true;
+                }
+            }
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("odp archive could not be inspected", ex);
+        }
+        if (!contentXmlFound) {
+            throw new IllegalArgumentException("odp content.xml not found");
         }
     }
 
@@ -1295,6 +1327,43 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         raise ValueError("odt paragraph text not found")
                     return paragraphs
 
+                def odp_to_text(path):
+                    paragraphs = odp_paragraphs(path)
+                    return "\\n".join(paragraphs) + ("\\n" if paragraphs else "")
+
+                def odp_to_html(path):
+                    paragraphs = odp_paragraphs(path)
+                    body = "\\n".join("<p>" + html.escape(paragraph) + "</p>" for paragraph in paragraphs)
+                    return "<!doctype html>\\n<html><body>\\n" + body + "\\n</body></html>\\n"
+
+                def odp_paragraphs(path):
+                    with zipfile.ZipFile(path) as archive:
+                        try:
+                            content_info = archive.getinfo("content.xml")
+                        except KeyError as exc:
+                            raise ValueError("odp content.xml not found") from exc
+                        if content_info.file_size > 1048576:
+                            raise ValueError("odp content.xml exceeds extraction budget")
+                        content_xml = archive.read(content_info)
+                    root = ET.fromstring(content_xml)
+                    ns = {
+                        "office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
+                        "draw": "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0",
+                        "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
+                    }
+                    presentation = root.find(".//office:presentation", ns)
+                    if presentation is None:
+                        raise ValueError("odp presentation body not found")
+                    paragraphs = []
+                    for page in presentation.findall(".//draw:page", ns):
+                        for paragraph in page.findall(".//text:p", ns):
+                            text = "".join(paragraph.itertext()).strip()
+                            if text:
+                                paragraphs.append(text)
+                    if not paragraphs:
+                        raise ValueError("odp slide text not found")
+                    return paragraphs
+
                 def ods_rows(path):
                     with zipfile.ZipFile(path) as archive:
                         try:
@@ -1660,6 +1729,12 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "odt" and target_format == "html":
                     output_path.write_text(odt_to_html(input_path), encoding="utf-8")
                     print(f"converted odt document to html")
+                elif source_format == "odp" and target_format == "txt":
+                    output_path.write_text(odp_to_text(input_path), encoding="utf-8")
+                    print(f"converted odp presentation to text")
+                elif source_format == "odp" and target_format == "html":
+                    output_path.write_text(odp_to_html(input_path), encoding="utf-8")
+                    print(f"converted odp presentation to html")
                 elif source_format == "ods" and target_format == "csv":
                     output_path.write_text(ods_to_csv(input_path), encoding="utf-8")
                     print(f"converted ods spreadsheet to csv")
@@ -1700,7 +1775,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
                 || (MARKDOWN_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
-                || ((DOCX_FORMAT.equals(sourceFormat) || ODT_FORMAT.equals(sourceFormat) || PDF_FORMAT.equals(sourceFormat))
+                || ((DOCX_FORMAT.equals(sourceFormat)
+                || ODT_FORMAT.equals(sourceFormat)
+                || ODP_FORMAT.equals(sourceFormat)
+                || PDF_FORMAT.equals(sourceFormat))
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
                 || (PPTX_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
@@ -1716,6 +1794,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return DOCX_FORMAT.equals(sourceFormat)
                 || ODT_FORMAT.equals(sourceFormat)
                 || ODS_FORMAT.equals(sourceFormat)
+                || ODP_FORMAT.equals(sourceFormat)
                 || XLSX_FORMAT.equals(sourceFormat)
                 || PPTX_FORMAT.equals(sourceFormat)
                 || PDF_FORMAT.equals(sourceFormat);
@@ -1729,6 +1808,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             case DOCX_FORMAT -> "docx";
             case ODT_FORMAT -> "odt";
             case ODS_FORMAT -> "ods";
+            case ODP_FORMAT -> "odp";
             case XLSX_FORMAT -> "xlsx";
             case PPTX_FORMAT -> "pptx";
             case PDF_FORMAT -> "pdf";
@@ -2760,6 +2840,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             case "zip" -> "application/zip";
             case "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
             case "ods" -> "application/vnd.oasis.opendocument.spreadsheet";
+            case "odp" -> "application/vnd.oasis.opendocument.presentation";
             case "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
             case "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation";
             case "docm" -> "application/vnd.ms-word.document.macroenabled.12";
