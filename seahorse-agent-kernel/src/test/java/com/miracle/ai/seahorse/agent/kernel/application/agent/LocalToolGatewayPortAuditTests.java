@@ -1169,6 +1169,45 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldSummarizeFlatOpenApiArgumentsWithValueShapeWithoutValues() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "openapi_listPets",
+                Map.of("status", "available-secret-marker"),
+                Map.of(),
+                "run-1:call-1",
+                List.of("openapi_listPets")));
+
+        assertTrue(result.success());
+        String summary = audit.requested.get(0).argumentsSummary();
+        assertTrue(summary.contains("\"toolId\":\"openapi_listPets\""));
+        assertTrue(summary.contains("\"provider\":\"OPENAPI\""));
+        assertTrue(summary.contains("\"argumentKeys\":[\"status\"]"));
+        assertTrue(summary.contains("\"argumentCount\":1"));
+        assertTrue(summary.contains("\"argumentValueCount\":1"));
+        assertTrue(summary.contains("\"argumentValueTotalLength\":23"));
+        assertTrue(summary.contains("\"argumentValueMaxLength\":23"));
+        assertTrue(summary.contains("\"queryKeys\":[]"));
+        assertTrue(summary.contains("\"requestBodyPresent\":false"));
+        assertFalse(summary.contains("available-secret-marker"));
+    }
+
+    @Test
     void shouldFilterUnsafeKeyNamesFromCrossProviderAuditSummaries() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();

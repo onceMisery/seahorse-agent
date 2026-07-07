@@ -469,6 +469,9 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("provider", "OPENAPI");
         summary.put("argumentKeys", safeArgumentKeys(arguments));
         summary.put("argumentCount", arguments.size());
+        summary.put("argumentValueCount", mapValueCount(arguments));
+        summary.put("argumentValueTotalLength", mapValueTotalLength(arguments));
+        summary.put("argumentValueMaxLength", mapValueMaxLength(arguments));
         summary.put("pathKeys", safeArgumentKeys(path));
         summary.put("pathCount", path.size());
         summary.put("pathValueCount", mapValueCount(path));
@@ -507,6 +510,9 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     + ", provider=OPENAPI"
                     + ", argumentKeys=" + safeArgumentKeys(arguments)
                     + ", argumentCount=" + arguments.size()
+                    + ", argumentValueCount=" + mapValueCount(arguments)
+                    + ", argumentValueTotalLength=" + mapValueTotalLength(arguments)
+                    + ", argumentValueMaxLength=" + mapValueMaxLength(arguments)
                     + ", pathKeys=" + safeArgumentKeys(path)
                     + ", queryKeys=" + safeArgumentKeys(query)
                     + ", parameterKeys=" + safeArgumentKeys(parameters)

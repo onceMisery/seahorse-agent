@@ -1019,6 +1019,14 @@ This is a narrow cross-provider audit-hardening slice. It does not change OpenAP
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 24/24, covering OpenAPI value shape metadata while preserving existing path, query, parameter, header, body value, and unsafe-key redaction assertions.
 
+## 2026-07-07 Update: OpenAPI Flat Argument Audit E2E
+
+Dynamic `openapi_` Tool Gateway audit summaries now include value-free top-level argument value shape metadata (`argumentValueCount`, total value length, and maximum value length). This covers the real OpenAPI tool invocation shape where operation parameters are passed as flat tool arguments, while the existing path/query/parameter/header/body partitions continue to cover structured calls.
+
+The full-Docker OpenAPI connector smoke now verifies the real `/api/tool-invocations` `argumentsSummary` for an imported connector operation invoked through Tool Gateway. It asserts the OpenAPI provider marker, safe argument key, top-level value shape, and request-body absence while checking that the raw query value, target server URL, host name, and sensitive response token/secret values do not appear in the audit summary.
+
+Fresh evidence: `node --check .\scripts\e2e-openapi-connector-smoke.mjs` passed; `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=LocalToolGatewayPortAuditTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 34/34, including regression coverage for flat OpenAPI arguments; `.\mvnw.cmd package -pl seahorse-agent-bootstrap -am "-DskipTests" "-Dmaven.test.skip=true" "-Dspotless.check.skip=true"` rebuilt the full bootstrap reactor with 28/28 modules passing; the rebuilt jar was copied into the real `seahorse-backend` container and the container returned to `healthy`; `.\scripts\e2e-openapi-connector-smoke.ps1 -BaseUrl http://127.0.0.1 -Password admin123` passed against the real full-Docker backend with `auditStatus=SUCCEEDED` for the imported `openapi_` tool and the new audit-summary assertions.
+
 ## 2026-07-06 Update: OpenAPI Request Body Audit Value Shape Summary
 
 Tool Gateway request audit now includes value-free object request body value shape evidence for dynamic `openapi_` tools: request body value count, total value length, and maximum value length. String request bodies keep the existing raw-length-only posture, while object bodies gain bounded shape evidence without persisting field values.

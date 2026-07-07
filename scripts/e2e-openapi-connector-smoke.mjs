@@ -303,6 +303,34 @@ const succeededAudit = auditRecords.find((record) =>
 if (!succeededAudit) {
   throw new Error(`OpenAPI invocation did not create SUCCEEDED audit: ${JSON.stringify(audit)}`);
 }
+const auditSummary = String(succeededAudit.argumentsSummary || "");
+const requiredAuditSummaryFragments = [
+  `"toolId":"${openApiToolId}"`,
+  `"provider":"OPENAPI"`,
+  `"argumentKeys":["status"]`,
+  `"argumentCount":1`,
+  `"argumentValueCount":1`,
+  `"argumentValueTotalLength":9`,
+  `"argumentValueMaxLength":9`,
+  `"requestBodyPresent":false`,
+  `"requestBodyType":"none"`
+];
+for (const fragment of requiredAuditSummaryFragments) {
+  if (!auditSummary.includes(fragment)) {
+    throw new Error(`OpenAPI audit summary did not include ${fragment}: ${auditSummary}`);
+  }
+}
+for (const forbidden of [
+  "available",
+  `${marker}-raw-token`,
+  `${marker}-raw-secret`,
+  serverUrl,
+  "host.docker.internal"
+]) {
+  if (forbidden && auditSummary.includes(forbidden)) {
+    throw new Error(`OpenAPI audit summary leaked raw invocation value '${forbidden}': ${auditSummary}`);
+  }
+}
 
 const dbRow = psql(`
 select c.connector_id,
