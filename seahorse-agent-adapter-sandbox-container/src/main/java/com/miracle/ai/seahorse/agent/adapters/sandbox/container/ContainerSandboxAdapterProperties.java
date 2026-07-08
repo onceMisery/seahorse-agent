@@ -33,6 +33,8 @@ public class ContainerSandboxAdapterProperties {
 
     private String browserProxyServer = "";
 
+    private String browserProxyServers = "";
+
     private String browserProxyUsername = "";
 
     private String browserProxyPassword = "";
@@ -93,6 +95,14 @@ public class ContainerSandboxAdapterProperties {
 
     public void setBrowserProxyServer(String browserProxyServer) {
         this.browserProxyServer = Objects.requireNonNullElse(browserProxyServer, "").trim();
+    }
+
+    public String getBrowserProxyServers() {
+        return browserProxyServers;
+    }
+
+    public void setBrowserProxyServers(String browserProxyServers) {
+        this.browserProxyServers = Objects.requireNonNullElse(browserProxyServers, "").trim();
     }
 
     public String getBrowserProxyUsername() {

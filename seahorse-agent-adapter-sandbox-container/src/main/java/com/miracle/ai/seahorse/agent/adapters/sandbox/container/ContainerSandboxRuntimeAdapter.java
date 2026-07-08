@@ -58,6 +58,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -96,6 +97,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final int MAX_BROWSER_COOKIES = 16;
     private static final int MAX_BROWSER_COOKIE_NAME_CHARS = 128;
     private static final int MAX_BROWSER_COOKIE_VALUE_CHARS = 4096;
+    private static final int MAX_BROWSER_PROXY_SERVERS = 8;
     private static final int MAX_BROWSER_SESSION_STATE_CHARS = 128 * 1024;
     private static final int MAX_BROWSER_SESSION_STATE_COOKIES = 32;
     private static final int MAX_BROWSER_SESSION_STATE_ORIGINS = 16;
@@ -137,6 +139,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private final Path workspaceRoot;
     private final String workspaceMountSourceRoot;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final AtomicInteger browserProxyCursor = new AtomicInteger();
 
     public ContainerSandboxRuntimeAdapter(ContainerSandboxAdapterProperties properties,
                                           ContainerCommandRunner commandRunner,
@@ -748,6 +751,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     }
 
     private String browserAutomationScript(BrowserAutomationRequest request) {
+        List<String> browserProxyServers = normalizedBrowserProxyServers();
+        String browserProxyServer = selectBrowserProxyServer(browserProxyServers);
+        BrowserProxyCredentials proxyCredentials = browserProxyCredentials(browserProxyServers);
         return """
                 import json
                 from datetime import datetime, timezone
@@ -760,6 +766,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 browser_proxy_server = %s
                 browser_proxy_username = %s
                 browser_proxy_password = %s
+                browser_proxy_pool_size = %d
                 allowed_hosts = set(%s)
                 viewport_width = %d
                 viewport_height = %d
@@ -975,6 +982,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         "proxy": {
                             "enabled": bool(target_url and browser_proxy_server),
                             "authenticated": bool(target_url and browser_proxy_server and browser_proxy_username and browser_proxy_password),
+                            "poolSize": browser_proxy_pool_size,
+                            "rotationEnabled": bool(browser_proxy_pool_size > 1),
                         },
                     }
 
@@ -1116,6 +1125,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             "proxy": {
                                 "enabled": bool(target_url and browser_proxy_server),
                                 "authenticated": bool(target_url and browser_proxy_server and browser_proxy_username and browser_proxy_password),
+                                "poolSize": browser_proxy_pool_size,
+                                "rotationEnabled": bool(browser_proxy_pool_size > 1),
                             },
                             "egress": egress_summary,
                             "cookies": {
@@ -1164,13 +1175,14 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             context.close()
                         browser.close()
 
-                print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}; har={har_enabled}; video={video_enabled}; cookies={len(browser_cookies)}; sessionStateReplay={browser_session_state is not None}; sessionStateCapture={capture_session_state}; egressRequests={egress_summary['requestCount']}; egressContinued={egress_summary['continuedRequestCount']}; egressBlocked={egress_summary['blockedRequestCount']}; proxyEnabled={egress_summary['proxy']['enabled']}; proxyAuthenticated={egress_summary['proxy']['authenticated']}")
+                print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}; har={har_enabled}; video={video_enabled}; cookies={len(browser_cookies)}; sessionStateReplay={browser_session_state is not None}; sessionStateCapture={capture_session_state}; egressRequests={egress_summary['requestCount']}; egressContinued={egress_summary['continuedRequestCount']}; egressBlocked={egress_summary['blockedRequestCount']}; proxyEnabled={egress_summary['proxy']['enabled']}; proxyAuthenticated={egress_summary['proxy']['authenticated']}; proxyPoolSize={egress_summary['proxy']['poolSize']}; proxyRotation={egress_summary['proxy']['rotationEnabled']}")
                 """.formatted(
                 request.action(),
                 jsonForScript(request.url()),
-                jsonForScript(normalizedBrowserProxyServer()),
-                jsonForScript(browserProxyCredentials().username()),
-                jsonForScript(browserProxyCredentials().password()),
+                jsonForScript(browserProxyServer),
+                jsonForScript(proxyCredentials.username()),
+                jsonForScript(proxyCredentials.password()),
+                browserProxyServers.size(),
                 jsonForScript(request.allowedHosts()),
                 request.viewportWidth(),
                 request.viewportHeight(),
@@ -2626,9 +2638,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private List<String> dockerInternalHosts(List<String> requestedHosts) {
         LinkedHashSet<String> hosts = new LinkedHashSet<>();
         hosts.add("host.docker.internal");
-        String browserProxyHost = browserProxyHost();
-        if (browserProxyHost != null && browserProxyHost.endsWith(".docker.internal")) {
-            hosts.add(browserProxyHost);
+        for (String browserProxyHost : browserProxyHosts()) {
+            if (browserProxyHost.endsWith(".docker.internal")) {
+                hosts.add(browserProxyHost);
+            }
         }
         if (requestedHosts != null) {
             for (String requestedHost : requestedHosts) {
@@ -2641,21 +2654,60 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return List.copyOf(hosts);
     }
 
-    private String browserProxyHost() {
-        String proxyServer = normalizedBrowserProxyServer();
-        if (!hasText(proxyServer)) {
-            return null;
+    private List<String> browserProxyHosts() {
+        List<String> proxyServers = normalizedBrowserProxyServers();
+        if (proxyServers.isEmpty()) {
+            return List.of();
         }
-        return URI.create(proxyServer).getHost().toLowerCase(Locale.ROOT);
+        return proxyServers.stream()
+                .map(proxyServer -> URI.create(proxyServer).getHost().toLowerCase(Locale.ROOT))
+                .distinct()
+                .toList();
     }
 
-    private String normalizedBrowserProxyServer() {
-        String value = trimToNull(properties.getBrowserProxyServer());
-        if (value == null) {
+    private String selectBrowserProxyServer(List<String> proxyServers) {
+        if (proxyServers.isEmpty()) {
+            return "";
+        }
+        if (proxyServers.size() == 1) {
+            return proxyServers.get(0);
+        }
+        int index = Math.floorMod(browserProxyCursor.getAndIncrement(), proxyServers.size());
+        return proxyServers.get(index);
+    }
+
+    private List<String> normalizedBrowserProxyServers() {
+        String singleProxyServer = trimToNull(properties.getBrowserProxyServer());
+        String proxyServerList = trimToNull(properties.getBrowserProxyServers());
+        if (singleProxyServer != null && proxyServerList != null) {
+            throw new IllegalArgumentException(
+                    "browserProxyServer and browserProxyServers must not be configured together");
+        }
+        if (proxyServerList == null) {
+            String normalized = normalizeBrowserProxyServer(singleProxyServer);
+            return hasText(normalized) ? List.of(normalized) : List.of();
+        }
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        for (String candidate : proxyServerList.split(",")) {
+            String proxyServer = normalizeBrowserProxyServer(candidate);
+            if (hasText(proxyServer)) {
+                normalized.add(proxyServer);
+            }
+            if (normalized.size() > MAX_BROWSER_PROXY_SERVERS) {
+                throw new IllegalArgumentException(
+                        "browserProxyServers must contain at most " + MAX_BROWSER_PROXY_SERVERS + " entries");
+            }
+        }
+        return List.copyOf(normalized);
+    }
+
+    private String normalizeBrowserProxyServer(String value) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
             return "";
         }
         try {
-            URI uri = new URI(value);
+            URI uri = new URI(trimmed);
             String scheme = nullToEmpty(uri.getScheme()).toLowerCase(Locale.ROOT);
             String host = uri.getHost();
             if (!Set.of("http", "https").contains(scheme)
@@ -2679,7 +2731,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
     }
 
-    private BrowserProxyCredentials browserProxyCredentials() {
+    private BrowserProxyCredentials browserProxyCredentials(List<String> proxyServers) {
         String username = trimToNull(properties.getBrowserProxyUsername());
         String password = hasText(properties.getBrowserProxyPassword())
                 ? properties.getBrowserProxyPassword()
@@ -2691,9 +2743,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             throw new IllegalArgumentException(
                     "browserProxyUsername and browserProxyPassword must be configured together");
         }
-        if (!hasText(normalizedBrowserProxyServer())) {
+        if (proxyServers.isEmpty()) {
             throw new IllegalArgumentException(
-                    "browserProxyUsername/browserProxyPassword require browserProxyServer");
+                    "browserProxyUsername/browserProxyPassword require browserProxyServer or browserProxyServers");
         }
         return new BrowserProxyCredentials(username, password);
     }

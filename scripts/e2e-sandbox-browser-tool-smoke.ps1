@@ -16,6 +16,7 @@ param(
     [int]$AssetPort = 18081,
     [string]$ProxyHost = "proxy.docker.internal",
     [int]$ProxyPort = 18082,
+    [int]$SecondaryProxyPort = 18083,
     [string]$ProxyUsername = "seahorse-proxy-user",
     [string]$ProxyPassword = "seahorse-proxy-password",
     [string]$StorageRoot = "/app/seahorse-agent-storage",
@@ -24,7 +25,8 @@ param(
     [switch]$SkipBrowserImageBuild,
     [switch]$SkipHealth,
     [switch]$ExpectBrowserProxy,
-    [switch]$ExpectBrowserProxyAuth
+    [switch]$ExpectBrowserProxyAuth,
+    [switch]$ExpectBrowserProxyRotation
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,12 +39,20 @@ if ($ExpectBrowserProxyAuth) {
         throw "ProxyUsername and ProxyPassword must be set when ExpectBrowserProxyAuth is enabled"
     }
 }
+if ($ExpectBrowserProxyRotation) {
+    $ExpectBrowserProxy = $true
+    if ($SecondaryProxyPort -eq $ProxyPort) {
+        throw "SecondaryProxyPort must differ from ProxyPort when ExpectBrowserProxyRotation is enabled"
+    }
+}
 $externalHttpContainerName = $null
 $externalHttpRoot = $null
 $assetHttpContainerName = $null
 $assetHttpRoot = $null
 $proxyContainerName = $null
 $proxyRoot = $null
+$secondaryProxyContainerName = $null
+$secondaryProxyRoot = $null
 $headers = $null
 $browserProfileNetworkEnabled = $false
 $baselineNonTerminalSandboxSessions = $null
@@ -844,6 +854,21 @@ try {
         if (-not $proxyFixture) { exit 1 }
         $script:proxyContainerName = "$($proxyFixture.Name)"
         $script:proxyRoot = "$($proxyFixture.Root)"
+        if ($ExpectBrowserProxyRotation) {
+            $secondaryProxyFixture = Test-Step "Start secondary HTTP proxy fixture for sandbox_browser rotation" {
+                Start-BrowserProxyFixture `
+                    -Name "seahorse-browser-proxy-rotation-smoke-$suffix" `
+                    -Port $SecondaryProxyPort `
+                    -ExternalHostName $ExternalHost `
+                    -AssetHostName $AssetHost `
+                    -Username $ProxyUsername `
+                    -Password $ProxyPassword `
+                    -RequireAuth ([bool]$ExpectBrowserProxyAuth)
+            }
+            if (-not $secondaryProxyFixture) { exit 1 }
+            $script:secondaryProxyContainerName = "$($secondaryProxyFixture.Name)"
+            $script:secondaryProxyRoot = "$($secondaryProxyFixture.Root)"
+        }
     }
 
     $egressConfigOk = Test-Step "Verify sandbox URL egress allowlist is configured" {
@@ -1372,6 +1397,9 @@ try {
         if ("$($parsed.resultSummary)" -notlike "*egressRequests=*" -or "$($parsed.resultSummary)" -notlike "*egressBlocked=*") {
             throw "Expected URL mode resultSummary to include egress counters: $content"
         }
+        if ($ExpectBrowserProxyRotation -and ("$($parsed.resultSummary)" -notlike "*proxyPoolSize=2*" -or "$($parsed.resultSummary)" -notlike "*proxyRotation=True*")) {
+            throw "Expected URL mode resultSummary to include proxy rotation counters: $content"
+        }
         $redactedExternalUrl = "http://${ExternalHost}:$ExternalPort/index.html?<redacted-query>"
         if ("$($parsed.browser.url)" -ne $externalUrl -and "$($parsed.browser.url)" -ne $redactedExternalUrl) {
             throw "Expected browser URL ${externalUrl} or governed redacted URL ${redactedExternalUrl}: $content"
@@ -1454,6 +1482,12 @@ try {
                 if ($ExpectBrowserProxyAuth -and $content -notlike "*`"authenticated`": true*" -and $content -notlike "*`"authenticated`":true*") {
                     throw "Downloaded URL mode browser result did not mark proxy authenticated: $content"
                 }
+                if ($ExpectBrowserProxyRotation -and ($content -notlike "*`"poolSize`": 2*" -and $content -notlike "*`"poolSize`":2*")) {
+                    throw "Downloaded URL mode browser result did not record proxy pool size: $content"
+                }
+                if ($ExpectBrowserProxyRotation -and ($content -notlike "*`"rotationEnabled`": true*" -and $content -notlike "*`"rotationEnabled`":true*")) {
+                    throw "Downloaded URL mode browser result did not mark proxy rotation enabled: $content"
+                }
                 $browserResult = $content | ConvertFrom-Json
                 if ($browserResult.egress.networkRequested -ne $true -or "$($browserResult.egress.policy)" -ne "ALLOWLISTED") {
                     throw "Downloaded URL mode browser result did not include allowlisted egress posture: $content"
@@ -1482,6 +1516,9 @@ try {
                 }
                 if ($ExpectBrowserProxyAuth -and $browserResult.egress.proxy.authenticated -ne $true) {
                     throw "Downloaded URL mode browser result egress summary did not mark proxy authenticated: $content"
+                }
+                if ($ExpectBrowserProxyRotation -and ([int]$browserResult.egress.proxy.poolSize -lt 2 -or $browserResult.egress.proxy.rotationEnabled -ne $true)) {
+                    throw "Downloaded URL mode browser result egress summary did not record proxy rotation metadata: $content"
                 }
                 $script:urlJsonArtifactId = $artifactId
             } elseif ($content -like "*localStorageCount*" -and ($content -like "*`"count`": 1*" -or $content -like "*`"count`":1*")) {
@@ -1536,7 +1573,7 @@ try {
         }
     } | Out-Null
 
-    if ($ExpectBrowserProxy) {
+    if ($ExpectBrowserProxy -and -not $ExpectBrowserProxyRotation) {
         Test-Step "Verify sandbox_browser URL mode used configured proxy" {
             $hitLog = Join-Path $script:proxyRoot "proxy-hits.log"
             if (-not (Test-Path -LiteralPath $hitLog)) {
@@ -1836,6 +1873,35 @@ try {
             throw "Artifact replay HAR leaked storage reference: $content"
         }
     } | Out-Null
+
+    if ($ExpectBrowserProxyRotation) {
+        Test-Step "Verify sandbox_browser URL mode rotated across configured proxies" {
+            $primaryHitLog = Join-Path $script:proxyRoot "proxy-hits.log"
+            $secondaryHitLog = Join-Path $script:secondaryProxyRoot "proxy-hits.log"
+            if (-not (Test-Path -LiteralPath $primaryHitLog)) {
+                throw "Expected primary browser proxy hit log at $primaryHitLog"
+            }
+            if (-not (Test-Path -LiteralPath $secondaryHitLog)) {
+                throw "Expected secondary browser proxy hit log at $secondaryHitLog"
+            }
+            $primaryHits = Get-Content -LiteralPath $primaryHitLog -Raw
+            $secondaryHits = Get-Content -LiteralPath $secondaryHitLog -Raw
+            if ($primaryHits -notlike "*$externalUrl*" -or $primaryHits -notlike "*$assetUrl*") {
+                throw "Primary browser proxy hit log did not include main and asset URLs: $primaryHits"
+            }
+            if ($secondaryHits -notlike "*$externalUrl*" -or $secondaryHits -notlike "*$assetUrl*") {
+                throw "Secondary browser proxy hit log did not include main and asset URLs: $secondaryHits"
+            }
+            if ($ExpectBrowserProxyAuth -and ($primaryHits -notlike "*auth=ok*" -or $secondaryHits -notlike "*auth=ok*")) {
+                throw "Browser proxy rotation hit logs did not confirm authenticated requests: primary=$primaryHits secondary=$secondaryHits"
+            }
+            foreach ($hits in @($primaryHits, $secondaryHits)) {
+                if ($hits -like "*$externalCookieValue*" -or $hits -like "*$externalStorageValue*" -or $hits -like "*$ProxyUsername*" -or $hits -like "*$ProxyPassword*") {
+                    throw "Browser proxy rotation hit log leaked cookie, session storage, or proxy credential values: $hits"
+                }
+            }
+        } | Out-Null
+    }
 
     Test-Step "Verify artifact session state replay inputs stay transient" {
         $safeArtifactReplaySessionId = $artifactReplaySessionId.Replace("'", "''")
@@ -2213,6 +2279,7 @@ try {
     Stop-ExternalHttpFixture -Name $externalHttpContainerName -Root $externalHttpRoot
     Stop-ExternalHttpFixture -Name $assetHttpContainerName -Root $assetHttpRoot
     Stop-ExternalHttpFixture -Name $proxyContainerName -Root $proxyRoot
+    Stop-ExternalHttpFixture -Name $secondaryProxyContainerName -Root $secondaryProxyRoot
 }
 
 if ($failed -gt 0) {
