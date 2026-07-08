@@ -775,6 +775,11 @@ try {
         "word/document.xml" = "<w:document><w:p><w:r><w:t>unsafe docx embedded $activeDocxEmbeddedMarker</w:t></w:r></w:p></w:document>"
         "word/embeddings/oleObject1.bin" = "embedded object bytes $activeDocxEmbeddedMarker"
     }
+    $activeDocxExternalLinkMarker = "file-convert-docx-external-link-secret-$suffix"
+    $activeDocxExternalLinkContent = New-ZipBase64 -Entries @{
+        "word/document.xml" = "<w:document><w:p><w:r><w:t>unsafe docx external link $activeDocxExternalLinkMarker</w:t></w:r></w:p></w:document>"
+        "word/externalLinks/externalLink1.xml" = "<externalLink xmlns=`"http://schemas.openxmlformats.org/wordprocessingml/2006/main`"><externalBook>$activeDocxExternalLinkMarker</externalBook></externalLink>"
+    }
     $activePptxMacroMarker = "file-convert-pptx-macro-secret-$suffix"
     $activePptxContent = New-ZipBase64 -Entries @{
         "ppt/slides/slide1.xml" = "<p:sld xmlns:p=`"http://schemas.openxmlformats.org/presentationml/2006/main`" xmlns:a=`"http://schemas.openxmlformats.org/drawingml/2006/main`"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>unsafe pptx $activePptxMacroMarker</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"
@@ -1003,6 +1008,33 @@ try {
                 '"contentLength":'
             )
             Forbidden = @($activeDocxEmbeddedContent, $activeDocxEmbeddedMarker, "word/embeddings/oleObject1.bin", "word/embeddings/oleobject1.bin", "unsafe docx embedded")
+        },
+        @{
+            Name = "docx-external-link-content"
+            StepId = "sandbox-file-convert-docx-external-link-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-docx-external-link-fail-call-$suffix"
+            ExpectedError = "docx active content is not supported"
+            Arguments = @{
+                sourceFormat = "docx"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $activeDocxExternalLinkContent
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"docx"',
+                '"sourceFormatPresent":true',
+                '"targetFormat":"txt"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"base64"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":true',
+                '"networkRequested":false',
+                '"argumentCount":4',
+                '"contentLength":'
+            )
+            Forbidden = @($activeDocxExternalLinkContent, $activeDocxExternalLinkMarker, "word/externalLinks/externalLink1.xml", "word/externallinks/externallink1.xml", "unsafe docx external link")
         },
         @{
             Name = "pptx-active-content"
