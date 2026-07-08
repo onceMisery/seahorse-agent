@@ -770,6 +770,11 @@ try {
         "word/document.xml" = "<w:document><w:p><w:r><w:t>unsafe docx activex $activeDocxActiveXMarker</w:t></w:r></w:p></w:document>"
         "word/activeX/activeX1.xml" = "<ax:ocx ax:classid=`"clsid:$activeDocxActiveXMarker`" xmlns:ax=`"http://schemas.microsoft.com/office/2006/activeX`" />"
     }
+    $activeDocxEmbeddedMarker = "file-convert-docx-embedded-secret-$suffix"
+    $activeDocxEmbeddedContent = New-ZipBase64 -Entries @{
+        "word/document.xml" = "<w:document><w:p><w:r><w:t>unsafe docx embedded $activeDocxEmbeddedMarker</w:t></w:r></w:p></w:document>"
+        "word/embeddings/oleObject1.bin" = "embedded object bytes $activeDocxEmbeddedMarker"
+    }
     $activePptxMacroMarker = "file-convert-pptx-macro-secret-$suffix"
     $activePptxContent = New-ZipBase64 -Entries @{
         "ppt/slides/slide1.xml" = "<p:sld xmlns:p=`"http://schemas.openxmlformats.org/presentationml/2006/main`" xmlns:a=`"http://schemas.openxmlformats.org/drawingml/2006/main`"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>unsafe pptx $activePptxMacroMarker</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"
@@ -971,6 +976,33 @@ try {
                 '"contentLength":'
             )
             Forbidden = @($activeDocxActiveXContent, $activeDocxActiveXMarker, "word/activeX/activeX1.xml", "word/activex/activex1.xml", "unsafe docx activex")
+        },
+        @{
+            Name = "docx-embedded-content"
+            StepId = "sandbox-file-convert-docx-embedded-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-docx-embedded-fail-call-$suffix"
+            ExpectedError = "docx active content is not supported"
+            Arguments = @{
+                sourceFormat = "docx"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $activeDocxEmbeddedContent
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"docx"',
+                '"sourceFormatPresent":true',
+                '"targetFormat":"txt"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"base64"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":true',
+                '"networkRequested":false',
+                '"argumentCount":4',
+                '"contentLength":'
+            )
+            Forbidden = @($activeDocxEmbeddedContent, $activeDocxEmbeddedMarker, "word/embeddings/oleObject1.bin", "word/embeddings/oleobject1.bin", "unsafe docx embedded")
         },
         @{
             Name = "pptx-active-content"
