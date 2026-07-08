@@ -790,6 +790,11 @@ try {
         "ppt/slides/slide1.xml" = "<p:sld xmlns:p=`"http://schemas.openxmlformats.org/presentationml/2006/main`" xmlns:a=`"http://schemas.openxmlformats.org/drawingml/2006/main`"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>unsafe pptx activex $activePptxActiveXMarker</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"
         "ppt/activeX/activeX1.xml" = "<ax:ocx ax:classid=`"clsid:$activePptxActiveXMarker`" xmlns:ax=`"http://schemas.microsoft.com/office/2006/activeX`" />"
     }
+    $activePptxEmbeddedMarker = "file-convert-pptx-embedded-secret-$suffix"
+    $activePptxEmbeddedContent = New-ZipBase64 -Entries @{
+        "ppt/slides/slide1.xml" = "<p:sld xmlns:p=`"http://schemas.openxmlformats.org/presentationml/2006/main`" xmlns:a=`"http://schemas.openxmlformats.org/drawingml/2006/main`"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>unsafe pptx embedded $activePptxEmbeddedMarker</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"
+        "ppt/embeddings/oleObject1.bin" = "embedded object bytes $activePptxEmbeddedMarker"
+    }
     $activeXlsxMacroMarker = "file-convert-xlsx-macro-secret-$suffix"
     $activeXlsxContent = New-ZipBase64 -Entries @{
         "xl/worksheets/sheet1.xml" = "<worksheet xmlns=`"http://schemas.openxmlformats.org/spreadsheetml/2006/main`"><sheetData><row><c t=`"inlineStr`"><is><t>unsafe xlsx $activeXlsxMacroMarker</t></is></c></row></sheetData></worksheet>"
@@ -1094,6 +1099,33 @@ try {
                 '"contentLength":'
             )
             Forbidden = @($activePptxActiveXContent, $activePptxActiveXMarker, "ppt/activeX/activeX1.xml", "ppt/activex/activex1.xml", "unsafe pptx activex")
+        },
+        @{
+            Name = "pptx-embedded-content"
+            StepId = "sandbox-file-convert-pptx-embedded-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-pptx-embedded-fail-call-$suffix"
+            ExpectedError = "pptx active content is not supported"
+            Arguments = @{
+                sourceFormat = "pptx"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $activePptxEmbeddedContent
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"pptx"',
+                '"sourceFormatPresent":true',
+                '"targetFormat":"txt"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"base64"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":true',
+                '"networkRequested":false',
+                '"argumentCount":4',
+                '"contentLength":'
+            )
+            Forbidden = @($activePptxEmbeddedContent, $activePptxEmbeddedMarker, "ppt/embeddings/oleObject1.bin", "ppt/embeddings/oleobject1.bin", "unsafe pptx embedded")
         },
         @{
             Name = "xlsx-active-content"
