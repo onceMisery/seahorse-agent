@@ -104,6 +104,14 @@ async function assertPanelText(page, text, label) {
   });
 }
 
+async function assertLocatorText(locator, text, label) {
+  await locator.waitFor({ state: "visible", timeout: 10000 });
+  const visible = await locator.innerText({ timeout: 5000 });
+  if (!visible.includes(text)) {
+    throw new Error(`${label} did not show '${text}'. Visible text: ${visible.slice(0, 1200)}`);
+  }
+}
+
 function assertNumericField(payload, field, expected) {
   const actual = Number(payload?.[field]);
   if (!Number.isFinite(actual) || actual !== expected) {
@@ -139,6 +147,11 @@ const findings = {
 
 try {
   await loginApi();
+  const runtimeProfiles = await api("/api/sandbox/runtime/profiles?tenantId=default");
+  const egressPolicy = runtimeProfiles?.defaultNetworkPolicy || "DENY_ALL";
+  const allowlistedHosts = Array.isArray(runtimeProfiles?.allowlistedHosts)
+    ? runtimeProfiles.allowlistedHosts.filter(Boolean).map(String)
+    : [];
   const context = await browser.newContext({
     viewport: { width: 1440, height: 960 },
     ignoreHTTPSErrors: true
@@ -169,6 +182,18 @@ try {
     await loginPage(page);
     await page.goto(`${baseUrl}/admin/sandbox`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
+
+    const egressPanel = page.getByTestId("sandbox-egress-policy-panel");
+    await egressPanel.waitFor({ state: "visible", timeout: 20000 });
+    await assertLocatorText(page.getByTestId("sandbox-egress-policy-name"), egressPolicy, "Sandbox egress policy");
+    await assertLocatorText(
+      page.getByTestId("sandbox-egress-allowlist-count"),
+      `${allowlistedHosts.length} hosts`,
+      "Sandbox egress allowlist count"
+    );
+    for (const host of allowlistedHosts.slice(0, 6)) {
+      await assertLocatorText(page.getByTestId("sandbox-egress-allowlist-preview"), host, "Sandbox egress allowlist");
+    }
 
     const panel = page.getByTestId("sandbox-tool-quota-panel");
     await panel.waitFor({ state: "visible", timeout: 20000 });
@@ -212,6 +237,7 @@ try {
     const screenshotPath = path.join(artifactDir, `${marker}.png`);
     await page.screenshot({ path: screenshotPath, fullPage: true });
     console.log(`PASS sandbox tool quota page smoke`);
+    console.log(`Egress policy: ${egressPolicy} / ${allowlistedHosts.length} hosts`);
     console.log(`Policy: ${policyId}`);
     console.log(`Screenshot: ${screenshotPath}`);
   } finally {

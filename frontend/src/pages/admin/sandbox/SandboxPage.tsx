@@ -204,6 +204,7 @@ function RuntimeGovernancePanel({
 }) {
   const profileRows = profiles?.profiles || [];
   const nodeRows = nodes || [];
+  const allowlistedHosts = profiles?.allowlistedHosts || [];
   const checkedAt = health?.checkedAt ? formatTimestamp(health.checkedAt) : "-";
   const [ttlDrafts, setTtlDrafts] = useState<Record<string, string>>({});
   const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({});
@@ -297,6 +298,44 @@ function RuntimeGovernancePanel({
                 </div>
               </div>
             </div>
+
+            {profiles && (
+              <div
+                className="rounded border border-slate-100 bg-white p-3"
+                data-testid="sandbox-egress-policy-panel"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
+                      <Activity className="h-3.5 w-3.5" />
+                      Browser egress policy
+                    </div>
+                    <div
+                      className="mt-1 font-mono text-sm text-slate-800"
+                      data-testid="sandbox-egress-policy-name"
+                    >
+                      {profiles.defaultNetworkPolicy || "DENY_ALL"}
+                    </div>
+                  </div>
+                  <Badge
+                    variant={allowlistedHosts.length > 0 ? "default" : "secondary"}
+                    data-testid="sandbox-egress-allowlist-count"
+                  >
+                    {allowlistedHosts.length} hosts
+                  </Badge>
+                </div>
+                <div className="mt-3 grid gap-3 text-xs sm:grid-cols-[auto_minmax(0,1fr)]">
+                  <div className="uppercase text-muted-foreground">Allowlist</div>
+                  <div
+                    className="break-all font-mono text-slate-700"
+                    title={allowlistedHosts.join(", ")}
+                    data-testid="sandbox-egress-allowlist-preview"
+                  >
+                    {previewList(allowlistedHosts, 6)}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {nodeRows.length > 0 && (
               <div className="space-y-2">

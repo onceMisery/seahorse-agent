@@ -3,7 +3,7 @@ import { storage } from "@/utils/storage";
 
 const DEFAULT_TENANT_ID = "default";
 const DEFAULT_RUNTIME_TYPE = "CODE_INTERPRETER";
-const SANDBOX_API_PREFIX = "/api/api/sandbox";
+const SANDBOX_API_PREFIX = "/api/sandbox";
 
 export interface SandboxSession {
   sessionId?: string;
