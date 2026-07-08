@@ -1294,8 +1294,11 @@ class ContainerSandboxRuntimeAdapterTests {
                                     "if target_url and browser_proxy_server:",
                                     "proxy_options = {\"server\": browser_proxy_server}",
                                     "context_options[\"proxy\"] = proxy_options",
+                                    "def build_egress_summary(events):",
                                     "\"proxy\": {",
-                                    "\"enabled\": bool(target_url and browser_proxy_server)");
+                                    "\"enabled\": bool(target_url and browser_proxy_server)",
+                                    "\"egress\": egress_summary",
+                                    "egressRequests={egress_summary['requestCount']}");
                     Files.writeString(command.workingDirectory().resolve("browser-result.json"),
                             """
                                     {"action":"snapshot","source":"url","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"proxy":{"enabled":true},"text":"proxy marker"}
@@ -1332,7 +1335,9 @@ class ContainerSandboxRuntimeAdapterTests {
                                     "browser_proxy_password = \"proxy-password-secret\"",
                                     "proxy_options[\"username\"] = browser_proxy_username",
                                     "proxy_options[\"password\"] = browser_proxy_password",
-                                    "\"authenticated\": bool(target_url and browser_proxy_server and browser_proxy_username and browser_proxy_password)");
+                                    "\"authenticated\": bool(target_url and browser_proxy_server and browser_proxy_username and browser_proxy_password)",
+                                    "\"egress\": egress_summary",
+                                    "proxyAuthenticated={egress_summary['proxy']['authenticated']}");
                     Files.writeString(command.workingDirectory().resolve("browser-result.json"),
                             """
                                     {"action":"snapshot","source":"url","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"proxy":{"enabled":true,"authenticated":true},"text":"proxy auth marker"}

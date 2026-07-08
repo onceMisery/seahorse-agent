@@ -1369,6 +1369,9 @@ try {
         if ($parsed.browser.networkAllowed -ne $true) {
             throw "Expected browser.networkAllowed=true for URL mode: $content"
         }
+        if ("$($parsed.resultSummary)" -notlike "*egressRequests=*" -or "$($parsed.resultSummary)" -notlike "*egressBlocked=*") {
+            throw "Expected URL mode resultSummary to include egress counters: $content"
+        }
         $redactedExternalUrl = "http://${ExternalHost}:$ExternalPort/index.html?<redacted-query>"
         if ("$($parsed.browser.url)" -ne $externalUrl -and "$($parsed.browser.url)" -ne $redactedExternalUrl) {
             throw "Expected browser URL ${externalUrl} or governed redacted URL ${redactedExternalUrl}: $content"
@@ -1451,6 +1454,35 @@ try {
                 if ($ExpectBrowserProxyAuth -and $content -notlike "*`"authenticated`": true*" -and $content -notlike "*`"authenticated`":true*") {
                     throw "Downloaded URL mode browser result did not mark proxy authenticated: $content"
                 }
+                $browserResult = $content | ConvertFrom-Json
+                if ($browserResult.egress.networkRequested -ne $true -or "$($browserResult.egress.policy)" -ne "ALLOWLISTED") {
+                    throw "Downloaded URL mode browser result did not include allowlisted egress posture: $content"
+                }
+                if ([int]$browserResult.egress.allowedHostCount -lt 2) {
+                    throw "Downloaded URL mode browser result did not record allowed host count: $content"
+                }
+                if ([int]$browserResult.egress.continuedRequestCount -lt 2) {
+                    throw "Downloaded URL mode browser result did not record continued request count: $content"
+                }
+                if ([int]$browserResult.egress.blockedRequestCount -lt 1) {
+                    throw "Downloaded URL mode browser result did not record blocked request count: $content"
+                }
+                $hostCounts = @($browserResult.egress.allowedHostRequestCounts)
+                if (@($hostCounts | Where-Object { "$($_.host)" -eq $ExternalHost -and ([int]$_.requestCount) -ge 1 }).Count -lt 1) {
+                    throw "Downloaded URL mode browser result did not record main host egress count: $content"
+                }
+                if (@($hostCounts | Where-Object { "$($_.host)" -eq $AssetHost -and ([int]$_.requestCount) -ge 1 }).Count -lt 1) {
+                    throw "Downloaded URL mode browser result did not record asset host egress count: $content"
+                }
+                if ([int]$browserResult.egress.blockedReasonCounts.host_not_allowlisted -lt 1) {
+                    throw "Downloaded URL mode browser result did not record blocked host_not_allowlisted count: $content"
+                }
+                if ($ExpectBrowserProxy -and $browserResult.egress.proxy.enabled -ne $true) {
+                    throw "Downloaded URL mode browser result egress summary did not mark proxy enabled: $content"
+                }
+                if ($ExpectBrowserProxyAuth -and $browserResult.egress.proxy.authenticated -ne $true) {
+                    throw "Downloaded URL mode browser result egress summary did not mark proxy authenticated: $content"
+                }
                 $script:urlJsonArtifactId = $artifactId
             } elseif ($content -like "*localStorageCount*" -and ($content -like "*`"count`": 1*" -or $content -like "*`"count`":1*")) {
                 if ($content -notlike "*host.docker.internal*") {
@@ -1492,6 +1524,9 @@ try {
         }
         if ($blockedRequests.Count -lt 1 -or $blockedRequests[0]._blocked -ne $true) {
             throw "Downloaded URL mode HAR did not mark non-allowlisted request as blocked: $content"
+        }
+        if ("$($blockedRequests[0]._blockedReason)" -ne "host_not_allowlisted") {
+            throw "Downloaded URL mode HAR did not record value-free blocked reason: $content"
         }
         if ($content -like "*$externalCookieValue*") {
             throw "Downloaded URL mode HAR leaked cookie value: $content"

@@ -852,17 +852,35 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         redacted += "#<redacted-fragment>"
                     return redacted
 
-                def allowed_url(url):
+                def egress_decision(url):
                     if url.startswith(("about:", "blob:", "data:")):
-                        return True
+                        return True, "internal_scheme"
                     if has_credential_url_parts(url):
-                        return False
+                        return False, "credential_url"
                     parsed = urlparse(url)
                     scheme = parsed.scheme.lower()
                     host = (parsed.hostname or "").lower()
                     if scheme in ("http", "https") and host:
-                        return host in allowed_hosts
-                    return False
+                        if host in allowed_hosts:
+                            return True, "allowlisted_host"
+                        return False, "host_not_allowlisted"
+                    return False, "unsupported_url"
+
+                def allowed_url(url):
+                    allowed, _ = egress_decision(url)
+                    return allowed
+
+                def request_host(url):
+                    parsed = urlparse(url)
+                    scheme = parsed.scheme.lower()
+                    host = (parsed.hostname or "").lower()
+                    if scheme in ("http", "https") and host:
+                        return host
+                    return None
+
+                def increment(counter, key):
+                    safe_key = key or "unknown"
+                    counter[safe_key] = counter.get(safe_key, 0) + 1
 
                 def empty_har_request(method, url):
                     return {
@@ -903,6 +921,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             "timings": {"send": 0, "wait": 0, "receive": 0},
                             "_resourceType": event.get("resourceType"),
                             "_blocked": bool(event.get("blocked")),
+                            "_blockedReason": event.get("blockedReason"),
                             "_failure": event.get("failure"),
                         })
                     return {
@@ -917,6 +936,46 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             }],
                             "entries": entries,
                         }
+                    }
+
+                def build_egress_summary(events):
+                    allowed_count = 0
+                    blocked_count = 0
+                    allowed_host_counts = {}
+                    resource_type_counts = {}
+                    blocked_resource_type_counts = {}
+                    blocked_reason_counts = {}
+                    for event in events:
+                        resource_type = event.get("resourceType") or "unknown"
+                        increment(resource_type_counts, resource_type)
+                        if event.get("blocked"):
+                            blocked_count += 1
+                            increment(blocked_resource_type_counts, resource_type)
+                            increment(blocked_reason_counts, event.get("blockedReason"))
+                        else:
+                            allowed_count += 1
+                            host = event.get("host")
+                            if host in allowed_hosts:
+                                increment(allowed_host_counts, host)
+                    return {
+                        "mode": "url" if target_url else "html",
+                        "networkRequested": bool(target_url),
+                        "policy": "ALLOWLISTED" if target_url else "DENY_ALL",
+                        "allowedHostCount": len(allowed_hosts),
+                        "requestCount": len(events),
+                        "continuedRequestCount": allowed_count,
+                        "blockedRequestCount": blocked_count,
+                        "blockedReasonCounts": blocked_reason_counts,
+                        "resourceTypeCounts": resource_type_counts,
+                        "blockedResourceTypeCounts": blocked_resource_type_counts,
+                        "allowedHostRequestCounts": [
+                            {"host": host, "requestCount": count}
+                            for host, count in sorted(allowed_host_counts.items())
+                        ],
+                        "proxy": {
+                            "enabled": bool(target_url and browser_proxy_server),
+                            "authenticated": bool(target_url and browser_proxy_server and browser_proxy_username and browser_proxy_password),
+                        },
                     }
 
                 def build_session_summary(state, current_url):
@@ -975,16 +1034,19 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         page = context.new_page()
 
                         def on_request(request):
-                            blocked = not allowed_url(request.url)
+                            allowed, decision_reason = egress_decision(request.url)
+                            blocked = not allowed
                             event = {
                                 "startedDateTime": utc_now(),
                                 "method": request.method,
                                 "url": redacted_har_url(request.url),
+                                "host": request_host(request.url) if allowed else None,
                                 "resourceType": request.resource_type,
                                 "status": 0,
                                 "statusText": "",
                                 "failure": None,
                                 "blocked": blocked,
+                                "blockedReason": None if allowed else decision_reason,
                             }
                             network_event_index[id(request)] = event
                             network_events.append(event)
@@ -1043,6 +1105,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             )
                             session_summary_file = session_summary_path.name
                             session_state_file = session_state_path.name
+                        egress_summary = build_egress_summary(network_events)
                         result = {
                             "action": action,
                             "source": "url" if target_url else "html",
@@ -1054,6 +1117,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                                 "enabled": bool(target_url and browser_proxy_server),
                                 "authenticated": bool(target_url and browser_proxy_server and browser_proxy_username and browser_proxy_password),
                             },
+                            "egress": egress_summary,
                             "cookies": {
                                 "count": len(browser_cookies),
                                 "domains": sorted({cookie.get("domain") for cookie in browser_cookies if cookie.get("domain")}),
@@ -1100,7 +1164,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             context.close()
                         browser.close()
 
-                print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}; har={har_enabled}; video={video_enabled}; cookies={len(browser_cookies)}; sessionStateReplay={browser_session_state is not None}; sessionStateCapture={capture_session_state}")
+                print(f"browser {action} completed; textLength={len(body_text)}; screenshot={screenshot_enabled}; har={har_enabled}; video={video_enabled}; cookies={len(browser_cookies)}; sessionStateReplay={browser_session_state is not None}; sessionStateCapture={capture_session_state}; egressRequests={egress_summary['requestCount']}; egressContinued={egress_summary['continuedRequestCount']}; egressBlocked={egress_summary['blockedRequestCount']}; proxyEnabled={egress_summary['proxy']['enabled']}; proxyAuthenticated={egress_summary['proxy']['authenticated']}")
                 """.formatted(
                 request.action(),
                 jsonForScript(request.url()),
