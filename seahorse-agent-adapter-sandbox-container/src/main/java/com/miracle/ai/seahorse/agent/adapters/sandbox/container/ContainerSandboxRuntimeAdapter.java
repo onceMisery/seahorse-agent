@@ -758,6 +758,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 action = "%s"
                 target_url = %s
                 browser_proxy_server = %s
+                browser_proxy_username = %s
+                browser_proxy_password = %s
                 allowed_hosts = set(%s)
                 viewport_width = %d
                 viewport_height = %d
@@ -958,7 +960,11 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         if browser_session_state is not None:
                             context_options["storage_state"] = str(session_state_input_path)
                         if target_url and browser_proxy_server:
-                            context_options["proxy"] = {"server": browser_proxy_server}
+                            proxy_options = {"server": browser_proxy_server}
+                            if browser_proxy_username and browser_proxy_password:
+                                proxy_options["username"] = browser_proxy_username
+                                proxy_options["password"] = browser_proxy_password
+                            context_options["proxy"] = proxy_options
                         if video_enabled:
                             video_dir.mkdir(parents=True, exist_ok=True)
                             context_options["record_video_dir"] = str(video_dir)
@@ -1046,6 +1052,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             "allowedHosts": sorted(allowed_hosts),
                             "proxy": {
                                 "enabled": bool(target_url and browser_proxy_server),
+                                "authenticated": bool(target_url and browser_proxy_server and browser_proxy_username and browser_proxy_password),
                             },
                             "cookies": {
                                 "count": len(browser_cookies),
@@ -1098,6 +1105,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 request.action(),
                 jsonForScript(request.url()),
                 jsonForScript(normalizedBrowserProxyServer()),
+                jsonForScript(browserProxyCredentials().username()),
+                jsonForScript(browserProxyCredentials().password()),
                 jsonForScript(request.allowedHosts()),
                 request.viewportWidth(),
                 request.viewportHeight(),
@@ -2603,6 +2612,32 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     null).toString();
         } catch (URISyntaxException ex) {
             throw new IllegalArgumentException("browserProxyServer must be a valid HTTP/HTTPS origin", ex);
+        }
+    }
+
+    private BrowserProxyCredentials browserProxyCredentials() {
+        String username = trimToNull(properties.getBrowserProxyUsername());
+        String password = hasText(properties.getBrowserProxyPassword())
+                ? properties.getBrowserProxyPassword()
+                : null;
+        if (username == null && password == null) {
+            return BrowserProxyCredentials.none();
+        }
+        if (username == null || password == null) {
+            throw new IllegalArgumentException(
+                    "browserProxyUsername and browserProxyPassword must be configured together");
+        }
+        if (!hasText(normalizedBrowserProxyServer())) {
+            throw new IllegalArgumentException(
+                    "browserProxyUsername/browserProxyPassword require browserProxyServer");
+        }
+        return new BrowserProxyCredentials(username, password);
+    }
+
+    private record BrowserProxyCredentials(String username, String password) {
+
+        private static BrowserProxyCredentials none() {
+            return new BrowserProxyCredentials("", "");
         }
     }
 

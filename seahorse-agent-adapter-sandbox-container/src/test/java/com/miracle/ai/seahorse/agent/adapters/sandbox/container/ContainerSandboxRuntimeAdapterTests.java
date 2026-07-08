@@ -1292,7 +1292,8 @@ class ContainerSandboxRuntimeAdapterTests {
                     assertThat(script)
                             .contains("browser_proxy_server = \"http://proxy.docker.internal:18082\"",
                                     "if target_url and browser_proxy_server:",
-                                    "context_options[\"proxy\"] = {\"server\": browser_proxy_server}",
+                                    "proxy_options = {\"server\": browser_proxy_server}",
+                                    "context_options[\"proxy\"] = proxy_options",
                                     "\"proxy\": {",
                                     "\"enabled\": bool(target_url and browser_proxy_server)");
                     Files.writeString(command.workingDirectory().resolve("browser-result.json"),
@@ -1301,6 +1302,47 @@ class ContainerSandboxRuntimeAdapterTests {
                                     """);
                 });
         ContainerSandboxRuntimeAdapter adapter = adapterWithBrowserProxy(runner, "http://proxy.docker.internal:18082");
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"screenshot":false,"har":false,"video":false}
+                        """,
+                true,
+                List.of("host.docker.internal")));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(runner.lastCommand.commandLine())
+                .containsSubsequence("--add-host", "host.docker.internal:host-gateway")
+                .containsSubsequence("--add-host", "proxy.docker.internal:host-gateway")
+                .doesNotContain("--network");
+    }
+
+    @Test
+    void shouldInjectConfiguredBrowserProxyAuthentication() throws Exception {
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("browser snapshot completed; proxy=True\n", Duration.ofMillis(320)),
+                command -> {
+                    String script = Files.readString(command.workingDirectory().resolve("main.py"));
+                    assertThat(script)
+                            .contains("browser_proxy_server = \"http://proxy.docker.internal:18082\"",
+                                    "browser_proxy_username = \"proxy-user\"",
+                                    "browser_proxy_password = \"proxy-password-secret\"",
+                                    "proxy_options[\"username\"] = browser_proxy_username",
+                                    "proxy_options[\"password\"] = browser_proxy_password",
+                                    "\"authenticated\": bool(target_url and browser_proxy_server and browser_proxy_username and browser_proxy_password)");
+                    Files.writeString(command.workingDirectory().resolve("browser-result.json"),
+                            """
+                                    {"action":"snapshot","source":"url","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"proxy":{"enabled":true,"authenticated":true},"text":"proxy auth marker"}
+                                    """);
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapterWithBrowserProxy(
+                runner,
+                "http://proxy.docker.internal:18082",
+                "proxy-user",
+                "proxy-password-secret");
         SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
 
         SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
@@ -2256,6 +2298,18 @@ class ContainerSandboxRuntimeAdapterTests {
     private ContainerSandboxRuntimeAdapter adapterWithBrowserProxy(RecordingRunner runner, String browserProxyServer) {
         ContainerSandboxAdapterProperties properties = properties();
         properties.setBrowserProxyServer(browserProxyServer);
+        return new ContainerSandboxRuntimeAdapter(properties, runner, CLOCK);
+    }
+
+    private ContainerSandboxRuntimeAdapter adapterWithBrowserProxy(
+            RecordingRunner runner,
+            String browserProxyServer,
+            String browserProxyUsername,
+            String browserProxyPassword) {
+        ContainerSandboxAdapterProperties properties = properties();
+        properties.setBrowserProxyServer(browserProxyServer);
+        properties.setBrowserProxyUsername(browserProxyUsername);
+        properties.setBrowserProxyPassword(browserProxyPassword);
         return new ContainerSandboxRuntimeAdapter(properties, runner, CLOCK);
     }
 

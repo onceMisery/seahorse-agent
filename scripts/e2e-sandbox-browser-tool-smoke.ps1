@@ -16,18 +16,27 @@ param(
     [int]$AssetPort = 18081,
     [string]$ProxyHost = "proxy.docker.internal",
     [int]$ProxyPort = 18082,
+    [string]$ProxyUsername = "seahorse-proxy-user",
+    [string]$ProxyPassword = "seahorse-proxy-password",
     [string]$StorageRoot = "/app/seahorse-agent-storage",
     [string]$ExpectedObjectUriPrefix = "local://sandbox-artifacts/",
     [long]$KernelRunProfileId = -9101,
     [switch]$SkipBrowserImageBuild,
     [switch]$SkipHealth,
-    [switch]$ExpectBrowserProxy
+    [switch]$ExpectBrowserProxy,
+    [switch]$ExpectBrowserProxyAuth
 )
 
 $ErrorActionPreference = "Stop"
 $passed = 0
 $failed = 0
 $total = 0
+if ($ExpectBrowserProxyAuth) {
+    $ExpectBrowserProxy = $true
+    if ([string]::IsNullOrWhiteSpace($ProxyUsername) -or [string]::IsNullOrWhiteSpace($ProxyPassword)) {
+        throw "ProxyUsername and ProxyPassword must be set when ExpectBrowserProxyAuth is enabled"
+    }
+}
 $externalHttpContainerName = $null
 $externalHttpRoot = $null
 $assetHttpContainerName = $null
@@ -320,6 +329,19 @@ function New-RealAgentRunId {
     }
 }
 
+function Assert-NoProxyCredentialLeak {
+    param(
+        [string]$Content,
+        [string]$Label
+    )
+    if (-not $ExpectBrowserProxyAuth) {
+        return
+    }
+    if ($Content -like "*$ProxyUsername*" -or $Content -like "*$ProxyPassword*") {
+        throw "$Label leaked proxy credential values: $Content"
+    }
+}
+
 function Invoke-NativeCommandCapture {
     param(
         [string]$Command,
@@ -538,7 +560,10 @@ function Start-BrowserProxyFixture {
         [string]$Name,
         [int]$Port,
         [string]$ExternalHostName,
-        [string]$AssetHostName
+        [string]$AssetHostName,
+        [string]$Username,
+        [string]$Password,
+        [bool]$RequireAuth
     )
     if ([string]::IsNullOrWhiteSpace($Name)) {
         throw "Browser proxy container name must not be blank"
@@ -548,12 +573,19 @@ function Start-BrowserProxyFixture {
         Remove-Item -LiteralPath $root -Recurse -Force
     }
     New-Item -ItemType Directory -Path $root | Out-Null
+    $usernameLiteral = $Username | ConvertTo-Json -Compress
+    $passwordLiteral = $Password | ConvertTo-Json -Compress
+    $requireAuthLiteral = if ($RequireAuth) { "True" } else { "False" }
     $proxyScript = @"
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
+import base64
 import http.client
 
 HIT_LOG = "/srv/proxy-hits.log"
+PROXY_USERNAME = $usernameLiteral
+PROXY_PASSWORD = $passwordLiteral
+REQUIRE_AUTH = $requireAuthLiteral
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -570,12 +602,24 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.scheme != "http" or not parsed.hostname:
             self.send_error(400, "only absolute http proxy GET requests are supported")
             return
+        if REQUIRE_AUTH:
+            expected = "Basic " + base64.b64encode(f"{PROXY_USERNAME}:{PROXY_PASSWORD}".encode("utf-8")).decode("ascii")
+            if self.headers.get("Proxy-Authorization") != expected:
+                body = b"proxy authentication required"
+                self.send_response(407)
+                self.send_header("Proxy-Authenticate", "Basic realm=\"seahorse-browser-proxy\"")
+                self.send_header("Content-Type", "text/plain")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
         port = parsed.port or 80
         path = parsed.path or "/"
         if parsed.query:
             path += "?" + parsed.query
         with open(HIT_LOG, "a", encoding="utf-8") as log:
-            log.write(f"{self.command} {target}\n")
+            auth_state = "ok" if REQUIRE_AUTH else "not-required"
+            log.write(f"{self.command} {target} auth={auth_state}\n")
         headers = {
             key: value
             for key, value in self.headers.items()
@@ -792,7 +836,10 @@ try {
                 -Name "seahorse-browser-proxy-smoke-$suffix" `
                 -Port $ProxyPort `
                 -ExternalHostName $ExternalHost `
-                -AssetHostName $AssetHost
+                -AssetHostName $AssetHost `
+                -Username $ProxyUsername `
+                -Password $ProxyPassword `
+                -RequireAuth ([bool]$ExpectBrowserProxyAuth)
         }
         if (-not $proxyFixture) { exit 1 }
         $script:proxyContainerName = "$($proxyFixture.Name)"
@@ -1375,6 +1422,7 @@ try {
     Test-Step "Download governed URL mode browser JSON artifacts" {
         foreach ($artifactId in $urlJsonArtifactIds) {
             $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$artifactId/download" -Headers $headers
+            Assert-NoProxyCredentialLeak -Content $content -Label "Downloaded URL mode JSON artifact"
             if ($content -like "*$externalCookieValue*") {
                 throw "Downloaded URL mode JSON artifact leaked cookie value: $content"
             }
@@ -1400,6 +1448,9 @@ try {
                 if ($ExpectBrowserProxy -and $content -notlike "*`"enabled`": true*" -and $content -notlike "*`"enabled`":true*") {
                     throw "Downloaded URL mode browser result did not mark proxy enabled: $content"
                 }
+                if ($ExpectBrowserProxyAuth -and $content -notlike "*`"authenticated`": true*" -and $content -notlike "*`"authenticated`":true*") {
+                    throw "Downloaded URL mode browser result did not mark proxy authenticated: $content"
+                }
                 $script:urlJsonArtifactId = $artifactId
             } elseif ($content -like "*localStorageCount*" -and ($content -like "*`"count`": 1*" -or $content -like "*`"count`":1*")) {
                 if ($content -notlike "*host.docker.internal*") {
@@ -1418,6 +1469,7 @@ try {
 
     Test-Step "Download governed URL mode browser HAR artifact" {
         $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$urlHarArtifactId/download" -Headers $headers
+        Assert-NoProxyCredentialLeak -Content $content -Label "Downloaded URL mode HAR artifact"
         $har = $content | ConvertFrom-Json
         $entries = @($har.log.entries)
         $mainRequests = @($entries | Where-Object { "$($_.request.url)" -eq $externalUrl })
@@ -1462,8 +1514,11 @@ try {
             if ($hits -notlike "*$assetUrl*") {
                 throw "Browser proxy hit log did not include asset URL ${assetUrl}: $hits"
             }
-            if ($hits -like "*$externalCookieValue*" -or $hits -like "*$externalStorageValue*") {
-                throw "Browser proxy hit log leaked cookie or session storage values: $hits"
+            if ($ExpectBrowserProxyAuth -and $hits -notlike "*auth=ok*") {
+                throw "Browser proxy hit log did not confirm authenticated requests: $hits"
+            }
+            if ($hits -like "*$externalCookieValue*" -or $hits -like "*$externalStorageValue*" -or $hits -like "*$ProxyUsername*" -or $hits -like "*$ProxyPassword*") {
+                throw "Browser proxy hit log leaked cookie, session storage, or proxy credential values: $hits"
             }
         } | Out-Null
     }
@@ -1596,6 +1651,7 @@ try {
 
     Test-Step "Download governed replay browser JSON artifact" {
         $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$replayJsonArtifactId/download" -Headers $headers
+        Assert-NoProxyCredentialLeak -Content $content -Label "Replay browser result"
         if ($content -notlike "*$externalAuthMarker*") {
             throw "Replay browser result did not use restored cookie auth marker: $content"
         }
@@ -1618,6 +1674,7 @@ try {
 
     Test-Step "Download governed replay browser HAR artifact" {
         $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$replayHarArtifactId/download" -Headers $headers
+        Assert-NoProxyCredentialLeak -Content $content -Label "Replay HAR"
         $har = $content | ConvertFrom-Json
         $entries = @($har.log.entries)
         $mainRequests = @($entries | Where-Object { "$($_.request.url)" -eq $externalUrl })
@@ -1707,6 +1764,7 @@ try {
 
     Test-Step "Download governed artifact replay browser JSON artifact" {
         $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$artifactReplayJsonArtifactId/download" -Headers $headers
+        Assert-NoProxyCredentialLeak -Content $content -Label "Artifact replay browser result"
         if ($content -notlike "*$externalAuthMarker*") {
             throw "Artifact replay browser result did not use restored cookie auth marker: $content"
         }
@@ -1729,6 +1787,7 @@ try {
 
     Test-Step "Download governed artifact replay browser HAR artifact" {
         $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$artifactReplayHarArtifactId/download" -Headers $headers
+        Assert-NoProxyCredentialLeak -Content $content -Label "Artifact replay HAR"
         $har = $content | ConvertFrom-Json
         $entries = @($har.log.entries)
         $mainRequests = @($entries | Where-Object { "$($_.request.url)" -eq $externalUrl })
@@ -1880,6 +1939,7 @@ try {
                 throw "sandbox_browser audit status mismatch for step $($expected.StepId): $($audit | ConvertTo-Json -Depth 20 -Compress)"
             }
             $summary = "$($audit.argumentsSummary)"
+            Assert-NoProxyCredentialLeak -Content $summary -Label "sandbox_browser audit summary"
             foreach ($required in @($expected.Required)) {
                 if ($summary -notlike "*$required*") {
                     throw "sandbox_browser audit summary for step $($expected.StepId) did not include $required`: $summary"
