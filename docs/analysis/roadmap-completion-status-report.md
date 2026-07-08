@@ -1078,6 +1078,12 @@ The unified GateResult projection now includes RAG Strategy comparison evidence.
 
 The Web API exposes the projection at `GET /knowledge-base/{kbId}/retrieval-evaluation-datasets/{datasetId}/comparisons/{comparisonId}/gate-result`. Existing comparison detail and promotion endpoints remain compatible.
 
-This extends GateResult beyond Agent and Run Profile to the first RAG Strategy adapter. It does not persist unified gate rows, and Model Config, Tool/Skill, and Ingestion Pipeline adapters remain follow-up work.
+This extends GateResult beyond Agent and Run Profile to the first RAG Strategy adapter. It does not persist unified gate rows. Later full-Docker evidence below closes the Model Config, Tool/Skill, and Ingestion Pipeline adapter verification gap for the current projection scope.
 
 Fresh evidence: `.\mvnw.cmd -pl seahorse-agent-kernel "-Dtest=GateResultsTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 4/4 projection tests; `.\mvnw.cmd -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseRetrievalAndMemoryControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` passed 20/20 Web contract tests; and `npm test -- src/services/frontendCapabilityContracts.test.ts src/services/serviceEndpointCoverage.test.ts` passed 15/15 frontend manifest/coverage tests.
+
+### 2026-07-08 Unified GateResult Full-Docker Adapter Evidence Update
+
+The unified GateResult projection now has fresh full-Docker evidence across the current adapter set. `scripts/e2e-gate-result-smoke.ps1` exercises real catalog and production objects for Tool, Skill, Run Profile, Agent, Ingestion Pipeline, Model Config, and RAG Strategy comparison GateResult APIs, then cleans up temporary pipeline, model config, and knowledge-base data.
+
+Fresh evidence: `.\scripts\e2e-gate-result-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123` passed 19/19 against the local full-Docker backend with marker `CODX_GATE_RESULT_1783472218669`. The run verified Tool `tool_search`, Skill `web-design-guidelines`, Run Profile `-9105`, Agent `github-visual-project-intro-agent`, temporary Ingestion Pipeline `333048789958111232`, temporary Model Config `default:codex.gateResult.1783472218669`, and RAG comparison `333048802029318144`. The remaining GateResult follow-up is persisted unified gate rows and any future retirement of object-specific gate models, not missing adapter coverage for the current projection APIs.
