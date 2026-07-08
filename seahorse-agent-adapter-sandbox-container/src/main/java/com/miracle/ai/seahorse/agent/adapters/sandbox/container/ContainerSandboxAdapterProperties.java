@@ -31,6 +31,8 @@ public class ContainerSandboxAdapterProperties {
 
     private String browserImage = "seahorse-sandbox-browser:playwright-1.48.0";
 
+    private String browserProxyServer = "";
+
     private String workspaceRoot = "";
 
     private String workspaceMountSourceRoot = "";
@@ -79,6 +81,14 @@ public class ContainerSandboxAdapterProperties {
         this.browserImage = requireTextOrDefault(
                 browserImage,
                 "seahorse-sandbox-browser:playwright-1.48.0");
+    }
+
+    public String getBrowserProxyServer() {
+        return browserProxyServer;
+    }
+
+    public void setBrowserProxyServer(String browserProxyServer) {
+        this.browserProxyServer = Objects.requireNonNullElse(browserProxyServer, "").trim();
     }
 
     public String getWorkspaceRoot() {

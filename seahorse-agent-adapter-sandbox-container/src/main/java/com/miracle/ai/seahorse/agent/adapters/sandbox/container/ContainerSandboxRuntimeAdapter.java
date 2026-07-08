@@ -757,6 +757,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
                 action = "%s"
                 target_url = %s
+                browser_proxy_server = %s
                 allowed_hosts = set(%s)
                 viewport_width = %d
                 viewport_height = %d
@@ -956,6 +957,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         }
                         if browser_session_state is not None:
                             context_options["storage_state"] = str(session_state_input_path)
+                        if target_url and browser_proxy_server:
+                            context_options["proxy"] = {"server": browser_proxy_server}
                         if video_enabled:
                             video_dir.mkdir(parents=True, exist_ok=True)
                             context_options["record_video_dir"] = str(video_dir)
@@ -1041,6 +1044,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             "url": redacted_har_url(page.url),
                             "targetUrl": target_url or None,
                             "allowedHosts": sorted(allowed_hosts),
+                            "proxy": {
+                                "enabled": bool(target_url and browser_proxy_server),
+                            },
                             "cookies": {
                                 "count": len(browser_cookies),
                                 "domains": sorted({cookie.get("domain") for cookie in browser_cookies if cookie.get("domain")}),
@@ -1091,6 +1097,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 """.formatted(
                 request.action(),
                 jsonForScript(request.url()),
+                jsonForScript(normalizedBrowserProxyServer()),
                 jsonForScript(request.allowedHosts()),
                 request.viewportWidth(),
                 request.viewportHeight(),
@@ -2546,6 +2553,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private List<String> dockerInternalHosts(List<String> requestedHosts) {
         LinkedHashSet<String> hosts = new LinkedHashSet<>();
         hosts.add("host.docker.internal");
+        String browserProxyHost = browserProxyHost();
+        if (browserProxyHost != null && browserProxyHost.endsWith(".docker.internal")) {
+            hosts.add(browserProxyHost);
+        }
         if (requestedHosts != null) {
             for (String requestedHost : requestedHosts) {
                 String host = nullToEmpty(requestedHost).trim().toLowerCase(Locale.ROOT);
@@ -2555,6 +2566,44 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             }
         }
         return List.copyOf(hosts);
+    }
+
+    private String browserProxyHost() {
+        String proxyServer = normalizedBrowserProxyServer();
+        if (!hasText(proxyServer)) {
+            return null;
+        }
+        return URI.create(proxyServer).getHost().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizedBrowserProxyServer() {
+        String value = trimToNull(properties.getBrowserProxyServer());
+        if (value == null) {
+            return "";
+        }
+        try {
+            URI uri = new URI(value);
+            String scheme = nullToEmpty(uri.getScheme()).toLowerCase(Locale.ROOT);
+            String host = uri.getHost();
+            if (!Set.of("http", "https").contains(scheme)
+                    || !hasText(host)
+                    || hasText(uri.getUserInfo())
+                    || hasText(uri.getQuery())
+                    || hasText(uri.getFragment())
+                    || (hasText(uri.getPath()) && !"/".equals(uri.getPath()))) {
+                throw new IllegalArgumentException("browserProxyServer must be an HTTP/HTTPS origin without credentials");
+            }
+            return new URI(
+                    scheme,
+                    null,
+                    host.toLowerCase(Locale.ROOT),
+                    uri.getPort(),
+                    null,
+                    null,
+                    null).toString();
+        } catch (URISyntaxException ex) {
+            throw new IllegalArgumentException("browserProxyServer must be a valid HTTP/HTTPS origin", ex);
+        }
     }
 
     private String imageForRuntime(SandboxRuntimeType runtimeType) {

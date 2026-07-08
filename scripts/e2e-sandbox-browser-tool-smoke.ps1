@@ -14,11 +14,14 @@ param(
     [int]$ExternalPort = 18080,
     [string]$AssetHost = "assets.docker.internal",
     [int]$AssetPort = 18081,
+    [string]$ProxyHost = "proxy.docker.internal",
+    [int]$ProxyPort = 18082,
     [string]$StorageRoot = "/app/seahorse-agent-storage",
     [string]$ExpectedObjectUriPrefix = "local://sandbox-artifacts/",
     [long]$KernelRunProfileId = -9101,
     [switch]$SkipBrowserImageBuild,
-    [switch]$SkipHealth
+    [switch]$SkipHealth,
+    [switch]$ExpectBrowserProxy
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,6 +32,8 @@ $externalHttpContainerName = $null
 $externalHttpRoot = $null
 $assetHttpContainerName = $null
 $assetHttpRoot = $null
+$proxyContainerName = $null
+$proxyRoot = $null
 $headers = $null
 $browserProfileNetworkEnabled = $false
 $baselineNonTerminalSandboxSessions = $null
@@ -528,6 +533,116 @@ function Stop-ExternalHttpFixture {
     }
 }
 
+function Start-BrowserProxyFixture {
+    param(
+        [string]$Name,
+        [int]$Port,
+        [string]$ExternalHostName,
+        [string]$AssetHostName
+    )
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        throw "Browser proxy container name must not be blank"
+    }
+    $root = Join-Path ([System.IO.Path]::GetTempPath()) $Name
+    if (Test-Path -LiteralPath $root) {
+        Remove-Item -LiteralPath $root -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $root | Out-Null
+    $proxyScript = @"
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlsplit
+import http.client
+
+HIT_LOG = "/srv/proxy-hits.log"
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/__proxy_health":
+            body = b"ok"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        target = self.path
+        parsed = urlsplit(target)
+        if parsed.scheme != "http" or not parsed.hostname:
+            self.send_error(400, "only absolute http proxy GET requests are supported")
+            return
+        port = parsed.port or 80
+        path = parsed.path or "/"
+        if parsed.query:
+            path += "?" + parsed.query
+        with open(HIT_LOG, "a", encoding="utf-8") as log:
+            log.write(f"{self.command} {target}\n")
+        headers = {
+            key: value
+            for key, value in self.headers.items()
+            if key.lower() not in ("host", "proxy-connection", "connection")
+        }
+        conn = http.client.HTTPConnection(parsed.hostname, port, timeout=10)
+        try:
+            conn.request("GET", path, headers=headers)
+            response = conn.getresponse()
+            body = response.read()
+            self.send_response(response.status)
+            for key, value in response.getheaders():
+                if key.lower() not in ("connection", "transfer-encoding", "proxy-authenticate", "proxy-authorization"):
+                    self.send_header(key, value)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        finally:
+            conn.close()
+
+    def log_message(self, format, *args):
+        return
+
+ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+"@
+    Set-Content -LiteralPath (Join-Path $root "proxy.py") -Value $proxyScript -Encoding UTF8
+
+    $run = Invoke-NativeCommandCapture -Command "docker" -Arguments @(
+        "run",
+        "-d",
+        "--rm",
+        "--name",
+        $Name,
+        "--add-host",
+        "${ExternalHostName}:host-gateway",
+        "--add-host",
+        "${AssetHostName}:host-gateway",
+        "-p",
+        "${Port}:8080",
+        "-v",
+        "${root}:/srv:rw",
+        "-w",
+        "/srv",
+        "python:3.11-alpine",
+        "python",
+        "proxy.py"
+    )
+    if ($run.ExitCode -ne 0) {
+        throw "docker run failed for browser proxy fixture: $($run.Output -join "`n")"
+    }
+
+    $healthUrl = "http://127.0.0.1:$Port/__proxy_health"
+    for ($attempt = 1; $attempt -le 30; $attempt++) {
+        $probe = Invoke-NativeCommandCapture -Command "curl" -Arguments @("-fsS", $healthUrl)
+        $content = $probe.Output -join "`n"
+        if ($probe.ExitCode -eq 0 -and "$content" -like "*ok*") {
+            return [pscustomobject]@{
+                Name = $Name
+                Root = $root
+                HitLog = (Join-Path $root "proxy-hits.log")
+            }
+        }
+        Start-Sleep -Seconds 1
+    }
+    throw "Timed out waiting for browser proxy fixture at $healthUrl"
+}
+
 try {
     if (-not $SkipHealth) {
         Test-Step "Wait for backend health" {
@@ -670,6 +785,19 @@ try {
     $externalStorageValue = "$($egressFixture.StorageValue)"
     $externalAuthMarker = "$($egressFixture.AuthMarker)"
     $assetUrl = "$($egressFixture.AssetUrl)"
+
+    if ($ExpectBrowserProxy) {
+        $proxyFixture = Test-Step "Start local HTTP proxy fixture for sandbox_browser URL mode" {
+            Start-BrowserProxyFixture `
+                -Name "seahorse-browser-proxy-smoke-$suffix" `
+                -Port $ProxyPort `
+                -ExternalHostName $ExternalHost `
+                -AssetHostName $AssetHost
+        }
+        if (-not $proxyFixture) { exit 1 }
+        $script:proxyContainerName = "$($proxyFixture.Name)"
+        $script:proxyRoot = "$($proxyFixture.Root)"
+    }
 
     $egressConfigOk = Test-Step "Verify sandbox URL egress allowlist is configured" {
         $profilesResponse = Invoke-Json -Method GET -Path "/api/sandbox/runtime/profiles" -Headers $headers
@@ -1266,6 +1394,12 @@ try {
                 if ($content -notlike "*assets.docker.internal*") {
                     throw "Downloaded URL mode browser result did not include asset allowlisted host: $content"
                 }
+                if ($ExpectBrowserProxy -and $content -notlike "*`"proxy`":*" ) {
+                    throw "Downloaded URL mode browser result did not include proxy metadata: $content"
+                }
+                if ($ExpectBrowserProxy -and $content -notlike "*`"enabled`": true*" -and $content -notlike "*`"enabled`":true*") {
+                    throw "Downloaded URL mode browser result did not mark proxy enabled: $content"
+                }
                 $script:urlJsonArtifactId = $artifactId
             } elseif ($content -like "*localStorageCount*" -and ($content -like "*`"count`": 1*" -or $content -like "*`"count`":1*")) {
                 if ($content -notlike "*host.docker.internal*") {
@@ -1314,6 +1448,25 @@ try {
             throw "Downloaded URL mode HAR leaked storage reference: $content"
         }
     } | Out-Null
+
+    if ($ExpectBrowserProxy) {
+        Test-Step "Verify sandbox_browser URL mode used configured proxy" {
+            $hitLog = Join-Path $script:proxyRoot "proxy-hits.log"
+            if (-not (Test-Path -LiteralPath $hitLog)) {
+                throw "Expected browser proxy hit log at $hitLog"
+            }
+            $hits = Get-Content -LiteralPath $hitLog -Raw
+            if ($hits -notlike "*$externalUrl*") {
+                throw "Browser proxy hit log did not include main URL ${externalUrl}: $hits"
+            }
+            if ($hits -notlike "*$assetUrl*") {
+                throw "Browser proxy hit log did not include asset URL ${assetUrl}: $hits"
+            }
+            if ($hits -like "*$externalCookieValue*" -or $hits -like "*$externalStorageValue*") {
+                throw "Browser proxy hit log leaked cookie or session storage values: $hits"
+            }
+        } | Out-Null
+    }
 
     Test-Step "Verify governed URL mode session state artifacts" {
         $safeUrlSessionId = $urlSessionId.Replace("'", "''")
@@ -1964,6 +2117,7 @@ try {
     }
     Stop-ExternalHttpFixture -Name $externalHttpContainerName -Root $externalHttpRoot
     Stop-ExternalHttpFixture -Name $assetHttpContainerName -Root $assetHttpRoot
+    Stop-ExternalHttpFixture -Name $proxyContainerName -Root $proxyRoot
 }
 
 if ($failed -gt 0) {

@@ -1284,6 +1284,42 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldInjectConfiguredBrowserProxyForUrlModeOnly() throws Exception {
+        RecordingRunner runner = new RecordingRunner(
+                ContainerCommandResult.succeeded("browser snapshot completed; proxy=True\n", Duration.ofMillis(320)),
+                command -> {
+                    String script = Files.readString(command.workingDirectory().resolve("main.py"));
+                    assertThat(script)
+                            .contains("browser_proxy_server = \"http://proxy.docker.internal:18082\"",
+                                    "if target_url and browser_proxy_server:",
+                                    "context_options[\"proxy\"] = {\"server\": browser_proxy_server}",
+                                    "\"proxy\": {",
+                                    "\"enabled\": bool(target_url and browser_proxy_server)");
+                    Files.writeString(command.workingDirectory().resolve("browser-result.json"),
+                            """
+                                    {"action":"snapshot","source":"url","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"proxy":{"enabled":true},"text":"proxy marker"}
+                                    """);
+                });
+        ContainerSandboxRuntimeAdapter adapter = adapterWithBrowserProxy(runner, "http://proxy.docker.internal:18082");
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.BROWSER_AUTOMATION));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                """
+                        {"action":"snapshot","url":"http://host.docker.internal:18080/page","allowedHosts":["host.docker.internal"],"screenshot":false,"har":false,"video":false}
+                        """,
+                true,
+                List.of("host.docker.internal")));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(result.artifacts()).hasSize(1);
+        assertThat(runner.lastCommand.commandLine())
+                .containsSubsequence("--add-host", "host.docker.internal:host-gateway")
+                .containsSubsequence("--add-host", "proxy.docker.internal:host-gateway")
+                .doesNotContain("--network");
+    }
+
+    @Test
     void shouldMapRequestedDockerInternalAllowedHostsForBrowserUrlMode() throws Exception {
         RecordingRunner runner = new RecordingRunner(
                 ContainerCommandResult.succeeded("browser snapshot completed\n", Duration.ofMillis(320)),
@@ -2215,6 +2251,12 @@ class ContainerSandboxRuntimeAdapterTests {
 
     private ContainerSandboxRuntimeAdapter adapter(RecordingRunner runner) {
         return new ContainerSandboxRuntimeAdapter(properties(), runner, CLOCK);
+    }
+
+    private ContainerSandboxRuntimeAdapter adapterWithBrowserProxy(RecordingRunner runner, String browserProxyServer) {
+        ContainerSandboxAdapterProperties properties = properties();
+        properties.setBrowserProxyServer(browserProxyServer);
+        return new ContainerSandboxRuntimeAdapter(properties, runner, CLOCK);
     }
 
     private ContainerSandboxAdapterProperties properties() {
