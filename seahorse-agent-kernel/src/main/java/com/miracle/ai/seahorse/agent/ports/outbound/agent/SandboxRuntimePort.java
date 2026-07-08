@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 
 import java.time.Instant;
 import java.util.Set;
+import java.util.UUID;
 
 public interface SandboxRuntimePort {
 
@@ -58,7 +59,7 @@ public interface SandboxRuntimePort {
             @Override
             public SandboxSession createSession(SandboxSessionRequest request) {
                 return SandboxSession.created(
-                        "sandbox_unsupported_" + request.runId(),
+                        "sandbox_unsupported_" + UUID.randomUUID(),
                         request.tenantId(),
                         request.runId(),
                         request.runtimeType(),
@@ -71,7 +72,7 @@ public interface SandboxRuntimePort {
             public SandboxExecutionResult execute(SandboxExecutionRequest request) {
                 Instant now = Instant.now();
                 SandboxExecution execution = SandboxExecution.failed(
-                        "sandbox_exec_unsupported_" + request.session().sessionId(),
+                        "sandbox_exec_unsupported_" + UUID.randomUUID(),
                         request.session().sessionId(),
                         request.session().runtimeType(),
                         now,
