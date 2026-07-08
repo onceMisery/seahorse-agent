@@ -1184,6 +1184,9 @@ class ContainerSandboxRuntimeAdapterTests {
                     assertThat(script)
                             .contains("target_url = \"http://host.docker.internal:18080/page\"",
                                     "allowed_hosts = set([\"host.docker.internal\"])",
+                                    "private_network_allowed_hosts = set([])",
+                                    "import ipaddress",
+                                    "import socket",
                                     "from urllib.parse import unquote_plus, urlparse",
                                     "sensitive_query_parameter_names = {",
                                     "\"sessiontoken\",",
@@ -1206,7 +1209,11 @@ class ContainerSandboxRuntimeAdapterTests {
                                     "scheme = parsed.scheme.lower()",
                                     "host = (parsed.hostname or \"\").lower()",
                                     "if scheme in (\"http\", \"https\") and host:",
-                                    "return host in allowed_hosts",
+                                    "return resolved_host_decision(host)",
+                                    "not ipaddress.ip_address(value).is_global",
+                                    "socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)",
+                                    "\"resolved_private_ip\"",
+                                    "browser navigation blocked by egress policy",
                                     "cookies_path = Path(\"/workspace/browser-cookies.json\")",
                                     "session_state_input_path = Path(\"/workspace/browser-session-state-input.json\")",
                                     "context_options[\"storage_state\"] = str(session_state_input_path)",
@@ -1429,7 +1436,7 @@ class ContainerSandboxRuntimeAdapterTests {
                     String script = Files.readString(command.workingDirectory().resolve("main.py"));
                     assertThat(script)
                             .contains("allowed_hosts = set([\"host.docker.internal\",\"assets.docker.internal\"])",
-                                    "return host in allowed_hosts");
+                                    "return resolved_host_decision(host)");
                     Files.writeString(command.workingDirectory().resolve("browser-result.json"),
                             """
                                     {"action":"snapshot","source":"url","url":"http://host.docker.internal:18080/page","allowedHosts":["assets.docker.internal","host.docker.internal"],"text":"url mode marker"}

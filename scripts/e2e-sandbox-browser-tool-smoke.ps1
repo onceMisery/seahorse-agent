@@ -14,6 +14,7 @@ param(
     [int]$ExternalPort = 18080,
     [string]$AssetHost = "assets.docker.internal",
     [int]$AssetPort = 18081,
+    [string]$PrivateDnsHost = "127.0.0.1.sslip.io",
     [string]$ProxyHost = "proxy.docker.internal",
     [int]$ProxyPort = 18082,
     [int]$SecondaryProxyPort = 18083,
@@ -132,28 +133,35 @@ function Invoke-Text {
         [string]$Method,
         [string]$Path,
         [hashtable]$Headers = @{},
-        [int]$ExpectedStatus = 200
+        [int]$ExpectedStatus = 200,
+        [int]$RateLimitRetries = 2
     )
 
-    $args = @("-sS", "-w", "`n%{http_code}", "-X", $Method, "$BaseUrl$Path")
-    foreach ($key in $Headers.Keys) {
-        $args += @("-H", "${key}: $($Headers[$key])")
-    }
+    for ($attempt = 1; $attempt -le ($RateLimitRetries + 1); $attempt++) {
+        $args = @("-sS", "-w", "`n%{http_code}", "-X", $Method, "$BaseUrl$Path")
+        foreach ($key in $Headers.Keys) {
+            $args += @("-H", "${key}: $($Headers[$key])")
+        }
 
-    $raw = & curl.exe @args
-    if ($LASTEXITCODE -ne 0) {
-        throw "curl exited with $LASTEXITCODE for $Method $Path"
-    }
-    $lines = @($raw)
-    if ($lines.Count -eq 0) {
-        throw "empty curl output for $Method $Path"
-    }
-    $status = [int]$lines[-1]
-    $content = if ($lines.Count -gt 1) { ($lines[0..($lines.Count - 2)] -join "`n") } else { "" }
-    if ($status -ne $ExpectedStatus) {
+        $raw = & curl.exe @args
+        if ($LASTEXITCODE -ne 0) {
+            throw "curl exited with $LASTEXITCODE for $Method $Path"
+        }
+        $lines = @($raw)
+        if ($lines.Count -eq 0) {
+            throw "empty curl output for $Method $Path"
+        }
+        $status = [int]$lines[-1]
+        $content = if ($lines.Count -gt 1) { ($lines[0..($lines.Count - 2)] -join "`n") } else { "" }
+        if ($status -eq $ExpectedStatus) {
+            return $content
+        }
+        if ($status -eq 429 -and $attempt -le $RateLimitRetries) {
+            Start-Sleep -Seconds 70
+            continue
+        }
         throw "Expected HTTP $ExpectedStatus but got $status for $Method $Path body=$content"
     }
-    return $content
 }
 
 function Assert-ApiOk {
@@ -884,6 +892,9 @@ try {
         if ($hosts -notcontains $AssetHost) {
             throw "Expected allowlistedHosts to contain ${AssetHost}: $($profilesResponse.data | ConvertTo-Json -Depth 20 -Compress)"
         }
+        if (-not [string]::IsNullOrWhiteSpace($PrivateDnsHost) -and $hosts -notcontains $PrivateDnsHost) {
+            throw "Expected allowlistedHosts to contain ${PrivateDnsHost}: $($profilesResponse.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
         $true
     }
     if (-not $egressConfigOk) { exit 1 }
@@ -984,6 +995,15 @@ try {
             AllowedHosts = @("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.test")
             ExpectedMessage = "must be a valid dotted DNS host, not localhost or an IP literal"
             ForbiddenValues = @()
+        },
+        @{
+            Name = "private-dns-resolution"
+            StepId = "sandbox-browser-url-private-dns-fail-step-$suffix"
+            ToolCallId = "sandbox-browser-url-private-dns-fail-call-$suffix"
+            Url = "http://${PrivateDnsHost}:$ExternalPort/index.html?q=private-dns-secret-${suffix}"
+            AllowedHosts = @($PrivateDnsHost)
+            ExpectedMessage = "resolved_private_ip"
+            ForbiddenValues = @("private-dns-secret-${suffix}")
         }
     )
 
@@ -1912,9 +1932,16 @@ try {
     } | Out-Null
 
     Test-Step "Verify sandbox_browser Tool Gateway audit summaries" {
-        $response = Invoke-Json -Method GET -Path "/api/tool-invocations?current=1&size=50&runId=$runId&toolId=sandbox_browser" -Headers $headers
-        Assert-ApiOk $response "Read sandbox_browser tool audit"
-        $records = Get-PageRecords $response.data
+        $records = @()
+        $page = 1
+        $pages = 1
+        do {
+            $response = Invoke-Json -Method GET -Path "/api/tool-invocations?current=$page&size=50&runId=$runId&toolId=sandbox_browser" -Headers $headers
+            Assert-ApiOk $response "Read sandbox_browser tool audit"
+            $records += Get-PageRecords $response.data
+            $pages = if ($response.data.pages) { [int]$response.data.pages } else { 1 }
+            $page++
+        } while ($page -le $pages)
         $expectedSteps = @(
             @{
                 StepId = "sandbox-browser-step-$suffix"
@@ -2181,12 +2208,23 @@ try {
         }
         $tempVideo = New-TemporaryFile
         try {
-            $raw = & curl.exe -sS -w "`n%{http_code}" -H "Authorization: Bearer $($login.data.token)" -o $tempVideo.FullName "$BaseUrl/api/sandbox/artifacts/$videoArtifactId/download"
-            if ($LASTEXITCODE -ne 0) {
-                throw "curl exited with $LASTEXITCODE for video download"
+            $status = 0
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+                $raw = & curl.exe -sS -w "`n%{http_code}" -H "Authorization: Bearer $($login.data.token)" -o $tempVideo.FullName "$BaseUrl/api/sandbox/artifacts/$videoArtifactId/download"
+                if ($LASTEXITCODE -ne 0) {
+                    throw "curl exited with $LASTEXITCODE for video download"
+                }
+                $lines = @($raw)
+                $status = [int]$lines[-1]
+                if ($status -eq 200) {
+                    break
+                }
+                if ($status -eq 429 -and $attempt -lt 3) {
+                    Start-Sleep -Seconds 70
+                    continue
+                }
+                break
             }
-            $lines = @($raw)
-            $status = [int]$lines[-1]
             if ($status -ne 200) {
                 throw "Expected HTTP 200 for video download but got $status"
             }

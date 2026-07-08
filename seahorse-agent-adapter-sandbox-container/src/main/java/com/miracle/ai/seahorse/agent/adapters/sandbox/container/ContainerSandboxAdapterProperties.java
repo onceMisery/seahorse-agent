@@ -39,6 +39,8 @@ public class ContainerSandboxAdapterProperties {
 
     private String browserProxyPassword = "";
 
+    private String browserPrivateNetworkAllowedHosts = "";
+
     private String workspaceRoot = "";
 
     private String workspaceMountSourceRoot = "";
@@ -119,6 +121,14 @@ public class ContainerSandboxAdapterProperties {
 
     public void setBrowserProxyPassword(String browserProxyPassword) {
         this.browserProxyPassword = Objects.requireNonNullElse(browserProxyPassword, "");
+    }
+
+    public String getBrowserPrivateNetworkAllowedHosts() {
+        return browserPrivateNetworkAllowedHosts;
+    }
+
+    public void setBrowserPrivateNetworkAllowedHosts(String browserPrivateNetworkAllowedHosts) {
+        this.browserPrivateNetworkAllowedHosts = Objects.requireNonNullElse(browserPrivateNetworkAllowedHosts, "").trim();
     }
 
     public String getWorkspaceRoot() {

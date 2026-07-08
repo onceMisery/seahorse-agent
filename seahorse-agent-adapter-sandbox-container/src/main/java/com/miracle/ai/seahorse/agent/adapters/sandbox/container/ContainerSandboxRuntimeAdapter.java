@@ -756,6 +756,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         BrowserProxyCredentials proxyCredentials = browserProxyCredentials(browserProxyServers);
         return """
                 import json
+                import ipaddress
+                import socket
                 from datetime import datetime, timezone
                 from pathlib import Path
                 from urllib.parse import unquote_plus, urlparse
@@ -768,6 +770,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 browser_proxy_password = %s
                 browser_proxy_pool_size = %d
                 allowed_hosts = set(%s)
+                private_network_allowed_hosts = set(%s)
                 viewport_width = %d
                 viewport_height = %d
                 screenshot_enabled = %s
@@ -833,6 +836,41 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                             return True
                     return False
 
+                host_resolution_cache = {}
+
+                def is_private_network_address(value):
+                    try:
+                        return not ipaddress.ip_address(value).is_global
+                    except ValueError:
+                        return True
+
+                def resolved_host_decision(host):
+                    cached = host_resolution_cache.get(host)
+                    if cached is not None:
+                        return cached
+                    private_network_allowed = host in private_network_allowed_hosts
+                    try:
+                        infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+                    except OSError:
+                        decision = (False, "dns_resolution_failed")
+                        host_resolution_cache[host] = decision
+                        return decision
+                    addresses = sorted({item[4][0] for item in infos if len(item) >= 5 and item[4]})
+                    if not addresses:
+                        decision = (False, "dns_resolution_failed")
+                    elif any(is_private_network_address(address) for address in addresses):
+                        decision = (
+                            True,
+                            "private_network_host_allowlisted",
+                        ) if private_network_allowed else (
+                            False,
+                            "resolved_private_ip",
+                        )
+                    else:
+                        decision = (True, "allowlisted_host")
+                    host_resolution_cache[host] = decision
+                    return decision
+
                 def redacted_har_url(url):
                     if url.startswith("data:"):
                         return "data:<redacted>"
@@ -869,7 +907,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     host = (parsed.hostname or "").lower()
                     if scheme in ("http", "https") and host:
                         if host in allowed_hosts:
-                            return True, "allowlisted_host"
+                            return resolved_host_decision(host)
                         return False, "host_not_allowlisted"
                     return False, "unsupported_url"
 
@@ -888,6 +926,12 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 def increment(counter, key):
                     safe_key = key or "unknown"
                     counter[safe_key] = counter.get(safe_key, 0) + 1
+
+                def blocked_navigation_reason(events):
+                    for event in events:
+                        if event.get("blocked"):
+                            return event.get("blockedReason") or "blocked"
+                    return None
 
                 def empty_har_request(method, url):
                     return {
@@ -1085,7 +1129,16 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         page.on("requestfailed", on_request_failed)
                         page.route("**/*", block_external)
                         if target_url:
-                            page.goto(target_url, wait_until="load", timeout=10000)
+                            try:
+                                page.goto(target_url, wait_until="load", timeout=10000)
+                            except Exception:
+                                blocked_reason = blocked_navigation_reason(network_events)
+                                if blocked_reason:
+                                    blocked_count = sum(1 for event in network_events if event.get("blocked"))
+                                    raise RuntimeError(
+                                        f"browser navigation blocked by egress policy; blockedReason={blocked_reason}; egressRequests={len(network_events)}; egressBlocked={blocked_count}"
+                                    ) from None
+                                raise RuntimeError("browser navigation failed") from None
                         else:
                             page.set_content(html, wait_until="load", timeout=10000)
                         if har_enabled:
@@ -1184,6 +1237,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 jsonForScript(proxyCredentials.password()),
                 browserProxyServers.size(),
                 jsonForScript(request.allowedHosts()),
+                jsonForScript(normalizedBrowserPrivateNetworkAllowedHosts()),
                 request.viewportWidth(),
                 request.viewportHeight(),
                 request.screenshot() ? "True" : "False",
@@ -2092,15 +2146,37 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     }
 
     private void addNormalizedBrowserHost(Set<String> hosts, String value) {
+        addNormalizedBrowserHost(hosts, value, "allowedHosts");
+    }
+
+    private void addNormalizedBrowserHost(Set<String> hosts, String value, String label) {
         if (!hasText(value)) {
             return;
         }
         String host = value.trim().toLowerCase(Locale.ROOT);
         if (host.contains("/") || host.contains(":") || !host.matches("[a-z0-9.-]+")) {
-            throw new IllegalArgumentException("browser automation allowedHosts must contain host names only");
+            throw new IllegalArgumentException("browser automation " + label + " must contain host names only");
         }
-        validatePublicBrowserHost(host, "allowedHosts");
+        validatePublicBrowserHost(host, label);
         hosts.add(host);
+    }
+
+    private List<String> normalizedBrowserPrivateNetworkAllowedHosts() {
+        String value = trimToNull(properties.getBrowserPrivateNetworkAllowedHosts());
+        if (value == null) {
+            return List.of();
+        }
+        LinkedHashSet<String> hosts = new LinkedHashSet<>();
+        for (String item : value.split(",")) {
+            addNormalizedBrowserHost(hosts, item, "browserPrivateNetworkAllowedHosts");
+        }
+        if (hosts.size() > MAX_BROWSER_ALLOWED_HOSTS) {
+            throw new IllegalArgumentException(
+                    "browserPrivateNetworkAllowedHosts must contain at most "
+                            + MAX_BROWSER_ALLOWED_HOSTS
+                            + " hosts");
+        }
+        return new ArrayList<>(hosts);
     }
 
     private String normalizedBrowserSessionState(JsonNode value,
