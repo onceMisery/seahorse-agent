@@ -48,6 +48,7 @@ Seahorse Agent 的目标是形成一个可证据化、可治理、可持续演�
 | 优先级 | 工作项 | 范围 | 验收 |
 |---|---|---|---|
 | P1 | MCP stdio 安全治理第一阶段 | 已落地：命令 allowlist、近端 runner 环境隔离、MCP 工具 HIGH/需审批默认标记、blocked stdio stderr 诊断、诊断审批直达入口、MCP 诊断执行网关 fail-closed、OpenAPI enabled operation 动态注册到 Tool Gateway 并具备真实 HTTP invoke/audit、Sandbox runtime close lifecycle 透传与关闭审计、Sandbox execution history API/UI、Sandbox artifact scanner/prompt visibility gate、Docker/Podman Code Interpreter 容器 adapter 最小闭环、`sandbox_python` Tool Gateway 工具链路、`sandbox_file_convert` CSV/TSV/JSON 表格转换、txt/html/markdown 文本文档转换与 base64 `docx -> txt`/`pdf -> txt` 保守文档文本提取工具链路、受限 inline no-network `sandbox_browser` 与 HAR/download-only video artifact capture、请求级 browser URL allowlist/cookie/session-state/captured-artifact replay guard、full-compose backend 容器内 Docker host-socket/CLI opt-in 接入、真实容器执行 artifact collection、MCP HTTP 和 A2A Tool Gateway audit evidence；剩余：proxy-rich browser egress、持久凭证/长生命周期 browser profile、PDF 渲染/OCR、Office 渲染/编辑、LibreOffice/Tika、通用二进制格式转换、外部扫描引擎/更深 PDF-binary scanning、强隔离与 node-pool 调度/健康、更广 Tool Gateway 产品化 | 非 allowlist stdio 命令无法启动；高风险 MCP 工具默认进入审批/网关治理 |
+| P1 | Sandbox egress 治理可见性 | 已落地：浏览器 URL allowlist、proxy/auth/rotation、egress audit summary、DNS/CIDR pinning、私网例外配置，以及 Sandbox Operations 只读展示 default network policy、allowlist 预览和 browser private-network exception 预览；剩余：可编辑 egress policy UX、长生命周期 browser profile、强隔离与 node-pool 调度/健康 | Operator 能在真实 full-Docker 管理页看到当前 egress posture 与私网例外，执行面仍由 runtime adapter 和 Tool Gateway 审计链路负责 |
 | P1 | AgentScope 生产硬化第一阶段 | 已落地：release gate、A2A 失败降级、Studio trace runId 反查快照、真实模型 AgentScope/kernel SSE 等价；剩余：直接 Studio/OTEL 生产联调 | AgentScope 失败不影响 kernel 普通聊天 |
 
 ## 中期路线（1-3 个月）
@@ -107,6 +108,12 @@ Seahorse Agent 的目标是形成一个可证据化、可治理、可持续演�
 Sandbox Runtime now exposes read-only runtime governance/profile visibility through `GET /api/sandbox/runtime/profiles` and the admin Sandbox Operations panel. The endpoint reports the kernel-owned default profile mapping, default `DENY_ALL` network posture, default TTL, and container-supported versus planned runtime types without touching Docker/Podman.
 
 This moves runtime profile/capacity visibility out of one-off health toasts and into the operator surface. Remaining Sandbox productionization work is profile/policy mutation, tenant/agent quota UX beyond the tool-level endpoint, browser automation, PDF rendering/OCR plus Office/binary conversion beyond the current conservative document text conversions, deeper scanning/redaction, stronger isolation, and node-pool scheduling/health.
+
+## 2026-07-09 Update: Sandbox Browser Private-Network Exception Visibility
+
+Sandbox Runtime health now carries the container runtime's configured `browser-private-network-allowed-hosts` as read-only posture data, and the admin Sandbox Operations panel shows its count plus a bounded preview beside the existing browser egress policy fields. This keeps the runtime adapter as the owner of private-network exception normalization while giving operators page-level evidence for local/private fixture exceptions such as Docker host aliases.
+
+This is a visibility slice only. It does not add mutable private-network exception editing, caller-controlled bypasses, or a new enforcement owner; URL-mode browser enforcement still stays in the container runtime route guard and Tool Gateway audit path.
 
 ## 2026-07-03 Update: Sandbox Document Text Conversion
 

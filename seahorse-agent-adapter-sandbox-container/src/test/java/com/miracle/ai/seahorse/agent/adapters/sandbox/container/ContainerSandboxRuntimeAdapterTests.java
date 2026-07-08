@@ -2206,7 +2206,9 @@ class ContainerSandboxRuntimeAdapterTests {
                         seahorse-sandbox-orphan-live\tUp 2 minutes
                         """,
                 Duration.ofMillis(80)));
-        ContainerSandboxRuntimeAdapter adapter = adapter(runner);
+        ContainerSandboxAdapterProperties properties = properties();
+        properties.setBrowserPrivateNetworkAllowedHosts("host.docker.internal,assets.docker.internal");
+        ContainerSandboxRuntimeAdapter adapter = new ContainerSandboxRuntimeAdapter(properties, runner, CLOCK);
 
         SandboxRuntimeHealth health = adapter.inspectHealth(Set.of("sandbox_container_active"));
 
@@ -2231,6 +2233,8 @@ class ContainerSandboxRuntimeAdapterTests {
                 .containsExactly("seahorse-sandbox-sandbox_container_active");
         assertThat(health.orphanContainerNames())
                 .containsExactly("seahorse-sandbox-orphan-live");
+        assertThat(health.browserPrivateNetworkAllowedHosts())
+                .containsExactly("host.docker.internal", "assets.docker.internal");
         assertThat(health.failureMessages()).isEmpty();
     }
 

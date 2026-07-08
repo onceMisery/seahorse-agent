@@ -148,9 +148,13 @@ const findings = {
 try {
   await loginApi();
   const runtimeProfiles = await api("/api/sandbox/runtime/profiles?tenantId=default");
+  const runtimeHealth = await api("/api/sandbox/runtime/health");
   const egressPolicy = runtimeProfiles?.defaultNetworkPolicy || "DENY_ALL";
   const allowlistedHosts = Array.isArray(runtimeProfiles?.allowlistedHosts)
     ? runtimeProfiles.allowlistedHosts.filter(Boolean).map(String)
+    : [];
+  const privateNetworkAllowedHosts = Array.isArray(runtimeHealth?.browserPrivateNetworkAllowedHosts)
+    ? runtimeHealth.browserPrivateNetworkAllowedHosts.filter(Boolean).map(String)
     : [];
   const context = await browser.newContext({
     viewport: { width: 1440, height: 960 },
@@ -193,6 +197,18 @@ try {
     );
     for (const host of allowlistedHosts.slice(0, 6)) {
       await assertLocatorText(page.getByTestId("sandbox-egress-allowlist-preview"), host, "Sandbox egress allowlist");
+    }
+    await assertLocatorText(
+      page.getByTestId("sandbox-egress-private-network-count"),
+      `${privateNetworkAllowedHosts.length} hosts`,
+      "Sandbox private network exception count"
+    );
+    for (const host of privateNetworkAllowedHosts.slice(0, 6)) {
+      await assertLocatorText(
+        page.getByTestId("sandbox-egress-private-network-preview"),
+        host,
+        "Sandbox private network exceptions"
+      );
     }
 
     const panel = page.getByTestId("sandbox-tool-quota-panel");
@@ -238,6 +254,7 @@ try {
     await page.screenshot({ path: screenshotPath, fullPage: true });
     console.log(`PASS sandbox tool quota page smoke`);
     console.log(`Egress policy: ${egressPolicy} / ${allowlistedHosts.length} hosts`);
+    console.log(`Private network exceptions: ${privateNetworkAllowedHosts.length} hosts`);
     console.log(`Policy: ${policyId}`);
     console.log(`Screenshot: ${screenshotPath}`);
   } finally {

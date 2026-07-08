@@ -205,6 +205,7 @@ function RuntimeGovernancePanel({
   const profileRows = profiles?.profiles || [];
   const nodeRows = nodes || [];
   const allowlistedHosts = profiles?.allowlistedHosts || [];
+  const privateNetworkAllowedHosts = health?.browserPrivateNetworkAllowedHosts || [];
   const checkedAt = health?.checkedAt ? formatTimestamp(health.checkedAt) : "-";
   const [ttlDrafts, setTtlDrafts] = useState<Record<string, string>>({});
   const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({});
@@ -332,6 +333,19 @@ function RuntimeGovernancePanel({
                     data-testid="sandbox-egress-allowlist-preview"
                   >
                     {previewList(allowlistedHosts, 6)}
+                  </div>
+                  <div className="uppercase text-muted-foreground">Private network</div>
+                  <div
+                    className="break-all font-mono text-slate-700"
+                    title={privateNetworkAllowedHosts.join(", ")}
+                  >
+                    <span data-testid="sandbox-egress-private-network-count">
+                      {privateNetworkAllowedHosts.length} hosts
+                    </span>
+                    <span className="mx-2 text-slate-300">/</span>
+                    <span data-testid="sandbox-egress-private-network-preview">
+                      {previewList(privateNetworkAllowedHosts, 6)}
+                    </span>
                   </div>
                 </div>
               </div>

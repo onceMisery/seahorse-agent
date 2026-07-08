@@ -41,6 +41,7 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                                    int failedContainerInspectionCount,
                                    List<String> activeContainerNames,
                                    List<String> orphanContainerNames,
+                                   List<String> browserPrivateNetworkAllowedHosts,
                                    List<String> failureMessages) {
 
     public static final String STATUS_HEALTHY = "HEALTHY";
@@ -67,6 +68,9 @@ public record SandboxRuntimeHealth(Instant checkedAt,
         capacityStatus = normalize(capacityStatus, CAPACITY_UNBOUNDED);
         activeContainerNames = activeContainerNames == null ? List.of() : List.copyOf(activeContainerNames);
         orphanContainerNames = orphanContainerNames == null ? List.of() : List.copyOf(orphanContainerNames);
+        browserPrivateNetworkAllowedHosts = browserPrivateNetworkAllowedHosts == null
+                ? List.of()
+                : List.copyOf(browserPrivateNetworkAllowedHosts);
         failureMessages = failureMessages == null ? List.of() : List.copyOf(failureMessages);
     }
 
@@ -91,6 +95,7 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                 0,
                 0,
                 0,
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of("sandbox runtime adapter is unsupported"));

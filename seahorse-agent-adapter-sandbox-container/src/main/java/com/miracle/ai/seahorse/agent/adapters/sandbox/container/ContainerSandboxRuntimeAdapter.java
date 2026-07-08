@@ -2632,6 +2632,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 containerSummary.failedInspectionCount(),
                 containerSummary.activeNames(),
                 containerSummary.orphanNames(),
+                normalizedBrowserPrivateNetworkAllowedHosts(),
                 failureMessages);
     }
 

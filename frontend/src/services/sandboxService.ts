@@ -71,6 +71,7 @@ export interface SandboxRuntimeHealth {
   failedContainerInspectionCount?: number;
   activeContainerNames?: string[];
   orphanContainerNames?: string[];
+  browserPrivateNetworkAllowedHosts?: string[];
   failureMessages?: string[];
 }
 

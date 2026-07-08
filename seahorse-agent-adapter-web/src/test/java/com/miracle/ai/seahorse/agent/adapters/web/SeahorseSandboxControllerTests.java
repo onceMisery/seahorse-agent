@@ -143,6 +143,7 @@ class SeahorseSandboxControllerTests {
                 0,
                 List.of(),
                 List.of(),
+                List.of(),
                 List.of()));
         when(port.inspectRuntimeNodes()).thenReturn(List.of(nodeHealth()));
         when(port.inspectArtifactScannerPolicy()).thenReturn(defaultScannerPolicy());

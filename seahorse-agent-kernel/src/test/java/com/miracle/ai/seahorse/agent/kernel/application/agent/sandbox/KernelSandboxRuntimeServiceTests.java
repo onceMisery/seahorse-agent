@@ -153,6 +153,7 @@ class KernelSandboxRuntimeServiceTests {
                 0,
                 List.of(),
                 List.of(),
+                List.of(),
                 List.of());
         KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
                 request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
@@ -207,6 +208,7 @@ class KernelSandboxRuntimeServiceTests {
                 0,
                 0,
                 0,
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of());
@@ -1698,6 +1700,7 @@ class KernelSandboxRuntimeServiceTests {
                     0,
                     0,
                     0,
+                    List.of(),
                     List.of(),
                     List.of(),
                     List.of());
