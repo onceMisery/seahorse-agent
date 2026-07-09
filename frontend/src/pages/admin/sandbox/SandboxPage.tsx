@@ -199,7 +199,12 @@ function RuntimeGovernancePanel({
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
-  onSavePolicy: (profile: SandboxRuntimeProfile, ttlSeconds: number, status: string) => void;
+  onSavePolicy: (
+    profile: SandboxRuntimeProfile,
+    ttlSeconds: number,
+    status: string,
+    networkAllowed: boolean
+  ) => void;
   savingProfileRuntimeType: string | null;
 }) {
   const profileRows = profiles?.profiles || [];
@@ -209,6 +214,7 @@ function RuntimeGovernancePanel({
   const checkedAt = health?.checkedAt ? formatTimestamp(health.checkedAt) : "-";
   const [ttlDrafts, setTtlDrafts] = useState<Record<string, string>>({});
   const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({});
+  const [networkDrafts, setNetworkDrafts] = useState<Record<string, boolean>>({});
 
   return (
     <Card>
@@ -437,7 +443,7 @@ function RuntimeGovernancePanel({
               {profileRows.map((profile) => (
                 <div
                   key={profile.runtimeType || profile.profileId}
-                  className="grid gap-3 rounded border border-slate-100 bg-white p-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto]"
+                  className="grid gap-3 rounded border border-slate-100 bg-white p-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto_auto]"
                 >
                   <div className="min-w-0">
                     <div className="truncate font-mono text-xs text-slate-600">
@@ -453,7 +459,10 @@ function RuntimeGovernancePanel({
                   <Badge variant={runtimeProfileBadgeVariant(profile.status)}>
                     {profile.status || "UNKNOWN"}
                   </Badge>
-                  <Badge variant={profile.networkAllowed ? "destructive" : "secondary"}>
+                  <Badge
+                    variant={profile.networkAllowed ? "destructive" : "secondary"}
+                    data-testid={`sandbox-runtime-profile-network-status-${profile.runtimeType || "UNKNOWN"}`}
+                  >
                     {profile.networkAllowed ? "NETWORK" : "NO NETWORK"}
                   </Badge>
                   <select
@@ -469,6 +478,36 @@ function RuntimeGovernancePanel({
                     <option value="ACTIVE">ACTIVE</option>
                     <option value="DISABLED">DISABLED</option>
                   </select>
+                  <label
+                    className={`flex h-8 items-center gap-2 rounded border border-slate-200 px-2 text-xs ${
+                      profile.runtimeType === "BROWSER_AUTOMATION"
+                        ? "bg-white text-slate-700"
+                        : "bg-slate-50 text-muted-foreground"
+                    }`}
+                    title={
+                      profile.runtimeType === "BROWSER_AUTOMATION"
+                        ? "Allow browser URL-mode runtime sessions to request network"
+                        : "Network is only supported for browser automation profiles"
+                    }
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      data-testid={`sandbox-runtime-profile-network-${profile.runtimeType || "UNKNOWN"}`}
+                      checked={
+                        networkDrafts[profile.runtimeType || ""]
+                          ?? Boolean(profile.networkAllowed)
+                      }
+                      disabled={profile.runtimeType !== "BROWSER_AUTOMATION"}
+                      onChange={(event) =>
+                        setNetworkDrafts((prev) => ({
+                          ...prev,
+                          [profile.runtimeType || ""]: event.target.checked
+                        }))
+                      }
+                    />
+                    Network
+                  </label>
                   <div className="flex items-center gap-1">
                     <Input
                       type="number"
@@ -497,8 +536,10 @@ function RuntimeGovernancePanel({
                         const key = profile.runtimeType || "";
                         const ttlSeconds = Number(ttlDrafts[key] ?? profile.sessionTtlSeconds ?? profiles?.defaultTtlSeconds ?? 3600);
                         const status = statusDrafts[key] || profile.policyStatus || "ACTIVE";
-                        onSavePolicy(profile, ttlSeconds, status);
+                        const networkAllowed = networkDrafts[key] ?? Boolean(profile.networkAllowed);
+                        onSavePolicy(profile, ttlSeconds, status, networkAllowed);
                       }}
+                      data-testid={`sandbox-runtime-profile-save-${profile.runtimeType || "UNKNOWN"}`}
                     >
                       <Save className={`h-4 w-4 ${savingProfileRuntimeType === profile.runtimeType ? "animate-pulse" : ""}`} />
                     </Button>
@@ -1069,7 +1110,8 @@ export function SandboxPage() {
   const handleSaveRuntimeProfilePolicy = async (
     profile: SandboxRuntimeProfile,
     ttlSeconds: number,
-    status: string
+    status: string,
+    networkAllowed: boolean
   ) => {
     if (!profile.runtimeType) return;
     if (!Number.isFinite(ttlSeconds) || ttlSeconds < 60 || ttlSeconds > 7200) {
@@ -1085,7 +1127,7 @@ export function SandboxPage() {
         profileId: profile.profileId,
         status,
         sessionTtlSeconds: Math.trunc(ttlSeconds),
-        networkAllowed: false
+        networkAllowed: profile.runtimeType === "BROWSER_AUTOMATION" && networkAllowed
       });
       await refreshRuntimeGovernance();
       toast.success(`Runtime profile ${profile.runtimeType} policy saved`);
@@ -1152,8 +1194,8 @@ export function SandboxPage() {
             loading={loadingRuntimeGovernance}
             error={runtimeGovernanceError}
             onRefresh={() => void refreshRuntimeGovernance(true)}
-            onSavePolicy={(profile, ttlSeconds, status) =>
-              void handleSaveRuntimeProfilePolicy(profile, ttlSeconds, status)
+            onSavePolicy={(profile, ttlSeconds, status, networkAllowed) =>
+              void handleSaveRuntimeProfilePolicy(profile, ttlSeconds, status, networkAllowed)
             }
             savingProfileRuntimeType={savingProfileRuntimeType}
           />

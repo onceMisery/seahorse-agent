@@ -115,6 +115,14 @@ Sandbox Runtime health now carries the container runtime's configured `browser-p
 
 This is a visibility slice only. It does not add mutable private-network exception editing, caller-controlled bypasses, or a new enforcement owner; URL-mode browser enforcement still stays in the container runtime route guard and Tool Gateway audit path.
 
+## 2026-07-09 Update: Sandbox Browser Runtime Network Policy UX
+
+Sandbox Operations now lets operators toggle the existing `BROWSER_AUTOMATION` runtime profile `networkAllowed` policy from the Runtime governance panel. The UI keeps non-browser runtime types disabled for network because only browser automation sessions can request network, and saves still flow through `POST /api/sandbox/runtime/profile-policies` before being read back from `GET /api/sandbox/runtime/profiles?tenantId=default`.
+
+This is an operator-control slice for an already-owned runtime profile policy. It does not add arbitrary egress editing, private-network exception editing, long-lived browser credentials, or a new enforcement owner; session creation and URL-mode enforcement remain in the kernel profile policy and container runtime guard path.
+
+Fresh evidence: `npm run build` passed with existing Browserslist/chunk-size warnings; the packaged frontend image rebuilt through the local `192.168.1.9:7890` proxy and `seahorse-frontend` was recreated; `.\scripts\e2e-sandbox-tool-quota-page-smoke.ps1 -BaseUrl http://127.0.0.1 -Password admin123 -Marker seahorse-sandbox-runtime-network-policy-page-smoke` passed against the local full-Docker frontend/backend and reported `Browser runtime network policy: true`; a post-run live API query confirmed `BROWSER_AUTOMATION.networkAllowed=False`, showing the E2E restore path left the real environment back at its original closed posture.
+
 ## 2026-07-03 Update: Sandbox Document Text Conversion
 
 `sandbox_file_convert` now supports conservative document text conversions on top of the existing CSV/TSV/JSON table path: `txt -> html`, `html -> txt`, `markdown/md -> html/txt`, and base64 `docx -> txt` / `pdf -> txt`. The implementation stays inside the no-network `FILE_CONVERSION` container runtime with a generated Python stdlib converter and collects only the converted output artifact. The DOCX path is intentionally limited to `word/document.xml` text extraction via stdlib `zipfile` and `xml.etree.ElementTree`; the PDF path extracts literal text from unencrypted PDF streams with stdlib `re`/`zlib` helpers. It does not add LibreOffice/Tika, PDF rendering/OCR, Office editing, or general binary conversion.
@@ -161,7 +169,7 @@ Fresh evidence: focused kernel/container/Web/autoconfigure tests passed, the loc
 
 ## 2026-07-03 Update: Sandbox Runtime Profile Policy Writes
 
-Sandbox Operations now exposes bounded runtime profile policy writes through `POST /api/sandbox/runtime/profile-policies`. The endpoint is deliberately narrow: existing kernel-owned profiles only, `ACTIVE`/`DISABLED`, `sessionTtlSeconds` from 60 to 7200, and `networkAllowed=false`.
+Sandbox Operations now exposes bounded runtime profile policy writes through `POST /api/sandbox/runtime/profile-policies`. The endpoint is deliberately narrow: existing kernel-owned profiles only, `ACTIVE`/`DISABLED`, and `sessionTtlSeconds` from 60 to 7200. The initial UI wrote `networkAllowed=false`; the 2026-07-09 browser-specific UX update above exposes the existing `BROWSER_AUTOMATION` network flag while keeping non-browser profile network disabled.
 
 New session creation now enforces those policies. Disabled profiles persist `RUNTIME_PROFILE_DISABLED`; active TTL overrides change the persisted session expiry; the admin Runtime governance panel reads the effective policy back through `GET /api/sandbox/runtime/profiles?tenantId=default`.
 

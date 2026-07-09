@@ -45,6 +45,7 @@ await fs.mkdir(artifactDir, { recursive: true });
 
 let createdPolicyId = null;
 let authToken = null;
+let browserProfileRestore = null;
 
 async function api(pathname, options = {}) {
   const pathWithSlash = pathname.startsWith("/") ? pathname : `/${pathname}`;
@@ -138,6 +139,18 @@ async function cleanupPolicy() {
   });
 }
 
+async function restoreBrowserProfilePolicy() {
+  if (!authToken || !browserProfileRestore) {
+    return;
+  }
+  await api("/api/sandbox/runtime/profile-policies", {
+    method: "POST",
+    body: JSON.stringify(browserProfileRestore)
+  }).catch((error) => {
+    console.warn(`Failed to restore browser runtime profile policy: ${error.message}`);
+  });
+}
+
 const browser = await chromium.launch({ headless });
 const findings = {
   console: [],
@@ -156,6 +169,20 @@ try {
   const privateNetworkAllowedHosts = Array.isArray(runtimeHealth?.browserPrivateNetworkAllowedHosts)
     ? runtimeHealth.browserPrivateNetworkAllowedHosts.filter(Boolean).map(String)
     : [];
+  const browserProfile = (Array.isArray(runtimeProfiles?.profiles) ? runtimeProfiles.profiles : [])
+    .find((profile) => profile?.runtimeType === "BROWSER_AUTOMATION");
+  if (!browserProfile) {
+    throw new Error(`BROWSER_AUTOMATION runtime profile missing: ${JSON.stringify(runtimeProfiles)}`);
+  }
+  browserProfileRestore = {
+    policyId: browserProfile.policyId,
+    tenantId: "default",
+    runtimeType: "BROWSER_AUTOMATION",
+    profileId: browserProfile.profileId,
+    status: browserProfile.policyStatus || "ACTIVE",
+    sessionTtlSeconds: browserProfile.sessionTtlSeconds || runtimeProfiles?.defaultTtlSeconds || 3600,
+    networkAllowed: Boolean(browserProfile.networkAllowed)
+  };
   const context = await browser.newContext({
     viewport: { width: 1440, height: 960 },
     ignoreHTTPSErrors: true
@@ -211,6 +238,40 @@ try {
       );
     }
 
+    const browserNetworkToggle = page.getByTestId("sandbox-runtime-profile-network-BROWSER_AUTOMATION");
+    await browserNetworkToggle.waitFor({ state: "visible", timeout: 10000 });
+    await browserNetworkToggle.setChecked(true);
+    const profileResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/api/sandbox/runtime/profile-policies") &&
+        response.request().method() === "POST",
+      { timeout: 20000 }
+    );
+    await page.getByTestId("sandbox-runtime-profile-save-BROWSER_AUTOMATION").click();
+    const profileResponse = await profileResponsePromise;
+    const profilePayload = await profileResponse.json();
+    if (profileResponse.status() !== 200 || profilePayload?.code !== "0") {
+      throw new Error(`Runtime profile network save failed: HTTP ${profileResponse.status()} ${JSON.stringify(profilePayload)}`);
+    }
+    const savedProfilePolicy = profilePayload.data;
+    if (savedProfilePolicy?.runtimeType !== "BROWSER_AUTOMATION" || savedProfilePolicy?.networkAllowed !== true) {
+      throw new Error(`Unexpected browser runtime profile policy response: ${JSON.stringify(savedProfilePolicy)}`);
+    }
+    await page.waitForFunction(
+      () =>
+        document.querySelector('[data-testid="sandbox-runtime-profile-network-status-BROWSER_AUTOMATION"]')
+          ?.textContent
+          ?.trim() === "NETWORK",
+      null,
+      { timeout: 10000 }
+    );
+    const browserNetworkStatus = await page
+      .getByTestId("sandbox-runtime-profile-network-status-BROWSER_AUTOMATION")
+      .innerText({ timeout: 5000 });
+    if (browserNetworkStatus.trim() !== "NETWORK") {
+      throw new Error(`Browser runtime profile network status did not become NETWORK: ${browserNetworkStatus}`);
+    }
+
     const panel = page.getByTestId("sandbox-tool-quota-panel");
     await panel.waitFor({ state: "visible", timeout: 20000 });
 
@@ -255,12 +316,14 @@ try {
     console.log(`PASS sandbox tool quota page smoke`);
     console.log(`Egress policy: ${egressPolicy} / ${allowlistedHosts.length} hosts`);
     console.log(`Private network exceptions: ${privateNetworkAllowedHosts.length} hosts`);
+    console.log(`Browser runtime network policy: ${savedProfilePolicy.networkAllowed}`);
     console.log(`Policy: ${policyId}`);
     console.log(`Screenshot: ${screenshotPath}`);
   } finally {
     await context.close();
   }
 } finally {
+  await restoreBrowserProfilePolicy();
   await cleanupPolicy();
   await browser.close();
 }
