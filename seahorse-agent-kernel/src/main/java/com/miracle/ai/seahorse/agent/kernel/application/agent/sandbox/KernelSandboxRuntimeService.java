@@ -439,7 +439,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 session,
                 safeCommand.input(),
                 safeCommand.networkRequested(),
-                safeCommand.requestedHosts()));
+                safeCommand.requestedHosts(),
+                policyPort.browserPrivateNetworkAllowedHosts(session.tenantId())));
         SandboxExecution savedExecution = executionRepositoryPort.saveExecution(result.execution());
         List<SandboxArtifact> savedArtifacts = result.artifacts().stream()
                 .map(this::persistArtifact)
@@ -606,6 +607,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 safeCommand.tenantId(),
                 safeCommand.networkPolicy(),
                 safeCommand.allowlistedHosts(),
+                safeCommand.browserPrivateNetworkAllowedHosts(),
                 existing.map(SandboxEgressPolicy::createdAt).orElse(now),
                 now);
         return egressPolicyRepositoryPort.upsert(policy);
@@ -724,6 +726,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                         safeTenantId,
                         policyPort.networkPolicy(safeTenantId),
                         policyPort.allowlistedHosts(safeTenantId),
+                        policyPort.browserPrivateNetworkAllowedHosts(safeTenantId),
                         clock.instant()));
     }
 

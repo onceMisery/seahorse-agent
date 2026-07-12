@@ -786,12 +786,20 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     public SandboxPolicyPort seahorseSandboxPolicyPort(
             @Value("${seahorse.agent.sandbox.network-policy:DENY_ALL}") SandboxNetworkPolicy networkPolicy,
             @Value("${seahorse.agent.sandbox.allowlisted-hosts:}") String allowlistedHosts,
+            @Value("${seahorse.agent.sandbox.browser-private-network-allowed-hosts:}") String browserPrivateNetworkAllowedHosts,
             ObjectProvider<SandboxEgressPolicyRepositoryPort> sandboxEgressPolicyRepositoryPort) {
         SandboxEgressPolicyRepositoryPort repositoryPort = sandboxEgressPolicyRepositoryPort.getIfAvailable();
         if (repositoryPort != null) {
-            return new RepositoryBackedSandboxPolicyPort(networkPolicy, csvList(allowlistedHosts), repositoryPort);
+            return new RepositoryBackedSandboxPolicyPort(
+                    networkPolicy,
+                    csvList(allowlistedHosts),
+                    csvList(browserPrivateNetworkAllowedHosts),
+                    repositoryPort);
         }
-        return new DefaultSandboxPolicyPort(networkPolicy, csvList(allowlistedHosts));
+        return new DefaultSandboxPolicyPort(
+                networkPolicy,
+                csvList(allowlistedHosts),
+                csvList(browserPrivateNetworkAllowedHosts));
     }
 
     @Bean

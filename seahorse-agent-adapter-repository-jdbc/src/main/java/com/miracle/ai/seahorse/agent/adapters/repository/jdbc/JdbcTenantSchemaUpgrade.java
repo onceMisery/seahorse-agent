@@ -317,11 +317,16 @@ public class JdbcTenantSchemaUpgrade {
                       tenant_id VARCHAR(64) NOT NULL,
                       network_policy VARCHAR(32) NOT NULL DEFAULT 'DENY_ALL',
                       allowlisted_hosts TEXT NOT NULL DEFAULT '',
+                      browser_private_network_allowed_hosts TEXT NOT NULL DEFAULT '',
                       created_at TIMESTAMP NOT NULL,
                       updated_at TIMESTAMP NOT NULL,
                       CONSTRAINT chk_sa_sandbox_egress_policy_network
                         CHECK (network_policy IN ('DENY_ALL', 'ALLOWLISTED'))
                     )
+                    """);
+            jdbcTemplate.execute("""
+                    ALTER TABLE sa_sandbox_egress_policy
+                      ADD COLUMN IF NOT EXISTS browser_private_network_allowed_hosts TEXT NOT NULL DEFAULT ''
                     """);
             jdbcTemplate.execute("""
                     CREATE UNIQUE INDEX IF NOT EXISTS uk_sa_sandbox_egress_policy_tenant

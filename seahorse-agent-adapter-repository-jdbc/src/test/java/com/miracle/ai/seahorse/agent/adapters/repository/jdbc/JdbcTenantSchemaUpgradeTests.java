@@ -268,6 +268,8 @@ class JdbcTenantSchemaUpgradeTests {
         assertThat(columnExists(jdbcTemplate, "sa_sandbox_egress_policy", "tenant_id")).isTrue();
         assertThat(columnExists(jdbcTemplate, "sa_sandbox_egress_policy", "network_policy")).isTrue();
         assertThat(columnExists(jdbcTemplate, "sa_sandbox_egress_policy", "allowlisted_hosts")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_sandbox_egress_policy", "browser_private_network_allowed_hosts"))
+                .isTrue();
         assertThat(indexExists(jdbcTemplate,
                 "sa_sandbox_egress_policy",
                 "uk_sa_sandbox_egress_policy_tenant")).isTrue();

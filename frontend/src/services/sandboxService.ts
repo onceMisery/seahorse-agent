@@ -115,6 +115,7 @@ export interface SandboxRuntimeProfilesResponse {
   profiles?: SandboxRuntimeProfile[];
   defaultNetworkPolicy?: string;
   allowlistedHosts?: string[];
+  browserPrivateNetworkAllowedHosts?: string[];
   defaultTtlSeconds?: number;
 }
 
@@ -123,6 +124,7 @@ export interface SandboxEgressPolicy {
   tenantId?: string;
   networkPolicy?: "DENY_ALL" | "ALLOWLISTED" | string;
   allowlistedHosts?: string[];
+  browserPrivateNetworkAllowedHosts?: string[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -132,6 +134,7 @@ export interface SandboxEgressPolicyPayload {
   tenantId: string;
   networkPolicy?: "DENY_ALL" | "ALLOWLISTED" | string;
   allowlistedHosts?: string[];
+  browserPrivateNetworkAllowedHosts?: string[];
 }
 
 export interface SandboxArtifactScannerPolicy {

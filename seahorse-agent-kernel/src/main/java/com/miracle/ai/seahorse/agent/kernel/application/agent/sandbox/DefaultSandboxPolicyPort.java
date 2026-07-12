@@ -33,10 +33,18 @@ public class DefaultSandboxPolicyPort implements SandboxPolicyPort {
 
     private final SandboxNetworkPolicy networkPolicy;
     private final Set<String> allowlistedHosts;
+    private final Set<String> browserPrivateNetworkAllowedHosts;
 
     public DefaultSandboxPolicyPort(SandboxNetworkPolicy networkPolicy, List<String> allowlistedHosts) {
+        this(networkPolicy, allowlistedHosts, List.of());
+    }
+
+    public DefaultSandboxPolicyPort(SandboxNetworkPolicy networkPolicy,
+                                    List<String> allowlistedHosts,
+                                    List<String> browserPrivateNetworkAllowedHosts) {
         this.networkPolicy = Objects.requireNonNullElse(networkPolicy, SandboxNetworkPolicy.DENY_ALL);
         this.allowlistedHosts = normalizeHosts(allowlistedHosts);
+        this.browserPrivateNetworkAllowedHosts = normalizeHosts(browserPrivateNetworkAllowedHosts);
     }
 
     @Override
@@ -62,6 +70,13 @@ public class DefaultSandboxPolicyPort implements SandboxPolicyPort {
     @Override
     public List<String> allowlistedHosts() {
         return allowlistedHosts.stream()
+                .sorted()
+                .toList();
+    }
+
+    @Override
+    public List<String> browserPrivateNetworkAllowedHosts() {
+        return browserPrivateNetworkAllowedHosts.stream()
                 .sorted()
                 .toList();
     }

@@ -25,11 +25,22 @@ import java.util.Objects;
 public record SandboxExecutionRequest(SandboxSession session,
                                       String input,
                                       boolean networkRequested,
-                                      List<String> requestedHosts) {
+                                      List<String> requestedHosts,
+                                      List<String> browserPrivateNetworkAllowedHosts) {
+
+    public SandboxExecutionRequest(SandboxSession session,
+                                   String input,
+                                   boolean networkRequested,
+                                   List<String> requestedHosts) {
+        this(session, input, networkRequested, requestedHosts, null);
+    }
 
     public SandboxExecutionRequest {
         session = Objects.requireNonNull(session, "session must not be null");
         input = input == null ? "" : input;
         requestedHosts = requestedHosts == null ? List.of() : List.copyOf(requestedHosts);
+        browserPrivateNetworkAllowedHosts = browserPrivateNetworkAllowedHosts == null
+                ? null
+                : List.copyOf(browserPrivateNetworkAllowedHosts);
     }
 }

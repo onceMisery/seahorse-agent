@@ -71,7 +71,7 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
             network_allowed, created_at, updated_at
             """;
     private static final String EGRESS_POLICY_COLUMNS = """
-            policy_id, tenant_id, network_policy, allowlisted_hosts, created_at, updated_at
+            policy_id, tenant_id, network_policy, allowlisted_hosts, browser_private_network_allowed_hosts, created_at, updated_at
             """;
 
     private static final String SQL_INSERT_SESSION = """
@@ -224,14 +224,15 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
             """.formatted(RUNTIME_PROFILE_POLICY_COLUMNS);
     private static final String SQL_INSERT_EGRESS_POLICY = """
             INSERT INTO sa_sandbox_egress_policy
-            (policy_id, tenant_id, network_policy, allowlisted_hosts, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (policy_id, tenant_id, network_policy, allowlisted_hosts, browser_private_network_allowed_hosts, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String SQL_UPDATE_EGRESS_POLICY = """
             UPDATE sa_sandbox_egress_policy
             SET tenant_id = ?,
                 network_policy = ?,
                 allowlisted_hosts = ?,
+                browser_private_network_allowed_hosts = ?,
                 created_at = ?,
                 updated_at = ?
             WHERE policy_id = ?
@@ -550,6 +551,7 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 policy.tenantId(),
                 policy.networkPolicy().name(),
                 encodeHosts(policy.allowlistedHosts()),
+                encodeHosts(policy.browserPrivateNetworkAllowedHosts()),
                 toTimestamp(policy.createdAt()),
                 toTimestamp(policy.updatedAt()));
     }
@@ -559,6 +561,7 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 policy.tenantId(),
                 policy.networkPolicy().name(),
                 encodeHosts(policy.allowlistedHosts()),
+                encodeHosts(policy.browserPrivateNetworkAllowedHosts()),
                 toTimestamp(policy.createdAt()),
                 toTimestamp(policy.updatedAt()),
                 policy.policyId());
@@ -623,6 +626,7 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 resultSet.getString("tenant_id"),
                 SandboxNetworkPolicy.valueOf(resultSet.getString("network_policy")),
                 decodeHosts(resultSet.getString("allowlisted_hosts")),
+                decodeHosts(resultSet.getString("browser_private_network_allowed_hosts")),
                 toInstant(resultSet.getTimestamp("created_at")),
                 toInstant(resultSet.getTimestamp("updated_at")));
     }

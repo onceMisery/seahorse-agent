@@ -35,13 +35,23 @@ public class RepositoryBackedSandboxPolicyPort implements SandboxPolicyPort {
 
     private final SandboxNetworkPolicy defaultNetworkPolicy;
     private final List<String> defaultAllowlistedHosts;
+    private final List<String> defaultBrowserPrivateNetworkAllowedHosts;
     private final SandboxEgressPolicyRepositoryPort repositoryPort;
 
     public RepositoryBackedSandboxPolicyPort(SandboxNetworkPolicy defaultNetworkPolicy,
                                              List<String> defaultAllowlistedHosts,
                                              SandboxEgressPolicyRepositoryPort repositoryPort) {
+        this(defaultNetworkPolicy, defaultAllowlistedHosts, List.of(), repositoryPort);
+    }
+
+    public RepositoryBackedSandboxPolicyPort(SandboxNetworkPolicy defaultNetworkPolicy,
+                                             List<String> defaultAllowlistedHosts,
+                                             List<String> defaultBrowserPrivateNetworkAllowedHosts,
+                                             SandboxEgressPolicyRepositoryPort repositoryPort) {
         this.defaultNetworkPolicy = Objects.requireNonNullElse(defaultNetworkPolicy, SandboxNetworkPolicy.DENY_ALL);
         this.defaultAllowlistedHosts = SandboxEgressPolicy.normalizeHosts(defaultAllowlistedHosts);
+        this.defaultBrowserPrivateNetworkAllowedHosts =
+                SandboxEgressPolicy.normalizeHosts(defaultBrowserPrivateNetworkAllowedHosts);
         this.repositoryPort = Objects.requireNonNull(repositoryPort, "repositoryPort must not be null");
     }
 
@@ -81,6 +91,16 @@ public class RepositoryBackedSandboxPolicyPort implements SandboxPolicyPort {
         return effectivePolicy(tenantId).allowlistedHosts();
     }
 
+    @Override
+    public List<String> browserPrivateNetworkAllowedHosts() {
+        return browserPrivateNetworkAllowedHosts(DEFAULT_TENANT_ID);
+    }
+
+    @Override
+    public List<String> browserPrivateNetworkAllowedHosts(String tenantId) {
+        return effectivePolicy(tenantId).browserPrivateNetworkAllowedHosts();
+    }
+
     private SandboxEgressPolicy effectivePolicy(String tenantId) {
         String safeTenantId = tenantId == null || tenantId.isBlank() ? DEFAULT_TENANT_ID : tenantId.trim();
         return repositoryPort.findByTenant(safeTenantId)
@@ -88,6 +108,7 @@ public class RepositoryBackedSandboxPolicyPort implements SandboxPolicyPort {
                         safeTenantId,
                         defaultNetworkPolicy,
                         defaultAllowlistedHosts,
+                        defaultBrowserPrivateNetworkAllowedHosts,
                         Instant.EPOCH));
     }
 }

@@ -230,14 +230,15 @@ public class SeahorseSandboxController {
             @RequestBody SandboxEgressPolicyRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
         SandboxEgressPolicyRequest safeRequest = request == null
-                ? new SandboxEgressPolicyRequest(null, null, null, null)
+                ? new SandboxEgressPolicyRequest(null, null, null, null, null)
                 : request;
         return ApiResponses.requireService(sandboxRuntimePortProvider,
                 port -> port.upsertSandboxEgressPolicy(new SandboxEgressPolicyUpsertCommand(
                         safeRequest.policyId(),
                         safeRequest.tenantId(),
                         safeRequest.networkPolicy(),
-                        safeRequest.allowlistedHosts())));
+                        safeRequest.allowlistedHosts(),
+                        safeRequest.browserPrivateNetworkAllowedHosts())));
     }
 
     @PostMapping("/api/sandbox/runtime/profile-policies")
@@ -406,6 +407,7 @@ public class SeahorseSandboxController {
                         ? SandboxNetworkPolicy.DENY_ALL.name()
                         : policyPort.networkPolicy(safeTenantId).name(),
                 policyPort == null ? List.of() : policyPort.allowlistedHosts(safeTenantId),
+                policyPort == null ? List.of() : policyPort.browserPrivateNetworkAllowedHosts(safeTenantId),
                 SandboxRuntimeProfilePolicy.DEFAULT_SESSION_TTL_SECONDS);
     }
 
@@ -512,13 +514,17 @@ public class SeahorseSandboxController {
     }
 
     public record SandboxRuntimeProfilesResponse(List<SandboxRuntimeProfileResponse> profiles,
-                                                  String defaultNetworkPolicy,
-                                                  List<String> allowlistedHosts,
-                                                  long defaultTtlSeconds) {
+                                                 String defaultNetworkPolicy,
+                                                 List<String> allowlistedHosts,
+                                                 List<String> browserPrivateNetworkAllowedHosts,
+                                                 long defaultTtlSeconds) {
 
         public SandboxRuntimeProfilesResponse {
             profiles = profiles == null ? List.of() : List.copyOf(profiles);
             allowlistedHosts = allowlistedHosts == null ? List.of() : List.copyOf(allowlistedHosts);
+            browserPrivateNetworkAllowedHosts = browserPrivateNetworkAllowedHosts == null
+                    ? List.of()
+                    : List.copyOf(browserPrivateNetworkAllowedHosts);
         }
     }
 
@@ -544,10 +550,14 @@ public class SeahorseSandboxController {
     public record SandboxEgressPolicyRequest(String policyId,
                                              String tenantId,
                                              SandboxNetworkPolicy networkPolicy,
-                                             List<String> allowlistedHosts) {
+                                             List<String> allowlistedHosts,
+                                             List<String> browserPrivateNetworkAllowedHosts) {
 
         public SandboxEgressPolicyRequest {
             allowlistedHosts = allowlistedHosts == null ? List.of() : List.copyOf(allowlistedHosts);
+            browserPrivateNetworkAllowedHosts = browserPrivateNetworkAllowedHosts == null
+                    ? List.of()
+                    : List.copyOf(browserPrivateNetworkAllowedHosts);
         }
     }
 

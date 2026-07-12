@@ -29,6 +29,7 @@ public record SandboxEgressPolicy(String policyId,
                                   String tenantId,
                                   SandboxNetworkPolicy networkPolicy,
                                   List<String> allowlistedHosts,
+                                  List<String> browserPrivateNetworkAllowedHosts,
                                   Instant createdAt,
                                   Instant updatedAt) {
 
@@ -41,6 +42,7 @@ public record SandboxEgressPolicy(String policyId,
         policyId = hasText(policyId) ? policyId.trim() : defaultPolicyId(tenantId);
         networkPolicy = Objects.requireNonNullElse(networkPolicy, SandboxNetworkPolicy.DENY_ALL);
         allowlistedHosts = normalizeHosts(allowlistedHosts);
+        browserPrivateNetworkAllowedHosts = normalizeHosts(browserPrivateNetworkAllowedHosts);
         createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
         updatedAt = Objects.requireNonNullElse(updatedAt, createdAt);
     }
@@ -48,12 +50,14 @@ public record SandboxEgressPolicy(String policyId,
     public static SandboxEgressPolicy defaultPolicy(String tenantId,
                                                     SandboxNetworkPolicy networkPolicy,
                                                     List<String> allowlistedHosts,
+                                                    List<String> browserPrivateNetworkAllowedHosts,
                                                     Instant now) {
         return new SandboxEgressPolicy(
                 defaultPolicyId(tenantId),
                 tenantId,
                 networkPolicy,
                 allowlistedHosts,
+                browserPrivateNetworkAllowedHosts,
                 now,
                 now);
     }

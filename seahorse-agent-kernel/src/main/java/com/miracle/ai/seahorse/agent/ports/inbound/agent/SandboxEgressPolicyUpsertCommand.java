@@ -25,13 +25,24 @@ import java.util.Objects;
 public record SandboxEgressPolicyUpsertCommand(String policyId,
                                                String tenantId,
                                                SandboxNetworkPolicy networkPolicy,
-                                               List<String> allowlistedHosts) {
+                                               List<String> allowlistedHosts,
+                                               List<String> browserPrivateNetworkAllowedHosts) {
+
+    public SandboxEgressPolicyUpsertCommand(String policyId,
+                                            String tenantId,
+                                            SandboxNetworkPolicy networkPolicy,
+                                            List<String> allowlistedHosts) {
+        this(policyId, tenantId, networkPolicy, allowlistedHosts, List.of());
+    }
 
     public SandboxEgressPolicyUpsertCommand {
         tenantId = requireText(tenantId, "tenantId must not be blank");
         policyId = policyId == null || policyId.trim().isEmpty() ? null : policyId.trim();
         networkPolicy = Objects.requireNonNullElse(networkPolicy, SandboxNetworkPolicy.DENY_ALL);
         allowlistedHosts = allowlistedHosts == null ? List.of() : List.copyOf(allowlistedHosts);
+        browserPrivateNetworkAllowedHosts = browserPrivateNetworkAllowedHosts == null
+                ? List.of()
+                : List.copyOf(browserPrivateNetworkAllowedHosts);
     }
 
     private static String requireText(String value, String message) {

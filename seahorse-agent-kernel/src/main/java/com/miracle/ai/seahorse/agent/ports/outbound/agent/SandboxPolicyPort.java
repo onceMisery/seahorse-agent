@@ -41,4 +41,12 @@ public interface SandboxPolicyPort {
     default List<String> allowlistedHosts(String tenantId) {
         return allowlistedHosts();
     }
+
+    default List<String> browserPrivateNetworkAllowedHosts() {
+        return List.of();
+    }
+
+    default List<String> browserPrivateNetworkAllowedHosts(String tenantId) {
+        return browserPrivateNetworkAllowedHosts();
+    }
 }

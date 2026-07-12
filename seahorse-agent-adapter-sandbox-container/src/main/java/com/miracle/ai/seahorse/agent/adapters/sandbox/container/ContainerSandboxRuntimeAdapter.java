@@ -204,7 +204,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     safeRequest.input(),
                     workspace,
                     safeRequest.networkRequested(),
-                    safeRequest.requestedHosts());
+                    safeRequest.requestedHosts(),
+                    safeRequest.browserPrivateNetworkAllowedHosts());
             ContainerCommandResult commandResult = commandRunner.run(
                     containerCommand(session, workspace, safeRequest.networkRequested(), safeRequest.requestedHosts()));
             Instant finishedAt = clock.instant();
@@ -290,7 +291,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                                        String input,
                                        Path workspace,
                                        boolean networkRequested,
-                                       List<String> requestedHosts) throws IOException {
+                                       List<String> requestedHosts,
+                                       List<String> browserPrivateNetworkAllowedHosts) throws IOException {
         Path safeWorkspace = workspace.toAbsolutePath().normalize();
         if (runtimeType == SandboxRuntimeType.CODE_INTERPRETER) {
             Files.writeString(safeWorkspace.resolve(SCRIPT_NAME), input, StandardCharsets.UTF_8);
@@ -318,7 +320,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     inputPath);
         }
         if (runtimeType == SandboxRuntimeType.BROWSER_AUTOMATION) {
-            BrowserAutomationRequest request = parseBrowserAutomationRequest(input);
+            BrowserAutomationRequest request = parseBrowserAutomationRequest(
+                    input,
+                    browserPrivateNetworkAllowedHosts);
             validateBrowserNetworkBoundary(request, networkRequested, requestedHosts);
             Path inputPath = safeWorkspace.resolve(browserInputName());
             Path cookiesPath = safeWorkspace.resolve(browserCookiesName());
@@ -661,7 +665,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || value.contains("/oleobject");
     }
 
-    private BrowserAutomationRequest parseBrowserAutomationRequest(String input) throws IOException {
+    private BrowserAutomationRequest parseBrowserAutomationRequest(String input,
+                                                                   List<String> browserPrivateNetworkAllowedHosts)
+            throws IOException {
         JsonNode root = objectMapper.readTree(nullToEmpty(input));
         String action = normalizedBrowserAction(root.path("action").asText(BROWSER_ACTION_SNAPSHOT));
         if (!isSupportedBrowserAction(action)) {
@@ -721,7 +727,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 har,
                 video,
                 captureSessionState,
-                sessionStateJson);
+                sessionStateJson,
+                effectiveBrowserPrivateNetworkAllowedHosts(browserPrivateNetworkAllowedHosts));
     }
 
     private void validateBrowserNetworkBoundary(BrowserAutomationRequest request,
@@ -1237,7 +1244,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 jsonForScript(proxyCredentials.password()),
                 browserProxyServers.size(),
                 jsonForScript(request.allowedHosts()),
-                jsonForScript(normalizedBrowserPrivateNetworkAllowedHosts()),
+                jsonForScript(request.browserPrivateNetworkAllowedHosts()),
                 request.viewportWidth(),
                 request.viewportHeight(),
                 request.screenshot() ? "True" : "False",
@@ -2168,6 +2175,23 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
         LinkedHashSet<String> hosts = new LinkedHashSet<>();
         for (String item : value.split(",")) {
+            addNormalizedBrowserHost(hosts, item, "browserPrivateNetworkAllowedHosts");
+        }
+        if (hosts.size() > MAX_BROWSER_ALLOWED_HOSTS) {
+            throw new IllegalArgumentException(
+                    "browserPrivateNetworkAllowedHosts must contain at most "
+                            + MAX_BROWSER_ALLOWED_HOSTS
+                            + " hosts");
+        }
+        return new ArrayList<>(hosts);
+    }
+
+    private List<String> effectiveBrowserPrivateNetworkAllowedHosts(List<String> runtimeRequestHosts) {
+        if (runtimeRequestHosts == null) {
+            return normalizedBrowserPrivateNetworkAllowedHosts();
+        }
+        LinkedHashSet<String> hosts = new LinkedHashSet<>();
+        for (String item : runtimeRequestHosts) {
             addNormalizedBrowserHost(hosts, item, "browserPrivateNetworkAllowedHosts");
         }
         if (hosts.size() > MAX_BROWSER_ALLOWED_HOSTS) {
@@ -3372,7 +3396,15 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                                             boolean har,
                                             boolean video,
                                             boolean captureSessionState,
-                                            String sessionStateJson) {}
+                                            String sessionStateJson,
+                                            List<String> browserPrivateNetworkAllowedHosts) {
+
+        private BrowserAutomationRequest {
+            browserPrivateNetworkAllowedHosts = browserPrivateNetworkAllowedHosts == null
+                    ? List.of()
+                    : List.copyOf(browserPrivateNetworkAllowedHosts);
+        }
+    }
 
     private record BrowserCookie(String name,
                                  String value,
