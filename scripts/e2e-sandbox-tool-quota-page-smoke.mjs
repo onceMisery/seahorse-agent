@@ -35,6 +35,10 @@ const baseUrl = readArg("--base-url", process.env.E2E_BASE_URL || "http://127.0.
 const username = readArg("--username", process.env.E2E_USERNAME || "admin");
 const password = readArg("--password", process.env.E2E_PASSWORD || "admin123");
 const marker = readArg("--marker", process.env.E2E_MARKER || "seahorse-sandbox-tool-quota-page-smoke");
+const browserSessionArtifactId = readArg(
+  "--browser-session-artifact-id",
+  process.env.E2E_BROWSER_SESSION_ARTIFACT_ID || ""
+).trim();
 const artifactDir = path.resolve(readArg(
   "--artifact-dir",
   process.env.E2E_ARTIFACT_DIR || path.join(repoRoot, "output", "playwright", "artifacts")
@@ -47,6 +51,7 @@ let createdPolicyId = null;
 let authToken = null;
 let egressPolicyRestore = null;
 let browserProfileRestore = null;
+let createdBrowserProfileId = null;
 
 async function api(pathname, options = {}) {
   const pathWithSlash = pathname.startsWith("/") ? pathname : `/${pathname}`;
@@ -217,6 +222,18 @@ try {
     ignoreHTTPSErrors: true
   });
   const page = await context.newPage();
+  if (typeof page.waitForFunction !== "function") {
+    page.waitForFunction = async (predicate, argument, options = {}) => {
+      const deadline = Date.now() + (options.timeout || 30000);
+      while (Date.now() < deadline) {
+        if (await page.evaluate(predicate, argument)) {
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      throw new Error("Timed out waiting for page condition");
+    };
+  }
 
   page.on("console", (message) => {
     if (["error", "warning"].includes(message.type())) {
@@ -415,6 +432,59 @@ try {
     await assertPanelText(page, "TOOL", "Tool quota panel");
     await assertPanelText(page, "sandbox_python", "Tool quota panel");
 
+    if (browserSessionArtifactId) {
+      const browserProfilesPanel = page.getByTestId("sandbox-browser-profiles-panel");
+      await browserProfilesPanel.waitFor({ state: "visible", timeout: 20000 });
+      const browserProfileName = `Browser profile ${marker}`;
+      await browserProfilesPanel.getByTestId("sandbox-browser-profile-name").fill(browserProfileName);
+      await browserProfilesPanel.getByTestId("sandbox-browser-profile-artifact").fill(browserSessionArtifactId);
+      await browserProfilesPanel.getByTestId("sandbox-browser-profile-expires").fill("2030-01-02T03:04");
+      const profileResponsePromise = page.waitForResponse(
+        (response) =>
+          response.url().includes("/api/api/sandbox/runtime/browser-profiles")
+          && response.request().method() === "POST",
+        { timeout: 20000 }
+      );
+      await browserProfilesPanel.getByTestId("sandbox-browser-profile-save").click();
+      const profileResponse = await profileResponsePromise;
+      const profilePayload = await profileResponse.json();
+      if (profileResponse.status() !== 200 || profilePayload?.code !== "0") {
+        throw new Error(`Browser profile save failed: HTTP ${profileResponse.status()} ${JSON.stringify(profilePayload)}`);
+      }
+      const savedBrowserProfile = profilePayload.data;
+      createdBrowserProfileId = String(savedBrowserProfile?.profileId || "");
+      if (!createdBrowserProfileId || savedBrowserProfile?.status !== "ACTIVE"
+          || savedBrowserProfile?.sessionStateArtifactId !== browserSessionArtifactId) {
+        throw new Error(`Unexpected browser profile response: ${JSON.stringify(savedBrowserProfile)}`);
+      }
+      await assertPanelText(page, browserProfileName, "Browser profiles panel");
+      const apiProfiles = await api("/api/sandbox/runtime/browser-profiles?tenantId=default");
+      const apiBrowserProfile = Array.isArray(apiProfiles)
+        ? apiProfiles.find((profile) => profile?.profileId === createdBrowserProfileId)
+        : null;
+      if (!apiBrowserProfile || apiBrowserProfile.status !== "ACTIVE"
+          || apiBrowserProfile.sessionStateArtifactId !== browserSessionArtifactId) {
+        throw new Error(`Browser profile API readback failed: ${JSON.stringify(apiProfiles)}`);
+      }
+      const disableResponsePromise = page.waitForResponse(
+        (response) =>
+          response.url().includes(`/api/api/sandbox/runtime/browser-profiles/${createdBrowserProfileId}:disable`)
+          && response.request().method() === "POST",
+        { timeout: 20000 }
+      );
+      await browserProfilesPanel.getByTestId(`sandbox-browser-profile-disable-${createdBrowserProfileId}`).click();
+      const disableResponse = await disableResponsePromise;
+      const disablePayload = await disableResponse.json();
+      if (disableResponse.status() !== 200 || disablePayload?.code !== "0" || disablePayload?.data?.status !== "DISABLED") {
+        throw new Error(`Browser profile disable failed: HTTP ${disableResponse.status()} ${JSON.stringify(disablePayload)}`);
+      }
+      await page.waitForFunction(
+        (profileId) => document.querySelector(`[data-testid="sandbox-browser-profile-disable-${profileId}"]`)?.hasAttribute("disabled"),
+        createdBrowserProfileId,
+        { timeout: 10000 }
+      );
+    }
+
     const screenshotPath = path.join(artifactDir, `${marker}.png`);
     await page.screenshot({ path: screenshotPath, fullPage: true });
     console.log(`PASS sandbox tool quota page smoke`);
@@ -423,6 +493,7 @@ try {
     console.log(`Private network exceptions: ${privateNetworkAllowedHosts.length} hosts`);
     console.log(`Saved private network exceptions: ${savedEgressPolicy.browserPrivateNetworkAllowedHosts.length} hosts`);
     console.log(`Browser runtime network policy: ${savedProfilePolicy.networkAllowed}`);
+    if (createdBrowserProfileId) console.log(`Browser profile: ${createdBrowserProfileId}`);
     console.log(`Policy: ${policyId}`);
     console.log(`Screenshot: ${screenshotPath}`);
   } finally {
