@@ -1183,3 +1183,7 @@ Fresh full-Docker E2E: after the backend image rebuilt through `192.168.1.9:7890
 ### 2026-07-13 Sandbox Browser Profile Operations UI Evidence Update
 
 The packaged Sandbox Operations page is now verified for the Profile lifecycle with a real governed session-state artifact, rather than only through direct APIs. The Playwright smoke creates the profile through the page, confirms API readback and asynchronous UI refresh, then disables it through the page. A real browser Tool Gateway run first produced the `BLOCKED`/`SECRET` input artifact and passed 37/37; the deployed page smoke passed and produced `output/playwright/artifacts/seahorse-browser-profile-ui-smoke-final.png`. Temporary UI-smoke profiles were disabled and the default tenant egress policy was restored to `DENY_ALL` with empty public/private-network lists.
+
+### 2026-07-13 Sandbox Container Linux Privilege Hardening Evidence Update
+
+The container adapter now applies `--cap-drop ALL` and `--security-opt no-new-privileges:true` by default, with explicit adapter properties for operational configuration. Full-Docker evidence passed through `scripts/e2e-sandbox-python-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-isolation-smoke`: the code executed in the real sandbox container asserted `NoNewPrivs=1` and an all-zero effective capability bitmap in `/proc/self/status`, then completed artifact and Tool Gateway audit checks. The run passed 5/5 after a successful adapter compile and backend image rebuild.

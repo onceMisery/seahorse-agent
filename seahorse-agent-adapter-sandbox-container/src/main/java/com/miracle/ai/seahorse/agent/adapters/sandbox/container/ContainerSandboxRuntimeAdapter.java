@@ -2721,6 +2721,14 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         commandLine.add(properties.getCpus());
         commandLine.add("--pids-limit");
         commandLine.add(Long.toString(properties.getPidsLimit()));
+        if (properties.isDropAllCapabilities()) {
+            commandLine.add("--cap-drop");
+            commandLine.add("ALL");
+        }
+        if (properties.isNoNewPrivileges()) {
+            commandLine.add("--security-opt");
+            commandLine.add("no-new-privileges:true");
+        }
         commandLine.add("-v");
         commandLine.add(mountSourceForSession(session.sessionId(), workspace) + ":" + CONTAINER_WORKSPACE + ":rw");
         commandLine.add("-w");

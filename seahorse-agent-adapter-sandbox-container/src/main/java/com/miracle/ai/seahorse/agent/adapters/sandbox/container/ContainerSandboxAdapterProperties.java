@@ -59,6 +59,10 @@ public class ContainerSandboxAdapterProperties {
 
     private long pidsLimit = 128L;
 
+    private boolean dropAllCapabilities = true;
+
+    private boolean noNewPrivileges = true;
+
     private Duration orphanWorkspaceMinAge = Duration.ofMinutes(5);
 
     private int maxActiveSessions = 0;
@@ -205,6 +209,22 @@ public class ContainerSandboxAdapterProperties {
 
     public void setPidsLimit(long pidsLimit) {
         this.pidsLimit = pidsLimit > 0 ? pidsLimit : 128L;
+    }
+
+    public boolean isDropAllCapabilities() {
+        return dropAllCapabilities;
+    }
+
+    public void setDropAllCapabilities(boolean dropAllCapabilities) {
+        this.dropAllCapabilities = dropAllCapabilities;
+    }
+
+    public boolean isNoNewPrivileges() {
+        return noNewPrivileges;
+    }
+
+    public void setNoNewPrivileges(boolean noNewPrivileges) {
+        this.noNewPrivileges = noNewPrivileges;
     }
 
     public Duration getOrphanWorkspaceMinAge() {
