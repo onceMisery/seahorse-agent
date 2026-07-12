@@ -2729,6 +2729,11 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             commandLine.add("--security-opt");
             commandLine.add("no-new-privileges:true");
         }
+        if (properties.isReadOnlyRootFilesystem()) {
+            commandLine.add("--read-only");
+            commandLine.add("--tmpfs");
+            commandLine.add("/tmp:rw,noexec,nosuid,size=64m");
+        }
         commandLine.add("-v");
         commandLine.add(mountSourceForSession(session.sessionId(), workspace) + ":" + CONTAINER_WORKSPACE + ":rw");
         commandLine.add("-w");

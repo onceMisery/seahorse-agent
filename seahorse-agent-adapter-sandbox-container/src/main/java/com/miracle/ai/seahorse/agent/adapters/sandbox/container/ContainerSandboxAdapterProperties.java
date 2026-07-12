@@ -63,6 +63,8 @@ public class ContainerSandboxAdapterProperties {
 
     private boolean noNewPrivileges = true;
 
+    private boolean readOnlyRootFilesystem = true;
+
     private Duration orphanWorkspaceMinAge = Duration.ofMinutes(5);
 
     private int maxActiveSessions = 0;
@@ -225,6 +227,14 @@ public class ContainerSandboxAdapterProperties {
 
     public void setNoNewPrivileges(boolean noNewPrivileges) {
         this.noNewPrivileges = noNewPrivileges;
+    }
+
+    public boolean isReadOnlyRootFilesystem() {
+        return readOnlyRootFilesystem;
+    }
+
+    public void setReadOnlyRootFilesystem(boolean readOnlyRootFilesystem) {
+        this.readOnlyRootFilesystem = readOnlyRootFilesystem;
     }
 
     public Duration getOrphanWorkspaceMinAge() {

@@ -1187,3 +1187,7 @@ The packaged Sandbox Operations page is now verified for the Profile lifecycle w
 ### 2026-07-13 Sandbox Container Linux Privilege Hardening Evidence Update
 
 The container adapter now applies `--cap-drop ALL` and `--security-opt no-new-privileges:true` by default, with explicit adapter properties for operational configuration. Full-Docker evidence passed through `scripts/e2e-sandbox-python-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-isolation-smoke`: the code executed in the real sandbox container asserted `NoNewPrivs=1` and an all-zero effective capability bitmap in `/proc/self/status`, then completed artifact and Tool Gateway audit checks. The run passed 5/5 after a successful adapter compile and backend image rebuild.
+
+### 2026-07-13 Sandbox Read-Only Root Filesystem Evidence Update
+
+Sandbox containers now default to a read-only root filesystem with a bounded noexec/nosuid `/tmp` tmpfs, while retaining only the governed per-session workspace as writable persistent storage. Full-Docker evidence passed 5/5 through `scripts/e2e-sandbox-python-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-readonly-smoke`; code inside the real managed container asserted no-new-privileges, zero effective capabilities, and a non-writable `/` before producing the governed artifact.

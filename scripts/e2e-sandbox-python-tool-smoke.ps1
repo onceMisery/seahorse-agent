@@ -260,7 +260,7 @@ try {
     $runId = "$($smokeRun.RunId)"
     $toolCallId = "sandbox-python-smoke-call-$suffix"
     $escapedMarker = $Marker.Replace("\", "\\").Replace("'", "\'")
-    $code = "from pathlib import Path`nstatus = dict(line.split(':', 1) for line in Path('/proc/self/status').read_text(encoding='utf-8').splitlines() if ':' in line)`nassert status.get('NoNewPrivs', '').strip() == '1', status.get('NoNewPrivs')`nassert status.get('CapEff', '').strip() == '0000000000000000', status.get('CapEff')`nPath('answer.txt').write_text('artifact $escapedMarker', encoding='utf-8')`nprint('$escapedMarker')"
+    $code = "import os`nfrom pathlib import Path`nstatus = dict(line.split(':', 1) for line in Path('/proc/self/status').read_text(encoding='utf-8').splitlines() if ':' in line)`nassert status.get('NoNewPrivs', '').strip() == '1', status.get('NoNewPrivs')`nassert status.get('CapEff', '').strip() == '0000000000000000', status.get('CapEff')`nassert not os.access('/', os.W_OK), 'sandbox root filesystem is writable'`nPath('answer.txt').write_text('artifact $escapedMarker', encoding='utf-8')`nprint('$escapedMarker')"
 
     Test-Step "Invoke sandbox_python through Tool Gateway" {
         $requestBody = @{
