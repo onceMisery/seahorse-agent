@@ -82,7 +82,8 @@ public class JdbcTenantSchemaUpgrade {
             "t_sample_question",
             "sa_agent_definition",
             "sa_quota_policy",
-            "sa_sandbox_runtime_profile_policy"
+            "sa_sandbox_runtime_profile_policy",
+            "sa_sandbox_egress_policy"
     );
 
     public JdbcTenantSchemaUpgrade(DataSource dataSource) {
@@ -106,6 +107,7 @@ public class JdbcTenantSchemaUpgrade {
         repairRemoteA2AToolCatalogGovernance();
         upgradeAgentHandoffContextPackReference();
         upgradeSandboxRuntimeProfilePolicy();
+        upgradeSandboxEgressPolicy();
         upgradeAiModelConfigUniqueness();
         enableRowLevelSecurity();
         log.info("[TenantSchema] 多租户 schema 升级完成");
@@ -303,6 +305,34 @@ public class JdbcTenantSchemaUpgrade {
         } catch (Exception e) {
             log.warn("[TenantSchema] repair sa_sandbox_runtime_profile_policy network constraint failed: {}",
                     e.getMessage());
+        }
+    }
+
+    private void upgradeSandboxEgressPolicy() {
+        try {
+            jdbcTemplate.execute("""
+                    CREATE TABLE IF NOT EXISTS sa_sandbox_egress_policy (
+                      pk_id BIGSERIAL PRIMARY KEY,
+                      policy_id VARCHAR(96) NOT NULL UNIQUE,
+                      tenant_id VARCHAR(64) NOT NULL,
+                      network_policy VARCHAR(32) NOT NULL DEFAULT 'DENY_ALL',
+                      allowlisted_hosts TEXT NOT NULL DEFAULT '',
+                      created_at TIMESTAMP NOT NULL,
+                      updated_at TIMESTAMP NOT NULL,
+                      CONSTRAINT chk_sa_sandbox_egress_policy_network
+                        CHECK (network_policy IN ('DENY_ALL', 'ALLOWLISTED'))
+                    )
+                    """);
+            jdbcTemplate.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS uk_sa_sandbox_egress_policy_tenant
+                      ON sa_sandbox_egress_policy(tenant_id)
+                    """);
+            jdbcTemplate.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_sa_sandbox_egress_policy_updated
+                      ON sa_sandbox_egress_policy(tenant_id, updated_at DESC, policy_id DESC)
+                    """);
+        } catch (Exception e) {
+            log.warn("[TenantSchema] upgrade sa_sandbox_egress_policy failed: {}", e.getMessage());
         }
     }
 

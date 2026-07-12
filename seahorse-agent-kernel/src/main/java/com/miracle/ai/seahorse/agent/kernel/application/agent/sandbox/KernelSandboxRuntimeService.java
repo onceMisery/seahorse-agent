@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactRedactionSummary;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxEgressPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
@@ -42,6 +43,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeT
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxEgressPolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
@@ -53,6 +55,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanReq
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxEgressPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
@@ -136,6 +139,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private final SandboxExecutionRepositoryPort executionRepositoryPort;
     private final SandboxArtifactQueryPort artifactQueryPort;
     private final SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort;
+    private final SandboxEgressPolicyRepositoryPort egressPolicyRepositoryPort;
     private final AgentRunRepositoryPort runRepository;
     private final CurrentUserPort currentUserPort;
     private final KernelAuditLedgerService auditLedger;
@@ -286,6 +290,36 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                                        CurrentUserPort currentUserPort,
                                        KernelAuditLedgerService auditLedger,
                                        Clock clock) {
+        this(policyPort,
+                runtimePort,
+                artifactPort,
+                sessionRepositoryPort,
+                executionRepositoryPort,
+                artifactQueryPort,
+                artifactScannerPort,
+                artifactStoragePort,
+                runtimeProfilePolicyRepositoryPort,
+                new InMemorySandboxEgressPolicyRepository(),
+                runRepository,
+                currentUserPort,
+                auditLedger,
+                clock);
+    }
+
+    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
+                                       SandboxRuntimePort runtimePort,
+                                       SandboxArtifactPort artifactPort,
+                                       SandboxSessionRepositoryPort sessionRepositoryPort,
+                                       SandboxExecutionRepositoryPort executionRepositoryPort,
+                                       SandboxArtifactQueryPort artifactQueryPort,
+                                       SandboxArtifactScannerPort artifactScannerPort,
+                                       ObjectStoragePort artifactStoragePort,
+                                       SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort,
+                                       SandboxEgressPolicyRepositoryPort egressPolicyRepositoryPort,
+                                       AgentRunRepositoryPort runRepository,
+                                       CurrentUserPort currentUserPort,
+                                       KernelAuditLedgerService auditLedger,
+                                       Clock clock) {
         this.policyPort = Objects.requireNonNull(policyPort, "policyPort must not be null");
         this.runtimePort = Objects.requireNonNull(runtimePort, "runtimePort must not be null");
         this.artifactPort = Objects.requireNonNull(artifactPort, "artifactPort must not be null");
@@ -299,6 +333,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         this.artifactQueryPort = Objects.requireNonNull(artifactQueryPort, "artifactQueryPort must not be null");
         this.runtimeProfilePolicyRepositoryPort = Objects.requireNonNull(runtimeProfilePolicyRepositoryPort,
                 "runtimeProfilePolicyRepositoryPort must not be null");
+        this.egressPolicyRepositoryPort = Objects.requireNonNull(egressPolicyRepositoryPort,
+                "egressPolicyRepositoryPort must not be null");
         this.runRepository = runRepository;
         this.currentUserPort = currentUserPort;
         this.auditLedger = auditLedger;
@@ -555,6 +591,27 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     }
 
     @Override
+    public SandboxEgressPolicy inspectSandboxEgressPolicy(String tenantId) {
+        return effectiveSandboxEgressPolicy(tenantId);
+    }
+
+    @Override
+    public SandboxEgressPolicy upsertSandboxEgressPolicy(SandboxEgressPolicyUpsertCommand command) {
+        SandboxEgressPolicyUpsertCommand safeCommand =
+                Objects.requireNonNull(command, "command must not be null");
+        Instant now = clock.instant();
+        Optional<SandboxEgressPolicy> existing = egressPolicyRepositoryPort.findByTenant(safeCommand.tenantId());
+        SandboxEgressPolicy policy = new SandboxEgressPolicy(
+                existing.map(SandboxEgressPolicy::policyId).orElse(safeCommand.policyId()),
+                safeCommand.tenantId(),
+                safeCommand.networkPolicy(),
+                safeCommand.allowlistedHosts(),
+                existing.map(SandboxEgressPolicy::createdAt).orElse(now),
+                now);
+        return egressPolicyRepositoryPort.upsert(policy);
+    }
+
+    @Override
     public List<SandboxExecution> listExecutions(String sessionId) {
         String safeSessionId = requireText(sessionId, "sessionId must not be blank");
         requireReadableSession(findSessionOrThrow(safeSessionId));
@@ -658,6 +715,16 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                                                                       SandboxRuntimeType runtimeType) {
         return runtimeProfilePolicyRepositoryPort.findByTenantAndRuntimeType(tenantId, runtimeType)
                 .orElseGet(() -> SandboxRuntimeProfilePolicy.defaultPolicy(tenantId, runtimeType, clock.instant()));
+    }
+
+    private SandboxEgressPolicy effectiveSandboxEgressPolicy(String tenantId) {
+        String safeTenantId = requireText(tenantId, "tenantId must not be blank");
+        return egressPolicyRepositoryPort.findByTenant(safeTenantId)
+                .orElseGet(() -> SandboxEgressPolicy.defaultPolicy(
+                        safeTenantId,
+                        policyPort.networkPolicy(safeTenantId),
+                        policyPort.allowlistedHosts(safeTenantId),
+                        clock.instant()));
     }
 
     private Optional<SandboxRuntimeProfilePolicy> existingRuntimeProfilePolicy(
@@ -1049,6 +1116,27 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                             .thenComparing(SandboxRuntimeProfilePolicy::updatedAt)
                             .thenComparing(SandboxRuntimeProfilePolicy::policyId))
                     .toList();
+        }
+    }
+
+    private static final class InMemorySandboxEgressPolicyRepository
+            implements SandboxEgressPolicyRepositoryPort {
+
+        private final Map<String, SandboxEgressPolicy> store = new ConcurrentHashMap<>();
+
+        @Override
+        public SandboxEgressPolicy upsert(SandboxEgressPolicy policy) {
+            SandboxEgressPolicy safePolicy = Objects.requireNonNull(policy, "policy must not be null");
+            store.put(safePolicy.tenantId(), safePolicy);
+            return safePolicy;
+        }
+
+        @Override
+        public Optional<SandboxEgressPolicy> findByTenant(String tenantId) {
+            if (!hasText(tenantId)) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(store.get(tenantId.trim()));
         }
     }
 

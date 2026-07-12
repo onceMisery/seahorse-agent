@@ -17,28 +17,13 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxNetworkPolicy;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyDecision;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxEgressPolicy;
 
-import java.util.List;
+import java.util.Optional;
 
-public interface SandboxPolicyPort {
+public interface SandboxEgressPolicyRepositoryPort {
 
-    SandboxPolicyDecision decide(SandboxPolicyRequest request);
+    SandboxEgressPolicy upsert(SandboxEgressPolicy policy);
 
-    default SandboxNetworkPolicy networkPolicy() {
-        return SandboxNetworkPolicy.DENY_ALL;
-    }
-
-    default SandboxNetworkPolicy networkPolicy(String tenantId) {
-        return networkPolicy();
-    }
-
-    default List<String> allowlistedHosts() {
-        return List.of();
-    }
-
-    default List<String> allowlistedHosts(String tenantId) {
-        return allowlistedHosts();
-    }
+    Optional<SandboxEgressPolicy> findByTenant(String tenantId);
 }

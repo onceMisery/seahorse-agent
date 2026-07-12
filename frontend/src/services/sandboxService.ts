@@ -118,6 +118,22 @@ export interface SandboxRuntimeProfilesResponse {
   defaultTtlSeconds?: number;
 }
 
+export interface SandboxEgressPolicy {
+  policyId?: string;
+  tenantId?: string;
+  networkPolicy?: "DENY_ALL" | "ALLOWLISTED" | string;
+  allowlistedHosts?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SandboxEgressPolicyPayload {
+  policyId?: string;
+  tenantId: string;
+  networkPolicy?: "DENY_ALL" | "ALLOWLISTED" | string;
+  allowlistedHosts?: string[];
+}
+
 export interface SandboxArtifactScannerPolicy {
   scannerId?: string;
   scannerMode?: string;
@@ -334,6 +350,19 @@ export function getSandboxRuntimeProfiles(tenantId = currentTenantId()) {
   return api.get<SandboxRuntimeProfilesResponse>(`${SANDBOX_API_PREFIX}/runtime/profiles`, {
     params: { tenantId }
   });
+}
+
+export function getSandboxEgressPolicy(tenantId = currentTenantId()) {
+  return api.get<SandboxEgressPolicy>(`${SANDBOX_API_PREFIX}/runtime/egress-policy`, {
+    params: { tenantId }
+  });
+}
+
+export function upsertSandboxEgressPolicy(payload: SandboxEgressPolicyPayload) {
+  return api.post<SandboxEgressPolicy, SandboxEgressPolicy>(
+    `${SANDBOX_API_PREFIX}/runtime/egress-policy`,
+    payload
+  );
 }
 
 export function upsertSandboxRuntimeProfilePolicy(payload: SandboxRuntimeProfilePolicyPayload) {

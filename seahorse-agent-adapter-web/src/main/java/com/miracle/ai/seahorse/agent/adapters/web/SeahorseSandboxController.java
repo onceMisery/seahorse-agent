@@ -34,6 +34,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaManagementInboundP
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaPolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxEgressPolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeProfilePolicyUpsertCommand;
@@ -208,10 +209,35 @@ public class SeahorseSandboxController {
         String safeTenantId = requireText(tenantId, "tenantId must not be blank");
         return ApiResponses.requireService(sandboxRuntimePortProvider,
                 port -> runtimeProfilesResponse(
+                        safeTenantId,
                         port.listRuntimeProfilePolicies(safeTenantId),
                         sandboxPolicyPortProvider == null
                                 ? null
                                 : sandboxPolicyPortProvider.getIfAvailable()));
+    }
+
+    @GetMapping("/api/sandbox/runtime/egress-policy")
+    public ApiResponse<Object> inspectSandboxEgressPolicy(
+            @RequestParam(defaultValue = DEFAULT_TENANT_ID) String tenantId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        String safeTenantId = requireText(tenantId, "tenantId must not be blank");
+        return ApiResponses.requireService(sandboxRuntimePortProvider,
+                port -> port.inspectSandboxEgressPolicy(safeTenantId));
+    }
+
+    @PostMapping("/api/sandbox/runtime/egress-policy")
+    public ApiResponse<Object> upsertSandboxEgressPolicy(
+            @RequestBody SandboxEgressPolicyRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        SandboxEgressPolicyRequest safeRequest = request == null
+                ? new SandboxEgressPolicyRequest(null, null, null, null)
+                : request;
+        return ApiResponses.requireService(sandboxRuntimePortProvider,
+                port -> port.upsertSandboxEgressPolicy(new SandboxEgressPolicyUpsertCommand(
+                        safeRequest.policyId(),
+                        safeRequest.tenantId(),
+                        safeRequest.networkPolicy(),
+                        safeRequest.allowlistedHosts())));
     }
 
     @PostMapping("/api/sandbox/runtime/profile-policies")
@@ -363,17 +389,23 @@ public class SeahorseSandboxController {
                 artifact.createdAt());
     }
 
-    private static SandboxRuntimeProfilesResponse runtimeProfilesResponse(List<SandboxRuntimeProfilePolicy> policies,
+    private static SandboxRuntimeProfilesResponse runtimeProfilesResponse(String tenantId,
+                                                                          List<SandboxRuntimeProfilePolicy> policies,
                                                                           SandboxPolicyPort policyPort) {
         List<SandboxRuntimeProfilePolicy> safePolicies = policies == null ? List.of() : List.copyOf(policies);
+        String safeTenantId = tenantId == null || tenantId.trim().isEmpty()
+                ? DEFAULT_TENANT_ID
+                : tenantId.trim();
         return new SandboxRuntimeProfilesResponse(
                 List.of(
                         runtimeProfile(SandboxRuntimeType.CODE_INTERPRETER, safePolicies),
                         runtimeProfile(SandboxRuntimeType.FILE_CONVERSION, safePolicies),
                         runtimeProfile(SandboxRuntimeType.BROWSER_AUTOMATION, safePolicies),
                         runtimeProfile(SandboxRuntimeType.SHELL, safePolicies)),
-                policyPort == null ? SandboxNetworkPolicy.DENY_ALL.name() : policyPort.networkPolicy().name(),
-                policyPort == null ? List.of() : policyPort.allowlistedHosts(),
+                policyPort == null
+                        ? SandboxNetworkPolicy.DENY_ALL.name()
+                        : policyPort.networkPolicy(safeTenantId).name(),
+                policyPort == null ? List.of() : policyPort.allowlistedHosts(safeTenantId),
                 SandboxRuntimeProfilePolicy.DEFAULT_SESSION_TTL_SECONDS);
     }
 
@@ -507,6 +539,16 @@ public class SeahorseSandboxController {
                                                      SandboxRuntimeProfilePolicyStatus status,
                                                      Long sessionTtlSeconds,
                                                      Boolean networkAllowed) {
+    }
+
+    public record SandboxEgressPolicyRequest(String policyId,
+                                             String tenantId,
+                                             SandboxNetworkPolicy networkPolicy,
+                                             List<String> allowlistedHosts) {
+
+        public SandboxEgressPolicyRequest {
+            allowlistedHosts = allowlistedHosts == null ? List.of() : List.copyOf(allowlistedHosts);
+        }
     }
 
     public record SandboxToolQuotaPolicyRequest(String policyId,

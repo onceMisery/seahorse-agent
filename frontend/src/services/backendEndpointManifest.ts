@@ -581,6 +581,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/sandbox/runtime/egress-policy"
+  },
+  {
+    "method": "GET",
     "path": "/api/sandbox/runtime/health"
   },
   {
@@ -1494,6 +1498,10 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/api/sandbox/runtime/orphans:sweep"
+  },
+  {
+    "method": "POST",
+    "path": "/api/sandbox/runtime/egress-policy"
   },
   {
     "method": "POST",

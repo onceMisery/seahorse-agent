@@ -45,6 +45,7 @@ await fs.mkdir(artifactDir, { recursive: true });
 
 let createdPolicyId = null;
 let authToken = null;
+let egressPolicyRestore = null;
 let browserProfileRestore = null;
 
 async function api(pathname, options = {}) {
@@ -151,6 +152,18 @@ async function restoreBrowserProfilePolicy() {
   });
 }
 
+async function restoreSandboxEgressPolicy() {
+  if (!authToken || !egressPolicyRestore) {
+    return;
+  }
+  await api("/api/sandbox/runtime/egress-policy", {
+    method: "POST",
+    body: JSON.stringify(egressPolicyRestore)
+  }).catch((error) => {
+    console.warn(`Failed to restore sandbox egress policy: ${error.message}`);
+  });
+}
+
 const browser = await chromium.launch({ headless });
 const findings = {
   console: [],
@@ -161,10 +174,19 @@ const findings = {
 try {
   await loginApi();
   const runtimeProfiles = await api("/api/sandbox/runtime/profiles?tenantId=default");
+  const originalEgressPolicy = await api("/api/sandbox/runtime/egress-policy?tenantId=default");
   const runtimeHealth = await api("/api/sandbox/runtime/health");
-  const egressPolicy = runtimeProfiles?.defaultNetworkPolicy || "DENY_ALL";
-  const allowlistedHosts = Array.isArray(runtimeProfiles?.allowlistedHosts)
-    ? runtimeProfiles.allowlistedHosts.filter(Boolean).map(String)
+  egressPolicyRestore = {
+    policyId: originalEgressPolicy?.policyId,
+    tenantId: originalEgressPolicy?.tenantId || "default",
+    networkPolicy: originalEgressPolicy?.networkPolicy || "DENY_ALL",
+    allowlistedHosts: Array.isArray(originalEgressPolicy?.allowlistedHosts)
+      ? originalEgressPolicy.allowlistedHosts.filter(Boolean).map(String)
+      : []
+  };
+  const egressPolicy = originalEgressPolicy?.networkPolicy || runtimeProfiles?.defaultNetworkPolicy || "DENY_ALL";
+  const allowlistedHosts = Array.isArray(originalEgressPolicy?.allowlistedHosts)
+    ? originalEgressPolicy.allowlistedHosts.filter(Boolean).map(String)
     : [];
   const privateNetworkAllowedHosts = Array.isArray(runtimeHealth?.browserPrivateNetworkAllowedHosts)
     ? runtimeHealth.browserPrivateNetworkAllowedHosts.filter(Boolean).map(String)
@@ -237,6 +259,56 @@ try {
         "Sandbox private network exceptions"
       );
     }
+
+    const egressSmokeHost = `aaa-egress-policy-page-smoke-${Date.now()}.invalid`;
+    const editedAllowlistedHosts = Array.from(new Set([...allowlistedHosts, egressSmokeHost])).sort();
+    await page.getByTestId("sandbox-egress-policy-select").selectOption("ALLOWLISTED");
+    await page.getByTestId("sandbox-egress-allowlist-input").fill(editedAllowlistedHosts.join("\n"));
+    const egressResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/api/sandbox/runtime/egress-policy") &&
+        response.request().method() === "POST",
+      { timeout: 20000 }
+    );
+    await page.getByTestId("sandbox-egress-policy-save").click();
+    const egressResponse = await egressResponsePromise;
+    const egressPayload = await egressResponse.json();
+    if (egressResponse.status() !== 200 || egressPayload?.code !== "0") {
+      throw new Error(`Sandbox egress policy save failed: HTTP ${egressResponse.status()} ${JSON.stringify(egressPayload)}`);
+    }
+    const savedEgressPolicy = egressPayload.data;
+    if (savedEgressPolicy?.networkPolicy !== "ALLOWLISTED"
+        || !Array.isArray(savedEgressPolicy?.allowlistedHosts)
+        || !savedEgressPolicy.allowlistedHosts.includes(egressSmokeHost)) {
+      throw new Error(`Unexpected sandbox egress policy response: ${JSON.stringify(savedEgressPolicy)}`);
+    }
+    const apiEgressPolicy = await api("/api/sandbox/runtime/egress-policy?tenantId=default");
+    if (apiEgressPolicy?.networkPolicy !== "ALLOWLISTED"
+        || !Array.isArray(apiEgressPolicy?.allowlistedHosts)
+        || !apiEgressPolicy.allowlistedHosts.includes(egressSmokeHost)) {
+      throw new Error(`Sandbox egress policy API readback failed: ${JSON.stringify(apiEgressPolicy)}`);
+    }
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="sandbox-egress-policy-name"]')?.textContent?.includes("ALLOWLISTED"),
+      null,
+      { timeout: 10000 }
+    );
+    await assertLocatorText(page.getByTestId("sandbox-egress-policy-name"), "ALLOWLISTED", "Saved sandbox egress policy");
+    await page.waitForFunction(
+      (expected) => document.querySelector('[data-testid="sandbox-egress-allowlist-count"]')?.textContent?.includes(expected),
+      `${editedAllowlistedHosts.length} hosts`,
+      { timeout: 10000 }
+    );
+    await assertLocatorText(
+      page.getByTestId("sandbox-egress-allowlist-count"),
+      `${editedAllowlistedHosts.length} hosts`,
+      "Saved sandbox egress allowlist count"
+    );
+    await page.waitForFunction(
+      (host) => document.querySelector('[data-testid="sandbox-egress-allowlist-input"]')?.value.includes(host),
+      egressSmokeHost,
+      { timeout: 10000 }
+    );
 
     const browserNetworkToggle = page.getByTestId("sandbox-runtime-profile-network-BROWSER_AUTOMATION");
     await browserNetworkToggle.waitFor({ state: "visible", timeout: 10000 });
@@ -315,6 +387,7 @@ try {
     await page.screenshot({ path: screenshotPath, fullPage: true });
     console.log(`PASS sandbox tool quota page smoke`);
     console.log(`Egress policy: ${egressPolicy} / ${allowlistedHosts.length} hosts`);
+    console.log(`Saved egress policy: ${savedEgressPolicy.networkPolicy} / ${savedEgressPolicy.allowlistedHosts.length} hosts`);
     console.log(`Private network exceptions: ${privateNetworkAllowedHosts.length} hosts`);
     console.log(`Browser runtime network policy: ${savedProfilePolicy.networkAllowed}`);
     console.log(`Policy: ${policyId}`);
@@ -323,6 +396,7 @@ try {
     await context.close();
   }
 } finally {
+  await restoreSandboxEgressPolicy();
   await restoreBrowserProfilePolicy();
   await cleanupPolicy();
   await browser.close();

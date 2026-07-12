@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxEgressPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeContainerReapResult;
@@ -62,6 +63,14 @@ public interface SandboxRuntimeInboundPort {
 
     default SandboxRuntimeProfilePolicy upsertRuntimeProfilePolicy(SandboxRuntimeProfilePolicyUpsertCommand command) {
         throw new UnsupportedOperationException("Sandbox runtime profile policy writes are not available");
+    }
+
+    default SandboxEgressPolicy inspectSandboxEgressPolicy(String tenantId) {
+        throw new UnsupportedOperationException("Sandbox egress policy inspection is not available");
+    }
+
+    default SandboxEgressPolicy upsertSandboxEgressPolicy(SandboxEgressPolicyUpsertCommand command) {
+        throw new UnsupportedOperationException("Sandbox egress policy writes are not available");
     }
 
     List<SandboxExecution> listExecutions(String sessionId);

@@ -51,6 +51,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.rollout.KernelAgen
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.KernelSandboxRuntimeService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.RepositoryBackedSandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sre.KernelSreHealthQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.KernelAgentSkillBindingService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.KernelAgentSkillManagementService;
@@ -136,6 +137,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAclRepositoryP
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxEgressPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
@@ -783,7 +785,12 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     @ConditionalOnMissingBean(SandboxPolicyPort.class)
     public SandboxPolicyPort seahorseSandboxPolicyPort(
             @Value("${seahorse.agent.sandbox.network-policy:DENY_ALL}") SandboxNetworkPolicy networkPolicy,
-            @Value("${seahorse.agent.sandbox.allowlisted-hosts:}") String allowlistedHosts) {
+            @Value("${seahorse.agent.sandbox.allowlisted-hosts:}") String allowlistedHosts,
+            ObjectProvider<SandboxEgressPolicyRepositoryPort> sandboxEgressPolicyRepositoryPort) {
+        SandboxEgressPolicyRepositoryPort repositoryPort = sandboxEgressPolicyRepositoryPort.getIfAvailable();
+        if (repositoryPort != null) {
+            return new RepositoryBackedSandboxPolicyPort(networkPolicy, csvList(allowlistedHosts), repositoryPort);
+        }
         return new DefaultSandboxPolicyPort(networkPolicy, csvList(allowlistedHosts));
     }
 
@@ -830,11 +837,30 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             SandboxArtifactQueryPort sandboxArtifactQueryPort,
             SandboxArtifactScannerPort sandboxArtifactScannerPort,
             SandboxRuntimeProfilePolicyRepositoryPort sandboxRuntimeProfilePolicyRepositoryPort,
+            ObjectProvider<SandboxEgressPolicyRepositoryPort> sandboxEgressPolicyRepositoryPort,
             ObjectProvider<ObjectStoragePort> objectStoragePort,
             ObjectProvider<AgentRunRepositoryPort> agentRunRepositoryPort,
             ObjectProvider<CurrentUserPort> currentUserPort,
             ObjectProvider<KernelAuditLedgerService> auditLedgerService,
             ObjectProvider<Clock> clockProvider) {
+        SandboxEgressPolicyRepositoryPort egressPolicyRepositoryPort =
+                sandboxEgressPolicyRepositoryPort.getIfAvailable();
+        if (egressPolicyRepositoryPort == null) {
+            return new KernelSandboxRuntimeService(
+                    sandboxPolicyPort,
+                    sandboxRuntimePort,
+                    sandboxArtifactPort,
+                    sandboxSessionRepositoryPort,
+                    sandboxExecutionRepositoryPort,
+                    sandboxArtifactQueryPort,
+                    sandboxArtifactScannerPort,
+                    objectStoragePort.getIfAvailable(),
+                    sandboxRuntimeProfilePolicyRepositoryPort,
+                    agentRunRepositoryPort.getIfAvailable(),
+                    currentUserPort.getIfAvailable(),
+                    auditLedgerService.getIfAvailable(),
+                    clockProvider.getIfAvailable(Clock::systemUTC));
+        }
         return new KernelSandboxRuntimeService(
                 sandboxPolicyPort,
                 sandboxRuntimePort,
@@ -845,6 +871,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 sandboxArtifactScannerPort,
                 objectStoragePort.getIfAvailable(),
                 sandboxRuntimeProfilePolicyRepositoryPort,
+                egressPolicyRepositoryPort,
                 agentRunRepositoryPort.getIfAvailable(),
                 currentUserPort.getIfAvailable(),
                 auditLedgerService.getIfAvailable(),

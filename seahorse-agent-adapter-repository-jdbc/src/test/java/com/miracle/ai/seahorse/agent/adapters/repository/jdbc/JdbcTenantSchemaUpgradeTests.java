@@ -252,6 +252,31 @@ class JdbcTenantSchemaUpgradeTests {
     }
 
     @Test
+    void shouldCreateSandboxEgressPolicyTableWhenMissing() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:tenant-schema-upgrade-sandbox-egress-policy-" + System.nanoTime()
+                        + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+                "sa",
+                "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+
+        JdbcTenantSchemaUpgrade upgrade = new JdbcTenantSchemaUpgrade(dataSource);
+        upgrade.upgrade();
+        upgrade.upgrade();
+
+        assertThat(tableExists(jdbcTemplate, "sa_sandbox_egress_policy")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_sandbox_egress_policy", "tenant_id")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_sandbox_egress_policy", "network_policy")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_sandbox_egress_policy", "allowlisted_hosts")).isTrue();
+        assertThat(indexExists(jdbcTemplate,
+                "sa_sandbox_egress_policy",
+                "uk_sa_sandbox_egress_policy_tenant")).isTrue();
+        assertThat(indexExists(jdbcTemplate,
+                "sa_sandbox_egress_policy",
+                "idx_sa_sandbox_egress_policy_updated")).isTrue();
+    }
+
+    @Test
     void shouldRelaxSandboxRuntimeProfilePolicyNetworkConstraintForBrowserAutomation() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:tenant-schema-upgrade-sandbox-runtime-profile-network-" + System.nanoTime()

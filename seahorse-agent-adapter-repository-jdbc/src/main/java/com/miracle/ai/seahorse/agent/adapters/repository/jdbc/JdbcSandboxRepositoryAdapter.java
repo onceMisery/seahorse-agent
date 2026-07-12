@@ -20,8 +20,10 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxEgressPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxNetworkPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicyStatus;
@@ -29,6 +31,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeT
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxEgressPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
@@ -39,6 +42,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -49,7 +53,8 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
         SandboxExecutionRepositoryPort,
         SandboxArtifactPort,
         SandboxArtifactQueryPort,
-        SandboxRuntimeProfilePolicyRepositoryPort {
+        SandboxRuntimeProfilePolicyRepositoryPort,
+        SandboxEgressPolicyRepositoryPort {
 
     private static final String SESSION_COLUMNS = """
             session_id, tenant_id, run_id, runtime_type, status, reason_code, profile_id, expires_at, created_at, updated_at
@@ -64,6 +69,9 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
     private static final String RUNTIME_PROFILE_POLICY_COLUMNS = """
             policy_id, tenant_id, runtime_type, profile_id, status, session_ttl_seconds,
             network_allowed, created_at, updated_at
+            """;
+    private static final String EGRESS_POLICY_COLUMNS = """
+            policy_id, tenant_id, network_policy, allowlisted_hosts, created_at, updated_at
             """;
 
     private static final String SQL_INSERT_SESSION = """
@@ -214,6 +222,27 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
             WHERE tenant_id = ?
             ORDER BY runtime_type ASC, updated_at DESC, policy_id ASC
             """.formatted(RUNTIME_PROFILE_POLICY_COLUMNS);
+    private static final String SQL_INSERT_EGRESS_POLICY = """
+            INSERT INTO sa_sandbox_egress_policy
+            (policy_id, tenant_id, network_policy, allowlisted_hosts, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """;
+    private static final String SQL_UPDATE_EGRESS_POLICY = """
+            UPDATE sa_sandbox_egress_policy
+            SET tenant_id = ?,
+                network_policy = ?,
+                allowlisted_hosts = ?,
+                created_at = ?,
+                updated_at = ?
+            WHERE policy_id = ?
+            """;
+    private static final String SQL_FIND_EGRESS_POLICY_BY_TENANT = """
+            SELECT %s
+            FROM sa_sandbox_egress_policy
+            WHERE tenant_id = ?
+            ORDER BY updated_at DESC, policy_id DESC
+            LIMIT 1
+            """.formatted(EGRESS_POLICY_COLUMNS);
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -381,6 +410,26 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 tenantId.trim());
     }
 
+    @Override
+    public SandboxEgressPolicy upsert(SandboxEgressPolicy policy) {
+        SandboxEgressPolicy safePolicy = Objects.requireNonNull(policy, "policy must not be null");
+        if (findByTenant(safePolicy.tenantId()).isPresent()) {
+            updateEgressPolicy(safePolicy);
+            return safePolicy;
+        }
+        insertEgressPolicy(safePolicy);
+        return safePolicy;
+    }
+
+    @Override
+    public Optional<SandboxEgressPolicy> findByTenant(String tenantId) {
+        if (!hasText(tenantId)) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query(SQL_FIND_EGRESS_POLICY_BY_TENANT, this::mapEgressPolicy,
+                tenantId.trim()).stream().findFirst();
+    }
+
     private void insertSession(SandboxSession session) {
         jdbcTemplate.update(SQL_INSERT_SESSION,
                 session.sessionId(),
@@ -495,6 +544,26 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 policy.policyId());
     }
 
+    private void insertEgressPolicy(SandboxEgressPolicy policy) {
+        jdbcTemplate.update(SQL_INSERT_EGRESS_POLICY,
+                policy.policyId(),
+                policy.tenantId(),
+                policy.networkPolicy().name(),
+                encodeHosts(policy.allowlistedHosts()),
+                toTimestamp(policy.createdAt()),
+                toTimestamp(policy.updatedAt()));
+    }
+
+    private void updateEgressPolicy(SandboxEgressPolicy policy) {
+        jdbcTemplate.update(SQL_UPDATE_EGRESS_POLICY,
+                policy.tenantId(),
+                policy.networkPolicy().name(),
+                encodeHosts(policy.allowlistedHosts()),
+                toTimestamp(policy.createdAt()),
+                toTimestamp(policy.updatedAt()),
+                policy.policyId());
+    }
+
     private SandboxSession mapSession(ResultSet resultSet, int rowNum) throws SQLException {
         return new SandboxSession(
                 resultSet.getString("session_id"),
@@ -546,6 +615,27 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 resultSet.getBoolean("network_allowed"),
                 toInstant(resultSet.getTimestamp("created_at")),
                 toInstant(resultSet.getTimestamp("updated_at")));
+    }
+
+    private SandboxEgressPolicy mapEgressPolicy(ResultSet resultSet, int rowNum) throws SQLException {
+        return new SandboxEgressPolicy(
+                resultSet.getString("policy_id"),
+                resultSet.getString("tenant_id"),
+                SandboxNetworkPolicy.valueOf(resultSet.getString("network_policy")),
+                decodeHosts(resultSet.getString("allowlisted_hosts")),
+                toInstant(resultSet.getTimestamp("created_at")),
+                toInstant(resultSet.getTimestamp("updated_at")));
+    }
+
+    private String encodeHosts(List<String> hosts) {
+        return String.join(",", SandboxEgressPolicy.normalizeHosts(hosts));
+    }
+
+    private List<String> decodeHosts(String value) {
+        if (!hasText(value)) {
+            return List.of();
+        }
+        return SandboxEgressPolicy.normalizeHosts(Arrays.asList(value.split(",")));
     }
 
     private Timestamp toTimestamp(Instant instant) {

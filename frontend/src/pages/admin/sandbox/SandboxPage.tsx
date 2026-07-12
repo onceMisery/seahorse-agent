@@ -24,6 +24,7 @@ import {
   getSandboxRuntimeHealth,
   getSandboxRuntimeNodes,
   getSandboxRuntimeProfiles,
+  upsertSandboxEgressPolicy,
   upsertSandboxRuntimeProfilePolicy,
   upsertSandboxToolQuotaPolicy,
   reapOrphanedSandboxRuntimeContainers,
@@ -155,6 +156,15 @@ function previewList(values?: string[], limit = 4) {
   return `${items.slice(0, limit).join(", ")} +${items.length - limit}`;
 }
 
+function parseHostDraft(value: string) {
+  return Array.from(new Set(
+    value
+      .split(/[\s,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  )).sort();
+}
+
 function formatScannerWindow(policy?: SandboxArtifactScannerPolicy | null) {
   if (!policy) return "-";
   return [
@@ -189,7 +199,9 @@ function RuntimeGovernancePanel({
   loading,
   error,
   onRefresh,
+  onSaveEgressPolicy,
   onSavePolicy,
+  savingEgressPolicy,
   savingProfileRuntimeType
 }: {
   health: SandboxRuntimeHealth | null;
@@ -199,22 +211,33 @@ function RuntimeGovernancePanel({
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
+  onSaveEgressPolicy: (networkPolicy: string, allowlistedHosts: string[]) => void;
   onSavePolicy: (
     profile: SandboxRuntimeProfile,
     ttlSeconds: number,
     status: string,
     networkAllowed: boolean
   ) => void;
+  savingEgressPolicy: boolean;
   savingProfileRuntimeType: string | null;
 }) {
   const profileRows = profiles?.profiles || [];
   const nodeRows = nodes || [];
   const allowlistedHosts = profiles?.allowlistedHosts || [];
+  const allowlistedHostsText = allowlistedHosts.join("\n");
   const privateNetworkAllowedHosts = health?.browserPrivateNetworkAllowedHosts || [];
   const checkedAt = health?.checkedAt ? formatTimestamp(health.checkedAt) : "-";
   const [ttlDrafts, setTtlDrafts] = useState<Record<string, string>>({});
   const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({});
   const [networkDrafts, setNetworkDrafts] = useState<Record<string, boolean>>({});
+  const [egressPolicyDraft, setEgressPolicyDraft] = useState("DENY_ALL");
+  const [egressHostsDraft, setEgressHostsDraft] = useState("");
+
+  useEffect(() => {
+    if (!profiles) return;
+    setEgressPolicyDraft(profiles.defaultNetworkPolicy || "DENY_ALL");
+    setEgressHostsDraft(allowlistedHostsText);
+  }, [profiles?.defaultNetworkPolicy, allowlistedHostsText]);
 
   return (
     <Card>
@@ -353,6 +376,40 @@ function RuntimeGovernancePanel({
                       {previewList(privateNetworkAllowedHosts, 6)}
                     </span>
                   </div>
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_auto] md:items-end">
+                  <div className="space-y-1">
+                    <div className="text-xs uppercase text-muted-foreground">Mode</div>
+                    <select
+                      className="h-9 w-full rounded border border-slate-200 bg-white px-2 text-xs"
+                      value={egressPolicyDraft}
+                      onChange={(event) => setEgressPolicyDraft(event.target.value)}
+                      data-testid="sandbox-egress-policy-select"
+                    >
+                      <option value="DENY_ALL">DENY_ALL</option>
+                      <option value="ALLOWLISTED">ALLOWLISTED</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-xs uppercase text-muted-foreground">Hosts</div>
+                    <Textarea
+                      className="min-h-[72px] font-mono text-xs"
+                      value={egressHostsDraft}
+                      onChange={(event) => setEgressHostsDraft(event.target.value)}
+                      data-testid="sandbox-egress-allowlist-input"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9"
+                    title="Save browser egress policy"
+                    disabled={savingEgressPolicy}
+                    onClick={() => onSaveEgressPolicy(egressPolicyDraft, parseHostDraft(egressHostsDraft))}
+                    data-testid="sandbox-egress-policy-save"
+                  >
+                    <Save className={`h-4 w-4 ${savingEgressPolicy ? "animate-pulse" : ""}`} />
+                  </Button>
                 </div>
               </div>
             )}
@@ -753,6 +810,7 @@ export function SandboxPage() {
   const [artifactScannerPolicy, setArtifactScannerPolicy] = useState<SandboxArtifactScannerPolicy | null>(null);
   const [loadingRuntimeGovernance, setLoadingRuntimeGovernance] = useState(false);
   const [runtimeGovernanceError, setRuntimeGovernanceError] = useState<string | null>(null);
+  const [savingEgressPolicy, setSavingEgressPolicy] = useState(false);
   const [savingProfileRuntimeType, setSavingProfileRuntimeType] = useState<string | null>(null);
   const [savingToolQuota, setSavingToolQuota] = useState(false);
   const [lastToolQuotaPolicy, setLastToolQuotaPolicy] = useState<SandboxToolQuotaPolicy | null>(null);
@@ -1107,6 +1165,25 @@ export function SandboxPage() {
     }
   };
 
+  const handleSaveSandboxEgressPolicy = async (networkPolicy: string, allowlistedHosts: string[]) => {
+    const safeNetworkPolicy = networkPolicy === "ALLOWLISTED" ? "ALLOWLISTED" : "DENY_ALL";
+    try {
+      setSavingEgressPolicy(true);
+      await upsertSandboxEgressPolicy({
+        tenantId: currentSandboxTenantId(),
+        networkPolicy: safeNetworkPolicy,
+        allowlistedHosts
+      });
+      await refreshRuntimeGovernance();
+      toast.success(`Browser egress policy saved: ${safeNetworkPolicy}`);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Browser egress policy save failed"));
+      console.error(error);
+    } finally {
+      setSavingEgressPolicy(false);
+    }
+  };
+
   const handleSaveRuntimeProfilePolicy = async (
     profile: SandboxRuntimeProfile,
     ttlSeconds: number,
@@ -1194,9 +1271,13 @@ export function SandboxPage() {
             loading={loadingRuntimeGovernance}
             error={runtimeGovernanceError}
             onRefresh={() => void refreshRuntimeGovernance(true)}
+            onSaveEgressPolicy={(networkPolicy, allowlistedHosts) =>
+              void handleSaveSandboxEgressPolicy(networkPolicy, allowlistedHosts)
+            }
             onSavePolicy={(profile, ttlSeconds, status, networkAllowed) =>
               void handleSaveRuntimeProfilePolicy(profile, ttlSeconds, status, networkAllowed)
             }
+            savingEgressPolicy={savingEgressPolicy}
             savingProfileRuntimeType={savingProfileRuntimeType}
           />
 
