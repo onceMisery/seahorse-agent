@@ -65,6 +65,8 @@ public class ContainerSandboxAdapterProperties {
 
     private boolean readOnlyRootFilesystem = true;
 
+    private long maxSessionFileBytes = 64L * 1024L * 1024L;
+
     private Duration orphanWorkspaceMinAge = Duration.ofMinutes(5);
 
     private int maxActiveSessions = 0;
@@ -235,6 +237,14 @@ public class ContainerSandboxAdapterProperties {
 
     public void setReadOnlyRootFilesystem(boolean readOnlyRootFilesystem) {
         this.readOnlyRootFilesystem = readOnlyRootFilesystem;
+    }
+
+    public long getMaxSessionFileBytes() {
+        return maxSessionFileBytes;
+    }
+
+    public void setMaxSessionFileBytes(long maxSessionFileBytes) {
+        this.maxSessionFileBytes = maxSessionFileBytes > 0 ? maxSessionFileBytes : 64L * 1024L * 1024L;
     }
 
     public Duration getOrphanWorkspaceMinAge() {

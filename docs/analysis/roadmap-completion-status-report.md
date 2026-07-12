@@ -1191,3 +1191,7 @@ The container adapter now applies `--cap-drop ALL` and `--security-opt no-new-pr
 ### 2026-07-13 Sandbox Read-Only Root Filesystem Evidence Update
 
 Sandbox containers now default to a read-only root filesystem with a bounded noexec/nosuid `/tmp` tmpfs, while retaining only the governed per-session workspace as writable persistent storage. Full-Docker evidence passed 5/5 through `scripts/e2e-sandbox-python-tool-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-readonly-smoke`; code inside the real managed container asserted no-new-privileges, zero effective capabilities, and a non-writable `/` before producing the governed artifact.
+
+### 2026-07-13 Sandbox Per-Session File Quota Evidence Update
+
+The container adapter now applies Docker `--ulimit fsize` from `max-session-file-bytes`, defaulting to 64 MiB. Full-Docker validation confirmed a normal small `sandbox_python` artifact succeeds and a deployed 1024-byte limit fails closed for a real approved 4096-byte Tool Gateway write. The runtime was restored to its default 64 MiB limit after verification.
