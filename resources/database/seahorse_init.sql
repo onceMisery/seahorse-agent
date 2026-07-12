@@ -1798,6 +1798,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_sa_sandbox_egress_policy_tenant
 CREATE INDEX IF NOT EXISTS idx_sa_sandbox_egress_policy_updated
   ON sa_sandbox_egress_policy(tenant_id, updated_at DESC, policy_id DESC);
 
+CREATE TABLE IF NOT EXISTS sa_sandbox_browser_profile (
+  pk_id BIGSERIAL PRIMARY KEY,
+  profile_id VARCHAR(96) NOT NULL,
+  tenant_id VARCHAR(64) NOT NULL,
+  name VARCHAR(96) NOT NULL,
+  session_state_artifact_id VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL,
+  CONSTRAINT chk_sa_sandbox_browser_profile_status CHECK (status IN ('ACTIVE', 'DISABLED')),
+  CONSTRAINT uk_sa_sandbox_browser_profile_tenant_profile UNIQUE (tenant_id, profile_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_sandbox_browser_profile_tenant
+  ON sa_sandbox_browser_profile(tenant_id, updated_at DESC, profile_id ASC);
+
 CREATE TABLE IF NOT EXISTS sa_audit_event (
   pk_id BIGSERIAL PRIMARY KEY,
   audit_id VARCHAR(64) NOT NULL UNIQUE,
@@ -2514,6 +2531,7 @@ ALTER TABLE sa_agent_definition ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sa_quota_policy ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sa_sandbox_runtime_profile_policy ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sa_sandbox_egress_policy ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sa_sandbox_browser_profile ENABLE ROW LEVEL SECURITY;
 
 -- Force RLS for table owners
 ALTER TABLE t_user FORCE ROW LEVEL SECURITY;
@@ -2541,6 +2559,7 @@ ALTER TABLE sa_agent_definition FORCE ROW LEVEL SECURITY;
 ALTER TABLE sa_quota_policy FORCE ROW LEVEL SECURITY;
 ALTER TABLE sa_sandbox_runtime_profile_policy FORCE ROW LEVEL SECURITY;
 ALTER TABLE sa_sandbox_egress_policy FORCE ROW LEVEL SECURITY;
+ALTER TABLE sa_sandbox_browser_profile FORCE ROW LEVEL SECURITY;
 
 -- RLS policies
 CREATE POLICY rls_tenant_isolation ON t_user
@@ -2592,6 +2611,8 @@ CREATE POLICY rls_tenant_isolation ON sa_quota_policy
 CREATE POLICY rls_tenant_isolation ON sa_sandbox_runtime_profile_policy
     USING (tenant_id = current_setting('app.current_tenant_id', true));
 CREATE POLICY rls_tenant_isolation ON sa_sandbox_egress_policy
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON sa_sandbox_browser_profile
     USING (tenant_id = current_setting('app.current_tenant_id', true));
 
 -- ---- V3: User Trial ----

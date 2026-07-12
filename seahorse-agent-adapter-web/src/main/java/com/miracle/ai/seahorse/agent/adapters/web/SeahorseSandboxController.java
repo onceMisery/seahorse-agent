@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxBrowserProfileStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxNetworkPolicy;
@@ -34,6 +35,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaManagementInboundP
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaPolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxBrowserProfileUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxEgressPolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
@@ -239,6 +241,43 @@ public class SeahorseSandboxController {
                         safeRequest.networkPolicy(),
                         safeRequest.allowlistedHosts(),
                         safeRequest.browserPrivateNetworkAllowedHosts())));
+    }
+
+    @GetMapping("/api/sandbox/runtime/browser-profiles")
+    public ApiResponse<Object> listSandboxBrowserProfiles(
+            @RequestParam(defaultValue = DEFAULT_TENANT_ID) String tenantId,
+            @RequestParam(defaultValue = "50") int limit) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        String safeTenantId = requireText(tenantId, "tenantId must not be blank");
+        return ApiResponses.requireService(sandboxRuntimePortProvider,
+                port -> port.listSandboxBrowserProfiles(safeTenantId, limit));
+    }
+
+    @PostMapping("/api/sandbox/runtime/browser-profiles")
+    public ApiResponse<Object> upsertSandboxBrowserProfile(
+            @RequestBody SandboxBrowserProfileRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        SandboxBrowserProfileRequest safeRequest = request == null
+                ? new SandboxBrowserProfileRequest(null, null, null, null, null, null)
+                : request;
+        return ApiResponses.requireService(sandboxRuntimePortProvider,
+                port -> port.upsertSandboxBrowserProfile(new SandboxBrowserProfileUpsertCommand(
+                        safeRequest.profileId(),
+                        safeRequest.tenantId(),
+                        safeRequest.name(),
+                        safeRequest.sessionStateArtifactId(),
+                        safeRequest.status(),
+                        safeRequest.expiresAt())));
+    }
+
+    @PostMapping("/api/sandbox/runtime/browser-profiles/{profileId}:disable")
+    public ApiResponse<Object> disableSandboxBrowserProfile(
+            @PathVariable String profileId,
+            @RequestParam(defaultValue = DEFAULT_TENANT_ID) String tenantId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        String safeTenantId = requireText(tenantId, "tenantId must not be blank");
+        return ApiResponses.requireService(sandboxRuntimePortProvider,
+                port -> port.disableSandboxBrowserProfile(safeTenantId, profileId));
     }
 
     @PostMapping("/api/sandbox/runtime/profile-policies")
@@ -559,6 +598,14 @@ public class SeahorseSandboxController {
                     ? List.of()
                     : List.copyOf(browserPrivateNetworkAllowedHosts);
         }
+    }
+
+    public record SandboxBrowserProfileRequest(String profileId,
+                                               String tenantId,
+                                               String name,
+                                               String sessionStateArtifactId,
+                                               SandboxBrowserProfileStatus status,
+                                               Instant expiresAt) {
     }
 
     public record SandboxToolQuotaPolicyRequest(String policyId,

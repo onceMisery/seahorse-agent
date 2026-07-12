@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxBrowserProfile;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxEgressPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
@@ -71,6 +72,22 @@ public interface SandboxRuntimeInboundPort {
 
     default SandboxEgressPolicy upsertSandboxEgressPolicy(SandboxEgressPolicyUpsertCommand command) {
         throw new UnsupportedOperationException("Sandbox egress policy writes are not available");
+    }
+
+    default List<SandboxBrowserProfile> listSandboxBrowserProfiles(String tenantId, int limit) {
+        return List.of();
+    }
+
+    default SandboxBrowserProfile upsertSandboxBrowserProfile(SandboxBrowserProfileUpsertCommand command) {
+        throw new UnsupportedOperationException("Sandbox browser profile writes are not available");
+    }
+
+    default SandboxBrowserProfile disableSandboxBrowserProfile(String tenantId, String profileId) {
+        throw new UnsupportedOperationException("Sandbox browser profile writes are not available");
+    }
+
+    default String readSandboxBrowserProfileSessionState(String tenantId, String profileId) {
+        throw new UnsupportedOperationException("Sandbox browser profile replay is not available");
     }
 
     List<SandboxExecution> listExecutions(String sessionId);

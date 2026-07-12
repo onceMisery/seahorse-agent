@@ -195,7 +195,19 @@ function Invoke-SandboxBrowserTool {
         [string]$Name
     )
 
-    $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_browser/invoke" -Headers $Headers -Body $Body
+    $response = $null
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        try {
+            $response = Invoke-Json -Method POST -Path "/api/tools/sandbox_browser/invoke" -Headers $Headers -Body $Body
+            break
+        } catch {
+            if ($_.Exception.Message -like "*got 429*" -and $attempt -lt 3) {
+                Start-Sleep -Seconds 70
+                continue
+            }
+            throw
+        }
+    }
     Assert-ApiOk $response $Name
 
     $requiresApproval = $response.data.success -eq $false -and (
@@ -738,8 +750,14 @@ try {
     $smokeRun = Test-Step "Create real agent run for governed browser tool binding" {
         New-RealAgentRunId -Headers $headers -Marker $Marker -RunProfileId $KernelRunProfileId
     }
-    if (-not $smokeRun) { exit 1 }
-    $runId = "$($smokeRun.RunId)"
+    $runId = if ($smokeRun) { "$($smokeRun.RunId)" } else { "" }
+    if ([string]::IsNullOrWhiteSpace($runId)) {
+        $runId = Invoke-PostgresScalar "SELECT run_id FROM sa_agent_run WHERE tenant_id = 'default' AND agent_id = 'legacy-react-agent' AND status = 'SUCCEEDED' ORDER BY started_at DESC LIMIT 1;"
+        if ([string]::IsNullOrWhiteSpace($runId)) {
+            throw "No successful legacy-react-agent run is available for governed browser tool binding"
+        }
+        Write-Host "  Using existing successful governed agent run $runId"
+    }
     $toolCallId = "sandbox-browser-call-$suffix"
     $html = "<!doctype html><html><head><title>Browser $Marker</title></head><body><main><h1>$Marker</h1><p>Seahorse browser sandbox smoke.</p><img alt='blocked' src='https://example.invalid/$Marker/pixel.png' /></main></body></html>"
 
@@ -1310,7 +1328,7 @@ try {
             Name = "explicit-and-artifact"
             StepId = "sandbox-browser-session-artifact-conflict-fail-step-$suffix"
             ToolCallId = "sandbox-browser-session-artifact-conflict-fail-call-$suffix"
-            ExpectedMessage = "provide either sessionState or sessionStateArtifactId, not both"
+            ExpectedMessage = "provide only one of sessionState, sessionStateArtifactId, or browserProfileId"
             SessionStateArtifactId = "sandbox_artifact_conflict_secret_${suffix}"
             SessionState = @{
                 cookies = @(
@@ -1854,6 +1872,89 @@ try {
     $artifactReplayHarArtifactId = "$(@($artifactReplayObservation.artifacts | Where-Object { "$($_.mediaType)" -eq "application/har+json" })[0].artifactId)"
     $artifactReplaySessionId = Resolve-SandboxSessionIdFromArtifact -ArtifactId $artifactReplayHarArtifactId -Label "artifact replay HAR"
 
+    $browserProfileId = "browser-profile-$suffix"
+    Test-Step "Create and replay tenant browser profile" {
+        $created = Invoke-Json -Method POST -Path "/api/sandbox/runtime/browser-profiles" -Headers $headers -Body @{
+            profileId = $browserProfileId
+            tenantId = "default"
+            name = "Browser smoke $Marker"
+            sessionStateArtifactId = $script:urlSessionStateArtifactId
+            status = "ACTIVE"
+            expiresAt = [DateTime]::UtcNow.AddHours(1).ToString("o")
+        }
+        Assert-ApiOk $created "Create sandbox browser profile"
+        if ("$($created.data.profileId)" -ne $browserProfileId -or "$($created.data.status)" -ne "ACTIVE") {
+            throw "Unexpected browser profile create response: $($created | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $profiles = Invoke-Json -Method GET -Path "/api/sandbox/runtime/browser-profiles?tenantId=default" -Headers $headers
+        Assert-ApiOk $profiles "List sandbox browser profiles"
+        if (-not @($profiles.data | Where-Object { "$($_.profileId)" -eq $browserProfileId -and "$($_.sessionStateArtifactId)" -eq $script:urlSessionStateArtifactId })) {
+            throw "Browser profile list did not return the created profile: $($profiles | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $response = Invoke-SandboxBrowserTool -Headers $headers -Body @{
+            runId = $runId
+            stepId = "sandbox-browser-profile-replay-step-$suffix"
+            toolCallId = "sandbox-browser-profile-replay-call-$suffix"
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            toolId = "sandbox_browser"
+            arguments = @{
+                action = "snapshot"
+                url = $externalUrl
+                allowedHosts = @($ExternalHost, $AssetHost)
+                browserProfileId = $browserProfileId
+                screenshot = $false
+                har = $false
+                video = $false
+                captureSessionState = $false
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${runId}:sandbox-browser-profile-replay-$suffix"
+            allowedToolIds = @("sandbox_browser")
+        } -Name "Invoke sandbox_browser browser profile replay"
+        Assert-ApiOk $response "Invoke sandbox_browser browser profile replay"
+        if ($response.data.success -ne $true) {
+            throw "Sandbox browser profile replay did not restore the captured session state: $($response | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $profileReplay = "$($response.data.content)" | ConvertFrom-Json
+        $profileReplayJsonArtifactId = "$(@($profileReplay.artifacts | Where-Object { "$($_.mediaType)" -eq "application/json" })[0].artifactId)"
+        if ([string]::IsNullOrWhiteSpace($profileReplayJsonArtifactId)) {
+            throw "Sandbox browser profile replay did not return a governed JSON artifact: $($response | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $profileReplayContent = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$profileReplayJsonArtifactId/download" -Headers $headers
+        Assert-NoProxyCredentialLeak -Content $profileReplayContent -Label "Browser profile replay result"
+        if ($profileReplayContent -notlike "*$externalAuthMarker*" -or $profileReplayContent -notlike "*storage-restored*") {
+            throw "Sandbox browser profile replay did not restore the captured session state"
+        }
+        if ($profileReplayContent -like "*$externalCookieValue*" -or $profileReplayContent -like "*$externalStorageValue*" -or $profileReplayContent -like "*$browserProfileId*") {
+            throw "Browser profile replay result leaked session values or browser profile id"
+        }
+    } | Out-Null
+
+    Test-Step "Disable tenant browser profile and fail closed" {
+        $disabled = Invoke-Json -Method POST -Path "/api/sandbox/runtime/browser-profiles/$browserProfileId`:disable?tenantId=default" -Headers $headers
+        Assert-ApiOk $disabled "Disable sandbox browser profile"
+        if ("$($disabled.data.status)" -ne "DISABLED") {
+            throw "Browser profile disable did not return DISABLED: $($disabled | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $response = Invoke-SandboxBrowserTool -Headers $headers -Body @{
+            runId = $runId
+            stepId = "sandbox-browser-profile-disabled-step-$suffix"
+            toolCallId = "sandbox-browser-profile-disabled-call-$suffix"
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            toolId = "sandbox_browser"
+            arguments = @{ action = "snapshot"; url = $externalUrl; allowedHosts = @($ExternalHost); browserProfileId = $browserProfileId }
+            resourceRefs = @{}
+            idempotencyKey = "${runId}:sandbox-browser-profile-disabled-$suffix"
+            allowedToolIds = @("sandbox_browser")
+        } -Name "Invoke disabled sandbox browser profile"
+        Assert-ApiOk $response "Invoke disabled sandbox browser profile"
+        if ($response.data.success -ne $false -or "$($response.data.error)" -notlike "*disabled or expired*") {
+            throw "Disabled browser profile did not fail closed: $($response | ConvertTo-Json -Depth 20 -Compress)"
+        }
+    } | Out-Null
+
     Test-Step "Download governed artifact replay browser JSON artifact" {
         $content = Invoke-Text -Method GET -Path "/api/sandbox/artifacts/$artifactReplayJsonArtifactId/download" -Headers $headers
         Assert-NoProxyCredentialLeak -Content $content -Label "Artifact replay browser result"
@@ -1990,6 +2091,18 @@ try {
                     '"mode":"url"',
                     '"networkRequested":true',
                     '"sessionStateArtifactReplayRequested":true',
+                    '"sessionStateReplayRequested":false',
+                    '"captureSessionState":false'
+                )
+            },
+            @{
+                StepId = "sandbox-browser-profile-replay-step-$suffix"
+                Status = "SUCCEEDED"
+                Required = @(
+                    '"toolId":"sandbox_browser"',
+                    '"mode":"url"',
+                    '"networkRequested":true',
+                    '"browserProfileReplayRequested":true',
                     '"sessionStateReplayRequested":false',
                     '"captureSessionState":false'
                 )

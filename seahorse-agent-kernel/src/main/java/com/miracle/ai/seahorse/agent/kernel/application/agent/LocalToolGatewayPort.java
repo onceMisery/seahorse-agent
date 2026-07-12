@@ -96,6 +96,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             "cookies",
             "sessionState",
             "sessionStateArtifactId",
+            "browserProfileId",
             "captureSessionState",
             "action",
             "screenshot",
@@ -668,6 +669,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         summary.put("cookieCount", cookieCount);
         summary.put("sessionStateReplayRequested", !sessionState.isEmpty());
         summary.put("sessionStateArtifactReplayRequested", hasText(argumentString(arguments, "sessionStateArtifactId")));
+        summary.put("browserProfileReplayRequested", hasText(argumentString(arguments, "browserProfileId")));
         summary.put("sessionStateCookieCount", sessionCookieCount);
         summary.put("sessionStateOriginCount", sessionOriginCount);
         summary.put("sessionStateLocalStorageItemCount", sessionLocalStorageItemCount);

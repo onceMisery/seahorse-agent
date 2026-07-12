@@ -27,6 +27,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactRedactionSummary;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxBrowserProfile;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxBrowserProfileStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxEgressPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
@@ -46,6 +48,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxEgressPolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxBrowserProfileUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeProfilePolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
@@ -54,6 +57,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPo
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxBrowserProfileRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxEgressPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
@@ -140,6 +144,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private final SandboxArtifactQueryPort artifactQueryPort;
     private final SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort;
     private final SandboxEgressPolicyRepositoryPort egressPolicyRepositoryPort;
+    private final SandboxBrowserProfileRepositoryPort browserProfileRepositoryPort;
     private final AgentRunRepositoryPort runRepository;
     private final CurrentUserPort currentUserPort;
     private final KernelAuditLedgerService auditLedger;
@@ -320,6 +325,38 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                                        CurrentUserPort currentUserPort,
                                        KernelAuditLedgerService auditLedger,
                                        Clock clock) {
+        this(policyPort,
+                runtimePort,
+                artifactPort,
+                sessionRepositoryPort,
+                executionRepositoryPort,
+                artifactQueryPort,
+                artifactScannerPort,
+                artifactStoragePort,
+                runtimeProfilePolicyRepositoryPort,
+                egressPolicyRepositoryPort,
+                new InMemorySandboxBrowserProfileRepository(),
+                runRepository,
+                currentUserPort,
+                auditLedger,
+                clock);
+    }
+
+    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
+                                       SandboxRuntimePort runtimePort,
+                                       SandboxArtifactPort artifactPort,
+                                       SandboxSessionRepositoryPort sessionRepositoryPort,
+                                       SandboxExecutionRepositoryPort executionRepositoryPort,
+                                       SandboxArtifactQueryPort artifactQueryPort,
+                                       SandboxArtifactScannerPort artifactScannerPort,
+                                       ObjectStoragePort artifactStoragePort,
+                                       SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort,
+                                       SandboxEgressPolicyRepositoryPort egressPolicyRepositoryPort,
+                                       SandboxBrowserProfileRepositoryPort browserProfileRepositoryPort,
+                                       AgentRunRepositoryPort runRepository,
+                                       CurrentUserPort currentUserPort,
+                                       KernelAuditLedgerService auditLedger,
+                                       Clock clock) {
         this.policyPort = Objects.requireNonNull(policyPort, "policyPort must not be null");
         this.runtimePort = Objects.requireNonNull(runtimePort, "runtimePort must not be null");
         this.artifactPort = Objects.requireNonNull(artifactPort, "artifactPort must not be null");
@@ -335,6 +372,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 "runtimeProfilePolicyRepositoryPort must not be null");
         this.egressPolicyRepositoryPort = Objects.requireNonNull(egressPolicyRepositoryPort,
                 "egressPolicyRepositoryPort must not be null");
+        this.browserProfileRepositoryPort = Objects.requireNonNull(browserProfileRepositoryPort,
+                "browserProfileRepositoryPort must not be null");
         this.runRepository = runRepository;
         this.currentUserPort = currentUserPort;
         this.auditLedger = auditLedger;
@@ -614,6 +653,70 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     }
 
     @Override
+    public List<SandboxBrowserProfile> listSandboxBrowserProfiles(String tenantId, int limit) {
+        return browserProfileRepositoryPort.listByTenant(
+                requireText(tenantId, "tenantId must not be blank"),
+                Math.max(1, Math.min(limit, 100)));
+    }
+
+    @Override
+    public SandboxBrowserProfile upsertSandboxBrowserProfile(SandboxBrowserProfileUpsertCommand command) {
+        SandboxBrowserProfileUpsertCommand safeCommand =
+                Objects.requireNonNull(command, "command must not be null");
+        String tenantId = requireText(safeCommand.tenantId(), "tenantId must not be blank");
+        String profileId = requireText(safeCommand.profileId(), "profileId must not be blank");
+        String artifactId = requireText(safeCommand.sessionStateArtifactId(), "sessionStateArtifactId must not be blank");
+        Instant now = clock.instant();
+        Instant expiresAt = Objects.requireNonNull(safeCommand.expiresAt(), "expiresAt must not be null");
+        if (!expiresAt.isAfter(now)) {
+            throw new IllegalArgumentException("expiresAt must be in the future");
+        }
+        requireBrowserProfileArtifact(tenantId, artifactId);
+        Optional<SandboxBrowserProfile> existing = browserProfileRepositoryPort
+                .findByTenantAndProfileId(tenantId, profileId);
+        return browserProfileRepositoryPort.save(new SandboxBrowserProfile(
+                profileId,
+                tenantId,
+                safeCommand.name(),
+                artifactId,
+                Objects.requireNonNullElse(safeCommand.status(), SandboxBrowserProfileStatus.ACTIVE),
+                expiresAt,
+                existing.map(SandboxBrowserProfile::createdAt).orElse(now),
+                now));
+    }
+
+    @Override
+    public SandboxBrowserProfile disableSandboxBrowserProfile(String tenantId, String profileId) {
+        String safeTenantId = requireText(tenantId, "tenantId must not be blank");
+        SandboxBrowserProfile existing = browserProfileRepositoryPort
+                .findByTenantAndProfileId(safeTenantId, requireText(profileId, "profileId must not be blank"))
+                .orElseThrow(() -> new IllegalArgumentException("Sandbox browser profile not found"));
+        return browserProfileRepositoryPort.save(new SandboxBrowserProfile(
+                existing.profileId(),
+                existing.tenantId(),
+                existing.name(),
+                existing.sessionStateArtifactId(),
+                SandboxBrowserProfileStatus.DISABLED,
+                existing.expiresAt(),
+                existing.createdAt(),
+                clock.instant()));
+    }
+
+    @Override
+    public String readSandboxBrowserProfileSessionState(String tenantId, String profileId) {
+        String safeTenantId = requireText(tenantId, "tenantId must not be blank");
+        SandboxBrowserProfile profile = browserProfileRepositoryPort
+                .findByTenantAndProfileId(safeTenantId, requireText(profileId, "profileId must not be blank"))
+                .orElseThrow(() -> new IllegalArgumentException("Sandbox browser profile not found"));
+        if (!profile.usableAt(clock.instant())) {
+            throw new IllegalStateException("Sandbox browser profile is disabled or expired");
+        }
+        return readBrowserSessionStateArtifact(requireBrowserProfileArtifact(
+                safeTenantId,
+                profile.sessionStateArtifactId()));
+    }
+
+    @Override
     public List<SandboxExecution> listExecutions(String sessionId) {
         String safeSessionId = requireText(sessionId, "sessionId must not be blank");
         requireReadableSession(findSessionOrThrow(safeSessionId));
@@ -656,14 +759,11 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     @Override
     public String readBrowserSessionStateArtifact(String artifactId) {
         SandboxArtifact artifact = findArtifactWithSession(artifactId);
-        if (!isBrowserSessionStateArtifact(artifact)) {
-            throw new IllegalArgumentException("Sandbox browser session-state artifact not found");
-        }
-        if (!"application/json".equals(normalizedMediaType(artifact.mediaType()))
-                || artifact.scanStatus() != SandboxArtifactScanStatus.BLOCKED
-                || artifact.sensitivity() != ContextSensitivity.SECRET) {
-            throw new IllegalStateException("Sandbox browser session-state artifact is not governed for replay");
-        }
+        return readBrowserSessionStateArtifact(artifact);
+    }
+
+    private String readBrowserSessionStateArtifact(SandboxArtifact artifact) {
+        requireGovernedBrowserSessionStateArtifact(artifact);
         try (InputStream input = openArtifactObjectStream(artifact)) {
             byte[] bytes = input.readNBytes(MAX_BROWSER_SESSION_STATE_ARTIFACT_BYTES + 1);
             if (bytes.length > MAX_BROWSER_SESSION_STATE_ARTIFACT_BYTES) {
@@ -672,6 +772,29 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             return new String(bytes, StandardCharsets.UTF_8);
         } catch (IOException ex) {
             throw new IllegalStateException("Sandbox browser session-state artifact could not be read", ex);
+        }
+    }
+
+    private SandboxArtifact requireBrowserProfileArtifact(String tenantId, String artifactId) {
+        SandboxArtifact artifact = artifactQueryPort.findArtifactById(
+                        requireText(artifactId, "sessionStateArtifactId must not be blank"))
+                .orElseThrow(() -> new IllegalArgumentException("Sandbox browser session-state artifact not found"));
+        SandboxSession session = findSessionOrThrow(artifact.sessionId());
+        if (!tenantId.equals(session.tenantId())) {
+            throw new IllegalArgumentException("Sandbox browser profile artifact belongs to another tenant");
+        }
+        requireGovernedBrowserSessionStateArtifact(artifact);
+        return artifact;
+    }
+
+    private void requireGovernedBrowserSessionStateArtifact(SandboxArtifact artifact) {
+        if (!isBrowserSessionStateArtifact(artifact)) {
+            throw new IllegalArgumentException("Sandbox browser session-state artifact not found");
+        }
+        if (!"application/json".equals(normalizedMediaType(artifact.mediaType()))
+                || artifact.scanStatus() != SandboxArtifactScanStatus.BLOCKED
+                || artifact.sensitivity() != ContextSensitivity.SECRET) {
+            throw new IllegalStateException("Sandbox browser session-state artifact is not governed for replay");
         }
     }
 
@@ -1237,6 +1360,41 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             records.sort(Comparator.comparing(SandboxExecution::createdAt)
                     .thenComparing(SandboxExecution::executionId));
             return List.copyOf(records);
+        }
+    }
+
+    private static final class InMemorySandboxBrowserProfileRepository
+            implements SandboxBrowserProfileRepositoryPort {
+
+        private final Map<String, SandboxBrowserProfile> store = new ConcurrentHashMap<>();
+
+        @Override
+        public SandboxBrowserProfile save(SandboxBrowserProfile profile) {
+            SandboxBrowserProfile safeProfile = Objects.requireNonNull(profile, "profile must not be null");
+            store.put(safeProfile.tenantId() + "|" + safeProfile.profileId(), safeProfile);
+            return safeProfile;
+        }
+
+        @Override
+        public Optional<SandboxBrowserProfile> findByTenantAndProfileId(String tenantId, String profileId) {
+            if (!hasText(tenantId) || !hasText(profileId)) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(store.get(tenantId.trim() + "|" + profileId.trim()));
+        }
+
+        @Override
+        public List<SandboxBrowserProfile> listByTenant(String tenantId, int limit) {
+            if (!hasText(tenantId) || limit <= 0) {
+                return List.of();
+            }
+            String safeTenantId = tenantId.trim();
+            return store.values().stream()
+                    .filter(profile -> profile.tenantId().equals(safeTenantId))
+                    .sorted(Comparator.comparing(SandboxBrowserProfile::updatedAt).reversed()
+                            .thenComparing(SandboxBrowserProfile::profileId))
+                    .limit(limit)
+                    .toList();
         }
     }
 

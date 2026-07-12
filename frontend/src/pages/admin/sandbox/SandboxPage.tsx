@@ -24,6 +24,9 @@ import {
   getSandboxRuntimeHealth,
   getSandboxRuntimeNodes,
   getSandboxRuntimeProfiles,
+  listSandboxBrowserProfiles,
+  upsertSandboxBrowserProfile,
+  disableSandboxBrowserProfile,
   upsertSandboxEgressPolicy,
   upsertSandboxRuntimeProfilePolicy,
   upsertSandboxToolQuotaPolicy,
@@ -39,6 +42,7 @@ import {
   type SandboxRuntimeNodeHealth,
   type SandboxRuntimeProfile,
   type SandboxRuntimeProfilesResponse,
+  type SandboxBrowserProfile,
   type SandboxToolQuotaPolicy
 } from "@/services/sandboxService";
 import { getErrorMessage } from "@/utils/error";
@@ -829,6 +833,11 @@ export function SandboxPage() {
   const [runtimeHealth, setRuntimeHealth] = useState<SandboxRuntimeHealth | null>(null);
   const [runtimeNodes, setRuntimeNodes] = useState<SandboxRuntimeNodeHealth[]>([]);
   const [runtimeProfiles, setRuntimeProfiles] = useState<SandboxRuntimeProfilesResponse | null>(null);
+  const [browserProfiles, setBrowserProfiles] = useState<SandboxBrowserProfile[]>([]);
+  const [browserProfileName, setBrowserProfileName] = useState("");
+  const [browserProfileArtifactId, setBrowserProfileArtifactId] = useState("");
+  const [browserProfileExpiresAt, setBrowserProfileExpiresAt] = useState("");
+  const [savingBrowserProfile, setSavingBrowserProfile] = useState(false);
   const [artifactScannerPolicy, setArtifactScannerPolicy] = useState<SandboxArtifactScannerPolicy | null>(null);
   const [loadingRuntimeGovernance, setLoadingRuntimeGovernance] = useState(false);
   const [runtimeGovernanceError, setRuntimeGovernanceError] = useState<string | null>(null);
@@ -885,16 +894,18 @@ export function SandboxPage() {
       setLoadingRuntimeGovernance(true);
       setRuntimeGovernanceError(null);
       const tenantId = currentSandboxTenantId();
-      const [health, nodes, profiles, scannerPolicy] = await Promise.all([
+      const [health, nodes, profiles, scannerPolicy, profileList] = await Promise.all([
         getSandboxRuntimeHealth(),
         getSandboxRuntimeNodes(),
         getSandboxRuntimeProfiles(tenantId),
-        getSandboxArtifactScannerPolicy()
+        getSandboxArtifactScannerPolicy(),
+        listSandboxBrowserProfiles(tenantId)
       ]);
       setRuntimeHealth(health || null);
       setRuntimeNodes(nodes || []);
       setRuntimeProfiles(profiles || null);
       setArtifactScannerPolicy(scannerPolicy || null);
+      setBrowserProfiles(profileList || []);
       if (showToast) {
         toast.success(`Runtime ${health?.status || "UNKNOWN"} / ${profiles?.defaultNetworkPolicy || "DENY_ALL"}`);
       }
@@ -1211,6 +1222,58 @@ export function SandboxPage() {
     }
   };
 
+  const handleSaveBrowserProfile = async () => {
+    const name = browserProfileName.trim();
+    const sessionStateArtifactId = browserProfileArtifactId.trim();
+    const expiresAt = browserProfileExpiresAt.trim();
+    if (!name || !sessionStateArtifactId || !expiresAt) {
+      toast.error("Browser profile name, session-state artifact, and expiry are required");
+      return;
+    }
+    const parsedExpiry = new Date(expiresAt);
+    if (Number.isNaN(parsedExpiry.getTime()) || parsedExpiry.getTime() <= Date.now()) {
+      toast.error("Browser profile expiry must be in the future");
+      return;
+    }
+    try {
+      setSavingBrowserProfile(true);
+      const profileId = `browser-profile-${Date.now()}`;
+      await upsertSandboxBrowserProfile({
+        profileId,
+        tenantId: currentSandboxTenantId(),
+        name,
+        sessionStateArtifactId,
+        status: "ACTIVE",
+        expiresAt: parsedExpiry.toISOString()
+      });
+      setBrowserProfileName("");
+      setBrowserProfileArtifactId("");
+      setBrowserProfileExpiresAt("");
+      await refreshRuntimeGovernance();
+      toast.success(`Browser profile ${name} saved`);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Browser profile save failed"));
+      console.error(error);
+    } finally {
+      setSavingBrowserProfile(false);
+    }
+  };
+
+  const handleDisableBrowserProfile = async (profile: SandboxBrowserProfile) => {
+    if (!profile.profileId) return;
+    try {
+      setSavingBrowserProfile(true);
+      await disableSandboxBrowserProfile(profile.profileId, currentSandboxTenantId());
+      await refreshRuntimeGovernance();
+      toast.success(`Browser profile ${profile.name || profile.profileId} disabled`);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Browser profile disable failed"));
+      console.error(error);
+    } finally {
+      setSavingBrowserProfile(false);
+    }
+  };
+
   const handleSaveRuntimeProfilePolicy = async (
     profile: SandboxRuntimeProfile,
     ttlSeconds: number,
@@ -1317,6 +1380,30 @@ export function SandboxPage() {
             lastPolicy={lastToolQuotaPolicy}
             onSave={(draft) => void handleSaveToolQuotaPolicy(draft)}
           />
+
+          <Card data-testid="sandbox-browser-profiles-panel">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between gap-2 text-base">
+                <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" />Browser profiles</span>
+                <Badge variant="secondary" data-testid="sandbox-browser-profiles-count">{browserProfiles.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px_auto] md:items-end">
+                <div className="space-y-1"><div className="text-xs uppercase text-muted-foreground">Name</div><Input value={browserProfileName} onChange={(event) => setBrowserProfileName(event.target.value)} data-testid="sandbox-browser-profile-name" /></div>
+                <div className="space-y-1"><div className="text-xs uppercase text-muted-foreground">Session artifact</div><Input className="font-mono text-xs" value={browserProfileArtifactId} onChange={(event) => setBrowserProfileArtifactId(event.target.value)} data-testid="sandbox-browser-profile-artifact" /></div>
+                <div className="space-y-1"><div className="text-xs uppercase text-muted-foreground">Expires</div><Input type="datetime-local" value={browserProfileExpiresAt} onChange={(event) => setBrowserProfileExpiresAt(event.target.value)} data-testid="sandbox-browser-profile-expires" /></div>
+                <Button variant="outline" size="icon" className="h-9 w-9" title="Save browser profile" disabled={savingBrowserProfile} onClick={() => void handleSaveBrowserProfile()} data-testid="sandbox-browser-profile-save"><Save className={`h-4 w-4 ${savingBrowserProfile ? "animate-pulse" : ""}`} /></Button>
+              </div>
+              {browserProfiles.length === 0 ? <div className="text-xs text-muted-foreground">No browser profiles</div> : browserProfiles.map((profile) => (
+                <div key={profile.profileId} className="grid gap-2 rounded border border-slate-100 bg-slate-50 p-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
+                  <div className="min-w-0"><div className="truncate font-mono text-slate-800">{profile.name || profile.profileId}</div><div className="truncate text-muted-foreground">{profile.profileId} / expires {formatTimestamp(profile.expiresAt)}</div></div>
+                  <Badge variant={profile.status === "ACTIVE" ? "default" : "secondary"}>{profile.status || "UNKNOWN"}</Badge>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" title="Disable browser profile" disabled={savingBrowserProfile || profile.status === "DISABLED"} onClick={() => void handleDisableBrowserProfile(profile)} data-testid={`sandbox-browser-profile-disable-${profile.profileId}`}><Square className="h-4 w-4" /></Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
 
           <Card>
           <CardHeader>

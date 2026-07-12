@@ -108,6 +108,7 @@ public class JdbcTenantSchemaUpgrade {
         upgradeAgentHandoffContextPackReference();
         upgradeSandboxRuntimeProfilePolicy();
         upgradeSandboxEgressPolicy();
+        upgradeSandboxBrowserProfile();
         upgradeAiModelConfigUniqueness();
         enableRowLevelSecurity();
         log.info("[TenantSchema] 多租户 schema 升级完成");
@@ -338,6 +339,32 @@ public class JdbcTenantSchemaUpgrade {
                     """);
         } catch (Exception e) {
             log.warn("[TenantSchema] upgrade sa_sandbox_egress_policy failed: {}", e.getMessage());
+        }
+    }
+
+    private void upgradeSandboxBrowserProfile() {
+        try {
+            jdbcTemplate.execute("""
+                    CREATE TABLE IF NOT EXISTS sa_sandbox_browser_profile (
+                      pk_id BIGSERIAL PRIMARY KEY,
+                      profile_id VARCHAR(96) NOT NULL,
+                      tenant_id VARCHAR(64) NOT NULL,
+                      name VARCHAR(96) NOT NULL,
+                      session_state_artifact_id VARCHAR(64) NOT NULL,
+                      status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                      expires_at TIMESTAMP NOT NULL,
+                      created_at TIMESTAMP NOT NULL,
+                      updated_at TIMESTAMP NOT NULL,
+                      CONSTRAINT chk_sa_sandbox_browser_profile_status CHECK (status IN ('ACTIVE', 'DISABLED')),
+                      CONSTRAINT uk_sa_sandbox_browser_profile_tenant_profile UNIQUE (tenant_id, profile_id)
+                    )
+                    """);
+            jdbcTemplate.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_sa_sandbox_browser_profile_tenant
+                      ON sa_sandbox_browser_profile(tenant_id, updated_at DESC, profile_id ASC)
+                    """);
+        } catch (Exception e) {
+            log.warn("[TenantSchema] upgrade sa_sandbox_browser_profile failed: {}", e.getMessage());
         }
     }
 

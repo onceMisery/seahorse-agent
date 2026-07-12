@@ -136,6 +136,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAccessPolicyPo
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAclRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxBrowserProfileRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxEgressPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
@@ -833,7 +834,8 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             SandboxExecutionRepositoryPort.class,
             SandboxArtifactQueryPort.class,
             SandboxArtifactScannerPort.class,
-            SandboxRuntimeProfilePolicyRepositoryPort.class
+            SandboxRuntimeProfilePolicyRepositoryPort.class,
+            SandboxBrowserProfileRepositoryPort.class
     })
     @ConditionalOnMissingBean(SandboxRuntimeInboundPort.class)
     public KernelSandboxRuntimeService seahorseSandboxRuntimeInboundPort(
@@ -845,6 +847,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             SandboxArtifactQueryPort sandboxArtifactQueryPort,
             SandboxArtifactScannerPort sandboxArtifactScannerPort,
             SandboxRuntimeProfilePolicyRepositoryPort sandboxRuntimeProfilePolicyRepositoryPort,
+            SandboxBrowserProfileRepositoryPort sandboxBrowserProfileRepositoryPort,
             ObjectProvider<SandboxEgressPolicyRepositoryPort> sandboxEgressPolicyRepositoryPort,
             ObjectProvider<ObjectStoragePort> objectStoragePort,
             ObjectProvider<AgentRunRepositoryPort> agentRunRepositoryPort,
@@ -880,6 +883,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 objectStoragePort.getIfAvailable(),
                 sandboxRuntimeProfilePolicyRepositoryPort,
                 egressPolicyRepositoryPort,
+                sandboxBrowserProfileRepositoryPort,
                 agentRunRepositoryPort.getIfAvailable(),
                 currentUserPort.getIfAvailable(),
                 auditLedgerService.getIfAvailable(),

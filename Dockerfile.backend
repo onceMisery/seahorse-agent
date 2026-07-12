@@ -62,6 +62,7 @@ RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && \
       rm -f /tmp/maven.tar.gz && \
       echo "Maven pre-downloaded to ${MAVEN_DIST_DIR}"; \
     fi && \
+    MAVEN_OPTS="${MAVEN_OPTS} -Dhttp.proxyHost=192.168.1.9 -Dhttp.proxyPort=7890 -Dhttps.proxyHost=192.168.1.9 -Dhttps.proxyPort=7890 -Dhttp.nonProxyHosts=localhost|127.*|[::1]" \
     ./mvnw package -B -pl seahorse-agent-bootstrap -am -DskipTests -Dmaven.test.skip=true -Dspotless.check.skip=true
 
 # Stage 2: Node runtime for stdio MCP servers

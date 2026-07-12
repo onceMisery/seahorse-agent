@@ -137,6 +137,26 @@ export interface SandboxEgressPolicyPayload {
   browserPrivateNetworkAllowedHosts?: string[];
 }
 
+export interface SandboxBrowserProfile {
+  profileId?: string;
+  tenantId?: string;
+  name?: string;
+  sessionStateArtifactId?: string;
+  status?: "ACTIVE" | "DISABLED" | string;
+  expiresAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SandboxBrowserProfilePayload {
+  profileId: string;
+  tenantId: string;
+  name: string;
+  sessionStateArtifactId: string;
+  status?: "ACTIVE" | "DISABLED" | string;
+  expiresAt: string;
+}
+
 export interface SandboxArtifactScannerPolicy {
   scannerId?: string;
   scannerMode?: string;
@@ -365,6 +385,27 @@ export function upsertSandboxEgressPolicy(payload: SandboxEgressPolicyPayload) {
   return api.post<SandboxEgressPolicy, SandboxEgressPolicy>(
     `${SANDBOX_API_PREFIX}/runtime/egress-policy`,
     payload
+  );
+}
+
+export function listSandboxBrowserProfiles(tenantId = currentTenantId(), limit = 50) {
+  return api.get<SandboxBrowserProfile[]>(`${SANDBOX_API_PREFIX}/runtime/browser-profiles`, {
+    params: { tenantId, limit }
+  });
+}
+
+export function upsertSandboxBrowserProfile(payload: SandboxBrowserProfilePayload) {
+  return api.post<SandboxBrowserProfile, SandboxBrowserProfile>(
+    `${SANDBOX_API_PREFIX}/runtime/browser-profiles`,
+    payload
+  );
+}
+
+export function disableSandboxBrowserProfile(profileId: string, tenantId = currentTenantId()) {
+  return api.post<SandboxBrowserProfile, SandboxBrowserProfile>(
+    `${SANDBOX_API_PREFIX}/runtime/browser-profiles/${encodeURIComponent(profileId)}:disable`,
+    undefined,
+    { params: { tenantId } }
   );
 }
 

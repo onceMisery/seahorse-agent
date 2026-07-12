@@ -20,6 +20,8 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxBrowserProfile;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxBrowserProfileStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxEgressPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionStatus;
@@ -31,6 +33,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeT
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxBrowserProfileRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxEgressPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
@@ -53,6 +56,7 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
         SandboxExecutionRepositoryPort,
         SandboxArtifactPort,
         SandboxArtifactQueryPort,
+        SandboxBrowserProfileRepositoryPort,
         SandboxRuntimeProfilePolicyRepositoryPort,
         SandboxEgressPolicyRepositoryPort {
 
@@ -72,6 +76,9 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
             """;
     private static final String EGRESS_POLICY_COLUMNS = """
             policy_id, tenant_id, network_policy, allowlisted_hosts, browser_private_network_allowed_hosts, created_at, updated_at
+            """;
+    private static final String BROWSER_PROFILE_COLUMNS = """
+            profile_id, tenant_id, name, session_state_artifact_id, status, expires_at, created_at, updated_at
             """;
 
     private static final String SQL_INSERT_SESSION = """
@@ -244,6 +251,23 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
             ORDER BY updated_at DESC, policy_id DESC
             LIMIT 1
             """.formatted(EGRESS_POLICY_COLUMNS);
+    private static final String SQL_INSERT_BROWSER_PROFILE = """
+            INSERT INTO sa_sandbox_browser_profile
+            (profile_id, tenant_id, name, session_state_artifact_id, status, expires_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """;
+    private static final String SQL_UPDATE_BROWSER_PROFILE = """
+            UPDATE sa_sandbox_browser_profile
+            SET name = ?, session_state_artifact_id = ?, status = ?, expires_at = ?, created_at = ?, updated_at = ?
+            WHERE tenant_id = ? AND profile_id = ?
+            """;
+    private static final String SQL_FIND_BROWSER_PROFILE = """
+            SELECT %s FROM sa_sandbox_browser_profile WHERE tenant_id = ? AND profile_id = ?
+            """.formatted(BROWSER_PROFILE_COLUMNS);
+    private static final String SQL_LIST_BROWSER_PROFILES = """
+            SELECT %s FROM sa_sandbox_browser_profile WHERE tenant_id = ?
+            ORDER BY updated_at DESC, profile_id ASC LIMIT ?
+            """.formatted(BROWSER_PROFILE_COLUMNS);
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -429,6 +453,40 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
         }
         return jdbcTemplate.query(SQL_FIND_EGRESS_POLICY_BY_TENANT, this::mapEgressPolicy,
                 tenantId.trim()).stream().findFirst();
+    }
+
+    @Override
+    public SandboxBrowserProfile save(SandboxBrowserProfile profile) {
+        SandboxBrowserProfile safeProfile = Objects.requireNonNull(profile, "profile must not be null");
+        if (findByTenantAndProfileId(safeProfile.tenantId(), safeProfile.profileId()).isPresent()) {
+            jdbcTemplate.update(SQL_UPDATE_BROWSER_PROFILE,
+                    safeProfile.name(), safeProfile.sessionStateArtifactId(), safeProfile.status().name(),
+                    toTimestamp(safeProfile.expiresAt()), toTimestamp(safeProfile.createdAt()),
+                    toTimestamp(safeProfile.updatedAt()), safeProfile.tenantId(), safeProfile.profileId());
+        } else {
+            jdbcTemplate.update(SQL_INSERT_BROWSER_PROFILE,
+                    safeProfile.profileId(), safeProfile.tenantId(), safeProfile.name(),
+                    safeProfile.sessionStateArtifactId(), safeProfile.status().name(), toTimestamp(safeProfile.expiresAt()),
+                    toTimestamp(safeProfile.createdAt()), toTimestamp(safeProfile.updatedAt()));
+        }
+        return safeProfile;
+    }
+
+    @Override
+    public Optional<SandboxBrowserProfile> findByTenantAndProfileId(String tenantId, String profileId) {
+        if (!hasText(tenantId) || !hasText(profileId)) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query(SQL_FIND_BROWSER_PROFILE, this::mapBrowserProfile, tenantId.trim(), profileId.trim())
+                .stream().findFirst();
+    }
+
+    @Override
+    public List<SandboxBrowserProfile> listByTenant(String tenantId, int limit) {
+        if (!hasText(tenantId) || limit <= 0) {
+            return List.of();
+        }
+        return jdbcTemplate.query(SQL_LIST_BROWSER_PROFILES, this::mapBrowserProfile, tenantId.trim(), limit);
     }
 
     private void insertSession(SandboxSession session) {
@@ -628,6 +686,15 @@ public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPor
                 decodeHosts(resultSet.getString("allowlisted_hosts")),
                 decodeHosts(resultSet.getString("browser_private_network_allowed_hosts")),
                 toInstant(resultSet.getTimestamp("created_at")),
+                toInstant(resultSet.getTimestamp("updated_at")));
+    }
+
+    private SandboxBrowserProfile mapBrowserProfile(ResultSet resultSet, int rowNum) throws SQLException {
+        return new SandboxBrowserProfile(
+                resultSet.getString("profile_id"), resultSet.getString("tenant_id"), resultSet.getString("name"),
+                resultSet.getString("session_state_artifact_id"),
+                SandboxBrowserProfileStatus.valueOf(resultSet.getString("status")),
+                toInstant(resultSet.getTimestamp("expires_at")), toInstant(resultSet.getTimestamp("created_at")),
                 toInstant(resultSet.getTimestamp("updated_at")));
     }
 
