@@ -72,6 +72,10 @@ export interface SandboxRuntimeHealth {
   activeContainerNames?: string[];
   orphanContainerNames?: string[];
   browserPrivateNetworkAllowedHosts?: string[];
+  dropAllCapabilities?: boolean;
+  noNewPrivileges?: boolean;
+  readOnlyRootFilesystem?: boolean;
+  maxSessionFileBytes?: number;
   failureMessages?: string[];
 }
 

@@ -339,6 +339,12 @@ function RuntimeGovernancePanel({
                 <div className="mt-1 text-xs text-muted-foreground">
                   Profiles: {profileRows.length || "-"}
                 </div>
+                <div className="mt-1 text-xs text-muted-foreground" data-testid="sandbox-runtime-isolation-posture">
+                  Isolation: {health?.readOnlyRootFilesystem ? "RO root" : "RW root"} / {health?.dropAllCapabilities ? "no caps" : "caps"} / {health?.noNewPrivileges ? "no new privs" : "privs allowed"}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground" data-testid="sandbox-runtime-file-quota">
+                  File quota: {formatBytes(health?.maxSessionFileBytes)}
+                </div>
               </div>
             </div>
 

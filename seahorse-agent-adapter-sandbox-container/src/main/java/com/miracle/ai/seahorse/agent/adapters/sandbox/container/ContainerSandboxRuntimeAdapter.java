@@ -2657,6 +2657,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 containerSummary.activeNames(),
                 containerSummary.orphanNames(),
                 normalizedBrowserPrivateNetworkAllowedHosts(),
+                properties.isDropAllCapabilities(),
+                properties.isNoNewPrivileges(),
+                properties.isReadOnlyRootFilesystem(),
+                properties.getMaxSessionFileBytes(),
                 failureMessages);
     }
 

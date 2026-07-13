@@ -181,6 +181,12 @@ try {
   const runtimeProfiles = await api("/api/sandbox/runtime/profiles?tenantId=default");
   const originalEgressPolicy = await api("/api/sandbox/runtime/egress-policy?tenantId=default");
   const runtimeHealth = await api("/api/sandbox/runtime/health");
+  if (runtimeHealth?.runtime === "container" && (runtimeHealth.dropAllCapabilities !== true
+      || runtimeHealth.noNewPrivileges !== true
+      || runtimeHealth.readOnlyRootFilesystem !== true
+      || Number(runtimeHealth.maxSessionFileBytes) !== 67108864)) {
+    throw new Error(`Sandbox isolation posture API readback failed: ${JSON.stringify(runtimeHealth)}`);
+  }
   egressPolicyRestore = {
     policyId: originalEgressPolicy?.policyId,
     tenantId: originalEgressPolicy?.tenantId || "default",
@@ -282,6 +288,12 @@ try {
         host,
         "Sandbox private network exceptions"
       );
+    }
+    if (runtimeHealth?.runtime === "container") {
+      await assertLocatorText(page.getByTestId("sandbox-runtime-isolation-posture"), "RO root", "Sandbox isolation posture");
+      await assertLocatorText(page.getByTestId("sandbox-runtime-isolation-posture"), "no caps", "Sandbox isolation posture");
+      await assertLocatorText(page.getByTestId("sandbox-runtime-isolation-posture"), "no new privs", "Sandbox isolation posture");
+      await assertLocatorText(page.getByTestId("sandbox-runtime-file-quota"), "64 MB", "Sandbox file quota");
     }
 
     const egressSmokeHost = `aaa-egress-policy-page-smoke-${Date.now()}.invalid`;

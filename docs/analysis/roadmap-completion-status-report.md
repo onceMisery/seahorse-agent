@@ -1195,3 +1195,7 @@ Sandbox containers now default to a read-only root filesystem with a bounded noe
 ### 2026-07-13 Sandbox Per-Session File Quota Evidence Update
 
 The container adapter now applies Docker `--ulimit fsize` from `max-session-file-bytes`, defaulting to 64 MiB. Full-Docker validation confirmed a normal small `sandbox_python` artifact succeeds and a deployed 1024-byte limit fails closed for a real approved 4096-byte Tool Gateway write. The runtime was restored to its default 64 MiB limit after verification.
+
+### 2026-07-13 Sandbox Isolation Posture Operations Visibility Evidence Update
+
+Sandbox runtime health and the deployed Operations page now expose the effective value-free posture for capability drop, no-new-privileges, read-only root filesystem, and per-session file quota. Full-Docker Playwright evidence passed through `scripts/e2e-sandbox-tool-quota-page-smoke.mjs`, checking both health API values and rendered `RO root / no caps / no new privs` plus `File quota: 64 MB`, while preserving existing egress/profile/quota cleanup behavior.
