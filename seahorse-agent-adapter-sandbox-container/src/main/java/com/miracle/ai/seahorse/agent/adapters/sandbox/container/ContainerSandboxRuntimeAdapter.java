@@ -1864,6 +1864,17 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     if rendered != output_path:
                         rendered.replace(output_path)
 
+                def html_to_docx(path):
+                    result = subprocess.run(
+                        ["soffice", "--headless", "--nologo", "--nodefault", "--nolockcheck", "--norestore",
+                         "--convert-to", "docx:Office Open XML Text", "--outdir", str(output_path.parent), str(path)],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=25)
+                    rendered = path.with_suffix(".docx")
+                    if result.returncode != 0 or not rendered.is_file() or rendered.stat().st_size == 0:
+                        raise ValueError("html docx conversion failed")
+                    if rendered != output_path:
+                        rendered.replace(output_path)
+
                 def pdf_to_png(path):
                     output_base = output_path.with_suffix("")
                     result = subprocess.run(
@@ -1918,6 +1929,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     raw = input_path.read_text(encoding="utf-8-sig")
                     output_path.write_text(html_to_text(raw), encoding="utf-8")
                     print(f"converted html document to text")
+                elif source_format == "html" and target_format == "docx":
+                    html_to_docx(input_path)
+                    print(f"converted html document to docx")
                 elif source_format == "markdown" and target_format == "html":
                     raw = input_path.read_text(encoding="utf-8-sig")
                     output_path.write_text(markdown_to_html(raw), encoding="utf-8")
@@ -1994,6 +2008,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || (JSON_FORMAT.equals(sourceFormat) && isDelimitedFileFormat(targetFormat))
                 || (TXT_FORMAT.equals(sourceFormat) && HTML_FORMAT.equals(targetFormat))
                 || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
+                || (HTML_FORMAT.equals(sourceFormat) && DOCX_FORMAT.equals(targetFormat))
                 || (MARKDOWN_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
                 || ((DOCX_FORMAT.equals(sourceFormat)
@@ -2977,7 +2992,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return (PDF_FORMAT.equals(request.targetFormat())
                 && (DOCX_FORMAT.equals(request.sourceFormat()) || PPTX_FORMAT.equals(request.sourceFormat())))
                 || (PDF_FORMAT.equals(request.sourceFormat())
-                && ("png".equals(request.targetFormat()) || "ocr_txt".equals(request.targetFormat())));
+                && ("png".equals(request.targetFormat()) || "ocr_txt".equals(request.targetFormat())))
+                || (HTML_FORMAT.equals(request.sourceFormat()) && DOCX_FORMAT.equals(request.targetFormat()));
     }
 
     private String memoryForRuntime(SandboxRuntimeType runtimeType) {
