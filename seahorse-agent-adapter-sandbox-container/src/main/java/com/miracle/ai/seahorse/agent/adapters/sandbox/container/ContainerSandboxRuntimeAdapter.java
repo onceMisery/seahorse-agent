@@ -1864,6 +1864,19 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     if rendered != output_path:
                         rendered.replace(output_path)
 
+                def pdf_to_png(path):
+                    output_base = output_path.with_suffix("")
+                    result = subprocess.run(
+                        ["pdftoppm", "-f", "1", "-l", "1", "-scale-to", "2048", "-png", "-singlefile",
+                         str(path), str(output_base)],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        timeout=25,
+                    )
+                    if result.returncode != 0 or not output_path.is_file() or output_path.stat().st_size == 0:
+                        raise ValueError("pdf png rendering failed")
+
                 if target_format == "json" and source_format in ("csv", "tsv"):
                     with input_path.open("r", encoding="utf-8-sig", newline="") as source:
                         reader = csv.DictReader(source, delimiter=delimiter(source_format))
@@ -1945,6 +1958,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "pdf" and target_format == "html":
                     output_path.write_text(pdf_to_html(input_path), encoding="utf-8")
                     print(f"converted pdf document to html")
+                elif source_format == "pdf" and target_format == "png":
+                    pdf_to_png(input_path)
+                    print(f"rendered pdf first page to png")
                 else:
                     raise ValueError(f"unsupported conversion: {source_format} to {target_format}")
                 """.formatted(
@@ -1967,6 +1983,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || PDF_FORMAT.equals(sourceFormat))
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
                 || (DOCX_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
+                || (PDF_FORMAT.equals(sourceFormat) && "png".equals(targetFormat))
                 || (PPTX_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat) || PDF_FORMAT.equals(targetFormat)))
                 || ((XLSX_FORMAT.equals(sourceFormat) || ODS_FORMAT.equals(sourceFormat))
@@ -2934,8 +2951,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     }
 
     private static boolean requiresOfficeRenderer(FileConversionRequest request) {
-        return PDF_FORMAT.equals(request.targetFormat())
-                && (DOCX_FORMAT.equals(request.sourceFormat()) || PPTX_FORMAT.equals(request.sourceFormat()));
+        return (PDF_FORMAT.equals(request.targetFormat())
+                && (DOCX_FORMAT.equals(request.sourceFormat()) || PPTX_FORMAT.equals(request.sourceFormat())))
+                || (PDF_FORMAT.equals(request.sourceFormat()) && "png".equals(request.targetFormat()));
     }
 
     private String memoryForRuntime(SandboxRuntimeType runtimeType) {

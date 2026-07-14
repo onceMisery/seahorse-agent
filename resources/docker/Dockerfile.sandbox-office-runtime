@@ -5,7 +5,7 @@ RUN set -eu; \
     for attempt in 1 2 3 4 5 6 7 8; do \
       if apt-get -o Acquire::Retries=5 update \
         && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
-          libreoffice-core libreoffice-impress libreoffice-writer python3; then \
+          libreoffice-core libreoffice-impress libreoffice-writer poppler-utils python3; then \
         break; \
       fi; \
       if [ "$attempt" = 8 ]; then exit 1; fi; \
