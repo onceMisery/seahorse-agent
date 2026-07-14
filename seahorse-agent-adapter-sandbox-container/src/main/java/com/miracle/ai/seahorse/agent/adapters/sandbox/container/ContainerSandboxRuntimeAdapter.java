@@ -1987,6 +1987,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "xlsx" and target_format == "html":
                     output_path.write_text(xlsx_to_html(input_path), encoding="utf-8")
                     print(f"converted xlsx worksheet to html")
+                elif source_format == "xlsx" and target_format == "pdf":
+                    office_to_pdf(input_path)
+                    print(f"rendered xlsx worksheet to pdf")
                 elif source_format == "pptx" and target_format == "txt":
                     output_path.write_text(pptx_to_text(input_path), encoding="utf-8")
                     print(f"converted pptx presentation to text")
@@ -2032,6 +2035,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || PDF_FORMAT.equals(sourceFormat))
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
                 || (DOCX_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
+                || (XLSX_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
                 || (PDF_FORMAT.equals(sourceFormat) && "png".equals(targetFormat))
                 || (PDF_FORMAT.equals(sourceFormat) && "ocr_txt".equals(targetFormat))
                 || (PPTX_FORMAT.equals(sourceFormat)
@@ -3005,7 +3009,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
     private static boolean requiresOfficeRenderer(FileConversionRequest request) {
         return (PDF_FORMAT.equals(request.targetFormat())
-                && (DOCX_FORMAT.equals(request.sourceFormat()) || PPTX_FORMAT.equals(request.sourceFormat())))
+                && (DOCX_FORMAT.equals(request.sourceFormat())
+                || PPTX_FORMAT.equals(request.sourceFormat())
+                || XLSX_FORMAT.equals(request.sourceFormat())))
                 || (PDF_FORMAT.equals(request.sourceFormat())
                 && ("png".equals(request.targetFormat()) || "ocr_txt".equals(request.targetFormat())))
                 || (HTML_FORMAT.equals(request.sourceFormat()) && DOCX_FORMAT.equals(request.targetFormat()))
