@@ -199,6 +199,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             Path workspace = workspaceForSession(session.sessionId());
             Files.createDirectories(workspace);
             prepareWorkspacePermissions(workspace);
+            String executionImage = imageForExecution(session.runtimeType(), safeRequest.input());
             validateContainerNetworkBoundary(session.runtimeType(), safeRequest.networkRequested());
             Set<Path> excludedArtifacts = prepareWorkspace(
                     session.runtimeType(),
@@ -208,7 +209,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     safeRequest.requestedHosts(),
                     safeRequest.browserPrivateNetworkAllowedHosts());
             ContainerCommandResult commandResult = commandRunner.run(
-                    containerCommand(session, workspace, safeRequest.networkRequested(), safeRequest.requestedHosts()));
+                    containerCommand(session, workspace, safeRequest.networkRequested(), safeRequest.requestedHosts(), executionImage));
             Instant finishedAt = clock.instant();
             if (commandResult.timedOut()) {
                 SandboxExecution execution = new SandboxExecution(
@@ -569,7 +570,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             throw new IllegalArgumentException("encrypted pdf is not supported");
         }
         if (java.util.regex.Pattern.compile(
-                "/(AA|EmbeddedFile|GoToE|GoToR|ImportData|JavaScript|JS|Launch|OpenAction|Rendition|RichMedia|SubmitForm)\\b",
+                "/(AA|EmbeddedFile|GoToE|GoToR|ImportData|JavaScript|JS|Launch|Rendition|RichMedia|SubmitForm)\\b",
                 java.util.regex.Pattern.CASE_INSENSITIVE).matcher(prefixText).find()) {
             throw new IllegalArgumentException("pdf active content is not supported");
         }
@@ -1280,6 +1281,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 import io
                 import json
                 import re
+                import subprocess
                 import xml.etree.ElementTree as ET
                 import zipfile
                 import zlib
@@ -1847,6 +1849,21 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     body = "\\n".join("<p>" + html.escape(line) + "</p>" for line in lines)
                     return "<!doctype html>\\n<html><body>\\n" + body + "\\n</body></html>\\n"
 
+                def office_to_pdf(path):
+                    result = subprocess.run(
+                        ["soffice", "--headless", "--nologo", "--nodefault", "--nolockcheck", "--norestore",
+                         "--convert-to", "pdf", "--outdir", str(output_path.parent), str(path)],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        timeout=25,
+                    )
+                    rendered = path.with_suffix(".pdf")
+                    if result.returncode != 0 or not rendered.is_file() or rendered.stat().st_size == 0:
+                        raise ValueError("office pdf rendering failed")
+                    if rendered != output_path:
+                        rendered.replace(output_path)
+
                 if target_format == "json" and source_format in ("csv", "tsv"):
                     with input_path.open("r", encoding="utf-8-sig", newline="") as source:
                         reader = csv.DictReader(source, delimiter=delimiter(source_format))
@@ -1886,6 +1903,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "docx" and target_format == "html":
                     output_path.write_text(docx_to_html(input_path), encoding="utf-8")
                     print(f"converted docx document to html")
+                elif source_format == "docx" and target_format == "pdf":
+                    office_to_pdf(input_path)
+                    print(f"rendered docx document to pdf")
                 elif source_format == "odt" and target_format == "txt":
                     output_path.write_text(odt_to_text(input_path), encoding="utf-8")
                     print(f"converted odt document to text")
@@ -1916,6 +1936,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "pptx" and target_format == "html":
                     output_path.write_text(pptx_to_html(input_path), encoding="utf-8")
                     print(f"converted pptx presentation to html")
+                elif source_format == "pptx" and target_format == "pdf":
+                    office_to_pdf(input_path)
+                    print(f"rendered pptx presentation to pdf")
                 elif source_format == "pdf" and target_format == "txt":
                     output_path.write_text(pdf_to_text(input_path), encoding="utf-8")
                     print(f"converted pdf document to text")
@@ -1943,8 +1966,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || ODP_FORMAT.equals(sourceFormat)
                 || PDF_FORMAT.equals(sourceFormat))
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
+                || (DOCX_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
                 || (PPTX_FORMAT.equals(sourceFormat)
-                && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
+                && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat) || PDF_FORMAT.equals(targetFormat)))
                 || ((XLSX_FORMAT.equals(sourceFormat) || ODS_FORMAT.equals(sourceFormat))
                 && (CSV_FORMAT.equals(targetFormat) || HTML_FORMAT.equals(targetFormat)));
     }
@@ -2713,7 +2737,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private ContainerCommand containerCommand(SandboxSession session,
                                               Path workspace,
                                               boolean networkRequested,
-                                              List<String> requestedHosts) {
+                                              List<String> requestedHosts,
+                                              String executionImage) {
         List<String> commandLine = new ArrayList<>();
         commandLine.add(properties.getEngine());
         commandLine.add("run");
@@ -2760,7 +2785,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         commandLine.add(mountSourceForSession(session.sessionId(), workspace) + ":" + CONTAINER_WORKSPACE + ":rw");
         commandLine.add("-w");
         commandLine.add(CONTAINER_WORKSPACE);
-        commandLine.add(imageForRuntime(session.runtimeType()));
+        commandLine.add(executionImage);
         commandLine.add("python");
         commandLine.add(CONTAINER_WORKSPACE + "/" + SCRIPT_NAME);
         return new ContainerCommand(
@@ -2898,6 +2923,19 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             return properties.getBrowserImage();
         }
         return properties.getPythonImage();
+    }
+
+    private String imageForExecution(SandboxRuntimeType runtimeType, String input) throws IOException {
+        if (runtimeType != SandboxRuntimeType.FILE_CONVERSION) {
+            return imageForRuntime(runtimeType);
+        }
+        FileConversionRequest request = parseFileConversionRequest(input);
+        return requiresOfficeRenderer(request) ? properties.getOfficeConversionImage() : imageForRuntime(runtimeType);
+    }
+
+    private static boolean requiresOfficeRenderer(FileConversionRequest request) {
+        return PDF_FORMAT.equals(request.targetFormat())
+                && (DOCX_FORMAT.equals(request.sourceFormat()) || PPTX_FORMAT.equals(request.sourceFormat()));
     }
 
     private String memoryForRuntime(SandboxRuntimeType runtimeType) {
@@ -3247,7 +3285,12 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         if (workspaceMountSourceRoot == null) {
             return workspace.toAbsolutePath().normalize().toString();
         }
-        return stripTrailingSeparators(workspaceMountSourceRoot) + "/" + safeFilesystemName(sessionId);
+        String root = stripTrailingSeparators(workspaceMountSourceRoot);
+        if (root.length() >= 3 && Character.isLetter(root.charAt(0)) && root.charAt(1) == ':'
+                && (root.charAt(2) == '/' || root.charAt(2) == '\\')) {
+            root = "/run/desktop/mnt/host/" + Character.toLowerCase(root.charAt(0)) + root.substring(2);
+        }
+        return root + "/" + safeFilesystemName(sessionId);
     }
 
     private void deleteWorkspace(String sessionId) {

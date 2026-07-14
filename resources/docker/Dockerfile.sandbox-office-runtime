@@ -1,0 +1,18 @@
+FROM debian:bookworm-slim
+
+RUN set -eu; \
+    rm -f /etc/apt/apt.conf.d/docker-clean; \
+    for attempt in 1 2 3 4 5 6 7 8; do \
+      if apt-get -o Acquire::Retries=5 update \
+        && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+          libreoffice-core libreoffice-impress libreoffice-writer python3; then \
+        break; \
+      fi; \
+      if [ "$attempt" = 8 ]; then exit 1; fi; \
+      sleep 30; \
+    done; \
+    rm -rf /var/lib/apt/lists/*; \
+    ln -s /usr/bin/python3 /usr/local/bin/python; \
+    useradd --system --uid 65532 --create-home --shell /usr/sbin/nologin sandbox
+
+WORKDIR /workspace
