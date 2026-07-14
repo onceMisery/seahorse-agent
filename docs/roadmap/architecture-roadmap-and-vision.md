@@ -4,7 +4,7 @@
 
 Container sandbox processes now run as the dedicated non-root `65532:65532` identity by default. Session workspace preparation grants only the per-session directory the access needed for that identity to write generated output; the existing read-only root filesystem, dropped capabilities, `no-new-privileges`, network boundary, and file-size limit remain in effect. The project browser runtime image now includes the same named system user, with temporary HOME/cache paths rooted in the existing writable `/tmp` tmpfs.
 
-The bounded `sandbox_file_convert` path now also renders base64 `DOCX` and `PPTX` input to PDF through a dedicated non-root LibreOffice runtime image. Only those two PDF conversions select the Office image; all other conversion formats retain the lightweight Python runtime. The generated PDF remains subject to the existing artifact scanner, storage, and governed-download flow. PDF initial-view `/OpenAction` entries are permitted because they are not executable active content; script, launch, remote-navigation, embedded-file, rich-media, and form-submit markers remain fail-closed.
+The bounded `sandbox_file_convert` path now also renders base64 `DOCX` and `PPTX` input to PDF through a dedicated non-root LibreOffice runtime image, tagged `seahorse-sandbox-office:libreoffice-7.4.7-bookworm` to match the packaged Debian runtime. Only those Office-backed conversions select that image; all other conversion formats retain the lightweight Python runtime. The generated PDF remains subject to the existing artifact scanner, storage, and governed-download flow. PDF initial-view `/OpenAction` entries are permitted because they are not executable active content; script, launch, remote-navigation, embedded-file, rich-media, and form-submit markers remain fail-closed.
 
 The same dedicated runtime now renders the first page of a base64 PDF to PNG through Poppler. Rendering is fixed to a single page and a 2048px longest-edge bound; callers cannot select pages, scale, or arbitrary Poppler options. The output continues through the ordinary artifact scan and governed-download pipeline. This is rendering only, not OCR, PDF editing, or a general image-conversion engine.
 
@@ -29,6 +29,8 @@ The OCR-enabled Office image was rebuilt through the same proxy and exposed the 
 A real full-Docker Tool Gateway HTML-to-DOCX invocation completed after approval with `SUCCEEDED`; the generated DOCX was scanned `CLEAN`, persisted to object storage, downloaded through the governed artifact endpoint, and its `word/document.xml` contained `SEAHORSE HTML DOCX E2E`.
 
 A real full-Docker Tool Gateway CSV-to-XLSX invocation completed after approval with `SUCCEEDED`; its XLSX artifact was scanned `CLEAN`, persisted, downloaded through the governed endpoint, and `xl/sharedStrings.xml` retained the submitted `Ada` and `Grace` cell values. This flow is now repeatable through `scripts/e2e-sandbox-csv-xlsx-tool-smoke.ps1`; its full-Docker run passed with real approval, agent-run binding, PostgreSQL artifact persistence, governed download, and XLSX package-content assertions.
+
+The full sandbox overlay was recreated with the exact `libreoffice-7.4.7-bookworm` default tag and the same CSV-to-XLSX real smoke passed under that runtime configuration.
 
 A real full-Docker formula-injection case submitted a CSV cell beginning with `=HYPERLINK(...)` through the approved Tool Gateway path. It failed closed before XLSX creation with the value-free formula-content error and no submitted formula text in the response.
 

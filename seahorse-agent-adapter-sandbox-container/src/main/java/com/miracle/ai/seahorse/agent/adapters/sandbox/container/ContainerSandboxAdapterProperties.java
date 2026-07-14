@@ -31,7 +31,7 @@ public class ContainerSandboxAdapterProperties {
 
     private String browserImage = "seahorse-sandbox-browser:playwright-1.48.0";
 
-    private String officeConversionImage = "seahorse-sandbox-office:libreoffice-24.2";
+    private String officeConversionImage = "seahorse-sandbox-office:libreoffice-7.4.7-bookworm";
 
     private String browserProxyServer = "";
 
@@ -118,7 +118,7 @@ public class ContainerSandboxAdapterProperties {
     public void setOfficeConversionImage(String officeConversionImage) {
         this.officeConversionImage = requireTextOrDefault(
                 officeConversionImage,
-                "seahorse-sandbox-office:libreoffice-24.2");
+                "seahorse-sandbox-office:libreoffice-7.4.7-bookworm");
     }
 
     public String getBrowserProxyServer() {
