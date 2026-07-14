@@ -522,18 +522,21 @@ try {
     $sessionId = "$($objectUri.SessionId)"
     $objectUri = "$($objectUri.ObjectUri)"
 
-    Test-Step "Verify persisted sandbox session profile and TTL metadata" {
+    Test-Step "Verify persisted sandbox session profile, node, and TTL metadata" {
         $safeSessionId = $sessionId.Replace("'", "''")
-        $row = Invoke-PostgresScalar "SELECT profile_id, (expires_at > created_at) FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
+        $row = Invoke-PostgresScalar "SELECT profile_id, runtime_node_id, (expires_at > created_at) FROM sa_sandbox_session WHERE session_id = '$safeSessionId';"
         $parts = $row -split "`t"
-        if ($parts.Count -ne 2) {
+        if ($parts.Count -ne 3) {
             throw "Unexpected sa_sandbox_session row: $row"
         }
         if ($parts[0] -ne "python-small") {
             throw "Expected python-small profile but got '$($parts[0])'"
         }
-        if ($parts[1] -ne "t") {
-            throw "Expected expires_at to be after created_at but got '$($parts[1])'"
+        if ($parts[1] -ne "local-container-docker") {
+            throw "Expected runtime_node_id=local-container-docker but got '$($parts[1])'"
+        }
+        if ($parts[2] -ne "t") {
+            throw "Expected expires_at to be after created_at but got '$($parts[2])'"
         }
     } | Out-Null
 
@@ -546,6 +549,9 @@ try {
         }
         if ("$($matched[0].profileId)" -ne "python-small") {
             throw "Expected sandbox session API profileId=python-small: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($matched[0].runtimeNodeId)" -ne "local-container-docker") {
+            throw "Expected sandbox session API runtimeNodeId=local-container-docker: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
         }
         if (-not "$($matched[0].expiresAt)") {
             throw "Sandbox session API did not include expiresAt: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"

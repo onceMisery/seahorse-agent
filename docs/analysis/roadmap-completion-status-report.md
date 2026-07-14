@@ -1,5 +1,11 @@
 # 架构路线图近期与中期设计完成情况分析报告
 
+## 2026-07-14 Sandbox Session Node Assignment Evidence Update
+
+`SandboxSession` now carries an optional `runtimeNodeId`. After profile, policy, disk, and capacity admission succeed, `KernelSandboxRuntimeService` selects the available node from the existing runtime health projection and binds its id to the newly created session. The first supported implementation intentionally has one local container node, so this is a durable node-assignment and audit boundary rather than remote scheduling.
+
+The JDBC adapter, initialization schema, tenant schema upgrader, and `V47__sandbox_session_runtime_node.sql` migration persist `runtime_node_id` with an index for tenant/node operational queries. Fresh evidence: focused kernel/JDBC/Web compilation passed, the complete bootstrap reactor returned `BUILD SUCCESS`, and the real full-Docker artifact storage smoke passed 52/52 while asserting the database and session API both report `local-container-docker` for the created sandbox session.
+
 ## 2026-07-14 Sandbox External ClamAV Scanner Evidence Update
 
 `ClamAvSandboxArtifactScannerPort` is an opt-in container adapter implementation of `SandboxArtifactScannerPort`. It sends local sandbox artifacts to an internal clamd endpoint using the INSTREAM protocol, then retains the existing local bounded scanner policy. Engine hits become a value-free `MALWARE` block; connection, protocol, and source failures remain fail-closed. The scanner policy endpoint reports `clamav-plus-local-bounded` and `LOCAL_BOUNDED_AND_EXTERNAL_CLAMAV` when enabled.

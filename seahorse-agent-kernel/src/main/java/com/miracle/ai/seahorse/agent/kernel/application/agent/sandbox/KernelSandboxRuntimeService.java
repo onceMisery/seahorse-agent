@@ -444,6 +444,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                     now);
             return saveSession(rejected, AuditEventType.SANDBOX_SESSION_CREATED);
         }
+        String runtimeNodeId = selectRuntimeNodeId();
         SandboxSession session = runtimePort.createSession(new SandboxSessionRequest(
                 safeCommand.tenantId(),
                 safeCommand.runId(),
@@ -454,7 +455,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 expiresAt));
         SandboxSession governed = session.withRuntimeGovernance(
                 profileId,
-                expiresAt);
+                expiresAt).withRuntimeNode(runtimeNodeId);
         return saveSession(governed, AuditEventType.SANDBOX_SESSION_CREATED);
     }
 
@@ -567,6 +568,14 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     @Override
     public List<SandboxRuntimeNodeHealth> inspectRuntimeNodes() {
         return List.of(SandboxRuntimeNodeHealth.fromHealth(inspectRuntimeHealth()));
+    }
+
+    private String selectRuntimeNodeId() {
+        return inspectRuntimeNodes().stream()
+                .filter(SandboxRuntimeNodeHealth::admissionAvailable)
+                .map(SandboxRuntimeNodeHealth::nodeId)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("no sandbox runtime node is available"));
     }
 
     @Override

@@ -173,6 +173,7 @@ public class JdbcTenantSchemaUpgrade {
             return;
         }
         addColumnIfMissing("sa_sandbox_session", "profile_id", "VARCHAR(64)");
+        addColumnIfMissing("sa_sandbox_session", "runtime_node_id", "VARCHAR(128)");
         addColumnIfMissing("sa_sandbox_session", "expires_at", "TIMESTAMP");
         jdbcTemplate.update("""
                 UPDATE sa_sandbox_session
@@ -191,6 +192,11 @@ public class JdbcTenantSchemaUpgrade {
         try {
             jdbcTemplate.execute(
                     "CREATE INDEX IF NOT EXISTS idx_sa_sandbox_session_expires ON sa_sandbox_session(tenant_id, expires_at)");
+            jdbcTemplate.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_sa_sandbox_session_runtime_node
+                    ON sa_sandbox_session(tenant_id, runtime_node_id, updated_at DESC)
+                    WHERE runtime_node_id IS NOT NULL
+                    """);
         } catch (Exception e) {
             log.warn("[TenantSchema] 创建 sa_sandbox_session expires 索引失败: {}", e.getMessage());
         }

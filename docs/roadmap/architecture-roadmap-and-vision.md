@@ -1,5 +1,11 @@
 # 架构路线图与未来展望
 
+## 2026-07-14 Update: Sandbox Session Node Assignment
+
+Sandbox sessions now persist the runtime node selected at admission. The current scheduler deliberately selects the single healthy local container node (`local-container-docker`) only after the existing runtime admission checks pass; rejected sessions have no node assignment. `runtime_node_id` is stored on `sa_sandbox_session`, exposed through the existing session API, and retained through close and timeout transitions. This makes node assignment auditable today without claiming remote execution, multi-node placement, migration, or failover that do not exist yet.
+
+Fresh real Docker evidence: the full bootstrap reactor rebuilt successfully and `scripts/e2e-sandbox-artifact-storage-smoke.ps1 -VerifyExternalVirusScanner` passed 52/52. The E2E creates a real Tool Gateway sandbox session and verifies `runtime_node_id=local-container-docker` in PostgreSQL and `runtimeNodeId` through the session API alongside governed artifact storage and scanner checks.
+
 ## 2026-07-14 Update: Sandbox External ClamAV Artifact Scanning
 
 The optional container sandbox overlay now supports an external ClamAV scanner. When `external-virus-scanner-enabled=true`, local `file://` artifacts stream to clamd using its INSTREAM protocol before the existing bounded local policy is applied. A malware hit is persisted only as `BLOCKED|CONFIDENTIAL` with the value-free `MALWARE` category; scanner unavailability, malformed responses, and unsupported sources fail closed as `EXTERNAL_SCAN_ERROR`. Raw signature names, paths, and storage references are not exposed in API responses.

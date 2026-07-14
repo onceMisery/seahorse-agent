@@ -1706,6 +1706,7 @@ CREATE TABLE IF NOT EXISTS sa_sandbox_session (
   status VARCHAR(32) NOT NULL,
   reason_code VARCHAR(64) NOT NULL,
   profile_id VARCHAR(64) NOT NULL,
+  runtime_node_id VARCHAR(128),
   expires_at TIMESTAMP NOT NULL,
   created_at TIMESTAMP NOT NULL,
   updated_at TIMESTAMP NOT NULL

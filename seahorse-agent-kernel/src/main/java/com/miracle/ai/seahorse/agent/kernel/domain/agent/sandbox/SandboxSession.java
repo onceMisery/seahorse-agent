@@ -27,8 +27,9 @@ public record SandboxSession(String sessionId,
                              SandboxRuntimeType runtimeType,
                              SandboxExecutionStatus status,
                              SandboxPolicyReasonCode reasonCode,
-                             String profileId,
-                             Instant expiresAt,
+                              String profileId,
+                              String runtimeNodeId,
+                              Instant expiresAt,
                              Instant createdAt,
                              Instant updatedAt) {
 
@@ -42,7 +43,21 @@ public record SandboxSession(String sessionId,
                           SandboxPolicyReasonCode reasonCode,
                           Instant createdAt,
                           Instant updatedAt) {
-        this(sessionId, tenantId, runId, runtimeType, status, reasonCode, null, null, createdAt, updatedAt);
+        this(sessionId, tenantId, runId, runtimeType, status, reasonCode, null, null, null, createdAt, updatedAt);
+    }
+
+    public SandboxSession(String sessionId,
+                          String tenantId,
+                          String runId,
+                          SandboxRuntimeType runtimeType,
+                          SandboxExecutionStatus status,
+                          SandboxPolicyReasonCode reasonCode,
+                          String profileId,
+                          Instant expiresAt,
+                          Instant createdAt,
+                          Instant updatedAt) {
+        this(sessionId, tenantId, runId, runtimeType, status, reasonCode,
+                profileId, null, expiresAt, createdAt, updatedAt);
     }
 
     public SandboxSession {
@@ -53,6 +68,7 @@ public record SandboxSession(String sessionId,
         status = Objects.requireNonNullElse(status, SandboxExecutionStatus.CREATED);
         reasonCode = Objects.requireNonNullElse(reasonCode, SandboxPolicyReasonCode.VALID_REQUEST);
         profileId = profileIdOrDefault(profileId, runtimeType);
+        runtimeNodeId = optionalText(runtimeNodeId);
         createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
         expiresAt = normalizeExpiresAt(expiresAt, createdAt);
         updatedAt = Objects.requireNonNullElse(updatedAt, createdAt);
@@ -110,6 +126,7 @@ public record SandboxSession(String sessionId,
                 SandboxExecutionStatus.CANCELLED,
                 reasonCode,
                 profileId,
+                runtimeNodeId,
                 expiresAt,
                 createdAt,
                 Objects.requireNonNullElse(closedAt, updatedAt));
@@ -124,6 +141,7 @@ public record SandboxSession(String sessionId,
                 SandboxExecutionStatus.TIMED_OUT,
                 SandboxPolicyReasonCode.RUNTIME_TIMED_OUT,
                 profileId,
+                runtimeNodeId,
                 expiresAt,
                 createdAt,
                 Objects.requireNonNullElse(timedOutAt, updatedAt));
@@ -138,9 +156,16 @@ public record SandboxSession(String sessionId,
                 status,
                 reasonCode,
                 profileId,
+                runtimeNodeId,
                 expiresAt,
                 createdAt,
                 updatedAt);
+    }
+
+    public SandboxSession withRuntimeNode(String runtimeNodeId) {
+        return new SandboxSession(
+                sessionId, tenantId, runId, runtimeType, status, reasonCode,
+                profileId, runtimeNodeId, expiresAt, createdAt, updatedAt);
     }
 
     public static String profileIdOrDefault(String profileId, SandboxRuntimeType runtimeType) {
@@ -157,6 +182,10 @@ public record SandboxSession(String sessionId,
 
     public static Instant defaultExpiresAt(Instant createdAt) {
         return Objects.requireNonNull(createdAt, "createdAt must not be null").plus(DEFAULT_SESSION_TTL);
+    }
+
+    private static String optionalText(String value) {
+        return value == null || value.trim().isEmpty() ? null : value.trim();
     }
 
     private static Instant normalizeExpiresAt(Instant expiresAt, Instant createdAt) {
