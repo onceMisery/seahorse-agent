@@ -1,5 +1,11 @@
 # 架构路线图近期与中期设计完成情况分析报告
 
+## 2026-07-14 Sandbox External ClamAV Scanner Evidence Update
+
+`ClamAvSandboxArtifactScannerPort` is an opt-in container adapter implementation of `SandboxArtifactScannerPort`. It sends local sandbox artifacts to an internal clamd endpoint using the INSTREAM protocol, then retains the existing local bounded scanner policy. Engine hits become a value-free `MALWARE` block; connection, protocol, and source failures remain fail-closed. The scanner policy endpoint reports `clamav-plus-local-bounded` and `LOCAL_BOUNDED_AND_EXTERNAL_CLAMAV` when enabled.
+
+Fresh evidence: the bootstrap reactor completed with `BUILD SUCCESS`; ClamAV was healthy in the local full-Docker environment; and `scripts/e2e-sandbox-artifact-storage-smoke.ps1 -BaseUrl http://127.0.0.1:9090 -Password admin123 -Marker seahorse-sandbox-clamav-final-pass-e2e -VerifyExternalVirusScanner` passed 52/52. The E2E used a real clamd custom test signature, verified `BLOCKED|CONFIDENTIAL|MALWARE`, no object-storage copy, no prompt visibility or download, and no storage URI or signature value leakage through the artifact API. Docker Desktop rejected direct EICAR file reads from the mounted workspace before clamd could open them, so EICAR remains a host-environment limitation rather than the external scanner acceptance fixture.
+
 日期：2026-06-22
 
 本报告基于代码库实际实现，对 `docs/roadmap/architecture-roadmap-and-vision.md` 中已经完成或已合入 main 的能力进行归档。路线图文档只保留未完成、待真实测试、待联调和待产品化的规划项；已完成内容以本报告为准。

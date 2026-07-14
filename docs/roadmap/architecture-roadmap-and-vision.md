@@ -1,5 +1,11 @@
 # 架构路线图与未来展望
 
+## 2026-07-14 Update: Sandbox External ClamAV Artifact Scanning
+
+The optional container sandbox overlay now supports an external ClamAV scanner. When `external-virus-scanner-enabled=true`, local `file://` artifacts stream to clamd using its INSTREAM protocol before the existing bounded local policy is applied. A malware hit is persisted only as `BLOCKED|CONFIDENTIAL` with the value-free `MALWARE` category; scanner unavailability, malformed responses, and unsupported sources fail closed as `EXTERNAL_SCAN_ERROR`. Raw signature names, paths, and storage references are not exposed in API responses.
+
+`docker-compose.sandbox.yml --profile external-virus-scanner` provides the internal-only ClamAV service. The scanner remains opt-in and the default `default-local-bounded` scanner behavior is unchanged. Real Docker evidence passed 52/52 through `scripts/e2e-sandbox-artifact-storage-smoke.ps1 -VerifyExternalVirusScanner`: a clean artifact was governed normally, while a real clamd custom test signature blocked the matching artifact before object storage, prompt visibility, and downloads. A custom harmless signature is used because the Docker Desktop host mount refuses EICAR file reads before clamd can inspect them.
+
 日期：2026-06-22
 
 本文只记录 Seahorse Agent 后续仍需落地、真实验证、产品化或生产硬化的路线。已经完成或已合入 main 的能力不再作为规划展开，统一归档到 [路线图完成情况报告](../analysis/roadmap-completion-status-report.md)。

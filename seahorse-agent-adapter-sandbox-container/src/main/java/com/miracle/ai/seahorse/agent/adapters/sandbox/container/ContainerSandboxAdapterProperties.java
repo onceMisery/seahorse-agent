@@ -67,6 +67,14 @@ public class ContainerSandboxAdapterProperties {
 
     private long maxSessionFileBytes = 64L * 1024L * 1024L;
 
+    private boolean externalVirusScannerEnabled;
+
+    private String externalVirusScannerHost = "clamav";
+
+    private int externalVirusScannerPort = 3310;
+
+    private Duration externalVirusScannerTimeout = Duration.ofSeconds(10);
+
     private Duration orphanWorkspaceMinAge = Duration.ofMinutes(5);
 
     private int maxActiveSessions = 0;
@@ -245,6 +253,45 @@ public class ContainerSandboxAdapterProperties {
 
     public void setMaxSessionFileBytes(long maxSessionFileBytes) {
         this.maxSessionFileBytes = maxSessionFileBytes > 0 ? maxSessionFileBytes : 64L * 1024L * 1024L;
+    }
+
+    public boolean isExternalVirusScannerEnabled() {
+        return externalVirusScannerEnabled;
+    }
+
+    public void setExternalVirusScannerEnabled(boolean externalVirusScannerEnabled) {
+        this.externalVirusScannerEnabled = externalVirusScannerEnabled;
+    }
+
+    public String getExternalVirusScannerHost() {
+        return externalVirusScannerHost;
+    }
+
+    public void setExternalVirusScannerHost(String externalVirusScannerHost) {
+        this.externalVirusScannerHost = requireTextOrDefault(externalVirusScannerHost, "clamav");
+    }
+
+    public int getExternalVirusScannerPort() {
+        return externalVirusScannerPort;
+    }
+
+    public void setExternalVirusScannerPort(int externalVirusScannerPort) {
+        this.externalVirusScannerPort = externalVirusScannerPort > 0 && externalVirusScannerPort <= 65535
+                ? externalVirusScannerPort
+                : 3310;
+    }
+
+    public Duration getExternalVirusScannerTimeout() {
+        return externalVirusScannerTimeout;
+    }
+
+    public void setExternalVirusScannerTimeout(Duration externalVirusScannerTimeout) {
+        if (externalVirusScannerTimeout == null || externalVirusScannerTimeout.isZero()
+                || externalVirusScannerTimeout.isNegative()) {
+            this.externalVirusScannerTimeout = Duration.ofSeconds(10);
+            return;
+        }
+        this.externalVirusScannerTimeout = externalVirusScannerTimeout;
     }
 
     public Duration getOrphanWorkspaceMinAge() {

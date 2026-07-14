@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.sandbox.container;
 
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
@@ -37,6 +38,16 @@ public class ContainerSandboxAutoConfiguration {
     @ConditionalOnMissingBean
     ContainerCommandRunner seahorseContainerCommandRunner() {
         return new ProcessBuilderContainerCommandRunner();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(SandboxArtifactScannerPort.class)
+    @ConditionalOnProperty(
+            prefix = "seahorse-agent.adapters.sandbox.container",
+            name = "external-virus-scanner-enabled",
+            havingValue = "true")
+    SandboxArtifactScannerPort seahorseClamAvArtifactScanner(ContainerSandboxAdapterProperties properties) {
+        return new ClamAvSandboxArtifactScannerPort(properties);
     }
 
     @Bean

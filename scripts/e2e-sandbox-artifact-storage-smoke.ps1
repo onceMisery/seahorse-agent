@@ -17,6 +17,7 @@ param(
     [switch]$VerifyWorkspaceDiskAdmission,
     [switch]$UseScheduledSweep,
     [int]$ScheduledSweepWaitSeconds = 45,
+    [switch]$VerifyExternalVirusScanner,
     [switch]$SkipHealth
 )
 
@@ -707,11 +708,13 @@ try {
     Test-Step "Inspect sandbox artifact scanner policy" {
         $response = Invoke-Json -Method GET -Path "/api/sandbox/runtime/artifact-scanner-policy" -Headers $headers
         Assert-ApiOk $response "Inspect sandbox artifact scanner policy"
-        if ("$($response.data.scannerId)" -ne "default-local-bounded") {
-            throw "Expected default-local-bounded scanner policy: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        $expectedScannerId = if ($VerifyExternalVirusScanner) { "clamav-plus-local-bounded" } else { "default-local-bounded" }
+        $expectedScannerMode = if ($VerifyExternalVirusScanner) { "LOCAL_BOUNDED_AND_EXTERNAL_CLAMAV" } else { "LOCAL_METADATA_AND_BOUNDED_CONTENT" }
+        if ("$($response.data.scannerId)" -ne $expectedScannerId) {
+            throw "Expected $expectedScannerId scanner policy: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
-        if ("$($response.data.scannerMode)" -ne "LOCAL_METADATA_AND_BOUNDED_CONTENT") {
-            throw "Expected bounded local scanner mode: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        if ("$($response.data.scannerMode)" -ne $expectedScannerMode) {
+            throw "Expected $expectedScannerMode scanner mode: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         if ($response.data.failClosed -ne $true -or $response.data.rawFindingValuesPersisted -ne $false) {
             throw "Expected fail-closed value-free scanner policy: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
@@ -735,7 +738,7 @@ try {
             throw "Expected scanner policy blocked categories: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $unsupportedCapabilities = @($response.data.unsupportedCapabilities)
-        if ($unsupportedCapabilities -notcontains "external virus scanning" -or $unsupportedCapabilities -notcontains "full PDF rendering/OCR") {
+        if ((-not $VerifyExternalVirusScanner -and $unsupportedCapabilities -notcontains "external virus scanning") -or $unsupportedCapabilities -notcontains "full PDF rendering/OCR") {
             throw "Expected scanner policy unsupported capability list: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $scannerPolicyJson = $response.data | ConvertTo-Json -Depth 20 -Compress
@@ -743,6 +746,75 @@ try {
             throw "Sandbox artifact scanner policy leaked workspace root path: $scannerPolicyJson"
         }
     } | Out-Null
+
+    if ($VerifyExternalVirusScanner) {
+        $virusMarker = "external scanner artifact"
+        $virusCode = @'
+from pathlib import Path
+import base64
+Path("external-clean.txt").write_text("clean external scanner artifact", encoding="utf-8")
+Path("external-infected.txt").write_bytes(base64.b64decode("U0VBSE9SU0UtQ0xBTUFWLUUyRS1NQVJLRVI="))
+print("external scanner artifact")
+'@
+        $virusObservation = Test-Step "Invoke sandbox_python with clean and malware-signature artifacts" {
+            $response = Invoke-SandboxPythonTool -Headers $headers -Name "Invoke sandbox_python external virus artifacts" -Body @{
+                runId = $runId
+                stepId = "sandbox-artifact-virus-step-$suffix"
+                toolCallId = "sandbox-artifact-virus-call-$suffix"
+                agentId = "legacy-react-agent"
+                tenantId = "default"
+                userId = "$($login.data.userId)"
+                agentIdentityId = "$($login.data.userId)"
+                arguments = @{ code = $virusCode }
+                resourceRefs = @{}
+                idempotencyKey = "${runId}:sandbox-artifact-virus-call-$suffix"
+                allowedToolIds = @("sandbox_python")
+            }
+            if ($response.data.success -ne $true) {
+                throw "sandbox_python external virus invocation failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            $content = "$($response.data.content)"
+            if ($content -notlike "*$virusMarker*" -or $content -match "EICAR|X5O!P%@") {
+                throw "External virus observation did not preserve marker or leaked test content"
+            }
+            $parsed = $content | ConvertFrom-Json
+            if (@($parsed.artifacts).Count -ne 1 -or "$(@($parsed.artifacts)[0].mediaType)" -ne "text/plain") {
+                throw "Expected only the clean external-scanned artifact to be prompt-visible"
+            }
+            $parsed
+        }
+        if (-not $virusObservation) { exit 1 }
+
+        $virusSessionId = Get-LatestSandboxSessionIdForRun -RunId $runId
+        $virusArtifactId = Test-Step "Verify EICAR artifact is blocked before object storage" {
+            $safeVirusSessionId = $virusSessionId.Replace("'", "''")
+            $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeVirusSessionId' AND object_uri LIKE '%external-infected.txt' ORDER BY created_at DESC LIMIT 1;"
+            $parts = $row -split "`t"
+            if ($parts.Count -ne 6) {
+                throw "Unexpected external virus artifact row"
+            }
+            if ($parts[1] -like "$ExpectedObjectUriPrefix*" -or $parts[2] -ne "BLOCKED" -or $parts[3] -ne "CONFIDENTIAL" -or $parts[4] -ne "external virus scan blocked artifact") {
+                throw "Expected malware-signature artifact to be blocked before object storage"
+            }
+            if ($parts[5] -notlike '*"MALWARE"*' -or $parts[5] -match "EICAR|X5O!P%@") {
+                throw "Expected value-free malware redaction summary"
+            }
+            $parts[0]
+        }
+        if (-not $virusArtifactId) { exit 1 }
+
+        Test-Step "Verify malware-signature artifact API remains metadata-only" {
+            $detail = Invoke-Json -Method GET -Path "/api/sandbox/artifacts/$virusArtifactId" -Headers $headers
+            Assert-ApiOk $detail "Get external virus artifact detail"
+            if ($detail.data.downloadable -ne $false -or $detail.data.promptVisible -ne $false -or "$($detail.data.scanStatus)" -ne "BLOCKED") {
+                throw "Expected malware-signature artifact to be non-downloadable and prompt-hidden"
+            }
+            $detailJson = $detail.data | ConvertTo-Json -Depth 20 -Compress
+            if ($detailJson -notmatch "MALWARE" -or $detailJson -match "objectUri|object_uri|storageRef|file://|local://|s3://|EICAR|X5O!P%@") {
+                throw "External virus artifact API leaked storage or scanner finding values"
+            }
+        } | Out-Null
+    }
 
     $expiredSweepStepName = if ($UseScheduledSweep) {
         "Wait for scheduled sandbox session sweep as TIMED_OUT"
