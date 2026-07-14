@@ -32,6 +32,8 @@ A real full-Docker Tool Gateway CSV-to-XLSX invocation completed after approval 
 
 The full sandbox overlay was recreated with the exact `libreoffice-7.4.7-bookworm` default tag and the same CSV-to-XLSX real smoke passed under that runtime configuration.
 
+After the Office/PDF rendering and conversion extensions, `scripts/e2e-sandbox-file-convert-tool-smoke.ps1` passed `74/74` against the real full-Docker backend. The regression run covered governed approvals, document/table conversion paths, artifact scanning and local object storage, governed downloads, redacted Tool Gateway audit summaries, and session cleanup.
+
 A real full-Docker formula-injection case submitted a CSV cell beginning with `=HYPERLINK(...)` through the approved Tool Gateway path. It failed closed before XLSX creation with the value-free formula-content error and no submitted formula text in the response.
 
 A real full-Docker CSV-to-XLSX run containing the ordinary numeric value `-42` completed after approval with a `CLEAN` XLSX artifact, confirming the formula guard does not reject signed numeric data.
