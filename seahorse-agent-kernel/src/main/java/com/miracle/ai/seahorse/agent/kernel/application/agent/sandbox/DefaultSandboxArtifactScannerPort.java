@@ -28,6 +28,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanner
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.RandomAccessFile;
 import java.net.URI;
 import java.time.Instant;
 import java.nio.charset.StandardCharsets;
@@ -337,7 +338,9 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                         true,
                         List.of("EXECUTABLE_BINARY"));
             }
-            if ("application/pdf".equals(mediaType) && containsPdfActiveContent(prefix)) {
+            if ("application/pdf".equals(mediaType)
+                    && (containsPdfActiveContent(prefix)
+                    || containsPdfActiveContent(readTail(path, MAX_BINARY_SIGNATURE_SCAN_BYTES)))) {
                 return SandboxArtifactScanResult.blocked(
                         ContextSensitivity.CONFIDENTIAL,
                         "pdf active content",
@@ -583,6 +586,17 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
     private static byte[] readPrefix(Path path, int maxBytes) throws IOException {
         try (InputStream input = Files.newInputStream(path)) {
             return input.readNBytes(maxBytes);
+        }
+    }
+
+    private static byte[] readTail(Path path, int maxBytes) throws IOException {
+        try (RandomAccessFile input = new RandomAccessFile(path.toFile(), "r")) {
+            long size = input.length();
+            int bytesToRead = (int) Math.min(size, maxBytes);
+            input.seek(Math.max(0L, size - bytesToRead));
+            byte[] tail = new byte[bytesToRead];
+            input.readFully(tail);
+            return tail;
         }
     }
 

@@ -1,5 +1,13 @@
 # 架构路线图与未来展望
 
+## 2026-07-14 Update: Bounded PDF Tail Scanning and File Quota Correction
+
+The local bounded scanner now checks both the leading and trailing `256 KiB` windows of a local PDF for active-content markers. This closes the simple bypass where a `/JavaScript`, `/OpenAction`, or other active action appeared only after the leading scan window. Both windows remain bounded; the scanner does not render or fully parse PDFs, extract attachments, perform OCR, or retain raw marker values.
+
+This slice also corrects the container `fsize` ulimit unit passed to Docker. The adapter now supplies the configured byte value directly, so the default `max-session-file-bytes=67108864` produces a real 64 MiB process file limit instead of an unintended roughly 128 KiB limit. Runtime health and actual process enforcement now agree.
+
+Fresh real Docker evidence: the full bootstrap reactor package completed successfully and `scripts/e2e-sandbox-artifact-storage-smoke.ps1 -VerifyExternalVirusScanner` passed 54/54. A real Tool Gateway sandbox execution wrote a PDF with `/JavaScript` beyond the leading 256 KiB; the artifact was blocked before object storage as `PDF_ACTIVE_CONTENT`, with a value-free persisted/API summary.
+
 ## 2026-07-14 Update: Sandbox Artifact Scanner Health
 
 Sandbox Operations now exposes `GET /api/sandbox/runtime/artifact-scanner-health`. The read-only health projection reports scanner id, mode, external-engine posture, and an `AVAILABLE` or `UNAVAILABLE` result without exposing scanner hostnames, ports, signatures, paths, or exception text. The external ClamAV adapter actively probes clamd with its `PING` protocol; the default bounded local scanner reports available without adding a network dependency.

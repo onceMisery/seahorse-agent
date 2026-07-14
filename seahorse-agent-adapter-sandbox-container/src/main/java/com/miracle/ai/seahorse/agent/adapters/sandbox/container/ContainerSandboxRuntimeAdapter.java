@@ -2739,7 +2739,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             commandLine.add("/tmp:rw,noexec,nosuid,size=64m");
         }
         commandLine.add("--ulimit");
-        commandLine.add("fsize=" + maxSessionFileBlocks() + ":" + maxSessionFileBlocks());
+        commandLine.add("fsize=" + maxSessionFileLimit() + ":" + maxSessionFileLimit());
         commandLine.add("-v");
         commandLine.add(mountSourceForSession(session.sessionId(), workspace) + ":" + CONTAINER_WORKSPACE + ":rw");
         commandLine.add("-w");
@@ -2891,8 +2891,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return properties.getMemory();
     }
 
-    private long maxSessionFileBlocks() {
-        return Math.max(1L, (properties.getMaxSessionFileBytes() + 511L) / 512L);
+    private long maxSessionFileLimit() {
+        return Math.max(1L, properties.getMaxSessionFileBytes());
     }
 
     private ContainerCommand containerInspectionCommand() {

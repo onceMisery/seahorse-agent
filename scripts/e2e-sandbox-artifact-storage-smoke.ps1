@@ -1197,7 +1197,7 @@ print("external scanner artifact")
     } | Out-Null
 
     $binaryMarker = "$Marker-binary-signature-scan"
-    $binaryCode = "from pathlib import Path`nPath('active.pdf').write_bytes(b'%PDF-1.7\n1 0 obj\n<< /OpenAction 2 0 R >>\nendobj\n')`nPath('chart.png').write_bytes(b'MZ\x00\x00seahorse')`nprint('$binaryMarker')"
+    $binaryCode = "from pathlib import Path`nPath('active.pdf').write_bytes(b'%PDF-1.7\n1 0 obj\n<< /OpenAction 2 0 R >>\nendobj\n')`nPath('tail-active.pdf').write_bytes(b'%PDF-1.7\n' + (b'%' * (300 * 1024)) + b'\n1 0 obj\n<< /JavaScript 2 0 R >>\nendobj\n')`nPath('chart.png').write_bytes(b'MZ\x00\x00seahorse')`nprint('$binaryMarker')"
     $binaryObservation = Test-Step "Invoke sandbox_python with binary-signature artifacts" {
         $response = Invoke-SandboxPythonTool -Headers $headers -Name "Invoke sandbox_python binary-signature artifacts" -Body @{
             runId = $runId
@@ -1253,6 +1253,24 @@ print("external scanner artifact")
         $parts[0]
     } | Out-Null
 
+    Test-Step "Verify tail PDF active-content artifact is blocked before object storage" {
+        $safeBinarySessionId = $binarySessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeBinarySessionId' AND object_uri LIKE '%tail-active.pdf' ORDER BY created_at DESC LIMIT 1;"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 7) {
+            throw "Unexpected tail PDF artifact row: $row"
+        }
+        if ($parts[1] -like "$ExpectedObjectUriPrefix*" -or $parts[2] -ne "application/pdf" -or $parts[3] -ne "BLOCKED" -or $parts[4] -ne "CONFIDENTIAL") {
+            throw "Expected blocked tail PDF artifact before object storage but got: $row"
+        }
+        if ($parts[5] -ne "pdf active content" -or $parts[6] -notlike '*"PDF_ACTIVE_CONTENT"*') {
+            throw "Expected PDF_ACTIVE_CONTENT tail scan result but got: $row"
+        }
+        if ($parts[6] -like "*JavaScript*") {
+            throw "Tail PDF redaction summary leaked active-content marker: $($parts[6])"
+        }
+    } | Out-Null
+
     $executableArtifactId = Test-Step "Verify executable masquerading artifact is blocked before object storage" {
         $safeBinarySessionId = $binarySessionId.Replace("'", "''")
         $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeBinarySessionId' AND media_type = 'image/png' ORDER BY created_at DESC LIMIT 1;"
@@ -1280,11 +1298,11 @@ print("external scanner artifact")
         $response = Invoke-Json -Method GET -Path "/api/sandbox/sessions/$binarySessionId/artifacts" -Headers $headers
         Assert-ApiOk $response "List binary-signature sandbox artifacts"
         $blockedArtifacts = @($response.data | Where-Object { "$($_.scanStatus)" -eq "BLOCKED" })
-        if ($blockedArtifacts.Count -lt 2) {
-            throw "Expected at least two blocked binary-signature artifacts: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        if ($blockedArtifacts.Count -lt 3) {
+            throw "Expected at least three blocked binary-signature artifacts: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $artifactJson = $response.data | ConvertTo-Json -Depth 20 -Compress
-        if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|OpenAction") {
+        if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|OpenAction|JavaScript") {
             throw "Binary-signature artifact API leaked storage or active-content details: $artifactJson"
         }
 
