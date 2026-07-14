@@ -14,6 +14,8 @@ The Office runtime now also supports bounded `HTML -> DOCX` generation through L
 
 The same runtime supports bounded `CSV -> XLSX` creation through LibreOffice Calc's explicit `Calc MS Excel 2007 XML` export filter. It complements the existing conservative XLSX-to-CSV reader without exposing spreadsheet formulas, macros, or arbitrary LibreOffice options. Generated XLSX packages remain non-prompt-visible governed binary artifacts.
 
+To prevent CSV formula injection from becoming executable workbook content, CSV-to-XLSX rejects cells whose trimmed value begins with `=`, `+`, `-`, or `@` before LibreOffice starts. The rejection is value-free and does not emit a workbook artifact.
+
 Calc-backed `XLSX -> PDF` rendering is also available through the same fixed Office export path used for documents and presentations. The generated PDF stays within the normal scanner and governed-download pipeline; this does not expose worksheet macro execution, print-configuration options, or arbitrary export arguments.
 
 Fresh real full-Docker evidence: the Office image was built through the local `7890` proxy, a direct read-only/no-network/capability-dropped UID `65532` DOCX render probe produced a valid `%PDF` artifact, and real Tool Gateway DOCX-to-PDF and PPTX-to-PDF flows completed after approval with `SUCCEEDED`, `application/pdf`, and ClamAV `CLEAN`; the DOCX path additionally verified persisted artifact storage and a governed download whose first bytes were `%PDF`. Docker Desktop host-drive mount sources are normalized to its daemon-visible `/run/desktop/mnt/host/<drive>/...` form before child-container execution so produced artifacts are collected from the same session workspace.
@@ -25,6 +27,8 @@ The OCR-enabled Office image was rebuilt through the same proxy and exposed the 
 A real full-Docker Tool Gateway HTML-to-DOCX invocation completed after approval with `SUCCEEDED`; the generated DOCX was scanned `CLEAN`, persisted to object storage, downloaded through the governed artifact endpoint, and its `word/document.xml` contained `SEAHORSE HTML DOCX E2E`.
 
 A real full-Docker Tool Gateway CSV-to-XLSX invocation completed after approval with `SUCCEEDED`; its XLSX artifact was scanned `CLEAN`, persisted, downloaded through the governed endpoint, and `xl/sharedStrings.xml` retained the submitted `Ada` and `Grace` cell values. This flow is now repeatable through `scripts/e2e-sandbox-csv-xlsx-tool-smoke.ps1`; its full-Docker run passed with real approval, agent-run binding, PostgreSQL artifact persistence, governed download, and XLSX package-content assertions.
+
+A real full-Docker formula-injection case submitted a CSV cell beginning with `=HYPERLINK(...)` through the approved Tool Gateway path. It failed closed before XLSX creation with the value-free formula-content error and no submitted formula text in the response.
 
 A real full-Docker Tool Gateway XLSX-to-PDF invocation, using a previously governed clean XLSX as its binary input, completed after approval with `SUCCEEDED`, `application/pdf`, and `CLEAN` scan status; the governed artifact download began with `%PDF`.
 

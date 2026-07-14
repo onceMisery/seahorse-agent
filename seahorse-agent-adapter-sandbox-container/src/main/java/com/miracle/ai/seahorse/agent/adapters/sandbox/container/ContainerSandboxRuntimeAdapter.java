@@ -1876,6 +1876,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         rendered.replace(output_path)
 
                 def csv_to_xlsx(path):
+                    with path.open("r", encoding="utf-8-sig", newline="") as source:
+                        for row in csv.reader(source):
+                            if any(cell.lstrip().startswith(("=", "+", "-", "@")) for cell in row):
+                                raise ValueError("csv formula content is not supported for xlsx conversion")
                     result = subprocess.run(
                         ["soffice", "--headless", "--nologo", "--nodefault", "--nolockcheck", "--norestore",
                          "--convert-to", "xlsx:Calc MS Excel 2007 XML", "--outdir", str(output_path.parent), str(path)],
