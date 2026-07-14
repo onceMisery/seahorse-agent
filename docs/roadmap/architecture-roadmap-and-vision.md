@@ -20,7 +20,7 @@ Calc-backed `XLSX -> PDF` rendering is also available through the same fixed Off
 
 `PPTX -> PNG` now renders only the first slide by exporting through Impress to a temporary PDF and rasterizing it through Poppler at the fixed 2048px longest-edge bound. Callers cannot select slide indices, export options, or arbitrary command arguments.
 
-The same fixed LibreOffice PDF path now accepts OpenDocument text and presentation packages: `ODT -> PDF` and `ODP -> PDF`. They use the existing no-network `FILE_CONVERSION` runtime and Office image selection, expose no caller-controlled LibreOffice arguments, and retain the ordinary scanner, object-storage, governed-download, and audit controls.
+The same fixed LibreOffice PDF path now accepts OpenDocument text, spreadsheet, and presentation packages: `ODT -> PDF`, `ODS -> PDF`, and `ODP -> PDF`. They use the existing no-network `FILE_CONVERSION` runtime and Office image selection, expose no caller-controlled LibreOffice arguments, and retain the ordinary scanner, object-storage, governed-download, and audit controls.
 
 Fresh real full-Docker evidence: the Office image was built through the local `7890` proxy, a direct read-only/no-network/capability-dropped UID `65532` DOCX render probe produced a valid `%PDF` artifact, and real Tool Gateway DOCX-to-PDF and PPTX-to-PDF flows completed after approval with `SUCCEEDED`, `application/pdf`, and ClamAV `CLEAN`; the DOCX path additionally verified persisted artifact storage and a governed download whose first bytes were `%PDF`. Docker Desktop host-drive mount sources are normalized to its daemon-visible `/run/desktop/mnt/host/<drive>/...` form before child-container execution so produced artifacts are collected from the same session workspace.
 
@@ -45,6 +45,8 @@ A real full-Docker Tool Gateway XLSX-to-PDF invocation, using a previously gover
 A real full-Docker Tool Gateway PPTX-to-PNG invocation completed after approval with `SUCCEEDED`, `image/png`, and `CLEAN` scan status; its governed artifact download had the PNG magic bytes.
 
 Fresh real full-Docker evidence: `scripts/e2e-sandbox-file-convert-tool-smoke.ps1` now generates valid ODT and ODP fixtures with the same pinned LibreOffice runtime, then invokes both conversions through the real Tool Gateway. The full regression passed `82/82`, including approval, `SUCCEEDED`, `application/pdf`, ClamAV `CLEAN`, PostgreSQL persistence, local object storage, governed `%PDF` download, and value-free audit summaries for both ODF paths.
+
+The same real full-Docker smoke now generates an ODS fixture through LibreOffice Calc from CSV and verifies `ODS -> PDF` through the Tool Gateway. The full regression passed `86/86`, including approval, `SUCCEEDED`, `application/pdf`, ClamAV `CLEAN`, PostgreSQL persistence, local object storage, governed `%PDF` download, and a value-free ODS audit summary.
 
 Fresh real Docker evidence: the browser image was rebuilt through the local `7890` proxy, a direct non-root/read-only Chromium probe succeeded, `scripts/e2e-sandbox-python-tool-smoke.ps1` passed 5/5 with an in-sandbox effective-UID non-root assertion, and `scripts/e2e-sandbox-browser-tool-smoke.ps1 -SkipBrowserImageBuild` passed 37/37. The browser E2E covers inline and URL execution, DNS fail-closed behavior, session capture/replay, governed Profile lifecycle, HAR/video artifacts, audit summaries, and no leftover managed containers or non-terminal sessions. Its real 429 handling now uses bounded retry only for rate-limit responses.
 

@@ -2286,6 +2286,10 @@ try {
     $odpPdfContent = Convert-OfficeFixtureToBase64 -SourceBase64 $odpPdfSource -SourceExtension "pptx" -TargetExtension "odp"
     $odpPdfObservation = Invoke-OfficePdfConversionSmoke -SourceFormat "odp" -Content $odpPdfContent -Label "ODP"
 
+    $odsPdfSource = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("name,score`nSandbox ODS PDF $Marker,42`n"))
+    $odsPdfContent = Convert-OfficeFixtureToBase64 -SourceBase64 $odsPdfSource -SourceExtension "csv" -TargetExtension "ods"
+    $odsPdfObservation = Invoke-OfficePdfConversionSmoke -SourceFormat "ods" -Content $odsPdfContent -Label "ODS"
+
     $odsRunId = $runId
     $odsToolCallId = "sandbox-file-convert-ods-csv-call-$suffix"
     $odsContent = New-OdsBase64 -Marker $Marker -SecondValue "ODS conversion extracts first table"
@@ -3103,6 +3107,20 @@ try {
                     '"networkRequested":false'
                 )
                 Forbidden = @($Marker, $odpPdfContent)
+            },
+            @{
+                StepId = "$($odsPdfObservation.StepId)"
+                Status = "SUCCEEDED"
+                Required = @(
+                    '"toolId":"sandbox_file_convert"',
+                    '"runtimeType":"FILE_CONVERSION"',
+                    '"sourceFormat":"ods"',
+                    '"targetFormat":"pdf"',
+                    '"contentEncoding":"base64"',
+                    '"binaryInput":true',
+                    '"networkRequested":false'
+                )
+                Forbidden = @($Marker, $odsPdfContent)
             },
             @{
                 StepId = "sandbox-file-convert-xlsx-csv-step-$suffix"

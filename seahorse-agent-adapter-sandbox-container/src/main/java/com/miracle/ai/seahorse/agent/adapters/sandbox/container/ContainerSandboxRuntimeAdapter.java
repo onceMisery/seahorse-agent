@@ -377,7 +377,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String contentEncoding = normalizedContentEncoding(root.path("contentEncoding").asText(PLAIN_ENCODING));
         if (!isSupportedFileConversion(sourceFormat, targetFormat)) {
             throw new UnsupportedFileConversionException(
-                    "container file conversion supports csv/tsv to json, csv to xlsx, json to csv/tsv, txt to html, html to txt/docx, markdown/md to html/txt, docx/odt/odp/pdf to html/txt, docx/pptx/xlsx to pdf, pdf/pptx to png, pdf to ocr_txt, xlsx/ods to csv/html, and pptx to html/txt only");
+                    "container file conversion supports csv/tsv to json, csv to xlsx, json to csv/tsv, txt to html, html to txt/docx, markdown/md to html/txt, docx/odt/odp/pdf to html/txt, docx/odt/ods/odp/pptx/xlsx to pdf, pdf/pptx to png, pdf to ocr_txt, xlsx/ods to csv/html, and pptx to html/txt only");
         }
         if (isBinaryDocumentFormat(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
             throw new IllegalArgumentException(sourceFormat + " file conversion contentEncoding must be base64");
@@ -2011,6 +2011,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "odp" and target_format == "pdf":
                     office_to_pdf(input_path)
                     print(f"rendered odp presentation to pdf")
+                elif source_format == "ods" and target_format == "pdf":
+                    office_to_pdf(input_path)
+                    print(f"rendered ods spreadsheet to pdf")
                 elif source_format == "ods" and target_format == "csv":
                     output_path.write_text(ods_to_csv(input_path), encoding="utf-8")
                     print(f"converted ods spreadsheet to csv")
@@ -2075,6 +2078,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
                 || (DOCX_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
                 || (ODT_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
+                || (ODS_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
                 || (ODP_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
                 || (XLSX_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
                 || (PDF_FORMAT.equals(sourceFormat) && "png".equals(targetFormat))
@@ -3053,6 +3057,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         return (PDF_FORMAT.equals(request.targetFormat())
                 && (DOCX_FORMAT.equals(request.sourceFormat())
                 || ODT_FORMAT.equals(request.sourceFormat())
+                || ODS_FORMAT.equals(request.sourceFormat())
                 || ODP_FORMAT.equals(request.sourceFormat())
                 || PPTX_FORMAT.equals(request.sourceFormat())
                 || XLSX_FORMAT.equals(request.sourceFormat())))
