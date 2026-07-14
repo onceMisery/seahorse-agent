@@ -1999,12 +1999,18 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "odt" and target_format == "html":
                     output_path.write_text(odt_to_html(input_path), encoding="utf-8")
                     print(f"converted odt document to html")
+                elif source_format == "odt" and target_format == "pdf":
+                    office_to_pdf(input_path)
+                    print(f"rendered odt document to pdf")
                 elif source_format == "odp" and target_format == "txt":
                     output_path.write_text(odp_to_text(input_path), encoding="utf-8")
                     print(f"converted odp presentation to text")
                 elif source_format == "odp" and target_format == "html":
                     output_path.write_text(odp_to_html(input_path), encoding="utf-8")
                     print(f"converted odp presentation to html")
+                elif source_format == "odp" and target_format == "pdf":
+                    office_to_pdf(input_path)
+                    print(f"rendered odp presentation to pdf")
                 elif source_format == "ods" and target_format == "csv":
                     output_path.write_text(ods_to_csv(input_path), encoding="utf-8")
                     print(f"converted ods spreadsheet to csv")
@@ -2068,6 +2074,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || PDF_FORMAT.equals(sourceFormat))
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
                 || (DOCX_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
+                || (ODT_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
+                || (ODP_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
                 || (XLSX_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
                 || (PDF_FORMAT.equals(sourceFormat) && "png".equals(targetFormat))
                 || (PPTX_FORMAT.equals(sourceFormat) && "png".equals(targetFormat))
@@ -3044,6 +3052,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static boolean requiresOfficeRenderer(FileConversionRequest request) {
         return (PDF_FORMAT.equals(request.targetFormat())
                 && (DOCX_FORMAT.equals(request.sourceFormat())
+                || ODT_FORMAT.equals(request.sourceFormat())
+                || ODP_FORMAT.equals(request.sourceFormat())
                 || PPTX_FORMAT.equals(request.sourceFormat())
                 || XLSX_FORMAT.equals(request.sourceFormat())))
                 || (PDF_FORMAT.equals(request.sourceFormat())

@@ -662,6 +662,106 @@ function New-PptxBase64 {
     }
 }
 
+function Convert-OfficeFixtureToBase64 {
+    param(
+        [string]$SourceBase64,
+        [string]$SourceExtension,
+        [string]$TargetExtension,
+        [string]$OfficeImage = "seahorse-sandbox-office:libreoffice-7.4.7-bookworm"
+    )
+    $tempDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "seahorse-office-fixture-$([guid]::NewGuid().ToString('N'))"
+    New-Item -ItemType Directory -Path $tempDirectory -ErrorAction Stop | Out-Null
+    $sourcePath = Join-Path $tempDirectory "input.$SourceExtension"
+    $targetPath = Join-Path $tempDirectory "input.$TargetExtension"
+    try {
+        [System.IO.File]::WriteAllBytes($sourcePath, [Convert]::FromBase64String($SourceBase64))
+        $mountPath = $tempDirectory.Replace('\', '/')
+        & docker run --rm -v "${mountPath}:/work" $OfficeImage sh -lc "mkdir -p /tmp/libreoffice-profile && HOME=/tmp/libreoffice-profile libreoffice --headless --convert-to $TargetExtension --outdir /work /work/input.$SourceExtension" | Out-Null
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $targetPath)) {
+            throw "LibreOffice did not create .$TargetExtension fixture from .$SourceExtension"
+        }
+        return [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($targetPath))
+    } finally {
+        Remove-Item -LiteralPath $tempDirectory -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Invoke-OfficePdfConversionSmoke {
+    param(
+        [string]$SourceFormat,
+        [string]$Content,
+        [string]$Label
+    )
+    $toolCallId = "sandbox-file-convert-$SourceFormat-pdf-call-$suffix"
+    $stepId = "sandbox-file-convert-$SourceFormat-pdf-step-$suffix"
+    $observation = Test-Step "Invoke sandbox_file_convert $Label to PDF through Tool Gateway" {
+        $requestBody = @{
+            runId = $runId
+            stepId = $stepId
+            toolCallId = $toolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{
+                sourceFormat = $SourceFormat
+                targetFormat = "pdf"
+                contentEncoding = "base64"
+                content = $Content
+            }
+            resourceRefs = @{}
+            idempotencyKey = "${runId}:${toolCallId}"
+            allowedToolIds = @("sandbox_file_convert")
+        }
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert $Label to PDF"
+        if ($response.data.success -ne $true) {
+            throw "sandbox_file_convert $Label to PDF failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $parsed = "$($response.data.content)" | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION" -or "$($parsed.executionStatus)" -ne "SUCCEEDED") {
+            throw "Expected succeeded FILE_CONVERSION $Label to PDF execution: $($response.data.content)"
+        }
+        if ("$($parsed.conversion.sourceFormat)" -ne $SourceFormat -or "$($parsed.conversion.targetFormat)" -ne "pdf" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected $Label to PDF conversion metadata: $($response.data.content)"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1 -or "$($artifacts[0].mediaType)" -ne "application/pdf" -or "$($artifacts[0].scanStatus)" -ne "CLEAN" -or "$($artifacts[0].scanSummary)" -ne "metadata scan passed" -or $artifacts[0].promptVisible -ne $true) {
+            throw "Expected one prompt-visible clean $Label PDF artifact: $($response.data.content)"
+        }
+        $parsed
+    }
+    if (-not $observation) { exit 1 }
+
+    $artifactId = "$(@($observation.artifacts)[0].artifactId)"
+    $objectUri = Test-Step "Verify persisted $Label to PDF session and artifact" {
+        Assert-PersistedFileConversionArtifact -ArtifactId $artifactId -ExpectedMediaType "application/pdf" -Label "$Label to PDF"
+    }
+    if (-not $objectUri) { exit 1 }
+
+    Test-Step "Download converted $Label PDF through governed artifact endpoint" {
+        $downloadPath = Join-Path ([System.IO.Path]::GetTempPath()) "seahorse-$SourceFormat-pdf-$([guid]::NewGuid().ToString('N')).pdf"
+        try {
+            Invoke-WebRequest -Uri "$BaseUrl/api/sandbox/artifacts/$artifactId/download" -Headers $headers -OutFile $downloadPath -UseBasicParsing
+            $bytes = [System.IO.File]::ReadAllBytes($downloadPath)
+            if ($bytes.Length -lt 5 -or [System.Text.Encoding]::ASCII.GetString($bytes, 0, 5) -ne "%PDF-") {
+                throw "Downloaded $Label PDF was not a PDF"
+            }
+        } finally {
+            Remove-Item -LiteralPath $downloadPath -ErrorAction SilentlyContinue
+        }
+    } | Out-Null
+
+    if ($objectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted $Label PDF object exists in backend storage volume" {
+            $key = $objectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'")) { throw "Cannot safely shell-quote $Label to PDF key" }
+            & docker exec $BackendContainer sh -lc "test -s '$StorageRoot/sandbox-artifacts/$key'"
+            if ($LASTEXITCODE -ne 0) { throw "Stored $Label PDF object not found" }
+        } | Out-Null
+    }
+    return [PSCustomObject]@{ StepId = $stepId; Content = $Content }
+}
+
 function ConvertTo-PdfLiteral {
     param([string]$Value)
     return $Value.Replace('\', '\\').Replace('(', '\(').Replace(')', '\)')
@@ -2178,6 +2278,14 @@ try {
         } | Out-Null
     }
 
+    $odtPdfSource = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("Sandbox ODT PDF $Marker`nODT PDF conversion uses a LibreOffice-generated document."))
+    $odtPdfContent = Convert-OfficeFixtureToBase64 -SourceBase64 $odtPdfSource -SourceExtension "txt" -TargetExtension "odt"
+    $odtPdfObservation = Invoke-OfficePdfConversionSmoke -SourceFormat "odt" -Content $odtPdfContent -Label "ODT"
+
+    $odpPdfSource = New-PptxBase64 -Marker $Marker -SecondValue "ODP PDF conversion uses a LibreOffice-generated presentation"
+    $odpPdfContent = Convert-OfficeFixtureToBase64 -SourceBase64 $odpPdfSource -SourceExtension "pptx" -TargetExtension "odp"
+    $odpPdfObservation = Invoke-OfficePdfConversionSmoke -SourceFormat "odp" -Content $odpPdfContent -Label "ODP"
+
     $odsRunId = $runId
     $odsToolCallId = "sandbox-file-convert-ods-csv-call-$suffix"
     $odsContent = New-OdsBase64 -Marker $Marker -SecondValue "ODS conversion extracts first table"
@@ -2967,6 +3075,34 @@ try {
                     '"contentLength":'
                 )
                 Forbidden = @($Marker, "Sandbox PDF HTML", "PDF HTML conversion renders literal text", $pdfHtmlContent)
+            },
+            @{
+                StepId = "$($odtPdfObservation.StepId)"
+                Status = "SUCCEEDED"
+                Required = @(
+                    '"toolId":"sandbox_file_convert"',
+                    '"runtimeType":"FILE_CONVERSION"',
+                    '"sourceFormat":"odt"',
+                    '"targetFormat":"pdf"',
+                    '"contentEncoding":"base64"',
+                    '"binaryInput":true',
+                    '"networkRequested":false'
+                )
+                Forbidden = @($Marker, $odtPdfContent)
+            },
+            @{
+                StepId = "$($odpPdfObservation.StepId)"
+                Status = "SUCCEEDED"
+                Required = @(
+                    '"toolId":"sandbox_file_convert"',
+                    '"runtimeType":"FILE_CONVERSION"',
+                    '"sourceFormat":"odp"',
+                    '"targetFormat":"pdf"',
+                    '"contentEncoding":"base64"',
+                    '"binaryInput":true',
+                    '"networkRequested":false'
+                )
+                Forbidden = @($Marker, $odpPdfContent)
             },
             @{
                 StepId = "sandbox-file-convert-xlsx-csv-step-$suffix"
