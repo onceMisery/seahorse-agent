@@ -18,6 +18,8 @@ To prevent CSV formula injection from becoming executable workbook content, CSV-
 
 Calc-backed `XLSX -> PDF` rendering is also available through the same fixed Office export path used for documents and presentations. The generated PDF stays within the normal scanner and governed-download pipeline; this does not expose worksheet macro execution, print-configuration options, or arbitrary export arguments.
 
+`PPTX -> PNG` now renders only the first slide by exporting through Impress to a temporary PDF and rasterizing it through Poppler at the fixed 2048px longest-edge bound. Callers cannot select slide indices, export options, or arbitrary command arguments.
+
 Fresh real full-Docker evidence: the Office image was built through the local `7890` proxy, a direct read-only/no-network/capability-dropped UID `65532` DOCX render probe produced a valid `%PDF` artifact, and real Tool Gateway DOCX-to-PDF and PPTX-to-PDF flows completed after approval with `SUCCEEDED`, `application/pdf`, and ClamAV `CLEAN`; the DOCX path additionally verified persisted artifact storage and a governed download whose first bytes were `%PDF`. Docker Desktop host-drive mount sources are normalized to its daemon-visible `/run/desktop/mnt/host/<drive>/...` form before child-container execution so produced artifacts are collected from the same session workspace.
 
 The Poppler-enabled Office image was rebuilt through the same local proxy and a real Tool Gateway PDF-to-PNG invocation, using a previously governed clean PDF as its real binary input, completed after approval with `SUCCEEDED`, `image/png`, and `CLEAN` scan status.
@@ -31,6 +33,8 @@ A real full-Docker Tool Gateway CSV-to-XLSX invocation completed after approval 
 A real full-Docker formula-injection case submitted a CSV cell beginning with `=HYPERLINK(...)` through the approved Tool Gateway path. It failed closed before XLSX creation with the value-free formula-content error and no submitted formula text in the response.
 
 A real full-Docker Tool Gateway XLSX-to-PDF invocation, using a previously governed clean XLSX as its binary input, completed after approval with `SUCCEEDED`, `application/pdf`, and `CLEAN` scan status; the governed artifact download began with `%PDF`.
+
+A real full-Docker Tool Gateway PPTX-to-PNG invocation completed after approval with `SUCCEEDED`, `image/png`, and `CLEAN` scan status; its governed artifact download had the PNG magic bytes.
 
 Fresh real Docker evidence: the browser image was rebuilt through the local `7890` proxy, a direct non-root/read-only Chromium probe succeeded, `scripts/e2e-sandbox-python-tool-smoke.ps1` passed 5/5 with an in-sandbox effective-UID non-root assertion, and `scripts/e2e-sandbox-browser-tool-smoke.ps1 -SkipBrowserImageBuild` passed 37/37. The browser E2E covers inline and URL execution, DNS fail-closed behavior, session capture/replay, governed Profile lifecycle, HAR/video artifacts, audit summaries, and no leftover managed containers or non-terminal sessions. Its real 429 handling now uses bounded retry only for rate-limit responses.
 

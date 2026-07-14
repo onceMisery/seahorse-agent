@@ -1903,6 +1903,27 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     if result.returncode != 0 or not output_path.is_file() or output_path.stat().st_size == 0:
                         raise ValueError("pdf png rendering failed")
 
+                def pptx_to_png(path):
+                    rendered_pdf = output_path.with_suffix(".source.pdf")
+                    result = subprocess.run(
+                        ["soffice", "--headless", "--nologo", "--nodefault", "--nolockcheck", "--norestore",
+                         "--convert-to", "pdf", "--outdir", str(output_path.parent), str(path)],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=25)
+                    source_pdf = path.with_suffix(".pdf")
+                    if result.returncode != 0 or not source_pdf.is_file() or source_pdf.stat().st_size == 0:
+                        raise ValueError("pptx png rendering failed")
+                    source_pdf.replace(rendered_pdf)
+                    try:
+                        output_base = output_path.with_suffix("")
+                        rendered = subprocess.run(
+                            ["pdftoppm", "-f", "1", "-l", "1", "-scale-to", "2048", "-png", "-singlefile",
+                             str(rendered_pdf), str(output_base)],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=25)
+                        if rendered.returncode != 0 or not output_path.is_file() or output_path.stat().st_size == 0:
+                            raise ValueError("pptx png rendering failed")
+                    finally:
+                        rendered_pdf.unlink(missing_ok=True)
+
                 def pdf_to_ocr_text(path):
                     image_path = output_path.with_suffix(".png")
                     render = subprocess.run(
@@ -2003,6 +2024,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "pptx" and target_format == "pdf":
                     office_to_pdf(input_path)
                     print(f"rendered pptx presentation to pdf")
+                elif source_format == "pptx" and target_format == "png":
+                    pptx_to_png(input_path)
+                    print(f"rendered pptx first slide to png")
                 elif source_format == "pdf" and target_format == "txt":
                     output_path.write_text(pdf_to_text(input_path), encoding="utf-8")
                     print(f"converted pdf document to text")
@@ -2041,6 +2065,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || (DOCX_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
                 || (XLSX_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
                 || (PDF_FORMAT.equals(sourceFormat) && "png".equals(targetFormat))
+                || (PPTX_FORMAT.equals(sourceFormat) && "png".equals(targetFormat))
                 || (PDF_FORMAT.equals(sourceFormat) && "ocr_txt".equals(targetFormat))
                 || (PPTX_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat) || PDF_FORMAT.equals(targetFormat)))
@@ -3018,6 +3043,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || XLSX_FORMAT.equals(request.sourceFormat())))
                 || (PDF_FORMAT.equals(request.sourceFormat())
                 && ("png".equals(request.targetFormat()) || "ocr_txt".equals(request.targetFormat())))
+                || (PPTX_FORMAT.equals(request.sourceFormat()) && "png".equals(request.targetFormat()))
                 || (HTML_FORMAT.equals(request.sourceFormat()) && DOCX_FORMAT.equals(request.targetFormat()))
                 || (CSV_FORMAT.equals(request.sourceFormat()) && XLSX_FORMAT.equals(request.targetFormat()));
     }
