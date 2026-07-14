@@ -12,6 +12,8 @@ The same dedicated runtime now renders the first page of a base64 PDF to PNG thr
 
 The Office runtime now also supports bounded `HTML -> DOCX` generation through LibreOffice's explicit `Office Open XML Text` export filter. The generated DOCX is scanned and persisted as a governed binary artifact. It is intentionally not prompt-visible, so the Tool Gateway retains the session reference while operators retrieve it through the normal artifact API; this keeps arbitrary document packages out of model context.
 
+The same runtime supports bounded `CSV -> XLSX` creation through LibreOffice Calc's explicit `Calc MS Excel 2007 XML` export filter. It complements the existing conservative XLSX-to-CSV reader without exposing spreadsheet formulas, macros, or arbitrary LibreOffice options. Generated XLSX packages remain non-prompt-visible governed binary artifacts.
+
 Fresh real full-Docker evidence: the Office image was built through the local `7890` proxy, a direct read-only/no-network/capability-dropped UID `65532` DOCX render probe produced a valid `%PDF` artifact, and real Tool Gateway DOCX-to-PDF and PPTX-to-PDF flows completed after approval with `SUCCEEDED`, `application/pdf`, and ClamAV `CLEAN`; the DOCX path additionally verified persisted artifact storage and a governed download whose first bytes were `%PDF`. Docker Desktop host-drive mount sources are normalized to its daemon-visible `/run/desktop/mnt/host/<drive>/...` form before child-container execution so produced artifacts are collected from the same session workspace.
 
 The Poppler-enabled Office image was rebuilt through the same local proxy and a real Tool Gateway PDF-to-PNG invocation, using a previously governed clean PDF as its real binary input, completed after approval with `SUCCEEDED`, `image/png`, and `CLEAN` scan status.
@@ -19,6 +21,8 @@ The Poppler-enabled Office image was rebuilt through the same local proxy and a 
 The OCR-enabled Office image was rebuilt through the same proxy and exposed the `eng` Tesseract model. A real full-Docker Tool Gateway PDF-to-`ocr_txt` invocation used a visibly rendered text PDF fixture, completed after approval with `SUCCEEDED` and a `CLEAN` `text/plain` artifact, and its governed download contained `SEAHORSE OCR E2E VISIBLE TEXT 314159`.
 
 A real full-Docker Tool Gateway HTML-to-DOCX invocation completed after approval with `SUCCEEDED`; the generated DOCX was scanned `CLEAN`, persisted to object storage, downloaded through the governed artifact endpoint, and its `word/document.xml` contained `SEAHORSE HTML DOCX E2E`.
+
+A real full-Docker Tool Gateway CSV-to-XLSX invocation completed after approval with `SUCCEEDED`; its XLSX artifact was scanned `CLEAN`, persisted, downloaded through the governed endpoint, and `xl/sharedStrings.xml` retained the submitted `Ada` and `Grace` cell values.
 
 Fresh real Docker evidence: the browser image was rebuilt through the local `7890` proxy, a direct non-root/read-only Chromium probe succeeded, `scripts/e2e-sandbox-python-tool-smoke.ps1` passed 5/5 with an in-sandbox effective-UID non-root assertion, and `scripts/e2e-sandbox-browser-tool-smoke.ps1 -SkipBrowserImageBuild` passed 37/37. The browser E2E covers inline and URL execution, DNS fail-closed behavior, session capture/replay, governed Profile lifecycle, HAR/video artifacts, audit summaries, and no leftover managed containers or non-terminal sessions. Its real 429 handling now uses bounded retry only for rate-limit responses.
 

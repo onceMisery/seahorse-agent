@@ -1875,6 +1875,17 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     if rendered != output_path:
                         rendered.replace(output_path)
 
+                def csv_to_xlsx(path):
+                    result = subprocess.run(
+                        ["soffice", "--headless", "--nologo", "--nodefault", "--nolockcheck", "--norestore",
+                         "--convert-to", "xlsx:Calc MS Excel 2007 XML", "--outdir", str(output_path.parent), str(path)],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=25)
+                    rendered = path.with_suffix(".xlsx")
+                    if result.returncode != 0 or not rendered.is_file() or rendered.stat().st_size == 0:
+                        raise ValueError("csv xlsx conversion failed")
+                    if rendered != output_path:
+                        rendered.replace(output_path)
+
                 def pdf_to_png(path):
                     output_base = output_path.with_suffix("")
                     result = subprocess.run(
@@ -1914,6 +1925,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         encoding="utf-8",
                     )
                     print(f"converted {len(rows)} rows from {source_format} to json")
+                elif source_format == "csv" and target_format == "xlsx":
+                    csv_to_xlsx(input_path)
+                    print(f"converted csv worksheet to xlsx")
                 elif source_format == "json" and target_format in ("csv", "tsv"):
                     rows, fieldnames = read_json_rows()
                     with output_path.open("w", encoding="utf-8", newline="") as target:
@@ -2005,6 +2019,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
     private boolean isSupportedFileConversion(String sourceFormat, String targetFormat) {
         return (isDelimitedFileFormat(sourceFormat) && JSON_FORMAT.equals(targetFormat))
+                || (CSV_FORMAT.equals(sourceFormat) && XLSX_FORMAT.equals(targetFormat))
                 || (JSON_FORMAT.equals(sourceFormat) && isDelimitedFileFormat(targetFormat))
                 || (TXT_FORMAT.equals(sourceFormat) && HTML_FORMAT.equals(targetFormat))
                 || (HTML_FORMAT.equals(sourceFormat) && TXT_FORMAT.equals(targetFormat))
@@ -2993,7 +3008,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 && (DOCX_FORMAT.equals(request.sourceFormat()) || PPTX_FORMAT.equals(request.sourceFormat())))
                 || (PDF_FORMAT.equals(request.sourceFormat())
                 && ("png".equals(request.targetFormat()) || "ocr_txt".equals(request.targetFormat())))
-                || (HTML_FORMAT.equals(request.sourceFormat()) && DOCX_FORMAT.equals(request.targetFormat()));
+                || (HTML_FORMAT.equals(request.sourceFormat()) && DOCX_FORMAT.equals(request.targetFormat()))
+                || (CSV_FORMAT.equals(request.sourceFormat()) && XLSX_FORMAT.equals(request.targetFormat()));
     }
 
     private String memoryForRuntime(SandboxRuntimeType runtimeType) {
