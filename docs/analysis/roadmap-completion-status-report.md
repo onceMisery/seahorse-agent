@@ -1,5 +1,11 @@
 # 架构路线图近期与中期设计完成情况分析报告
 
+## 2026-07-14 Sandbox Artifact Scanner Health Evidence Update
+
+`SandboxArtifactScannerHealth` extends the existing scanner port and sandbox runtime inbound port with an availability projection. `DefaultSandboxArtifactScannerPort` is locally available, while `ClamAvSandboxArtifactScannerPort` issues a bounded clamd `PING` probe and reports only value-free availability. The sandbox Web controller exposes the result at `/api/sandbox/runtime/artifact-scanner-health` under the existing SANDBOX feature gate.
+
+Fresh evidence: focused kernel, Web, and container adapter compilation completed with `BUILD SUCCESS`; the full bootstrap reactor rebuilt and deployed to the local full-Docker backend; and `scripts/e2e-sandbox-artifact-storage-smoke.ps1 -VerifyExternalVirusScanner` passed 53/53. The live endpoint returned the external scanner id/mode and `AVAILABLE`, with no engine connection details in its API payload.
+
 ## 2026-07-14 Sandbox Session Node Assignment Evidence Update
 
 `SandboxSession` now carries an optional `runtimeNodeId`. After profile, policy, disk, and capacity admission succeed, `KernelSandboxRuntimeService` selects the available node from the existing runtime health projection and binds its id to the newly created session. The first supported implementation intentionally has one local container node, so this is a durable node-assignment and audit boundary rather than remote scheduling.

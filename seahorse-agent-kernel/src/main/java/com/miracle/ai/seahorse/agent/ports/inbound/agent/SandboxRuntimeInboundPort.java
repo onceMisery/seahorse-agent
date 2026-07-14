@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxBrowserProfile;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxEgressPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
@@ -54,6 +55,10 @@ public interface SandboxRuntimeInboundPort {
 
     default SandboxArtifactScannerPolicy inspectArtifactScannerPolicy() {
         return SandboxArtifactScannerPolicy.unavailable();
+    }
+
+    default SandboxArtifactScannerHealth inspectArtifactScannerHealth() {
+        return SandboxArtifactScannerHealth.unavailable();
     }
 
     SandboxRuntimeContainerReapResult reapOrphanedRuntimeContainers(boolean dryRun);

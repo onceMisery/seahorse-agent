@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitiv
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactRedactionSummary;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxBrowserProfile;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxBrowserProfileStatus;
@@ -581,6 +582,11 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     @Override
     public SandboxArtifactScannerPolicy inspectArtifactScannerPolicy() {
         return artifactScannerPort.describePolicy();
+    }
+
+    @Override
+    public SandboxArtifactScannerHealth inspectArtifactScannerHealth() {
+        return artifactScannerPort.describeHealth();
     }
 
     @Override

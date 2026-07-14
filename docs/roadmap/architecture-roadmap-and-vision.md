@@ -1,5 +1,11 @@
 # 架构路线图与未来展望
 
+## 2026-07-14 Update: Sandbox Artifact Scanner Health
+
+Sandbox Operations now exposes `GET /api/sandbox/runtime/artifact-scanner-health`. The read-only health projection reports scanner id, mode, external-engine posture, and an `AVAILABLE` or `UNAVAILABLE` result without exposing scanner hostnames, ports, signatures, paths, or exception text. The external ClamAV adapter actively probes clamd with its `PING` protocol; the default bounded local scanner reports available without adding a network dependency.
+
+Fresh real Docker evidence: `scripts/e2e-sandbox-artifact-storage-smoke.ps1 -VerifyExternalVirusScanner` passed 53/53, including a live ClamAV health probe and the existing signed-malware artifact block, storage, API redaction, and node-assignment assertions.
+
 ## 2026-07-14 Update: Sandbox Session Node Assignment
 
 Sandbox sessions now persist the runtime node selected at admission. The current scheduler deliberately selects the single healthy local container node (`local-container-docker`) only after the existing runtime admission checks pass; rejected sessions have no node assignment. `runtime_node_id` is stored on `sa_sandbox_session`, exposed through the existing session API, and retained through close and timeout transitions. This makes node assignment auditable today without claiming remote execution, multi-node placement, migration, or failover that do not exist yet.

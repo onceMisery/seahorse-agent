@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSan
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanResult;
@@ -37,6 +38,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
 /** Streams local artifacts to clamd, then applies local policy without persisting engine findings. */
@@ -106,12 +108,31 @@ final class ClamAvSandboxArtifactScannerPort implements SandboxArtifactScannerPo
                 unsupported);
     }
 
+    @Override
+    public SandboxArtifactScannerHealth describeHealth() {
+        boolean available = false;
+        try (Socket socket = new Socket()) {
+            int timeoutMillis = timeoutMillis();
+            socket.connect(new InetSocketAddress(properties.getExternalVirusScannerHost(),
+                    properties.getExternalVirusScannerPort()), timeoutMillis);
+            socket.setSoTimeout(timeoutMillis);
+            socket.getOutputStream().write("zPING\0".getBytes(StandardCharsets.US_ASCII));
+            socket.getOutputStream().flush();
+            available = "PONG".equals(readResponse(socket.getInputStream()));
+        } catch (IOException exception) {
+            available = false;
+        }
+        return new SandboxArtifactScannerHealth(
+                Instant.now(), "clamav-plus-local-bounded", "LOCAL_BOUNDED_AND_EXTERNAL_CLAMAV",
+                available ? SandboxArtifactScannerHealth.STATUS_AVAILABLE : SandboxArtifactScannerHealth.STATUS_UNAVAILABLE,
+                true, available);
+    }
+
     private boolean scanWithClamAv(Path file) throws IOException {
         if (Files.size(file) > properties.getMaxSessionFileBytes()) {
             throw new IOException("artifact exceeds external scanner request limit");
         }
-        Duration timeout = properties.getExternalVirusScannerTimeout();
-        int timeoutMillis = Math.toIntExact(Math.min(timeout.toMillis(), Integer.MAX_VALUE));
+        int timeoutMillis = timeoutMillis();
         try (Socket socket = new Socket()) {
             socket.connect(new InetSocketAddress(properties.getExternalVirusScannerHost(),
                     properties.getExternalVirusScannerPort()), timeoutMillis);
@@ -171,6 +192,11 @@ final class ClamAvSandboxArtifactScannerPort implements SandboxArtifactScannerPo
             }
         }
         return response.toString(StandardCharsets.US_ASCII).trim();
+    }
+
+    private int timeoutMillis() {
+        Duration timeout = properties.getExternalVirusScannerTimeout();
+        return Math.toIntExact(Math.min(timeout.toMillis(), Integer.MAX_VALUE));
     }
 
     private static SandboxArtifactScanResult blocked(SandboxArtifact artifact, String category) {

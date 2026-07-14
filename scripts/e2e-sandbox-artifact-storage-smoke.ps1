@@ -753,6 +753,22 @@ try {
         }
     } | Out-Null
 
+    Test-Step "Inspect sandbox artifact scanner health" {
+        $response = Invoke-Json -Method GET -Path "/api/sandbox/runtime/artifact-scanner-health" -Headers $headers
+        Assert-ApiOk $response "Inspect sandbox artifact scanner health"
+        $expectedScannerId = if ($VerifyExternalVirusScanner) { "clamav-plus-local-bounded" } else { "default-local-bounded" }
+        if ("$($response.data.scannerId)" -ne $expectedScannerId -or "$($response.data.status)" -ne "AVAILABLE" -or $response.data.available -ne $true) {
+            throw "Expected available $expectedScannerId scanner health: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($response.data.externalEngine -ne $VerifyExternalVirusScanner) {
+            throw "Unexpected externalEngine scanner health posture: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $scannerHealthJson = $response.data | ConvertTo-Json -Depth 20 -Compress
+        if ($scannerHealthJson -match "clamav:|3310|$SandboxWorkspaceRoot") {
+            throw "Sandbox artifact scanner health leaked engine or workspace details: $scannerHealthJson"
+        }
+    } | Out-Null
+
     if ($VerifyExternalVirusScanner) {
         $virusMarker = "external scanner artifact"
         $virusCode = @'

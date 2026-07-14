@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScannerHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanResult;
@@ -28,6 +29,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanner
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -266,6 +268,13 @@ public class DefaultSandboxArtifactScannerPort implements SandboxArtifactScanner
                         "LibreOffice/Tika conversion",
                         "macro execution or parsing",
                         "general binary conversion"));
+    }
+
+    @Override
+    public SandboxArtifactScannerHealth describeHealth() {
+        return new SandboxArtifactScannerHealth(
+                Instant.now(), SCANNER_ID, SCANNER_MODE,
+                SandboxArtifactScannerHealth.STATUS_AVAILABLE, false, true);
     }
 
     private static List<String> promptSafeMediaTypes() {
