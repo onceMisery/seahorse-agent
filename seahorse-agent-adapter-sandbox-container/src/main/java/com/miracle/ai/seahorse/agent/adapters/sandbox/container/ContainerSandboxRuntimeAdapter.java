@@ -1877,6 +1877,22 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     if result.returncode != 0 or not output_path.is_file() or output_path.stat().st_size == 0:
                         raise ValueError("pdf png rendering failed")
 
+                def pdf_to_ocr_text(path):
+                    image_path = output_path.with_suffix(".png")
+                    render = subprocess.run(
+                        ["pdftoppm", "-f", "1", "-l", "1", "-scale-to", "2048", "-png", "-singlefile",
+                         str(path), str(image_path.with_suffix(""))],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=25)
+                    if render.returncode != 0 or not image_path.is_file() or image_path.stat().st_size == 0:
+                        raise ValueError("pdf ocr rendering failed")
+                    recognized = subprocess.run(
+                        ["tesseract", str(image_path), "stdout", "-l", "eng"],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=25)
+                    image_path.unlink(missing_ok=True)
+                    if recognized.returncode != 0:
+                        raise ValueError("pdf ocr failed")
+                    output_path.write_text(recognized.stdout, encoding="utf-8")
+
                 if target_format == "json" and source_format in ("csv", "tsv"):
                     with input_path.open("r", encoding="utf-8-sig", newline="") as source:
                         reader = csv.DictReader(source, delimiter=delimiter(source_format))
@@ -1961,6 +1977,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "pdf" and target_format == "png":
                     pdf_to_png(input_path)
                     print(f"rendered pdf first page to png")
+                elif source_format == "pdf" and target_format == "ocr_txt":
+                    pdf_to_ocr_text(input_path)
+                    print(f"ocr rendered pdf first page")
                 else:
                     raise ValueError(f"unsupported conversion: {source_format} to {target_format}")
                 """.formatted(
@@ -1984,6 +2003,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat)))
                 || (DOCX_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
                 || (PDF_FORMAT.equals(sourceFormat) && "png".equals(targetFormat))
+                || (PDF_FORMAT.equals(sourceFormat) && "ocr_txt".equals(targetFormat))
                 || (PPTX_FORMAT.equals(sourceFormat)
                 && (HTML_FORMAT.equals(targetFormat) || TXT_FORMAT.equals(targetFormat) || PDF_FORMAT.equals(targetFormat)))
                 || ((XLSX_FORMAT.equals(sourceFormat) || ODS_FORMAT.equals(sourceFormat))
@@ -2022,6 +2042,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     }
 
     private String fileConversionOutputName(String targetFormat) {
+        if ("ocr_txt".equals(targetFormat)) {
+            return "converted.txt";
+        }
         return "converted." + targetFormat;
     }
 
@@ -2953,7 +2976,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static boolean requiresOfficeRenderer(FileConversionRequest request) {
         return (PDF_FORMAT.equals(request.targetFormat())
                 && (DOCX_FORMAT.equals(request.sourceFormat()) || PPTX_FORMAT.equals(request.sourceFormat())))
-                || (PDF_FORMAT.equals(request.sourceFormat()) && "png".equals(request.targetFormat()));
+                || (PDF_FORMAT.equals(request.sourceFormat())
+                && ("png".equals(request.targetFormat()) || "ocr_txt".equals(request.targetFormat())));
     }
 
     private String memoryForRuntime(SandboxRuntimeType runtimeType) {
