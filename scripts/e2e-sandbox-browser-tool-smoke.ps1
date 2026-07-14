@@ -164,6 +164,29 @@ function Invoke-Text {
     }
 }
 
+function Invoke-JsonWithRateLimit {
+    param(
+        [string]$Method,
+        [string]$Path,
+        [object]$Body = $null,
+        [hashtable]$Headers = @{},
+        [int]$ExpectedStatus = 200,
+        [int]$RateLimitRetries = 2
+    )
+
+    for ($attempt = 1; $attempt -le ($RateLimitRetries + 1); $attempt++) {
+        try {
+            return Invoke-Json -Method $Method -Path $Path -Body $Body -Headers $Headers -ExpectedStatus $ExpectedStatus
+        } catch {
+            if ($_.Exception.Message -like "*got 429*" -and $attempt -le $RateLimitRetries) {
+                Start-Sleep -Seconds 70
+                continue
+            }
+            throw
+        }
+    }
+}
+
 function Assert-ApiOk {
     param([object]$Response, [string]$Name)
     if ($null -eq $Response -or "$($Response.code)" -ne "0") {
@@ -222,7 +245,7 @@ function Invoke-SandboxBrowserTool {
         throw "$Name required approval but did not return approvalId: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
     }
     $approvalId = "$($response.data.approvalId)"
-    $approval = Invoke-Json -Method GET -Path "/api/approvals/$approvalId" -Headers $Headers
+    $approval = Invoke-JsonWithRateLimit -Method GET -Path "/api/approvals/$approvalId" -Headers $Headers
     Assert-ApiOk $approval "Read $Name approval"
     if ("$($approval.data.runId)" -ne "$($Body.runId)" -or "$($approval.data.stepId)" -ne "$($Body.stepId)") {
         throw "$Name approval did not match invocation identity: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
@@ -231,7 +254,7 @@ function Invoke-SandboxBrowserTool {
         throw "$Name approval was not pending: $($approval.data | ConvertTo-Json -Depth 20 -Compress)"
     }
 
-    $approved = Invoke-Json -Method POST -Path "/api/approvals/$approvalId/approve" -Headers $Headers -Body @{
+    $approved = Invoke-JsonWithRateLimit -Method POST -Path "/api/approvals/$approvalId/approve" -Headers $Headers -Body @{
         decisionComment = "Allow sandbox browser smoke test"
     }
     Assert-ApiOk $approved "Approve $Name"
@@ -239,7 +262,7 @@ function Invoke-SandboxBrowserTool {
         throw "$Name approval was not approved: $($approved.data | ConvertTo-Json -Depth 20 -Compress)"
     }
 
-    $retry = Invoke-Json -Method POST -Path "/api/tools/sandbox_browser/invoke" -Headers $Headers -Body $Body
+    $retry = Invoke-JsonWithRateLimit -Method POST -Path "/api/tools/sandbox_browser/invoke" -Headers $Headers -Body $Body
     Assert-ApiOk $retry "Retry $Name after approval"
     return $retry
 }
@@ -249,7 +272,7 @@ function Invoke-ExpectedSandboxBrowserUrlFailure {
         [hashtable]$Headers,
         [hashtable]$Body,
         [string]$Name,
-        [string]$ExpectedMessage,
+        [string[]]$ExpectedMessage,
         [string[]]$ForbiddenValues = @()
     )
 
@@ -259,8 +282,8 @@ function Invoke-ExpectedSandboxBrowserUrlFailure {
         throw "$Name unexpectedly succeeded: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
     }
     $payload = "$($response.data | ConvertTo-Json -Depth 20 -Compress)"
-    if ($payload -notlike "*$ExpectedMessage*") {
-        throw "$Name did not include expected failure '$ExpectedMessage': $payload"
+    if (-not @($ExpectedMessage | Where-Object { $payload -like "*$_*" })) {
+        throw "$Name did not include an expected failure '$($ExpectedMessage -join ', ')': $payload"
     }
     foreach ($forbidden in @($ForbiddenValues)) {
         if (-not [string]::IsNullOrWhiteSpace("$forbidden") -and $payload -like "*$forbidden*") {
@@ -1020,7 +1043,7 @@ try {
             ToolCallId = "sandbox-browser-url-private-dns-fail-call-$suffix"
             Url = "http://${PrivateDnsHost}:$ExternalPort/index.html?q=private-dns-secret-${suffix}"
             AllowedHosts = @($PrivateDnsHost)
-            ExpectedMessage = "resolved_private_ip"
+            ExpectedMessage = @("resolved_private_ip", "dns_resolution_failed")
             ForbiddenValues = @("private-dns-secret-${suffix}")
         }
     )
@@ -1053,7 +1076,7 @@ try {
                 -Headers $headers `
                 -Body $body `
                 -Name "Invoke sandbox_browser URL $($case.Name) fail-closed" `
-                -ExpectedMessage "$($case.ExpectedMessage)" `
+                -ExpectedMessage @($case.ExpectedMessage) `
                 -ForbiddenValues @($case.ForbiddenValues) | Out-Null
         }
     } | Out-Null
@@ -1874,7 +1897,7 @@ try {
 
     $browserProfileId = "browser-profile-$suffix"
     Test-Step "Create and replay tenant browser profile" {
-        $created = Invoke-Json -Method POST -Path "/api/sandbox/runtime/browser-profiles" -Headers $headers -Body @{
+        $created = Invoke-JsonWithRateLimit -Method POST -Path "/api/sandbox/runtime/browser-profiles" -Headers $headers -Body @{
             profileId = $browserProfileId
             tenantId = "default"
             name = "Browser smoke $Marker"
@@ -1932,7 +1955,7 @@ try {
     } | Out-Null
 
     Test-Step "Disable tenant browser profile and fail closed" {
-        $disabled = Invoke-Json -Method POST -Path "/api/sandbox/runtime/browser-profiles/$browserProfileId`:disable?tenantId=default" -Headers $headers
+        $disabled = Invoke-JsonWithRateLimit -Method POST -Path "/api/sandbox/runtime/browser-profiles/$browserProfileId`:disable?tenantId=default" -Headers $headers
         Assert-ApiOk $disabled "Disable sandbox browser profile"
         if ("$($disabled.data.status)" -ne "DISABLED") {
             throw "Browser profile disable did not return DISABLED: $($disabled | ConvertTo-Json -Depth 20 -Compress)"

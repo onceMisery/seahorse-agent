@@ -1,5 +1,11 @@
 # 架构路线图与未来展望
 
+## 2026-07-14 Update: Non-Root Container Sandbox Execution
+
+Container sandbox processes now run as the dedicated non-root `65532:65532` identity by default. Session workspace preparation grants only the per-session directory the access needed for that identity to write generated output; the existing read-only root filesystem, dropped capabilities, `no-new-privileges`, network boundary, and file-size limit remain in effect. The project browser runtime image now includes the same named system user, with temporary HOME/cache paths rooted in the existing writable `/tmp` tmpfs.
+
+Fresh real Docker evidence: the browser image was rebuilt through the local `7890` proxy, a direct non-root/read-only Chromium probe succeeded, `scripts/e2e-sandbox-python-tool-smoke.ps1` passed 5/5 with an in-sandbox effective-UID non-root assertion, and `scripts/e2e-sandbox-browser-tool-smoke.ps1 -SkipBrowserImageBuild` passed 37/37. The browser E2E covers inline and URL execution, DNS fail-closed behavior, session capture/replay, governed Profile lifecycle, HAR/video artifacts, audit summaries, and no leftover managed containers or non-terminal sessions. Its real 429 handling now uses bounded retry only for rate-limit responses.
+
 ## 2026-07-14 Update: Bounded PDF Tail Scanning and File Quota Correction
 
 The local bounded scanner now checks both the leading and trailing `256 KiB` windows of a local PDF for active-content markers. This closes the simple bypass where a `/JavaScript`, `/OpenAction`, or other active action appeared only after the leading scan window. Both windows remain bounded; the scanner does not render or fully parse PDFs, extract attachments, perform OCR, or retain raw marker values.

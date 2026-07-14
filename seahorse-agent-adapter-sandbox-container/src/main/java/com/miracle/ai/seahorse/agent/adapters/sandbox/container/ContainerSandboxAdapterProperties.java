@@ -65,6 +65,8 @@ public class ContainerSandboxAdapterProperties {
 
     private boolean readOnlyRootFilesystem = true;
 
+    private String runAsUser = "65532:65532";
+
     private long maxSessionFileBytes = 64L * 1024L * 1024L;
 
     private boolean externalVirusScannerEnabled;
@@ -245,6 +247,14 @@ public class ContainerSandboxAdapterProperties {
 
     public void setReadOnlyRootFilesystem(boolean readOnlyRootFilesystem) {
         this.readOnlyRootFilesystem = readOnlyRootFilesystem;
+    }
+
+    public String getRunAsUser() {
+        return runAsUser;
+    }
+
+    public void setRunAsUser(String runAsUser) {
+        this.runAsUser = requireTextOrDefault(runAsUser, "65532:65532");
     }
 
     public long getMaxSessionFileBytes() {

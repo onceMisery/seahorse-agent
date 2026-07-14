@@ -8,3 +8,5 @@ with sync_playwright() as playwright:
     browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
     browser.close()
 PY
+
+RUN useradd --system --uid 65532 --create-home --shell /usr/sbin/nologin sandbox

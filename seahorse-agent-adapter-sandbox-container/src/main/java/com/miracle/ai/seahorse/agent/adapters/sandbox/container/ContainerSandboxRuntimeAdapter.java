@@ -198,6 +198,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         try {
             Path workspace = workspaceForSession(session.sessionId());
             Files.createDirectories(workspace);
+            prepareWorkspacePermissions(workspace);
             validateContainerNetworkBoundary(session.runtimeType(), safeRequest.networkRequested());
             Set<Path> excludedArtifacts = prepareWorkspace(
                     session.runtimeType(),
@@ -349,6 +350,15 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             return Set.copyOf(excluded);
         }
         throw new IllegalArgumentException("unsupported sandbox runtime type: " + runtimeType);
+    }
+
+    private static void prepareWorkspacePermissions(Path workspace) throws IOException {
+        java.io.File directory = workspace.toFile();
+        if (!directory.setReadable(true, false)
+                || !directory.setWritable(true, false)
+                || !directory.setExecutable(true, false)) {
+            throw new IOException("sandbox workspace permissions could not be prepared");
+        }
     }
 
     private void validateContainerNetworkBoundary(SandboxRuntimeType runtimeType, boolean networkRequested) {
@@ -2740,6 +2750,12 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         }
         commandLine.add("--ulimit");
         commandLine.add("fsize=" + maxSessionFileLimit() + ":" + maxSessionFileLimit());
+        commandLine.add("--user");
+        commandLine.add(properties.getRunAsUser());
+        commandLine.add("-e");
+        commandLine.add("HOME=/tmp");
+        commandLine.add("-e");
+        commandLine.add("XDG_CACHE_HOME=/tmp/.cache");
         commandLine.add("-v");
         commandLine.add(mountSourceForSession(session.sessionId(), workspace) + ":" + CONTAINER_WORKSPACE + ":rw");
         commandLine.add("-w");
