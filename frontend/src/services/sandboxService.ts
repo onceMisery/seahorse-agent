@@ -181,6 +181,15 @@ export interface SandboxArtifactScannerPolicy {
   unsupportedCapabilities?: string[];
 }
 
+export interface SandboxArtifactScannerHealth {
+  checkedAt?: string;
+  scannerId?: string;
+  scannerMode?: string;
+  status?: "AVAILABLE" | "UNAVAILABLE" | string;
+  externalEngine?: boolean;
+  available?: boolean;
+}
+
 export interface SandboxToolQuotaPolicyPayload {
   policyId?: string;
   tenantId: string;
@@ -371,6 +380,10 @@ export function getSandboxRuntimeNodes() {
 
 export function getSandboxArtifactScannerPolicy() {
   return api.get<SandboxArtifactScannerPolicy>(`${SANDBOX_API_PREFIX}/runtime/artifact-scanner-policy`);
+}
+
+export function getSandboxArtifactScannerHealth() {
+  return api.get<SandboxArtifactScannerHealth>(`${SANDBOX_API_PREFIX}/runtime/artifact-scanner-health`);
 }
 
 export function getSandboxRuntimeProfiles(tenantId = currentTenantId()) {

@@ -20,6 +20,7 @@ import {
   listSandboxArtifacts,
   sweepExpiredSandboxSessions,
   sweepOrphanedSandboxRuntimeResources,
+  getSandboxArtifactScannerHealth,
   getSandboxArtifactScannerPolicy,
   getSandboxRuntimeHealth,
   getSandboxRuntimeNodes,
@@ -37,6 +38,7 @@ import {
   type SandboxExecutionResult,
   type SandboxArtifact,
   type SandboxArtifactDetail,
+  type SandboxArtifactScannerHealth,
   type SandboxArtifactScannerPolicy,
   type SandboxRuntimeHealth,
   type SandboxRuntimeNodeHealth,
@@ -105,6 +107,12 @@ function runtimeProfileBadgeVariant(status?: string): "default" | "secondary" | 
 function nodeAdmissionBadgeVariant(status?: string): "default" | "secondary" | "destructive" {
   if (status === "AVAILABLE") return "default";
   if (status === "UNAVAILABLE" || status === "DISK_LOW" || status === "SATURATED") return "destructive";
+  return "secondary";
+}
+
+function scannerHealthBadgeVariant(status?: string): "default" | "secondary" | "destructive" {
+  if (status === "AVAILABLE") return "default";
+  if (status === "UNAVAILABLE") return "destructive";
   return "secondary";
 }
 
@@ -199,6 +207,7 @@ function RuntimeGovernancePanel({
   health,
   nodes,
   profiles,
+  scannerHealth,
   scannerPolicy,
   loading,
   error,
@@ -211,6 +220,7 @@ function RuntimeGovernancePanel({
   health: SandboxRuntimeHealth | null;
   nodes: SandboxRuntimeNodeHealth[];
   profiles: SandboxRuntimeProfilesResponse | null;
+  scannerHealth: SandboxArtifactScannerHealth | null;
   scannerPolicy: SandboxArtifactScannerPolicy | null;
   loading: boolean;
   error: string | null;
@@ -279,7 +289,7 @@ function RuntimeGovernancePanel({
           </div>
         )}
 
-        {!error && loading && !health && nodeRows.length === 0 && !profiles && !scannerPolicy && (
+        {!error && loading && !health && nodeRows.length === 0 && !profiles && !scannerHealth && !scannerPolicy && (
           <div className="grid gap-3 sm:grid-cols-3">
             {[0, 1, 2].map((item) => (
               <div key={item} className="h-20 animate-pulse rounded border border-slate-100 bg-slate-50" />
@@ -287,11 +297,11 @@ function RuntimeGovernancePanel({
           </div>
         )}
 
-        {!loading && !error && !health && nodeRows.length === 0 && !profiles && !scannerPolicy && (
+        {!loading && !error && !health && nodeRows.length === 0 && !profiles && !scannerHealth && !scannerPolicy && (
           <div className="text-sm text-muted-foreground">No runtime governance data</div>
         )}
 
-        {(health || nodeRows.length > 0 || profiles || scannerPolicy) && (
+        {(health || nodeRows.length > 0 || profiles || scannerHealth || scannerPolicy) && (
           <>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded border border-slate-100 bg-slate-50 p-3">
@@ -477,8 +487,8 @@ function RuntimeGovernancePanel({
               </div>
             )}
 
-            {scannerPolicy && (
-              <div className="rounded border border-slate-100 bg-white p-3">
+            {(scannerPolicy || scannerHealth) && (
+              <div className="rounded border border-slate-100 bg-white p-3" data-testid="sandbox-artifact-scanner-panel">
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
@@ -486,22 +496,29 @@ function RuntimeGovernancePanel({
                       Artifact scanner
                     </div>
                     <div className="mt-1 truncate font-mono text-sm text-slate-800">
-                      {scannerPolicy.scannerId || "unknown"}
+                      {scannerHealth?.scannerId || scannerPolicy?.scannerId || "unknown"}
                     </div>
                     <div className="truncate text-xs text-muted-foreground">
-                      {scannerPolicy.scannerMode || "UNKNOWN"}
+                      {scannerHealth?.scannerMode || scannerPolicy?.scannerMode || "UNKNOWN"}
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Badge variant={scannerPolicy.failClosed ? "default" : "destructive"}>
-                      {scannerPolicy.failClosed ? "FAIL CLOSED" : "OPEN"}
-                    </Badge>
-                    <Badge variant={scannerPolicy.rawFindingValuesPersisted ? "destructive" : "secondary"}>
-                      {scannerPolicy.rawFindingValuesPersisted ? "RAW VALUES" : "VALUE-FREE"}
-                    </Badge>
+                  <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                    {scannerHealth && (
+                      <Badge variant={scannerHealthBadgeVariant(scannerHealth.status)} data-testid="sandbox-artifact-scanner-health">
+                        {scannerHealth.status || "UNKNOWN"}
+                      </Badge>
+                    )}
+                    {scannerPolicy && <>
+                      <Badge variant={scannerPolicy.failClosed ? "default" : "destructive"}>
+                        {scannerPolicy.failClosed ? "FAIL CLOSED" : "OPEN"}
+                      </Badge>
+                      <Badge variant={scannerPolicy.rawFindingValuesPersisted ? "destructive" : "secondary"}>
+                        {scannerPolicy.rawFindingValuesPersisted ? "RAW VALUES" : "VALUE-FREE"}
+                      </Badge>
+                    </>}
                   </div>
                 </div>
-                <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+                {scannerPolicy && <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
                   <div>
                     <div className="uppercase text-muted-foreground">Window</div>
                     <div className="mt-1 font-mono text-slate-700">{formatScannerWindow(scannerPolicy)}</div>
@@ -524,7 +541,7 @@ function RuntimeGovernancePanel({
                       {previewList(scannerPolicy.unsupportedCapabilities, 3)}
                     </div>
                   </div>
-                </div>
+                </div>}
               </div>
             )}
 
@@ -845,6 +862,7 @@ export function SandboxPage() {
   const [browserProfileExpiresAt, setBrowserProfileExpiresAt] = useState("");
   const [savingBrowserProfile, setSavingBrowserProfile] = useState(false);
   const [artifactScannerPolicy, setArtifactScannerPolicy] = useState<SandboxArtifactScannerPolicy | null>(null);
+  const [artifactScannerHealth, setArtifactScannerHealth] = useState<SandboxArtifactScannerHealth | null>(null);
   const [loadingRuntimeGovernance, setLoadingRuntimeGovernance] = useState(false);
   const [runtimeGovernanceError, setRuntimeGovernanceError] = useState<string | null>(null);
   const [savingEgressPolicy, setSavingEgressPolicy] = useState(false);
@@ -900,17 +918,19 @@ export function SandboxPage() {
       setLoadingRuntimeGovernance(true);
       setRuntimeGovernanceError(null);
       const tenantId = currentSandboxTenantId();
-      const [health, nodes, profiles, scannerPolicy, profileList] = await Promise.all([
+      const [health, nodes, profiles, scannerPolicy, scannerHealth, profileList] = await Promise.all([
         getSandboxRuntimeHealth(),
         getSandboxRuntimeNodes(),
         getSandboxRuntimeProfiles(tenantId),
         getSandboxArtifactScannerPolicy(),
+        getSandboxArtifactScannerHealth(),
         listSandboxBrowserProfiles(tenantId)
       ]);
       setRuntimeHealth(health || null);
       setRuntimeNodes(nodes || []);
       setRuntimeProfiles(profiles || null);
       setArtifactScannerPolicy(scannerPolicy || null);
+      setArtifactScannerHealth(scannerHealth || null);
       setBrowserProfiles(profileList || []);
       if (showToast) {
         toast.success(`Runtime ${health?.status || "UNKNOWN"} / ${profiles?.defaultNetworkPolicy || "DENY_ALL"}`);
@@ -1363,6 +1383,7 @@ export function SandboxPage() {
             health={runtimeHealth}
             nodes={runtimeNodes}
             profiles={runtimeProfiles}
+            scannerHealth={artifactScannerHealth}
             scannerPolicy={artifactScannerPolicy}
             loading={loadingRuntimeGovernance}
             error={runtimeGovernanceError}

@@ -39,6 +39,7 @@ const browserSessionArtifactId = readArg(
   "--browser-session-artifact-id",
   process.env.E2E_BROWSER_SESSION_ARTIFACT_ID || ""
 ).trim();
+const verifyExternalVirusScanner = hasFlag("--verify-external-virus-scanner");
 const artifactDir = path.resolve(readArg(
   "--artifact-dir",
   process.env.E2E_ARTIFACT_DIR || path.join(repoRoot, "output", "playwright", "artifacts")
@@ -181,6 +182,16 @@ try {
   const runtimeProfiles = await api("/api/sandbox/runtime/profiles?tenantId=default");
   const originalEgressPolicy = await api("/api/sandbox/runtime/egress-policy?tenantId=default");
   const runtimeHealth = await api("/api/sandbox/runtime/health");
+  const scannerHealth = await api("/api/sandbox/runtime/artifact-scanner-health");
+  const expectedScannerId = verifyExternalVirusScanner ? "clamav-plus-local-bounded" : "default-local-bounded";
+  if (scannerHealth?.scannerId !== expectedScannerId || scannerHealth?.status !== "AVAILABLE"
+      || scannerHealth?.available !== true || scannerHealth?.externalEngine !== verifyExternalVirusScanner) {
+    throw new Error(`Unexpected artifact scanner health: ${JSON.stringify(scannerHealth)}`);
+  }
+  const scannerHealthJson = JSON.stringify(scannerHealth);
+  if (/clamav:|3310|SEAHORSE-CLAMAV-E2E-MARKER|sandbox-workspaces/i.test(scannerHealthJson)) {
+    throw new Error(`Artifact scanner health leaked runtime details: ${scannerHealthJson}`);
+  }
   if (runtimeHealth?.runtime === "container" && (runtimeHealth.dropAllCapabilities !== true
       || runtimeHealth.noNewPrivileges !== true
       || runtimeHealth.readOnlyRootFilesystem !== true
@@ -294,6 +305,15 @@ try {
       await assertLocatorText(page.getByTestId("sandbox-runtime-isolation-posture"), "no caps", "Sandbox isolation posture");
       await assertLocatorText(page.getByTestId("sandbox-runtime-isolation-posture"), "no new privs", "Sandbox isolation posture");
       await assertLocatorText(page.getByTestId("sandbox-runtime-file-quota"), "64 MB", "Sandbox file quota");
+    }
+    const scannerPanel = page.getByTestId("sandbox-artifact-scanner-panel");
+    await scannerPanel.waitFor({ state: "visible", timeout: 20000 });
+    await assertLocatorText(scannerPanel, expectedScannerId, "Artifact scanner panel");
+    await assertLocatorText(scannerPanel, scannerHealth.scannerMode, "Artifact scanner panel");
+    await assertLocatorText(page.getByTestId("sandbox-artifact-scanner-health"), "AVAILABLE", "Artifact scanner health");
+    const scannerPanelText = await scannerPanel.innerText();
+    if (/clamav:|3310|SEAHORSE-CLAMAV-E2E-MARKER|sandbox-workspaces/i.test(scannerPanelText)) {
+      throw new Error(`Artifact scanner panel leaked runtime details: ${scannerPanelText}`);
     }
 
     const egressSmokeHost = `aaa-egress-policy-page-smoke-${Date.now()}.invalid`;
@@ -505,6 +525,7 @@ try {
     console.log(`Private network exceptions: ${privateNetworkAllowedHosts.length} hosts`);
     console.log(`Saved private network exceptions: ${savedEgressPolicy.browserPrivateNetworkAllowedHosts.length} hosts`);
     console.log(`Browser runtime network policy: ${savedProfilePolicy.networkAllowed}`);
+    console.log(`Artifact scanner: ${scannerHealth.scannerId} / ${scannerHealth.status}`);
     if (createdBrowserProfileId) console.log(`Browser profile: ${createdBrowserProfileId}`);
     console.log(`Policy: ${policyId}`);
     console.log(`Screenshot: ${screenshotPath}`);

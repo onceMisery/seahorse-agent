@@ -577,6 +577,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/sandbox/runtime/artifact-scanner-health"
+  },
+  {
+    "method": "GET",
     "path": "/api/sandbox/runtime/artifact-scanner-policy"
   },
   {
