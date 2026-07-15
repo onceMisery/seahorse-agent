@@ -2861,6 +2861,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 properties.isNoNewPrivileges(),
                 properties.isReadOnlyRootFilesystem(),
                 properties.getMaxSessionFileBytes(),
+                MAX_SESSION_WORKSPACE_FILES,
                 failureMessages);
     }
 

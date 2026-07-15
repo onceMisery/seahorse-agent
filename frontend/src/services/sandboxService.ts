@@ -76,6 +76,7 @@ export interface SandboxRuntimeHealth {
   noNewPrivileges?: boolean;
   readOnlyRootFilesystem?: boolean;
   maxSessionFileBytes?: number;
+  maxSessionWorkspaceFiles?: number;
   failureMessages?: string[];
 }
 

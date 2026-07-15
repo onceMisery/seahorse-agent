@@ -192,10 +192,14 @@ try {
   if (/clamav:|3310|SEAHORSE-CLAMAV-E2E-MARKER|sandbox-workspaces/i.test(scannerHealthJson)) {
     throw new Error(`Artifact scanner health leaked runtime details: ${scannerHealthJson}`);
   }
-  if (runtimeHealth?.runtime === "container" && (runtimeHealth.dropAllCapabilities !== true
+  if (runtimeHealth?.runtime !== "container") {
+    throw new Error(`Expected container sandbox runtime health: ${JSON.stringify(runtimeHealth)}`);
+  }
+  if (runtimeHealth.dropAllCapabilities !== true
       || runtimeHealth.noNewPrivileges !== true
       || runtimeHealth.readOnlyRootFilesystem !== true
-      || Number(runtimeHealth.maxSessionFileBytes) !== 67108864)) {
+      || Number(runtimeHealth.maxSessionFileBytes) !== 67108864
+      || Number(runtimeHealth.maxSessionWorkspaceFiles) !== 256) {
     throw new Error(`Sandbox isolation posture API readback failed: ${JSON.stringify(runtimeHealth)}`);
   }
   egressPolicyRestore = {
@@ -300,13 +304,13 @@ try {
         "Sandbox private network exceptions"
       );
     }
-    if (runtimeHealth?.runtime === "container") {
-      await assertLocatorText(page.getByTestId("sandbox-runtime-isolation-posture"), "RO root", "Sandbox isolation posture");
-      await assertLocatorText(page.getByTestId("sandbox-runtime-isolation-posture"), "no caps", "Sandbox isolation posture");
-      await assertLocatorText(page.getByTestId("sandbox-runtime-isolation-posture"), "no new privs", "Sandbox isolation posture");
-      await assertLocatorText(page.getByTestId("sandbox-runtime-file-quota"), "Session workspace quota", "Sandbox workspace quota");
-      await assertLocatorText(page.getByTestId("sandbox-runtime-file-quota"), "64 MB", "Sandbox file quota");
-    }
+    await assertLocatorText(page.getByTestId("sandbox-runtime-isolation-posture"), "RO root", "Sandbox isolation posture");
+    await assertLocatorText(page.getByTestId("sandbox-runtime-isolation-posture"), "no caps", "Sandbox isolation posture");
+    await assertLocatorText(page.getByTestId("sandbox-runtime-isolation-posture"), "no new privs", "Sandbox isolation posture");
+    await assertLocatorText(page.getByTestId("sandbox-runtime-file-quota"), "Session workspace quota", "Sandbox workspace quota");
+    await assertLocatorText(page.getByTestId("sandbox-runtime-file-quota"), "64 MB", "Sandbox file quota");
+    await assertLocatorText(page.getByTestId("sandbox-runtime-file-count-limit"), "Workspace files", "Sandbox file count limit");
+    await assertLocatorText(page.getByTestId("sandbox-runtime-file-count-limit"), "256 max", "Sandbox file count limit");
     const scannerPanel = page.getByTestId("sandbox-artifact-scanner-panel");
     await scannerPanel.waitFor({ state: "visible", timeout: 20000 });
     await assertLocatorText(scannerPanel, expectedScannerId, "Artifact scanner panel");

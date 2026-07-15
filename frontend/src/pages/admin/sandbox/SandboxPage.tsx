@@ -355,6 +355,9 @@ function RuntimeGovernancePanel({
                 <div className="mt-1 text-xs text-muted-foreground" data-testid="sandbox-runtime-file-quota">
                   Session workspace quota: {formatBytes(health?.maxSessionFileBytes)}
                 </div>
+                <div className="mt-1 text-xs text-muted-foreground" data-testid="sandbox-runtime-file-count-limit">
+                  Workspace files: {health?.maxSessionWorkspaceFiles ?? "-"} max
+                </div>
               </div>
             </div>
 

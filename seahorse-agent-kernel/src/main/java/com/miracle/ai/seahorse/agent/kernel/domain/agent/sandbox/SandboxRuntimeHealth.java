@@ -46,6 +46,7 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                                    boolean noNewPrivileges,
                                    boolean readOnlyRootFilesystem,
                                    long maxSessionFileBytes,
+                                   int maxSessionWorkspaceFiles,
                                    List<String> failureMessages) {
 
     public static final String STATUS_HEALTHY = "HEALTHY";
@@ -76,6 +77,7 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                 ? List.of()
                 : List.copyOf(browserPrivateNetworkAllowedHosts);
         maxSessionFileBytes = Math.max(maxSessionFileBytes, 0L);
+        maxSessionWorkspaceFiles = Math.max(maxSessionWorkspaceFiles, 0);
         failureMessages = failureMessages == null ? List.of() : List.copyOf(failureMessages);
     }
 
@@ -92,7 +94,7 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                 activeSessionLimit, activeSessionRemaining, activeSessionCapacityAvailable, capacityStatus,
                 inspectedContainerCount, activeContainerCount, orphanContainerCount, failedContainerInspectionCount,
                 activeContainerNames, orphanContainerNames, browserPrivateNetworkAllowedHosts,
-                false, false, false, 0L, failureMessages);
+                false, false, false, 0L, 0, failureMessages);
     }
 
     public static SandboxRuntimeHealth unsupported(Instant checkedAt, int activeSessionCount) {
@@ -123,6 +125,7 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                 false,
                 false,
                 0L,
+                0,
                 List.of("sandbox runtime adapter is unsupported"));
     }
 
