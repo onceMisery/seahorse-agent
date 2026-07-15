@@ -680,6 +680,74 @@ try {
         }
     } | Out-Null
 
+    Test-Step "Create and close sandbox session pinned to available runtime node" {
+        $placementSessionId = $null
+        try {
+            $created = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
+                tenantId = "default"
+                runId = $runId
+                runtimeType = "CODE_INTERPRETER"
+                networkRequested = $false
+                requestedHosts = @()
+                requiredRuntimeNodeId = $ExpectedRuntimeNodeId
+            }
+            Assert-ApiOk $created "Create node-pinned sandbox session"
+            $placementSessionId = "$($created.data.sessionId)"
+            if ("$($created.data.status)" -ne "CREATED") {
+                throw "Expected node-pinned session status CREATED: $($created.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ("$($created.data.runtimeNodeId)" -ne $ExpectedRuntimeNodeId) {
+                throw "Expected node-pinned session runtimeNodeId=${ExpectedRuntimeNodeId}: $($created.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            $safePlacementSessionId = $placementSessionId.Replace("'", "''")
+            $row = Invoke-PostgresScalar "SELECT status, runtime_node_id FROM sa_sandbox_session WHERE session_id = '$safePlacementSessionId';"
+            if ($row -ne "CREATED`t$ExpectedRuntimeNodeId") {
+                throw "Unexpected node-pinned session DB row: $row"
+            }
+        } finally {
+            if ($placementSessionId) {
+                $closed = Invoke-Json -Method POST -Path "/api/sandbox/sessions/$placementSessionId/close" -Headers $headers
+                Assert-ApiOk $closed "Close node-pinned sandbox session"
+                if ("$($closed.data.status)" -ne "CANCELLED") {
+                    throw "Expected node-pinned session status CANCELLED after close: $($closed.data | ConvertTo-Json -Depth 20 -Compress)"
+                }
+            }
+        }
+    } | Out-Null
+
+    Test-Step "Reject sandbox session pinned to unavailable runtime node" {
+        $unavailableNodeId = "unavailable-node-$suffix"
+        $rejected = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
+            tenantId = "default"
+            runId = $runId
+            runtimeType = "CODE_INTERPRETER"
+            networkRequested = $false
+            requestedHosts = @()
+            requiredRuntimeNodeId = $unavailableNodeId
+        }
+        Assert-ApiOk $rejected "Create sandbox session pinned to unavailable node"
+        if ("$($rejected.data.status)" -ne "FAILED" -or "$($rejected.data.reasonCode)" -ne "RUNTIME_NODE_UNAVAILABLE") {
+            throw "Expected unavailable node placement to fail closed: $($rejected.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($rejected.data.runtimeNodeId)") {
+            throw "Unavailable node placement unexpectedly assigned runtimeNodeId: $($rejected.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+
+        $rejectedSessionId = "$($rejected.data.sessionId)"
+        $safeRejectedSessionId = $rejectedSessionId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT status, reason_code, COALESCE(runtime_node_id, '<null>') FROM sa_sandbox_session WHERE session_id = '$safeRejectedSessionId';"
+        if ($row -ne "FAILED`tRUNTIME_NODE_UNAVAILABLE`t<null>") {
+            throw "Unexpected unavailable node placement DB row: $row"
+        }
+        & docker exec $BackendContainer sh -lc "test ! -d '$SandboxWorkspaceRoot/$rejectedSessionId'"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unavailable node placement unexpectedly created workspace $SandboxWorkspaceRoot/$rejectedSessionId"
+        }
+        if (Test-DockerContainerExists "seahorse-sandbox-$($rejectedSessionId.ToLowerInvariant())") {
+            throw "Unavailable node placement unexpectedly created a managed child container"
+        }
+    } | Out-Null
+
     Test-Step "Inspect sandbox runtime governance profiles" {
         $response = Invoke-Json -Method GET -Path "/api/sandbox/runtime/profiles" -Headers $headers
         Assert-ApiOk $response "Inspect sandbox runtime profiles"

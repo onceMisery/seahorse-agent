@@ -269,6 +269,60 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldCreateSessionWhenRequiredRuntimeNodeMatchesAvailableNode() {
+        RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                runtime,
+                new MemoryArtifactPort(),
+                CLOCK);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-node-affinity",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                null,
+                null,
+                "local-container-docker"));
+
+        assertEquals(SandboxExecutionStatus.CREATED, session.status());
+        assertEquals("local-container-docker", session.runtimeNodeId());
+        assertTrue(runtime.createSessionCalled);
+    }
+
+    @Test
+    void shouldRejectSessionWhenRequiredRuntimeNodeDoesNotMatchAvailableNode() {
+        RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                runtime,
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                CLOCK);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-node-affinity-miss",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                null,
+                null,
+                "sandbox-node-missing"));
+
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertEquals(SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE, session.reasonCode());
+        assertNull(session.runtimeNodeId());
+        assertFalse(runtime.createSessionCalled);
+        assertEquals(session, sessionRepository.findSessionById(session.sessionId()).orElseThrow());
+    }
+
+    @Test
     void shouldNotRejectWorkspaceDiskUnavailableWhenNoThresholdIsConfigured() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
         runtime.healthResponse = SandboxRuntimeHealth.unsupported(NOW, 0);

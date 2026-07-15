@@ -305,6 +305,7 @@ export interface SandboxSessionCreatePayload {
   requestedHosts?: string[];
   profileId?: string;
   expiresAt?: string;
+  requiredRuntimeNodeId?: string;
 }
 
 export interface SandboxExecutePayload {
@@ -341,6 +342,9 @@ export function createSandboxSession(payload: SandboxSessionCreatePayload = {}) 
   }
   if (payload.expiresAt?.trim()) {
     request.expiresAt = payload.expiresAt.trim();
+  }
+  if (payload.requiredRuntimeNodeId?.trim()) {
+    request.requiredRuntimeNodeId = payload.requiredRuntimeNodeId.trim();
   }
   return api.post<SandboxSession, SandboxSession>(`${SANDBOX_API_PREFIX}/sessions`, request);
 }

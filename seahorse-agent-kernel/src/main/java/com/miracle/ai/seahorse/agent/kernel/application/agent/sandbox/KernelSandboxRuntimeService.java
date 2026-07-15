@@ -432,7 +432,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                     now);
             return saveSession(denied, AuditEventType.SANDBOX_SESSION_CREATED);
         }
-        RuntimeAdmissionDecision runtimeAdmission = runtimeAdmissionDecision();
+        RuntimeAdmissionDecision runtimeAdmission = runtimeAdmissionDecision(safeCommand.requiredRuntimeNodeId());
         if (runtimeAdmission.rejectionReason() != null) {
             SandboxSession rejected = SandboxSession.failed(
                     sessionId(),
@@ -828,15 +828,20 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         return SandboxExecutionResult.failed(execution, reasonCode);
     }
 
-    private RuntimeAdmissionDecision runtimeAdmissionDecision() {
+    private RuntimeAdmissionDecision runtimeAdmissionDecision(String requiredRuntimeNodeId) {
         Set<String> activeSessionIds = sessionRepositoryPort.listActiveSessionIds();
         SandboxRuntimeHealth health = Objects.requireNonNull(
                 runtimePort.inspectHealth(activeSessionIds),
                 "runtime health result must not be null");
         if (SandboxRuntimeHealth.STATUS_UNSUPPORTED.equals(health.status())) {
-            return RuntimeAdmissionDecision.allowed(null);
+            return hasText(requiredRuntimeNodeId)
+                    ? RuntimeAdmissionDecision.rejected(SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE)
+                    : RuntimeAdmissionDecision.allowed(null);
         }
         SandboxRuntimeNodeHealth node = SandboxRuntimeNodeHealth.fromHealth(health);
+        if (hasText(requiredRuntimeNodeId) && !requiredRuntimeNodeId.equals(node.nodeId())) {
+            return RuntimeAdmissionDecision.rejected(SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE);
+        }
         return switch (node.admissionStatus()) {
             case SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE,
                  SandboxRuntimeNodeHealth.ADMISSION_DEGRADED -> RuntimeAdmissionDecision.allowed(node.nodeId());

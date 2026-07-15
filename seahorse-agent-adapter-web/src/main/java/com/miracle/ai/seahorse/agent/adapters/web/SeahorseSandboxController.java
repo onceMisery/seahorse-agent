@@ -126,7 +126,7 @@ public class SeahorseSandboxController {
     public ApiResponse<Object> createSession(@RequestBody SandboxSessionCreateRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
         SandboxSessionCreateRequest safeRequest = request == null
-                ? new SandboxSessionCreateRequest(null, null, null, false, List.of(), null, null)
+                ? new SandboxSessionCreateRequest(null, null, null, false, List.of(), null, null, null)
                 : request;
         return ApiResponses.requireService(sandboxRuntimePortProvider,
                 port -> port.createSession(new SandboxSessionCreateCommand(
@@ -136,7 +136,8 @@ public class SeahorseSandboxController {
                         safeRequest.networkRequested(),
                         safeRequest.requestedHosts(),
                         safeRequest.profileId(),
-                        safeRequest.expiresAt())));
+                        safeRequest.expiresAt(),
+                        safeRequest.requiredRuntimeNodeId())));
     }
 
     @PostMapping("/api/sandbox/sessions/{sessionId}/execute")
@@ -504,7 +505,18 @@ public class SeahorseSandboxController {
                                               boolean networkRequested,
                                               List<String> requestedHosts,
                                               String profileId,
-                                              Instant expiresAt) {
+                                              Instant expiresAt,
+                                              String requiredRuntimeNodeId) {
+
+        public SandboxSessionCreateRequest(String tenantId,
+                                           String runId,
+                                           SandboxRuntimeType runtimeType,
+                                           boolean networkRequested,
+                                           List<String> requestedHosts,
+                                           String profileId,
+                                           Instant expiresAt) {
+            this(tenantId, runId, runtimeType, networkRequested, requestedHosts, profileId, expiresAt, null);
+        }
 
         public SandboxSessionCreateRequest {
             requestedHosts = requestedHosts == null ? List.of() : List.copyOf(requestedHosts);
