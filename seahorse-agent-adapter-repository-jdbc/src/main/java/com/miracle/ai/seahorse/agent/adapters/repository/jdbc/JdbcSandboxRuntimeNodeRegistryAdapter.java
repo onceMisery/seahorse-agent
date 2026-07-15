@@ -93,6 +93,15 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
             SET expires_at = CASE WHEN expires_at > ? THEN expires_at ELSE ? END
             WHERE node_id = ? AND owner_id = ? AND expires_at > ?
             """;
+    private static final String SQL_LIST_STALE_NODE_IDS = """
+            SELECT node_id FROM sa_sandbox_runtime_node
+            WHERE expires_at <= ?
+            ORDER BY expires_at ASC, node_id ASC
+            LIMIT ?
+            """;
+    private static final String SQL_DELETE_STALE_NODE = """
+            DELETE FROM sa_sandbox_runtime_node WHERE node_id = ? AND expires_at <= ?
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -216,6 +225,25 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                 nodeId.trim(),
                 ownerId.trim(),
                 toTimestamp(now)) == 1;
+    }
+
+    @Override
+    public int deleteStaleRegistrations(Duration retention, int limit) {
+        Duration safeRetention = Objects.requireNonNull(retention, "retention must not be null");
+        if (safeRetention.isNegative() || safeRetention.isZero() || limit <= 0) {
+            return 0;
+        }
+        Instant cutoff = databaseNow().minus(safeRetention);
+        List<String> nodeIds = jdbcTemplate.queryForList(
+                SQL_LIST_STALE_NODE_IDS,
+                String.class,
+                toTimestamp(cutoff),
+                Math.min(limit, 1_000));
+        int removed = 0;
+        for (String nodeId : nodeIds) {
+            removed += jdbcTemplate.update(SQL_DELETE_STALE_NODE, nodeId, toTimestamp(cutoff));
+        }
+        return removed;
     }
 
     @Override

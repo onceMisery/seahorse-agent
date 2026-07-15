@@ -27,4 +27,8 @@ public interface SandboxRuntimeNodeRegistryInboundPort {
     SandboxRuntimeNodeHeartbeatResult heartbeat(Duration leaseTtl);
 
     List<SandboxRuntimeNodeRegistration> listRegistrations(int limit);
+
+    default int cleanupStaleRegistrations(Duration retention, int limit) {
+        return 0;
+    }
 }

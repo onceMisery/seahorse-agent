@@ -42,6 +42,10 @@ public class KernelSandboxRuntimeNodeRegistryService implements SandboxRuntimeNo
     private static final Duration MAX_LEASE_TTL = Duration.ofMinutes(10);
     private static final int DEFAULT_LIST_LIMIT = 100;
     private static final int MAX_LIST_LIMIT = 500;
+    private static final Duration MIN_STALE_RETENTION = Duration.ofMinutes(1);
+    private static final Duration MAX_STALE_RETENTION = Duration.ofDays(365);
+    private static final int DEFAULT_CLEANUP_LIMIT = 100;
+    private static final int MAX_CLEANUP_LIMIT = 1_000;
 
     private final SandboxRuntimePort runtimePort;
     private final SandboxSessionRepositoryPort sessionRepositoryPort;
@@ -150,6 +154,17 @@ public class KernelSandboxRuntimeNodeRegistryService implements SandboxRuntimeNo
     public List<SandboxRuntimeNodeRegistration> listRegistrations(int limit) {
         int safeLimit = limit <= 0 ? DEFAULT_LIST_LIMIT : Math.min(limit, MAX_LIST_LIMIT);
         return registryPort.listRegistrations(safeLimit);
+    }
+
+    @Override
+    public int cleanupStaleRegistrations(Duration retention, int limit) {
+        Duration safeRetention = Objects.requireNonNullElse(retention, Duration.ofDays(7));
+        if (safeRetention.compareTo(MIN_STALE_RETENTION) < 0
+                || safeRetention.compareTo(MAX_STALE_RETENTION) > 0) {
+            throw new IllegalArgumentException("retention must be between 1 minute and 365 days");
+        }
+        int safeLimit = limit <= 0 ? DEFAULT_CLEANUP_LIMIT : Math.min(limit, MAX_CLEANUP_LIMIT);
+        return registryPort.deleteStaleRegistrations(safeRetention, safeLimit);
     }
 
     @Override

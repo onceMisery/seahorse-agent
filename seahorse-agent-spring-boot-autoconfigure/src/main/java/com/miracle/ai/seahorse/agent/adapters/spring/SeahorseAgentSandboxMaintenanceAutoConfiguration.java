@@ -82,4 +82,28 @@ public class SeahorseAgentSandboxMaintenanceAutoConfiguration {
                 Duration.ofMillis(leaseTtlMs),
                 Duration.ofMillis(fixedDelayMs));
     }
+
+    @Bean
+    @ConditionalOnBean(SandboxRuntimeNodeRegistryInboundPort.class)
+    @ConditionalOnProperty(prefix = "seahorse.agent.sandbox.node-cleanup", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public SandboxRuntimeNodeCleanupJob seahorseSandboxRuntimeNodeCleanupJob(
+            SandboxRuntimeNodeRegistryInboundPort nodeRegistry,
+            ObjectProvider<DistributedLockPort> lockPort,
+            @Value("${seahorse.agent.sandbox.node-cleanup.retention-ms:604800000}") long retentionMs,
+            @Value("${seahorse.agent.sandbox.node-cleanup.limit:100}") int limit) {
+        if (retentionMs < Duration.ofMinutes(1).toMillis()
+                || retentionMs > Duration.ofDays(365).toMillis()) {
+            throw new IllegalArgumentException("sandbox node cleanup retention must be between 1 minute and 365 days");
+        }
+        if (limit <= 0 || limit > 1_000) {
+            throw new IllegalArgumentException("sandbox node cleanup limit must be between 1 and 1000");
+        }
+        return new SandboxRuntimeNodeCleanupJob(
+                nodeRegistry,
+                lockPort.getIfAvailable(DistributedLockPort::noop),
+                Duration.ofMillis(retentionMs),
+                limit);
+    }
 }

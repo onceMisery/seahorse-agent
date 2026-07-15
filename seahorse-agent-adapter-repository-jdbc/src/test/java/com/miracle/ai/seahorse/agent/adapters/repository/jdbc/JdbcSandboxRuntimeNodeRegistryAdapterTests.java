@@ -115,6 +115,13 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
         assertThat(adapter.isLiveOwner("local-container-docker", "owner-b")).isFalse();
         assertThat(adapter.listRegistrations(10)).singleElement()
                 .satisfies(registration -> assertThat(registration.registrationStatus()).isEqualTo("STALE"));
+        assertThat(adapter.deleteStaleRegistrations(Duration.ofDays(1), 10)).isZero();
+        Timestamp cleanupNow = jdbcTemplate.queryForObject("SELECT CURRENT_TIMESTAMP", Timestamp.class);
+        jdbcTemplate.update(
+                "UPDATE sa_sandbox_runtime_node SET expires_at = ? WHERE node_id = 'local-container-docker'",
+                Timestamp.from(cleanupNow.toInstant().minus(Duration.ofDays(2))));
+        assertThat(adapter.deleteStaleRegistrations(Duration.ofDays(1), 10)).isEqualTo(1);
+        assertThat(adapter.listRegistrations(10)).isEmpty();
     }
 
     private static SandboxRuntimeNodeRegistration registration(Instant heartbeatAt, Instant expiresAt) {

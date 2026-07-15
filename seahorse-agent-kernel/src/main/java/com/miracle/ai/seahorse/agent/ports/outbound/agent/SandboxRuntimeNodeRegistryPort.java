@@ -53,6 +53,10 @@ public interface SandboxRuntimeNodeRegistryPort {
         return false;
     }
 
+    default int deleteStaleRegistrations(Duration retention, int limit) {
+        return 0;
+    }
+
     boolean release(String nodeId, String ownerId);
 
     List<SandboxRuntimeNodeRegistration> listRegistrations(int limit);

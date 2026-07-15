@@ -20,14 +20,15 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSandboxRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxArtifactScannerPort;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.KernelSandboxRuntimeService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.RepositoryBackedSandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxNetworkPolicy;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxEgressPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
@@ -38,9 +39,11 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import javax.sql.DataSource;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -68,12 +71,14 @@ class SeahorseAgentSandboxAutoConfigurationTests {
                     assertThat(context.getBean(SandboxArtifactScannerPort.class))
                             .isInstanceOf(DefaultSandboxArtifactScannerPort.class);
                     assertThat(context).hasSingleBean(SandboxPolicyPort.class);
-                    assertThat(context.getBean(SandboxPolicyPort.class)).isInstanceOf(DefaultSandboxPolicyPort.class);
+                    assertThat(context.getBean(SandboxPolicyPort.class))
+                            .isInstanceOf(RepositoryBackedSandboxPolicyPort.class);
                     assertThat(context).hasSingleBean(SandboxRuntimePort.class);
                     assertThat(context).hasSingleBean(SandboxRuntimeInboundPort.class);
                     assertThat(context).hasSingleBean(KernelSandboxRuntimeService.class);
                     assertThat(context).hasSingleBean(SandboxSessionTtlSweepJob.class);
                     assertThat(context).hasSingleBean(SandboxRuntimeOrphanSweepJob.class);
+                    assertThat(context).hasSingleBean(SandboxRuntimeNodeCleanupJob.class);
                     assertThat(context).hasSingleBean(KernelAuditLedgerService.class);
                     assertThat(context).hasSingleBean(ObjectStoragePort.class);
                     assertThat(field(context.getBean(KernelSandboxRuntimeService.class), "auditLedger"))
@@ -113,8 +118,20 @@ class SeahorseAgentSandboxAutoConfigurationTests {
     }
 
     @Test
-    void shouldBindSandboxNetworkPolicyProperties() {
+    void shouldDisableSandboxRuntimeNodeCleanupJobWhenConfiguredOff() {
         contextRunner.withUserConfiguration(TestInfrastructureConfiguration.class)
+                .withPropertyValues("seahorse.agent.sandbox.node-cleanup.enabled=false")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).doesNotHaveBean(SandboxRuntimeNodeCleanupJob.class);
+                });
+    }
+
+    @Test
+    void shouldBindSandboxNetworkPolicyProperties() {
+        contextRunner.withUserConfiguration(
+                        TestInfrastructureConfiguration.class,
+                        EmptyEgressPolicyRepositoryConfiguration.class)
                 .withPropertyValues(
                         "seahorse.agent.sandbox.network-policy=ALLOWLISTED",
                         "seahorse.agent.sandbox.allowlisted-hosts=host.docker.internal, api.example.com")
@@ -153,6 +170,28 @@ class SeahorseAgentSandboxAutoConfigurationTests {
         @Bean
         SandboxRuntimePort customSandboxRuntimePort() {
             return SandboxRuntimePort.unsupported();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class EmptyEgressPolicyRepositoryConfiguration {
+
+        @Bean
+        @Primary
+        SandboxEgressPolicyRepositoryPort emptySandboxEgressPolicyRepositoryPort() {
+            return new SandboxEgressPolicyRepositoryPort() {
+                @Override
+                public com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxEgressPolicy upsert(
+                        com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxEgressPolicy policy) {
+                    return policy;
+                }
+
+                @Override
+                public Optional<com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxEgressPolicy>
+                        findByTenant(String tenantId) {
+                    return Optional.empty();
+                }
+            };
         }
     }
 

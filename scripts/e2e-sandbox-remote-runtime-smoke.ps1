@@ -8,7 +8,8 @@ param(
     [string]$CoordinatorContainer = "seahorse-backend",
     [string]$WorkerContainer = "seahorse-runtime-node-b",
     [string]$PostgresContainer = "seahorse-postgres",
-    [string]$Marker = "seahorse-remote-runtime-e2e"
+    [string]$Marker = "seahorse-remote-runtime-e2e",
+    [switch]$VerifyStaleNodeCleanup
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,6 +23,9 @@ $runId = $null
 $workerPaused = $false
 $remoteAdmissionAvailable = $null
 $remoteAdmissionStatus = $null
+$staleFixtureSuffix = [guid]::NewGuid().ToString("N")
+$oldStaleNodeId = "e2e-stale-old-$staleFixtureSuffix"
+$recentStaleNodeId = "e2e-stale-recent-$staleFixtureSuffix"
 
 function Test-Step {
     param([string]$Name, [scriptblock]$Action)
@@ -186,6 +190,54 @@ try {
             throw "registration API leaked private transport fields"
         }
     } | Out-Null
+
+    if ($VerifyStaleNodeCleanup) {
+        Test-Step "Insert old and recent stale node registrations" {
+            $safeOldNode = $oldStaleNodeId.Replace("'", "''")
+            $safeRecentNode = $recentStaleNodeId.Replace("'", "''")
+            Invoke-PostgresCommand @"
+INSERT INTO sa_sandbox_runtime_node
+    (node_id, owner_id, transport_uri, runtime, engine, health_status,
+     admission_available, admission_status, active_session_count, active_session_limit,
+     workspace_free_bytes, observed_at, heartbeat_at, expires_at, registered_at)
+VALUES
+    ('$safeOldNode', 'e2e-cleanup-owner', '', 'CONTAINER', 'docker', 'UNAVAILABLE',
+     FALSE, 'UNAVAILABLE', 0, 0, -1,
+     CURRENT_TIMESTAMP - INTERVAL '3 minutes',
+     CURRENT_TIMESTAMP - INTERVAL '3 minutes',
+     CURRENT_TIMESTAMP - INTERVAL '2 minutes',
+     CURRENT_TIMESTAMP - INTERVAL '3 minutes'),
+    ('$safeRecentNode', 'e2e-cleanup-owner', '', 'CONTAINER', 'docker', 'UNAVAILABLE',
+     FALSE, 'UNAVAILABLE', 0, 0, -1,
+     CURRENT_TIMESTAMP - INTERVAL '90 seconds',
+     CURRENT_TIMESTAMP - INTERVAL '90 seconds',
+     CURRENT_TIMESTAMP - INTERVAL '30 seconds',
+     CURRENT_TIMESTAMP - INTERVAL '90 seconds');
+"@
+        } | Out-Null
+
+        Test-Step "Remove only stale registrations beyond retention" {
+            $safeOldNode = $oldStaleNodeId.Replace("'", "''")
+            $safeRecentNode = $recentStaleNodeId.Replace("'", "''")
+            $safeLocalNode = $LocalNodeId.Replace("'", "''")
+            $safeRemoteNode = $RemoteNodeId.Replace("'", "''")
+            $deadline = (Get-Date).AddSeconds(45)
+            do {
+                $state = Invoke-PostgresScalar @"
+SELECT COUNT(*) FILTER (WHERE node_id = '$safeOldNode'),
+       COUNT(*) FILTER (WHERE node_id = '$safeRecentNode'),
+       COUNT(*) FILTER (
+           WHERE node_id IN ('$safeLocalNode', '$safeRemoteNode')
+             AND expires_at > CURRENT_TIMESTAMP)
+FROM sa_sandbox_runtime_node
+WHERE node_id IN ('$safeOldNode', '$safeRecentNode', '$safeLocalNode', '$safeRemoteNode');
+"@
+                if ($state -eq "0`t1`t2") { return }
+                Start-Sleep -Seconds 2
+            } while ((Get-Date) -lt $deadline)
+            throw "stale cleanup did not converge: old/recent/live=$state"
+        } | Out-Null
+    }
 
     $run = Test-Step "Create a real agent run for sandbox ownership" {
         $agentRow = Invoke-PostgresScalar "SELECT d.agent_id, COALESCE(d.latest_version_id, v.version_id) FROM sa_agent_definition d LEFT JOIN sa_agent_version v ON v.agent_id=d.agent_id WHERE d.tenant_id='default' AND COALESCE(d.latest_version_id, v.version_id) IS NOT NULL ORDER BY d.updated_at DESC LIMIT 1;"
@@ -354,6 +406,15 @@ try {
     } | Out-Null
 } finally {
     $environmentCleanupIssues = @()
+    if ($VerifyStaleNodeCleanup) {
+        try {
+            $safeOldNode = $oldStaleNodeId.Replace("'", "''")
+            $safeRecentNode = $recentStaleNodeId.Replace("'", "''")
+            Invoke-PostgresCommand "DELETE FROM sa_sandbox_runtime_node WHERE node_id IN ('$safeOldNode', '$safeRecentNode');"
+        } catch {
+            $environmentCleanupIssues += "stale fixture cleanup failed: $($_.Exception.Message)"
+        }
+    }
     if ($workerPaused) {
         try { Resume-WorkerHeartbeat } catch { $environmentCleanupIssues += $_.Exception.Message }
     }
