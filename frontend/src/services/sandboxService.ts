@@ -107,6 +107,22 @@ export interface SandboxRuntimeNodeHealth {
   failureMessages?: string[];
 }
 
+export interface SandboxRuntimeNodeRegistration {
+  nodeId: string;
+  runtime: string;
+  engine: string;
+  observedHealthStatus: string;
+  observedAdmissionAvailable: boolean;
+  observedAdmissionStatus: string;
+  observedActiveSessionCount: number;
+  observedActiveSessionLimit: number;
+  observedWorkspaceFreeBytes: number;
+  observedAt: string;
+  heartbeatAt: string;
+  expiresAt: string;
+  registrationStatus: "LIVE" | "STALE";
+}
+
 export interface SandboxRuntimeProfile {
   runtimeType?: string;
   profileId?: string;
@@ -383,6 +399,12 @@ export function getSandboxRuntimeHealth() {
 
 export function getSandboxRuntimeNodes() {
   return api.get<SandboxRuntimeNodeHealth[]>(`${SANDBOX_API_PREFIX}/runtime/nodes`);
+}
+
+export function getSandboxRuntimeNodeRegistrations(limit = 100) {
+  return api.get<SandboxRuntimeNodeRegistration[]>(`/api/admin/sandbox/runtime/registrations`, {
+    params: { limit }
+  });
 }
 
 export function getSandboxArtifactScannerPolicy() {

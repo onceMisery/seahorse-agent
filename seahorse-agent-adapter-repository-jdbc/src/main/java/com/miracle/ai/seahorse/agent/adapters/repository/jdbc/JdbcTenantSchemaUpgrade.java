@@ -109,6 +109,7 @@ public class JdbcTenantSchemaUpgrade {
         upgradeSandboxRuntimeProfilePolicy();
         upgradeSandboxEgressPolicy();
         upgradeSandboxBrowserProfile();
+        upgradeSandboxRuntimeNodeRegistry();
         upgradeAiModelConfigUniqueness();
         enableRowLevelSecurity();
         log.info("[TenantSchema] 多租户 schema 升级完成");
@@ -371,6 +372,39 @@ public class JdbcTenantSchemaUpgrade {
                     """);
         } catch (Exception e) {
             log.warn("[TenantSchema] upgrade sa_sandbox_browser_profile failed: {}", e.getMessage());
+        }
+    }
+
+    private void upgradeSandboxRuntimeNodeRegistry() {
+        try {
+            jdbcTemplate.execute("""
+                    CREATE TABLE IF NOT EXISTS sa_sandbox_runtime_node (
+                      node_id VARCHAR(64) PRIMARY KEY,
+                      owner_id VARCHAR(64) NOT NULL,
+                      runtime VARCHAR(32) NOT NULL,
+                      engine VARCHAR(32) NOT NULL DEFAULT '',
+                      health_status VARCHAR(32) NOT NULL,
+                      admission_available BOOLEAN NOT NULL,
+                      admission_status VARCHAR(32) NOT NULL,
+                      active_session_count INTEGER NOT NULL DEFAULT 0,
+                      active_session_limit INTEGER NOT NULL DEFAULT 0,
+                      workspace_free_bytes BIGINT NOT NULL DEFAULT -1,
+                      observed_at TIMESTAMP NOT NULL,
+                      heartbeat_at TIMESTAMP NOT NULL,
+                      expires_at TIMESTAMP NOT NULL,
+                      registered_at TIMESTAMP NOT NULL,
+                      CONSTRAINT chk_sa_sandbox_runtime_node_sessions
+                        CHECK (active_session_count >= 0 AND active_session_limit >= 0),
+                      CONSTRAINT chk_sa_sandbox_runtime_node_lease
+                        CHECK (expires_at > heartbeat_at)
+                    )
+                    """);
+            jdbcTemplate.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_sa_sandbox_runtime_node_lease
+                      ON sa_sandbox_runtime_node(expires_at, heartbeat_at DESC)
+                    """);
+        } catch (Exception e) {
+            log.warn("[TenantSchema] upgrade sa_sandbox_runtime_node failed: {}", e.getMessage());
         }
     }
 

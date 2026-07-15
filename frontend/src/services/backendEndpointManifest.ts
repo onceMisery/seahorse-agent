@@ -597,6 +597,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/admin/sandbox/runtime/registrations"
+  },
+  {
+    "method": "GET",
     "path": "/api/sandbox/runtime/profiles"
   },
   {

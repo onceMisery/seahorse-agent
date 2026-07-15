@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeNodeRegistryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,6 +29,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
+
+import java.time.Duration;
 
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
@@ -63,5 +66,20 @@ public class SeahorseAgentSandboxMaintenanceAutoConfiguration {
         return new SandboxRuntimeOrphanSweepJob(
                 sandboxRuntime,
                 lockPort.getIfAvailable(DistributedLockPort::noop));
+    }
+
+    @Bean
+    @ConditionalOnBean(SandboxRuntimeNodeRegistryInboundPort.class)
+    @ConditionalOnProperty(prefix = "seahorse.agent.sandbox.node-heartbeat", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public SandboxRuntimeNodeHeartbeatJob seahorseSandboxRuntimeNodeHeartbeatJob(
+            SandboxRuntimeNodeRegistryInboundPort nodeRegistry,
+            @Value("${seahorse.agent.sandbox.node-heartbeat.lease-ttl-ms:45000}") long leaseTtlMs,
+            @Value("${seahorse.agent.sandbox.node-heartbeat.fixed-delay-ms:15000}") long fixedDelayMs) {
+        return new SandboxRuntimeNodeHeartbeatJob(
+                nodeRegistry,
+                Duration.ofMillis(leaseTtlMs),
+                Duration.ofMillis(fixedDelayMs));
     }
 }

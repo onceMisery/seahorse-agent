@@ -51,6 +51,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.rollout.KernelAgen
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.KernelSandboxRuntimeService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.KernelSandboxRuntimeNodeRegistryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.RepositoryBackedSandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sre.KernelSreHealthQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.KernelAgentSkillBindingService;
@@ -90,6 +91,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaManagementInboundP
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaSummaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ResourceAclManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeNodeRegistryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SreHealthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutCostSummaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutInboundPort;
@@ -142,6 +144,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxEgressPolicyRep
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthContributorPort;
@@ -807,6 +810,25 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     @ConditionalOnMissingBean(SandboxRuntimePort.class)
     public SandboxRuntimePort seahorseSandboxRuntimePort() {
         return SandboxRuntimePort.unsupported();
+    }
+
+    @Bean
+    @ConditionalOnBean({
+            SandboxRuntimePort.class,
+            SandboxSessionRepositoryPort.class,
+            SandboxRuntimeNodeRegistryPort.class
+    })
+    @ConditionalOnMissingBean(SandboxRuntimeNodeRegistryInboundPort.class)
+    public KernelSandboxRuntimeNodeRegistryService seahorseSandboxRuntimeNodeRegistryInboundPort(
+            SandboxRuntimePort sandboxRuntimePort,
+            SandboxSessionRepositoryPort sandboxSessionRepositoryPort,
+            SandboxRuntimeNodeRegistryPort sandboxRuntimeNodeRegistryPort,
+            ObjectProvider<Clock> clockProvider) {
+        return new KernelSandboxRuntimeNodeRegistryService(
+                sandboxRuntimePort,
+                sandboxSessionRepositoryPort,
+                sandboxRuntimeNodeRegistryPort,
+                clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
     private static List<String> csvList(String value) {

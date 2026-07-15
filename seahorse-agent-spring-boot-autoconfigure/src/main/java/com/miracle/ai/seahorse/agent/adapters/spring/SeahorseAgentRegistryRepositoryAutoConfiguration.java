@@ -50,6 +50,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSandboxReposit
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcToolApprovalRequestRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcToolCatalogRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcToolInvocationAuditRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSandboxRuntimeNodeRegistryAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCatalogQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositoryPort;
@@ -78,6 +79,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ProductionGateReposito
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.QuotaPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAclRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
@@ -335,6 +337,14 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
     @ConditionalOnMissingBean(SandboxSessionRepositoryPort.class)
     public JdbcSandboxRepositoryAdapter seahorseJdbcSandboxRepositoryAdapter(DataSource dataSource) {
         return new JdbcSandboxRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(SandboxRuntimeNodeRegistryPort.class)
+    public JdbcSandboxRuntimeNodeRegistryAdapter seahorseJdbcSandboxRuntimeNodeRegistryAdapter(DataSource dataSource) {
+        return new JdbcSandboxRuntimeNodeRegistryAdapter(dataSource);
     }
 
     @Bean

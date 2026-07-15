@@ -2,6 +2,8 @@ param(
     [string]$BaseUrl = "http://127.0.0.1:9090",
     [string]$Username = "admin",
     [string]$Password = "admin123",
+    [string]$NonAdminUsername = "demo_user_001",
+    [string]$NonAdminPassword = "demo123",
     [string]$Marker = "seahorse-sandbox-artifact-storage-smoke",
     [string]$PostgresContainer = "seahorse-postgres",
     [string]$PostgresUser = "seahorse",
@@ -366,6 +368,26 @@ try {
 
     $headers = @{ Authorization = "Bearer $($login.data.token)" }
     $suffix = ([guid]::NewGuid().ToString('N')).Substring(0, 8)
+    $runtimeNodeHeartbeatEpoch = $null
+
+    $nonAdminLogin = Test-Step "Login as non-admin runtime node registry probe user" {
+        $response = Invoke-Json -Method POST -Path "/auth/login" -Body @{
+            username = $NonAdminUsername
+            password = $NonAdminPassword
+        }
+        Assert-ApiOk $response "Non-admin login"
+        if (-not $response.data.token) {
+            throw "Non-admin login response did not include token"
+        }
+        $response
+    }
+    if (-not $nonAdminLogin) { exit 1 }
+
+    Test-Step "Reject non-admin sandbox runtime node registry access" {
+        Invoke-Json -Method GET -Path "/api/admin/sandbox/runtime/registrations?limit=100" -Headers @{
+            Authorization = "Bearer $($nonAdminLogin.data.token)"
+        } -ExpectedStatus 403 | Out-Null
+    } | Out-Null
 
     if ($VerifyWorkspaceDiskAdmission) {
         Test-Step "Inspect low-disk sandbox runtime health" {
@@ -677,6 +699,72 @@ try {
         $nodeJson = $node | ConvertTo-Json -Depth 20 -Compress
         if ($nodeJson -match [regex]::Escape($SandboxWorkspaceRoot)) {
             throw "Sandbox runtime node health leaked workspace root path: $nodeJson"
+        }
+    } | Out-Null
+
+    Test-Step "Inspect live sandbox runtime node registration" {
+        $response = Invoke-Json -Method GET -Path "/api/admin/sandbox/runtime/registrations?limit=100" -Headers $headers
+        Assert-ApiOk $response "Inspect sandbox runtime node registrations"
+        $registrations = @($response.data | Where-Object { "$($_.nodeId)" -eq $ExpectedRuntimeNodeId })
+        if ($registrations.Count -ne 1) {
+            throw "Expected one registration for node ${ExpectedRuntimeNodeId}: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $registration = $registrations[0]
+        if ("$($registration.registrationStatus)" -ne "LIVE") {
+            throw "Expected live runtime node registration: $($registration | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($registration.runtime)" -ne "container" -or "$($registration.engine)" -ne "docker") {
+            throw "Unexpected registered runtime identity: $($registration | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($registration.observedHealthStatus)" -ne "HEALTHY") {
+            throw "Expected registered observedHealthStatus=HEALTHY: $($registration | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ($registration.observedAdmissionAvailable -ne $true -or "$($registration.observedAdmissionStatus)" -notin @("AVAILABLE", "DEGRADED")) {
+            throw "Expected registered admission snapshot to remain available: $($registration | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $registrationJson = $registration | ConvertTo-Json -Depth 20 -Compress
+        if ($registrationJson -match "ownerId|owner_id|workspaceRoot|workspace-root") {
+            throw "Runtime node registration leaked owner or workspace details: $registrationJson"
+        }
+
+        $safeExpectedRuntimeNodeId = $ExpectedRuntimeNodeId.Replace("'", "''")
+        $row = Invoke-PostgresScalar "SELECT runtime, engine, (expires_at > heartbeat_at), EXTRACT(EPOCH FROM heartbeat_at)::bigint FROM sa_sandbox_runtime_node WHERE node_id = '$safeExpectedRuntimeNodeId';"
+        $parts = $row -split "`t"
+        if ($parts.Count -ne 4 -or $parts[0] -ne "container" -or $parts[1] -ne "docker" -or $parts[2] -ne "t") {
+            throw "Unexpected runtime node registration DB row: $row"
+        }
+        $script:runtimeNodeHeartbeatEpoch = [long]$parts[3]
+    } | Out-Null
+
+    Test-Step "Wait for sandbox runtime node heartbeat to advance" {
+        if ($null -eq $runtimeNodeHeartbeatEpoch) {
+            throw "Initial runtime node heartbeat epoch was not captured"
+        }
+        $safeExpectedRuntimeNodeId = $ExpectedRuntimeNodeId.Replace("'", "''")
+        $deadline = (Get-Date).AddSeconds(30)
+        $latestEpoch = $runtimeNodeHeartbeatEpoch
+        while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 2
+            $latestEpoch = [long](Invoke-PostgresScalar "SELECT EXTRACT(EPOCH FROM heartbeat_at)::bigint FROM sa_sandbox_runtime_node WHERE node_id = '$safeExpectedRuntimeNodeId';")
+            if ($latestEpoch -gt $runtimeNodeHeartbeatEpoch) {
+                return
+            }
+        }
+        throw "Runtime node heartbeat did not advance within 30 seconds; initial=$runtimeNodeHeartbeatEpoch latest=$latestEpoch"
+    } | Out-Null
+
+    Test-Step "Classify expired sandbox runtime node registration as stale" {
+        $staleNodeId = "stale-node-$suffix"
+        try {
+            Invoke-PostgresNonQuery "INSERT INTO sa_sandbox_runtime_node (node_id, owner_id, runtime, engine, health_status, admission_available, admission_status, active_session_count, active_session_limit, workspace_free_bytes, observed_at, heartbeat_at, expires_at, registered_at) VALUES ('$staleNodeId', 'stale-owner-$suffix', 'container', 'docker', 'HEALTHY', TRUE, 'AVAILABLE', 0, 0, 1024, now() - interval '2 minutes', now() - interval '2 minutes', now() - interval '1 minute', now() - interval '2 minutes');"
+            $response = Invoke-Json -Method GET -Path "/api/admin/sandbox/runtime/registrations?limit=100" -Headers $headers
+            Assert-ApiOk $response "Inspect stale sandbox runtime node registration"
+            $matched = @($response.data | Where-Object { "$($_.nodeId)" -eq $staleNodeId })
+            if ($matched.Count -ne 1 -or "$($matched[0].registrationStatus)" -ne "STALE") {
+                throw "Expected inserted expired node registration to be STALE: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+        } finally {
+            Invoke-PostgresNonQuery "DELETE FROM sa_sandbox_runtime_node WHERE node_id = '$staleNodeId';"
         }
     } | Out-Null
 

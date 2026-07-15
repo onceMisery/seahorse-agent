@@ -252,6 +252,28 @@ class JdbcTenantSchemaUpgradeTests {
     }
 
     @Test
+    void shouldCreateSandboxRuntimeNodeRegistryTableWhenMissing() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:tenant-schema-upgrade-sandbox-runtime-node-" + System.nanoTime()
+                        + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+                "sa",
+                "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+
+        JdbcTenantSchemaUpgrade upgrade = new JdbcTenantSchemaUpgrade(dataSource);
+        upgrade.upgrade();
+        upgrade.upgrade();
+
+        assertThat(tableExists(jdbcTemplate, "sa_sandbox_runtime_node")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_sandbox_runtime_node", "owner_id")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_sandbox_runtime_node", "heartbeat_at")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_sandbox_runtime_node", "expires_at")).isTrue();
+        assertThat(indexExists(jdbcTemplate,
+                "sa_sandbox_runtime_node",
+                "idx_sa_sandbox_runtime_node_lease")).isTrue();
+    }
+
+    @Test
     void shouldCreateSandboxEgressPolicyTableWhenMissing() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:tenant-schema-upgrade-sandbox-egress-policy-" + System.nanoTime()

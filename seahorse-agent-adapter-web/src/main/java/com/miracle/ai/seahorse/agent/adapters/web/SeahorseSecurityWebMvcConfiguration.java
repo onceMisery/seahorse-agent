@@ -62,6 +62,7 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
      */
     private static final Set<String> ADMIN_PATH_PREFIXES = Set.of(
             "/admin/",
+            "/api/admin/",
             "/users",
             "/intent-tree",
             "/ingestion/",
