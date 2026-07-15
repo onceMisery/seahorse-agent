@@ -46,6 +46,7 @@ public class KernelSandboxRuntimeNodeRegistryService implements SandboxRuntimeNo
     private final SandboxRuntimeNodeRegistryPort registryPort;
     private final Clock clock;
     private final String ownerId;
+    private final String transportUri;
     private final AtomicReference<SandboxRuntimeNodeRegistration> registeredNode = new AtomicReference<>();
     private boolean closed;
 
@@ -53,7 +54,15 @@ public class KernelSandboxRuntimeNodeRegistryService implements SandboxRuntimeNo
                                                    SandboxSessionRepositoryPort sessionRepositoryPort,
                                                    SandboxRuntimeNodeRegistryPort registryPort,
                                                    Clock clock) {
-        this(runtimePort, sessionRepositoryPort, registryPort, clock, UUID.randomUUID().toString());
+        this(runtimePort, sessionRepositoryPort, registryPort, clock, UUID.randomUUID().toString(), "");
+    }
+
+    public KernelSandboxRuntimeNodeRegistryService(SandboxRuntimePort runtimePort,
+                                                   SandboxSessionRepositoryPort sessionRepositoryPort,
+                                                   SandboxRuntimeNodeRegistryPort registryPort,
+                                                   String transportUri,
+                                                   Clock clock) {
+        this(runtimePort, sessionRepositoryPort, registryPort, clock, UUID.randomUUID().toString(), transportUri);
     }
 
     KernelSandboxRuntimeNodeRegistryService(SandboxRuntimePort runtimePort,
@@ -61,6 +70,15 @@ public class KernelSandboxRuntimeNodeRegistryService implements SandboxRuntimeNo
                                             SandboxRuntimeNodeRegistryPort registryPort,
                                             Clock clock,
                                             String ownerId) {
+        this(runtimePort, sessionRepositoryPort, registryPort, clock, ownerId, "");
+    }
+
+    KernelSandboxRuntimeNodeRegistryService(SandboxRuntimePort runtimePort,
+                                            SandboxSessionRepositoryPort sessionRepositoryPort,
+                                            SandboxRuntimeNodeRegistryPort registryPort,
+                                            Clock clock,
+                                            String ownerId,
+                                            String transportUri) {
         this.runtimePort = Objects.requireNonNull(runtimePort, "runtimePort must not be null");
         this.sessionRepositoryPort = Objects.requireNonNull(
                 sessionRepositoryPort,
@@ -68,6 +86,7 @@ public class KernelSandboxRuntimeNodeRegistryService implements SandboxRuntimeNo
         this.registryPort = Objects.requireNonNull(registryPort, "registryPort must not be null");
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
         this.ownerId = requireText(ownerId, "ownerId must not be blank");
+        this.transportUri = transportUri == null ? "" : transportUri.trim();
     }
 
     @Override
@@ -87,7 +106,7 @@ public class KernelSandboxRuntimeNodeRegistryService implements SandboxRuntimeNo
                 SandboxRuntimeNodeHealth.fromHealth(health),
                 now,
                 now.plus(safeLeaseTtl));
-        var savedRegistration = registryPort.heartbeat(registration, ownerId, safeLeaseTtl);
+        var savedRegistration = registryPort.heartbeat(registration, ownerId, transportUri, safeLeaseTtl);
         if (savedRegistration.isPresent()) {
             registeredNode.set(savedRegistration.get());
             return SandboxRuntimeNodeHeartbeatResult.registered(savedRegistration.get());

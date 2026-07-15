@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeRegistration;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeEndpoint;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -26,6 +27,7 @@ import javax.sql.DataSource;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -43,15 +45,15 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
             UPDATE sa_sandbox_runtime_node
             SET owner_id = ?, runtime = ?, engine = ?, health_status = ?, admission_available = ?,
                 admission_status = ?, active_session_count = ?, active_session_limit = ?,
-                workspace_free_bytes = ?, observed_at = ?, heartbeat_at = ?, expires_at = ?
+                workspace_free_bytes = ?, observed_at = ?, heartbeat_at = ?, expires_at = ?, transport_uri = ?
             WHERE node_id = ? AND (owner_id = ? OR expires_at <= ?)
             """;
     private static final String SQL_INSERT_HEARTBEAT = """
             INSERT INTO sa_sandbox_runtime_node
             (node_id, owner_id, runtime, engine, health_status, admission_available, admission_status,
              active_session_count, active_session_limit, workspace_free_bytes,
-             observed_at, heartbeat_at, expires_at, registered_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             observed_at, heartbeat_at, expires_at, registered_at, transport_uri)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String SQL_LIST_REGISTRATIONS = """
             SELECT %s,
@@ -67,6 +69,11 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
             SELECT heartbeat_at FROM sa_sandbox_runtime_node WHERE node_id = ? AND owner_id = ?
             """;
     private static final String SQL_DATABASE_NOW = "SELECT CURRENT_TIMESTAMP";
+    private static final String SQL_FIND_LIVE_ENDPOINT = """
+            SELECT node_id, transport_uri, expires_at
+            FROM sa_sandbox_runtime_node
+            WHERE node_id = ? AND expires_at > CURRENT_TIMESTAMP AND transport_uri <> ''
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -78,10 +85,19 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
     public Optional<SandboxRuntimeNodeRegistration> heartbeat(SandboxRuntimeNodeRegistration registration,
                                                               String ownerId,
                                                               Duration leaseTtl) {
+        return heartbeat(registration, ownerId, "", leaseTtl);
+    }
+
+    @Override
+    public Optional<SandboxRuntimeNodeRegistration> heartbeat(SandboxRuntimeNodeRegistration registration,
+                                                              String ownerId,
+                                                              String transportUri,
+                                                              Duration leaseTtl) {
         SandboxRuntimeNodeRegistration safeRegistration = Objects.requireNonNull(
                 registration,
                 "registration must not be null");
         String safeOwnerId = requireText(ownerId, "ownerId must not be blank");
+        String safeTransportUri = normalizeTransportUri(transportUri);
         Duration safeLeaseTtl = Objects.requireNonNull(leaseTtl, "leaseTtl must not be null");
         Instant databaseNow = databaseNow();
         SandboxRuntimeNodeRegistration persisted = persistedAt(safeRegistration, databaseNow, safeLeaseTtl);
@@ -99,6 +115,7 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                 toTimestamp(safeRegistration.observedAt()),
                 toTimestamp(persisted.heartbeatAt()),
                 toTimestamp(persisted.expiresAt()),
+                safeTransportUri,
                 safeRegistration.nodeId(),
                 safeOwnerId,
                 toTimestamp(databaseNow));
@@ -121,11 +138,27 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                     toTimestamp(safeRegistration.observedAt()),
                     toTimestamp(persisted.heartbeatAt()),
                     toTimestamp(persisted.expiresAt()),
-                    toTimestamp(persisted.heartbeatAt()));
+                    toTimestamp(persisted.heartbeatAt()),
+                    safeTransportUri);
             return Optional.of(persisted);
         } catch (DuplicateKeyException ignored) {
             return Optional.empty();
         }
+    }
+
+    @Override
+    public Optional<SandboxRuntimeNodeEndpoint> findLiveEndpoint(String nodeId) {
+        if (nodeId == null || nodeId.isBlank()) {
+            return Optional.empty();
+        }
+        List<SandboxRuntimeNodeEndpoint> endpoints = jdbcTemplate.query(
+                SQL_FIND_LIVE_ENDPOINT,
+                (rs, rowNum) -> new SandboxRuntimeNodeEndpoint(
+                        rs.getString("node_id"),
+                        URI.create(rs.getString("transport_uri")),
+                        toInstant(rs.getTimestamp("expires_at"))),
+                nodeId.trim());
+        return endpoints.stream().findFirst();
     }
 
     @Override
@@ -213,5 +246,15 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
             throw new IllegalArgumentException(message);
         }
         return value.trim();
+    }
+
+    private static String normalizeTransportUri(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        return new SandboxRuntimeNodeEndpoint(
+                "transport-validation",
+                URI.create(value.trim()),
+                Instant.MAX).transportUri().toString();
     }
 }

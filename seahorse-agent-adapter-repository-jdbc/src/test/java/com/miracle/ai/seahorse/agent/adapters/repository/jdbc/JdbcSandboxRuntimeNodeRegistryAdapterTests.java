@@ -22,9 +22,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
-import java.sql.Timestamp;
-import java.time.Instant;
 import java.time.Duration;
+import java.time.Instant;
+import java.net.URI;
+import java.sql.Timestamp;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,15 +42,33 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
         JdbcSandboxRuntimeNodeRegistryAdapter adapter = new JdbcSandboxRuntimeNodeRegistryAdapter(dataSource);
         SandboxRuntimeNodeRegistration first = registration(NOW, NOW.plusSeconds(45));
 
-        assertThat(adapter.heartbeat(first, "owner-a", Duration.ofSeconds(45))).isPresent();
+        assertThat(adapter.heartbeat(
+                first,
+                "owner-a",
+                "http://runtime-a:8080/internal/sandbox/runtime",
+                Duration.ofSeconds(45))).isPresent();
+        assertThat(adapter.findLiveEndpoint("local-container-docker"))
+                .get()
+                .extracting(endpoint -> endpoint.transportUri())
+                .isEqualTo(URI.create("http://runtime-a:8080/internal/sandbox/runtime"));
         assertThat(adapter.heartbeat(
                 registration(NOW.plusSeconds(1), NOW.plusSeconds(46)),
                 "owner-b",
+                "http://runtime-b:8080/internal/sandbox/runtime",
                 Duration.ofSeconds(45))).isEmpty();
+        assertThat(adapter.findLiveEndpoint("local-container-docker"))
+                .get()
+                .extracting(endpoint -> endpoint.transportUri())
+                .isEqualTo(URI.create("http://runtime-a:8080/internal/sandbox/runtime"));
         assertThat(adapter.heartbeat(
                 registration(NOW.plusSeconds(2), NOW.plusSeconds(47)),
                 "owner-a",
+                "http://runtime-a-new:8080/internal/sandbox/runtime/",
                 Duration.ofSeconds(45))).isPresent();
+        assertThat(adapter.findLiveEndpoint("local-container-docker"))
+                .get()
+                .extracting(endpoint -> endpoint.transportUri())
+                .isEqualTo(URI.create("http://runtime-a-new:8080/internal/sandbox/runtime"));
         Timestamp databaseNow = jdbcTemplate.queryForObject("SELECT CURRENT_TIMESTAMP", Timestamp.class);
         jdbcTemplate.update(
                 "UPDATE sa_sandbox_runtime_node SET expires_at = ?",
@@ -57,7 +76,12 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
         assertThat(adapter.heartbeat(
                 registration(NOW.plusSeconds(48), NOW.plusSeconds(93)),
                 "owner-b",
+                "http://runtime-b:8080/internal/sandbox/runtime",
                 Duration.ofSeconds(45))).isPresent();
+        assertThat(adapter.findLiveEndpoint("local-container-docker"))
+                .get()
+                .extracting(endpoint -> endpoint.transportUri())
+                .isEqualTo(URI.create("http://runtime-b:8080/internal/sandbox/runtime"));
 
         List<SandboxRuntimeNodeRegistration> registrations = adapter.listRegistrations(10);
         assertThat(registrations).hasSize(1);
@@ -65,6 +89,7 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
         assertThat(registrations.get(0).registrationStatus()).isEqualTo("LIVE");
         assertThat(adapter.release("local-container-docker", "owner-a")).isFalse();
         assertThat(adapter.release("local-container-docker", "owner-b")).isTrue();
+        assertThat(adapter.findLiveEndpoint("local-container-docker")).isEmpty();
         assertThat(adapter.listRegistrations(10)).singleElement()
                 .satisfies(registration -> assertThat(registration.registrationStatus()).isEqualTo("STALE"));
     }
@@ -99,6 +124,7 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                 CREATE TABLE sa_sandbox_runtime_node (
                   node_id VARCHAR(64) PRIMARY KEY,
                   owner_id VARCHAR(64) NOT NULL,
+                  transport_uri VARCHAR(512) NOT NULL DEFAULT '',
                   runtime VARCHAR(32) NOT NULL,
                   engine VARCHAR(32) NOT NULL,
                   health_status VARCHAR(32) NOT NULL,

@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeRegistration;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeEndpoint;
 
 import java.time.Duration;
 import java.util.List;
@@ -28,6 +29,17 @@ public interface SandboxRuntimeNodeRegistryPort {
     Optional<SandboxRuntimeNodeRegistration> heartbeat(SandboxRuntimeNodeRegistration registration,
                                                        String ownerId,
                                                        Duration leaseTtl);
+
+    default Optional<SandboxRuntimeNodeRegistration> heartbeat(SandboxRuntimeNodeRegistration registration,
+                                                               String ownerId,
+                                                               String transportUri,
+                                                               Duration leaseTtl) {
+        return heartbeat(registration, ownerId, leaseTtl);
+    }
+
+    default Optional<SandboxRuntimeNodeEndpoint> findLiveEndpoint(String nodeId) {
+        return Optional.empty();
+    }
 
     boolean release(String nodeId, String ownerId);
 

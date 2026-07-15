@@ -381,6 +381,7 @@ public class JdbcTenantSchemaUpgrade {
                     CREATE TABLE IF NOT EXISTS sa_sandbox_runtime_node (
                       node_id VARCHAR(64) PRIMARY KEY,
                       owner_id VARCHAR(64) NOT NULL,
+                      transport_uri VARCHAR(512) NOT NULL DEFAULT '',
                       runtime VARCHAR(32) NOT NULL,
                       engine VARCHAR(32) NOT NULL DEFAULT '',
                       health_status VARCHAR(32) NOT NULL,
@@ -398,6 +399,10 @@ public class JdbcTenantSchemaUpgrade {
                       CONSTRAINT chk_sa_sandbox_runtime_node_lease
                         CHECK (expires_at > heartbeat_at)
                     )
+                    """);
+            jdbcTemplate.execute("""
+                    ALTER TABLE sa_sandbox_runtime_node
+                      ADD COLUMN IF NOT EXISTS transport_uri VARCHAR(512) NOT NULL DEFAULT ''
                     """);
             jdbcTemplate.execute("""
                     CREATE INDEX IF NOT EXISTS idx_sa_sandbox_runtime_node_lease

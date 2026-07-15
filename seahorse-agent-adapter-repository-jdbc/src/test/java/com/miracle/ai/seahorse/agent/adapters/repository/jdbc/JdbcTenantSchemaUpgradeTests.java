@@ -266,6 +266,7 @@ class JdbcTenantSchemaUpgradeTests {
 
         assertThat(tableExists(jdbcTemplate, "sa_sandbox_runtime_node")).isTrue();
         assertThat(columnExists(jdbcTemplate, "sa_sandbox_runtime_node", "owner_id")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "sa_sandbox_runtime_node", "transport_uri")).isTrue();
         assertThat(columnExists(jdbcTemplate, "sa_sandbox_runtime_node", "heartbeat_at")).isTrue();
         assertThat(columnExists(jdbcTemplate, "sa_sandbox_runtime_node", "expires_at")).isTrue();
         assertThat(indexExists(jdbcTemplate,

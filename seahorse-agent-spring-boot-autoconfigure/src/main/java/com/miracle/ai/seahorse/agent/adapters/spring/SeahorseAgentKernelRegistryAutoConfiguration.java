@@ -823,11 +823,13 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             SandboxRuntimePort sandboxRuntimePort,
             SandboxSessionRepositoryPort sandboxSessionRepositoryPort,
             SandboxRuntimeNodeRegistryPort sandboxRuntimeNodeRegistryPort,
+            @Value("${seahorse.agent.sandbox.node-transport.base-url:}") String transportBaseUrl,
             ObjectProvider<Clock> clockProvider) {
         return new KernelSandboxRuntimeNodeRegistryService(
                 sandboxRuntimePort,
                 sandboxSessionRepositoryPort,
                 sandboxRuntimeNodeRegistryPort,
+                transportBaseUrl,
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
