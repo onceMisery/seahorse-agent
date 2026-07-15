@@ -981,6 +981,10 @@ try {
         "content.xml" = "<office:document-content xmlns:office=`"urn:oasis:names:tc:opendocument:xmlns:office:1.0`" xmlns:text=`"urn:oasis:names:tc:opendocument:xmlns:text:1.0`"><office:body><office:text><text:p>unsafe odt $activeOdtMacroMarker</text:p></office:text></office:body></office:document-content>"
         "Scripts/macro.js" = "alert('$activeOdtMacroMarker')"
     }
+    $activeOdtExternalReferenceMarker = "file-convert-odt-external-reference-secret-$suffix"
+    $activeOdtExternalReferenceContent = New-ZipBase64 -Entries @{
+        "content.xml" = "<office:document-content xmlns:office=`"urn:oasis:names:tc:opendocument:xmlns:office:1.0`" xmlns:text=`"urn:oasis:names:tc:opendocument:xmlns:text:1.0`" xmlns:xlink=`"http://www.w3.org/1999/xlink`"><office:body><office:text><text:p><text:a xlink:href=`"https://$activeOdtExternalReferenceMarker.invalid/payload`">unsafe external reference</text:a></text:p></office:text></office:body></office:document-content>"
+    }
     $activeOdsMacroMarker = "file-convert-ods-macro-secret-$suffix"
     $activeOdsContent = New-ZipBase64 -Entries @{
         "content.xml" = "<office:document-content xmlns:office=`"urn:oasis:names:tc:opendocument:xmlns:office:1.0`" xmlns:table=`"urn:oasis:names:tc:opendocument:xmlns:table:1.0`" xmlns:text=`"urn:oasis:names:tc:opendocument:xmlns:text:1.0`"><office:body><office:spreadsheet><table:table><table:table-row><table:table-cell><text:p>unsafe ods $activeOdsMacroMarker</text:p></table:table-cell></table:table-row></table:table></office:spreadsheet></office:body></office:document-content>"
@@ -1449,6 +1453,33 @@ try {
                 '"contentLength":'
             )
             Forbidden = @($activeOdtContent, $activeOdtMacroMarker, "Scripts/macro.js", "unsafe odt")
+        },
+        @{
+            Name = "odt-external-reference"
+            StepId = "sandbox-file-convert-odt-external-reference-fail-step-$suffix"
+            ToolCallId = "sandbox-file-convert-odt-external-reference-fail-call-$suffix"
+            ExpectedError = "odt external reference is not supported"
+            Arguments = @{
+                sourceFormat = "odt"
+                targetFormat = "txt"
+                contentEncoding = "base64"
+                content = $activeOdtExternalReferenceContent
+            }
+            Required = @(
+                '"toolId":"sandbox_file_convert"',
+                '"runtimeType":"FILE_CONVERSION"',
+                '"sourceFormat":"odt"',
+                '"sourceFormatPresent":true',
+                '"targetFormat":"txt"',
+                '"targetFormatPresent":true',
+                '"contentEncoding":"base64"',
+                '"contentEncodingPresent":true',
+                '"binaryInput":true',
+                '"networkRequested":false',
+                '"argumentCount":4',
+                '"contentLength":'
+            )
+            Forbidden = @($activeOdtExternalReferenceContent, $activeOdtExternalReferenceMarker, "https://", "unsafe external reference")
         },
         @{
             Name = "ods-active-content"

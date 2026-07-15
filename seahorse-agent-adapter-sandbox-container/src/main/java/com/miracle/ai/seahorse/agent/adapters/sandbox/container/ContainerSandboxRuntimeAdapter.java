@@ -466,6 +466,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 }
                 if ("content.xml".equals(entryName)) {
                     contentXmlFound = true;
+                    if (hasOdfExternalReference(archive)) {
+                        throw new IllegalArgumentException("odt external reference is not supported");
+                    }
                 }
             }
         } catch (IOException ex) {
@@ -494,6 +497,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 }
                 if ("content.xml".equals(entryName)) {
                     contentXmlFound = true;
+                    if (hasOdfExternalReference(archive)) {
+                        throw new IllegalArgumentException("ods external reference is not supported");
+                    }
                 }
             }
         } catch (IOException ex) {
@@ -522,6 +528,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 }
                 if ("content.xml".equals(entryName)) {
                     contentXmlFound = true;
+                    if (hasOdfExternalReference(archive)) {
+                        throw new IllegalArgumentException("odp external reference is not supported");
+                    }
                 }
             }
         } catch (IOException ex) {
@@ -650,6 +659,18 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || value.endsWith(".cmd")
                 || value.contains("basic/")
                 || value.contains("objectreplacements/");
+    }
+
+    private boolean hasOdfExternalReference(ZipInputStream archive) throws IOException {
+        byte[] contentXml = archive.readNBytes(MAX_FILE_CONVERSION_BINARY_SCAN_BYTES + 1);
+        if (contentXml.length > MAX_FILE_CONVERSION_BINARY_SCAN_BYTES) {
+            throw new IllegalArgumentException("odf content xml exceeds scan budget");
+        }
+        String xml = new String(contentXml, StandardCharsets.UTF_8);
+        return java.util.regex.Pattern.compile(
+                        "(?i)(?:xlink:)?href\\s*=\\s*['\\\"]\\s*(?:https?|ftp|file):")
+                .matcher(xml)
+                .find();
     }
 
     private boolean hasXlsxActiveContentEntry(String value) {

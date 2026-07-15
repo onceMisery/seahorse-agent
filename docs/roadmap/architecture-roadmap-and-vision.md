@@ -54,6 +54,8 @@ Fresh real full-Docker evidence: the same smoke used valid LibreOffice-generated
 
 The same real full-Docker smoke now creates valid DOCX and XLSX packages through the pinned LibreOffice runtime and verifies their bounded PNG previews. The full regression passed `106/106`, including approval, `SUCCEEDED`, `image/png`, ClamAV `CLEAN`, PostgreSQL persistence, local object storage, governed PNG-magic-byte downloads, and value-free Tool Gateway audit summaries.
 
+ODF package preflight now also reads bounded `content.xml` before LibreOffice receives the file and rejects external `http`, `https`, `ftp`, or `file` link references without retaining the raw URL. A real Tool Gateway ODT negative case with an `xlink:href` URL failed closed before runtime execution, while the response and persisted audit summary excluded both the URL marker and document payload; the full Docker regression remained `106/106`.
+
 Fresh real Docker evidence: the browser image was rebuilt through the local `7890` proxy, a direct non-root/read-only Chromium probe succeeded, `scripts/e2e-sandbox-python-tool-smoke.ps1` passed 5/5 with an in-sandbox effective-UID non-root assertion, and `scripts/e2e-sandbox-browser-tool-smoke.ps1 -SkipBrowserImageBuild` passed 37/37. The browser E2E covers inline and URL execution, DNS fail-closed behavior, session capture/replay, governed Profile lifecycle, HAR/video artifacts, audit summaries, and no leftover managed containers or non-terminal sessions. Its real 429 handling now uses bounded retry only for rate-limit responses.
 
 ## 2026-07-14 Update: Bounded PDF Tail Scanning and File Quota Correction
