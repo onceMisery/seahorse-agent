@@ -466,9 +466,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 }
                 if ("content.xml".equals(entryName)) {
                     contentXmlFound = true;
-                    if (hasOdfExternalReference(archive)) {
-                        throw new IllegalArgumentException("odt external reference is not supported");
-                    }
+                }
+                if (isOdfExternalReferenceScanEntry(entryName) && hasOdfExternalReference(archive)) {
+                    throw new IllegalArgumentException("odt external reference is not supported");
                 }
             }
         } catch (IOException ex) {
@@ -497,9 +497,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 }
                 if ("content.xml".equals(entryName)) {
                     contentXmlFound = true;
-                    if (hasOdfExternalReference(archive)) {
-                        throw new IllegalArgumentException("ods external reference is not supported");
-                    }
+                }
+                if (isOdfExternalReferenceScanEntry(entryName) && hasOdfExternalReference(archive)) {
+                    throw new IllegalArgumentException("ods external reference is not supported");
                 }
             }
         } catch (IOException ex) {
@@ -528,9 +528,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 }
                 if ("content.xml".equals(entryName)) {
                     contentXmlFound = true;
-                    if (hasOdfExternalReference(archive)) {
-                        throw new IllegalArgumentException("odp external reference is not supported");
-                    }
+                }
+                if (isOdfExternalReferenceScanEntry(entryName) && hasOdfExternalReference(archive)) {
+                    throw new IllegalArgumentException("odp external reference is not supported");
                 }
             }
         } catch (IOException ex) {
@@ -671,6 +671,13 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                         "(?i)(?:xlink:)?href\\s*=\\s*['\\\"]\\s*(?:https?|ftp|file):")
                 .matcher(xml)
                 .find();
+    }
+
+    private boolean isOdfExternalReferenceScanEntry(String entryName) {
+        return "content.xml".equals(entryName)
+                || "styles.xml".equals(entryName)
+                || "settings.xml".equals(entryName)
+                || "meta.xml".equals(entryName);
     }
 
     private boolean hasXlsxActiveContentEntry(String value) {

@@ -983,7 +983,8 @@ try {
     }
     $activeOdtExternalReferenceMarker = "file-convert-odt-external-reference-secret-$suffix"
     $activeOdtExternalReferenceContent = New-ZipBase64 -Entries @{
-        "content.xml" = "<office:document-content xmlns:office=`"urn:oasis:names:tc:opendocument:xmlns:office:1.0`" xmlns:text=`"urn:oasis:names:tc:opendocument:xmlns:text:1.0`" xmlns:xlink=`"http://www.w3.org/1999/xlink`"><office:body><office:text><text:p><text:a xlink:href=`"https://$activeOdtExternalReferenceMarker.invalid/payload`">unsafe external reference</text:a></text:p></office:text></office:body></office:document-content>"
+        "content.xml" = "<office:document-content xmlns:office=`"urn:oasis:names:tc:opendocument:xmlns:office:1.0`" xmlns:text=`"urn:oasis:names:tc:opendocument:xmlns:text:1.0`"><office:body><office:text><text:p>safe content</text:p></office:text></office:body></office:document-content>"
+        "styles.xml" = "<office:document-styles xmlns:office=`"urn:oasis:names:tc:opendocument:xmlns:office:1.0`" xmlns:xlink=`"http://www.w3.org/1999/xlink`"><office:styles><office:document-styles xlink:href=`"https://$activeOdtExternalReferenceMarker.invalid/payload`" /></office:styles></office:document-styles>"
     }
     $activeOdsMacroMarker = "file-convert-ods-macro-secret-$suffix"
     $activeOdsContent = New-ZipBase64 -Entries @{
