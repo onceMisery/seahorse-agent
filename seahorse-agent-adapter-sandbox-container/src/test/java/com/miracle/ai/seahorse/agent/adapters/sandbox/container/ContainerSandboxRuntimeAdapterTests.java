@@ -2199,7 +2199,7 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
-    void shouldInspectRuntimeHealthFromWorkspaceAndManagedContainers() {
+    void shouldInspectRuntimeHealthFromWorkspaceAndManagedContainers() throws IOException {
         RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded(
                 """
                         seahorse-sandbox-sandbox_container_active\tUp 10 seconds
@@ -2209,8 +2209,11 @@ class ContainerSandboxRuntimeAdapterTests {
         ContainerSandboxAdapterProperties properties = properties();
         properties.setBrowserPrivateNetworkAllowedHosts("host.docker.internal,assets.docker.internal");
         ContainerSandboxRuntimeAdapter adapter = new ContainerSandboxRuntimeAdapter(properties, runner, CLOCK);
+        Files.createDirectory(tempDir.resolve("sandbox_container_active"));
 
-        SandboxRuntimeHealth health = adapter.inspectHealth(Set.of("sandbox_container_active"));
+        SandboxRuntimeHealth health = adapter.inspectHealth(Set.of(
+                "sandbox_container_active",
+                "sandbox_remote_active"));
 
         assertThat(health.runtime()).isEqualTo("container");
         assertThat(health.engine()).isEqualTo("docker");
@@ -2279,13 +2282,14 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
-    void shouldReportRuntimeHealthCapacitySaturation() {
+    void shouldReportRuntimeHealthCapacitySaturation() throws IOException {
         RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded(
                 "seahorse-sandbox-sandbox_container_active\tUp 10 seconds\n",
                 Duration.ofMillis(80)));
         ContainerSandboxAdapterProperties properties = properties();
         properties.setMaxActiveSessions(1);
         ContainerSandboxRuntimeAdapter adapter = new ContainerSandboxRuntimeAdapter(properties, runner, CLOCK);
+        Files.createDirectory(tempDir.resolve("sandbox_container_active"));
 
         SandboxRuntimeHealth health = adapter.inspectHealth(Set.of("sandbox_container_active"));
 

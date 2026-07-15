@@ -54,6 +54,13 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
         assertThat(adapter.findLiveEndpoint("local-container-docker")).get()
                 .extracting(endpoint -> endpoint.ownerId())
                 .isEqualTo("owner-a");
+        assertThat(adapter.listLiveEndpoints()).singleElement()
+                .satisfies(endpoint -> {
+                    assertThat(endpoint.nodeId()).isEqualTo("local-container-docker");
+                    assertThat(endpoint.observedActiveSessionCount()).isZero();
+                    assertThat(endpoint.observedActiveSessionLimit()).isZero();
+                    assertThat(endpoint.observedWorkspaceFreeBytes()).isEqualTo(1024L);
+                });
         assertThat(adapter.isLiveOwner("local-container-docker", "owner-a")).isTrue();
         assertThat(adapter.isLiveOwner("local-container-docker", "owner-b")).isFalse();
         assertThat(adapter.reserveOperationLease(

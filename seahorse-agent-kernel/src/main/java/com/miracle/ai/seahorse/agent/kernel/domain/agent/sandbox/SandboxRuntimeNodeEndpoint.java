@@ -28,6 +28,9 @@ public record SandboxRuntimeNodeEndpoint(String nodeId,
                                          String observedHealthStatus,
                                          boolean observedAdmissionAvailable,
                                          String observedAdmissionStatus,
+                                         int observedActiveSessionCount,
+                                         int observedActiveSessionLimit,
+                                         long observedWorkspaceFreeBytes,
                                          Instant expiresAt) {
 
     private static final Pattern NODE_ID = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
@@ -38,6 +41,9 @@ public record SandboxRuntimeNodeEndpoint(String nodeId,
         transportUri = normalizeTransportUri(transportUri);
         observedHealthStatus = requireText(observedHealthStatus, "observedHealthStatus must not be blank");
         observedAdmissionStatus = requireText(observedAdmissionStatus, "observedAdmissionStatus must not be blank");
+        observedActiveSessionCount = Math.max(observedActiveSessionCount, 0);
+        observedActiveSessionLimit = Math.max(observedActiveSessionLimit, 0);
+        observedWorkspaceFreeBytes = Math.max(observedWorkspaceFreeBytes, -1L);
         expiresAt = Objects.requireNonNull(expiresAt, "expiresAt must not be null");
     }
 
@@ -48,6 +54,30 @@ public record SandboxRuntimeNodeEndpoint(String nodeId,
                 "HEALTHY",
                 true,
                 SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE,
+                0,
+                0,
+                -1L,
+                expiresAt);
+    }
+
+    public SandboxRuntimeNodeEndpoint(String nodeId,
+                                      URI transportUri,
+                                      String observedHealthStatus,
+                                      boolean observedAdmissionAvailable,
+                                      String observedAdmissionStatus,
+                                      int observedActiveSessionCount,
+                                      int observedActiveSessionLimit,
+                                      long observedWorkspaceFreeBytes,
+                                      Instant expiresAt) {
+        this(nodeId,
+                "legacy-owner",
+                transportUri,
+                observedHealthStatus,
+                observedAdmissionAvailable,
+                observedAdmissionStatus,
+                observedActiveSessionCount,
+                observedActiveSessionLimit,
+                observedWorkspaceFreeBytes,
                 expiresAt);
     }
 
@@ -63,6 +93,28 @@ public record SandboxRuntimeNodeEndpoint(String nodeId,
                 observedHealthStatus,
                 observedAdmissionAvailable,
                 observedAdmissionStatus,
+                0,
+                0,
+                -1L,
+                expiresAt);
+    }
+
+    public SandboxRuntimeNodeEndpoint(String nodeId,
+                                      String ownerId,
+                                      URI transportUri,
+                                      String observedHealthStatus,
+                                      boolean observedAdmissionAvailable,
+                                      String observedAdmissionStatus,
+                                      Instant expiresAt) {
+        this(nodeId,
+                ownerId,
+                transportUri,
+                observedHealthStatus,
+                observedAdmissionAvailable,
+                observedAdmissionStatus,
+                0,
+                0,
+                -1L,
                 expiresAt);
     }
 

@@ -956,13 +956,13 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         if (SandboxRuntimeHealth.STATUS_UNSUPPORTED.equals(health.status())) {
             return hasText(requiredRuntimeNodeId)
                     ? remoteRuntimeAdmissionDecision(requiredRuntimeNodeId)
-                    : RuntimeAdmissionDecision.allowedLocal(null);
+                    : automaticRuntimeAdmissionDecision(null, RuntimeAdmissionDecision.allowedLocal(null));
         }
         SandboxRuntimeNodeHealth node = SandboxRuntimeNodeHealth.fromHealth(health);
         if (hasText(requiredRuntimeNodeId) && !requiredRuntimeNodeId.equals(node.nodeId())) {
             return remoteRuntimeAdmissionDecision(requiredRuntimeNodeId);
         }
-        return switch (node.admissionStatus()) {
+        RuntimeAdmissionDecision localDecision = switch (node.admissionStatus()) {
             case SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE,
                  SandboxRuntimeNodeHealth.ADMISSION_DEGRADED -> RuntimeAdmissionDecision.allowedLocal(node.nodeId());
             case SandboxRuntimeNodeHealth.ADMISSION_DRAINING ->
@@ -973,6 +973,41 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                     RuntimeAdmissionDecision.rejected(SandboxPolicyReasonCode.RUNTIME_CAPACITY_EXCEEDED);
             default -> RuntimeAdmissionDecision.rejected(SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE);
         };
+        return hasText(requiredRuntimeNodeId)
+                ? localDecision
+                : automaticRuntimeAdmissionDecision(node, localDecision);
+    }
+
+    private RuntimeAdmissionDecision automaticRuntimeAdmissionDecision(SandboxRuntimeNodeHealth localNode,
+                                                                        RuntimeAdmissionDecision localDecision) {
+        List<RuntimePlacementCandidate> candidates = new ArrayList<>();
+        if (localNode != null && localDecision.rejectionReason() == null) {
+            candidates.add(RuntimePlacementCandidate.local(localNode));
+        }
+        if (remoteRuntimePort != null && runtimeNodeRegistryPort != null) {
+            List<SandboxRuntimeNodeEndpoint> endpoints;
+            try {
+                endpoints = runtimeNodeRegistryPort.listLiveEndpoints();
+            } catch (RuntimeException ex) {
+                return localDecision;
+            }
+            String localNodeId = localNode == null ? null : localNode.nodeId();
+            endpoints.stream()
+                    .filter(endpoint -> !endpoint.nodeId().equals(localNodeId))
+                    .filter(KernelSandboxRuntimeService::allowsAutomaticPlacement)
+                    .map(RuntimePlacementCandidate::remote)
+                    .forEach(candidates::add);
+        }
+        return candidates.stream()
+                .min(RuntimePlacementCandidate.ORDER)
+                .map(RuntimePlacementCandidate::admissionDecision)
+                .orElse(localDecision);
+    }
+
+    private static boolean allowsAutomaticPlacement(SandboxRuntimeNodeEndpoint endpoint) {
+        return endpoint.observedAdmissionAvailable()
+                && (SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE.equals(endpoint.observedAdmissionStatus())
+                || SandboxRuntimeNodeHealth.ADMISSION_DEGRADED.equals(endpoint.observedAdmissionStatus()));
     }
 
     private RuntimeAdmissionDecision remoteRuntimeAdmissionDecision(String requiredRuntimeNodeId) {
@@ -1614,6 +1649,55 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         @Override
         public List<SandboxArtifact> listPromptVisibleBySession(String sessionId) {
             return List.of();
+        }
+    }
+
+    private record RuntimePlacementCandidate(String nodeId,
+                                             SandboxRuntimeNodeEndpoint remoteEndpoint,
+                                             String admissionStatus,
+                                             int activeSessionCount,
+                                             int activeSessionLimit,
+                                             long workspaceFreeBytes) {
+
+        private static final Comparator<RuntimePlacementCandidate> ORDER = Comparator
+                .comparingInt(RuntimePlacementCandidate::admissionRank)
+                .thenComparingDouble(RuntimePlacementCandidate::utilization)
+                .thenComparingInt(RuntimePlacementCandidate::activeSessionCount)
+                .thenComparing(Comparator.comparingLong(RuntimePlacementCandidate::workspaceFreeBytes).reversed())
+                .thenComparing(RuntimePlacementCandidate::nodeId);
+
+        private static RuntimePlacementCandidate local(SandboxRuntimeNodeHealth node) {
+            return new RuntimePlacementCandidate(
+                    node.nodeId(),
+                    null,
+                    node.admissionStatus(),
+                    node.activeSessionCount(),
+                    node.activeSessionLimit(),
+                    node.workspaceFreeBytes());
+        }
+
+        private static RuntimePlacementCandidate remote(SandboxRuntimeNodeEndpoint endpoint) {
+            return new RuntimePlacementCandidate(
+                    endpoint.nodeId(),
+                    endpoint,
+                    endpoint.observedAdmissionStatus(),
+                    endpoint.observedActiveSessionCount(),
+                    endpoint.observedActiveSessionLimit(),
+                    endpoint.observedWorkspaceFreeBytes());
+        }
+
+        private double utilization() {
+            return activeSessionLimit <= 0 ? 0D : (double) activeSessionCount / activeSessionLimit;
+        }
+
+        private int admissionRank() {
+            return SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE.equals(admissionStatus) ? 0 : 1;
+        }
+
+        private RuntimeAdmissionDecision admissionDecision() {
+            return remoteEndpoint == null
+                    ? RuntimeAdmissionDecision.allowedLocal(nodeId)
+                    : RuntimeAdmissionDecision.allowedRemote(remoteEndpoint);
         }
     }
 }

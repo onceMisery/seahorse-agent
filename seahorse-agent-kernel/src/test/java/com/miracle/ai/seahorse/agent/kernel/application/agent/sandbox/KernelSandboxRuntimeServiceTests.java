@@ -367,6 +367,85 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldAutomaticallyPlaceSessionOnLeastLoadedLiveNode() {
+        RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        sessionRepository.saveSession(SandboxSession.created(
+                "session-local-active",
+                "tenant-1",
+                "run-local-active",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW).withRuntimeNode("local-container-docker"));
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                localRuntime,
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(
+                        SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true, 0, 0, 2048L)),
+                sessionRepository);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-auto-placement",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        assertEquals("sandbox-node-b", session.runtimeNodeId());
+        assertTrue(remoteRuntime.createSessionCalled);
+        assertFalse(localRuntime.createSessionCalled);
+    }
+
+    @Test
+    void shouldKeepExplicitLocalPlacementWhenRemoteNodeIsLessLoaded() {
+        RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                localRuntime,
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(
+                        SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true, 0, 0, 2048L)),
+                new MemorySandboxSessionRepository());
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-explicit-local",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                null,
+                null,
+                "local-container-docker"));
+
+        assertEquals("local-container-docker", session.runtimeNodeId());
+        assertTrue(localRuntime.createSessionCalled);
+        assertFalse(remoteRuntime.createSessionCalled);
+    }
+
+    @Test
+    void shouldPreferAvailableLocalNodeOverLessLoadedDegradedRemoteNode() {
+        RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                localRuntime,
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(
+                        SandboxRuntimeNodeHealth.ADMISSION_DEGRADED, true, 0, 0, 2048L)),
+                new MemorySandboxSessionRepository());
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-prefer-available",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        assertEquals("local-container-docker", session.runtimeNodeId());
+        assertTrue(localRuntime.createSessionCalled);
+        assertFalse(remoteRuntime.createSessionCalled);
+    }
+
+    @Test
     void shouldRejectPinnedRemoteSessionWhenLiveEndpointIsMissing() {
         RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
         RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
@@ -1769,12 +1848,23 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     private static SandboxRuntimeNodeEndpoint remoteEndpoint(String admissionStatus, boolean admissionAvailable) {
+        return remoteEndpoint(admissionStatus, admissionAvailable, 0, 0, -1L);
+    }
+
+    private static SandboxRuntimeNodeEndpoint remoteEndpoint(String admissionStatus,
+                                                             boolean admissionAvailable,
+                                                             int activeSessionCount,
+                                                             int activeSessionLimit,
+                                                             long workspaceFreeBytes) {
         return new SandboxRuntimeNodeEndpoint(
                 "sandbox-node-b",
                 URI.create("http://sandbox-node-b:8080/internal/sandbox/runtime"),
                 "HEALTHY",
                 admissionAvailable,
                 admissionStatus,
+                activeSessionCount,
+                activeSessionLimit,
+                workspaceFreeBytes,
                 NOW.plusSeconds(45));
     }
 
@@ -1847,6 +1937,11 @@ class KernelSandboxRuntimeServiceTests {
             return endpoint != null && endpoint.nodeId().equals(nodeId)
                     ? Optional.of(endpoint)
                     : Optional.empty();
+        }
+
+        @Override
+        public List<SandboxRuntimeNodeEndpoint> listLiveEndpoints() {
+            return endpoint == null ? List.of() : List.of(endpoint);
         }
     }
 

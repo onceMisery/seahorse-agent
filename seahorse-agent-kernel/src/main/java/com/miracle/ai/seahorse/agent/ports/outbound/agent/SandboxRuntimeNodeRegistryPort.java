@@ -41,6 +41,10 @@ public interface SandboxRuntimeNodeRegistryPort {
         return Optional.empty();
     }
 
+    default List<SandboxRuntimeNodeEndpoint> listLiveEndpoints() {
+        return List.of();
+    }
+
     default boolean isLiveOwner(String nodeId, String ownerId) {
         return false;
     }

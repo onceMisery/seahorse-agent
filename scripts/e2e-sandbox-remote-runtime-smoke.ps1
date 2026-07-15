@@ -3,6 +3,7 @@ param(
     [string]$WorkerBaseUrl = "http://127.0.0.1:19092",
     [string]$Username = "admin",
     [string]$Password = "admin123",
+    [string]$LocalNodeId = "local-container-docker",
     [string]$RemoteNodeId = "sandbox-node-b",
     [string]$CoordinatorContainer = "seahorse-backend",
     [string]$WorkerContainer = "seahorse-runtime-node-b",
@@ -15,7 +16,12 @@ $passed = 0
 $failed = 0
 $total = 0
 $sessionId = $null
+$localLoadSessionId = $null
+$drainingSessionId = $null
 $runId = $null
+$workerPaused = $false
+$remoteAdmissionAvailable = $null
+$remoteAdmissionStatus = $null
 
 function Test-Step {
     param([string]$Name, [scriptblock]$Action)
@@ -86,6 +92,12 @@ function Invoke-PostgresScalar {
     return $rows[0]
 }
 
+function Invoke-PostgresCommand {
+    param([string]$Sql)
+    & docker exec $PostgresContainer psql -U seahorse -d seahorse -v ON_ERROR_STOP=1 -c $Sql | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "psql failed for SQL: $Sql" }
+}
+
 function Invoke-DownloadText {
     param([string]$Path, [hashtable]$Headers)
     $args = @("-sS", "-X", "GET", "$BaseUrl$Path")
@@ -95,8 +107,35 @@ function Invoke-DownloadText {
     return @($content) -join "`n"
 }
 
-function Remove-RemoteSessionFallback {
-    param([string]$TargetSessionId)
+function Resume-WorkerHeartbeat {
+    if (-not $script:workerPaused) { return }
+    & docker unpause $WorkerContainer | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "failed to resume worker heartbeat" }
+    $script:workerPaused = $false
+}
+
+function Restore-RemoteAdmissionState {
+    if ($null -eq $script:remoteAdmissionAvailable -or -not $script:remoteAdmissionStatus) { return }
+    $safeRemoteNode = $RemoteNodeId.Replace("'", "''")
+    $expectedAvailable = if ($script:remoteAdmissionAvailable) { "t" } else { "f" }
+    $deadline = (Get-Date).AddSeconds(45)
+    do {
+        $state = Invoke-PostgresScalar "SELECT admission_available, admission_status FROM sa_sandbox_runtime_node WHERE node_id='$safeRemoteNode';"
+        if ($state -eq "$expectedAvailable`t$script:remoteAdmissionStatus") {
+            $script:remoteAdmissionAvailable = $null
+            $script:remoteAdmissionStatus = $null
+            return
+        }
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $deadline)
+    $availableSql = if ($script:remoteAdmissionAvailable) { "TRUE" } else { "FALSE" }
+    $safeStatus = $script:remoteAdmissionStatus.Replace("'", "''")
+    Invoke-PostgresCommand "UPDATE sa_sandbox_runtime_node SET admission_available=$availableSql, admission_status='$safeStatus' WHERE node_id='$safeRemoteNode';"
+    throw "worker heartbeat did not restore admission state before timeout"
+}
+
+function Remove-SessionFallback {
+    param([string]$TargetSessionId, [string]$TargetContainer)
     if ($TargetSessionId -notmatch '^[A-Za-z0-9._-]{1,128}$') {
         throw "refusing fallback cleanup for unsafe session id"
     }
@@ -107,7 +146,7 @@ function Remove-RemoteSessionFallback {
         & docker rm -f $containerName | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "failed to remove managed sandbox container $containerName" }
     }
-    & docker exec -e "SESSION_ID=$TargetSessionId" $WorkerContainer sh -lc `
+    & docker exec -e "SESSION_ID=$TargetSessionId" $TargetContainer sh -lc `
         'target="/var/lib/seahorse-sandbox/$SESSION_ID"; rm -rf -- "$target"; test ! -e "$target"'
     if ($LASTEXITCODE -ne 0) { throw "remote workspace remains after fallback cleanup" }
 }
@@ -139,7 +178,7 @@ try {
     Test-Step "Require local and remote node registrations LIVE" {
         $response = Invoke-Json -Method GET -Path "/api/admin/sandbox/runtime/registrations?limit=100" -Headers $headers
         Assert-ApiOk $response "List runtime registrations"
-        $local = @($response.data | Where-Object { "$($_.nodeId)" -eq "local-container-docker" -and "$($_.registrationStatus)" -eq "LIVE" })
+        $local = @($response.data | Where-Object { "$($_.nodeId)" -eq $LocalNodeId -and "$($_.registrationStatus)" -eq "LIVE" })
         $remote = @($response.data | Where-Object { "$($_.nodeId)" -eq $RemoteNodeId -and "$($_.registrationStatus)" -eq "LIVE" })
         if ($local.Count -ne 1 -or $remote.Count -ne 1) { throw "expected one LIVE local and remote registration" }
         $json = $response.data | ConvertTo-Json -Depth 20 -Compress
@@ -169,19 +208,54 @@ try {
     if (-not $run) { throw "agent run creation failed" }
     $runId = "$($run.runId)"
 
-    $session = Test-Step "Create sandbox session pinned to remote node" {
+    $localLoadSession = Test-Step "Create explicit local session as node load" {
         $response = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
             tenantId = "default"
             runId = $runId
             runtimeType = "CODE_INTERPRETER"
             networkRequested = $false
             requestedHosts = @()
-            requiredRuntimeNodeId = $RemoteNodeId
+            requiredRuntimeNodeId = $LocalNodeId
         }
-        Assert-ApiOk $response "Create remote sandbox session"
+        Assert-ApiOk $response "Create explicit local sandbox session"
+        $script:localLoadSessionId = "$($response.data.sessionId)"
+        if ("$($response.data.status)" -ne "CREATED" -or "$($response.data.runtimeNodeId)" -ne $LocalNodeId) {
+            throw "explicit local session was not created on $LocalNodeId"
+        }
+        & docker exec $CoordinatorContainer sh -lc "test -d '/var/lib/seahorse-sandbox/$script:localLoadSessionId'"
+        if ($LASTEXITCODE -ne 0) { throw "local load workspace is missing" }
+        & docker exec $WorkerContainer sh -lc "test ! -e '/var/lib/seahorse-sandbox/$script:localLoadSessionId'"
+        if ($LASTEXITCODE -ne 0) { throw "worker unexpectedly owns the local load workspace" }
+        return $response.data
+    }
+    if (-not $localLoadSession) { throw "local load session creation failed" }
+    $localLoadSessionId = "$($localLoadSession.sessionId)"
+
+    Test-Step "Wait for node-local heartbeat load metrics" {
+        $safeLocalNode = $LocalNodeId.Replace("'", "''")
+        $safeRemoteNode = $RemoteNodeId.Replace("'", "''")
+        $deadline = (Get-Date).AddSeconds(45)
+        do {
+            $localCount = [int](Invoke-PostgresScalar "SELECT active_session_count FROM sa_sandbox_runtime_node WHERE node_id='$safeLocalNode';")
+            $remoteCount = [int](Invoke-PostgresScalar "SELECT active_session_count FROM sa_sandbox_runtime_node WHERE node_id='$safeRemoteNode';")
+            if ($localCount -ge 1 -and $remoteCount -eq 0) { return }
+            Start-Sleep -Seconds 2
+        } while ((Get-Date) -lt $deadline)
+        throw "node-local heartbeat loads did not converge: local=$localCount remote=$remoteCount"
+    } | Out-Null
+
+    $session = Test-Step "Automatically place sandbox session on less-loaded remote node" {
+        $response = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
+            tenantId = "default"
+            runId = $runId
+            runtimeType = "CODE_INTERPRETER"
+            networkRequested = $false
+            requestedHosts = @()
+        }
+        Assert-ApiOk $response "Create automatically placed sandbox session"
         $script:sessionId = "$($response.data.sessionId)"
         if ("$($response.data.status)" -ne "CREATED" -or "$($response.data.runtimeNodeId)" -ne $RemoteNodeId) {
-            throw "remote session was not created on $RemoteNodeId"
+            throw "automatic placement did not choose less-loaded node $RemoteNodeId"
         }
         return $response.data
     }
@@ -236,31 +310,87 @@ try {
         $script:sessionId = $null
     } | Out-Null
 
+    Test-Step "Exclude draining remote node from automatic placement" {
+        & docker pause $WorkerContainer | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "failed to pause worker heartbeat" }
+        $script:workerPaused = $true
+        $safeRemoteNode = $RemoteNodeId.Replace("'", "''")
+        $originalState = (Invoke-PostgresScalar "SELECT admission_available, admission_status FROM sa_sandbox_runtime_node WHERE node_id='$safeRemoteNode';") -split "`t"
+        if ($originalState.Count -ne 2) { throw "unable to capture remote admission state" }
+        $script:remoteAdmissionAvailable = $originalState[0] -eq "t"
+        $script:remoteAdmissionStatus = $originalState[1]
+        Invoke-PostgresCommand "UPDATE sa_sandbox_runtime_node SET admission_available=FALSE, admission_status='DRAINING' WHERE node_id='$safeRemoteNode';"
+        $response = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
+            tenantId = "default"
+            runId = $runId
+            runtimeType = "CODE_INTERPRETER"
+            networkRequested = $false
+            requestedHosts = @()
+        }
+        Assert-ApiOk $response "Create session while remote node is draining"
+        $script:drainingSessionId = "$($response.data.sessionId)"
+        if ("$($response.data.status)" -ne "CREATED" -or "$($response.data.runtimeNodeId)" -ne $LocalNodeId) {
+            throw "automatic placement selected draining remote node"
+        }
+        $closeResponse = Invoke-Json -Method POST -Path "/api/sandbox/sessions/$script:drainingSessionId/close" -Headers $headers
+        Assert-ApiOk $closeResponse "Close draining-placement session"
+        $script:drainingSessionId = $null
+        Resume-WorkerHeartbeat
+        Restore-RemoteAdmissionState
+    } | Out-Null
+
+    Test-Step "Close explicit local load session" {
+        $response = Invoke-Json -Method POST -Path "/api/sandbox/sessions/$localLoadSessionId/close" -Headers $headers
+        Assert-ApiOk $response "Close explicit local sandbox session"
+        if ("$($response.data.status)" -ne "CANCELLED") { throw "local load session was not cancelled" }
+        & docker exec $CoordinatorContainer sh -lc "test ! -e '/var/lib/seahorse-sandbox/$localLoadSessionId'"
+        if ($LASTEXITCODE -ne 0) { throw "local load workspace remains after close" }
+        $script:localLoadSessionId = $null
+    } | Out-Null
+
     Test-Step "Require no managed child containers remain" {
         $managed = @(docker ps -a --format "{{.Names}}" | Where-Object { $_ -like "seahorse-sandbox-*" -and $_ -ne $WorkerContainer })
         if ($managed.Count -ne 0) { throw "managed sandbox containers remain: $($managed -join ',')" }
     } | Out-Null
 } finally {
-    if ($sessionId -and $headers) {
+    $environmentCleanupIssues = @()
+    if ($workerPaused) {
+        try { Resume-WorkerHeartbeat } catch { $environmentCleanupIssues += $_.Exception.Message }
+    }
+    if ($null -ne $remoteAdmissionAvailable -and $remoteAdmissionStatus) {
+        try { Restore-RemoteAdmissionState } catch { $environmentCleanupIssues += $_.Exception.Message }
+    }
+    if ($environmentCleanupIssues.Count -gt 0) {
+        $script:total++
+        $script:failed++
+        Write-Host "`n[$script:total] Restore worker admission state`n  FAIL: $($environmentCleanupIssues -join '; ')" -ForegroundColor Red
+    }
+    $cleanupTargets = @(
+        @{ SessionId = $sessionId; Container = $WorkerContainer },
+        @{ SessionId = $drainingSessionId; Container = $CoordinatorContainer },
+        @{ SessionId = $localLoadSessionId; Container = $CoordinatorContainer }
+    )
+    foreach ($target in $cleanupTargets) {
+        if (-not $target.SessionId -or -not $headers) { continue }
         $cleanupIssues = @()
         try {
-            $cleanupResponse = Invoke-Json -Method POST -Path "/api/sandbox/sessions/$sessionId/close" -Headers $headers
-            Assert-ApiOk $cleanupResponse "Cleanup remote sandbox session"
+            $cleanupResponse = Invoke-Json -Method POST -Path "/api/sandbox/sessions/$($target.SessionId)/close" -Headers $headers
+            Assert-ApiOk $cleanupResponse "Cleanup sandbox session"
         } catch {
             $cleanupIssues += "close failed: $($_.Exception.Message)"
         }
         try {
-            Remove-RemoteSessionFallback -TargetSessionId $sessionId
+            Remove-SessionFallback -TargetSessionId $target.SessionId -TargetContainer $target.Container
         } catch {
             $cleanupIssues += "fallback failed: $($_.Exception.Message)"
         }
         $script:total++
         if ($cleanupIssues.Count -eq 0) {
             $script:passed++
-            Write-Host "`n[$script:total] Cleanup remote sandbox session`n  PASS" -ForegroundColor Green
+            Write-Host "`n[$script:total] Cleanup sandbox session $($target.SessionId)`n  PASS" -ForegroundColor Green
         } else {
             $script:failed++
-            Write-Host "`n[$script:total] Cleanup remote sandbox session`n  FAIL: $($cleanupIssues -join '; ')" -ForegroundColor Red
+            Write-Host "`n[$script:total] Cleanup sandbox session $($target.SessionId)`n  FAIL: $($cleanupIssues -join '; ')" -ForegroundColor Red
         }
     }
 }

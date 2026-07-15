@@ -2827,7 +2827,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         WorkspaceDiskSummary diskSummary = workspaceDiskSummary(workspaceAvailable);
         failureMessages.addAll(diskSummary.failureMessages());
         boolean engineAvailable = containerSummary.failedInspectionCount() == 0;
-        CapacitySummary capacitySummary = capacitySummary(safeActiveSessionIds.size());
+        int ownedActiveSessionCount = ownedActiveSessionCount(safeActiveSessionIds);
+        CapacitySummary capacitySummary = capacitySummary(ownedActiveSessionCount);
         return new SandboxRuntimeHealth(
                 clock.instant(),
                 "container",
@@ -2847,7 +2848,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 diskSummary.minFreeBytes(),
                 diskSummary.available(),
                 diskSummary.status(),
-                safeActiveSessionIds.size(),
+                ownedActiveSessionCount,
                 capacitySummary.limit(),
                 capacitySummary.remaining(),
                 capacitySummary.available(),
@@ -2865,6 +2866,12 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 properties.getMaxSessionFileBytes(),
                 MAX_SESSION_WORKSPACE_FILES,
                 failureMessages);
+    }
+
+    private int ownedActiveSessionCount(Set<String> activeSessionIds) {
+        return (int) activeSessionIds.stream()
+                .filter(sessionId -> Files.isDirectory(workspaceForSession(sessionId), LinkOption.NOFOLLOW_LINKS))
+                .count();
     }
 
     @Override

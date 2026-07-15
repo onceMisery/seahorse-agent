@@ -72,9 +72,17 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
             """;
     private static final String SQL_DATABASE_NOW = "SELECT CURRENT_TIMESTAMP";
     private static final String SQL_FIND_LIVE_ENDPOINT = """
-            SELECT node_id, owner_id, transport_uri, health_status, admission_available, admission_status, expires_at
+            SELECT node_id, owner_id, transport_uri, health_status, admission_available, admission_status,
+                   active_session_count, active_session_limit, workspace_free_bytes, expires_at
             FROM sa_sandbox_runtime_node
             WHERE node_id = ? AND expires_at > CURRENT_TIMESTAMP AND transport_uri <> ''
+            """;
+    private static final String SQL_LIST_LIVE_ENDPOINTS = """
+            SELECT node_id, owner_id, transport_uri, health_status, admission_available, admission_status,
+                   active_session_count, active_session_limit, workspace_free_bytes, expires_at
+            FROM sa_sandbox_runtime_node
+            WHERE expires_at > CURRENT_TIMESTAMP AND transport_uri <> ''
+            ORDER BY node_id ASC
             """;
     private static final String SQL_IS_LIVE_OWNER = """
             SELECT COUNT(*) FROM sa_sandbox_runtime_node
@@ -166,16 +174,14 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
         }
         List<SandboxRuntimeNodeEndpoint> endpoints = jdbcTemplate.query(
                 SQL_FIND_LIVE_ENDPOINT,
-                (rs, rowNum) -> new SandboxRuntimeNodeEndpoint(
-                        rs.getString("node_id"),
-                        rs.getString("owner_id"),
-                        URI.create(rs.getString("transport_uri")),
-                        rs.getString("health_status"),
-                        rs.getBoolean("admission_available"),
-                        rs.getString("admission_status"),
-                        toInstant(rs.getTimestamp("expires_at"))),
+                this::mapEndpoint,
                 nodeId.trim());
         return endpoints.stream().findFirst();
+    }
+
+    @Override
+    public List<SandboxRuntimeNodeEndpoint> listLiveEndpoints() {
+        return jdbcTemplate.query(SQL_LIST_LIVE_ENDPOINTS, this::mapEndpoint);
     }
 
     @Override
@@ -258,6 +264,20 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                 toInstant(rs.getTimestamp("heartbeat_at")),
                 toInstant(rs.getTimestamp("expires_at")),
                 rs.getString("registration_status"));
+    }
+
+    private SandboxRuntimeNodeEndpoint mapEndpoint(ResultSet rs, int rowNum) throws SQLException {
+        return new SandboxRuntimeNodeEndpoint(
+                rs.getString("node_id"),
+                rs.getString("owner_id"),
+                URI.create(rs.getString("transport_uri")),
+                rs.getString("health_status"),
+                rs.getBoolean("admission_available"),
+                rs.getString("admission_status"),
+                rs.getInt("active_session_count"),
+                rs.getInt("active_session_limit"),
+                rs.getLong("workspace_free_bytes"),
+                toInstant(rs.getTimestamp("expires_at")));
     }
 
     private SandboxRuntimeNodeRegistration persistedAt(SandboxRuntimeNodeRegistration registration,
