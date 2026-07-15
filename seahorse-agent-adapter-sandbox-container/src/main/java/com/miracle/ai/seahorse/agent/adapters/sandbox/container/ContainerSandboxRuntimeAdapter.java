@@ -2832,6 +2832,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 clock.instant(),
                 "container",
                 properties.getEngine(),
+                properties.getNodeId(),
                 healthStatus(
                         engineAvailable,
                         workspaceAvailable,

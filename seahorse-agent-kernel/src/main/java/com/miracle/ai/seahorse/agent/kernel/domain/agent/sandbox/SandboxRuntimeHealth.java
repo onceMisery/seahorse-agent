@@ -23,6 +23,7 @@ import java.util.List;
 public record SandboxRuntimeHealth(Instant checkedAt,
                                    String runtime,
                                    String engine,
+                                   String nodeId,
                                    String status,
                                    boolean engineAvailable,
                                    boolean workspaceAvailable,
@@ -64,6 +65,7 @@ public record SandboxRuntimeHealth(Instant checkedAt,
     public SandboxRuntimeHealth {
         runtime = normalize(runtime, "unsupported");
         engine = normalize(engine, "");
+        nodeId = normalize(nodeId, "");
         status = normalize(status, STATUS_UNAVAILABLE);
         workspaceFreeBytes = workspaceFreeBytes < 0 ? -1L : workspaceFreeBytes;
         workspaceMinFreeBytes = Math.max(workspaceMinFreeBytes, 0L);
@@ -88,8 +90,26 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                                 boolean activeSessionCapacityAvailable, String capacityStatus, int inspectedContainerCount,
                                 int activeContainerCount, int orphanContainerCount, int failedContainerInspectionCount,
                                 List<String> activeContainerNames, List<String> orphanContainerNames,
+                                List<String> browserPrivateNetworkAllowedHosts, boolean dropAllCapabilities,
+                                boolean noNewPrivileges, boolean readOnlyRootFilesystem, long maxSessionFileBytes,
+                                int maxSessionWorkspaceFiles, List<String> failureMessages) {
+        this(checkedAt, runtime, engine, "", status, engineAvailable, workspaceAvailable, workspaceFreeBytes,
+                workspaceMinFreeBytes, workspaceDiskAvailable, workspaceDiskStatus, activeSessionCount,
+                activeSessionLimit, activeSessionRemaining, activeSessionCapacityAvailable, capacityStatus,
+                inspectedContainerCount, activeContainerCount, orphanContainerCount, failedContainerInspectionCount,
+                activeContainerNames, orphanContainerNames, browserPrivateNetworkAllowedHosts, dropAllCapabilities,
+                noNewPrivileges, readOnlyRootFilesystem, maxSessionFileBytes, maxSessionWorkspaceFiles, failureMessages);
+    }
+
+    public SandboxRuntimeHealth(Instant checkedAt, String runtime, String engine, String status,
+                                boolean engineAvailable, boolean workspaceAvailable, long workspaceFreeBytes,
+                                long workspaceMinFreeBytes, boolean workspaceDiskAvailable, String workspaceDiskStatus,
+                                int activeSessionCount, int activeSessionLimit, int activeSessionRemaining,
+                                boolean activeSessionCapacityAvailable, String capacityStatus, int inspectedContainerCount,
+                                int activeContainerCount, int orphanContainerCount, int failedContainerInspectionCount,
+                                List<String> activeContainerNames, List<String> orphanContainerNames,
                                 List<String> browserPrivateNetworkAllowedHosts, List<String> failureMessages) {
-        this(checkedAt, runtime, engine, status, engineAvailable, workspaceAvailable, workspaceFreeBytes,
+        this(checkedAt, runtime, engine, "", status, engineAvailable, workspaceAvailable, workspaceFreeBytes,
                 workspaceMinFreeBytes, workspaceDiskAvailable, workspaceDiskStatus, activeSessionCount,
                 activeSessionLimit, activeSessionRemaining, activeSessionCapacityAvailable, capacityStatus,
                 inspectedContainerCount, activeContainerCount, orphanContainerCount, failedContainerInspectionCount,
@@ -101,6 +121,7 @@ public record SandboxRuntimeHealth(Instant checkedAt,
         return new SandboxRuntimeHealth(
                 checkedAt,
                 "unsupported",
+                "",
                 "",
                 STATUS_UNSUPPORTED,
                 false,

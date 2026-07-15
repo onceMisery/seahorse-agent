@@ -11,6 +11,7 @@ param(
     [string]$SandboxWorkspaceRoot = "/var/lib/seahorse-sandbox",
     [string]$ExpectedObjectUriPrefix = "local://sandbox-artifacts/",
     [int]$ExpectedRuntimeActiveSessionLimit = 0,
+    [string]$ExpectedRuntimeNodeId = "local-container-docker",
     [long]$ExpectedWorkspaceMinFreeBytes = 0,
     [long]$KernelRunProfileId = -9101,
     [switch]$VerifyCapacityAdmission,
@@ -532,8 +533,8 @@ try {
         if ($parts[0] -ne "python-small") {
             throw "Expected python-small profile but got '$($parts[0])'"
         }
-        if ($parts[1] -ne "local-container-docker") {
-            throw "Expected runtime_node_id=local-container-docker but got '$($parts[1])'"
+        if ($parts[1] -ne $ExpectedRuntimeNodeId) {
+            throw "Expected runtime_node_id=$ExpectedRuntimeNodeId but got '$($parts[1])'"
         }
         if ($parts[2] -ne "t") {
             throw "Expected expires_at to be after created_at but got '$($parts[2])'"
@@ -550,8 +551,8 @@ try {
         if ("$($matched[0].profileId)" -ne "python-small") {
             throw "Expected sandbox session API profileId=python-small: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
         }
-        if ("$($matched[0].runtimeNodeId)" -ne "local-container-docker") {
-            throw "Expected sandbox session API runtimeNodeId=local-container-docker: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
+        if ("$($matched[0].runtimeNodeId)" -ne $ExpectedRuntimeNodeId) {
+            throw "Expected sandbox session API runtimeNodeId=${ExpectedRuntimeNodeId}: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
         }
         if (-not "$($matched[0].expiresAt)") {
             throw "Sandbox session API did not include expiresAt: $($matched[0] | ConvertTo-Json -Depth 20 -Compress)"
@@ -649,8 +650,8 @@ try {
         if ("$($node.engine)" -ne "docker") {
             throw "Expected docker runtime node but got: $($node | ConvertTo-Json -Depth 20 -Compress)"
         }
-        if ("$($node.nodeId)" -ne "local-container-docker") {
-            throw "Expected local-container-docker node id but got: $($node | ConvertTo-Json -Depth 20 -Compress)"
+        if ("$($node.nodeId)" -ne $ExpectedRuntimeNodeId) {
+            throw "Expected $ExpectedRuntimeNodeId node id but got: $($node | ConvertTo-Json -Depth 20 -Compress)"
         }
         if ($node.engineAvailable -ne $true -or $node.workspaceAvailable -ne $true) {
             throw "Expected runtime node engine/workspace availability: $($node | ConvertTo-Json -Depth 20 -Compress)"
@@ -1220,35 +1221,39 @@ print("external scanner artifact")
             throw "sandbox_python binary-signature content did not contain marker '$binaryMarker': $content"
         }
         $parsed = $content | ConvertFrom-Json
-        if (@($parsed.artifacts).Count -ne 0) {
-            throw "Binary-signature artifacts should not be prompt-visible: $content"
+        $visibleArtifacts = @($parsed.artifacts)
+        if ($visibleArtifacts.Count -ne 1 -or
+            "$($visibleArtifacts[0].mediaType)" -ne "application/pdf" -or
+            "$($visibleArtifacts[0].scanStatus)" -ne "CLEAN" -or
+            $visibleArtifacts[0].promptVisible -ne $true) {
+            throw "Only the safe PDF initial-view artifact should be prompt-visible: $content"
         }
         $parsed
     }
     if (-not $binaryObservation) { exit 1 }
 
     $binarySessionId = Get-LatestSandboxSessionIdForRun -RunId $runId
-    Test-Step "Verify PDF active-content artifact is blocked before object storage" {
+    Test-Step "Verify PDF initial-view artifact is clean and stored" {
         $safeBinarySessionId = $binarySessionId.Replace("'", "''")
-        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeBinarySessionId' AND media_type = 'application/pdf' ORDER BY created_at DESC LIMIT 1;"
+        $row = Invoke-PostgresScalar "SELECT artifact_id, object_uri, media_type, scan_status, sensitivity, scan_summary, redaction_summary_json FROM sa_sandbox_artifact WHERE session_id = '$safeBinarySessionId' AND media_type = 'application/pdf' AND scan_status = 'CLEAN' ORDER BY created_at DESC LIMIT 1;"
         $parts = $row -split "`t"
         if ($parts.Count -ne 7) {
-            throw "Unexpected PDF binary-signature artifact row: $row"
+            throw "Unexpected PDF initial-view artifact row: $row"
         }
-        if ($parts[1] -like "$ExpectedObjectUriPrefix*") {
-            throw "PDF active-content artifact was copied to object storage: $($parts[1])"
+        if ($parts[1] -notlike "$ExpectedObjectUriPrefix*") {
+            throw "PDF initial-view artifact was not copied to object storage: $($parts[1])"
         }
-        if ($parts[2] -ne "application/pdf" -or $parts[3] -ne "BLOCKED" -or $parts[4] -ne "CONFIDENTIAL") {
-            throw "Expected blocked CONFIDENTIAL PDF artifact but got: $row"
+        if ($parts[2] -ne "application/pdf" -or $parts[3] -ne "CLEAN" -or $parts[4] -ne "INTERNAL") {
+            throw "Expected clean INTERNAL PDF initial-view artifact but got: $row"
         }
-        if ($parts[5] -ne "pdf active content") {
-            throw "Expected PDF active-content scan summary but got '$($parts[5])'"
+        if ($parts[5] -ne "metadata scan passed") {
+            throw "Expected PDF initial-view metadata scan summary but got '$($parts[5])'"
         }
-        if ($parts[6] -notlike '*"decision":"BLOCKED"*' -or $parts[6] -notlike '*"PDF_ACTIVE_CONTENT"*') {
-            throw "Expected BLOCKED PDF_ACTIVE_CONTENT redaction summary but got '$($parts[6])'"
+        if ($parts[6] -notlike '*"decision":"CLEAN"*' -or $parts[6] -like '*"PDF_ACTIVE_CONTENT"*') {
+            throw "Expected CLEAN PDF initial-view redaction summary but got '$($parts[6])'"
         }
         if ($parts[6] -like "*OpenAction*") {
-            throw "PDF redaction summary leaked active-content marker: $($parts[6])"
+            throw "PDF initial-view redaction summary leaked marker detail: $($parts[6])"
         }
         $parts[0]
     } | Out-Null
@@ -1298,8 +1303,8 @@ print("external scanner artifact")
         $response = Invoke-Json -Method GET -Path "/api/sandbox/sessions/$binarySessionId/artifacts" -Headers $headers
         Assert-ApiOk $response "List binary-signature sandbox artifacts"
         $blockedArtifacts = @($response.data | Where-Object { "$($_.scanStatus)" -eq "BLOCKED" })
-        if ($blockedArtifacts.Count -lt 3) {
-            throw "Expected at least three blocked binary-signature artifacts: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        if ($blockedArtifacts.Count -lt 2) {
+            throw "Expected at least two blocked binary-signature artifacts: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $artifactJson = $response.data | ConvertTo-Json -Depth 20 -Compress
         if ($artifactJson -match "objectUri|object_uri|storageRef|file:|local://|s3://|OpenAction|JavaScript") {

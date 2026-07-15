@@ -74,7 +74,7 @@ public record SandboxRuntimeNodeHealth(Instant checkedAt,
                 && !ADMISSION_SATURATED.equals(admissionStatus);
         return new SandboxRuntimeNodeHealth(
                 safeHealth.checkedAt(),
-                nodeId(safeHealth.runtime(), safeHealth.engine()),
+                nodeId(safeHealth.nodeId(), safeHealth.runtime(), safeHealth.engine()),
                 safeHealth.runtime(),
                 safeHealth.engine(),
                 safeHealth.status(),
@@ -118,7 +118,10 @@ public record SandboxRuntimeNodeHealth(Instant checkedAt,
         return ADMISSION_AVAILABLE;
     }
 
-    private static String nodeId(String runtime, String engine) {
+    private static String nodeId(String configuredNodeId, String runtime, String engine) {
+        if (configuredNodeId != null && !configuredNodeId.trim().isEmpty()) {
+            return configuredNodeId.trim();
+        }
         String raw = "local-" + normalize(runtime, "unsupported");
         if (engine != null && !engine.trim().isEmpty()) {
             raw += "-" + engine.trim();

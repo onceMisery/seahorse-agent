@@ -25,7 +25,11 @@ import java.util.Objects;
 @ConfigurationProperties(prefix = "seahorse-agent.adapters.sandbox.container")
 public class ContainerSandboxAdapterProperties {
 
+    private static final String DEFAULT_NODE_ID = "local-container-docker";
+
     private String engine = "docker";
+
+    private String nodeId = DEFAULT_NODE_ID;
 
     private String pythonImage = "python:3.11-alpine";
 
@@ -91,6 +95,19 @@ public class ContainerSandboxAdapterProperties {
 
     public void setEngine(String engine) {
         this.engine = requireTextOrDefault(engine, "docker");
+    }
+
+    public String getNodeId() {
+        return nodeId;
+    }
+
+    public void setNodeId(String nodeId) {
+        if (nodeId == null || nodeId.isBlank() || nodeId.length() > 64
+                || !nodeId.matches("[a-z0-9][a-z0-9._-]*")) {
+            throw new IllegalArgumentException(
+                    "sandbox container node-id must use 1-64 lowercase letters, numbers, dots, underscores, or hyphens");
+        }
+        this.nodeId = nodeId;
     }
 
     public String getPythonImage() {
