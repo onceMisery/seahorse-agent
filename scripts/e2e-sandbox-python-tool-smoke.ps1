@@ -366,6 +366,17 @@ try {
                 throw "sandbox_python audit summary leaked raw code value '$forbidden': $summary"
             }
         }
+
+        $quotaAudit = @($records | Where-Object { "$($_.stepId)" -eq "sandbox-python-workspace-quota-step-$suffix" -and "$($_.toolId)" -eq "sandbox_python" }) | Select-Object -First 1
+        if (-not $quotaAudit -or "$($quotaAudit.status)" -ne "FAILED") {
+            throw "sandbox_python workspace quota audit was not failed: $($quotaAudit | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $quotaSummary = "$($quotaAudit.argumentsSummary)"
+        foreach ($forbidden in @($quotaCode, "quota-a.bin", "quota-b.bin", "40000000", "workspace quota probe")) {
+            if (-not [string]::IsNullOrWhiteSpace("$forbidden") -and $quotaSummary.Contains($forbidden)) {
+                throw "sandbox_python workspace quota audit leaked raw code value '$forbidden': $quotaSummary"
+            }
+        }
     } | Out-Null
 
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
