@@ -2350,6 +2350,14 @@ try {
     $odpPngObservation = Invoke-OfficePngConversionSmoke -SourceFormat "odp" -Content $odpPdfContent -Label "ODP"
     $odsPngObservation = Invoke-OfficePngConversionSmoke -SourceFormat "ods" -Content $odsPdfContent -Label "ODS"
 
+    $docxPngSource = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("Sandbox DOCX PNG $Marker`nDOCX PNG conversion uses a LibreOffice-generated document."))
+    $docxPngContent = Convert-OfficeFixtureToBase64 -SourceBase64 $docxPngSource -SourceExtension "txt" -TargetExtension "docx"
+    $docxPngObservation = Invoke-OfficePngConversionSmoke -SourceFormat "docx" -Content $docxPngContent -Label "DOCX"
+
+    $xlsxPngSource = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("name,score`nSandbox XLSX PNG $Marker,42`n"))
+    $xlsxPngContent = Convert-OfficeFixtureToBase64 -SourceBase64 $xlsxPngSource -SourceExtension "csv" -TargetExtension "xlsx"
+    $xlsxPngObservation = Invoke-OfficePngConversionSmoke -SourceFormat "xlsx" -Content $xlsxPngContent -Label "XLSX"
+
     $odsRunId = $runId
     $odsToolCallId = "sandbox-file-convert-ods-csv-call-$suffix"
     $odsContent = New-OdsBase64 -Marker $Marker -SecondValue "ODS conversion extracts first table"
@@ -3199,6 +3207,18 @@ try {
                 Status = "SUCCEEDED"
                 Required = @('"toolId":"sandbox_file_convert"', '"runtimeType":"FILE_CONVERSION"', '"sourceFormat":"ods"', '"targetFormat":"png"', '"contentEncoding":"base64"', '"binaryInput":true', '"networkRequested":false')
                 Forbidden = @($Marker, $odsPdfContent)
+            },
+            @{
+                StepId = "$($docxPngObservation.StepId)"
+                Status = "SUCCEEDED"
+                Required = @('"toolId":"sandbox_file_convert"', '"runtimeType":"FILE_CONVERSION"', '"sourceFormat":"docx"', '"targetFormat":"png"', '"contentEncoding":"base64"', '"binaryInput":true', '"networkRequested":false')
+                Forbidden = @($Marker, $docxPngContent)
+            },
+            @{
+                StepId = "$($xlsxPngObservation.StepId)"
+                Status = "SUCCEEDED"
+                Required = @('"toolId":"sandbox_file_convert"', '"runtimeType":"FILE_CONVERSION"', '"sourceFormat":"xlsx"', '"targetFormat":"png"', '"contentEncoding":"base64"', '"binaryInput":true', '"networkRequested":false')
+                Forbidden = @($Marker, $xlsxPngContent)
             },
             @{
                 StepId = "sandbox-file-convert-xlsx-csv-step-$suffix"

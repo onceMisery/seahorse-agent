@@ -377,7 +377,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String contentEncoding = normalizedContentEncoding(root.path("contentEncoding").asText(PLAIN_ENCODING));
         if (!isSupportedFileConversion(sourceFormat, targetFormat)) {
             throw new UnsupportedFileConversionException(
-                    "container file conversion supports csv/tsv to json, csv to xlsx, json to csv/tsv, txt to html, html to txt/docx, markdown/md to html/txt, docx/odt/odp/pdf to html/txt, docx/odt/ods/odp/pptx/xlsx to pdf, odt/ods/odp/pdf/pptx to png, pdf to ocr_txt, xlsx/ods to csv/html, and pptx to html/txt only");
+                    "container file conversion supports csv/tsv to json, csv to xlsx, json to csv/tsv, txt to html, html to txt/docx, markdown/md to html/txt, docx/odt/odp/pdf to html/txt, docx/odt/ods/odp/pptx/xlsx to pdf, docx/odt/ods/odp/pdf/pptx/xlsx to png, pdf to ocr_txt, xlsx/ods to csv/html, and pptx to html/txt only");
         }
         if (isBinaryDocumentFormat(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
             throw new IllegalArgumentException(sourceFormat + " file conversion contentEncoding must be base64");
@@ -1993,6 +1993,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "docx" and target_format == "pdf":
                     office_to_pdf(input_path)
                     print(f"rendered docx document to pdf")
+                elif source_format == "docx" and target_format == "png":
+                    office_to_png(input_path)
+                    print(f"rendered docx first page to png")
                 elif source_format == "odt" and target_format == "txt":
                     output_path.write_text(odt_to_text(input_path), encoding="utf-8")
                     print(f"converted odt document to text")
@@ -2038,6 +2041,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 elif source_format == "xlsx" and target_format == "pdf":
                     office_to_pdf(input_path)
                     print(f"rendered xlsx worksheet to pdf")
+                elif source_format == "xlsx" and target_format == "png":
+                    office_to_png(input_path)
+                    print(f"rendered xlsx first sheet to png")
                 elif source_format == "pptx" and target_format == "txt":
                     output_path.write_text(pptx_to_text(input_path), encoding="utf-8")
                     print(f"converted pptx presentation to text")
@@ -2090,7 +2096,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || (ODS_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
                 || (ODP_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
                 || (XLSX_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
-                || ((ODT_FORMAT.equals(sourceFormat) || ODS_FORMAT.equals(sourceFormat) || ODP_FORMAT.equals(sourceFormat))
+                || ((DOCX_FORMAT.equals(sourceFormat) || ODT_FORMAT.equals(sourceFormat) || ODS_FORMAT.equals(sourceFormat) || ODP_FORMAT.equals(sourceFormat) || XLSX_FORMAT.equals(sourceFormat))
                 && "png".equals(targetFormat))
                 || (PDF_FORMAT.equals(sourceFormat) && "png".equals(targetFormat))
                 || (PPTX_FORMAT.equals(sourceFormat) && "png".equals(targetFormat))
@@ -3074,10 +3080,12 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 || XLSX_FORMAT.equals(request.sourceFormat())))
                 || (PDF_FORMAT.equals(request.sourceFormat())
                 && ("png".equals(request.targetFormat()) || "ocr_txt".equals(request.targetFormat())))
-                || ((ODT_FORMAT.equals(request.sourceFormat())
+                || ((DOCX_FORMAT.equals(request.sourceFormat())
+                || ODT_FORMAT.equals(request.sourceFormat())
                 || ODS_FORMAT.equals(request.sourceFormat())
                 || ODP_FORMAT.equals(request.sourceFormat())
-                || PPTX_FORMAT.equals(request.sourceFormat())) && "png".equals(request.targetFormat()))
+                || PPTX_FORMAT.equals(request.sourceFormat())
+                || XLSX_FORMAT.equals(request.sourceFormat())) && "png".equals(request.targetFormat()))
                 || (HTML_FORMAT.equals(request.sourceFormat()) && DOCX_FORMAT.equals(request.targetFormat()))
                 || (CSV_FORMAT.equals(request.sourceFormat()) && XLSX_FORMAT.equals(request.targetFormat()));
     }
