@@ -90,6 +90,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     private static final int MAX_FILE_CONVERSION_CONTENT_CHARS = 256 * 1024;
     private static final int MAX_FILE_CONVERSION_ARCHIVE_ENTRIES = 128;
     private static final int MAX_FILE_CONVERSION_BINARY_SCAN_BYTES = 256 * 1024;
+    private static final int MAX_SESSION_WORKSPACE_FILES = 256;
     private static final int MAX_BROWSER_HTML_CHARS = 256 * 1024;
     private static final int MAX_BROWSER_URL_CHARS = 2048;
     private static final int MAX_BROWSER_URL_QUERY_CHARS = 512;
@@ -3328,7 +3329,11 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
                     .map(path -> path.toAbsolutePath().normalize())
                     .filter(path -> path.startsWith(safeWorkspace))
+                    .limit(MAX_SESSION_WORKSPACE_FILES + 1L)
                     .toList();
+            if (files.size() > MAX_SESSION_WORKSPACE_FILES) {
+                throw new IOException("sandbox workspace exceeds session file count limit");
+            }
             long workspaceBytes = 0L;
             for (Path path : files) {
                 workspaceBytes = Math.addExact(workspaceBytes, Files.size(path));

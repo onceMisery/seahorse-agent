@@ -323,6 +323,29 @@ try {
         }
     } | Out-Null
 
+    $fileCountToolCallId = "sandbox-python-workspace-file-count-call-$suffix"
+    $fileCountCode = "from pathlib import Path`nfor index in range(300):`n    Path(f'count-{index}.txt').write_text('x', encoding='utf-8')`nprint('workspace file count probe')"
+    Test-Step "Reject sandbox_python workspace exceeding file count limit" {
+        $requestBody = @{
+            runId = $runId
+            stepId = "sandbox-python-workspace-file-count-step-$suffix"
+            toolCallId = $fileCountToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{ code = $fileCountCode }
+            resourceRefs = @{}
+            idempotencyKey = "${runId}:${fileCountToolCallId}"
+            allowedToolIds = @("sandbox_python")
+        }
+        $response = Invoke-SandboxPythonTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_python workspace file count failure"
+        Assert-ApiOk $response "Invoke sandbox_python workspace file count failure"
+        if ($response.data.success -ne $false -or "$($response.data.error)" -notlike "*sandbox workspace exceeds session file count limit*" -or "$($response.data.content)" -notin @("", $null)) {
+            throw "sandbox_python workspace file count did not fail closed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+    } | Out-Null
+
     Test-Step "Verify sandbox_python Tool Gateway audit summary" {
         $response = Invoke-Json -Method GET -Path "/api/tool-invocations?current=1&size=20&runId=$runId&toolId=sandbox_python" -Headers $headers
         Assert-ApiOk $response "Read sandbox_python tool audit"
@@ -375,6 +398,17 @@ try {
         foreach ($forbidden in @($quotaCode, "quota-a.bin", "quota-b.bin", "40000000", "workspace quota probe")) {
             if (-not [string]::IsNullOrWhiteSpace("$forbidden") -and $quotaSummary.Contains($forbidden)) {
                 throw "sandbox_python workspace quota audit leaked raw code value '$forbidden': $quotaSummary"
+            }
+        }
+
+        $fileCountAudit = @($records | Where-Object { "$($_.stepId)" -eq "sandbox-python-workspace-file-count-step-$suffix" -and "$($_.toolId)" -eq "sandbox_python" }) | Select-Object -First 1
+        if (-not $fileCountAudit -or "$($fileCountAudit.status)" -ne "FAILED") {
+            throw "sandbox_python workspace file count audit was not failed: $($fileCountAudit | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        $fileCountSummary = "$($fileCountAudit.argumentsSummary)"
+        foreach ($forbidden in @($fileCountCode, "count-{index}.txt", "range(300)", "workspace file count probe")) {
+            if (-not [string]::IsNullOrWhiteSpace("$forbidden") -and $fileCountSummary.Contains($forbidden)) {
+                throw "sandbox_python workspace file count audit leaked raw code value '$forbidden': $fileCountSummary"
             }
         }
     } | Out-Null
