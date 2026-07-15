@@ -160,6 +160,7 @@ public class SeahorseWebGovernanceConfiguration implements WebMvcConfigurer, Fil
 
     private boolean isAllowedInDemoMode(HttpServletRequest request) {
         String uri = request.getRequestURI();
-        return uri != null && uri.startsWith("/auth/");
+        return uri != null && (uri.startsWith("/auth/")
+                || uri.startsWith(SeahorseSandboxRuntimeTransportController.BASE_PATH + "/"));
     }
 }

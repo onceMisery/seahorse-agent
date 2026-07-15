@@ -112,6 +112,7 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
                         "/readiness/**",
                         "/auth/**",
                         "/api/auth/**",
+                        "/internal/sandbox/runtime/**",
                         "/error",
                         "/assets/**",
                         "/prototype/**");
@@ -130,6 +131,7 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
                         "/readiness/**",
                         "/auth/**",
                         "/api/auth/**",
+                        "/internal/sandbox/runtime/**",
                         "/error",
                         "/assets/**",
                         "/prototype/**");

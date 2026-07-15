@@ -17,7 +17,10 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.adapters.web.HttpSandboxRemoteRuntimeAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.ProductMode;
+import com.miracle.ai.seahorse.agent.adapters.web.SandboxRuntimeTransportAuthenticator;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAgentDefinitionService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.artifact.KernelAgentArtifactQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.artifact.KernelAgentArtifactUpdateService;
@@ -144,6 +147,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxEgressPolicyRep
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRemoteRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
@@ -168,6 +172,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 
@@ -810,6 +815,33 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     @ConditionalOnMissingBean(SandboxRuntimePort.class)
     public SandboxRuntimePort seahorseSandboxRuntimePort() {
         return SandboxRuntimePort.unsupported();
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "seahorse.agent.sandbox.node-transport", name = "enabled", havingValue = "true")
+    @ConditionalOnMissingBean(SandboxRuntimeTransportAuthenticator.class)
+    public SandboxRuntimeTransportAuthenticator seahorseSandboxRuntimeTransportAuthenticator(
+            @Value("${seahorse.agent.sandbox.node-transport.shared-secret:}") String sharedSecret,
+            @Value("${seahorse-agent.adapters.sandbox.container.node-id:local-container-docker}") String nodeId,
+            @Value("${seahorse.agent.sandbox.node-transport.allowed-skew-ms:120000}") long allowedSkewMs) {
+        return new SandboxRuntimeTransportAuthenticator(sharedSecret, nodeId, Duration.ofMillis(allowedSkewMs));
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "seahorse.agent.sandbox.node-transport", name = "enabled", havingValue = "true")
+    @ConditionalOnMissingBean(SandboxRemoteRuntimePort.class)
+    public SandboxRemoteRuntimePort seahorseSandboxRemoteRuntimePort(
+            ObjectMapper objectMapper,
+            @Value("${seahorse.agent.sandbox.node-transport.shared-secret:}") String sharedSecret,
+            @Value("${seahorse.agent.sandbox.node-transport.connect-timeout-ms:5000}") long connectTimeoutMs,
+            @Value("${seahorse.agent.sandbox.node-transport.request-timeout-ms:60000}") long requestTimeoutMs,
+            @Value("${seahorse.agent.sandbox.node-transport.max-artifact-bytes:67108864}") long maxArtifactBytes) {
+        return new HttpSandboxRemoteRuntimeAdapter(
+                objectMapper,
+                sharedSecret,
+                Duration.ofMillis(connectTimeoutMs),
+                Duration.ofMillis(requestTimeoutMs),
+                maxArtifactBytes);
     }
 
     @Bean
