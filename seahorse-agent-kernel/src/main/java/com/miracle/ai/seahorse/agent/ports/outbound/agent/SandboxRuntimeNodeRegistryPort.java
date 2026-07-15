@@ -41,6 +41,14 @@ public interface SandboxRuntimeNodeRegistryPort {
         return Optional.empty();
     }
 
+    default boolean isLiveOwner(String nodeId, String ownerId) {
+        return false;
+    }
+
+    default boolean reserveOperationLease(String nodeId, String ownerId, Duration leaseTtl) {
+        return false;
+    }
+
     boolean release(String nodeId, String ownerId);
 
     List<SandboxRuntimeNodeRegistration> listRegistrations(int limit);

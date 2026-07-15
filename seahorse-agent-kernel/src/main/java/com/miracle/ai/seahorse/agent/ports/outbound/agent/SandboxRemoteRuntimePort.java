@@ -20,6 +20,9 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeEndpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
+
+import java.util.List;
 
 public interface SandboxRemoteRuntimePort {
 
@@ -28,4 +31,9 @@ public interface SandboxRemoteRuntimePort {
     SandboxExecutionResult execute(SandboxRuntimeNodeEndpoint endpoint, SandboxExecutionRequest request);
 
     SandboxSession closeSession(SandboxRuntimeNodeEndpoint endpoint, SandboxSession session);
+
+    default void releaseArtifacts(SandboxSession session,
+                                  List<SandboxArtifact> sourceArtifacts,
+                                  List<SandboxArtifact> retainedArtifacts) {
+    }
 }

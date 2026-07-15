@@ -162,6 +162,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditRedactionPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditWriteFailurePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxNetworkPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeOwnerIdentity;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -818,13 +819,36 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(SandboxRuntimeNodeOwnerIdentity.class)
+    public SandboxRuntimeNodeOwnerIdentity seahorseSandboxRuntimeNodeOwnerIdentity() {
+        return SandboxRuntimeNodeOwnerIdentity.random();
+    }
+
+    @Bean
     @ConditionalOnProperty(prefix = "seahorse.agent.sandbox.node-transport", name = "enabled", havingValue = "true")
     @ConditionalOnMissingBean(SandboxRuntimeTransportAuthenticator.class)
     public SandboxRuntimeTransportAuthenticator seahorseSandboxRuntimeTransportAuthenticator(
             @Value("${seahorse.agent.sandbox.node-transport.shared-secret:}") String sharedSecret,
             @Value("${seahorse-agent.adapters.sandbox.container.node-id:local-container-docker}") String nodeId,
-            @Value("${seahorse.agent.sandbox.node-transport.allowed-skew-ms:120000}") long allowedSkewMs) {
-        return new SandboxRuntimeTransportAuthenticator(sharedSecret, nodeId, Duration.ofMillis(allowedSkewMs));
+            @Value("${seahorse.agent.sandbox.node-transport.allowed-skew-ms:120000}") long allowedSkewMs,
+            @Value("${seahorse.agent.sandbox.node-transport.request-timeout-ms:60000}") long requestTimeoutMs,
+            @Value("${seahorse.agent.sandbox.node-transport.operation-lease-ttl-ms:90000}") long operationLeaseTtlMs,
+            SandboxRuntimeNodeOwnerIdentity ownerIdentity,
+            SandboxRuntimeNodeRegistryPort registryPort) {
+        if (operationLeaseTtlMs <= requestTimeoutMs || operationLeaseTtlMs > Duration.ofMinutes(10).toMillis()) {
+            throw new IllegalArgumentException(
+                    "sandbox transport operation lease TTL must exceed request timeout and be at most 10 minutes");
+        }
+        Duration operationLeaseTtl = Duration.ofMillis(operationLeaseTtlMs);
+        return new SandboxRuntimeTransportAuthenticator(
+                sharedSecret,
+                nodeId,
+                ownerIdentity.ownerId(),
+                Duration.ofMillis(allowedSkewMs),
+                (requestedNodeId, requestedOwnerId) -> registryPort.reserveOperationLease(
+                        requestedNodeId,
+                        requestedOwnerId,
+                        operationLeaseTtl));
     }
 
     @Bean
@@ -835,13 +859,15 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             @Value("${seahorse.agent.sandbox.node-transport.shared-secret:}") String sharedSecret,
             @Value("${seahorse.agent.sandbox.node-transport.connect-timeout-ms:5000}") long connectTimeoutMs,
             @Value("${seahorse.agent.sandbox.node-transport.request-timeout-ms:60000}") long requestTimeoutMs,
-            @Value("${seahorse.agent.sandbox.node-transport.max-artifact-bytes:67108864}") long maxArtifactBytes) {
+            @Value("${seahorse.agent.sandbox.node-transport.max-artifact-bytes:67108864}") long maxArtifactBytes,
+            @Value("${seahorse.agent.sandbox.node-transport.allow-insecure-http:false}") boolean allowInsecureHttp) {
         return new HttpSandboxRemoteRuntimeAdapter(
                 objectMapper,
                 sharedSecret,
                 Duration.ofMillis(connectTimeoutMs),
                 Duration.ofMillis(requestTimeoutMs),
-                maxArtifactBytes);
+                maxArtifactBytes,
+                allowInsecureHttp);
     }
 
     @Bean
@@ -856,12 +882,16 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             SandboxSessionRepositoryPort sandboxSessionRepositoryPort,
             SandboxRuntimeNodeRegistryPort sandboxRuntimeNodeRegistryPort,
             @Value("${seahorse.agent.sandbox.node-transport.base-url:}") String transportBaseUrl,
+            @Value("${seahorse.agent.sandbox.node-transport.allow-insecure-http:false}") boolean allowInsecureHttp,
+            SandboxRuntimeNodeOwnerIdentity ownerIdentity,
             ObjectProvider<Clock> clockProvider) {
         return new KernelSandboxRuntimeNodeRegistryService(
                 sandboxRuntimePort,
                 sandboxSessionRepositoryPort,
                 sandboxRuntimeNodeRegistryPort,
                 transportBaseUrl,
+                allowInsecureHttp,
+                ownerIdentity,
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 

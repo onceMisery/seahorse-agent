@@ -577,27 +577,35 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 safeCommand.requestedHosts(),
                 policyPort.browserPrivateNetworkAllowedHosts(session.tenantId()));
         SandboxExecutionResult result;
+        Optional<SandboxRuntimeNodeEndpoint> remoteEndpoint;
         try {
-            Optional<SandboxRuntimeNodeEndpoint> remoteEndpoint = remoteEndpointFor(session);
+            remoteEndpoint = remoteEndpointFor(session);
             result = remoteEndpoint.isPresent()
                     ? remoteRuntimePort.execute(remoteEndpoint.get(), runtimeRequest)
                     : runtimePort.execute(runtimeRequest);
         } catch (RuntimeException ex) {
             return failedResult(session, SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE);
         }
-        SandboxExecution savedExecution = executionRepositoryPort.saveExecution(result.execution());
-        List<SandboxArtifact> savedArtifacts = result.artifacts().stream()
-                .map(this::persistArtifact)
-                .toList();
-        List<SandboxArtifact> visibleArtifacts = savedArtifacts.stream()
-                .filter(SandboxArtifact::promptVisible)
-                .toList();
-        appendExecutionAudit(session,
-                savedExecution,
-                savedArtifacts.size(),
-                visibleArtifacts.size(),
-                result.reasonCode());
-        return new SandboxExecutionResult(savedExecution, visibleArtifacts, result.reasonCode());
+        List<SandboxArtifact> savedArtifacts = new ArrayList<>();
+        try {
+            SandboxExecution savedExecution = executionRepositoryPort.saveExecution(result.execution());
+            for (SandboxArtifact artifact : result.artifacts()) {
+                savedArtifacts.add(persistArtifact(artifact));
+            }
+            List<SandboxArtifact> visibleArtifacts = savedArtifacts.stream()
+                    .filter(SandboxArtifact::promptVisible)
+                    .toList();
+            appendExecutionAudit(session,
+                    savedExecution,
+                    savedArtifacts.size(),
+                    visibleArtifacts.size(),
+                    result.reasonCode());
+            return new SandboxExecutionResult(savedExecution, visibleArtifacts, result.reasonCode());
+        } finally {
+            if (remoteEndpoint.isPresent()) {
+                remoteRuntimePort.releaseArtifacts(session, result.artifacts(), List.copyOf(savedArtifacts));
+            }
+        }
     }
 
     @Override

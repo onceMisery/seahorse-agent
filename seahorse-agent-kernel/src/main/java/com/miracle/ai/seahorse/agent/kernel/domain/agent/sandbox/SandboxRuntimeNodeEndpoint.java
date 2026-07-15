@@ -23,6 +23,7 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 
 public record SandboxRuntimeNodeEndpoint(String nodeId,
+                                         String ownerId,
                                          URI transportUri,
                                          String observedHealthStatus,
                                          boolean observedAdmissionAvailable,
@@ -33,6 +34,7 @@ public record SandboxRuntimeNodeEndpoint(String nodeId,
 
     public SandboxRuntimeNodeEndpoint {
         nodeId = normalizeNodeId(nodeId);
+        ownerId = requireText(ownerId, "ownerId must not be blank");
         transportUri = normalizeTransportUri(transportUri);
         observedHealthStatus = requireText(observedHealthStatus, "observedHealthStatus must not be blank");
         observedAdmissionStatus = requireText(observedAdmissionStatus, "observedAdmissionStatus must not be blank");
@@ -40,7 +42,28 @@ public record SandboxRuntimeNodeEndpoint(String nodeId,
     }
 
     public SandboxRuntimeNodeEndpoint(String nodeId, URI transportUri, Instant expiresAt) {
-        this(nodeId, transportUri, "HEALTHY", true, SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, expiresAt);
+        this(nodeId,
+                "legacy-owner",
+                transportUri,
+                "HEALTHY",
+                true,
+                SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE,
+                expiresAt);
+    }
+
+    public SandboxRuntimeNodeEndpoint(String nodeId,
+                                      URI transportUri,
+                                      String observedHealthStatus,
+                                      boolean observedAdmissionAvailable,
+                                      String observedAdmissionStatus,
+                                      Instant expiresAt) {
+        this(nodeId,
+                "legacy-owner",
+                transportUri,
+                observedHealthStatus,
+                observedAdmissionAvailable,
+                observedAdmissionStatus,
+                expiresAt);
     }
 
     private static String normalizeNodeId(String value) {

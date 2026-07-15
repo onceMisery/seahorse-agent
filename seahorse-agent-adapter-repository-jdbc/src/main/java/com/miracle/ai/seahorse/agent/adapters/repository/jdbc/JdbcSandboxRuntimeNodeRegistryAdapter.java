@@ -45,7 +45,9 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
             UPDATE sa_sandbox_runtime_node
             SET owner_id = ?, runtime = ?, engine = ?, health_status = ?, admission_available = ?,
                 admission_status = ?, active_session_count = ?, active_session_limit = ?,
-                workspace_free_bytes = ?, observed_at = ?, heartbeat_at = ?, expires_at = ?, transport_uri = ?
+                workspace_free_bytes = ?, observed_at = ?, heartbeat_at = ?,
+                expires_at = CASE WHEN owner_id = ? AND expires_at > ? THEN expires_at ELSE ? END,
+                transport_uri = ?
             WHERE node_id = ? AND (owner_id = ? OR expires_at <= ?)
             """;
     private static final String SQL_INSERT_HEARTBEAT = """
@@ -70,9 +72,18 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
             """;
     private static final String SQL_DATABASE_NOW = "SELECT CURRENT_TIMESTAMP";
     private static final String SQL_FIND_LIVE_ENDPOINT = """
-            SELECT node_id, transport_uri, health_status, admission_available, admission_status, expires_at
+            SELECT node_id, owner_id, transport_uri, health_status, admission_available, admission_status, expires_at
             FROM sa_sandbox_runtime_node
             WHERE node_id = ? AND expires_at > CURRENT_TIMESTAMP AND transport_uri <> ''
+            """;
+    private static final String SQL_IS_LIVE_OWNER = """
+            SELECT COUNT(*) FROM sa_sandbox_runtime_node
+            WHERE node_id = ? AND owner_id = ? AND expires_at > CURRENT_TIMESTAMP
+            """;
+    private static final String SQL_RESERVE_OPERATION_LEASE = """
+            UPDATE sa_sandbox_runtime_node
+            SET expires_at = CASE WHEN expires_at > ? THEN expires_at ELSE ? END
+            WHERE node_id = ? AND owner_id = ? AND expires_at > ?
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -114,6 +125,8 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                 safeRegistration.observedWorkspaceFreeBytes(),
                 toTimestamp(safeRegistration.observedAt()),
                 toTimestamp(persisted.heartbeatAt()),
+                safeOwnerId,
+                toTimestamp(persisted.expiresAt()),
                 toTimestamp(persisted.expiresAt()),
                 safeTransportUri,
                 safeRegistration.nodeId(),
@@ -155,6 +168,7 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                 SQL_FIND_LIVE_ENDPOINT,
                 (rs, rowNum) -> new SandboxRuntimeNodeEndpoint(
                         rs.getString("node_id"),
+                        rs.getString("owner_id"),
                         URI.create(rs.getString("transport_uri")),
                         rs.getString("health_status"),
                         rs.getBoolean("admission_available"),
@@ -162,6 +176,40 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                         toInstant(rs.getTimestamp("expires_at"))),
                 nodeId.trim());
         return endpoints.stream().findFirst();
+    }
+
+    @Override
+    public boolean isLiveOwner(String nodeId, String ownerId) {
+        if (nodeId == null || nodeId.isBlank() || ownerId == null || ownerId.isBlank()) {
+            return false;
+        }
+        Integer count = jdbcTemplate.queryForObject(
+                SQL_IS_LIVE_OWNER,
+                Integer.class,
+                nodeId.trim(),
+                ownerId.trim());
+        return count != null && count == 1;
+    }
+
+    @Override
+    public boolean reserveOperationLease(String nodeId, String ownerId, Duration leaseTtl) {
+        if (nodeId == null || nodeId.isBlank() || ownerId == null || ownerId.isBlank()) {
+            return false;
+        }
+        Duration safeLeaseTtl = Objects.requireNonNull(leaseTtl, "leaseTtl must not be null");
+        if (safeLeaseTtl.isNegative() || safeLeaseTtl.isZero()
+                || safeLeaseTtl.compareTo(Duration.ofMinutes(10)) > 0) {
+            throw new IllegalArgumentException("leaseTtl must be between 1ms and 10 minutes");
+        }
+        Instant now = databaseNow();
+        Instant operationDeadline = now.plus(safeLeaseTtl);
+        return jdbcTemplate.update(
+                SQL_RESERVE_OPERATION_LEASE,
+                toTimestamp(operationDeadline),
+                toTimestamp(operationDeadline),
+                nodeId.trim(),
+                ownerId.trim(),
+                toTimestamp(now)) == 1;
     }
 
     @Override

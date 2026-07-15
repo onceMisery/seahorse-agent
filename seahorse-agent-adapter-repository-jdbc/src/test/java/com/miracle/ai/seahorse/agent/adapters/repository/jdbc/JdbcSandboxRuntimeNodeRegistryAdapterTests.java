@@ -51,6 +51,18 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                 .get()
                 .extracting(endpoint -> endpoint.transportUri())
                 .isEqualTo(URI.create("http://runtime-a:8080/internal/sandbox/runtime"));
+        assertThat(adapter.findLiveEndpoint("local-container-docker")).get()
+                .extracting(endpoint -> endpoint.ownerId())
+                .isEqualTo("owner-a");
+        assertThat(adapter.isLiveOwner("local-container-docker", "owner-a")).isTrue();
+        assertThat(adapter.isLiveOwner("local-container-docker", "owner-b")).isFalse();
+        assertThat(adapter.reserveOperationLease(
+                "local-container-docker", "owner-a", Duration.ofSeconds(90))).isTrue();
+        Timestamp operationLeaseExpiry = jdbcTemplate.queryForObject(
+                "SELECT expires_at FROM sa_sandbox_runtime_node WHERE node_id = 'local-container-docker'",
+                Timestamp.class);
+        assertThat(adapter.reserveOperationLease(
+                "local-container-docker", "owner-b", Duration.ofSeconds(90))).isFalse();
         assertThat(adapter.heartbeat(
                 registration(NOW.plusSeconds(1), NOW.plusSeconds(46)),
                 "owner-b",
@@ -65,6 +77,9 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                 "owner-a",
                 "http://runtime-a-new:8080/internal/sandbox/runtime/",
                 Duration.ofSeconds(45))).isPresent();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT expires_at FROM sa_sandbox_runtime_node WHERE node_id = 'local-container-docker'",
+                Timestamp.class)).isEqualTo(operationLeaseExpiry);
         assertThat(adapter.findLiveEndpoint("local-container-docker"))
                 .get()
                 .extracting(endpoint -> endpoint.transportUri())
@@ -90,6 +105,7 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
         assertThat(adapter.release("local-container-docker", "owner-a")).isFalse();
         assertThat(adapter.release("local-container-docker", "owner-b")).isTrue();
         assertThat(adapter.findLiveEndpoint("local-container-docker")).isEmpty();
+        assertThat(adapter.isLiveOwner("local-container-docker", "owner-b")).isFalse();
         assertThat(adapter.listRegistrations(10)).singleElement()
                 .satisfies(registration -> assertThat(registration.registrationStatus()).isEqualTo("STALE"));
     }

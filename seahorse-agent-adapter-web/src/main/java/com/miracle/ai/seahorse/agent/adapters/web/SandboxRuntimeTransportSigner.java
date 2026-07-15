@@ -32,6 +32,7 @@ import java.util.function.Supplier;
 public final class SandboxRuntimeTransportSigner {
 
     public static final String HEADER_NODE = "X-Seahorse-Sandbox-Node";
+    public static final String HEADER_OWNER = "X-Seahorse-Sandbox-Lease-Owner";
     public static final String HEADER_TIMESTAMP = "X-Seahorse-Sandbox-Timestamp";
     public static final String HEADER_NONCE = "X-Seahorse-Sandbox-Nonce";
     public static final String HEADER_BODY_SHA256 = "X-Seahorse-Sandbox-Body-SHA256";
@@ -54,26 +55,33 @@ public final class SandboxRuntimeTransportSigner {
     }
 
     public Map<String, String> sign(String nodeId, String method, String path, String body) {
+        return sign(nodeId, "transport-owner", method, path, body);
+    }
+
+    public Map<String, String> sign(String nodeId, String ownerId, String method, String path, String body) {
         String timestamp = Instant.now(clock).toString();
         String nonce = Objects.requireNonNull(nonceSupplier.get(), "nonce must not be null");
         String bodySha256 = sha256Hex(body);
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put(HEADER_NODE, requireText(nodeId, "nodeId must not be blank"));
+        headers.put(HEADER_OWNER, requireText(ownerId, "ownerId must not be blank"));
         headers.put(HEADER_TIMESTAMP, timestamp);
         headers.put(HEADER_NONCE, nonce);
         headers.put(HEADER_BODY_SHA256, bodySha256);
         headers.put(HEADER_SIGNATURE, signPayload(secret,
-                signaturePayload(nodeId, method, path, timestamp, nonce, bodySha256)));
+                signaturePayload(nodeId, ownerId, method, path, timestamp, nonce, bodySha256)));
         return Map.copyOf(headers);
     }
 
     static String signaturePayload(String nodeId,
+                                   String ownerId,
                                    String method,
                                    String path,
                                    String timestamp,
                                    String nonce,
                                    String bodySha256) {
         return requireText(nodeId, "nodeId must not be blank") + "\n"
+                + requireText(ownerId, "ownerId must not be blank") + "\n"
                 + requireText(method, "method must not be blank").toUpperCase() + "\n"
                 + requirePath(path) + "\n"
                 + requireText(timestamp, "timestamp must not be blank") + "\n"

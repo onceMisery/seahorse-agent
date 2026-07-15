@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
+import java.util.function.BiPredicate;
 
 public final class SandboxRuntimeTransportAuthenticator {
 
@@ -40,6 +41,8 @@ public final class SandboxRuntimeTransportAuthenticator {
 
     private final String secret;
     private final String localNodeId;
+    private final String localOwnerId;
+    private final BiPredicate<String, String> liveOwnerValidator;
     private final Duration allowedTimestampSkew;
     private final Clock clock;
     private final Map<String, Instant> nonceExpirations = new ConcurrentHashMap<>();
@@ -47,15 +50,34 @@ public final class SandboxRuntimeTransportAuthenticator {
     public SandboxRuntimeTransportAuthenticator(String secret,
                                                 String localNodeId,
                                                 Duration allowedTimestampSkew) {
-        this(secret, localNodeId, allowedTimestampSkew, Clock.systemUTC());
+        this(secret, localNodeId, "transport-owner", allowedTimestampSkew, (nodeId, ownerId) -> true);
     }
 
     SandboxRuntimeTransportAuthenticator(String secret,
                                          String localNodeId,
                                          Duration allowedTimestampSkew,
                                          Clock clock) {
+        this(secret, localNodeId, "transport-owner", allowedTimestampSkew, clock, (nodeId, ownerId) -> true);
+    }
+
+    public SandboxRuntimeTransportAuthenticator(String secret,
+                                                String localNodeId,
+                                                String localOwnerId,
+                                                Duration allowedTimestampSkew,
+                                                BiPredicate<String, String> liveOwnerValidator) {
+        this(secret, localNodeId, localOwnerId, allowedTimestampSkew, Clock.systemUTC(), liveOwnerValidator);
+    }
+
+    SandboxRuntimeTransportAuthenticator(String secret,
+                                         String localNodeId,
+                                         String localOwnerId,
+                                         Duration allowedTimestampSkew,
+                                         Clock clock,
+                                         BiPredicate<String, String> liveOwnerValidator) {
         this.secret = SandboxRuntimeTransportSigner.requireSecret(secret);
         this.localNodeId = requireHeaderValue(localNodeId, "sandbox transport local node id");
+        this.localOwnerId = requireHeaderValue(localOwnerId, "sandbox transport local owner id");
+        this.liveOwnerValidator = Objects.requireNonNull(liveOwnerValidator, "liveOwnerValidator must not be null");
         this.allowedTimestampSkew = Objects.requireNonNullElse(allowedTimestampSkew, Duration.ofMinutes(2));
         if (this.allowedTimestampSkew.isNegative() || this.allowedTimestampSkew.isZero()
                 || this.allowedTimestampSkew.compareTo(Duration.ofMinutes(10)) > 0) {
@@ -67,6 +89,10 @@ public final class SandboxRuntimeTransportAuthenticator {
     public void authenticate(String method, String path, String body, Map<String, String> headers) {
         String nodeId = requiredHeader(headers, SandboxRuntimeTransportSigner.HEADER_NODE);
         if (!constantTimeEquals(localNodeId, nodeId)) {
+            unauthorized();
+        }
+        String ownerId = requiredHeader(headers, SandboxRuntimeTransportSigner.HEADER_OWNER);
+        if (!constantTimeEquals(localOwnerId, ownerId)) {
             unauthorized();
         }
         String timestamp = requiredHeader(headers, SandboxRuntimeTransportSigner.HEADER_TIMESTAMP);
@@ -84,20 +110,23 @@ public final class SandboxRuntimeTransportAuthenticator {
         String expectedSignature = SandboxRuntimeTransportSigner.signPayload(
                 secret,
                 SandboxRuntimeTransportSigner.signaturePayload(
-                        nodeId, method, path, timestamp, nonce, bodySha256));
+                        nodeId, ownerId, method, path, timestamp, nonce, bodySha256));
         if (!constantTimeEquals(expectedSignature, signature)) {
             unauthorized();
         }
-        rememberNonce(nodeId, nonce);
+        rememberNonce(nodeId, ownerId, nonce, requestTime);
+        if (!liveOwnerValidator.test(nodeId, ownerId)) {
+            unauthorized();
+        }
     }
 
-    private void rememberNonce(String nodeId, String nonce) {
+    private void rememberNonce(String nodeId, String ownerId, String nonce, Instant requestTime) {
         purgeExpiredNonces();
         if (nonceExpirations.size() >= MAX_REMEMBERED_NONCES) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Sandbox transport nonce capacity exceeded");
         }
-        Instant expiration = clock.instant().plus(allowedTimestampSkew);
-        if (nonceExpirations.putIfAbsent(nodeId + "|" + nonce, expiration) != null) {
+        Instant expiration = requestTime.plus(allowedTimestampSkew);
+        if (nonceExpirations.putIfAbsent(nodeId + "|" + ownerId + "|" + nonce, expiration) != null) {
             unauthorized();
         }
     }

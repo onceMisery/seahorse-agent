@@ -36,9 +36,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class HttpSandboxRemoteRuntimeAdapter implements SandboxRemoteRuntimePort {
@@ -50,6 +52,7 @@ public final class HttpSandboxRemoteRuntimeAdapter implements SandboxRemoteRunti
     private final SandboxRuntimeTransportSigner signer;
     private final Duration requestTimeout;
     private final long maxArtifactBytes;
+    private final boolean allowInsecureHttp;
     private final Map<String, Path> sessionTempDirectories = new ConcurrentHashMap<>();
 
     public HttpSandboxRemoteRuntimeAdapter(ObjectMapper objectMapper,
@@ -57,10 +60,20 @@ public final class HttpSandboxRemoteRuntimeAdapter implements SandboxRemoteRunti
                                            Duration connectTimeout,
                                            Duration requestTimeout,
                                            long maxArtifactBytes) {
+        this(objectMapper, sharedSecret, connectTimeout, requestTimeout, maxArtifactBytes, false);
+    }
+
+    public HttpSandboxRemoteRuntimeAdapter(ObjectMapper objectMapper,
+                                           String sharedSecret,
+                                           Duration connectTimeout,
+                                           Duration requestTimeout,
+                                           long maxArtifactBytes,
+                                           boolean allowInsecureHttp) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.signer = new SandboxRuntimeTransportSigner(sharedSecret);
         this.requestTimeout = positiveDuration(requestTimeout, Duration.ofSeconds(60), "requestTimeout");
         this.maxArtifactBytes = requireMaxArtifactBytes(maxArtifactBytes);
+        this.allowInsecureHttp = allowInsecureHttp;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(positiveDuration(connectTimeout, Duration.ofSeconds(5), "connectTimeout"))
                 .build();
@@ -119,7 +132,7 @@ public final class HttpSandboxRemoteRuntimeAdapter implements SandboxRemoteRunti
                 descriptor.sessionId(), descriptor.executionId(), descriptor.artifactId());
         String body = writeJson(request);
         URI uri = resolve(endpoint, SeahorseSandboxRuntimeTransportController.ARTIFACT_PATH);
-        HttpRequest httpRequest = signedRequest(endpoint.nodeId(), uri, body);
+        HttpRequest httpRequest = signedRequest(endpoint, uri, body);
         HttpResponse<InputStream> response;
         try {
             response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
@@ -143,7 +156,7 @@ public final class HttpSandboxRemoteRuntimeAdapter implements SandboxRemoteRunti
         URI uri = resolve(endpoint, path);
         try {
             HttpResponse<String> response = httpClient.send(
-                    signedRequest(endpoint.nodeId(), uri, body),
+                    signedRequest(endpoint, uri, body),
                     HttpResponse.BodyHandlers.ofString());
             requireSuccessful(response.statusCode());
             return objectMapper.readValue(response.body(), type);
@@ -155,14 +168,76 @@ public final class HttpSandboxRemoteRuntimeAdapter implements SandboxRemoteRunti
         }
     }
 
-    private HttpRequest signedRequest(String nodeId, URI uri, String body) {
+    private HttpRequest signedRequest(SandboxRuntimeNodeEndpoint endpoint, URI uri, String body) {
+        requireSecureEndpoint(uri);
         HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
                 .timeout(requestTimeout)
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body));
-        signer.sign(nodeId, "POST", uri.getPath(), body).forEach(builder::header);
+        signer.sign(endpoint.nodeId(), endpoint.ownerId(), "POST", uri.getPath(), body).forEach(builder::header);
         return builder.build();
+    }
+
+    @Override
+    public void releaseArtifacts(SandboxSession session,
+                                 List<SandboxArtifact> sourceArtifacts,
+                                 List<SandboxArtifact> retainedArtifacts) {
+        Path root = sessionTempDirectories.get(session.sessionId());
+        if (root == null || sourceArtifacts == null) {
+            return;
+        }
+        Path safeRoot = root.toAbsolutePath().normalize();
+        Set<Path> retainedPaths = artifactFilePaths(retainedArtifacts, safeRoot);
+        for (SandboxArtifact artifact : sourceArtifacts) {
+            try {
+                URI uri = URI.create(artifact.objectUri());
+                if (!"file".equalsIgnoreCase(uri.getScheme())) {
+                    continue;
+                }
+                Path path = Path.of(uri).toAbsolutePath().normalize();
+                if (path.startsWith(safeRoot) && !retainedPaths.contains(path)) {
+                    Files.deleteIfExists(path);
+                }
+            } catch (IOException | RuntimeException ignored) {
+            }
+        }
+        try {
+            if (retainedPaths.isEmpty() && Files.deleteIfExists(safeRoot)) {
+                sessionTempDirectories.remove(session.sessionId(), root);
+            }
+        } catch (IOException ignored) {
+        }
+    }
+
+    private static Set<Path> artifactFilePaths(List<SandboxArtifact> artifacts, Path safeRoot) {
+        Set<Path> paths = new HashSet<>();
+        if (artifacts == null) {
+            return paths;
+        }
+        for (SandboxArtifact artifact : artifacts) {
+            try {
+                URI uri = URI.create(artifact.objectUri());
+                if ("file".equalsIgnoreCase(uri.getScheme())) {
+                    Path path = Path.of(uri).toAbsolutePath().normalize();
+                    if (path.startsWith(safeRoot)) {
+                        paths.add(path);
+                    }
+                }
+            } catch (RuntimeException ignored) {
+            }
+        }
+        return paths;
+    }
+
+    private void requireSecureEndpoint(URI uri) {
+        if ("https".equalsIgnoreCase(uri.getScheme())) {
+            return;
+        }
+        if (allowInsecureHttp && "http".equalsIgnoreCase(uri.getScheme())) {
+            return;
+        }
+        throw new IllegalStateException("Sandbox remote runtime endpoint must use HTTPS");
     }
 
     private String writeJson(Object payload) {

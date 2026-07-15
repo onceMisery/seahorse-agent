@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeRegistration;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeOwnerIdentity;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeNodeRegistryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeNodeHeartbeatResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
@@ -29,6 +30,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionReposito
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.net.URI;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -62,7 +64,37 @@ public class KernelSandboxRuntimeNodeRegistryService implements SandboxRuntimeNo
                                                    SandboxRuntimeNodeRegistryPort registryPort,
                                                    String transportUri,
                                                    Clock clock) {
-        this(runtimePort, sessionRepositoryPort, registryPort, clock, UUID.randomUUID().toString(), transportUri);
+        this(runtimePort, sessionRepositoryPort, registryPort, transportUri, false, clock);
+    }
+
+    public KernelSandboxRuntimeNodeRegistryService(SandboxRuntimePort runtimePort,
+                                                   SandboxSessionRepositoryPort sessionRepositoryPort,
+                                                   SandboxRuntimeNodeRegistryPort registryPort,
+                                                   String transportUri,
+                                                   boolean allowInsecureHttp,
+                                                   Clock clock) {
+        this(runtimePort,
+                sessionRepositoryPort,
+                registryPort,
+                transportUri,
+                allowInsecureHttp,
+                SandboxRuntimeNodeOwnerIdentity.random(),
+                clock);
+    }
+
+    public KernelSandboxRuntimeNodeRegistryService(SandboxRuntimePort runtimePort,
+                                                   SandboxSessionRepositoryPort sessionRepositoryPort,
+                                                   SandboxRuntimeNodeRegistryPort registryPort,
+                                                   String transportUri,
+                                                   boolean allowInsecureHttp,
+                                                   SandboxRuntimeNodeOwnerIdentity ownerIdentity,
+                                                   Clock clock) {
+        this(runtimePort,
+                sessionRepositoryPort,
+                registryPort,
+                clock,
+                Objects.requireNonNull(ownerIdentity, "ownerIdentity must not be null").ownerId(),
+                normalizeTransportUri(transportUri, allowInsecureHttp));
     }
 
     KernelSandboxRuntimeNodeRegistryService(SandboxRuntimePort runtimePort,
@@ -140,6 +172,23 @@ public class KernelSandboxRuntimeNodeRegistryService implements SandboxRuntimeNo
     private static String requireText(String value, String message) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(message);
+        }
+        return value.trim();
+    }
+
+    private static String normalizeTransportUri(String value, boolean allowInsecureHttp) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        URI uri;
+        try {
+            uri = URI.create(value.trim());
+        } catch (RuntimeException ex) {
+            throw new IllegalArgumentException("sandbox node transport base URL must be a valid URI", ex);
+        }
+        if ("http".equalsIgnoreCase(uri.getScheme()) && !allowInsecureHttp) {
+            throw new IllegalArgumentException(
+                    "sandbox node transport requires HTTPS unless allow-insecure-http is explicitly enabled");
         }
         return value.trim();
     }

@@ -17,6 +17,10 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeEndpoint;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -24,9 +28,13 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.time.ZoneId;
+import java.net.URI;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SandboxRuntimeTransportAuthenticatorTests {
@@ -78,11 +86,132 @@ class SandboxRuntimeTransportAuthenticatorTests {
                 .hasMessageContaining("at least 32");
     }
 
+    @Test
+    void shouldRetainFutureTimestampNonceForEntireSignatureWindow() {
+        MutableClock authenticatorClock = new MutableClock(NOW);
+        Clock futureSignerClock = Clock.fixed(NOW.plusSeconds(60), ZoneOffset.UTC);
+        SandboxRuntimeTransportSigner futureSigner = new SandboxRuntimeTransportSigner(
+                SECRET,
+                futureSignerClock,
+                () -> "nonce-future");
+        SandboxRuntimeTransportAuthenticator authenticator = new SandboxRuntimeTransportAuthenticator(
+                SECRET,
+                NODE_ID,
+                "owner-a",
+                Duration.ofMinutes(2),
+                authenticatorClock,
+                (nodeId, ownerId) -> true);
+        Map<String, String> headers = futureSigner.sign(NODE_ID, "owner-a", "POST", PATH, BODY);
+
+        authenticator.authenticate("POST", PATH, BODY, headers);
+        authenticatorClock.setInstant(NOW.plusSeconds(150));
+
+        assertThatThrownBy(() -> authenticator.authenticate("POST", PATH, BODY, headers))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("401");
+    }
+
+    @Test
+    void shouldFenceRequestsByProcessOwnerAndLiveLease() {
+        SandboxRuntimeTransportAuthenticator authenticator = new SandboxRuntimeTransportAuthenticator(
+                SECRET,
+                NODE_ID,
+                "owner-a",
+                Duration.ofMinutes(2),
+                CLOCK,
+                (nodeId, ownerId) -> "owner-a".equals(ownerId));
+
+        assertThatThrownBy(() -> authenticator.authenticate(
+                "POST", PATH, BODY, signer("nonce-owner-b").sign(NODE_ID, "owner-b", "POST", PATH, BODY)))
+                .isInstanceOf(ResponseStatusException.class);
+        SandboxRuntimeTransportAuthenticator staleLease = new SandboxRuntimeTransportAuthenticator(
+                SECRET,
+                NODE_ID,
+                "owner-a",
+                Duration.ofMinutes(2),
+                CLOCK,
+                (nodeId, ownerId) -> false);
+        assertThatThrownBy(() -> staleLease.authenticate(
+                "POST", PATH, BODY, signer("nonce-stale").sign(NODE_ID, "owner-a", "POST", PATH, BODY)))
+                .isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
+    void shouldReserveOwnerLeaseOnlyAfterSignatureAndReplayValidation() {
+        AtomicInteger reservations = new AtomicInteger();
+        SandboxRuntimeTransportAuthenticator authenticator = new SandboxRuntimeTransportAuthenticator(
+                SECRET,
+                NODE_ID,
+                "owner-a",
+                Duration.ofMinutes(2),
+                CLOCK,
+                (nodeId, ownerId) -> reservations.incrementAndGet() > 0);
+        Map<String, String> validHeaders = signer("nonce-reservation").sign(
+                NODE_ID, "owner-a", "POST", PATH, BODY);
+
+        assertThatThrownBy(() -> authenticator.authenticate("POST", PATH, BODY + " ", validHeaders))
+                .isInstanceOf(ResponseStatusException.class);
+        assertThat(reservations).hasValue(0);
+        authenticator.authenticate("POST", PATH, BODY, validHeaders);
+        assertThat(reservations).hasValue(1);
+        assertThatThrownBy(() -> authenticator.authenticate("POST", PATH, BODY, validHeaders))
+                .isInstanceOf(ResponseStatusException.class);
+        assertThat(reservations).hasValue(1);
+    }
+
+    @Test
+    void shouldRejectPlainHttpRemoteEndpointByDefault() {
+        HttpSandboxRemoteRuntimeAdapter adapter = new HttpSandboxRemoteRuntimeAdapter(
+                new ObjectMapper().findAndRegisterModules(),
+                SECRET,
+                Duration.ofSeconds(1),
+                Duration.ofSeconds(1),
+                1024L);
+
+        assertThatThrownBy(() -> adapter.createSession(
+                new SandboxRuntimeNodeEndpoint(
+                        NODE_ID,
+                        URI.create("http://runtime-node:9090/internal/sandbox/runtime"),
+                        NOW.plusSeconds(45)),
+                new SandboxSessionRequest(
+                        "default", "run-1", SandboxRuntimeType.CODE_INTERPRETER, false, java.util.List.of())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("HTTPS");
+    }
+
     private static SandboxRuntimeTransportAuthenticator authenticator() {
         return new SandboxRuntimeTransportAuthenticator(SECRET, NODE_ID, Duration.ofMinutes(2), CLOCK);
     }
 
     private static SandboxRuntimeTransportSigner signer(String nonce) {
         return new SandboxRuntimeTransportSigner(SECRET, CLOCK, () -> nonce);
+    }
+
+    private static final class MutableClock extends Clock {
+
+        private Instant instant;
+
+        private MutableClock(Instant instant) {
+            this.instant = instant;
+        }
+
+        private void setInstant(Instant instant) {
+            this.instant = instant;
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return instant;
+        }
     }
 }
