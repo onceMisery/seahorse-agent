@@ -31,6 +31,8 @@ public class ContainerSandboxAdapterProperties {
 
     private String nodeId = DEFAULT_NODE_ID;
 
+    private boolean admissionEnabled = true;
+
     private String pythonImage = "python:3.11-alpine";
 
     private String browserImage = "seahorse-sandbox-browser:playwright-1.48.0";
@@ -108,6 +110,14 @@ public class ContainerSandboxAdapterProperties {
                     "sandbox container node-id must use 1-64 lowercase letters, numbers, dots, underscores, or hyphens");
         }
         this.nodeId = nodeId;
+    }
+
+    public boolean isAdmissionEnabled() {
+        return admissionEnabled;
+    }
+
+    public void setAdmissionEnabled(boolean admissionEnabled) {
+        this.admissionEnabled = admissionEnabled;
     }
 
     public String getPythonImage() {

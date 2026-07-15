@@ -578,6 +578,9 @@ try {
         if ($response.data.workspaceAvailable -ne $true) {
             throw "Expected sandbox runtime workspaceAvailable=true: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
+        if ($response.data.admissionEnabled -ne $true) {
+            throw "Expected sandbox runtime admissionEnabled=true: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
         if ($null -eq $response.data.PSObject.Properties["workspaceFreeBytes"]) {
             throw "Sandbox runtime health did not include workspaceFreeBytes: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }

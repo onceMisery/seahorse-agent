@@ -53,6 +53,8 @@ export interface SandboxRuntimeHealth {
   checkedAt?: string;
   runtime?: string;
   engine?: string;
+  nodeId?: string;
+  admissionEnabled?: boolean;
   status?: string;
   engineAvailable?: boolean;
   workspaceAvailable?: boolean;

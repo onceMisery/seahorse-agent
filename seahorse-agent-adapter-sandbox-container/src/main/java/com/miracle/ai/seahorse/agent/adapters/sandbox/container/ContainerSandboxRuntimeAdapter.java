@@ -2833,6 +2833,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 "container",
                 properties.getEngine(),
                 properties.getNodeId(),
+                properties.isAdmissionEnabled(),
                 healthStatus(
                         engineAvailable,
                         workspaceAvailable,

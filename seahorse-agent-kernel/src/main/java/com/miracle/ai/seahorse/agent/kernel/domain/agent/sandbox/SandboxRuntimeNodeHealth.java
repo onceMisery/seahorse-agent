@@ -49,6 +49,7 @@ public record SandboxRuntimeNodeHealth(Instant checkedAt,
     public static final String ADMISSION_DEGRADED = "DEGRADED";
     public static final String ADMISSION_DISK_LOW = "DISK_LOW";
     public static final String ADMISSION_SATURATED = "SATURATED";
+    public static final String ADMISSION_DRAINING = "DRAINING";
     public static final String ADMISSION_UNAVAILABLE = "UNAVAILABLE";
 
     public SandboxRuntimeNodeHealth {
@@ -69,9 +70,8 @@ public record SandboxRuntimeNodeHealth(Instant checkedAt,
     public static SandboxRuntimeNodeHealth fromHealth(SandboxRuntimeHealth health) {
         SandboxRuntimeHealth safeHealth = Objects.requireNonNull(health, "health must not be null");
         String admissionStatus = admissionStatus(safeHealth);
-        boolean admissionAvailable = !ADMISSION_UNAVAILABLE.equals(admissionStatus)
-                && !ADMISSION_DISK_LOW.equals(admissionStatus)
-                && !ADMISSION_SATURATED.equals(admissionStatus);
+        boolean admissionAvailable = ADMISSION_AVAILABLE.equals(admissionStatus)
+                || ADMISSION_DEGRADED.equals(admissionStatus);
         return new SandboxRuntimeNodeHealth(
                 safeHealth.checkedAt(),
                 nodeId(safeHealth.nodeId(), safeHealth.runtime(), safeHealth.engine()),
@@ -103,6 +103,9 @@ public record SandboxRuntimeNodeHealth(Instant checkedAt,
                 || !health.engineAvailable()
                 || !health.workspaceAvailable()) {
             return ADMISSION_UNAVAILABLE;
+        }
+        if (!health.admissionEnabled()) {
+            return ADMISSION_DRAINING;
         }
         if (!health.workspaceDiskAvailable()) {
             return ADMISSION_DISK_LOW;

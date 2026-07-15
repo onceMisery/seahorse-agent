@@ -432,20 +432,19 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                     now);
             return saveSession(denied, AuditEventType.SANDBOX_SESSION_CREATED);
         }
-        Optional<SandboxPolicyReasonCode> runtimeAdmissionRejection = runtimeAdmissionRejectionReason();
-        if (runtimeAdmissionRejection.isPresent()) {
+        RuntimeAdmissionDecision runtimeAdmission = runtimeAdmissionDecision();
+        if (runtimeAdmission.rejectionReason() != null) {
             SandboxSession rejected = SandboxSession.failed(
                     sessionId(),
                     safeCommand.tenantId(),
                     safeCommand.runId(),
                     safeCommand.runtimeType(),
-                    runtimeAdmissionRejection.get(),
+                    runtimeAdmission.rejectionReason(),
                     profileId,
                     expiresAt,
                     now);
             return saveSession(rejected, AuditEventType.SANDBOX_SESSION_CREATED);
         }
-        String runtimeNodeId = selectRuntimeNodeId();
         SandboxSession session = runtimePort.createSession(new SandboxSessionRequest(
                 safeCommand.tenantId(),
                 safeCommand.runId(),
@@ -456,7 +455,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 expiresAt));
         SandboxSession governed = session.withRuntimeGovernance(
                 profileId,
-                expiresAt).withRuntimeNode(runtimeNodeId);
+                expiresAt).withRuntimeNode(runtimeAdmission.runtimeNodeId());
         return saveSession(governed, AuditEventType.SANDBOX_SESSION_CREATED);
     }
 
@@ -569,14 +568,6 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     @Override
     public List<SandboxRuntimeNodeHealth> inspectRuntimeNodes() {
         return List.of(SandboxRuntimeNodeHealth.fromHealth(inspectRuntimeHealth()));
-    }
-
-    private String selectRuntimeNodeId() {
-        return inspectRuntimeNodes().stream()
-                .filter(SandboxRuntimeNodeHealth::admissionAvailable)
-                .map(SandboxRuntimeNodeHealth::nodeId)
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("no sandbox runtime node is available"));
     }
 
     @Override
@@ -837,18 +828,26 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         return SandboxExecutionResult.failed(execution, reasonCode);
     }
 
-    private Optional<SandboxPolicyReasonCode> runtimeAdmissionRejectionReason() {
+    private RuntimeAdmissionDecision runtimeAdmissionDecision() {
         Set<String> activeSessionIds = sessionRepositoryPort.listActiveSessionIds();
         SandboxRuntimeHealth health = Objects.requireNonNull(
                 runtimePort.inspectHealth(activeSessionIds),
                 "runtime health result must not be null");
-        if (health.workspaceMinFreeBytes() > 0L && !health.workspaceDiskAvailable()) {
-            return Optional.of(SandboxPolicyReasonCode.RUNTIME_WORKSPACE_DISK_LOW);
+        if (SandboxRuntimeHealth.STATUS_UNSUPPORTED.equals(health.status())) {
+            return RuntimeAdmissionDecision.allowed(null);
         }
-        if (!health.activeSessionCapacityAvailable()) {
-            return Optional.of(SandboxPolicyReasonCode.RUNTIME_CAPACITY_EXCEEDED);
-        }
-        return Optional.empty();
+        SandboxRuntimeNodeHealth node = SandboxRuntimeNodeHealth.fromHealth(health);
+        return switch (node.admissionStatus()) {
+            case SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE,
+                 SandboxRuntimeNodeHealth.ADMISSION_DEGRADED -> RuntimeAdmissionDecision.allowed(node.nodeId());
+            case SandboxRuntimeNodeHealth.ADMISSION_DRAINING ->
+                    RuntimeAdmissionDecision.rejected(SandboxPolicyReasonCode.RUNTIME_NODE_DRAINING);
+            case SandboxRuntimeNodeHealth.ADMISSION_DISK_LOW ->
+                    RuntimeAdmissionDecision.rejected(SandboxPolicyReasonCode.RUNTIME_WORKSPACE_DISK_LOW);
+            case SandboxRuntimeNodeHealth.ADMISSION_SATURATED ->
+                    RuntimeAdmissionDecision.rejected(SandboxPolicyReasonCode.RUNTIME_CAPACITY_EXCEEDED);
+            default -> RuntimeAdmissionDecision.rejected(SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE);
+        };
     }
 
     private SandboxRuntimeProfilePolicy effectiveRuntimeProfilePolicy(String tenantId,
@@ -1208,6 +1207,19 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
 
         private static SandboxArtifactDownloadPolicy blocked(String reason) {
             return new SandboxArtifactDownloadPolicy(false, reason);
+        }
+    }
+
+    private record RuntimeAdmissionDecision(String runtimeNodeId, SandboxPolicyReasonCode rejectionReason) {
+
+        private static RuntimeAdmissionDecision allowed(String runtimeNodeId) {
+            return new RuntimeAdmissionDecision(runtimeNodeId, null);
+        }
+
+        private static RuntimeAdmissionDecision rejected(SandboxPolicyReasonCode reasonCode) {
+            return new RuntimeAdmissionDecision(
+                    null,
+                    Objects.requireNonNull(reasonCode, "reasonCode must not be null"));
         }
     }
 
