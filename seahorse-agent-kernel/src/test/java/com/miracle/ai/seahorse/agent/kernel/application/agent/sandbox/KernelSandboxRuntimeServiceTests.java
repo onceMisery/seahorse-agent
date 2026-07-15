@@ -40,6 +40,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeC
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeCleanupResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeHealth;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeEndpoint;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeRegistration;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeProfilePolicyStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
@@ -61,6 +63,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionReposi
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRemoteRuntimePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
@@ -74,10 +78,12 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -320,6 +326,92 @@ class KernelSandboxRuntimeServiceTests {
         assertNull(session.runtimeNodeId());
         assertFalse(runtime.createSessionCalled);
         assertEquals(session, sessionRepository.findSessionById(session.sessionId()).orElseThrow());
+    }
+
+    @Test
+    void shouldRoutePinnedRemoteSessionLifecycleWithoutLocalFallback() {
+        RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                localRuntime,
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true)),
+                sessionRepository);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-remote-node",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                null,
+                null,
+                "sandbox-node-b"));
+        SandboxExecutionResult result = service.execute(new SandboxExecutionCommand(
+                session.sessionId(),
+                "print('remote')",
+                false,
+                List.of()));
+        SandboxSession closed = service.close(session.sessionId());
+
+        assertEquals("sandbox-node-b", session.runtimeNodeId());
+        assertEquals(SandboxExecutionStatus.SUCCEEDED, result.execution().status());
+        assertEquals(SandboxExecutionStatus.CANCELLED, closed.status());
+        assertTrue(remoteRuntime.createSessionCalled);
+        assertTrue(remoteRuntime.executeCalled);
+        assertTrue(remoteRuntime.closeSessionCalled);
+        assertFalse(localRuntime.createSessionCalled);
+        assertFalse(localRuntime.executeCalled);
+        assertFalse(localRuntime.closeSessionCalled);
+    }
+
+    @Test
+    void shouldRejectPinnedRemoteSessionWhenLiveEndpointIsMissing() {
+        RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                localRuntime,
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(null),
+                new MemorySandboxSessionRepository());
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-remote-missing",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                null,
+                null,
+                "sandbox-node-b"));
+
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertEquals(SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE, session.reasonCode());
+        assertFalse(localRuntime.createSessionCalled);
+        assertFalse(remoteRuntime.createSessionCalled);
+    }
+
+    @Test
+    void shouldPreserveRemoteNodeDrainingAdmissionReason() {
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                new RecordingSandboxRuntimePort(),
+                new RecordingSandboxRemoteRuntimePort(),
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(SandboxRuntimeNodeHealth.ADMISSION_DRAINING, false)),
+                new MemorySandboxSessionRepository());
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-remote-draining",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                null,
+                null,
+                "sandbox-node-b"));
+
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertEquals(SandboxPolicyReasonCode.RUNTIME_NODE_DRAINING, session.reasonCode());
     }
 
     @Test
@@ -1651,6 +1743,111 @@ class KernelSandboxRuntimeServiceTests {
                 .toList();
         assertTrue(eventTypes.contains(AuditEventType.SANDBOX_SESSION_CREATED));
         assertTrue(eventTypes.contains(AuditEventType.SANDBOX_SESSION_CLOSED));
+    }
+
+    private static KernelSandboxRuntimeService remoteRoutingService(
+            RecordingSandboxRuntimePort localRuntime,
+            RecordingSandboxRemoteRuntimePort remoteRuntime,
+            SandboxRuntimeNodeRegistryPort nodeRegistry,
+            MemorySandboxSessionRepository sessionRepository) {
+        return new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                localRuntime,
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                new DefaultSandboxArtifactScannerPort(),
+                null,
+                new MemorySandboxRuntimeProfilePolicyRepository(),
+                null,
+                null,
+                null,
+                CLOCK,
+                remoteRuntime,
+                nodeRegistry);
+    }
+
+    private static SandboxRuntimeNodeEndpoint remoteEndpoint(String admissionStatus, boolean admissionAvailable) {
+        return new SandboxRuntimeNodeEndpoint(
+                "sandbox-node-b",
+                URI.create("http://sandbox-node-b:8080/internal/sandbox/runtime"),
+                "HEALTHY",
+                admissionAvailable,
+                admissionStatus,
+                NOW.plusSeconds(45));
+    }
+
+    private static final class RecordingSandboxRemoteRuntimePort implements SandboxRemoteRuntimePort {
+
+        private boolean createSessionCalled;
+        private boolean executeCalled;
+        private boolean closeSessionCalled;
+
+        @Override
+        public SandboxSession createSession(SandboxRuntimeNodeEndpoint endpoint, SandboxSessionRequest request) {
+            createSessionCalled = true;
+            return SandboxSession.created(
+                    "session-remote-1",
+                    request.tenantId(),
+                    request.runId(),
+                    request.runtimeType(),
+                    request.profileId(),
+                    request.expiresAt(),
+                    NOW);
+        }
+
+        @Override
+        public SandboxExecutionResult execute(SandboxRuntimeNodeEndpoint endpoint, SandboxExecutionRequest request) {
+            executeCalled = true;
+            SandboxExecution execution = SandboxExecution.created(
+                    "exec-remote-1",
+                    request.session().sessionId(),
+                    request.session().runtimeType(),
+                    NOW)
+                    .markRunning(NOW)
+                    .markSucceeded(NOW, "remote");
+            return SandboxExecutionResult.succeeded(execution, List.of());
+        }
+
+        @Override
+        public SandboxSession closeSession(SandboxRuntimeNodeEndpoint endpoint, SandboxSession session) {
+            closeSessionCalled = true;
+            return session.closed(NOW.plusSeconds(5));
+        }
+    }
+
+    private static final class FixedSandboxRuntimeNodeRegistry implements SandboxRuntimeNodeRegistryPort {
+
+        private final SandboxRuntimeNodeEndpoint endpoint;
+
+        private FixedSandboxRuntimeNodeRegistry(SandboxRuntimeNodeEndpoint endpoint) {
+            this.endpoint = endpoint;
+        }
+
+        @Override
+        public Optional<SandboxRuntimeNodeRegistration> heartbeat(SandboxRuntimeNodeRegistration registration,
+                                                                  String ownerId,
+                                                                  Duration leaseTtl) {
+            return Optional.of(registration);
+        }
+
+        @Override
+        public boolean release(String nodeId, String ownerId) {
+            return false;
+        }
+
+        @Override
+        public List<SandboxRuntimeNodeRegistration> listRegistrations(int limit) {
+            return List.of();
+        }
+
+        @Override
+        public Optional<SandboxRuntimeNodeEndpoint> findLiveEndpoint(String nodeId) {
+            return endpoint != null && endpoint.nodeId().equals(nodeId)
+                    ? Optional.of(endpoint)
+                    : Optional.empty();
+        }
     }
 
     private static final class RecordingSandboxRuntimePort implements SandboxRuntimePort {

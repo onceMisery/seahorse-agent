@@ -22,14 +22,25 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
-public record SandboxRuntimeNodeEndpoint(String nodeId, URI transportUri, Instant expiresAt) {
+public record SandboxRuntimeNodeEndpoint(String nodeId,
+                                         URI transportUri,
+                                         String observedHealthStatus,
+                                         boolean observedAdmissionAvailable,
+                                         String observedAdmissionStatus,
+                                         Instant expiresAt) {
 
     private static final Pattern NODE_ID = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
 
     public SandboxRuntimeNodeEndpoint {
         nodeId = normalizeNodeId(nodeId);
         transportUri = normalizeTransportUri(transportUri);
+        observedHealthStatus = requireText(observedHealthStatus, "observedHealthStatus must not be blank");
+        observedAdmissionStatus = requireText(observedAdmissionStatus, "observedAdmissionStatus must not be blank");
         expiresAt = Objects.requireNonNull(expiresAt, "expiresAt must not be null");
+    }
+
+    public SandboxRuntimeNodeEndpoint(String nodeId, URI transportUri, Instant expiresAt) {
+        this(nodeId, transportUri, "HEALTHY", true, SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, expiresAt);
     }
 
     private static String normalizeNodeId(String value) {
@@ -55,5 +66,12 @@ public record SandboxRuntimeNodeEndpoint(String nodeId, URI transportUri, Instan
             throw new IllegalArgumentException("transportUri must not exceed 512 characters");
         }
         return text.endsWith("/") ? URI.create(text.substring(0, text.length() - 1)) : uri;
+    }
+
+    private static String requireText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(message);
+        }
+        return value.trim();
     }
 }
