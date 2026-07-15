@@ -2024,7 +2024,7 @@ class ContainerSandboxRuntimeAdapterTests {
         assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo(SandboxPolicyReasonCode.RUNTIME_UNSUPPORTED);
         assertThat(result.execution().resultSummary())
-                .contains("supports csv/tsv to json, csv to xlsx, json to csv/tsv, txt to html, html to txt/docx, markdown/md to html/txt, docx/odt/odp/pdf to html/txt, docx/odt/ods/odp/pptx/xlsx to pdf, pdf/pptx to png, pdf to ocr_txt, xlsx/ods to csv/html, and pptx to html/txt only");
+                .contains("supports csv/tsv to json, csv to xlsx, json to csv/tsv, txt to html, html to txt/docx, markdown/md to html/txt, docx/odt/odp/pdf to html/txt, docx/odt/ods/odp/pptx/xlsx to pdf, odt/ods/odp/pdf/pptx to png, pdf to ocr_txt, xlsx/ods to csv/html, and pptx to html/txt only");
         assertThat(runner.lastCommand).isNull();
     }
 

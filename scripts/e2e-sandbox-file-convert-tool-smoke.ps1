@@ -762,6 +762,62 @@ function Invoke-OfficePdfConversionSmoke {
     return [PSCustomObject]@{ StepId = $stepId; Content = $Content }
 }
 
+function Invoke-OfficePngConversionSmoke {
+    param(
+        [string]$SourceFormat,
+        [string]$Content,
+        [string]$Label
+    )
+    $toolCallId = "sandbox-file-convert-$SourceFormat-png-call-$suffix"
+    $stepId = "sandbox-file-convert-$SourceFormat-png-step-$suffix"
+    $observation = Test-Step "Invoke sandbox_file_convert $Label to PNG through Tool Gateway" {
+        $requestBody = @{
+            runId = $runId; stepId = $stepId; toolCallId = $toolCallId
+            agentId = "legacy-react-agent"; tenantId = "default"
+            userId = "$($login.data.userId)"; agentIdentityId = "$($login.data.userId)"
+            arguments = @{ sourceFormat = $SourceFormat; targetFormat = "png"; contentEncoding = "base64"; content = $Content }
+            resourceRefs = @{}; idempotencyKey = "${runId}:${toolCallId}"; allowedToolIds = @("sandbox_file_convert")
+        }
+        $response = Invoke-SandboxFileConvertTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_file_convert $Label to PNG"
+        if ($response.data.success -ne $true) { throw "sandbox_file_convert $Label to PNG failed: $($response.data | ConvertTo-Json -Depth 20 -Compress)" }
+        $parsed = "$($response.data.content)" | ConvertFrom-Json
+        if ("$($parsed.runtimeType)" -ne "FILE_CONVERSION" -or "$($parsed.executionStatus)" -ne "SUCCEEDED" -or "$($parsed.conversion.sourceFormat)" -ne $SourceFormat -or "$($parsed.conversion.targetFormat)" -ne "png" -or "$($parsed.conversion.contentEncoding)" -ne "base64") {
+            throw "Unexpected $Label to PNG execution: $($response.data.content)"
+        }
+        $artifacts = @($parsed.artifacts)
+        if ($artifacts.Count -ne 1 -or "$($artifacts[0].mediaType)" -ne "image/png" -or "$($artifacts[0].scanStatus)" -ne "CLEAN" -or "$($artifacts[0].scanSummary)" -ne "metadata scan passed" -or $artifacts[0].promptVisible -ne $true) {
+            throw "Expected one prompt-visible clean $Label PNG artifact: $($response.data.content)"
+        }
+        $parsed
+    }
+    if (-not $observation) { exit 1 }
+
+    $artifactId = "$(@($observation.artifacts)[0].artifactId)"
+    $objectUri = Test-Step "Verify persisted $Label to PNG session and artifact" {
+        Assert-PersistedFileConversionArtifact -ArtifactId $artifactId -ExpectedMediaType "image/png" -Label "$Label to PNG"
+    }
+    if (-not $objectUri) { exit 1 }
+
+    Test-Step "Download converted $Label PNG through governed artifact endpoint" {
+        $downloadPath = Join-Path ([System.IO.Path]::GetTempPath()) "seahorse-$SourceFormat-png-$([guid]::NewGuid().ToString('N')).png"
+        try {
+            Invoke-WebRequest -Uri "$BaseUrl/api/sandbox/artifacts/$artifactId/download" -Headers $headers -OutFile $downloadPath -UseBasicParsing
+            $bytes = [System.IO.File]::ReadAllBytes($downloadPath)
+            if ($bytes.Length -lt 8 -or [System.BitConverter]::ToString($bytes, 0, 8) -ne "89-50-4E-47-0D-0A-1A-0A") { throw "Downloaded $Label PNG was not a PNG" }
+        } finally { Remove-Item -LiteralPath $downloadPath -ErrorAction SilentlyContinue }
+    } | Out-Null
+
+    if ($objectUri.StartsWith("local://sandbox-artifacts/")) {
+        Test-Step "Verify local converted $Label PNG object exists in backend storage volume" {
+            $key = $objectUri.Substring("local://sandbox-artifacts/".Length)
+            if ($key.Contains("'")) { throw "Cannot safely shell-quote $Label to PNG key" }
+            & docker exec $BackendContainer sh -lc "test -s '$StorageRoot/sandbox-artifacts/$key'"
+            if ($LASTEXITCODE -ne 0) { throw "Stored $Label PNG object not found" }
+        } | Out-Null
+    }
+    return [PSCustomObject]@{ StepId = $stepId; Content = $Content }
+}
+
 function ConvertTo-PdfLiteral {
     param([string]$Value)
     return $Value.Replace('\', '\\').Replace('(', '\(').Replace(')', '\)')
@@ -2290,6 +2346,10 @@ try {
     $odsPdfContent = Convert-OfficeFixtureToBase64 -SourceBase64 $odsPdfSource -SourceExtension "csv" -TargetExtension "ods"
     $odsPdfObservation = Invoke-OfficePdfConversionSmoke -SourceFormat "ods" -Content $odsPdfContent -Label "ODS"
 
+    $odtPngObservation = Invoke-OfficePngConversionSmoke -SourceFormat "odt" -Content $odtPdfContent -Label "ODT"
+    $odpPngObservation = Invoke-OfficePngConversionSmoke -SourceFormat "odp" -Content $odpPdfContent -Label "ODP"
+    $odsPngObservation = Invoke-OfficePngConversionSmoke -SourceFormat "ods" -Content $odsPdfContent -Label "ODS"
+
     $odsRunId = $runId
     $odsToolCallId = "sandbox-file-convert-ods-csv-call-$suffix"
     $odsContent = New-OdsBase64 -Marker $Marker -SecondValue "ODS conversion extracts first table"
@@ -3120,6 +3180,24 @@ try {
                     '"binaryInput":true',
                     '"networkRequested":false'
                 )
+                Forbidden = @($Marker, $odsPdfContent)
+            },
+            @{
+                StepId = "$($odtPngObservation.StepId)"
+                Status = "SUCCEEDED"
+                Required = @('"toolId":"sandbox_file_convert"', '"runtimeType":"FILE_CONVERSION"', '"sourceFormat":"odt"', '"targetFormat":"png"', '"contentEncoding":"base64"', '"binaryInput":true', '"networkRequested":false')
+                Forbidden = @($Marker, $odtPdfContent)
+            },
+            @{
+                StepId = "$($odpPngObservation.StepId)"
+                Status = "SUCCEEDED"
+                Required = @('"toolId":"sandbox_file_convert"', '"runtimeType":"FILE_CONVERSION"', '"sourceFormat":"odp"', '"targetFormat":"png"', '"contentEncoding":"base64"', '"binaryInput":true', '"networkRequested":false')
+                Forbidden = @($Marker, $odpPdfContent)
+            },
+            @{
+                StepId = "$($odsPngObservation.StepId)"
+                Status = "SUCCEEDED"
+                Required = @('"toolId":"sandbox_file_convert"', '"runtimeType":"FILE_CONVERSION"', '"sourceFormat":"ods"', '"targetFormat":"png"', '"contentEncoding":"base64"', '"binaryInput":true', '"networkRequested":false')
                 Forbidden = @($Marker, $odsPdfContent)
             },
             @{

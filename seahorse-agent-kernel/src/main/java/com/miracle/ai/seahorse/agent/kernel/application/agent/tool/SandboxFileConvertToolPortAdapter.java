@@ -117,7 +117,7 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
         String content = argumentStringPreservingWhitespace(safeRequest.arguments(), CONTENT_ARGUMENT);
         if (!isSupportedConversion(sourceFormat, targetFormat)) {
             return ToolInvocationResult.failed(
-                    "sandbox_file_convert failed: supported conversions are csv/tsv to json, csv to xlsx, json to csv/tsv, txt to html, html to txt/docx, markdown/md to html/txt, docx/odt/odp/pdf to html/txt, docx/odt/ods/odp/pptx/xlsx to pdf, pdf/pptx to png, pdf to ocr_txt, xlsx/ods to csv/html, and pptx to html/txt");
+                    "sandbox_file_convert failed: supported conversions are csv/tsv to json, csv to xlsx, json to csv/tsv, txt to html, html to txt/docx, markdown/md to html/txt, docx/odt/odp/pdf to html/txt, docx/odt/ods/odp/pptx/xlsx to pdf, odt/ods/odp/pdf/pptx to png, pdf to ocr_txt, xlsx/ods to csv/html, and pptx to html/txt");
         }
         if (isBinaryDocumentFormat(sourceFormat) && !BASE64_ENCODING.equals(contentEncoding)) {
             return ToolInvocationResult.failed("sandbox_file_convert failed: "
@@ -290,6 +290,8 @@ public class SandboxFileConvertToolPortAdapter implements DescribedToolPort, Too
                 || (ODS_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
                 || (ODP_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
                 || (XLSX_FORMAT.equals(sourceFormat) && PDF_FORMAT.equals(targetFormat))
+                || ((ODT_FORMAT.equals(sourceFormat) || ODS_FORMAT.equals(sourceFormat) || ODP_FORMAT.equals(sourceFormat))
+                && "png".equals(targetFormat))
                 || (PDF_FORMAT.equals(sourceFormat) && "png".equals(targetFormat))
                 || (PPTX_FORMAT.equals(sourceFormat) && "png".equals(targetFormat))
                 || (PDF_FORMAT.equals(sourceFormat) && "ocr_txt".equals(targetFormat))
