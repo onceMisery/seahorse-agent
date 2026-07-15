@@ -68,6 +68,8 @@ Fresh real Docker evidence: the full bootstrap reactor package completed success
 
 The container runtime now applies `max-session-file-bytes` as a cumulative workspace budget before artifact publication, in addition to the existing per-process `fsize` ulimit. On successful container exit it sums every regular file in the session workspace, including internal inputs and scripts, and fails closed before scanner or object-storage work when the total exceeds the configured limit. A real full-Docker `sandbox_python` E2E created two separate 40 MiB files under the 64 MiB per-file process limit; the 80 MiB workspace was rejected with no observation content or artifact publication, and the matching Tool Gateway audit was `FAILED` without leaking the quota probe code or filenames.
 
+Sandbox Operations now labels this same health value as `Session workspace quota`, making clear that the 64 MiB posture bounds the aggregate sandbox workspace rather than an individual uploaded file. Real Playwright E2E passed against the full Docker frontend/backend with the external ClamAV scanner enabled, covering the quota label and value, isolation posture, scanner health, and existing quota/egress policy save-and-restore flow.
+
 ## 2026-07-14 Update: Sandbox Artifact Scanner Health
 
 Sandbox Operations now exposes `GET /api/sandbox/runtime/artifact-scanner-health`. The read-only health projection reports scanner id, mode, external-engine posture, and an `AVAILABLE` or `UNAVAILABLE` result without exposing scanner hostnames, ports, signatures, paths, or exception text. The external ClamAV adapter actively probes clamd with its `PING` protocol; the default bounded local scanner reports available without adding a network dependency.

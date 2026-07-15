@@ -4,6 +4,7 @@ param(
     [string]$Password = "admin123",
     [string]$Marker = "seahorse-sandbox-tool-quota-page-smoke",
     [string]$ArtifactDir = "output/playwright/artifacts",
+    [switch]$VerifyExternalVirusScanner,
     [switch]$Headed
 )
 
@@ -53,6 +54,9 @@ $nodeArgs = @(
 
 if ($Headed) {
     $nodeArgs += "--headed"
+}
+if ($VerifyExternalVirusScanner) {
+    $nodeArgs += "--verify-external-virus-scanner"
 }
 
 node @nodeArgs

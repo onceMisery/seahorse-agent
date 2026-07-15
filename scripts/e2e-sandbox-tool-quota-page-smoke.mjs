@@ -304,6 +304,7 @@ try {
       await assertLocatorText(page.getByTestId("sandbox-runtime-isolation-posture"), "RO root", "Sandbox isolation posture");
       await assertLocatorText(page.getByTestId("sandbox-runtime-isolation-posture"), "no caps", "Sandbox isolation posture");
       await assertLocatorText(page.getByTestId("sandbox-runtime-isolation-posture"), "no new privs", "Sandbox isolation posture");
+      await assertLocatorText(page.getByTestId("sandbox-runtime-file-quota"), "Session workspace quota", "Sandbox workspace quota");
       await assertLocatorText(page.getByTestId("sandbox-runtime-file-quota"), "64 MB", "Sandbox file quota");
     }
     const scannerPanel = page.getByTestId("sandbox-artifact-scanner-panel");
