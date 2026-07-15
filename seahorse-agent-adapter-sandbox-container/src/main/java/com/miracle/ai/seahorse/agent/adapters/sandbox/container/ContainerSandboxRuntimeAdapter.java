@@ -3324,10 +3324,19 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 .map(path -> path.toAbsolutePath().normalize())
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         try (var paths = Files.walk(safeWorkspace)) {
-            return paths
+            List<Path> files = paths
                     .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
                     .map(path -> path.toAbsolutePath().normalize())
                     .filter(path -> path.startsWith(safeWorkspace))
+                    .toList();
+            long workspaceBytes = 0L;
+            for (Path path : files) {
+                workspaceBytes = Math.addExact(workspaceBytes, Files.size(path));
+                if (workspaceBytes > maxSessionFileLimit()) {
+                    throw new IOException("sandbox workspace exceeds session file limit");
+                }
+            }
+            return files.stream()
                     .filter(path -> !safeExcludedArtifacts.contains(path))
                     .sorted(Comparator.comparing(path -> safeWorkspace.relativize(path).toString()))
                     .map(path -> artifact(session, executionId, path, createdAt))

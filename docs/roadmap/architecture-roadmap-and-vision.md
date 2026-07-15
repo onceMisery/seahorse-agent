@@ -66,6 +66,8 @@ This slice also corrects the container `fsize` ulimit unit passed to Docker. The
 
 Fresh real Docker evidence: the full bootstrap reactor package completed successfully and `scripts/e2e-sandbox-artifact-storage-smoke.ps1 -VerifyExternalVirusScanner` passed 54/54. A real Tool Gateway sandbox execution wrote a PDF with `/JavaScript` beyond the leading 256 KiB; the artifact was blocked before object storage as `PDF_ACTIVE_CONTENT`, with a value-free persisted/API summary.
 
+The container runtime now applies `max-session-file-bytes` as a cumulative workspace budget before artifact publication, in addition to the existing per-process `fsize` ulimit. On successful container exit it sums every regular file in the session workspace, including internal inputs and scripts, and fails closed before scanner or object-storage work when the total exceeds the configured limit. A real full-Docker `sandbox_python` E2E created two separate 40 MiB files under the 64 MiB per-file process limit; the 80 MiB workspace was rejected with no observation content or artifact publication, while the ordinary sandbox Python path remained green.
+
 ## 2026-07-14 Update: Sandbox Artifact Scanner Health
 
 Sandbox Operations now exposes `GET /api/sandbox/runtime/artifact-scanner-health`. The read-only health projection reports scanner id, mode, external-engine posture, and an `AVAILABLE` or `UNAVAILABLE` result without exposing scanner hostnames, ports, signatures, paths, or exception text. The external ClamAV adapter actively probes clamd with its `PING` protocol; the default bounded local scanner reports available without adding a network dependency.

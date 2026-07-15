@@ -300,6 +300,29 @@ try {
         $response.data | ConvertTo-Json -Compress | Write-Host
     } | Out-Null
 
+    $quotaToolCallId = "sandbox-python-workspace-quota-call-$suffix"
+    $quotaCode = "from pathlib import Path`nPath('quota-a.bin').write_bytes(b'a' * 40000000)`nPath('quota-b.bin').write_bytes(b'b' * 40000000)`nprint('workspace quota probe')"
+    Test-Step "Reject sandbox_python workspace exceeding cumulative file quota" {
+        $requestBody = @{
+            runId = $runId
+            stepId = "sandbox-python-workspace-quota-step-$suffix"
+            toolCallId = $quotaToolCallId
+            agentId = "legacy-react-agent"
+            tenantId = "default"
+            userId = "$($login.data.userId)"
+            agentIdentityId = "$($login.data.userId)"
+            arguments = @{ code = $quotaCode }
+            resourceRefs = @{}
+            idempotencyKey = "${runId}:${quotaToolCallId}"
+            allowedToolIds = @("sandbox_python")
+        }
+        $response = Invoke-SandboxPythonTool -Headers $headers -Body $requestBody -Name "Invoke sandbox_python workspace quota failure"
+        Assert-ApiOk $response "Invoke sandbox_python workspace quota failure"
+        if ($response.data.success -ne $false -or "$($response.data.error)" -notlike "*sandbox workspace exceeds session file limit*" -or "$($response.data.content)" -notin @("", $null)) {
+            throw "sandbox_python workspace quota did not fail closed: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+    } | Out-Null
+
     Test-Step "Verify sandbox_python Tool Gateway audit summary" {
         $response = Invoke-Json -Method GET -Path "/api/tool-invocations?current=1&size=20&runId=$runId&toolId=sandbox_python" -Headers $headers
         Assert-ApiOk $response "Read sandbox_python tool audit"
