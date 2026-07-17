@@ -3,13 +3,15 @@ param(
     [string]$WorkerBaseUrl = "http://127.0.0.1:19092",
     [string]$Username = "admin",
     [string]$Password = "admin123",
+    [string]$LocalNodeId = "local-container-docker",
     [string]$RemoteNodeId = "sandbox-node-b",
     [string]$CoordinatorContainer = "seahorse-backend",
     [string]$WorkerContainer = "seahorse-runtime-node-b",
     [string]$PostgresContainer = "seahorse-postgres",
     [string]$WorkerNetworkAlias = "sandbox-runtime-node-b",
     [string]$ProxyNetworkAlias = "sandbox-create-loss-proxy",
-    [string]$Marker = "seahorse-create-reconciliation-e2e"
+    [string]$Marker = "seahorse-create-reconciliation-e2e",
+    [switch]$VerifyAutomaticFailover
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,6 +21,8 @@ $createJob = $null
 $releaseFile = "/tmp/release-close-response"
 $runId = $null
 $sessionId = $null
+$localLoadSessionId = $null
+$headers = $null
 $originalActiveSessionLimit = $null
 $originalTransportUri = $null
 $passed = 0
@@ -87,15 +91,18 @@ function Invoke-PostgresCommand {
 }
 
 function Start-SessionCreateJob {
-    param([string]$Authorization, [string]$TargetRunId)
-    $body = @{
+    param([string]$Authorization, [string]$TargetRunId, [bool]$ExplicitPlacement)
+    $bodyFields = @{
         tenantId = "default"
         runId = $TargetRunId
         runtimeType = "CODE_INTERPRETER"
         networkRequested = $false
         requestedHosts = @()
-        requiredRuntimeNodeId = $RemoteNodeId
-    } | ConvertTo-Json -Depth 10 -Compress
+    }
+    if ($ExplicitPlacement) {
+        $bodyFields.requiredRuntimeNodeId = $RemoteNodeId
+    }
+    $body = $bodyFields | ConvertTo-Json -Depth 10 -Compress
     return Start-Job -ScriptBlock {
         param($Url, $Token, $Json)
         $temp = [IO.Path]::GetTempFileName()
@@ -202,6 +209,31 @@ try {
     $runId = $login.RunId
     $headers = $login.Headers
 
+    if ($VerifyAutomaticFailover) {
+        Test-Step "Create local load and make remote node the first automatic candidate" {
+            $load = Invoke-Json POST "/api/sandbox/sessions" -Headers $headers -Body @{
+                tenantId = "default"
+                runId = $runId
+                runtimeType = "CODE_INTERPRETER"
+                networkRequested = $false
+                requestedHosts = @()
+                requiredRuntimeNodeId = $LocalNodeId
+            }
+            Assert-ApiOk $load "Create local load session"
+            $script:localLoadSessionId = "$($load.data.sessionId)"
+            if ("$($load.data.status)" -ne "CREATED" -or "$($load.data.runtimeNodeId)" -ne $LocalNodeId) {
+                throw "local load session was not created on $LocalNodeId"
+            }
+            $deadline = (Get-Date).AddSeconds(45)
+            do {
+                $counts = Invoke-PostgresScalar "SELECT COALESCE(MAX(active_session_count) FILTER (WHERE node_id='$LocalNodeId'), -1), COALESCE(MAX(active_session_count) FILTER (WHERE node_id='$RemoteNodeId'), -1) FROM sa_sandbox_runtime_node WHERE node_id IN ('$LocalNodeId', '$RemoteNodeId');"
+                if ($counts -eq "1`t0") { return }
+                Start-Sleep -Seconds 1
+            } while ((Get-Date) -lt $deadline)
+            throw "node-local heartbeat counts did not converge to local=1 remote=0: $counts"
+        } | Out-Null
+    }
+
     Test-Step "Install one-shot response-loss proxy in the worker network" {
         $networks = (& docker inspect $WorkerContainer --format '{{json .NetworkSettings.Networks}}') | ConvertFrom-Json
         $names = @($networks.PSObject.Properties.Name)
@@ -238,7 +270,10 @@ try {
     } | Out-Null
 
     Test-Step "Lose create response and hold cleanup confirmation" {
-        $script:createJob = Start-SessionCreateJob -Authorization $headers.Authorization -TargetRunId $runId
+        $script:createJob = Start-SessionCreateJob `
+            -Authorization $headers.Authorization `
+            -TargetRunId $runId `
+            -ExplicitPlacement:(-not $VerifyAutomaticFailover)
         Wait-ProxyEvent "close-response-held" -TimeoutSeconds 30 | Out-Null
         $events = Get-ProxyEvents
         $createRequests = @($events | Where-Object { $_.event -eq "create-request-received" })
@@ -267,26 +302,63 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "coordinator unexpectedly owns the remote workspace" }
     } | Out-Null
 
-    $response = Test-Step "Release cleanup confirmation and persist one failed session" {
+    $response = Test-Step "Release cleanup confirmation and settle coordinator session" {
         & docker exec $proxyContainer touch $releaseFile
         if ($LASTEXITCODE -ne 0) { throw "failed to release close response gate" }
         $result = Receive-SessionCreateJob $createJob
         $script:createJob | Remove-Job -Force -ErrorAction SilentlyContinue
         $script:createJob = $null
         Assert-ApiOk $result "Create sandbox session"
-        $matchesExpectedFailure = "$($result.data.sessionId)" -eq $sessionId `
-            -and "$($result.data.status)" -eq "FAILED" `
-            -and "$($result.data.reasonCode)" -eq "RUNTIME_NODE_UNAVAILABLE"
-        if (-not $matchesExpectedFailure) {
-            throw "ambiguous create did not fail closed with the coordinator session id"
+        if ($VerifyAutomaticFailover) {
+            $matchesExpectedFailover = "$($result.data.sessionId)" -eq $sessionId `
+                -and "$($result.data.status)" -eq "CREATED" `
+                -and "$($result.data.runtimeNodeId)" -eq $LocalNodeId
+            if (-not $matchesExpectedFailover) {
+                throw "automatic create did not fail over with the coordinator session id"
+            }
+        } else {
+            $matchesExpectedFailure = "$($result.data.sessionId)" -eq $sessionId `
+                -and "$($result.data.status)" -eq "FAILED" `
+                -and "$($result.data.reasonCode)" -eq "RUNTIME_NODE_UNAVAILABLE"
+            if (-not $matchesExpectedFailure) {
+                throw "explicit ambiguous create did not fail closed with the coordinator session id"
+            }
         }
         return $result
     }
 
-    Test-Step "Require no retry, reservation, workspace, or child-container residue" {
+    if ($VerifyAutomaticFailover) {
+        Test-Step "Execute and close the same session on the failover node" {
+            & docker exec -e "SESSION_ID=$sessionId" $CoordinatorContainer sh -lc `
+                'test -d "/var/lib/seahorse-sandbox/$SESSION_ID"'
+            if ($LASTEXITCODE -ne 0) { throw "failover workspace is absent on coordinator" }
+            & docker exec -e "SESSION_ID=$sessionId" $WorkerContainer sh -lc `
+                'test ! -e "/var/lib/seahorse-sandbox/$SESSION_ID"'
+            if ($LASTEXITCODE -ne 0) { throw "failed worker still owns the coordinator session" }
+
+            $execution = Invoke-Json POST "/api/sandbox/sessions/$sessionId/execute" -Headers $headers -Body @{
+                input = "print('$Marker')"
+                networkRequested = $false
+                requestedHosts = @()
+            }
+            Assert-ApiOk $execution "Execute failover session"
+            if ("$($execution.data.execution.status)" -ne "SUCCEEDED") {
+                throw "failover session execution did not succeed"
+            }
+            $closed = Invoke-Json POST "/api/sandbox/sessions/$sessionId/close" -Headers $headers
+            Assert-ApiOk $closed "Close failover session"
+            if ("$($closed.data.status)" -ne "CANCELLED") { throw "failover session was not cancelled" }
+            $loadClosed = Invoke-Json POST "/api/sandbox/sessions/$localLoadSessionId/close" -Headers $headers
+            Assert-ApiOk $loadClosed "Close local load session"
+            if ("$($loadClosed.data.status)" -ne "CANCELLED") { throw "local load session was not cancelled" }
+            $script:localLoadSessionId = $null
+        } | Out-Null
+    }
+
+    Test-Step "Require no repeated failed-node create or runtime residue" {
         $events = Get-ProxyEvents
         if (@($events | Where-Object { $_.event -eq "create-request-received" }).Count -ne 1) {
-            throw "runtime create was attempted more than once"
+            throw "failed remote node received more than one create attempt"
         }
         $safeSession = $sessionId.Replace("'", "''")
         $safeRun = $runId.Replace("'", "''")
@@ -296,7 +368,12 @@ SELECT (SELECT COUNT(*) FROM sa_sandbox_session WHERE run_id='$safeRun'),
        (SELECT COALESCE(runtime_node_id, '') FROM sa_sandbox_session WHERE session_id='$safeSession'),
        (SELECT COUNT(*) FROM sa_sandbox_runtime_capacity_reservation WHERE node_id='$RemoteNodeId');
 "@
-        if ($state -ne "1`tFAILED`t`t0") { throw "unexpected persisted reconciliation state: $state" }
+        $expectedState = if ($VerifyAutomaticFailover) {
+            "2`tCANCELLED`t$LocalNodeId`t0"
+        } else {
+            "1`tFAILED`t`t0"
+        }
+        if ($state -ne $expectedState) { throw "unexpected persisted reconciliation state: $state" }
         $managed = @(docker ps -a --format '{{.Names}}' | Where-Object { $_ -like "seahorse-sandbox-*" })
         if ($managed.Count -ne 0) { throw "managed sandbox child containers remain: $($managed -join ',')" }
     } | Out-Null
@@ -305,6 +382,31 @@ SELECT (SELECT COUNT(*) FROM sa_sandbox_session WHERE run_id='$safeRun'),
         try { & docker exec $proxyContainer touch $releaseFile 2>$null | Out-Null } catch { }
         try { Wait-Job $createJob -Timeout 10 | Out-Null } catch { }
         $createJob | Remove-Job -Force -ErrorAction SilentlyContinue
+    }
+    if ($headers) {
+        $cleanupSessionIds = @($sessionId, $localLoadSessionId)
+        if ($runId) {
+            try {
+                $safeRunId = $runId.Replace("'", "''")
+                $discovered = @(& docker exec $PostgresContainer psql -U seahorse -d seahorse -At -c @"
+SELECT session_id
+FROM sa_sandbox_session
+WHERE run_id='$safeRunId'
+  AND status NOT IN ('SUCCEEDED','FAILED','TIMED_OUT','CANCELLED');
+"@)
+                if ($LASTEXITCODE -eq 0) { $cleanupSessionIds += $discovered }
+            } catch {
+                Write-Warning "run-owned sandbox session discovery failed: $($_.Exception.Message)"
+            }
+        }
+        foreach ($cleanupSessionId in @($cleanupSessionIds | Where-Object { $_ } | Select-Object -Unique)) {
+            if (-not $cleanupSessionId) { continue }
+            try {
+                Invoke-Json POST "/api/sandbox/sessions/$cleanupSessionId/close" -Headers $headers | Out-Null
+            } catch {
+                Write-Warning "sandbox session cleanup failed for $cleanupSessionId`: $($_.Exception.Message)"
+            }
+        }
     }
     try { Remove-ResponseLossProxy } catch { Write-Error "response-loss proxy cleanup failed: $($_.Exception.Message)" }
     if ($null -ne $originalActiveSessionLimit -and $null -ne $originalTransportUri) {
@@ -328,4 +430,4 @@ Test-Step "Verify proxy removal and runtime registration restoration" {
     if ($residue -ne "0`t0") { throw "runtime residue remains after cleanup: $residue" }
 } | Out-Null
 
-Write-Host "`nSandbox create reconciliation E2E: $passed/$total passed" -ForegroundColor Green
+Write-Host "`nSandbox create reconciliation/failover E2E: $passed/$total passed" -ForegroundColor Green

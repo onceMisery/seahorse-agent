@@ -91,6 +91,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -117,6 +118,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private static final String BROWSER_SESSION_STATE_ARTIFACT_NAME = "browser-session-state.json";
     private static final int DEFAULT_SESSION_LIST_LIMIT = 20;
     private static final int MAX_SESSION_LIST_LIMIT = 100;
+    private static final int MAX_RUNTIME_CREATE_ATTEMPTS = 2;
     private static final String CAPACITY_RESERVATION_ID_PREFIX = "sandbox_res_";
     private static final Duration CAPACITY_RESERVATION_LEASE_TTL = Duration.ofMinutes(5);
     private static final String DOWNLOAD_BLOCKED = "Sandbox artifact is not available for download";
@@ -590,19 +592,9 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                     now);
             return saveSession(denied, AuditEventType.SANDBOX_SESSION_CREATED);
         }
-        RuntimeAdmissionDecision runtimeAdmission = runtimeAdmissionDecision(safeCommand.requiredRuntimeNodeId());
-        if (runtimeAdmission.rejectionReason() != null) {
-            SandboxSession rejected = SandboxSession.failed(
-                    sessionId(),
-                    safeCommand.tenantId(),
-                    safeCommand.runId(),
-                    safeCommand.runtimeType(),
-                    runtimeAdmission.rejectionReason(),
-                    profileId,
-                    expiresAt,
-                    now);
-            return saveSession(rejected, AuditEventType.SANDBOX_SESSION_CREATED);
-        }
+        List<RuntimeAdmissionDecision> runtimeCandidates = runtimeAdmissionCandidates(
+                safeCommand.requiredRuntimeNodeId());
+        boolean automaticPlacement = !hasText(safeCommand.requiredRuntimeNodeId());
         String runtimeSessionId = sessionId();
         SandboxSessionRequest runtimeRequest = new SandboxSessionRequest(
                 safeCommand.tenantId(),
@@ -613,65 +605,108 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 profileId,
                 expiresAt,
                 runtimeSessionId);
-        SandboxSession cleanupSession = SandboxSession.created(
+        SandboxPolicyReasonCode lastAdmissionRejection = null;
+        int runtimeCreateAttempts = 0;
+        for (int candidateIndex = 0; candidateIndex < runtimeCandidates.size(); candidateIndex++) {
+            RuntimeAdmissionDecision runtimeAdmission = reserveRuntimeAdmission(runtimeCandidates.get(candidateIndex));
+            boolean hasNextCandidate = candidateIndex + 1 < runtimeCandidates.size();
+            if (runtimeAdmission.rejectionReason() != null) {
+                lastAdmissionRejection = runtimeAdmission.rejectionReason();
+                if (automaticPlacement
+                        && hasNextCandidate
+                        && runtimeAdmission.rejectionReason() == SandboxPolicyReasonCode.RUNTIME_CAPACITY_EXCEEDED) {
+                    continue;
+                }
+                return saveFailedRuntimeSession(
+                        safeCommand, runtimeSessionId, runtimeAdmission.rejectionReason(), profileId, expiresAt, now);
+            }
+            runtimeCreateAttempts++;
+            SandboxSession cleanupSession = SandboxSession.created(
+                    runtimeSessionId,
+                    safeCommand.tenantId(),
+                    safeCommand.runId(),
+                    safeCommand.runtimeType(),
+                    profileId,
+                    expiresAt,
+                    now).withRuntimeNode(runtimeAdmission.runtimeNodeId());
+            SandboxSession session;
+            try {
+                session = Objects.requireNonNull(runtimeAdmission.remoteEndpoint() == null
+                        ? runtimePort.createSession(runtimeRequest)
+                        : remoteRuntimePort.createSession(runtimeAdmission.remoteEndpoint(), runtimeRequest),
+                        "runtime createSession result must not be null");
+            } catch (RuntimeException ex) {
+                RuntimeCreateRecovery recovery = recoverFailedRuntimeCreate(runtimeAdmission, cleanupSession);
+                if (recovery.releaseReservation()) {
+                    releaseCapacityReservation(runtimeAdmission);
+                }
+                if (automaticPlacement
+                        && hasNextCandidate
+                        && runtimeCreateAttempts < MAX_RUNTIME_CREATE_ATTEMPTS
+                        && recovery.failoverAllowed()) {
+                    continue;
+                }
+                return saveFailedRuntimeSession(
+                        safeCommand,
+                        runtimeSessionId,
+                        SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE,
+                        profileId,
+                        expiresAt,
+                        now);
+            }
+            if (!runtimeSessionId.equals(session.sessionId())) {
+                if (rollbackCreatedRuntimeSession(runtimeAdmission, cleanupSession)) {
+                    releaseCapacityReservation(runtimeAdmission);
+                }
+                return saveFailedRuntimeSession(
+                        safeCommand,
+                        runtimeSessionId,
+                        SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE,
+                        profileId,
+                        expiresAt,
+                        now);
+            }
+            SandboxSession governed = session.withRuntimeGovernance(
+                    profileId,
+                    expiresAt).withRuntimeNode(runtimeAdmission.runtimeNodeId());
+            SandboxSession saved;
+            try {
+                saved = persistSession(governed);
+            } catch (RuntimeException ex) {
+                if (rollbackCreatedRuntimeSession(runtimeAdmission, governed)) {
+                    releaseCapacityReservation(runtimeAdmission);
+                }
+                throw ex;
+            }
+            releaseCapacityReservation(runtimeAdmission);
+            appendSessionAudit(saved, AuditEventType.SANDBOX_SESSION_CREATED);
+            return saved;
+        }
+        return saveFailedRuntimeSession(
+                safeCommand,
                 runtimeSessionId,
-                safeCommand.tenantId(),
-                safeCommand.runId(),
-                safeCommand.runtimeType(),
+                Objects.requireNonNullElse(lastAdmissionRejection, SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE),
                 profileId,
                 expiresAt,
-                now).withRuntimeNode(runtimeAdmission.runtimeNodeId());
-        SandboxSession session;
-        try {
-            session = Objects.requireNonNull(runtimeAdmission.remoteEndpoint() == null
-                    ? runtimePort.createSession(runtimeRequest)
-                    : remoteRuntimePort.createSession(runtimeAdmission.remoteEndpoint(), runtimeRequest),
-                    "runtime createSession result must not be null");
-        } catch (RuntimeException ex) {
-            if (reconcileFailedRuntimeCreate(runtimeAdmission, cleanupSession)) {
-                releaseCapacityReservation(runtimeAdmission);
-            }
-            SandboxSession failed = SandboxSession.failed(
-                    runtimeSessionId,
-                    safeCommand.tenantId(),
-                    safeCommand.runId(),
-                    safeCommand.runtimeType(),
-                    SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE,
-                    profileId,
-                    expiresAt,
-                    now);
-            return saveSession(failed, AuditEventType.SANDBOX_SESSION_CREATED);
-        }
-        if (!runtimeSessionId.equals(session.sessionId())) {
-            if (rollbackCreatedRuntimeSession(runtimeAdmission, cleanupSession)) {
-                releaseCapacityReservation(runtimeAdmission);
-            }
-            SandboxSession failed = SandboxSession.failed(
-                    runtimeSessionId,
-                    safeCommand.tenantId(),
-                    safeCommand.runId(),
-                    safeCommand.runtimeType(),
-                    SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE,
-                    profileId,
-                    expiresAt,
-                    now);
-            return saveSession(failed, AuditEventType.SANDBOX_SESSION_CREATED);
-        }
-        SandboxSession governed = session.withRuntimeGovernance(
+                now);
+    }
+
+    private SandboxSession saveFailedRuntimeSession(SandboxSessionCreateCommand command,
+                                                    String sessionId,
+                                                    SandboxPolicyReasonCode reasonCode,
+                                                    String profileId,
+                                                    Instant expiresAt,
+                                                    Instant now) {
+        SandboxSession failed = SandboxSession.failed(
+                sessionId,
+                command.tenantId(),
+                command.runId(),
+                command.runtimeType(),
+                reasonCode,
                 profileId,
-                expiresAt).withRuntimeNode(runtimeAdmission.runtimeNodeId());
-        SandboxSession saved;
-        try {
-            saved = persistSession(governed);
-        } catch (RuntimeException ex) {
-            if (rollbackCreatedRuntimeSession(runtimeAdmission, governed)) {
-                releaseCapacityReservation(runtimeAdmission);
-            }
-            throw ex;
-        }
-        releaseCapacityReservation(runtimeAdmission);
-        appendSessionAudit(saved, AuditEventType.SANDBOX_SESSION_CREATED);
-        return saved;
+                expiresAt,
+                now);
+        return saveSession(failed, AuditEventType.SANDBOX_SESSION_CREATED);
     }
 
     @Override
@@ -1067,19 +1102,19 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         return SandboxExecutionResult.failed(execution, reasonCode);
     }
 
-    private RuntimeAdmissionDecision runtimeAdmissionDecision(String requiredRuntimeNodeId) {
+    private List<RuntimeAdmissionDecision> runtimeAdmissionCandidates(String requiredRuntimeNodeId) {
         Set<String> activeSessionIds = sessionRepositoryPort.listActiveSessionIds();
         SandboxRuntimeHealth health = Objects.requireNonNull(
                 runtimePort.inspectHealth(activeSessionIds),
                 "runtime health result must not be null");
         if (SandboxRuntimeHealth.STATUS_UNSUPPORTED.equals(health.status())) {
             return hasText(requiredRuntimeNodeId)
-                    ? reserveRuntimeAdmission(remoteRuntimeAdmissionDecision(requiredRuntimeNodeId))
-                    : automaticRuntimeAdmissionDecision(null, RuntimeAdmissionDecision.allowedLocal(null));
+                    ? List.of(remoteRuntimeAdmissionDecision(requiredRuntimeNodeId))
+                    : automaticRuntimeAdmissionCandidates(null, RuntimeAdmissionDecision.allowedLocal(null));
         }
         SandboxRuntimeNodeHealth node = SandboxRuntimeNodeHealth.fromHealth(health);
         if (hasText(requiredRuntimeNodeId) && !requiredRuntimeNodeId.equals(node.nodeId())) {
-            return reserveRuntimeAdmission(remoteRuntimeAdmissionDecision(requiredRuntimeNodeId));
+            return List.of(remoteRuntimeAdmissionDecision(requiredRuntimeNodeId));
         }
         RuntimeAdmissionDecision localDecision = switch (node.admissionStatus()) {
             case SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE,
@@ -1093,46 +1128,40 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             default -> RuntimeAdmissionDecision.rejected(SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE);
         };
         return hasText(requiredRuntimeNodeId)
-                ? reserveRuntimeAdmission(localDecision)
-                : automaticRuntimeAdmissionDecision(node, localDecision);
+                ? List.of(localDecision)
+                : automaticRuntimeAdmissionCandidates(node, localDecision);
     }
 
-    private RuntimeAdmissionDecision automaticRuntimeAdmissionDecision(SandboxRuntimeNodeHealth localNode,
-                                                                        RuntimeAdmissionDecision localDecision) {
+    private List<RuntimeAdmissionDecision> automaticRuntimeAdmissionCandidates(SandboxRuntimeNodeHealth localNode,
+                                                                                RuntimeAdmissionDecision localDecision) {
         List<RuntimePlacementCandidate> candidates = new ArrayList<>();
+        Set<String> candidateNodeIds = new HashSet<>();
         if (localNode != null && localDecision.rejectionReason() == null) {
             candidates.add(RuntimePlacementCandidate.local(localNode));
+            candidateNodeIds.add(localNode.nodeId());
         }
         if (remoteRuntimePort != null && runtimeNodeRegistryPort != null) {
             List<SandboxRuntimeNodeEndpoint> endpoints;
             try {
                 endpoints = runtimeNodeRegistryPort.listLiveEndpoints();
             } catch (RuntimeException ex) {
-                return reserveRuntimeAdmission(localDecision);
+                return List.of(localDecision);
             }
             String localNodeId = localNode == null ? null : localNode.nodeId();
             endpoints.stream()
                     .filter(endpoint -> !endpoint.nodeId().equals(localNodeId))
                     .filter(KernelSandboxRuntimeService::allowsAutomaticPlacement)
+                    .filter(endpoint -> candidateNodeIds.add(endpoint.nodeId()))
                     .map(RuntimePlacementCandidate::remote)
                     .forEach(candidates::add);
         }
         if (candidates.isEmpty()) {
-            return reserveRuntimeAdmission(localDecision);
+            return List.of(localDecision);
         }
-        List<RuntimePlacementCandidate> orderedCandidates = candidates.stream()
+        return candidates.stream()
                 .sorted(RuntimePlacementCandidate.ORDER)
+                .map(RuntimePlacementCandidate::admissionDecision)
                 .toList();
-        for (RuntimePlacementCandidate candidate : orderedCandidates) {
-            RuntimeAdmissionDecision reserved = reserveRuntimeAdmission(candidate.admissionDecision());
-            if (reserved.rejectionReason() == null) {
-                return reserved;
-            }
-            if (reserved.rejectionReason() != SandboxPolicyReasonCode.RUNTIME_CAPACITY_EXCEEDED) {
-                return reserved;
-            }
-        }
-        return RuntimeAdmissionDecision.rejected(SandboxPolicyReasonCode.RUNTIME_CAPACITY_EXCEEDED);
     }
 
     private RuntimeAdmissionDecision reserveRuntimeAdmission(RuntimeAdmissionDecision decision) {
@@ -1180,20 +1209,23 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         }
     }
 
-    private boolean reconcileFailedRuntimeCreate(RuntimeAdmissionDecision decision, SandboxSession session) {
+    private RuntimeCreateRecovery recoverFailedRuntimeCreate(RuntimeAdmissionDecision decision, SandboxSession session) {
         if (decision.remoteEndpoint() == null) {
-            return rollbackCreatedRuntimeSession(decision, session);
+            return RuntimeCreateRecovery.releaseOnly(rollbackCreatedRuntimeSession(decision, session));
         }
         try {
             SandboxRuntimeSessionOwnership ownership = Objects.requireNonNull(
                     remoteRuntimePort.inspectSessionOwnership(decision.remoteEndpoint(), session.sessionId()),
                     "runtime session ownership result must not be null");
             return switch (ownership) {
-                case ABSENT -> true;
-                case OWNED, UNSUPPORTED -> rollbackCreatedRuntimeSession(decision, session);
+                case ABSENT -> RuntimeCreateRecovery.safeToFailOver();
+                case OWNED -> RuntimeCreateRecovery.safeToFailOver(
+                        rollbackCreatedRuntimeSession(decision, session));
+                case UNSUPPORTED -> RuntimeCreateRecovery.releaseOnly(
+                        rollbackCreatedRuntimeSession(decision, session));
             };
         } catch (RuntimeException ignored) {
-            return rollbackCreatedRuntimeSession(decision, session);
+            return RuntimeCreateRecovery.releaseOnly(rollbackCreatedRuntimeSession(decision, session));
         }
     }
 
@@ -1641,6 +1673,21 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
 
         private RuntimeAdmissionDecision withCapacityReservation(String reservationId) {
             return new RuntimeAdmissionDecision(runtimeNodeId, remoteEndpoint, rejectionReason, reservationId);
+        }
+    }
+
+    private record RuntimeCreateRecovery(boolean releaseReservation, boolean failoverAllowed) {
+
+        private static RuntimeCreateRecovery releaseOnly(boolean cleanupConfirmed) {
+            return new RuntimeCreateRecovery(cleanupConfirmed, false);
+        }
+
+        private static RuntimeCreateRecovery safeToFailOver() {
+            return new RuntimeCreateRecovery(true, true);
+        }
+
+        private static RuntimeCreateRecovery safeToFailOver(boolean cleanupConfirmed) {
+            return new RuntimeCreateRecovery(cleanupConfirmed, cleanupConfirmed);
         }
     }
 

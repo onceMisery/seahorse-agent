@@ -433,6 +433,185 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldFailOverAutomaticCreateWithSameIdWhenRemoteSessionIsAbsent() {
+        RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        remoteRuntime.failCreateSession = true;
+        remoteRuntime.sessionOwnership = SandboxRuntimeSessionOwnership.ABSENT;
+        MemorySandboxSessionRepository sessionRepository = repositoryWithActiveLocalSession();
+        RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                localRuntime,
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(
+                        SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true, 0, 0, 2048L)),
+                sessionRepository,
+                reservations);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-create-failover-absent",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        assertEquals(SandboxExecutionStatus.CREATED, session.status());
+        assertEquals("local-container-docker", session.runtimeNodeId());
+        assertEquals(session.sessionId(), remoteRuntime.createSessionRequest.sessionId());
+        assertEquals(session.sessionId(), localRuntime.createSessionRequest.sessionId());
+        assertTrue(remoteRuntime.inspectSessionOwnershipCalled);
+        assertFalse(remoteRuntime.closeSessionCalled);
+        assertEquals(List.of("sandbox-node-b", "local-container-docker"), reservations.reservedNodeIds);
+        assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
+    }
+
+    @Test
+    void shouldNotFailOverAutomaticCreateWhenRemoteReconciliationIsUnsupported() {
+        RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        remoteRuntime.failCreateSession = true;
+        RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                localRuntime,
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(
+                        SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true, 0, 0, 2048L)),
+                repositoryWithActiveLocalSession(),
+                reservations);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-create-failover-unsupported",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertFalse(localRuntime.createSessionCalled);
+        assertEquals(List.of("create", "inspect", "close"), remoteRuntime.calls);
+        assertEquals(List.of("sandbox-node-b"), reservations.reservedNodeIds);
+        assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
+    }
+
+    @Test
+    void shouldNotFailOverAutomaticCreateWhenRemoteReconciliationFails() {
+        RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        remoteRuntime.failCreateSession = true;
+        remoteRuntime.failInspectSessionOwnership = true;
+        RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                localRuntime,
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(
+                        SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true, 0, 0, 2048L)),
+                repositoryWithActiveLocalSession(),
+                reservations);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-create-failover-reconciliation-failed",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertFalse(localRuntime.createSessionCalled);
+        assertEquals(List.of("create", "inspect", "close"), remoteRuntime.calls);
+        assertEquals(List.of("sandbox-node-b"), reservations.reservedNodeIds);
+        assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
+    }
+
+    @Test
+    void shouldNotFailOverAutomaticCreateWhenRuntimeReturnsDifferentSessionId() {
+        RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        remoteRuntime.returnMismatchedSessionId = true;
+        RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                localRuntime,
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(
+                        SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true, 0, 0, 2048L)),
+                repositoryWithActiveLocalSession(),
+                reservations);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-create-failover-mismatch",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertFalse(localRuntime.createSessionCalled);
+        assertTrue(remoteRuntime.closeSessionCalled);
+        assertEquals(remoteRuntime.createSessionRequest.sessionId(), remoteRuntime.closedSessionId);
+        assertEquals(List.of("sandbox-node-b"), reservations.reservedNodeIds);
+        assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
+    }
+
+    @Test
+    void shouldBoundAutomaticRuntimeCreateAttemptsToOneFailover() {
+        RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
+        localRuntime.healthResponse = SandboxRuntimeHealth.unsupported(NOW, 0);
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        remoteRuntime.failCreateSession = true;
+        remoteRuntime.sessionOwnership = SandboxRuntimeSessionOwnership.ABSENT;
+        RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                localRuntime,
+                remoteRuntime,
+                new ListSandboxRuntimeNodeRegistry(List.of(
+                        remoteEndpoint("sandbox-node-a", SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true),
+                        remoteEndpoint("sandbox-node-b", SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true),
+                        remoteEndpoint("sandbox-node-c", SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true))),
+                new MemorySandboxSessionRepository(),
+                reservations);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-create-failover-bounded",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertEquals(List.of("sandbox-node-a", "sandbox-node-b"), remoteRuntime.createSessionNodeIds);
+        assertEquals(List.of("sandbox-node-a", "sandbox-node-b"), reservations.reservedNodeIds);
+        assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
+    }
+
+    @Test
+    void shouldNotFailOverAutomaticCreateWhenLocalRuntimeFails() {
+        RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
+        localRuntime.failCreateSession = true;
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                localRuntime,
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(
+                        SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true, 1, 0, 2048L)),
+                new MemorySandboxSessionRepository(),
+                reservations);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-create-failover-local-failed",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertTrue(localRuntime.createSessionCalled);
+        assertTrue(localRuntime.closeSessionCalled);
+        assertFalse(remoteRuntime.createSessionCalled);
+        assertEquals(List.of("local-container-docker"), reservations.reservedNodeIds);
+        assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
+    }
+
+    @Test
     void shouldReserveAndReleaseRemoteNodeCapacityAfterSessionPersistence() {
         RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
         RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
@@ -576,12 +755,13 @@ class KernelSandboxRuntimeServiceTests {
 
     @Test
     void shouldReleaseCapacityWithoutCloseWhenReconciliationConfirmsSessionAbsent() {
+        RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
         RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
         remoteRuntime.failCreateSession = true;
         remoteRuntime.sessionOwnership = SandboxRuntimeSessionOwnership.ABSENT;
         RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
         KernelSandboxRuntimeService service = remoteRoutingService(
-                new RecordingSandboxRuntimePort(),
+                localRuntime,
                 remoteRuntime,
                 new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true)),
                 new MemorySandboxSessionRepository(),
@@ -601,6 +781,7 @@ class KernelSandboxRuntimeServiceTests {
         assertTrue(remoteRuntime.inspectSessionOwnershipCalled);
         assertEquals(remoteRuntime.createSessionRequest.sessionId(), remoteRuntime.inspectedSessionId);
         assertFalse(remoteRuntime.closeSessionCalled);
+        assertFalse(localRuntime.createSessionCalled);
         assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
     }
 
@@ -2183,6 +2364,17 @@ class KernelSandboxRuntimeServiceTests {
         assertTrue(eventTypes.contains(AuditEventType.SANDBOX_SESSION_CLOSED));
     }
 
+    private static MemorySandboxSessionRepository repositoryWithActiveLocalSession() {
+        MemorySandboxSessionRepository repository = new MemorySandboxSessionRepository();
+        repository.saveSession(SandboxSession.created(
+                "session-local-failover-load",
+                "tenant-1",
+                "run-local-failover-load",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                NOW).withRuntimeNode("local-container-docker"));
+        return repository;
+    }
+
     private static KernelSandboxRuntimeService remoteRoutingService(
             RecordingSandboxRuntimePort localRuntime,
             RecordingSandboxRemoteRuntimePort remoteRuntime,
@@ -2259,10 +2451,12 @@ class KernelSandboxRuntimeServiceTests {
         private boolean closeSessionCalled;
         private boolean inspectSessionOwnershipCalled;
         private boolean failCreateSession;
+        private boolean failInspectSessionOwnership;
         private boolean failCloseSession;
         private boolean returnNullCloseSession;
         private boolean returnMismatchedSessionId;
         private String createSessionNodeId;
+        private final List<String> createSessionNodeIds = new ArrayList<>();
         private String closedSessionId;
         private String inspectedSessionId;
         private SandboxSessionRequest createSessionRequest;
@@ -2274,6 +2468,7 @@ class KernelSandboxRuntimeServiceTests {
             createSessionCalled = true;
             calls.add("create");
             createSessionNodeId = endpoint.nodeId();
+            createSessionNodeIds.add(endpoint.nodeId());
             createSessionRequest = request;
             if (failCreateSession) {
                 throw new IllegalStateException("remote runtime create failed");
@@ -2294,6 +2489,9 @@ class KernelSandboxRuntimeServiceTests {
             inspectSessionOwnershipCalled = true;
             inspectedSessionId = sessionId;
             calls.add("inspect");
+            if (failInspectSessionOwnership) {
+                throw new IllegalStateException("remote runtime ownership inspection failed");
+            }
             return sessionOwnership;
         }
 
@@ -2459,6 +2657,7 @@ class KernelSandboxRuntimeServiceTests {
         private boolean createSessionCalled;
         private boolean executeCalled;
         private boolean closeSessionCalled;
+        private boolean failCreateSession;
         private SandboxSessionRequest createSessionRequest;
         private final List<String> closedSessionIds = new ArrayList<>();
         private Set<String> orphanSweepActiveSessionIds = Set.of();
@@ -2481,6 +2680,9 @@ class KernelSandboxRuntimeServiceTests {
         public SandboxSession createSession(SandboxSessionRequest request) {
             createSessionCalled = true;
             createSessionRequest = request;
+            if (failCreateSession) {
+                throw new IllegalStateException("local runtime create failed");
+            }
             return SandboxSession.created(
                     request.sessionId() == null ? "session-1" : request.sessionId(),
                     request.tenantId(),
