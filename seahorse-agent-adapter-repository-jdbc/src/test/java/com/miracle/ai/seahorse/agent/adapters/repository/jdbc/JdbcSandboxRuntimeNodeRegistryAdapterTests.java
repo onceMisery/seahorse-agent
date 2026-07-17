@@ -29,6 +29,9 @@ import java.sql.Timestamp;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort.ReservationResult.NOT_REQUIRED;
+import static com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort.ReservationResult.REJECTED;
+import static com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort.ReservationResult.RESERVED;
 
 class JdbcSandboxRuntimeNodeRegistryAdapterTests {
 
@@ -124,7 +127,68 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
         assertThat(adapter.listRegistrations(10)).isEmpty();
     }
 
+    @Test
+    void shouldReserveFiniteNodeCapacityAgainstPendingAndPersistedSessions() {
+        DriverManagerDataSource dataSource = dataSource();
+        createSchema(dataSource);
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        JdbcSandboxRuntimeNodeRegistryAdapter adapter = new JdbcSandboxRuntimeNodeRegistryAdapter(dataSource);
+
+        assertThat(adapter.tryReserve("unregistered-node", "reservation-unmanaged", Duration.ofMinutes(1)))
+                .isEqualTo(NOT_REQUIRED);
+        assertThat(adapter.heartbeat(
+                registration(NOW, NOW.plusSeconds(45), 1),
+                "owner-a",
+                "http://runtime-a:8080/internal/sandbox/runtime",
+                Duration.ofSeconds(45))).isPresent();
+        assertThat(adapter.tryReserve("local-container-docker", "reservation-a", Duration.ofMinutes(1)))
+                .isEqualTo(RESERVED);
+        assertThat(adapter.tryReserve("local-container-docker", "reservation-b", Duration.ofMinutes(1)))
+                .isEqualTo(REJECTED);
+        assertThat(adapter.release("reservation-a")).isTrue();
+
+        jdbcTemplate.update("""
+                INSERT INTO sa_sandbox_session
+                (session_id, tenant_id, run_id, runtime_type, status, reason_code, profile_id,
+                 runtime_node_id, expires_at, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                "session-a",
+                "default",
+                "run-a",
+                "CODE_INTERPRETER",
+                "CREATED",
+                "VALID_REQUEST",
+                "python-small",
+                "local-container-docker",
+                Timestamp.from(NOW.plusSeconds(3600)),
+                Timestamp.from(NOW),
+                Timestamp.from(NOW));
+        assertThat(adapter.tryReserve("local-container-docker", "reservation-b", Duration.ofMinutes(1)))
+                .isEqualTo(REJECTED);
+
+        jdbcTemplate.update("UPDATE sa_sandbox_session SET status = 'CANCELLED' WHERE session_id = 'session-a'");
+        assertThat(adapter.tryReserve("local-container-docker", "reservation-b", Duration.ofMinutes(1)))
+                .isEqualTo(RESERVED);
+        jdbcTemplate.update(
+                "UPDATE sa_sandbox_runtime_capacity_reservation SET expires_at = ? WHERE reservation_id = ?",
+                Timestamp.from(Instant.now().minusSeconds(1)),
+                "reservation-b");
+        assertThat(adapter.tryReserve("local-container-docker", "reservation-c", Duration.ofMinutes(1)))
+                .isEqualTo(RESERVED);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sa_sandbox_runtime_capacity_reservation",
+                Integer.class)).isEqualTo(1);
+        assertThat(adapter.release("reservation-c")).isTrue();
+    }
+
     private static SandboxRuntimeNodeRegistration registration(Instant heartbeatAt, Instant expiresAt) {
+        return registration(heartbeatAt, expiresAt, 0);
+    }
+
+    private static SandboxRuntimeNodeRegistration registration(Instant heartbeatAt,
+                                                               Instant expiresAt,
+                                                               int activeSessionLimit) {
         return new SandboxRuntimeNodeRegistration(
                 "local-container-docker",
                 "container",
@@ -133,7 +197,7 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                 true,
                 "AVAILABLE",
                 0,
-                0,
+                activeSessionLimit,
                 1024L,
                 heartbeatAt,
                 heartbeatAt,
@@ -167,6 +231,29 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                   heartbeat_at TIMESTAMP NOT NULL,
                   expires_at TIMESTAMP NOT NULL,
                   registered_at TIMESTAMP NOT NULL
+                )
+                """);
+        new JdbcTemplate(dataSource).execute("""
+                CREATE TABLE sa_sandbox_runtime_capacity_reservation (
+                  reservation_id VARCHAR(64) PRIMARY KEY,
+                  node_id VARCHAR(64) NOT NULL,
+                  expires_at TIMESTAMP NOT NULL,
+                  created_at TIMESTAMP NOT NULL
+                )
+                """);
+        new JdbcTemplate(dataSource).execute("""
+                CREATE TABLE sa_sandbox_session (
+                  session_id VARCHAR(64) PRIMARY KEY,
+                  tenant_id VARCHAR(64) NOT NULL,
+                  run_id VARCHAR(64) NOT NULL,
+                  runtime_type VARCHAR(32) NOT NULL,
+                  status VARCHAR(32) NOT NULL,
+                  reason_code VARCHAR(64) NOT NULL,
+                  profile_id VARCHAR(64) NOT NULL,
+                  runtime_node_id VARCHAR(128),
+                  expires_at TIMESTAMP NOT NULL,
+                  created_at TIMESTAMP NOT NULL,
+                  updated_at TIMESTAMP NOT NULL
                 )
                 """);
     }

@@ -9,7 +9,8 @@ param(
     [string]$WorkerContainer = "seahorse-runtime-node-b",
     [string]$PostgresContainer = "seahorse-postgres",
     [string]$Marker = "seahorse-remote-runtime-e2e",
-    [switch]$VerifyStaleNodeCleanup
+    [switch]$VerifyStaleNodeCleanup,
+    [switch]$VerifyAtomicCapacityReservation
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,6 +20,9 @@ $total = 0
 $sessionId = $null
 $localLoadSessionId = $null
 $drainingSessionId = $null
+$capacityWinnerSessionId = $null
+$capacityReuseSessionId = $null
+$capacityConcurrentSessionIds = @()
 $runId = $null
 $workerPaused = $false
 $remoteAdmissionAvailable = $null
@@ -80,6 +84,55 @@ function Invoke-Json {
     return $content | ConvertFrom-Json
 }
 
+function Start-JsonPostJob {
+    param(
+        [string]$Path,
+        [object]$Body,
+        [hashtable]$Headers
+    )
+    $authorization = "$($Headers.Authorization)"
+    $json = $Body | ConvertTo-Json -Depth 20 -Compress
+    return Start-Job -ScriptBlock {
+        param([string]$Url, [string]$Authorization, [string]$Json)
+        $temp = [IO.Path]::GetTempFileName()
+        try {
+            [IO.File]::WriteAllText($temp, $Json, (New-Object Text.UTF8Encoding($false)))
+            $raw = & curl.exe -sS -w "`n%{http_code}" -X POST $Url `
+                -H "Authorization: $Authorization" `
+                -H "Content-Type: application/json" `
+                --data-binary "@$temp"
+            [pscustomobject]@{
+                ExitCode = $LASTEXITCODE
+                Raw = @($raw) -join "`n"
+            }
+        } finally {
+            Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+        }
+    } -ArgumentList "$BaseUrl$Path", $authorization, $json
+}
+
+function Receive-JsonPostJob {
+    param([object]$Job, [string]$Path)
+    try {
+        Wait-Job -Job $Job | Out-Null
+        $results = @($Job | Receive-Job)
+    } finally {
+        $Job | Remove-Job -Force -ErrorAction SilentlyContinue
+    }
+    if ($results.Count -ne 1) {
+        throw "Expected one asynchronous response but got $($results.Count)"
+    }
+    $result = $results[0]
+    if ([int]$result.ExitCode -ne 0) { throw "asynchronous curl exited with $($result.ExitCode)" }
+    $lines = @("$($result.Raw)" -split "`n")
+    $status = [int]$lines[-1]
+    $content = if ($lines.Count -gt 1) { $lines[0..($lines.Count - 2)] -join "`n" } else { "" }
+    if ($status -ne 200) {
+        throw "Expected HTTP 200 but got $status for asynchronous POST $Path body=$content"
+    }
+    return $content | ConvertFrom-Json
+}
+
 function Assert-ApiOk {
     param([object]$Response, [string]$Name)
     if ($null -eq $Response -or "$($Response.code)" -ne "0") {
@@ -122,7 +175,7 @@ function Restore-RemoteAdmissionState {
     if ($null -eq $script:remoteAdmissionAvailable -or -not $script:remoteAdmissionStatus) { return }
     $safeRemoteNode = $RemoteNodeId.Replace("'", "''")
     $expectedAvailable = if ($script:remoteAdmissionAvailable) { "t" } else { "f" }
-    $deadline = (Get-Date).AddSeconds(45)
+    $deadline = (Get-Date).AddSeconds(90)
     do {
         $state = Invoke-PostgresScalar "SELECT admission_available, admission_status FROM sa_sandbox_runtime_node WHERE node_id='$safeRemoteNode';"
         if ($state -eq "$expectedAvailable`t$script:remoteAdmissionStatus") {
@@ -132,6 +185,12 @@ function Restore-RemoteAdmissionState {
         }
         Start-Sleep -Seconds 2
     } while ((Get-Date) -lt $deadline)
+    $state = Invoke-PostgresScalar "SELECT admission_available, admission_status FROM sa_sandbox_runtime_node WHERE node_id='$safeRemoteNode';"
+    if ($state -eq "$expectedAvailable`t$script:remoteAdmissionStatus") {
+        $script:remoteAdmissionAvailable = $null
+        $script:remoteAdmissionStatus = $null
+        return
+    }
     $availableSql = if ($script:remoteAdmissionAvailable) { "TRUE" } else { "FALSE" }
     $safeStatus = $script:remoteAdmissionStatus.Replace("'", "''")
     Invoke-PostgresCommand "UPDATE sa_sandbox_runtime_node SET admission_available=$availableSql, admission_status='$safeStatus' WHERE node_id='$safeRemoteNode';"
@@ -259,6 +318,225 @@ WHERE node_id IN ('$safeOldNode', '$safeRecentNode', '$safeLocalNode', '$safeRem
     }
     if (-not $run) { throw "agent run creation failed" }
     $runId = "$($run.runId)"
+
+    if ($VerifyAtomicCapacityReservation) {
+        Test-Step "Require a clean finite-capacity remote node" {
+            $safeRemoteNode = $RemoteNodeId.Replace("'", "''")
+            $state = Invoke-PostgresScalar @"
+SELECT active_session_limit,
+       (SELECT COUNT(*) FROM sa_sandbox_session
+        WHERE runtime_node_id = '$safeRemoteNode'
+          AND status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')),
+       (SELECT COUNT(*) FROM sa_sandbox_runtime_capacity_reservation
+        WHERE node_id = '$safeRemoteNode' AND expires_at > CURRENT_TIMESTAMP)
+FROM sa_sandbox_runtime_node
+WHERE node_id = '$safeRemoteNode' AND expires_at > CURRENT_TIMESTAMP;
+"@
+            if ($state -ne "1`t0`t0") {
+                throw "remote node is not ready for atomic capacity verification: limit/active/reserved=$state"
+            }
+        } | Out-Null
+
+        $capacityResponses = Test-Step "Reject a second request while the first owns a pending reservation" {
+            $body = @{
+                tenantId = "default"
+                runId = $runId
+                runtimeType = "CODE_INTERPRETER"
+                networkRequested = $false
+                requestedHosts = @()
+                requiredRuntimeNodeId = $RemoteNodeId
+            }
+            $safeRemoteNode = $RemoteNodeId.Replace("'", "''")
+            $safeRunId = $runId.Replace("'", "''")
+            $jobs = @()
+            $responses = @()
+            try {
+                & docker pause $WorkerContainer | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "failed to pause worker for capacity overlap" }
+                $script:workerPaused = $true
+
+                $jobs += Start-JsonPostJob -Path "/api/sandbox/sessions" -Body $body -Headers $headers
+                $deadline = (Get-Date).AddSeconds(15)
+                do {
+                    $state = Invoke-PostgresScalar @"
+SELECT (SELECT COUNT(*) FROM sa_sandbox_runtime_capacity_reservation
+        WHERE node_id = '$safeRemoteNode' AND expires_at > CURRENT_TIMESTAMP),
+       (SELECT COUNT(*) FROM sa_sandbox_session
+        WHERE runtime_node_id = '$safeRemoteNode'
+          AND status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED'));
+"@
+                    if ($state -eq "1`t0") { break }
+                    Start-Sleep -Milliseconds 100
+                } while ((Get-Date) -lt $deadline)
+                if ($state -ne "1`t0") {
+                    throw "first request did not hold an observable pending reservation: reserved/persisted=$state"
+                }
+
+                $jobs += Start-JsonPostJob -Path "/api/sandbox/sessions" -Body $body -Headers $headers
+                $deadline = (Get-Date).AddSeconds(15)
+                do {
+                    $state = Invoke-PostgresScalar @"
+SELECT (SELECT COUNT(*) FROM sa_sandbox_runtime_capacity_reservation
+        WHERE node_id = '$safeRemoteNode' AND expires_at > CURRENT_TIMESTAMP),
+       (SELECT COUNT(*) FROM sa_sandbox_session
+        WHERE runtime_node_id = '$safeRemoteNode'
+          AND status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')),
+       (SELECT COUNT(*) FROM sa_sandbox_session
+        WHERE run_id = '$safeRunId' AND status = 'FAILED'
+          AND reason_code = 'RUNTIME_CAPACITY_EXCEEDED');
+"@
+                    if ($state -eq "1`t0`t1") { break }
+                    $parts = $state -split "`t"
+                    if ($parts.Count -ge 1 -and [int]$parts[0] -gt 1) {
+                        throw "overlapping requests held more than one reservation: reserved/persisted/rejected=$state"
+                    }
+                    Start-Sleep -Milliseconds 100
+                } while ((Get-Date) -lt $deadline)
+                if ($state -ne "1`t0`t1") {
+                    throw "second request was not rejected while the first reservation was pending: reserved/persisted/rejected=$state"
+                }
+
+                Resume-WorkerHeartbeat
+                foreach ($job in @($jobs)) {
+                    try {
+                        $response = Receive-JsonPostJob -Job $job -Path "/api/sandbox/sessions"
+                        $responses += $response
+                        if ("$($response.data.status)" -eq "CREATED" -and "$($response.data.sessionId)") {
+                            $script:capacityConcurrentSessionIds += "$($response.data.sessionId)"
+                        }
+                    } finally {
+                        $jobs = @($jobs | Where-Object { $_.Id -ne $job.Id })
+                    }
+                }
+            } finally {
+                Resume-WorkerHeartbeat
+                foreach ($job in @($jobs)) {
+                    try {
+                        $response = Receive-JsonPostJob -Job $job -Path "/api/sandbox/sessions"
+                        if ("$($response.data.status)" -eq "CREATED" -and "$($response.data.sessionId)") {
+                            $script:capacityConcurrentSessionIds += "$($response.data.sessionId)"
+                        }
+                    } catch {
+                        # Preserve the original verification failure; the database fallback below owns cleanup discovery.
+                    } finally {
+                        $jobs = @($jobs | Where-Object { $_.Id -ne $job.Id })
+                    }
+                }
+                $activeSessionIds = Invoke-PostgresScalar @"
+SELECT COALESCE(string_agg(session_id, ',' ORDER BY session_id), 'NONE')
+FROM sa_sandbox_session
+WHERE run_id = '$safeRunId' AND runtime_node_id = '$safeRemoteNode'
+  AND status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED');
+"@
+                if ($activeSessionIds -ne "NONE") {
+                    $script:capacityConcurrentSessionIds += @($activeSessionIds -split ',')
+                }
+            }
+            $responseSessionIds = @($responses | Where-Object {
+                "$($_.data.status)" -eq "CREATED" -and "$($_.data.sessionId)"
+            } | ForEach-Object { "$($_.data.sessionId)" })
+            $script:capacityConcurrentSessionIds = @(
+                @($script:capacityConcurrentSessionIds) + $responseSessionIds
+            ) | Select-Object -Unique
+            foreach ($response in $responses) { Assert-ApiOk $response "Concurrent sandbox session create" }
+            $created = @($responses | Where-Object { "$($_.data.status)" -eq "CREATED" })
+            $rejected = @($responses | Where-Object {
+                "$($_.data.status)" -eq "FAILED" -and
+                "$($_.data.reasonCode)" -eq "RUNTIME_CAPACITY_EXCEEDED"
+            })
+            if ($created.Count -ne 1 -or $rejected.Count -ne 1) {
+                throw "Expected one CREATED and one FAILED|RUNTIME_CAPACITY_EXCEEDED: $($responses | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            if ("$($created[0].data.runtimeNodeId)" -ne $RemoteNodeId) {
+                throw "capacity winner was not created on $RemoteNodeId"
+            }
+            $script:capacityWinnerSessionId = "$($created[0].data.sessionId)"
+            return @($created[0].data, $rejected[0].data)
+        }
+        if (-not $capacityResponses -or @($capacityResponses).Count -ne 2) {
+            throw "concurrent capacity verification did not return both session records"
+        }
+        $capacityWinnerSessionId = "$($capacityResponses[0].sessionId)"
+        $capacityRejectedSessionId = "$($capacityResponses[1].sessionId)"
+
+        Test-Step "Persist one winner, one capacity rejection, and no pending lease" {
+            $safeWinner = $capacityWinnerSessionId.Replace("'", "''")
+            $safeRejected = $capacityRejectedSessionId.Replace("'", "''")
+            $safeRemoteNode = $RemoteNodeId.Replace("'", "''")
+            $state = Invoke-PostgresScalar @"
+SELECT COUNT(*) FILTER (
+           WHERE session_id = '$safeWinner' AND status = 'CREATED' AND runtime_node_id = '$safeRemoteNode'),
+       COUNT(*) FILTER (
+           WHERE session_id = '$safeRejected' AND status = 'FAILED'
+             AND reason_code = 'RUNTIME_CAPACITY_EXCEEDED'),
+       (SELECT COUNT(*) FROM sa_sandbox_runtime_capacity_reservation
+        WHERE node_id = '$safeRemoteNode')
+FROM sa_sandbox_session
+WHERE session_id IN ('$safeWinner', '$safeRejected');
+"@
+            if ($state -ne "1`t1`t0") {
+                throw "unexpected concurrent capacity persistence state: winner/rejected/reserved=$state"
+            }
+            & docker exec $WorkerContainer sh -lc "test -d '/var/lib/seahorse-sandbox/$capacityWinnerSessionId'"
+            if ($LASTEXITCODE -ne 0) { throw "capacity winner workspace is missing" }
+            & docker exec $WorkerContainer sh -lc "test ! -e '/var/lib/seahorse-sandbox/$capacityRejectedSessionId'"
+            if ($LASTEXITCODE -ne 0) { throw "capacity-rejected session unexpectedly owns a workspace" }
+        } | Out-Null
+
+        Test-Step "Close capacity winner and reuse the released slot" {
+            $close = Invoke-Json -Method POST -Path "/api/sandbox/sessions/$capacityWinnerSessionId/close" -Headers $headers
+            Assert-ApiOk $close "Close capacity winner"
+            if ("$($close.data.status)" -ne "CANCELLED") { throw "capacity winner was not cancelled" }
+            & docker exec $WorkerContainer sh -lc "test ! -e '/var/lib/seahorse-sandbox/$capacityWinnerSessionId'"
+            if ($LASTEXITCODE -ne 0) { throw "capacity winner workspace remains after close" }
+            $script:capacityConcurrentSessionIds = @($script:capacityConcurrentSessionIds | Where-Object {
+                $_ -ne $capacityWinnerSessionId
+            })
+            $script:capacityWinnerSessionId = $null
+
+            $safeRemoteNode = $RemoteNodeId.Replace("'", "''")
+            $deadline = (Get-Date).AddSeconds(45)
+            do {
+                $state = Invoke-PostgresScalar @"
+SELECT active_session_count,
+       (SELECT COUNT(*) FROM sa_sandbox_runtime_capacity_reservation
+        WHERE node_id = '$safeRemoteNode' AND expires_at > CURRENT_TIMESTAMP)
+FROM sa_sandbox_runtime_node
+WHERE node_id = '$safeRemoteNode' AND expires_at > CURRENT_TIMESTAMP;
+"@
+                if ($state -eq "0`t0") { break }
+                Start-Sleep -Seconds 2
+            } while ((Get-Date) -lt $deadline)
+            if ($state -ne "0`t0") {
+                throw "remote capacity did not converge after closing the winner: active/reserved=$state"
+            }
+
+            $response = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
+                tenantId = "default"
+                runId = $runId
+                runtimeType = "CODE_INTERPRETER"
+                networkRequested = $false
+                requestedHosts = @()
+                requiredRuntimeNodeId = $RemoteNodeId
+            }
+            Assert-ApiOk $response "Reuse remote capacity slot"
+            $script:capacityReuseSessionId = "$($response.data.sessionId)"
+            if ("$($response.data.status)" -ne "CREATED" -or "$($response.data.runtimeNodeId)" -ne $RemoteNodeId) {
+                throw "remote capacity slot was not reusable: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
+            & docker exec $WorkerContainer sh -lc "test -d '/var/lib/seahorse-sandbox/$script:capacityReuseSessionId'"
+            if ($LASTEXITCODE -ne 0) { throw "capacity reuse workspace is missing" }
+            if ((Invoke-PostgresScalar "SELECT COUNT(*) FROM sa_sandbox_runtime_capacity_reservation WHERE node_id='$safeRemoteNode';") -ne "0") {
+                throw "capacity reservation remained after reused session persistence"
+            }
+
+            $reuseClose = Invoke-Json -Method POST -Path "/api/sandbox/sessions/$script:capacityReuseSessionId/close" -Headers $headers
+            Assert-ApiOk $reuseClose "Close capacity reuse session"
+            & docker exec $WorkerContainer sh -lc "test ! -e '/var/lib/seahorse-sandbox/$script:capacityReuseSessionId'"
+            if ($LASTEXITCODE -ne 0) { throw "capacity reuse workspace remains after close" }
+            $script:capacityReuseSessionId = $null
+        } | Out-Null
+    }
 
     $localLoadSession = Test-Step "Create explicit local session as node load" {
         $response = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
@@ -428,11 +706,19 @@ WHERE node_id IN ('$safeOldNode', '$safeRecentNode', '$safeLocalNode', '$safeRem
     }
     $cleanupTargets = @(
         @{ SessionId = $sessionId; Container = $WorkerContainer },
+        @{ SessionId = $capacityWinnerSessionId; Container = $WorkerContainer },
+        @{ SessionId = $capacityReuseSessionId; Container = $WorkerContainer },
         @{ SessionId = $drainingSessionId; Container = $CoordinatorContainer },
         @{ SessionId = $localLoadSessionId; Container = $CoordinatorContainer }
     )
+    $cleanupTargets += @($capacityConcurrentSessionIds | ForEach-Object {
+        @{ SessionId = $_; Container = $WorkerContainer }
+    })
+    $cleanedSessionIds = @{}
     foreach ($target in $cleanupTargets) {
         if (-not $target.SessionId -or -not $headers) { continue }
+        if ($cleanedSessionIds.ContainsKey($target.SessionId)) { continue }
+        $cleanedSessionIds[$target.SessionId] = $true
         $cleanupIssues = @()
         try {
             $cleanupResponse = Invoke-Json -Method POST -Path "/api/sandbox/sessions/$($target.SessionId)/close" -Headers $headers

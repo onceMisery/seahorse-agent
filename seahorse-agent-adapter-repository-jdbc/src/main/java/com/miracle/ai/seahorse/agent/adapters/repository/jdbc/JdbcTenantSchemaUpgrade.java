@@ -194,12 +194,16 @@ public class JdbcTenantSchemaUpgrade {
             jdbcTemplate.execute(
                     "CREATE INDEX IF NOT EXISTS idx_sa_sandbox_session_expires ON sa_sandbox_session(tenant_id, expires_at)");
             jdbcTemplate.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_sa_sandbox_session_runtime_node_status
+                    ON sa_sandbox_session(runtime_node_id, status)
+                    """);
+            jdbcTemplate.execute("""
                     CREATE INDEX IF NOT EXISTS idx_sa_sandbox_session_runtime_node
                     ON sa_sandbox_session(tenant_id, runtime_node_id, updated_at DESC)
                     WHERE runtime_node_id IS NOT NULL
                     """);
         } catch (Exception e) {
-            log.warn("[TenantSchema] 创建 sa_sandbox_session expires 索引失败: {}", e.getMessage());
+            log.warn("[TenantSchema] 创建 sa_sandbox_session 运行时治理索引失败: {}", e.getMessage());
         }
     }
 
@@ -407,6 +411,18 @@ public class JdbcTenantSchemaUpgrade {
             jdbcTemplate.execute("""
                     CREATE INDEX IF NOT EXISTS idx_sa_sandbox_runtime_node_lease
                       ON sa_sandbox_runtime_node(expires_at, heartbeat_at DESC)
+                    """);
+            jdbcTemplate.execute("""
+                    CREATE TABLE IF NOT EXISTS sa_sandbox_runtime_capacity_reservation (
+                      reservation_id VARCHAR(64) PRIMARY KEY,
+                      node_id VARCHAR(64) NOT NULL,
+                      expires_at TIMESTAMP NOT NULL,
+                      created_at TIMESTAMP NOT NULL
+                    )
+                    """);
+            jdbcTemplate.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_sa_sandbox_runtime_capacity_reservation_node
+                      ON sa_sandbox_runtime_capacity_reservation(node_id, expires_at)
                     """);
         } catch (Exception e) {
             log.warn("[TenantSchema] upgrade sa_sandbox_runtime_node failed: {}", e.getMessage());

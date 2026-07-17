@@ -19,9 +19,12 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeRegistration;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeEndpoint;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
 import java.sql.ResultSet;
@@ -34,7 +37,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNodeRegistryPort {
+public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNodeRegistryPort,
+        SandboxRuntimeCapacityReservationPort {
 
     private static final String REGISTRATION_COLUMNS = """
             node_id, runtime, engine, health_status, admission_available, admission_status,
@@ -102,11 +106,42 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
     private static final String SQL_DELETE_STALE_NODE = """
             DELETE FROM sa_sandbox_runtime_node WHERE node_id = ? AND expires_at <= ?
             """;
+    private static final String SQL_DELETE_EXPIRED_CAPACITY_RESERVATIONS = """
+            DELETE FROM sa_sandbox_runtime_capacity_reservation WHERE node_id = ? AND expires_at <= ?
+            """;
+    private static final String SQL_LOCK_CAPACITY_NODE = """
+            SELECT admission_available, admission_status, active_session_count,
+                   active_session_limit, expires_at
+            FROM sa_sandbox_runtime_node
+            WHERE node_id = ?
+            FOR UPDATE
+            """;
+    private static final String SQL_COUNT_CAPACITY_USAGE = """
+            SELECT
+              (SELECT COUNT(*) FROM sa_sandbox_session
+               WHERE runtime_node_id = ? AND status NOT IN (?, ?, ?, ?)) AS persisted_active,
+              (SELECT COUNT(*) FROM sa_sandbox_runtime_capacity_reservation
+               WHERE node_id = ? AND expires_at > ?) AS pending_reservations
+            """;
+    private static final String SQL_INSERT_CAPACITY_RESERVATION = """
+            INSERT INTO sa_sandbox_runtime_capacity_reservation
+            (reservation_id, node_id, expires_at, created_at)
+            VALUES (?, ?, ?, ?)
+            """;
+    private static final String SQL_RELEASE_CAPACITY_RESERVATION = """
+            DELETE FROM sa_sandbox_runtime_capacity_reservation WHERE reservation_id = ?
+            """;
+    private static final String SQL_DELETE_NODE_CAPACITY_RESERVATIONS = """
+            DELETE FROM sa_sandbox_runtime_capacity_reservation WHERE node_id = ?
+            """;
 
     private final JdbcTemplate jdbcTemplate;
+    private final TransactionTemplate transactionTemplate;
 
     public JdbcSandboxRuntimeNodeRegistryAdapter(DataSource dataSource) {
-        this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
+        DataSource safeDataSource = Objects.requireNonNull(dataSource, "dataSource must not be null");
+        this.jdbcTemplate = new JdbcTemplate(safeDataSource);
+        this.transactionTemplate = new TransactionTemplate(new DataSourceTransactionManager(safeDataSource));
     }
 
     @Override
@@ -241,9 +276,43 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                 Math.min(limit, 1_000));
         int removed = 0;
         for (String nodeId : nodeIds) {
-            removed += jdbcTemplate.update(SQL_DELETE_STALE_NODE, nodeId, toTimestamp(cutoff));
+            Boolean nodeRemoved = transactionTemplate.execute(status -> {
+                int deleted = jdbcTemplate.update(SQL_DELETE_STALE_NODE, nodeId, toTimestamp(cutoff));
+                if (deleted == 1) {
+                    jdbcTemplate.update(SQL_DELETE_NODE_CAPACITY_RESERVATIONS, nodeId);
+                    return true;
+                }
+                return false;
+            });
+            if (Boolean.TRUE.equals(nodeRemoved)) {
+                removed++;
+            }
         }
         return removed;
+    }
+
+    @Override
+    public ReservationResult tryReserve(String nodeId, String reservationId, Duration leaseTtl) {
+        String safeNodeId = requireText(nodeId, "nodeId must not be blank");
+        String safeReservationId = requireText(reservationId, "reservationId must not be blank");
+        Duration safeLeaseTtl = Objects.requireNonNull(leaseTtl, "leaseTtl must not be null");
+        if (safeLeaseTtl.isNegative() || safeLeaseTtl.isZero()
+                || safeLeaseTtl.compareTo(Duration.ofMinutes(10)) > 0) {
+            throw new IllegalArgumentException("leaseTtl must be between 1ms and 10 minutes");
+        }
+        ReservationResult result = transactionTemplate.execute(status -> reserveCapacity(
+                safeNodeId,
+                safeReservationId,
+                safeLeaseTtl));
+        return Objects.requireNonNullElse(result, ReservationResult.REJECTED);
+    }
+
+    @Override
+    public boolean release(String reservationId) {
+        if (reservationId == null || reservationId.isBlank()) {
+            return false;
+        }
+        return jdbcTemplate.update(SQL_RELEASE_CAPACITY_RESERVATION, reservationId.trim()) == 1;
     }
 
     @Override
@@ -327,6 +396,60 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                 SandboxRuntimeNodeRegistration.REGISTRATION_LIVE);
     }
 
+    private ReservationResult reserveCapacity(String nodeId, String reservationId, Duration leaseTtl) {
+        Instant now = databaseNow();
+        List<CapacityNode> nodes = jdbcTemplate.query(
+                SQL_LOCK_CAPACITY_NODE,
+                (rs, rowNum) -> new CapacityNode(
+                        rs.getBoolean("admission_available"),
+                        rs.getString("admission_status"),
+                        rs.getInt("active_session_count"),
+                        rs.getInt("active_session_limit"),
+                        toInstant(rs.getTimestamp("expires_at"))),
+                nodeId);
+        if (nodes.isEmpty()) {
+            jdbcTemplate.update(SQL_DELETE_EXPIRED_CAPACITY_RESERVATIONS, nodeId, toTimestamp(now));
+            return ReservationResult.NOT_REQUIRED;
+        }
+        CapacityNode node = nodes.get(0);
+        jdbcTemplate.update(SQL_DELETE_EXPIRED_CAPACITY_RESERVATIONS, nodeId, toTimestamp(now));
+        if (!node.expiresAt().isAfter(now)
+                || !node.admissionAvailable()
+                || !("AVAILABLE".equals(node.admissionStatus()) || "DEGRADED".equals(node.admissionStatus()))) {
+            return ReservationResult.REJECTED;
+        }
+        if (node.activeSessionLimit() <= 0) {
+            return ReservationResult.NOT_REQUIRED;
+        }
+        CapacityUsage usage = jdbcTemplate.queryForObject(
+                SQL_COUNT_CAPACITY_USAGE,
+                (rs, rowNum) -> new CapacityUsage(
+                        rs.getInt("persisted_active"),
+                        rs.getInt("pending_reservations")),
+                nodeId,
+                "SUCCEEDED",
+                "FAILED",
+                "TIMED_OUT",
+                "CANCELLED",
+                nodeId,
+                toTimestamp(now));
+        CapacityUsage safeUsage = Objects.requireNonNull(usage, "capacity usage must not be null");
+        int effectiveActive = Math.max(
+                node.observedActiveSessionCount(),
+                safeUsage.persistedActive())
+                + safeUsage.pendingReservations();
+        if (effectiveActive >= node.activeSessionLimit()) {
+            return ReservationResult.REJECTED;
+        }
+        jdbcTemplate.update(
+                SQL_INSERT_CAPACITY_RESERVATION,
+                reservationId,
+                nodeId,
+                toTimestamp(now.plus(leaseTtl)),
+                toTimestamp(now));
+        return ReservationResult.RESERVED;
+    }
+
     private Instant databaseNow() {
         Timestamp timestamp = jdbcTemplate.queryForObject(SQL_DATABASE_NOW, Timestamp.class);
         return Objects.requireNonNull(timestamp, "database current timestamp must not be null").toInstant();
@@ -355,5 +478,15 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                 "transport-validation",
                 URI.create(value.trim()),
                 Instant.MAX).transportUri().toString();
+    }
+
+    private record CapacityNode(boolean admissionAvailable,
+                                String admissionStatus,
+                                int observedActiveSessionCount,
+                                int activeSessionLimit,
+                                Instant expiresAt) {
+    }
+
+    private record CapacityUsage(int persistedActive, int pendingReservations) {
     }
 }

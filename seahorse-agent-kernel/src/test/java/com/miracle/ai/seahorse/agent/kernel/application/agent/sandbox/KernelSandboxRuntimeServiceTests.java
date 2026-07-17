@@ -64,6 +64,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionReques
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRemoteRuntimePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
@@ -100,6 +101,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort.ReservationResult.REJECTED;
+import static com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort.ReservationResult.RESERVED;
 
 class KernelSandboxRuntimeServiceTests {
 
@@ -394,6 +397,235 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals("sandbox-node-b", session.runtimeNodeId());
         assertTrue(remoteRuntime.createSessionCalled);
         assertFalse(localRuntime.createSessionCalled);
+    }
+
+    @Test
+    void shouldReserveAndReleaseRemoteNodeCapacityAfterSessionPersistence() {
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                new RecordingSandboxRuntimePort(),
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true)),
+                new MemorySandboxSessionRepository(),
+                reservations);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-capacity-reserved",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                null,
+                null,
+                "sandbox-node-b"));
+
+        assertEquals(SandboxExecutionStatus.CREATED, session.status());
+        assertEquals(List.of("sandbox-node-b"), reservations.reservedNodeIds);
+        assertEquals(List.of(Duration.ofMinutes(5)), reservations.leaseTtls);
+        assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
+        assertTrue(remoteRuntime.createSessionCalled);
+    }
+
+    @Test
+    void shouldPersistCapacityRejectionWithoutCreatingRuntimeSession() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(REJECTED);
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                new RecordingSandboxRuntimePort(),
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true)),
+                sessionRepository,
+                reservations);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-capacity-rejected",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                null,
+                null,
+                "sandbox-node-b"));
+
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertEquals(SandboxPolicyReasonCode.RUNTIME_CAPACITY_EXCEEDED, session.reasonCode());
+        assertEquals(session, sessionRepository.findSessionById(session.sessionId()).orElseThrow());
+        assertFalse(remoteRuntime.createSessionCalled);
+        assertTrue(reservations.releasedReservationIds.isEmpty());
+    }
+
+    @Test
+    void shouldTryNextAutomaticCandidateWhenFirstCapacityReservationLoses() {
+        RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
+        localRuntime.healthResponse = SandboxRuntimeHealth.unsupported(NOW, 0);
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
+        reservations.resultsByNode.put("sandbox-node-a", REJECTED);
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                localRuntime,
+                remoteRuntime,
+                new ListSandboxRuntimeNodeRegistry(List.of(
+                        remoteEndpoint("sandbox-node-a", SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true),
+                        remoteEndpoint("sandbox-node-b", SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true))),
+                new MemorySandboxSessionRepository(),
+                reservations);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-capacity-next-node",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        assertEquals(SandboxExecutionStatus.CREATED, session.status());
+        assertEquals("sandbox-node-b", session.runtimeNodeId());
+        assertEquals(List.of("sandbox-node-a", "sandbox-node-b"), reservations.reservedNodeIds);
+        assertEquals("sandbox-node-b", remoteRuntime.createSessionNodeId);
+        assertEquals(1, reservations.releasedReservationIds.size());
+    }
+
+    @Test
+    void shouldStillReserveLocalCapacityWhenRemoteRegistryListingFails() {
+        RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
+        RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                localRuntime,
+                new RecordingSandboxRemoteRuntimePort(),
+                new ThrowingListSandboxRuntimeNodeRegistry(),
+                new MemorySandboxSessionRepository(),
+                reservations);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-capacity-registry-failed",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        assertEquals(SandboxExecutionStatus.CREATED, session.status());
+        assertEquals("local-container-docker", session.runtimeNodeId());
+        assertEquals(List.of("local-container-docker"), reservations.reservedNodeIds);
+        assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
+        assertTrue(localRuntime.createSessionCalled);
+    }
+
+    @Test
+    void shouldReleaseCapacityReservationWhenRuntimeCreationFails() {
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        remoteRuntime.failCreateSession = true;
+        RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                new RecordingSandboxRuntimePort(),
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true)),
+                new MemorySandboxSessionRepository(),
+                reservations);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-capacity-create-failed",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                null,
+                null,
+                "sandbox-node-b"));
+
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertEquals(SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE, session.reasonCode());
+        assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
+    }
+
+    @Test
+    void shouldReleaseCapacityAfterPersistenceRollbackAndKeepLeaseWhenRollbackFails() {
+        RecordingSandboxRemoteRuntimePort rollbackRuntime = new RecordingSandboxRemoteRuntimePort();
+        RecordingCapacityReservationPort releasedReservations = new RecordingCapacityReservationPort(RESERVED);
+        KernelSandboxRuntimeService rollbackService = remoteRoutingService(
+                new RecordingSandboxRuntimePort(),
+                rollbackRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true)),
+                new FailingSandboxSessionRepository(),
+                releasedReservations);
+
+        assertThrows(IllegalStateException.class, () -> rollbackService.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-capacity-persist-failed",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                null,
+                null,
+                "sandbox-node-b")));
+        assertTrue(rollbackRuntime.closeSessionCalled);
+        assertEquals(releasedReservations.reservationIds, releasedReservations.releasedReservationIds);
+
+        RecordingSandboxRemoteRuntimePort failedRollbackRuntime = new RecordingSandboxRemoteRuntimePort();
+        failedRollbackRuntime.failCloseSession = true;
+        RecordingCapacityReservationPort retainedReservations = new RecordingCapacityReservationPort(RESERVED);
+        KernelSandboxRuntimeService failedRollbackService = remoteRoutingService(
+                new RecordingSandboxRuntimePort(),
+                failedRollbackRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true)),
+                new FailingSandboxSessionRepository(),
+                retainedReservations);
+
+        assertThrows(IllegalStateException.class, () -> failedRollbackService.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-capacity-rollback-failed",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                null,
+                null,
+                "sandbox-node-b")));
+        assertTrue(failedRollbackRuntime.closeSessionCalled);
+        assertTrue(retainedReservations.releasedReservationIds.isEmpty());
+    }
+
+    @Test
+    void shouldKeepPersistedRuntimeSessionWhenFailClosedAuditWriteFails() {
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
+        KernelAuditLedgerService auditLedger = new KernelAuditLedgerService(
+                new FailingAuditEventRepository(),
+                new AuditRedactionPolicy(),
+                AuditWriteFailurePolicy.FAIL_CLOSED);
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(),
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new EmptySandboxArtifactQueryPort(),
+                new DefaultSandboxArtifactScannerPort(),
+                null,
+                new MemorySandboxRuntimeProfilePolicyRepository(),
+                null,
+                null,
+                auditLedger,
+                CLOCK,
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(
+                        SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true)),
+                reservations);
+
+        assertThrows(IllegalStateException.class, () -> service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-capacity-audit-failed",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                null,
+                null,
+                "sandbox-node-b")));
+
+        SandboxSession persisted = sessionRepository.findSessionById("session-remote-1").orElseThrow();
+        assertEquals(SandboxExecutionStatus.CREATED, persisted.status());
+        assertFalse(remoteRuntime.closeSessionCalled);
+        assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
     }
 
     @Test
@@ -1829,6 +2061,15 @@ class KernelSandboxRuntimeServiceTests {
             RecordingSandboxRemoteRuntimePort remoteRuntime,
             SandboxRuntimeNodeRegistryPort nodeRegistry,
             MemorySandboxSessionRepository sessionRepository) {
+        return remoteRoutingService(localRuntime, remoteRuntime, nodeRegistry, sessionRepository, null);
+    }
+
+    private static KernelSandboxRuntimeService remoteRoutingService(
+            RecordingSandboxRuntimePort localRuntime,
+            RecordingSandboxRemoteRuntimePort remoteRuntime,
+            SandboxRuntimeNodeRegistryPort nodeRegistry,
+            SandboxSessionRepositoryPort sessionRepository,
+            SandboxRuntimeCapacityReservationPort capacityReservationPort) {
         return new KernelSandboxRuntimeService(
                 request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
                 localRuntime,
@@ -1844,11 +2085,27 @@ class KernelSandboxRuntimeServiceTests {
                 null,
                 CLOCK,
                 remoteRuntime,
-                nodeRegistry);
+                nodeRegistry,
+                capacityReservationPort);
     }
 
     private static SandboxRuntimeNodeEndpoint remoteEndpoint(String admissionStatus, boolean admissionAvailable) {
         return remoteEndpoint(admissionStatus, admissionAvailable, 0, 0, -1L);
+    }
+
+    private static SandboxRuntimeNodeEndpoint remoteEndpoint(String nodeId,
+                                                             String admissionStatus,
+                                                             boolean admissionAvailable) {
+        return new SandboxRuntimeNodeEndpoint(
+                nodeId,
+                URI.create("http://" + nodeId + ":8080/internal/sandbox/runtime"),
+                "HEALTHY",
+                admissionAvailable,
+                admissionStatus,
+                0,
+                1,
+                2048L,
+                NOW.plusSeconds(45));
     }
 
     private static SandboxRuntimeNodeEndpoint remoteEndpoint(String admissionStatus,
@@ -1873,10 +2130,17 @@ class KernelSandboxRuntimeServiceTests {
         private boolean createSessionCalled;
         private boolean executeCalled;
         private boolean closeSessionCalled;
+        private boolean failCreateSession;
+        private boolean failCloseSession;
+        private String createSessionNodeId;
 
         @Override
         public SandboxSession createSession(SandboxRuntimeNodeEndpoint endpoint, SandboxSessionRequest request) {
             createSessionCalled = true;
+            createSessionNodeId = endpoint.nodeId();
+            if (failCreateSession) {
+                throw new IllegalStateException("remote runtime create failed");
+            }
             return SandboxSession.created(
                     "session-remote-1",
                     request.tenantId(),
@@ -1903,7 +2167,39 @@ class KernelSandboxRuntimeServiceTests {
         @Override
         public SandboxSession closeSession(SandboxRuntimeNodeEndpoint endpoint, SandboxSession session) {
             closeSessionCalled = true;
+            if (failCloseSession) {
+                throw new IllegalStateException("remote runtime close failed");
+            }
             return session.closed(NOW.plusSeconds(5));
+        }
+    }
+
+    private static final class RecordingCapacityReservationPort
+            implements SandboxRuntimeCapacityReservationPort {
+
+        private final ReservationResult defaultResult;
+        private final Map<String, ReservationResult> resultsByNode = new ConcurrentHashMap<>();
+        private final List<String> reservedNodeIds = new ArrayList<>();
+        private final List<String> reservationIds = new ArrayList<>();
+        private final List<Duration> leaseTtls = new ArrayList<>();
+        private final List<String> releasedReservationIds = new ArrayList<>();
+
+        private RecordingCapacityReservationPort(ReservationResult defaultResult) {
+            this.defaultResult = defaultResult;
+        }
+
+        @Override
+        public ReservationResult tryReserve(String nodeId, String reservationId, Duration leaseTtl) {
+            reservedNodeIds.add(nodeId);
+            reservationIds.add(reservationId);
+            leaseTtls.add(leaseTtl);
+            return resultsByNode.getOrDefault(nodeId, defaultResult);
+        }
+
+        @Override
+        public boolean release(String reservationId) {
+            releasedReservationIds.add(reservationId);
+            return true;
         }
     }
 
@@ -1942,6 +2238,67 @@ class KernelSandboxRuntimeServiceTests {
         @Override
         public List<SandboxRuntimeNodeEndpoint> listLiveEndpoints() {
             return endpoint == null ? List.of() : List.of(endpoint);
+        }
+    }
+
+    private static final class ListSandboxRuntimeNodeRegistry implements SandboxRuntimeNodeRegistryPort {
+
+        private final List<SandboxRuntimeNodeEndpoint> endpoints;
+
+        private ListSandboxRuntimeNodeRegistry(List<SandboxRuntimeNodeEndpoint> endpoints) {
+            this.endpoints = List.copyOf(endpoints);
+        }
+
+        @Override
+        public Optional<SandboxRuntimeNodeRegistration> heartbeat(SandboxRuntimeNodeRegistration registration,
+                                                                  String ownerId,
+                                                                  Duration leaseTtl) {
+            return Optional.of(registration);
+        }
+
+        @Override
+        public boolean release(String nodeId, String ownerId) {
+            return false;
+        }
+
+        @Override
+        public List<SandboxRuntimeNodeRegistration> listRegistrations(int limit) {
+            return List.of();
+        }
+
+        @Override
+        public Optional<SandboxRuntimeNodeEndpoint> findLiveEndpoint(String nodeId) {
+            return endpoints.stream().filter(endpoint -> endpoint.nodeId().equals(nodeId)).findFirst();
+        }
+
+        @Override
+        public List<SandboxRuntimeNodeEndpoint> listLiveEndpoints() {
+            return endpoints;
+        }
+    }
+
+    private static final class ThrowingListSandboxRuntimeNodeRegistry implements SandboxRuntimeNodeRegistryPort {
+
+        @Override
+        public Optional<SandboxRuntimeNodeRegistration> heartbeat(SandboxRuntimeNodeRegistration registration,
+                                                                  String ownerId,
+                                                                  Duration leaseTtl) {
+            return Optional.of(registration);
+        }
+
+        @Override
+        public boolean release(String nodeId, String ownerId) {
+            return false;
+        }
+
+        @Override
+        public List<SandboxRuntimeNodeRegistration> listRegistrations(int limit) {
+            return List.of();
+        }
+
+        @Override
+        public List<SandboxRuntimeNodeEndpoint> listLiveEndpoints() {
+            throw new IllegalStateException("runtime node registry unavailable");
         }
     }
 
@@ -2273,6 +2630,24 @@ class KernelSandboxRuntimeServiceTests {
         }
     }
 
+    private static final class FailingAuditEventRepository implements AuditEventRepositoryPort {
+
+        @Override
+        public AuditEvent save(AuditEvent event) {
+            throw new IllegalStateException("audit repository unavailable");
+        }
+
+        @Override
+        public Optional<AuditEvent> findById(String auditId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public AuditEventPage page(AuditEventQuery query) {
+            return new AuditEventPage(List.of(), 0, query.size(), query.current(), 0);
+        }
+    }
+
     private static final class MemorySandboxRuntimeProfilePolicyRepository
             implements SandboxRuntimeProfilePolicyRepositoryPort {
 
@@ -2352,6 +2727,34 @@ class KernelSandboxRuntimeServiceTests {
                     .filter(session -> !session.status().isTerminal())
                     .map(SandboxSession::sessionId)
                     .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        }
+    }
+
+    private static final class FailingSandboxSessionRepository implements SandboxSessionRepositoryPort {
+
+        @Override
+        public SandboxSession saveSession(SandboxSession session) {
+            throw new IllegalStateException("sandbox session persistence failed");
+        }
+
+        @Override
+        public Optional<SandboxSession> findSessionById(String sessionId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<SandboxSession> listSessionsByTenant(String tenantId, int limit) {
+            return List.of();
+        }
+
+        @Override
+        public List<SandboxSession> listExpiredActiveSessions(String tenantId, Instant now, int limit) {
+            return List.of();
+        }
+
+        @Override
+        public Set<String> listActiveSessionIds() {
+            return Set.of();
         }
     }
 

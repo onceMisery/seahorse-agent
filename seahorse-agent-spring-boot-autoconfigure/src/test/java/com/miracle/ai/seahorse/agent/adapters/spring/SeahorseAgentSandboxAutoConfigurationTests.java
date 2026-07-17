@@ -31,6 +31,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionReposi
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxEgressPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
@@ -74,6 +75,7 @@ class SeahorseAgentSandboxAutoConfigurationTests {
                     assertThat(context.getBean(SandboxPolicyPort.class))
                             .isInstanceOf(RepositoryBackedSandboxPolicyPort.class);
                     assertThat(context).hasSingleBean(SandboxRuntimePort.class);
+                    assertThat(context).hasSingleBean(SandboxRuntimeCapacityReservationPort.class);
                     assertThat(context).hasSingleBean(SandboxRuntimeInboundPort.class);
                     assertThat(context).hasSingleBean(KernelSandboxRuntimeService.class);
                     assertThat(context).hasSingleBean(SandboxSessionTtlSweepJob.class);
@@ -90,6 +92,9 @@ class SeahorseAgentSandboxAutoConfigurationTests {
                     assertThat(field(context.getBean(KernelSandboxRuntimeService.class),
                             "runtimeProfilePolicyRepositoryPort"))
                             .isSameAs(context.getBean(SandboxRuntimeProfilePolicyRepositoryPort.class));
+                    assertThat(field(context.getBean(KernelSandboxRuntimeService.class),
+                            "capacityReservationPort"))
+                            .isSameAs(context.getBean(SandboxRuntimeCapacityReservationPort.class));
                 });
     }
 

@@ -148,6 +148,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionReposi
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRemoteRuntimePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
@@ -941,6 +942,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             ObjectProvider<KernelAuditLedgerService> auditLedgerService,
             ObjectProvider<SandboxRemoteRuntimePort> sandboxRemoteRuntimePort,
             ObjectProvider<SandboxRuntimeNodeRegistryPort> sandboxRuntimeNodeRegistryPort,
+            ObjectProvider<SandboxRuntimeCapacityReservationPort> sandboxRuntimeCapacityReservationPort,
             ObjectProvider<Clock> clockProvider) {
         SandboxEgressPolicyRepositoryPort egressPolicyRepositoryPort =
                 sandboxEgressPolicyRepositoryPort.getIfAvailable();
@@ -960,7 +962,8 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                     auditLedgerService.getIfAvailable(),
                     clockProvider.getIfAvailable(Clock::systemUTC),
                     sandboxRemoteRuntimePort.getIfAvailable(),
-                    sandboxRuntimeNodeRegistryPort.getIfAvailable());
+                    sandboxRuntimeNodeRegistryPort.getIfAvailable(),
+                    sandboxRuntimeCapacityReservationPort.getIfAvailable());
         }
         return new KernelSandboxRuntimeService(
                 sandboxPolicyPort,
@@ -979,6 +982,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 auditLedgerService.getIfAvailable(),
                 clockProvider.getIfAvailable(Clock::systemUTC),
                 sandboxRemoteRuntimePort.getIfAvailable(),
-                sandboxRuntimeNodeRegistryPort.getIfAvailable());
+                sandboxRuntimeNodeRegistryPort.getIfAvailable(),
+                sandboxRuntimeCapacityReservationPort.getIfAvailable());
     }
 }

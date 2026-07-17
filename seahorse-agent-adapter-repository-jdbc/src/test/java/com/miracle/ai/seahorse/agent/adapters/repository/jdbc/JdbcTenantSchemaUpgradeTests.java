@@ -74,6 +74,8 @@ class JdbcTenantSchemaUpgradeTests {
         assertThat(isNullable(jdbcTemplate, "sa_sandbox_session", "profile_id")).isEqualTo("NO");
         assertThat(isNullable(jdbcTemplate, "sa_sandbox_session", "expires_at")).isEqualTo("NO");
         assertThat(indexExists(jdbcTemplate, "sa_sandbox_session", "idx_sa_sandbox_session_expires")).isTrue();
+        assertThat(indexExists(jdbcTemplate, "sa_sandbox_session", "idx_sa_sandbox_session_runtime_node_status"))
+                .isTrue();
         assertThat(profileId(jdbcTemplate, "session-python")).isEqualTo("python-small");
         assertThat(profileId(jdbcTemplate, "session-browser")).isEqualTo("browser-readonly");
         assertThat(profileId(jdbcTemplate, "session-file")).isEqualTo("file-conversion");
@@ -272,6 +274,13 @@ class JdbcTenantSchemaUpgradeTests {
         assertThat(indexExists(jdbcTemplate,
                 "sa_sandbox_runtime_node",
                 "idx_sa_sandbox_runtime_node_lease")).isTrue();
+        assertThat(tableExists(jdbcTemplate, "sa_sandbox_runtime_capacity_reservation")).isTrue();
+        assertThat(columnExists(jdbcTemplate,
+                "sa_sandbox_runtime_capacity_reservation",
+                "expires_at")).isTrue();
+        assertThat(indexExists(jdbcTemplate,
+                "sa_sandbox_runtime_capacity_reservation",
+                "idx_sa_sandbox_runtime_capacity_reservation_node")).isTrue();
     }
 
     @Test

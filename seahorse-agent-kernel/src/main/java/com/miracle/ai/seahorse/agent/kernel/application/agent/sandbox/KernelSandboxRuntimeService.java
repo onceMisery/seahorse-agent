@@ -67,6 +67,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionReques
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRemoteRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
@@ -85,6 +86,7 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -114,6 +116,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private static final String BROWSER_SESSION_STATE_ARTIFACT_NAME = "browser-session-state.json";
     private static final int DEFAULT_SESSION_LIST_LIMIT = 20;
     private static final int MAX_SESSION_LIST_LIMIT = 100;
+    private static final String CAPACITY_RESERVATION_ID_PREFIX = "sandbox_res_";
+    private static final Duration CAPACITY_RESERVATION_LEASE_TTL = Duration.ofMinutes(5);
     private static final String DOWNLOAD_BLOCKED = "Sandbox artifact is not available for download";
     private static final String UNSAFE_STORAGE_REF_BLOCKED =
             "Sandbox artifact storage reference is not available through the download endpoint";
@@ -142,6 +146,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private final SandboxRuntimePort runtimePort;
     private final SandboxRemoteRuntimePort remoteRuntimePort;
     private final SandboxRuntimeNodeRegistryPort runtimeNodeRegistryPort;
+    private final SandboxRuntimeCapacityReservationPort capacityReservationPort;
     private final SandboxArtifactPort artifactPort;
     private final SandboxArtifactScannerPort artifactScannerPort;
     private final ObjectStoragePort artifactStoragePort;
@@ -342,6 +347,40 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 artifactScannerPort,
                 artifactStoragePort,
                 runtimeProfilePolicyRepositoryPort,
+                runRepository,
+                currentUserPort,
+                auditLedger,
+                clock,
+                remoteRuntimePort,
+                runtimeNodeRegistryPort,
+                null);
+    }
+
+    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
+                                       SandboxRuntimePort runtimePort,
+                                       SandboxArtifactPort artifactPort,
+                                       SandboxSessionRepositoryPort sessionRepositoryPort,
+                                       SandboxExecutionRepositoryPort executionRepositoryPort,
+                                       SandboxArtifactQueryPort artifactQueryPort,
+                                       SandboxArtifactScannerPort artifactScannerPort,
+                                       ObjectStoragePort artifactStoragePort,
+                                       SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort,
+                                       AgentRunRepositoryPort runRepository,
+                                       CurrentUserPort currentUserPort,
+                                       KernelAuditLedgerService auditLedger,
+                                       Clock clock,
+                                       SandboxRemoteRuntimePort remoteRuntimePort,
+                                       SandboxRuntimeNodeRegistryPort runtimeNodeRegistryPort,
+                                       SandboxRuntimeCapacityReservationPort capacityReservationPort) {
+        this(policyPort,
+                runtimePort,
+                artifactPort,
+                sessionRepositoryPort,
+                executionRepositoryPort,
+                artifactQueryPort,
+                artifactScannerPort,
+                artifactStoragePort,
+                runtimeProfilePolicyRepositoryPort,
                 new InMemorySandboxEgressPolicyRepository(),
                 new InMemorySandboxBrowserProfileRepository(),
                 runRepository,
@@ -349,7 +388,8 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 auditLedger,
                 clock,
                 remoteRuntimePort,
-                runtimeNodeRegistryPort);
+                runtimeNodeRegistryPort,
+                capacityReservationPort);
     }
 
     public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
@@ -434,10 +474,49 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                                        Clock clock,
                                        SandboxRemoteRuntimePort remoteRuntimePort,
                                        SandboxRuntimeNodeRegistryPort runtimeNodeRegistryPort) {
+        this(policyPort,
+                runtimePort,
+                artifactPort,
+                sessionRepositoryPort,
+                executionRepositoryPort,
+                artifactQueryPort,
+                artifactScannerPort,
+                artifactStoragePort,
+                runtimeProfilePolicyRepositoryPort,
+                egressPolicyRepositoryPort,
+                browserProfileRepositoryPort,
+                runRepository,
+                currentUserPort,
+                auditLedger,
+                clock,
+                remoteRuntimePort,
+                runtimeNodeRegistryPort,
+                null);
+    }
+
+    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
+                                       SandboxRuntimePort runtimePort,
+                                       SandboxArtifactPort artifactPort,
+                                       SandboxSessionRepositoryPort sessionRepositoryPort,
+                                       SandboxExecutionRepositoryPort executionRepositoryPort,
+                                       SandboxArtifactQueryPort artifactQueryPort,
+                                       SandboxArtifactScannerPort artifactScannerPort,
+                                       ObjectStoragePort artifactStoragePort,
+                                       SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort,
+                                       SandboxEgressPolicyRepositoryPort egressPolicyRepositoryPort,
+                                       SandboxBrowserProfileRepositoryPort browserProfileRepositoryPort,
+                                       AgentRunRepositoryPort runRepository,
+                                       CurrentUserPort currentUserPort,
+                                       KernelAuditLedgerService auditLedger,
+                                       Clock clock,
+                                       SandboxRemoteRuntimePort remoteRuntimePort,
+                                       SandboxRuntimeNodeRegistryPort runtimeNodeRegistryPort,
+                                       SandboxRuntimeCapacityReservationPort capacityReservationPort) {
         this.policyPort = Objects.requireNonNull(policyPort, "policyPort must not be null");
         this.runtimePort = Objects.requireNonNull(runtimePort, "runtimePort must not be null");
         this.remoteRuntimePort = remoteRuntimePort;
         this.runtimeNodeRegistryPort = runtimeNodeRegistryPort;
+        this.capacityReservationPort = capacityReservationPort;
         this.artifactPort = Objects.requireNonNull(artifactPort, "artifactPort must not be null");
         this.artifactScannerPort = Objects.requireNonNull(artifactScannerPort,
                 "artifactScannerPort must not be null");
@@ -537,6 +616,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                     ? runtimePort.createSession(runtimeRequest)
                     : remoteRuntimePort.createSession(runtimeAdmission.remoteEndpoint(), runtimeRequest);
         } catch (RuntimeException ex) {
+            releaseCapacityReservation(runtimeAdmission);
             SandboxSession failed = SandboxSession.failed(
                     sessionId(),
                     safeCommand.tenantId(),
@@ -551,7 +631,18 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         SandboxSession governed = session.withRuntimeGovernance(
                 profileId,
                 expiresAt).withRuntimeNode(runtimeAdmission.runtimeNodeId());
-        return saveSession(governed, AuditEventType.SANDBOX_SESSION_CREATED);
+        SandboxSession saved;
+        try {
+            saved = persistSession(governed);
+        } catch (RuntimeException ex) {
+            if (rollbackCreatedRuntimeSession(runtimeAdmission, governed)) {
+                releaseCapacityReservation(runtimeAdmission);
+            }
+            throw ex;
+        }
+        releaseCapacityReservation(runtimeAdmission);
+        appendSessionAudit(saved, AuditEventType.SANDBOX_SESSION_CREATED);
+        return saved;
     }
 
     @Override
@@ -955,12 +1046,12 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 "runtime health result must not be null");
         if (SandboxRuntimeHealth.STATUS_UNSUPPORTED.equals(health.status())) {
             return hasText(requiredRuntimeNodeId)
-                    ? remoteRuntimeAdmissionDecision(requiredRuntimeNodeId)
+                    ? reserveRuntimeAdmission(remoteRuntimeAdmissionDecision(requiredRuntimeNodeId))
                     : automaticRuntimeAdmissionDecision(null, RuntimeAdmissionDecision.allowedLocal(null));
         }
         SandboxRuntimeNodeHealth node = SandboxRuntimeNodeHealth.fromHealth(health);
         if (hasText(requiredRuntimeNodeId) && !requiredRuntimeNodeId.equals(node.nodeId())) {
-            return remoteRuntimeAdmissionDecision(requiredRuntimeNodeId);
+            return reserveRuntimeAdmission(remoteRuntimeAdmissionDecision(requiredRuntimeNodeId));
         }
         RuntimeAdmissionDecision localDecision = switch (node.admissionStatus()) {
             case SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE,
@@ -974,7 +1065,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             default -> RuntimeAdmissionDecision.rejected(SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE);
         };
         return hasText(requiredRuntimeNodeId)
-                ? localDecision
+                ? reserveRuntimeAdmission(localDecision)
                 : automaticRuntimeAdmissionDecision(node, localDecision);
     }
 
@@ -989,7 +1080,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             try {
                 endpoints = runtimeNodeRegistryPort.listLiveEndpoints();
             } catch (RuntimeException ex) {
-                return localDecision;
+                return reserveRuntimeAdmission(localDecision);
             }
             String localNodeId = localNode == null ? null : localNode.nodeId();
             endpoints.stream()
@@ -998,10 +1089,68 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                     .map(RuntimePlacementCandidate::remote)
                     .forEach(candidates::add);
         }
-        return candidates.stream()
-                .min(RuntimePlacementCandidate.ORDER)
-                .map(RuntimePlacementCandidate::admissionDecision)
-                .orElse(localDecision);
+        if (candidates.isEmpty()) {
+            return reserveRuntimeAdmission(localDecision);
+        }
+        List<RuntimePlacementCandidate> orderedCandidates = candidates.stream()
+                .sorted(RuntimePlacementCandidate.ORDER)
+                .toList();
+        for (RuntimePlacementCandidate candidate : orderedCandidates) {
+            RuntimeAdmissionDecision reserved = reserveRuntimeAdmission(candidate.admissionDecision());
+            if (reserved.rejectionReason() == null) {
+                return reserved;
+            }
+            if (reserved.rejectionReason() != SandboxPolicyReasonCode.RUNTIME_CAPACITY_EXCEEDED) {
+                return reserved;
+            }
+        }
+        return RuntimeAdmissionDecision.rejected(SandboxPolicyReasonCode.RUNTIME_CAPACITY_EXCEEDED);
+    }
+
+    private RuntimeAdmissionDecision reserveRuntimeAdmission(RuntimeAdmissionDecision decision) {
+        if (decision.rejectionReason() != null
+                || !hasText(decision.runtimeNodeId())
+                || capacityReservationPort == null) {
+            return decision;
+        }
+        String reservationId = CAPACITY_RESERVATION_ID_PREFIX + nextId();
+        try {
+            return switch (capacityReservationPort.tryReserve(
+                    decision.runtimeNodeId(),
+                    reservationId,
+                    CAPACITY_RESERVATION_LEASE_TTL)) {
+                case RESERVED -> decision.withCapacityReservation(reservationId);
+                case NOT_REQUIRED -> decision;
+                case REJECTED -> RuntimeAdmissionDecision.rejected(
+                        SandboxPolicyReasonCode.RUNTIME_CAPACITY_EXCEEDED);
+            };
+        } catch (RuntimeException ex) {
+            return RuntimeAdmissionDecision.rejected(SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE);
+        }
+    }
+
+    private void releaseCapacityReservation(RuntimeAdmissionDecision decision) {
+        if (capacityReservationPort == null || !hasText(decision.capacityReservationId())) {
+            return;
+        }
+        try {
+            capacityReservationPort.release(decision.capacityReservationId());
+        } catch (RuntimeException ignored) {
+            // The bounded database lease remains the recovery path when an explicit release fails.
+        }
+    }
+
+    private boolean rollbackCreatedRuntimeSession(RuntimeAdmissionDecision decision, SandboxSession session) {
+        try {
+            if (decision.remoteEndpoint() == null) {
+                runtimePort.closeSession(session);
+            } else {
+                remoteRuntimePort.closeSession(decision.remoteEndpoint(), session);
+            }
+            return true;
+        } catch (RuntimeException ignored) {
+            return false;
+        }
     }
 
     private static boolean allowsAutomaticPlacement(SandboxRuntimeNodeEndpoint endpoint) {
@@ -1084,9 +1233,14 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     }
 
     private SandboxSession saveSession(SandboxSession session, AuditEventType auditEventType) {
+        SandboxSession saved = persistSession(session);
+        appendSessionAudit(saved, auditEventType);
+        return saved;
+    }
+
+    private SandboxSession persistSession(SandboxSession session) {
         SandboxSession saved = sessionRepositoryPort.saveSession(session);
         sessions.put(saved.sessionId(), saved);
-        appendSessionAudit(saved, auditEventType);
         return saved;
     }
 
@@ -1414,21 +1568,27 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
 
     private record RuntimeAdmissionDecision(String runtimeNodeId,
                                             SandboxRuntimeNodeEndpoint remoteEndpoint,
-                                            SandboxPolicyReasonCode rejectionReason) {
+                                            SandboxPolicyReasonCode rejectionReason,
+                                            String capacityReservationId) {
 
         private static RuntimeAdmissionDecision allowedLocal(String runtimeNodeId) {
-            return new RuntimeAdmissionDecision(runtimeNodeId, null, null);
+            return new RuntimeAdmissionDecision(runtimeNodeId, null, null, null);
         }
 
         private static RuntimeAdmissionDecision allowedRemote(SandboxRuntimeNodeEndpoint endpoint) {
-            return new RuntimeAdmissionDecision(endpoint.nodeId(), endpoint, null);
+            return new RuntimeAdmissionDecision(endpoint.nodeId(), endpoint, null, null);
         }
 
         private static RuntimeAdmissionDecision rejected(SandboxPolicyReasonCode reasonCode) {
             return new RuntimeAdmissionDecision(
                     null,
                     null,
-                    Objects.requireNonNull(reasonCode, "reasonCode must not be null"));
+                    Objects.requireNonNull(reasonCode, "reasonCode must not be null"),
+                    null);
+        }
+
+        private RuntimeAdmissionDecision withCapacityReservation(String reservationId) {
+            return new RuntimeAdmissionDecision(runtimeNodeId, remoteEndpoint, rejectionReason, reservationId);
         }
     }
 
