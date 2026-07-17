@@ -30,6 +30,11 @@ public interface SandboxRemoteRuntimePort {
 
     SandboxExecutionResult execute(SandboxRuntimeNodeEndpoint endpoint, SandboxExecutionRequest request);
 
+    default SandboxRuntimeSessionOwnership inspectSessionOwnership(SandboxRuntimeNodeEndpoint endpoint,
+                                                                    String sessionId) {
+        return SandboxRuntimeSessionOwnership.UNSUPPORTED;
+    }
+
     SandboxSession closeSession(SandboxRuntimeNodeEndpoint endpoint, SandboxSession session);
 
     default void releaseArtifacts(SandboxSession session,

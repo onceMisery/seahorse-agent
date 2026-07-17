@@ -28,6 +28,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeH
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeSessionOwnership;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -81,6 +82,29 @@ class ContainerSandboxRuntimeAdapterTests {
         try (var workspaces = Files.list(tempDir)) {
             assertThat(workspaces.filter(Files::isDirectory).count()).isEqualTo(1L);
         }
+    }
+
+    @Test
+    void shouldReportWorkspaceOwnershipForCoordinatorSession() {
+        ContainerSandboxRuntimeAdapter adapter = adapter(
+                new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO)));
+        SandboxSession session = adapter.createSession(new SandboxSessionRequest(
+                "default",
+                "run-ownership",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                "python-small",
+                CLOCK.instant().plusSeconds(3600),
+                "sandbox_coordinator_ownership"));
+
+        assertThat(adapter.inspectSessionOwnership(session.sessionId()))
+                .isEqualTo(SandboxRuntimeSessionOwnership.OWNED);
+
+        adapter.closeSession(session);
+
+        assertThat(adapter.inspectSessionOwnership(session.sessionId()))
+                .isEqualTo(SandboxRuntimeSessionOwnership.ABSENT);
     }
 
     @Test

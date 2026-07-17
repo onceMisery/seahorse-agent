@@ -71,6 +71,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacity
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRemoteRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeSessionOwnership;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
@@ -627,7 +628,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                     : remoteRuntimePort.createSession(runtimeAdmission.remoteEndpoint(), runtimeRequest),
                     "runtime createSession result must not be null");
         } catch (RuntimeException ex) {
-            if (rollbackCreatedRuntimeSession(runtimeAdmission, cleanupSession)) {
+            if (reconcileFailedRuntimeCreate(runtimeAdmission, cleanupSession)) {
                 releaseCapacityReservation(runtimeAdmission);
             }
             SandboxSession failed = SandboxSession.failed(
@@ -1176,6 +1177,23 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             return true;
         } catch (RuntimeException ignored) {
             return false;
+        }
+    }
+
+    private boolean reconcileFailedRuntimeCreate(RuntimeAdmissionDecision decision, SandboxSession session) {
+        if (decision.remoteEndpoint() == null) {
+            return rollbackCreatedRuntimeSession(decision, session);
+        }
+        try {
+            SandboxRuntimeSessionOwnership ownership = Objects.requireNonNull(
+                    remoteRuntimePort.inspectSessionOwnership(decision.remoteEndpoint(), session.sessionId()),
+                    "runtime session ownership result must not be null");
+            return switch (ownership) {
+                case ABSENT -> true;
+                case OWNED, UNSUPPORTED -> rollbackCreatedRuntimeSession(decision, session);
+            };
+        } catch (RuntimeException ignored) {
+            return rollbackCreatedRuntimeSession(decision, session);
         }
     }
 

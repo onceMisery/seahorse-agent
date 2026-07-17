@@ -67,6 +67,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRemoteRuntimePo
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeSessionOwnership;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
@@ -567,8 +568,69 @@ class KernelSandboxRuntimeServiceTests {
 
         assertEquals(SandboxExecutionStatus.FAILED, session.status());
         assertEquals(SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE, session.reasonCode());
+        assertTrue(remoteRuntime.inspectSessionOwnershipCalled);
         assertTrue(remoteRuntime.closeSessionCalled);
         assertEquals(remoteRuntime.createSessionRequest.sessionId(), remoteRuntime.closedSessionId);
+        assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
+    }
+
+    @Test
+    void shouldReleaseCapacityWithoutCloseWhenReconciliationConfirmsSessionAbsent() {
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        remoteRuntime.failCreateSession = true;
+        remoteRuntime.sessionOwnership = SandboxRuntimeSessionOwnership.ABSENT;
+        RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                new RecordingSandboxRuntimePort(),
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true)),
+                new MemorySandboxSessionRepository(),
+                reservations);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-capacity-create-absent",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                null,
+                null,
+                "sandbox-node-b"));
+
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertTrue(remoteRuntime.inspectSessionOwnershipCalled);
+        assertEquals(remoteRuntime.createSessionRequest.sessionId(), remoteRuntime.inspectedSessionId);
+        assertFalse(remoteRuntime.closeSessionCalled);
+        assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
+    }
+
+    @Test
+    void shouldCloseOwnedSessionBeforeReleasingCapacityAfterAmbiguousCreate() {
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        remoteRuntime.failCreateSession = true;
+        remoteRuntime.sessionOwnership = SandboxRuntimeSessionOwnership.OWNED;
+        RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                new RecordingSandboxRuntimePort(),
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true)),
+                new MemorySandboxSessionRepository(),
+                reservations);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-capacity-create-owned",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                null,
+                null,
+                "sandbox-node-b"));
+
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertEquals(List.of("create", "inspect", "close"), remoteRuntime.calls);
+        assertEquals(remoteRuntime.createSessionRequest.sessionId(), remoteRuntime.inspectedSessionId);
+        assertEquals(remoteRuntime.inspectedSessionId, remoteRuntime.closedSessionId);
         assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
     }
 
@@ -2195,17 +2257,22 @@ class KernelSandboxRuntimeServiceTests {
         private boolean createSessionCalled;
         private boolean executeCalled;
         private boolean closeSessionCalled;
+        private boolean inspectSessionOwnershipCalled;
         private boolean failCreateSession;
         private boolean failCloseSession;
         private boolean returnNullCloseSession;
         private boolean returnMismatchedSessionId;
         private String createSessionNodeId;
         private String closedSessionId;
+        private String inspectedSessionId;
         private SandboxSessionRequest createSessionRequest;
+        private SandboxRuntimeSessionOwnership sessionOwnership = SandboxRuntimeSessionOwnership.UNSUPPORTED;
+        private final List<String> calls = new ArrayList<>();
 
         @Override
         public SandboxSession createSession(SandboxRuntimeNodeEndpoint endpoint, SandboxSessionRequest request) {
             createSessionCalled = true;
+            calls.add("create");
             createSessionNodeId = endpoint.nodeId();
             createSessionRequest = request;
             if (failCreateSession) {
@@ -2219,6 +2286,15 @@ class KernelSandboxRuntimeServiceTests {
                     request.profileId(),
                     request.expiresAt(),
                     NOW);
+        }
+
+        @Override
+        public SandboxRuntimeSessionOwnership inspectSessionOwnership(SandboxRuntimeNodeEndpoint endpoint,
+                                                                      String sessionId) {
+            inspectSessionOwnershipCalled = true;
+            inspectedSessionId = sessionId;
+            calls.add("inspect");
+            return sessionOwnership;
         }
 
         @Override
@@ -2237,6 +2313,7 @@ class KernelSandboxRuntimeServiceTests {
         @Override
         public SandboxSession closeSession(SandboxRuntimeNodeEndpoint endpoint, SandboxSession session) {
             closeSessionCalled = true;
+            calls.add("close");
             closedSessionId = session.sessionId();
             if (failCloseSession) {
                 throw new IllegalStateException("remote runtime close failed");

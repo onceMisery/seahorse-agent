@@ -34,6 +34,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeSessionOwnership;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
 
 import java.io.IOException;
@@ -2736,6 +2737,14 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         SandboxSession safeSession = Objects.requireNonNull(session, "session must not be null");
         deleteWorkspace(safeSession.sessionId());
         return safeSession.closed(clock.instant());
+    }
+
+    @Override
+    public SandboxRuntimeSessionOwnership inspectSessionOwnership(String sessionId) {
+        Path workspace = workspaceForSession(sessionId);
+        return Files.isDirectory(workspace, LinkOption.NOFOLLOW_LINKS)
+                ? SandboxRuntimeSessionOwnership.OWNED
+                : SandboxRuntimeSessionOwnership.ABSENT;
     }
 
     @Override

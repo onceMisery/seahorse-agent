@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeEndpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeSessionOwnership;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -200,6 +201,28 @@ class SandboxRuntimeTransportAuthenticatorTests {
         assertThat(legacy.sessionId()).isNull();
         assertThat(objectMapper.readTree(objectMapper.writeValueAsString(assigned)).path("sessionId").asText())
                 .isEqualTo("sandbox_coordinator_123");
+    }
+
+    @Test
+    void shouldValidateSessionOwnershipTransportContract() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+        SandboxRuntimeTransportProtocol.SessionOwnershipRequest request = objectMapper.readValue(
+                "{\"sessionId\":\"sandbox_coordinator_123\"}",
+                SandboxRuntimeTransportProtocol.SessionOwnershipRequest.class);
+        SandboxRuntimeTransportProtocol.SessionOwnershipResponse response = objectMapper.readValue(
+                "{\"sessionId\":\"sandbox_coordinator_123\",\"ownership\":\"OWNED\"}",
+                SandboxRuntimeTransportProtocol.SessionOwnershipResponse.class);
+
+        assertThat(request.sessionId()).isEqualTo("sandbox_coordinator_123");
+        assertThat(response.ownership()).isEqualTo(SandboxRuntimeSessionOwnership.OWNED);
+        assertThatThrownBy(() -> objectMapper.readValue(
+                "{\"sessionId\":\"../unsafe\"}",
+                SandboxRuntimeTransportProtocol.SessionOwnershipRequest.class))
+                .hasRootCauseInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> objectMapper.readValue(
+                "{\"sessionId\":\"sandbox_coordinator_123\"}",
+                SandboxRuntimeTransportProtocol.SessionOwnershipResponse.class))
+                .hasRootCauseInstanceOf(NullPointerException.class);
     }
 
     private static SandboxRuntimeTransportAuthenticator authenticator() {

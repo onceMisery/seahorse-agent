@@ -23,11 +23,16 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeSessionOwnership;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
+import java.util.regex.Pattern;
 
 public final class SandboxRuntimeTransportProtocol {
+
+    private static final Pattern SESSION_ID_PATTERN = Pattern.compile("[A-Za-z0-9._-]{1,128}");
 
     private SandboxRuntimeTransportProtocol() {
     }
@@ -87,5 +92,27 @@ public final class SandboxRuntimeTransportProtocol {
     }
 
     public record ArtifactRequest(String sessionId, String executionId, String artifactId) {
+    }
+
+    public record SessionOwnershipRequest(String sessionId) {
+
+        public SessionOwnershipRequest {
+            sessionId = requireSessionId(sessionId);
+        }
+    }
+
+    public record SessionOwnershipResponse(String sessionId, SandboxRuntimeSessionOwnership ownership) {
+
+        public SessionOwnershipResponse {
+            sessionId = requireSessionId(sessionId);
+            ownership = Objects.requireNonNull(ownership, "ownership must not be null");
+        }
+    }
+
+    private static String requireSessionId(String value) {
+        if (value == null || !SESSION_ID_PATTERN.matcher(value).matches()) {
+            throw new IllegalArgumentException("sandbox transport session id is invalid");
+        }
+        return value;
     }
 }

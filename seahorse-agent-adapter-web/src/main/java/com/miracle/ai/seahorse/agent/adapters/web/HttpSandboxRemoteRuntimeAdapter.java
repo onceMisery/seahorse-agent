@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeN
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRemoteRuntimePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeSessionOwnership;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRequest;
 
 import java.io.IOException;
@@ -112,6 +113,22 @@ public final class HttpSandboxRemoteRuntimeAdapter implements SandboxRemoteRunti
             sessionTempDirectories.remove(request.session().sessionId(), tempDirectory);
             throw new IllegalStateException("Sandbox remote artifact transfer failed", ex);
         }
+    }
+
+    @Override
+    public SandboxRuntimeSessionOwnership inspectSessionOwnership(SandboxRuntimeNodeEndpoint endpoint,
+                                                                  String sessionId) {
+        SandboxRuntimeTransportProtocol.SessionOwnershipRequest request =
+                new SandboxRuntimeTransportProtocol.SessionOwnershipRequest(sessionId);
+        SandboxRuntimeTransportProtocol.SessionOwnershipResponse response = invokeJson(
+                endpoint,
+                SeahorseSandboxRuntimeTransportController.SESSION_OWNERSHIP_PATH,
+                request,
+                SandboxRuntimeTransportProtocol.SessionOwnershipResponse.class);
+        if (!request.sessionId().equals(response.sessionId())) {
+            throw new IllegalStateException("Sandbox remote ownership response session id did not match");
+        }
+        return response.ownership();
     }
 
     @Override

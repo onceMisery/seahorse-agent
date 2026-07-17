@@ -52,6 +52,7 @@ public class SeahorseSandboxRuntimeTransportController {
     public static final String BASE_PATH = "/internal/sandbox/runtime";
     public static final String SESSION_PATH = BASE_PATH + "/sessions";
     public static final String EXECUTION_PATH = BASE_PATH + "/executions";
+    public static final String SESSION_OWNERSHIP_PATH = BASE_PATH + "/session-ownership";
     public static final String CLOSE_PATH = BASE_PATH + "/close";
     public static final String ARTIFACT_PATH = BASE_PATH + "/artifacts";
 
@@ -97,6 +98,20 @@ public class SeahorseSandboxRuntimeTransportController {
                     RemoteArtifact.from(artifact));
         }
         return SandboxRuntimeTransportProtocol.ExecutionResponse.from(result);
+    }
+
+    @PostMapping(SESSION_OWNERSHIP_PATH)
+    public SandboxRuntimeTransportProtocol.SessionOwnershipResponse inspectSessionOwnership(
+            @RequestBody String body,
+            @RequestHeader Map<String, String> headers,
+            HttpServletRequest servletRequest) throws IOException {
+        authenticate(servletRequest, body, headers);
+        SandboxRuntimeTransportProtocol.SessionOwnershipRequest request = objectMapper.readValue(
+                body,
+                SandboxRuntimeTransportProtocol.SessionOwnershipRequest.class);
+        return new SandboxRuntimeTransportProtocol.SessionOwnershipResponse(
+                request.sessionId(),
+                localRuntimePort.inspectSessionOwnership(request.sessionId()));
     }
 
     @PostMapping(CLOSE_PATH)

@@ -35,6 +35,10 @@ public interface SandboxRuntimePort {
 
     SandboxExecutionResult execute(SandboxExecutionRequest request);
 
+    default SandboxRuntimeSessionOwnership inspectSessionOwnership(String sessionId) {
+        return SandboxRuntimeSessionOwnership.UNSUPPORTED;
+    }
+
     default SandboxSession closeSession(SandboxSession session) {
         return session.closed(Instant.now());
     }
