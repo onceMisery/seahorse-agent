@@ -179,6 +179,29 @@ class SandboxRuntimeTransportAuthenticatorTests {
                 .hasMessageContaining("HTTPS");
     }
 
+    @Test
+    void shouldPreserveLegacyTransportJsonAndSerializeCoordinatorSessionId() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+        SandboxSessionRequest legacy = objectMapper.readValue("""
+                {"tenantId":"default","runId":"run-legacy","runtimeType":"CODE_INTERPRETER",
+                 "networkRequested":false,"requestedHosts":[],"profileId":"python-small",
+                 "expiresAt":"2026-07-15T14:00:00Z"}
+                """, SandboxSessionRequest.class);
+        SandboxSessionRequest assigned = new SandboxSessionRequest(
+                "default",
+                "run-assigned",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                java.util.List.of(),
+                "python-small",
+                NOW.plusSeconds(3600),
+                "sandbox_coordinator_123");
+
+        assertThat(legacy.sessionId()).isNull();
+        assertThat(objectMapper.readTree(objectMapper.writeValueAsString(assigned)).path("sessionId").asText())
+                .isEqualTo("sandbox_coordinator_123");
+    }
+
     private static SandboxRuntimeTransportAuthenticator authenticator() {
         return new SandboxRuntimeTransportAuthenticator(SECRET, NODE_ID, Duration.ofMinutes(2), CLOCK);
     }

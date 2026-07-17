@@ -602,6 +602,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                     now);
             return saveSession(rejected, AuditEventType.SANDBOX_SESSION_CREATED);
         }
+        String runtimeSessionId = sessionId();
         SandboxSessionRequest runtimeRequest = new SandboxSessionRequest(
                 safeCommand.tenantId(),
                 safeCommand.runId(),
@@ -609,16 +610,43 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 safeCommand.networkRequested(),
                 safeCommand.requestedHosts(),
                 profileId,
-                expiresAt);
+                expiresAt,
+                runtimeSessionId);
+        SandboxSession cleanupSession = SandboxSession.created(
+                runtimeSessionId,
+                safeCommand.tenantId(),
+                safeCommand.runId(),
+                safeCommand.runtimeType(),
+                profileId,
+                expiresAt,
+                now).withRuntimeNode(runtimeAdmission.runtimeNodeId());
         SandboxSession session;
         try {
-            session = runtimeAdmission.remoteEndpoint() == null
+            session = Objects.requireNonNull(runtimeAdmission.remoteEndpoint() == null
                     ? runtimePort.createSession(runtimeRequest)
-                    : remoteRuntimePort.createSession(runtimeAdmission.remoteEndpoint(), runtimeRequest);
+                    : remoteRuntimePort.createSession(runtimeAdmission.remoteEndpoint(), runtimeRequest),
+                    "runtime createSession result must not be null");
         } catch (RuntimeException ex) {
-            releaseCapacityReservation(runtimeAdmission);
+            if (rollbackCreatedRuntimeSession(runtimeAdmission, cleanupSession)) {
+                releaseCapacityReservation(runtimeAdmission);
+            }
             SandboxSession failed = SandboxSession.failed(
-                    sessionId(),
+                    runtimeSessionId,
+                    safeCommand.tenantId(),
+                    safeCommand.runId(),
+                    safeCommand.runtimeType(),
+                    SandboxPolicyReasonCode.RUNTIME_NODE_UNAVAILABLE,
+                    profileId,
+                    expiresAt,
+                    now);
+            return saveSession(failed, AuditEventType.SANDBOX_SESSION_CREATED);
+        }
+        if (!runtimeSessionId.equals(session.sessionId())) {
+            if (rollbackCreatedRuntimeSession(runtimeAdmission, cleanupSession)) {
+                releaseCapacityReservation(runtimeAdmission);
+            }
+            SandboxSession failed = SandboxSession.failed(
+                    runtimeSessionId,
                     safeCommand.tenantId(),
                     safeCommand.runId(),
                     safeCommand.runtimeType(),
@@ -707,12 +735,12 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             return session;
         }
         Optional<SandboxRuntimeNodeEndpoint> remoteEndpoint = remoteEndpointFor(session);
-        SandboxSession closed = Objects.requireNonNull(
+        SandboxSession runtimeClosed =
                 remoteEndpoint.isPresent()
                         ? remoteRuntimePort.closeSession(remoteEndpoint.get(), session)
-                        : runtimePort.closeSession(session),
-                "runtime closeSession result must not be null");
-        return saveSession(closed, AuditEventType.SANDBOX_SESSION_CLOSED);
+                        : runtimePort.closeSession(session);
+        requireConfirmedRuntimeClose(session, runtimeClosed);
+        return saveSession(runtimeClosed, AuditEventType.SANDBOX_SESSION_CLOSED);
     }
 
     @Override
@@ -744,11 +772,10 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             }
             try {
                 Optional<SandboxRuntimeNodeEndpoint> remoteEndpoint = remoteEndpointFor(session);
-                if (remoteEndpoint.isPresent()) {
-                    remoteRuntimePort.closeSession(remoteEndpoint.get(), session);
-                } else {
-                    runtimePort.closeSession(session);
-                }
+                SandboxSession runtimeClosed = remoteEndpoint.isPresent()
+                        ? remoteRuntimePort.closeSession(remoteEndpoint.get(), session)
+                        : runtimePort.closeSession(session);
+                requireConfirmedRuntimeClose(session, runtimeClosed);
                 SandboxSession timedOut = session.timedOut(now);
                 closedSessions.add(saveSession(timedOut, AuditEventType.SANDBOX_SESSION_EXPIRED));
             } catch (RuntimeException ex) {
@@ -1142,14 +1169,21 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
 
     private boolean rollbackCreatedRuntimeSession(RuntimeAdmissionDecision decision, SandboxSession session) {
         try {
-            if (decision.remoteEndpoint() == null) {
-                runtimePort.closeSession(session);
-            } else {
-                remoteRuntimePort.closeSession(decision.remoteEndpoint(), session);
-            }
+            SandboxSession runtimeClosed = decision.remoteEndpoint() == null
+                    ? runtimePort.closeSession(session)
+                    : remoteRuntimePort.closeSession(decision.remoteEndpoint(), session);
+            requireConfirmedRuntimeClose(session, runtimeClosed);
             return true;
         } catch (RuntimeException ignored) {
             return false;
+        }
+    }
+
+    private static void requireConfirmedRuntimeClose(SandboxSession expected, SandboxSession actual) {
+        if (actual == null
+                || !expected.sessionId().equals(actual.sessionId())
+                || actual.status() != SandboxExecutionStatus.CANCELLED) {
+            throw new IllegalStateException("runtime closeSession result did not confirm cleanup");
         }
     }
 

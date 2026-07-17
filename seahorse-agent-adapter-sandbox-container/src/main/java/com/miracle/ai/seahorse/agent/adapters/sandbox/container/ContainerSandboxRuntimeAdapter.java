@@ -64,7 +64,8 @@ import java.util.zip.ZipInputStream;
 
 public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
 
-    private static final String SESSION_ID_PREFIX = "sandbox_container_";
+    private static final String COORDINATOR_SESSION_ID_PREFIX = "sandbox_";
+    private static final String LEGACY_SESSION_ID_PREFIX = "sandbox_container_";
     private static final String EXECUTION_ID_PREFIX = "sandbox_exec_container_";
     private static final String ARTIFACT_ID_PREFIX = "sandbox_artifact_container_";
     private static final String SCRIPT_NAME = "main.py";
@@ -156,7 +157,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     public SandboxSession createSession(SandboxSessionRequest request) {
         SandboxSessionRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
         Instant now = clock.instant();
-        String sessionId = SESSION_ID_PREFIX + SnowflakeIds.nextIdString();
+        String sessionId = safeRequest.sessionId() == null
+                ? LEGACY_SESSION_ID_PREFIX + SnowflakeIds.nextIdString()
+                : safeRequest.sessionId();
         try {
             Files.createDirectories(workspaceForSession(sessionId));
             return SandboxSession.created(
@@ -3502,7 +3505,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         if (!Files.exists(workspace)) {
             return;
         }
-        deleteWorkspacePath(workspace);
+        if (!deleteWorkspacePath(workspace)) {
+            throw new IllegalStateException("sandbox workspace could not be deleted");
+        }
     }
 
     private boolean deleteWorkspacePath(Path workspace) {
@@ -3519,7 +3524,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 try {
                     Files.deleteIfExists(path);
                 } catch (IOException ignored) {
-                    // Best-effort cleanup; session close still records a terminal state.
+                    // The final existence check keeps close fail-closed when any deletion fails.
                 }
             });
             return !Files.exists(safeWorkspace);
@@ -3534,7 +3539,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             return false;
         }
         Path filename = safePath.getFileName();
-        return filename != null && filename.toString().startsWith(SESSION_ID_PREFIX);
+        return filename != null && filename.toString().startsWith(COORDINATOR_SESSION_ID_PREFIX);
     }
 
     private boolean isManagedContainerName(String value) {

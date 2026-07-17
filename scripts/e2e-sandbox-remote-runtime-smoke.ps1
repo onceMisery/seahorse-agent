@@ -8,6 +8,7 @@ param(
     [string]$CoordinatorContainer = "seahorse-backend",
     [string]$WorkerContainer = "seahorse-runtime-node-b",
     [string]$PostgresContainer = "seahorse-postgres",
+    [string]$TransportSharedSecret = "",
     [string]$Marker = "seahorse-remote-runtime-e2e",
     [switch]$VerifyStaleNodeCleanup,
     [switch]$VerifyAtomicCapacityReservation
@@ -18,6 +19,7 @@ $passed = 0
 $failed = 0
 $total = 0
 $sessionId = $null
+$duplicateRuntimeSessionId = $null
 $localLoadSessionId = $null
 $drainingSessionId = $null
 $capacityWinnerSessionId = $null
@@ -61,7 +63,7 @@ function Invoke-Json {
     if ($null -ne $Body) {
         $text = if ($Body -is [string]) { $Body } else { $Body | ConvertTo-Json -Depth 20 -Compress }
         $temp = New-TemporaryFile
-        Set-Content -LiteralPath $temp.FullName -Value $text -Encoding UTF8 -NoNewline
+        [IO.File]::WriteAllText($temp.FullName, $text, (New-Object Text.UTF8Encoding($false)))
         $args += @("-H", "Content-Type: application/json", "--data-binary", "@$($temp.FullName)")
     }
     foreach ($key in $Headers.Keys) {
@@ -153,6 +155,72 @@ function Invoke-PostgresCommand {
     param([string]$Sql)
     & docker exec $PostgresContainer psql -U seahorse -d seahorse -v ON_ERROR_STOP=1 -c $Sql | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "psql failed for SQL: $Sql" }
+}
+
+function Get-ContainerEnvironmentValue {
+    param([string]$Container, [string]$Name)
+    $prefix = "$Name="
+    $environment = @(& docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' $Container)
+    $inspectExitCode = $LASTEXITCODE
+    if ($inspectExitCode -ne 0) { throw "failed to inspect environment for $Container" }
+    $line = @($environment |
+        Where-Object { $_.StartsWith($prefix, [StringComparison]::Ordinal) } |
+        Select-Object -First 1)
+    if ($line.Count -ne 1) { throw "container $Container does not define $Name" }
+    return "$($line[0])".Substring($prefix.Length)
+}
+
+function Get-HexDigest {
+    param([byte[]]$Bytes)
+    return ([BitConverter]::ToString($Bytes) -replace '-', '').ToLowerInvariant()
+}
+
+function New-SandboxTransportHeaders {
+    param(
+        [string]$NodeId,
+        [string]$OwnerId,
+        [string]$Body,
+        [string]$Secret
+    )
+    $path = "/internal/sandbox/runtime/sessions"
+    $timestamp = [DateTimeOffset]::UtcNow.ToString("o")
+    $nonce = [guid]::NewGuid().ToString()
+    $bodyBytes = [Text.Encoding]::UTF8.GetBytes($Body)
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try {
+        $bodySha256 = Get-HexDigest -Bytes $sha256.ComputeHash($bodyBytes)
+    } finally {
+        $sha256.Dispose()
+    }
+    $payload = @($NodeId, $OwnerId, "POST", $path, $timestamp, $nonce, $bodySha256) -join "`n"
+    $hmac = [Security.Cryptography.HMACSHA256]::new()
+    try {
+        $hmac.Key = [Text.Encoding]::UTF8.GetBytes($Secret)
+        $signature = Get-HexDigest -Bytes $hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($payload))
+    } finally {
+        $hmac.Dispose()
+    }
+    return @{
+        "X-Seahorse-Sandbox-Node" = $NodeId
+        "X-Seahorse-Sandbox-Lease-Owner" = $OwnerId
+        "X-Seahorse-Sandbox-Timestamp" = $timestamp
+        "X-Seahorse-Sandbox-Nonce" = $nonce
+        "X-Seahorse-Sandbox-Body-SHA256" = $bodySha256
+        "X-Seahorse-Sandbox-Signature" = $signature
+    }
+}
+
+function Invoke-SignedSandboxCreate {
+    param(
+        [object]$Body,
+        [string]$NodeId,
+        [string]$OwnerId,
+        [string]$Secret
+    )
+    $json = $Body | ConvertTo-Json -Depth 20 -Compress
+    $signedHeaders = New-SandboxTransportHeaders -NodeId $NodeId -OwnerId $OwnerId -Body $json -Secret $Secret
+    return Invoke-Json -Method POST -Path "/internal/sandbox/runtime/sessions" `
+        -Body $json -Headers $signedHeaders -Origin $WorkerBaseUrl
 }
 
 function Invoke-DownloadText {
@@ -249,6 +317,31 @@ try {
             throw "registration API leaked private transport fields"
         }
     } | Out-Null
+
+    $transportSecret = Test-Step "Require matching sandbox transport credentials" {
+        $coordinatorSecret = Get-ContainerEnvironmentValue `
+            -Container $CoordinatorContainer `
+            -Name "SEAHORSE_AGENT_SANDBOX_NODE_TRANSPORT_SHARED_SECRET"
+        $workerSecret = Get-ContainerEnvironmentValue `
+            -Container $WorkerContainer `
+            -Name "SEAHORSE_AGENT_SANDBOX_NODE_TRANSPORT_SHARED_SECRET"
+        if ($coordinatorSecret -cne $workerSecret) {
+            throw "coordinator and worker sandbox transport credentials do not match"
+        }
+        $configuredSecret = if ([string]::IsNullOrWhiteSpace($TransportSharedSecret)) {
+            $coordinatorSecret
+        } else {
+            $TransportSharedSecret
+        }
+        if ($configuredSecret -cne $coordinatorSecret) {
+            throw "provided sandbox transport credential does not match the deployed containers"
+        }
+        if ($configuredSecret.Length -lt 32) {
+            throw "sandbox transport credential is shorter than the production minimum"
+        }
+        return $configuredSecret
+    }
+    if (-not $transportSecret) { throw "sandbox transport credentials are unavailable" }
 
     if ($VerifyStaleNodeCleanup) {
         Test-Step "Insert old and recent stale node registrations" {
@@ -599,6 +692,39 @@ WHERE node_id = '$safeRemoteNode' AND expires_at > CURRENT_TIMESTAMP;
         if ($LASTEXITCODE -ne 0) { throw "coordinator unexpectedly owns the remote workspace" }
     } | Out-Null
 
+    Test-Step "Repeat signed remote create with the coordinator session identity" {
+        $safeRemoteNode = $RemoteNodeId.Replace("'", "''")
+        $ownerId = Invoke-PostgresScalar "SELECT owner_id FROM sa_sandbox_runtime_node WHERE node_id='$safeRemoteNode' AND expires_at > CURRENT_TIMESTAMP;"
+        $expiresAt = ([DateTimeOffset]$session.expiresAt).ToUniversalTime().ToString("o")
+        $repeated = Invoke-SignedSandboxCreate -NodeId $RemoteNodeId -OwnerId $ownerId `
+            -Secret $transportSecret -Body @{
+                tenantId = "$($session.tenantId)"
+                runId = "$($session.runId)"
+                runtimeType = "$($session.runtimeType)"
+                networkRequested = $false
+                requestedHosts = @()
+                profileId = "$($session.profileId)"
+                expiresAt = $expiresAt
+                sessionId = $sessionId
+            }
+        $script:duplicateRuntimeSessionId = "$($repeated.sessionId)"
+        if ($script:duplicateRuntimeSessionId -ne $sessionId) {
+            throw "worker replaced coordinator session id with $script:duplicateRuntimeSessionId"
+        }
+        $workspaceMatches = @(& docker exec $WorkerContainer find /var/lib/seahorse-sandbox `
+            -mindepth 1 -maxdepth 1 -type d -name $sessionId -print)
+        if ($LASTEXITCODE -ne 0) { throw "failed to inspect coordinator-owned workspace" }
+        if ($workspaceMatches.Count -ne 1) {
+            throw "worker does not contain exactly one coordinator-owned workspace"
+        }
+        $safeSession = $sessionId.Replace("'", "''")
+        $persistedCount = Invoke-PostgresScalar "SELECT COUNT(*) FROM sa_sandbox_session WHERE session_id='$safeSession' AND runtime_node_id='$safeRemoteNode' AND status='CREATED';"
+        if ($persistedCount -ne "1") {
+            throw "coordinator does not contain exactly one persisted remote session"
+        }
+        $script:duplicateRuntimeSessionId = $null
+    } | Out-Null
+
     $execution = Test-Step "Execute Python remotely and transfer artifact" {
         $python = "from pathlib import Path`nPath('remote-e2e.txt').write_text('$Marker', encoding='utf-8')`nprint('$Marker')"
         $response = Invoke-Json -Method POST -Path "/api/sandbox/sessions/$sessionId/execute" -Headers $headers -Body @{
@@ -678,6 +804,21 @@ WHERE node_id = '$safeRemoteNode' AND expires_at > CURRENT_TIMESTAMP;
         $script:localLoadSessionId = $null
     } | Out-Null
 
+    Test-Step "Create an untracked remote session for cleanup recovery" {
+        $response = Invoke-Json -Method POST -Path "/api/sandbox/sessions" -Headers $headers -Body @{
+            tenantId = "default"
+            runId = $runId
+            runtimeType = "CODE_INTERPRETER"
+            networkRequested = $false
+            requestedHosts = @()
+            requiredRuntimeNodeId = $RemoteNodeId
+        }
+        Assert-ApiOk $response "Create cleanup recovery sandbox session"
+        if ("$($response.data.status)" -ne "CREATED" -or "$($response.data.runtimeNodeId)" -ne $RemoteNodeId) {
+            throw "cleanup recovery session was not created on $RemoteNodeId"
+        }
+    } | Out-Null
+
     Test-Step "Require no managed child containers remain" {
         $managed = @(docker ps -a --format "{{.Names}}" | Where-Object { $_ -like "seahorse-sandbox-*" -and $_ -ne $WorkerContainer })
         if ($managed.Count -ne 0) { throw "managed sandbox containers remain: $($managed -join ',')" }
@@ -706,6 +847,7 @@ WHERE node_id = '$safeRemoteNode' AND expires_at > CURRENT_TIMESTAMP;
     }
     $cleanupTargets = @(
         @{ SessionId = $sessionId; Container = $WorkerContainer },
+        @{ SessionId = $duplicateRuntimeSessionId; Container = $WorkerContainer },
         @{ SessionId = $capacityWinnerSessionId; Container = $WorkerContainer },
         @{ SessionId = $capacityReuseSessionId; Container = $WorkerContainer },
         @{ SessionId = $drainingSessionId; Container = $CoordinatorContainer },
@@ -714,6 +856,35 @@ WHERE node_id = '$safeRemoteNode' AND expires_at > CURRENT_TIMESTAMP;
     $cleanupTargets += @($capacityConcurrentSessionIds | ForEach-Object {
         @{ SessionId = $_; Container = $WorkerContainer }
     })
+    if ($runId -and $headers) {
+        try {
+            $safeRunId = $runId.Replace("'", "''")
+            $discovered = @(& docker exec $PostgresContainer psql -U seahorse -d seahorse -At -F "`t" -c @"
+SELECT session_id, COALESCE(runtime_node_id, '')
+FROM sa_sandbox_session
+WHERE run_id = '$safeRunId'
+  AND status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
+ORDER BY created_at;
+"@)
+            if ($LASTEXITCODE -ne 0) { throw "failed to discover run-owned sandbox sessions" }
+            foreach ($row in @($discovered | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+                $parts = "$row" -split "`t", 2
+                if ($parts.Count -ne 2 -or $parts[0] -notmatch '^[A-Za-z0-9._-]{1,128}$') {
+                    throw "invalid run-owned sandbox session row"
+                }
+                $targetContainer = if ($parts[1] -eq $RemoteNodeId) {
+                    $WorkerContainer
+                } else {
+                    $CoordinatorContainer
+                }
+                $cleanupTargets += @{ SessionId = $parts[0]; Container = $targetContainer }
+            }
+        } catch {
+            $script:total++
+            $script:failed++
+            Write-Host "`n[$script:total] Discover run-owned sandbox sessions`n  FAIL: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
     $cleanedSessionIds = @{}
     foreach ($target in $cleanupTargets) {
         if (-not $target.SessionId -or -not $headers) { continue }
@@ -726,10 +897,25 @@ WHERE node_id = '$safeRemoteNode' AND expires_at > CURRENT_TIMESTAMP;
         } catch {
             $cleanupIssues += "close failed: $($_.Exception.Message)"
         }
+        $fallbackSucceeded = $false
         try {
             Remove-SessionFallback -TargetSessionId $target.SessionId -TargetContainer $target.Container
+            $fallbackSucceeded = $true
         } catch {
             $cleanupIssues += "fallback failed: $($_.Exception.Message)"
+        }
+        if ($fallbackSucceeded) {
+            try {
+                $safeTargetSessionId = "$($target.SessionId)".Replace("'", "''")
+                Invoke-PostgresCommand @"
+UPDATE sa_sandbox_session
+SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP
+WHERE session_id = '$safeTargetSessionId'
+  AND status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED');
+"@
+            } catch {
+                $cleanupIssues += "database convergence failed: $($_.Exception.Message)"
+            }
         }
         $script:total++
         if ($cleanupIssues.Count -eq 0) {

@@ -49,6 +49,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ContainerSandboxRuntimeAdapterTests {
 
@@ -56,6 +57,46 @@ class ContainerSandboxRuntimeAdapterTests {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void shouldHonorCoordinatorAssignedSessionIdAcrossRepeatedCreateRequests() throws Exception {
+        ContainerSandboxRuntimeAdapter adapter = adapter(
+                new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO)));
+        SandboxSessionRequest request = new SandboxSessionRequest(
+                "default",
+                "run-coordinator-id",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                "python-small",
+                CLOCK.instant().plusSeconds(3600),
+                "sandbox_coordinator_123");
+
+        SandboxSession first = adapter.createSession(request);
+        SandboxSession repeated = adapter.createSession(request);
+
+        assertThat(first.sessionId()).isEqualTo("sandbox_coordinator_123");
+        assertThat(repeated.sessionId()).isEqualTo(first.sessionId());
+        assertThat(Files.isDirectory(tempDir.resolve(first.sessionId()))).isTrue();
+        try (var workspaces = Files.list(tempDir)) {
+            assertThat(workspaces.filter(Files::isDirectory).count()).isEqualTo(1L);
+        }
+    }
+
+    @Test
+    void shouldRejectUnsafeCoordinatorAssignedSessionId() {
+        assertThatThrownBy(() -> new SandboxSessionRequest(
+                "default",
+                "run-unsafe-id",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of(),
+                "python-small",
+                CLOCK.instant().plusSeconds(3600),
+                "../unsafe"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("sessionId");
+    }
 
     @Test
     void shouldRunCodeInterpreterThroughDockerWithNetworkDeniedWorkspaceMount() throws Exception {
@@ -2130,22 +2171,25 @@ class ContainerSandboxRuntimeAdapterTests {
         ContainerSandboxAdapterProperties properties = properties();
         properties.setOrphanWorkspaceMinAge(Duration.ofMinutes(10));
         ContainerSandboxRuntimeAdapter adapter = new ContainerSandboxRuntimeAdapter(properties, runner, CLOCK);
-        Path active = createWorkspace("sandbox_container_active", CLOCK.instant().minusSeconds(3600));
-        Path orphan = createWorkspace("sandbox_container_orphan", CLOCK.instant().minusSeconds(3600));
-        Path recent = createWorkspace("sandbox_container_recent", CLOCK.instant());
+        Path active = createWorkspace("sandbox_coordinator_active", CLOCK.instant().minusSeconds(3600));
+        Path orphan = createWorkspace("sandbox_coordinator_orphan", CLOCK.instant().minusSeconds(3600));
+        Path legacyOrphan = createWorkspace("sandbox_container_orphan", CLOCK.instant().minusSeconds(3600));
+        Path recent = createWorkspace("sandbox_coordinator_recent", CLOCK.instant());
         Path unmanaged = createWorkspace("not_sandbox_container_orphan", CLOCK.instant().minusSeconds(3600));
 
-        SandboxRuntimeCleanupResult result = adapter.sweepOrphanedResources(Set.of("sandbox_container_active"));
+        SandboxRuntimeCleanupResult result = adapter.sweepOrphanedResources(Set.of("sandbox_coordinator_active"));
 
         assertThat(result.activeSessionCount()).isEqualTo(1);
-        assertThat(result.inspectedWorkspaceCount()).isEqualTo(3);
+        assertThat(result.inspectedWorkspaceCount()).isEqualTo(4);
         assertThat(result.skippedActiveWorkspaceCount()).isEqualTo(1);
         assertThat(result.skippedRecentWorkspaceCount()).isEqualTo(1);
-        assertThat(result.removedWorkspaceCount()).isEqualTo(1);
+        assertThat(result.removedWorkspaceCount()).isEqualTo(2);
         assertThat(result.failedWorkspaceCount()).isZero();
-        assertThat(result.removedWorkspaceNames()).containsExactly("sandbox_container_orphan");
+        assertThat(result.removedWorkspaceNames())
+                .containsExactly("sandbox_container_orphan", "sandbox_coordinator_orphan");
         assertThat(active).exists();
         assertThat(orphan).doesNotExist();
+        assertThat(legacyOrphan).doesNotExist();
         assertThat(recent).exists();
         assertThat(unmanaged).exists();
     }

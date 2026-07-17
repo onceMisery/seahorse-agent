@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeT
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 public record SandboxSessionRequest(String tenantId,
                                     String runId,
@@ -29,14 +30,27 @@ public record SandboxSessionRequest(String tenantId,
                                     boolean networkRequested,
                                     List<String> requestedHosts,
                                     String profileId,
-                                    Instant expiresAt) {
+                                    Instant expiresAt,
+                                    String sessionId) {
+
+    private static final Pattern SESSION_ID_PATTERN = Pattern.compile("[A-Za-z0-9._-]{1,128}");
+
+    public SandboxSessionRequest(String tenantId,
+                                 String runId,
+                                 SandboxRuntimeType runtimeType,
+                                 boolean networkRequested,
+                                 List<String> requestedHosts,
+                                 String profileId,
+                                 Instant expiresAt) {
+        this(tenantId, runId, runtimeType, networkRequested, requestedHosts, profileId, expiresAt, null);
+    }
 
     public SandboxSessionRequest(String tenantId,
                                  String runId,
                                  SandboxRuntimeType runtimeType,
                                  boolean networkRequested,
                                  List<String> requestedHosts) {
-        this(tenantId, runId, runtimeType, networkRequested, requestedHosts, null, null);
+        this(tenantId, runId, runtimeType, networkRequested, requestedHosts, null, null, null);
     }
 
     public SandboxSessionRequest {
@@ -45,6 +59,19 @@ public record SandboxSessionRequest(String tenantId,
         runtimeType = Objects.requireNonNull(runtimeType, "runtimeType must not be null");
         requestedHosts = requestedHosts == null ? List.of() : List.copyOf(requestedHosts);
         profileId = profileId == null || profileId.trim().isEmpty() ? null : profileId.trim();
+        sessionId = normalizeSessionId(sessionId);
+    }
+
+    private static String normalizeSessionId(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        String normalized = value.trim();
+        if (!SESSION_ID_PATTERN.matcher(normalized).matches()) {
+            throw new IllegalArgumentException(
+                    "sessionId must contain 1-128 letters, digits, dots, underscores, or hyphens");
+        }
+        return normalized;
     }
 
     private static String requireText(String value, String message) {

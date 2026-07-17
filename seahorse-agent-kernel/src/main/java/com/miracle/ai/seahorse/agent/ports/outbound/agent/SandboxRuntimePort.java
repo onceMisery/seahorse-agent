@@ -59,7 +59,9 @@ public interface SandboxRuntimePort {
             @Override
             public SandboxSession createSession(SandboxSessionRequest request) {
                 return SandboxSession.created(
-                        "sandbox_unsupported_" + UUID.randomUUID(),
+                        request.sessionId() == null
+                                ? "sandbox_unsupported_" + UUID.randomUUID()
+                                : request.sessionId(),
                         request.tenantId(),
                         request.runId(),
                         request.runtimeType(),
