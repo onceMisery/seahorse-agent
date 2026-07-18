@@ -121,6 +121,32 @@ export interface SandboxRuntimeNodeRegistration {
   heartbeatAt: string;
   expiresAt: string;
   registrationStatus: "LIVE" | "STALE";
+  effectiveAdmissionAvailable: boolean;
+  effectiveAdmissionStatus: string;
+  operatorDraining: boolean;
+  operatorId: string;
+  operatorUpdatedAt?: string | null;
+}
+
+export interface SandboxRuntimeNodeMaintenanceStatus {
+  nodeId: string;
+  operatorDraining: boolean;
+  persistedActiveSessionCount: number;
+  pendingReservationCount: number;
+  createOperationTrackingAvailable: boolean;
+  inFlightCreateOperationCount: number;
+  drainRequestedAt?: string | null;
+  stabilizationDeadline?: string | null;
+  stabilizationElapsed: boolean;
+  maintenanceReady: boolean;
+  checkedAt: string;
+}
+
+export interface SandboxRuntimeNodeAdmissionOverride {
+  nodeId: string;
+  draining: boolean;
+  operatorId: string;
+  updatedAt: string;
 }
 
 export interface SandboxRuntimeProfile {
@@ -405,6 +431,28 @@ export function getSandboxRuntimeNodeRegistrations(limit = 100) {
   return api.get<SandboxRuntimeNodeRegistration[]>(`/api/admin/sandbox/runtime/registrations`, {
     params: { limit }
   });
+}
+
+function sandboxRuntimeNodeRegistrationPath(nodeId: string) {
+  return `/api/admin/sandbox/runtime/registrations/${encodeURIComponent(nodeId)}`;
+}
+
+export function getSandboxRuntimeNodeMaintenanceStatus(nodeId: string) {
+  return api.get<SandboxRuntimeNodeMaintenanceStatus>(
+    `${sandboxRuntimeNodeRegistrationPath(nodeId)}/maintenance-status`
+  );
+}
+
+export function drainSandboxRuntimeNode(nodeId: string) {
+  return api.post<SandboxRuntimeNodeAdmissionOverride, SandboxRuntimeNodeAdmissionOverride>(
+    `${sandboxRuntimeNodeRegistrationPath(nodeId)}/drain`
+  );
+}
+
+export function resumeSandboxRuntimeNode(nodeId: string) {
+  return api.post<SandboxRuntimeNodeAdmissionOverride, SandboxRuntimeNodeAdmissionOverride>(
+    `${sandboxRuntimeNodeRegistrationPath(nodeId)}/resume`
+  );
 }
 
 export function getSandboxArtifactScannerPolicy() {

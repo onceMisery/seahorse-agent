@@ -24,7 +24,11 @@ import {
   getSandboxArtifactScannerPolicy,
   getSandboxRuntimeHealth,
   getSandboxRuntimeNodes,
+  getSandboxRuntimeNodeRegistrations,
+  getSandboxRuntimeNodeMaintenanceStatus,
   getSandboxRuntimeProfiles,
+  drainSandboxRuntimeNode,
+  resumeSandboxRuntimeNode,
   listSandboxBrowserProfiles,
   upsertSandboxBrowserProfile,
   disableSandboxBrowserProfile,
@@ -42,6 +46,8 @@ import {
   type SandboxArtifactScannerPolicy,
   type SandboxRuntimeHealth,
   type SandboxRuntimeNodeHealth,
+  type SandboxRuntimeNodeRegistration,
+  type SandboxRuntimeNodeMaintenanceStatus,
   type SandboxRuntimeProfile,
   type SandboxRuntimeProfilesResponse,
   type SandboxBrowserProfile,
@@ -206,25 +212,32 @@ function optionalDraftNumber(value: string, label: string, options: { integer?: 
 function RuntimeGovernancePanel({
   health,
   nodes,
+  registrations,
+  maintenanceStatuses,
   profiles,
   scannerHealth,
   scannerPolicy,
   loading,
   error,
   onRefresh,
+  onSetNodeDraining,
   onSaveEgressPolicy,
   onSavePolicy,
   savingEgressPolicy,
-  savingProfileRuntimeType
+  savingProfileRuntimeType,
+  nodeActionStates
 }: {
   health: SandboxRuntimeHealth | null;
   nodes: SandboxRuntimeNodeHealth[];
+  registrations: SandboxRuntimeNodeRegistration[];
+  maintenanceStatuses: Record<string, SandboxRuntimeNodeMaintenanceStatus>;
   profiles: SandboxRuntimeProfilesResponse | null;
   scannerHealth: SandboxArtifactScannerHealth | null;
   scannerPolicy: SandboxArtifactScannerPolicy | null;
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
+  onSetNodeDraining: (nodeId: string, draining: boolean) => void;
   onSaveEgressPolicy: (
     networkPolicy: string,
     allowlistedHosts: string[],
@@ -238,9 +251,11 @@ function RuntimeGovernancePanel({
   ) => void;
   savingEgressPolicy: boolean;
   savingProfileRuntimeType: string | null;
+  nodeActionStates: Record<string, "drain" | "resume" | undefined>;
 }) {
   const profileRows = profiles?.profiles || [];
   const nodeRows = nodes || [];
+  const registeredRows = registrations || [];
   const allowlistedHosts = profiles?.allowlistedHosts || [];
   const allowlistedHostsText = allowlistedHosts.join("\n");
   const privateNetworkAllowedHosts = profiles?.browserPrivateNetworkAllowedHosts
@@ -289,7 +304,7 @@ function RuntimeGovernancePanel({
           </div>
         )}
 
-        {!error && loading && !health && nodeRows.length === 0 && !profiles && !scannerHealth && !scannerPolicy && (
+        {!error && loading && !health && nodeRows.length === 0 && registeredRows.length === 0 && !profiles && !scannerHealth && !scannerPolicy && (
           <div className="grid gap-3 sm:grid-cols-3">
             {[0, 1, 2].map((item) => (
               <div key={item} className="h-20 animate-pulse rounded border border-slate-100 bg-slate-50" />
@@ -297,11 +312,11 @@ function RuntimeGovernancePanel({
           </div>
         )}
 
-        {!loading && !error && !health && nodeRows.length === 0 && !profiles && !scannerHealth && !scannerPolicy && (
+        {!loading && !error && !health && nodeRows.length === 0 && registeredRows.length === 0 && !profiles && !scannerHealth && !scannerPolicy && (
           <div className="text-sm text-muted-foreground">No runtime governance data</div>
         )}
 
-        {(health || nodeRows.length > 0 || profiles || scannerHealth || scannerPolicy) && (
+        {(health || nodeRows.length > 0 || registeredRows.length > 0 || profiles || scannerHealth || scannerPolicy) && (
           <>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded border border-slate-100 bg-slate-50 p-3">
@@ -487,6 +502,88 @@ function RuntimeGovernancePanel({
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {registeredRows.length > 0 && (
+              <div className="space-y-2" data-testid="sandbox-runtime-node-registry">
+                <div className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
+                  <Server className="h-3.5 w-3.5" />
+                  Registered nodes
+                </div>
+                {registeredRows.map((node) => {
+                  const maintenance = maintenanceStatuses[node.nodeId];
+                  const action = nodeActionStates[node.nodeId];
+                  return (
+                    <div
+                      key={node.nodeId}
+                      className="space-y-3 rounded border border-slate-100 bg-white p-3 text-sm"
+                      data-testid={`sandbox-runtime-node-registration-${node.nodeId}`}
+                    >
+                      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center">
+                        <div className="min-w-0">
+                          <div className="truncate font-mono text-sm text-slate-800">{node.nodeId}</div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {node.runtime || "-"} / {node.engine || "-"} / {node.observedHealthStatus || "UNKNOWN"}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Observed {node.observedAdmissionStatus || "UNKNOWN"} / {node.observedActiveSessionCount ?? 0} of {node.observedActiveSessionLimit ?? 0} sessions
+                          </div>
+                        </div>
+                        <Badge variant={node.registrationStatus === "LIVE" ? "default" : "secondary"}>
+                          {node.registrationStatus || "STALE"}
+                        </Badge>
+                        <Badge
+                          variant={nodeAdmissionBadgeVariant(node.effectiveAdmissionStatus)}
+                          data-testid={`sandbox-runtime-node-effective-admission-${node.nodeId}`}
+                        >
+                          {node.effectiveAdmissionStatus || "UNKNOWN"}
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          title={node.operatorDraining ? `Resume ${node.nodeId}` : `Drain ${node.nodeId}`}
+                          disabled={Boolean(action)}
+                          onClick={() => onSetNodeDraining(node.nodeId, !node.operatorDraining)}
+                          data-testid={`sandbox-runtime-node-${node.operatorDraining ? "resume" : "drain"}-${node.nodeId}`}
+                        >
+                          {node.operatorDraining
+                            ? <Play className={`h-4 w-4 ${action ? "animate-pulse" : ""}`} />
+                            : <Square className={`h-4 w-4 ${action ? "animate-pulse" : ""}`} />}
+                        </Button>
+                      </div>
+
+                      {node.operatorDraining && maintenance && (
+                        <div
+                          className="grid gap-2 border-t border-slate-100 pt-3 text-xs sm:grid-cols-2 lg:grid-cols-3"
+                          data-testid={`sandbox-runtime-node-maintenance-${node.nodeId}`}
+                        >
+                          <div className="flex items-center gap-2 sm:col-span-2 lg:col-span-3">
+                            <Badge variant={maintenance.maintenanceReady ? "default" : "secondary"}>
+                              {maintenance.maintenanceReady ? "READY" : "NOT READY"}
+                            </Badge>
+                            <span className="text-muted-foreground">
+                              Checked {formatTimestamp(maintenance.checkedAt)}
+                            </span>
+                          </div>
+                          <div className="font-mono text-slate-700">Sessions: {maintenance.persistedActiveSessionCount}</div>
+                          <div className="font-mono text-slate-700">Reservations: {maintenance.pendingReservationCount}</div>
+                          <div className="font-mono text-slate-700">In-flight creates: {maintenance.inFlightCreateOperationCount}</div>
+                          <div className="text-muted-foreground">
+                            Create tracking: {maintenance.createOperationTrackingAvailable ? "AVAILABLE" : "UNAVAILABLE"}
+                          </div>
+                          <div className="text-muted-foreground">
+                            Stabilization: {maintenance.stabilizationElapsed ? "ELAPSED" : "PENDING"}
+                          </div>
+                          <div className="text-muted-foreground">
+                            Deadline: {formatTimestamp(maintenance.stabilizationDeadline || undefined)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -858,6 +955,9 @@ export function SandboxPage() {
   const [reapingOrphanedRuntimeContainers, setReapingOrphanedRuntimeContainers] = useState(false);
   const [runtimeHealth, setRuntimeHealth] = useState<SandboxRuntimeHealth | null>(null);
   const [runtimeNodes, setRuntimeNodes] = useState<SandboxRuntimeNodeHealth[]>([]);
+  const [runtimeNodeRegistrations, setRuntimeNodeRegistrations] = useState<SandboxRuntimeNodeRegistration[]>([]);
+  const [runtimeNodeMaintenanceStatuses, setRuntimeNodeMaintenanceStatuses] = useState<Record<string, SandboxRuntimeNodeMaintenanceStatus>>({});
+  const [runtimeNodeActionStates, setRuntimeNodeActionStates] = useState<Record<string, "drain" | "resume" | undefined>>({});
   const [runtimeProfiles, setRuntimeProfiles] = useState<SandboxRuntimeProfilesResponse | null>(null);
   const [browserProfiles, setBrowserProfiles] = useState<SandboxBrowserProfile[]>([]);
   const [browserProfileName, setBrowserProfileName] = useState("");
@@ -916,21 +1016,32 @@ export function SandboxPage() {
     await loadSessionData(selected);
   };
 
-  const refreshRuntimeGovernance = async (showToast = false) => {
+  const refreshRuntimeGovernance = async (showToast = false): Promise<boolean> => {
     try {
       setLoadingRuntimeGovernance(true);
       setRuntimeGovernanceError(null);
       const tenantId = currentSandboxTenantId();
-      const [health, nodes, profiles, scannerPolicy, scannerHealth, profileList] = await Promise.all([
+      const [health, nodes, registrations, profiles, scannerPolicy, scannerHealth, profileList] = await Promise.all([
         getSandboxRuntimeHealth(),
         getSandboxRuntimeNodes(),
+        getSandboxRuntimeNodeRegistrations(),
         getSandboxRuntimeProfiles(tenantId),
         getSandboxArtifactScannerPolicy(),
         getSandboxArtifactScannerHealth(),
         listSandboxBrowserProfiles(tenantId)
       ]);
+      const maintenanceEntries = await Promise.all(
+        (registrations || [])
+          .filter((registration) => registration.operatorDraining)
+          .map(async (registration) => [
+            registration.nodeId,
+            await getSandboxRuntimeNodeMaintenanceStatus(registration.nodeId)
+          ] as const)
+      );
       setRuntimeHealth(health || null);
       setRuntimeNodes(nodes || []);
+      setRuntimeNodeRegistrations(registrations || []);
+      setRuntimeNodeMaintenanceStatuses(Object.fromEntries(maintenanceEntries));
       setRuntimeProfiles(profiles || null);
       setArtifactScannerPolicy(scannerPolicy || null);
       setArtifactScannerHealth(scannerHealth || null);
@@ -938,15 +1049,59 @@ export function SandboxPage() {
       if (showToast) {
         toast.success(`Runtime ${health?.status || "UNKNOWN"} / ${profiles?.defaultNetworkPolicy || "DENY_ALL"}`);
       }
+      return true;
     } catch (error) {
+      setRuntimeHealth(null);
+      setRuntimeNodes([]);
+      setRuntimeNodeRegistrations([]);
+      setRuntimeNodeMaintenanceStatuses({});
+      setRuntimeProfiles(null);
+      setArtifactScannerPolicy(null);
+      setArtifactScannerHealth(null);
+      setBrowserProfiles([]);
       const message = getErrorMessage(error, "Runtime governance load failed");
       setRuntimeGovernanceError(message);
       if (showToast) {
         toast.error(message);
       }
       console.error(error);
+      return false;
     } finally {
       setLoadingRuntimeGovernance(false);
+    }
+  };
+
+  const handleSetRuntimeNodeDraining = async (nodeId: string, draining: boolean) => {
+    const action = draining ? "drain" : "resume";
+    let admissionChanged = false;
+    try {
+      setRuntimeNodeActionStates((current) => ({ ...current, [nodeId]: action }));
+      if (draining) {
+        await drainSandboxRuntimeNode(nodeId);
+      } else {
+        await resumeSandboxRuntimeNode(nodeId);
+      }
+      admissionChanged = true;
+      const refreshed = await refreshRuntimeGovernance();
+      if (!refreshed) {
+        toast.error(`${nodeId} admission changed, but runtime governance refresh failed`);
+        return;
+      }
+      toast.success(`${nodeId} ${draining ? "draining" : "available"}`);
+    } catch (error) {
+      toast.error(getErrorMessage(
+        error,
+        admissionChanged
+          ? `${nodeId} admission changed, but runtime governance refresh failed`
+          : `Failed to ${action} ${nodeId}`
+      ));
+      console.error(error);
+    } finally {
+      setRuntimeNodeActionStates((current) => {
+        const next = { ...current };
+        delete next[nodeId];
+        return next;
+      });
     }
   };
 
@@ -1385,12 +1540,15 @@ export function SandboxPage() {
           <RuntimeGovernancePanel
             health={runtimeHealth}
             nodes={runtimeNodes}
+            registrations={runtimeNodeRegistrations}
+            maintenanceStatuses={runtimeNodeMaintenanceStatuses}
             profiles={runtimeProfiles}
             scannerHealth={artifactScannerHealth}
             scannerPolicy={artifactScannerPolicy}
             loading={loadingRuntimeGovernance}
             error={runtimeGovernanceError}
             onRefresh={() => void refreshRuntimeGovernance(true)}
+            onSetNodeDraining={(nodeId, draining) => void handleSetRuntimeNodeDraining(nodeId, draining)}
             onSaveEgressPolicy={(networkPolicy, allowlistedHosts, browserPrivateNetworkAllowedHosts) =>
               void handleSaveSandboxEgressPolicy(
                 networkPolicy,
@@ -1403,6 +1561,7 @@ export function SandboxPage() {
             }
             savingEgressPolicy={savingEgressPolicy}
             savingProfileRuntimeType={savingProfileRuntimeType}
+            nodeActionStates={runtimeNodeActionStates}
           />
 
           <SandboxToolQuotaPanel

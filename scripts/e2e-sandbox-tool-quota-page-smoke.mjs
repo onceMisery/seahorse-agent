@@ -35,6 +35,7 @@ const baseUrl = readArg("--base-url", process.env.E2E_BASE_URL || "http://127.0.
 const username = readArg("--username", process.env.E2E_USERNAME || "admin");
 const password = readArg("--password", process.env.E2E_PASSWORD || "admin123");
 const marker = readArg("--marker", process.env.E2E_MARKER || "seahorse-sandbox-tool-quota-page-smoke");
+const runtimeNodeId = readArg("--runtime-node-id", process.env.E2E_RUNTIME_NODE_ID || "sandbox-node-b");
 const browserSessionArtifactId = readArg(
   "--browser-session-artifact-id",
   process.env.E2E_BROWSER_SESSION_ARTIFACT_ID || ""
@@ -53,6 +54,7 @@ let authToken = null;
 let egressPolicyRestore = null;
 let browserProfileRestore = null;
 let createdBrowserProfileId = null;
+let drainedRuntimeNodeId = null;
 
 async function api(pathname, options = {}) {
   const pathWithSlash = pathname.startsWith("/") ? pathname : `/${pathname}`;
@@ -170,6 +172,18 @@ async function restoreSandboxEgressPolicy() {
   });
 }
 
+async function restoreRuntimeNodeAdmission() {
+  if (!authToken || !drainedRuntimeNodeId) {
+    return;
+  }
+  const nodeId = drainedRuntimeNodeId;
+  await api(`/api/admin/sandbox/runtime/registrations/${encodeURIComponent(nodeId)}/resume`, {
+    method: "POST"
+  }).catch((error) => {
+    console.warn(`Failed to resume runtime node ${nodeId}: ${error.message}`);
+  });
+}
+
 const browser = await chromium.launch({ headless });
 const findings = {
   console: [],
@@ -180,6 +194,13 @@ const findings = {
 try {
   await loginApi();
   const runtimeProfiles = await api("/api/sandbox/runtime/profiles?tenantId=default");
+  const runtimeRegistrations = await api("/api/admin/sandbox/runtime/registrations");
+  const initialRuntimeNode = Array.isArray(runtimeRegistrations)
+    ? runtimeRegistrations.find((registration) => registration?.nodeId === runtimeNodeId)
+    : null;
+  if (!initialRuntimeNode || initialRuntimeNode.registrationStatus !== "LIVE" || initialRuntimeNode.operatorDraining) {
+    throw new Error(`Expected a live, available runtime node ${runtimeNodeId}: ${JSON.stringify(initialRuntimeNode)}`);
+  }
   const originalEgressPolicy = await api("/api/sandbox/runtime/egress-policy?tenantId=default");
   const runtimeHealth = await api("/api/sandbox/runtime/health");
   const scannerHealth = await api("/api/sandbox/runtime/artifact-scanner-health");
@@ -320,6 +341,85 @@ try {
     if (/clamav:|3310|SEAHORSE-CLAMAV-E2E-MARKER|sandbox-workspaces/i.test(scannerPanelText)) {
       throw new Error(`Artifact scanner panel leaked runtime details: ${scannerPanelText}`);
     }
+
+    const nodeRegistry = page.getByTestId("sandbox-runtime-node-registry");
+    await nodeRegistry.waitFor({ state: "visible", timeout: 20000 });
+    const nodeRow = page.getByTestId(`sandbox-runtime-node-registration-${runtimeNodeId}`);
+    await nodeRow.waitFor({ state: "visible", timeout: 10000 });
+    await assertLocatorText(
+      page.getByTestId(`sandbox-runtime-node-effective-admission-${runtimeNodeId}`),
+      "AVAILABLE",
+      "Runtime node effective admission before drain"
+    );
+    const drainResponsePromise = page.waitForResponse(
+      (response) => response.url().includes(
+        `/api/api/admin/sandbox/runtime/registrations/${encodeURIComponent(runtimeNodeId)}/drain`
+      ) && response.request().method() === "POST",
+      { timeout: 20000 }
+    );
+    await page.getByTestId(`sandbox-runtime-node-drain-${runtimeNodeId}`).click();
+    const drainResponse = await drainResponsePromise;
+    const drainPayload = await drainResponse.json();
+    if (drainResponse.status() !== 200 || drainPayload?.code !== "0" || drainPayload?.data?.draining !== true) {
+      throw new Error(`Runtime node drain failed: HTTP ${drainResponse.status()} ${JSON.stringify(drainPayload)}`);
+    }
+    drainedRuntimeNodeId = runtimeNodeId;
+    const drainedRegistrations = await api("/api/admin/sandbox/runtime/registrations");
+    const drainedRuntimeNode = Array.isArray(drainedRegistrations)
+      ? drainedRegistrations.find((registration) => registration?.nodeId === runtimeNodeId)
+      : null;
+    if (!drainedRuntimeNode || drainedRuntimeNode.operatorDraining !== true
+        || drainedRuntimeNode.effectiveAdmissionStatus !== "DRAINING"
+        || drainedRuntimeNode.effectiveAdmissionAvailable !== false) {
+      throw new Error(`Runtime node drain API readback failed: ${JSON.stringify(drainedRuntimeNode)}`);
+    }
+    const maintenance = await api(
+      `/api/admin/sandbox/runtime/registrations/${encodeURIComponent(runtimeNodeId)}/maintenance-status`
+    );
+    if (maintenance?.operatorDraining !== true
+        || Number(maintenance.persistedActiveSessionCount) !== 0
+        || Number(maintenance.pendingReservationCount) !== 0
+        || maintenance.createOperationTrackingAvailable !== true
+        || Number(maintenance.inFlightCreateOperationCount) !== 0
+        || maintenance.stabilizationElapsed !== false
+        || maintenance.maintenanceReady !== false) {
+      throw new Error(`Runtime node maintenance readback failed: ${JSON.stringify(maintenance)}`);
+    }
+    const maintenancePanel = page.getByTestId(`sandbox-runtime-node-maintenance-${runtimeNodeId}`);
+    await assertLocatorText(maintenancePanel, "NOT READY", "Runtime node maintenance readiness");
+    await assertLocatorText(maintenancePanel, "Sessions: 0", "Runtime node session count");
+    await assertLocatorText(maintenancePanel, "Reservations: 0", "Runtime node reservation count");
+    await assertLocatorText(maintenancePanel, "In-flight creates: 0", "Runtime node create count");
+    await assertLocatorText(maintenancePanel, "Create tracking: AVAILABLE", "Runtime node create tracking");
+
+    const resumeResponsePromise = page.waitForResponse(
+      (response) => response.url().includes(
+        `/api/api/admin/sandbox/runtime/registrations/${encodeURIComponent(runtimeNodeId)}/resume`
+      ) && response.request().method() === "POST",
+      { timeout: 20000 }
+    );
+    await page.getByTestId(`sandbox-runtime-node-resume-${runtimeNodeId}`).click();
+    const resumeResponse = await resumeResponsePromise;
+    const resumePayload = await resumeResponse.json();
+    if (resumeResponse.status() !== 200 || resumePayload?.code !== "0" || resumePayload?.data?.draining !== false) {
+      throw new Error(`Runtime node resume failed: HTTP ${resumeResponse.status()} ${JSON.stringify(resumePayload)}`);
+    }
+    const resumedRegistrations = await api("/api/admin/sandbox/runtime/registrations");
+    const resumedRuntimeNode = Array.isArray(resumedRegistrations)
+      ? resumedRegistrations.find((registration) => registration?.nodeId === runtimeNodeId)
+      : null;
+    if (!resumedRuntimeNode || resumedRuntimeNode.operatorDraining !== false
+        || resumedRuntimeNode.effectiveAdmissionStatus !== "AVAILABLE"
+        || resumedRuntimeNode.effectiveAdmissionAvailable !== true) {
+      throw new Error(`Runtime node resume API readback failed: ${JSON.stringify(resumedRuntimeNode)}`);
+    }
+    await page.waitForFunction(
+      (nodeId) => document.querySelector(`[data-testid="sandbox-runtime-node-effective-admission-${nodeId}"]`)
+        ?.textContent?.trim() === "AVAILABLE",
+      runtimeNodeId,
+      { timeout: 10000 }
+    );
+    drainedRuntimeNodeId = null;
 
     const egressSmokeHost = `aaa-egress-policy-page-smoke-${Date.now()}.invalid`;
     const privateNetworkSmokeHost = `aaa-private-network-page-smoke-${Date.now()}.invalid`;
@@ -538,6 +638,7 @@ try {
     await context.close();
   }
 } finally {
+  await restoreRuntimeNodeAdmission();
   await restoreSandboxEgressPolicy();
   await restoreBrowserProfilePolicy();
   await cleanupPolicy();
