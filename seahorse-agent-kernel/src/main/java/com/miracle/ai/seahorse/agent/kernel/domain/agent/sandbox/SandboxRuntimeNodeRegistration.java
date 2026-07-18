@@ -32,7 +32,12 @@ public record SandboxRuntimeNodeRegistration(String nodeId,
                                              Instant observedAt,
                                              Instant heartbeatAt,
                                              Instant expiresAt,
-                                             String registrationStatus) {
+                                             String registrationStatus,
+                                             boolean effectiveAdmissionAvailable,
+                                             String effectiveAdmissionStatus,
+                                             boolean operatorDraining,
+                                             String operatorId,
+                                             Instant operatorUpdatedAt) {
 
     public static final String REGISTRATION_LIVE = "LIVE";
     public static final String REGISTRATION_STALE = "STALE";
@@ -53,6 +58,50 @@ public record SandboxRuntimeNodeRegistration(String nodeId,
             throw new IllegalArgumentException("expiresAt must be after heartbeatAt");
         }
         registrationStatus = normalizeRegistrationStatus(registrationStatus);
+        effectiveAdmissionAvailable = operatorDraining ? false : observedAdmissionAvailable;
+        effectiveAdmissionStatus = operatorDraining
+                ? SandboxRuntimeNodeHealth.ADMISSION_DRAINING
+                : observedAdmissionStatus;
+        operatorId = operatorId == null ? "" : operatorId.trim();
+        if (operatorDraining && operatorId.isEmpty()) {
+            throw new IllegalArgumentException("operatorId must not be blank while node is draining");
+        }
+        if (operatorDraining && operatorUpdatedAt == null) {
+            throw new IllegalArgumentException("operatorUpdatedAt must not be null while node is draining");
+        }
+    }
+
+    public SandboxRuntimeNodeRegistration(String nodeId,
+                                          String runtime,
+                                          String engine,
+                                          String observedHealthStatus,
+                                          boolean observedAdmissionAvailable,
+                                          String observedAdmissionStatus,
+                                          int observedActiveSessionCount,
+                                          int observedActiveSessionLimit,
+                                          long observedWorkspaceFreeBytes,
+                                          Instant observedAt,
+                                          Instant heartbeatAt,
+                                          Instant expiresAt,
+                                          String registrationStatus) {
+        this(nodeId,
+                runtime,
+                engine,
+                observedHealthStatus,
+                observedAdmissionAvailable,
+                observedAdmissionStatus,
+                observedActiveSessionCount,
+                observedActiveSessionLimit,
+                observedWorkspaceFreeBytes,
+                observedAt,
+                heartbeatAt,
+                expiresAt,
+                registrationStatus,
+                observedAdmissionAvailable,
+                observedAdmissionStatus,
+                false,
+                "",
+                null);
     }
 
     public static SandboxRuntimeNodeRegistration live(SandboxRuntimeNodeHealth health,

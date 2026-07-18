@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeRegistration;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionOverride;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeOwnerIdentity;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeNodeRegistryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeNodeHeartbeatResult;
@@ -154,6 +155,17 @@ public class KernelSandboxRuntimeNodeRegistryService implements SandboxRuntimeNo
     public List<SandboxRuntimeNodeRegistration> listRegistrations(int limit) {
         int safeLimit = limit <= 0 ? DEFAULT_LIST_LIMIT : Math.min(limit, MAX_LIST_LIMIT);
         return registryPort.listRegistrations(safeLimit);
+    }
+
+    @Override
+    public SandboxRuntimeNodeAdmissionOverride setOperatorDraining(String nodeId,
+                                                                   boolean draining,
+                                                                   String operatorId) {
+        return registryPort.setOperatorDraining(
+                        requireText(nodeId, "nodeId must not be blank"),
+                        draining,
+                        requireText(operatorId, "operatorId must not be blank"))
+                .orElseThrow(() -> new IllegalArgumentException("sandbox runtime node is not registered"));
     }
 
     @Override

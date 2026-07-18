@@ -424,6 +424,14 @@ public class JdbcTenantSchemaUpgrade {
                     CREATE INDEX IF NOT EXISTS idx_sa_sandbox_runtime_capacity_reservation_node
                       ON sa_sandbox_runtime_capacity_reservation(node_id, expires_at)
                     """);
+            jdbcTemplate.execute("""
+                    CREATE TABLE IF NOT EXISTS sa_sandbox_runtime_node_admission_override (
+                      node_id VARCHAR(64) PRIMARY KEY,
+                      draining BOOLEAN NOT NULL,
+                      operator_id VARCHAR(128) NOT NULL,
+                      updated_at TIMESTAMP NOT NULL
+                    )
+                    """);
         } catch (Exception e) {
             log.warn("[TenantSchema] upgrade sa_sandbox_runtime_node failed: {}", e.getMessage());
         }

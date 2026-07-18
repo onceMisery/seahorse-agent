@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeRegistration;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeEndpoint;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionOverride;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
 import org.springframework.dao.DuplicateKeyException;
@@ -41,9 +42,13 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
         SandboxRuntimeCapacityReservationPort {
 
     private static final String REGISTRATION_COLUMNS = """
-            node_id, runtime, engine, health_status, admission_available, admission_status,
-            active_session_count, active_session_limit, workspace_free_bytes,
-            observed_at, heartbeat_at, expires_at
+            n.node_id, n.runtime, n.engine, n.health_status,
+            n.admission_available, n.admission_status,
+            n.active_session_count, n.active_session_limit, n.workspace_free_bytes,
+            n.observed_at, n.heartbeat_at, n.expires_at,
+            COALESCE(o.draining, FALSE) AS operator_draining,
+            COALESCE(o.operator_id, '') AS operator_id,
+            o.updated_at AS operator_updated_at
             """;
     private static final String SQL_UPDATE_HEARTBEAT = """
             UPDATE sa_sandbox_runtime_node
@@ -63,9 +68,10 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
             """;
     private static final String SQL_LIST_REGISTRATIONS = """
             SELECT %s,
-                   CASE WHEN expires_at > CURRENT_TIMESTAMP THEN 'LIVE' ELSE 'STALE' END AS registration_status
-            FROM sa_sandbox_runtime_node
-            ORDER BY heartbeat_at DESC, node_id ASC
+                   CASE WHEN n.expires_at > CURRENT_TIMESTAMP THEN 'LIVE' ELSE 'STALE' END AS registration_status
+            FROM sa_sandbox_runtime_node n
+            LEFT JOIN sa_sandbox_runtime_node_admission_override o ON o.node_id = n.node_id
+            ORDER BY n.heartbeat_at DESC, n.node_id ASC
             LIMIT ?
             """.formatted(REGISTRATION_COLUMNS);
     private static final String SQL_RELEASE = """
@@ -76,17 +82,27 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
             """;
     private static final String SQL_DATABASE_NOW = "SELECT CURRENT_TIMESTAMP";
     private static final String SQL_FIND_LIVE_ENDPOINT = """
-            SELECT node_id, owner_id, transport_uri, health_status, admission_available, admission_status,
-                   active_session_count, active_session_limit, workspace_free_bytes, expires_at
-            FROM sa_sandbox_runtime_node
-            WHERE node_id = ? AND expires_at > CURRENT_TIMESTAMP AND transport_uri <> ''
+            SELECT n.node_id, n.owner_id, n.transport_uri, n.health_status,
+                   CASE WHEN COALESCE(o.draining, FALSE) THEN FALSE ELSE n.admission_available END
+                     AS admission_available,
+                   CASE WHEN COALESCE(o.draining, FALSE) THEN 'DRAINING' ELSE n.admission_status END
+                     AS admission_status,
+                   n.active_session_count, n.active_session_limit, n.workspace_free_bytes, n.expires_at
+            FROM sa_sandbox_runtime_node n
+            LEFT JOIN sa_sandbox_runtime_node_admission_override o ON o.node_id = n.node_id
+            WHERE n.node_id = ? AND n.expires_at > CURRENT_TIMESTAMP AND n.transport_uri <> ''
             """;
     private static final String SQL_LIST_LIVE_ENDPOINTS = """
-            SELECT node_id, owner_id, transport_uri, health_status, admission_available, admission_status,
-                   active_session_count, active_session_limit, workspace_free_bytes, expires_at
-            FROM sa_sandbox_runtime_node
-            WHERE expires_at > CURRENT_TIMESTAMP AND transport_uri <> ''
-            ORDER BY node_id ASC
+            SELECT n.node_id, n.owner_id, n.transport_uri, n.health_status,
+                   CASE WHEN COALESCE(o.draining, FALSE) THEN FALSE ELSE n.admission_available END
+                     AS admission_available,
+                   CASE WHEN COALESCE(o.draining, FALSE) THEN 'DRAINING' ELSE n.admission_status END
+                     AS admission_status,
+                   n.active_session_count, n.active_session_limit, n.workspace_free_bytes, n.expires_at
+            FROM sa_sandbox_runtime_node n
+            LEFT JOIN sa_sandbox_runtime_node_admission_override o ON o.node_id = n.node_id
+            WHERE n.expires_at > CURRENT_TIMESTAMP AND n.transport_uri <> ''
+            ORDER BY n.node_id ASC
             """;
     private static final String SQL_IS_LIVE_OWNER = """
             SELECT COUNT(*) FROM sa_sandbox_runtime_node
@@ -133,6 +149,25 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
             """;
     private static final String SQL_DELETE_NODE_CAPACITY_RESERVATIONS = """
             DELETE FROM sa_sandbox_runtime_capacity_reservation WHERE node_id = ?
+            """;
+    private static final String SQL_FIND_OPERATOR_DRAINING = """
+            SELECT draining FROM sa_sandbox_runtime_node_admission_override WHERE node_id = ?
+            """;
+    private static final String SQL_LOCK_NODE_FOR_ADMISSION_OVERRIDE = """
+            SELECT node_id FROM sa_sandbox_runtime_node WHERE node_id = ? FOR UPDATE
+            """;
+    private static final String SQL_LOCK_ADMISSION_OVERRIDE = """
+            SELECT node_id FROM sa_sandbox_runtime_node_admission_override WHERE node_id = ? FOR UPDATE
+            """;
+    private static final String SQL_UPDATE_ADMISSION_OVERRIDE = """
+            UPDATE sa_sandbox_runtime_node_admission_override
+            SET draining = ?, operator_id = ?, updated_at = ?
+            WHERE node_id = ?
+            """;
+    private static final String SQL_INSERT_ADMISSION_OVERRIDE = """
+            INSERT INTO sa_sandbox_runtime_node_admission_override
+            (node_id, draining, operator_id, updated_at)
+            VALUES (?, ?, ?, ?)
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -292,6 +327,49 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
     }
 
     @Override
+    public Optional<SandboxRuntimeNodeAdmissionOverride> setOperatorDraining(String nodeId,
+                                                                             boolean draining,
+                                                                             String operatorId) {
+        String safeNodeId = requireText(nodeId, "nodeId must not be blank");
+        String safeOperatorId = requireText(operatorId, "operatorId must not be blank");
+        Optional<SandboxRuntimeNodeAdmissionOverride> result = transactionTemplate.execute(status -> {
+            List<String> nodes = jdbcTemplate.queryForList(
+                    SQL_LOCK_NODE_FOR_ADMISSION_OVERRIDE,
+                    String.class,
+                    safeNodeId);
+            List<String> overrides = jdbcTemplate.queryForList(
+                    SQL_LOCK_ADMISSION_OVERRIDE,
+                    String.class,
+                    safeNodeId);
+            if (nodes.isEmpty() && overrides.isEmpty()) {
+                return Optional.empty();
+            }
+            Instant updatedAt = databaseNow();
+            if (overrides.isEmpty()) {
+                jdbcTemplate.update(
+                        SQL_INSERT_ADMISSION_OVERRIDE,
+                        safeNodeId,
+                        draining,
+                        safeOperatorId,
+                        toTimestamp(updatedAt));
+            } else {
+                jdbcTemplate.update(
+                        SQL_UPDATE_ADMISSION_OVERRIDE,
+                        draining,
+                        safeOperatorId,
+                        toTimestamp(updatedAt),
+                        safeNodeId);
+            }
+            return Optional.of(new SandboxRuntimeNodeAdmissionOverride(
+                    safeNodeId,
+                    draining,
+                    safeOperatorId,
+                    updatedAt));
+        });
+        return Objects.requireNonNullElse(result, Optional.empty());
+    }
+
+    @Override
     public ReservationResult tryReserve(String nodeId, String reservationId, Duration leaseTtl) {
         String safeNodeId = requireText(nodeId, "nodeId must not be blank");
         String safeReservationId = requireText(reservationId, "reservationId must not be blank");
@@ -347,20 +425,28 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
     }
 
     private SandboxRuntimeNodeRegistration mapRegistration(ResultSet rs, int rowNum) throws SQLException {
+        boolean operatorDraining = rs.getBoolean("operator_draining");
+        String observedAdmissionStatus = rs.getString("admission_status");
+        boolean observedAdmissionAvailable = rs.getBoolean("admission_available");
         return new SandboxRuntimeNodeRegistration(
                 rs.getString("node_id"),
                 rs.getString("runtime"),
                 rs.getString("engine"),
                 rs.getString("health_status"),
-                rs.getBoolean("admission_available"),
-                rs.getString("admission_status"),
+                observedAdmissionAvailable,
+                observedAdmissionStatus,
                 rs.getInt("active_session_count"),
                 rs.getInt("active_session_limit"),
                 rs.getLong("workspace_free_bytes"),
                 toInstant(rs.getTimestamp("observed_at")),
                 toInstant(rs.getTimestamp("heartbeat_at")),
                 toInstant(rs.getTimestamp("expires_at")),
-                rs.getString("registration_status"));
+                rs.getString("registration_status"),
+                operatorDraining ? false : observedAdmissionAvailable,
+                operatorDraining ? "DRAINING" : observedAdmissionStatus,
+                operatorDraining,
+                rs.getString("operator_id"),
+                toNullableInstant(rs.getTimestamp("operator_updated_at")));
     }
 
     private SandboxRuntimeNodeEndpoint mapEndpoint(ResultSet rs, int rowNum) throws SQLException {
@@ -413,7 +499,15 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
         }
         CapacityNode node = nodes.get(0);
         jdbcTemplate.update(SQL_DELETE_EXPIRED_CAPACITY_RESERVATIONS, nodeId, toTimestamp(now));
+        boolean operatorDraining = jdbcTemplate.query(
+                        SQL_FIND_OPERATOR_DRAINING,
+                        (rs, rowNum) -> rs.getBoolean("draining"),
+                        nodeId)
+                .stream()
+                .findFirst()
+                .orElse(false);
         if (!node.expiresAt().isAfter(now)
+                || operatorDraining
                 || !node.admissionAvailable()
                 || !("AVAILABLE".equals(node.admissionStatus()) || "DEGRADED".equals(node.admissionStatus()))) {
             return ReservationResult.REJECTED;
@@ -461,6 +555,10 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
 
     private static Instant toInstant(Timestamp timestamp) {
         return timestamp.toInstant();
+    }
+
+    private static Instant toNullableInstant(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toInstant();
     }
 
     private static String requireText(String value, String message) {

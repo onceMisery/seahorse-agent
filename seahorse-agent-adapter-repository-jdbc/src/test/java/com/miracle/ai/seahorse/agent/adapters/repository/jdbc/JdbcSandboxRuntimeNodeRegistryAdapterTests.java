@@ -182,6 +182,104 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
         assertThat(adapter.release("reservation-c")).isTrue();
     }
 
+    @Test
+    void shouldPersistOperatorDrainAcrossHeartbeatsAndResumeObservedAdmission() {
+        DriverManagerDataSource dataSource = dataSource();
+        createSchema(dataSource);
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        JdbcSandboxRuntimeNodeRegistryAdapter adapter = new JdbcSandboxRuntimeNodeRegistryAdapter(dataSource);
+
+        assertThat(adapter.setOperatorDraining("unknown-node", true, "admin")).isEmpty();
+        assertThat(adapter.heartbeat(
+                registration(NOW, NOW.plusSeconds(45), 1),
+                "owner-a",
+                "http://runtime-a:8080/internal/sandbox/runtime",
+                Duration.ofSeconds(45))).isPresent();
+
+        assertThat(adapter.setOperatorDraining("local-container-docker", true, "admin"))
+                .get()
+                .satisfies(override -> {
+                    assertThat(override.draining()).isTrue();
+                    assertThat(override.operatorId()).isEqualTo("admin");
+                });
+        assertThat(adapter.listRegistrations(10)).singleElement()
+                .satisfies(registration -> {
+                    assertThat(registration.observedAdmissionAvailable()).isTrue();
+                    assertThat(registration.observedAdmissionStatus()).isEqualTo("AVAILABLE");
+                    assertThat(registration.effectiveAdmissionAvailable()).isFalse();
+                    assertThat(registration.effectiveAdmissionStatus()).isEqualTo("DRAINING");
+                    assertThat(registration.operatorDraining()).isTrue();
+                    assertThat(registration.operatorId()).isEqualTo("admin");
+                    assertThat(registration.operatorUpdatedAt()).isNotNull();
+                });
+        assertThat(adapter.findLiveEndpoint("local-container-docker"))
+                .get()
+                .satisfies(endpoint -> {
+                    assertThat(endpoint.observedAdmissionAvailable()).isFalse();
+                    assertThat(endpoint.observedAdmissionStatus()).isEqualTo("DRAINING");
+                });
+        assertThat(adapter.tryReserve(
+                "local-container-docker", "reservation-drained", Duration.ofMinutes(1)))
+                .isEqualTo(REJECTED);
+
+        assertThat(adapter.heartbeat(
+                registration(NOW.plusSeconds(1), NOW.plusSeconds(46), 1),
+                "owner-a",
+                "http://runtime-a:8080/internal/sandbox/runtime",
+                Duration.ofSeconds(45))).isPresent();
+        assertThat(adapter.listRegistrations(10)).singleElement()
+                .satisfies(registration -> {
+                    assertThat(registration.observedAdmissionStatus()).isEqualTo("AVAILABLE");
+                    assertThat(registration.effectiveAdmissionStatus()).isEqualTo("DRAINING");
+                });
+
+        adapter = new JdbcSandboxRuntimeNodeRegistryAdapter(dataSource);
+        assertThat(adapter.listRegistrations(10)).singleElement()
+                .satisfies(registration -> assertThat(registration.effectiveAdmissionStatus())
+                        .isEqualTo("DRAINING"));
+        Timestamp cleanupNow = jdbcTemplate.queryForObject("SELECT CURRENT_TIMESTAMP", Timestamp.class);
+        jdbcTemplate.update(
+                "UPDATE sa_sandbox_runtime_node SET expires_at = ? WHERE node_id = 'local-container-docker'",
+                Timestamp.from(cleanupNow.toInstant().minus(Duration.ofMinutes(2))));
+        assertThat(adapter.deleteStaleRegistrations(Duration.ofMinutes(1), 10)).isEqualTo(1);
+        assertThat(adapter.listRegistrations(10)).isEmpty();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT draining FROM sa_sandbox_runtime_node_admission_override "
+                        + "WHERE node_id = 'local-container-docker'",
+                Boolean.class)).isTrue();
+
+        adapter = new JdbcSandboxRuntimeNodeRegistryAdapter(dataSource);
+        assertThat(adapter.heartbeat(
+                registration(NOW.plusSeconds(2), NOW.plusSeconds(47), 1),
+                "owner-b",
+                "http://runtime-b:8080/internal/sandbox/runtime",
+                Duration.ofSeconds(45))).isPresent();
+        assertThat(adapter.listRegistrations(10)).singleElement()
+                .satisfies(registration -> {
+                    assertThat(registration.observedAdmissionStatus()).isEqualTo("AVAILABLE");
+                    assertThat(registration.effectiveAdmissionStatus()).isEqualTo("DRAINING");
+                    assertThat(registration.operatorDraining()).isTrue();
+                });
+        assertThat(adapter.tryReserve(
+                "local-container-docker", "reservation-reregistered-drained", Duration.ofMinutes(1)))
+                .isEqualTo(REJECTED);
+
+        assertThat(adapter.setOperatorDraining("local-container-docker", false, "admin"))
+                .get()
+                .satisfies(override -> assertThat(override.draining()).isFalse());
+        assertThat(adapter.listRegistrations(10)).singleElement()
+                .satisfies(registration -> {
+                    assertThat(registration.effectiveAdmissionAvailable()).isTrue();
+                    assertThat(registration.effectiveAdmissionStatus()).isEqualTo("AVAILABLE");
+                    assertThat(registration.operatorDraining()).isFalse();
+                    assertThat(registration.operatorId()).isEqualTo("admin");
+                });
+        assertThat(adapter.tryReserve(
+                "local-container-docker", "reservation-resumed", Duration.ofMinutes(1)))
+                .isEqualTo(RESERVED);
+        assertThat(adapter.release("reservation-resumed")).isTrue();
+    }
+
     private static SandboxRuntimeNodeRegistration registration(Instant heartbeatAt, Instant expiresAt) {
         return registration(heartbeatAt, expiresAt, 0);
     }
@@ -239,6 +337,14 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                   node_id VARCHAR(64) NOT NULL,
                   expires_at TIMESTAMP NOT NULL,
                   created_at TIMESTAMP NOT NULL
+                )
+                """);
+        new JdbcTemplate(dataSource).execute("""
+                CREATE TABLE sa_sandbox_runtime_node_admission_override (
+                  node_id VARCHAR(64) PRIMARY KEY,
+                  draining BOOLEAN NOT NULL,
+                  operator_id VARCHAR(128) NOT NULL,
+                  updated_at TIMESTAMP NOT NULL
                 )
                 """);
         new JdbcTemplate(dataSource).execute("""

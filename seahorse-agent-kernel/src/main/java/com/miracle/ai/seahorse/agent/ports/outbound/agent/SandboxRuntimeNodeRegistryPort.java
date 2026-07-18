@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeRegistration;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeEndpoint;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionOverride;
 
 import java.time.Duration;
 import java.util.List;
@@ -55,6 +56,12 @@ public interface SandboxRuntimeNodeRegistryPort {
 
     default int deleteStaleRegistrations(Duration retention, int limit) {
         return 0;
+    }
+
+    default Optional<SandboxRuntimeNodeAdmissionOverride> setOperatorDraining(String nodeId,
+                                                                              boolean draining,
+                                                                              String operatorId) {
+        return Optional.empty();
     }
 
     boolean release(String nodeId, String ownerId);

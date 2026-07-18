@@ -18,6 +18,8 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeNodeRegistryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
@@ -40,9 +42,15 @@ class SandboxApiDisabledByDefaultTests {
     @Test
     void demoDefaultsShouldRejectEverySandboxEndpointBeforeCallingPort() throws Exception {
         SandboxRuntimeInboundPort port = mock(SandboxRuntimeInboundPort.class);
+        SandboxRuntimeNodeRegistryInboundPort registry = mock(SandboxRuntimeNodeRegistryInboundPort.class);
+        CurrentUserPort currentUser = mock(CurrentUserPort.class);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseSandboxController(
                                 provider(SandboxRuntimeInboundPort.class, port),
+                                AdvancedFeatureGate.demoDefaults()),
+                        new SeahorseSandboxRuntimeNodeRegistryController(
+                                provider(SandboxRuntimeNodeRegistryInboundPort.class, registry),
+                                provider(CurrentUserPort.class, currentUser),
                                 AdvancedFeatureGate.demoDefaults()))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
@@ -79,6 +87,15 @@ class SandboxApiDisabledByDefaultTests {
         mvc.perform(get("/api/sandbox/runtime/nodes"))
                 .andExpect(status().isForbidden());
 
+        mvc.perform(get("/api/admin/sandbox/runtime/registrations"))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(post("/api/admin/sandbox/runtime/registrations/sandbox-node-b/drain"))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(post("/api/admin/sandbox/runtime/registrations/sandbox-node-b/resume"))
+                .andExpect(status().isForbidden());
+
         mvc.perform(get("/api/sandbox/runtime/artifact-scanner-policy"))
                 .andExpect(status().isForbidden());
 
@@ -110,6 +127,7 @@ class SandboxApiDisabledByDefaultTests {
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(port);
+        verifyNoInteractions(registry, currentUser);
     }
 
     private static String json(Object value) {

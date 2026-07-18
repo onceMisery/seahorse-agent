@@ -21,6 +21,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeNodeRegis
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -51,5 +53,30 @@ public class SeahorseSandboxRuntimeNodeRegistryController {
         }
         currentUser.requireRole("admin");
         return ApiResponses.requireService(registryProvider, registry -> registry.listRegistrations(limit));
+    }
+
+    @PostMapping("/api/admin/sandbox/runtime/registrations/{nodeId}/drain")
+    public ApiResponse<Object> drain(@PathVariable String nodeId) {
+        return setDraining(nodeId, true);
+    }
+
+    @PostMapping("/api/admin/sandbox/runtime/registrations/{nodeId}/resume")
+    public ApiResponse<Object> resume(@PathVariable String nodeId) {
+        return setDraining(nodeId, false);
+    }
+
+    private ApiResponse<Object> setDraining(String nodeId, boolean draining) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        CurrentUserPort currentUser = currentUserProvider.getIfAvailable();
+        if (currentUser == null) {
+            throw new IllegalStateException("Current user service is unavailable");
+        }
+        var operator = currentUser.requireCurrentUser();
+        if (!operator.hasRole("admin")) {
+            throw new SecurityException("Insufficient permissions");
+        }
+        return ApiResponses.requireService(
+                registryProvider,
+                registry -> registry.setOperatorDraining(nodeId, draining, operator.operator()));
     }
 }
