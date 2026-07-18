@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEventType;
@@ -463,6 +465,54 @@ class KernelSandboxRuntimeServiceTests {
         assertFalse(remoteRuntime.closeSessionCalled);
         assertEquals(List.of("sandbox-node-b", "local-container-docker"), reservations.reservedNodeIds);
         assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
+    }
+
+    @Test
+    void shouldAuditOnlySuccessfulAutomaticCreateFailoverWithBoundedRecoveryValues() throws Exception {
+        for (Map.Entry<SandboxRuntimeSessionOwnership, String> fixture : Map.of(
+                SandboxRuntimeSessionOwnership.ABSENT, "ABSENT",
+                SandboxRuntimeSessionOwnership.OWNED, "CLOSED").entrySet()) {
+            RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
+            RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+            remoteRuntime.failCreateSession = true;
+            remoteRuntime.sessionOwnership = fixture.getKey();
+            RecordingAuditEventRepository auditRepository = new RecordingAuditEventRepository();
+            KernelAuditLedgerService auditLedger = new KernelAuditLedgerService(
+                    auditRepository,
+                    new AuditRedactionPolicy(),
+                    AuditWriteFailurePolicy.FAIL_CLOSED);
+            KernelSandboxRuntimeService service = remoteRoutingService(
+                    localRuntime,
+                    remoteRuntime,
+                    new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(
+                            SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true, 0, 0, 2048L)),
+                    repositoryWithActiveLocalSession(),
+                    new RecordingCapacityReservationPort(RESERVED),
+                    auditLedger);
+
+            SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                    "tenant-1",
+                    "run-create-failover-audit-" + fixture.getValue().toLowerCase(),
+                    SandboxRuntimeType.CODE_INTERPRETER,
+                    false,
+                    List.of()));
+
+            List<AuditEvent> failoverEvents = auditRepository.events.stream()
+                    .filter(event -> event.eventType() == AuditEventType.SANDBOX_RUNTIME_CREATE_FAILED_OVER)
+                    .toList();
+            assertEquals(1, failoverEvents.size());
+            AuditEvent failoverEvent = failoverEvents.get(0);
+            assertEquals(session.sessionId(), failoverEvent.resourceId());
+            JsonNode payload = new ObjectMapper().readTree(failoverEvent.redactedPayload());
+            assertEquals(4, payload.size());
+            assertFalse(payload.has("sessionId"));
+            assertEquals("sandbox-node-b", payload.path("fromNodeId").asText());
+            assertEquals("local-container-docker", payload.path("toNodeId").asText());
+            assertEquals(fixture.getValue(), payload.path("recovery").asText());
+            assertEquals(2, payload.path("attemptCount").asInt());
+            assertFalse(failoverEvent.redactedPayload().contains("transport"));
+            assertFalse(failoverEvent.redactedPayload().contains("http://"));
+        }
     }
 
     @Test
@@ -2389,6 +2439,22 @@ class KernelSandboxRuntimeServiceTests {
             SandboxRuntimeNodeRegistryPort nodeRegistry,
             SandboxSessionRepositoryPort sessionRepository,
             SandboxRuntimeCapacityReservationPort capacityReservationPort) {
+        return remoteRoutingService(
+                localRuntime,
+                remoteRuntime,
+                nodeRegistry,
+                sessionRepository,
+                capacityReservationPort,
+                null);
+    }
+
+    private static KernelSandboxRuntimeService remoteRoutingService(
+            RecordingSandboxRuntimePort localRuntime,
+            RecordingSandboxRemoteRuntimePort remoteRuntime,
+            SandboxRuntimeNodeRegistryPort nodeRegistry,
+            SandboxSessionRepositoryPort sessionRepository,
+            SandboxRuntimeCapacityReservationPort capacityReservationPort,
+            KernelAuditLedgerService auditLedger) {
         return new KernelSandboxRuntimeService(
                 request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
                 localRuntime,
@@ -2401,7 +2467,7 @@ class KernelSandboxRuntimeServiceTests {
                 new MemorySandboxRuntimeProfilePolicyRepository(),
                 null,
                 null,
-                null,
+                auditLedger,
                 CLOCK,
                 remoteRuntime,
                 nodeRegistry,

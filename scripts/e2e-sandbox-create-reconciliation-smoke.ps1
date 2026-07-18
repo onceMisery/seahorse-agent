@@ -327,6 +327,76 @@ try {
         return $result
     }
 
+    Test-Step "Verify bounded create failover audit evidence" {
+        $auditResponse = Invoke-Json GET "/api/audit-events?tenantId=default&runId=$runId&eventType=SANDBOX_RUNTIME_CREATE_FAILED_OVER&current=1&size=10" -Headers $headers
+        Assert-ApiOk $auditResponse "List create failover audit events"
+        $records = @($auditResponse.data.records)
+        $safeRun = $runId.Replace("'", "''")
+        $databaseCount = Invoke-PostgresScalar "SELECT COUNT(*) FROM sa_audit_event WHERE run_id='$safeRun' AND event_type='SANDBOX_RUNTIME_CREATE_FAILED_OVER';"
+
+        if (-not $VerifyAutomaticFailover) {
+            if ($records.Count -ne 0 -or $databaseCount -ne "0") {
+                throw "explicit placement unexpectedly emitted create failover audit evidence"
+            }
+            return
+        }
+
+        if ($records.Count -ne 1 -or $databaseCount -ne "1") {
+            throw "automatic failover did not emit exactly one API and database audit event"
+        }
+        $event = $records[0]
+        if ("$($event.resourceType)" -ne "SANDBOX_SESSION" -or "$($event.resourceId)" -ne $sessionId) {
+            throw "create failover audit event is not correlated to the coordinator session"
+        }
+        $payload = "$($event.redactedPayload)" | ConvertFrom-Json
+        $payloadKeys = @($payload.PSObject.Properties.Name | Sort-Object)
+        $expectedKeys = @("attemptCount", "fromNodeId", "recovery", "toNodeId")
+        if (($payloadKeys -join ",") -ne ($expectedKeys -join ",")) {
+            throw "create failover audit payload keys are not value-bounded: $($payloadKeys -join ',')"
+        }
+        if ("$($payload.fromNodeId)" -ne $RemoteNodeId `
+                -or "$($payload.toNodeId)" -ne $LocalNodeId `
+                -or "$($payload.recovery)" -ne "CLOSED" `
+                -or [int]$payload.attemptCount -ne 2) {
+            throw "create failover audit payload values are incorrect"
+        }
+
+        $safeSession = $sessionId.Replace("'", "''")
+        $databaseRow = Invoke-PostgresScalar @"
+SELECT resource_id, redacted_payload
+FROM sa_audit_event
+WHERE run_id='$safeRun'
+  AND event_type='SANDBOX_RUNTIME_CREATE_FAILED_OVER'
+  AND resource_id='$safeSession';
+"@
+        $databaseParts = "$databaseRow" -split "`t", 2
+        if ($databaseParts.Count -ne 2 -or $databaseParts[0] -ne $sessionId) {
+            throw "database create failover audit event is not correlated to the coordinator session"
+        }
+        $databasePayload = $databaseParts[1] | ConvertFrom-Json
+        if ("$($databasePayload.fromNodeId)" -ne $RemoteNodeId `
+                -or "$($databasePayload.toNodeId)" -ne $LocalNodeId `
+                -or "$($databasePayload.recovery)" -ne "CLOSED" `
+                -or [int]$databasePayload.attemptCount -ne 2) {
+            throw "database create failover audit payload values are incorrect"
+        }
+
+        [string]$auditJson = $event | ConvertTo-Json -Depth 20 -Compress
+        [string]$databaseJson = $databaseParts[1]
+        $forbiddenMarkers = @("transportUri", "transport_uri", "endpoint", "sharedSecret", "http://", $ProxyNetworkAlias)
+        foreach ($forbidden in $forbiddenMarkers) {
+            if ($auditJson.IndexOf($forbidden, [StringComparison]::OrdinalIgnoreCase) -ge 0 `
+                    -or $databaseJson.IndexOf($forbidden, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                throw "create failover audit leaked transport detail marker: $forbidden"
+            }
+        }
+        if ($originalTransportUri `
+                -and ($auditJson.IndexOf($originalTransportUri, [StringComparison]::Ordinal) -ge 0 `
+                    -or $databaseJson.IndexOf($originalTransportUri, [StringComparison]::Ordinal) -ge 0)) {
+            throw "create failover audit leaked the original transport URI"
+        }
+    } | Out-Null
+
     if ($VerifyAutomaticFailover) {
         Test-Step "Execute and close the same session on the failover node" {
             & docker exec -e "SESSION_ID=$sessionId" $CoordinatorContainer sh -lc `

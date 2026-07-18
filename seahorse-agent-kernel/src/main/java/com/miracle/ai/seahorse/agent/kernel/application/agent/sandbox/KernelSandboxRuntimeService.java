@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditActorType;
@@ -102,6 +104,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
 
+    private static final ObjectMapper AUDIT_OBJECT_MAPPER = new ObjectMapper();
     private static final String SESSION_ID_PREFIX = "sandbox_";
     private static final String EXECUTION_ID_PREFIX = "sandbox_exec_";
     private static final String AUDIT_ID_PREFIX = "audit_sandbox_";
@@ -607,6 +610,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 runtimeSessionId);
         SandboxPolicyReasonCode lastAdmissionRejection = null;
         int runtimeCreateAttempts = 0;
+        RuntimeCreateFailoverAudit pendingFailoverAudit = null;
         for (int candidateIndex = 0; candidateIndex < runtimeCandidates.size(); candidateIndex++) {
             RuntimeAdmissionDecision runtimeAdmission = reserveRuntimeAdmission(runtimeCandidates.get(candidateIndex));
             boolean hasNextCandidate = candidateIndex + 1 < runtimeCandidates.size();
@@ -644,6 +648,9 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                         && hasNextCandidate
                         && runtimeCreateAttempts < MAX_RUNTIME_CREATE_ATTEMPTS
                         && recovery.failoverAllowed()) {
+                    pendingFailoverAudit = new RuntimeCreateFailoverAudit(
+                            runtimeAdmission.runtimeNodeId(),
+                            recovery.failoverRecovery());
                     continue;
                 }
                 return saveFailedRuntimeSession(
@@ -679,6 +686,9 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 throw ex;
             }
             releaseCapacityReservation(runtimeAdmission);
+            if (pendingFailoverAudit != null) {
+                appendRuntimeCreateFailoverAudit(saved, pendingFailoverAudit, runtimeCreateAttempts);
+            }
             appendSessionAudit(saved, AuditEventType.SANDBOX_SESSION_CREATED);
             return saved;
         }
@@ -1218,9 +1228,10 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                     remoteRuntimePort.inspectSessionOwnership(decision.remoteEndpoint(), session.sessionId()),
                     "runtime session ownership result must not be null");
             return switch (ownership) {
-                case ABSENT -> RuntimeCreateRecovery.safeToFailOver();
+                case ABSENT -> RuntimeCreateRecovery.safeToFailOver(RuntimeCreateFailoverRecovery.ABSENT);
                 case OWNED -> RuntimeCreateRecovery.safeToFailOver(
-                        rollbackCreatedRuntimeSession(decision, session));
+                        rollbackCreatedRuntimeSession(decision, session),
+                        RuntimeCreateFailoverRecovery.CLOSED);
                 case UNSUPPORTED -> RuntimeCreateRecovery.releaseOnly(
                         rollbackCreatedRuntimeSession(decision, session));
             };
@@ -1617,8 +1628,40 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 now));
     }
 
+    private void appendRuntimeCreateFailoverAudit(SandboxSession session,
+                                                  RuntimeCreateFailoverAudit failoverAudit,
+                                                  int attemptCount) {
+        if (auditLedger == null) {
+            return;
+        }
+        auditLedger.append(new AuditEvent(
+                auditId(),
+                session.tenantId(),
+                AuditEventType.SANDBOX_RUNTIME_CREATE_FAILED_OVER,
+                AuditActorType.SYSTEM,
+                AUDIT_ACTOR_ID,
+                session.runId(),
+                null,
+                RESOURCE_TYPE_SANDBOX_SESSION,
+                session.sessionId(),
+                auditPayload(Map.of(
+                        "fromNodeId", failoverAudit.fromNodeId(),
+                        "toNodeId", session.runtimeNodeId(),
+                        "recovery", failoverAudit.recovery().name(),
+                        "attemptCount", attemptCount)),
+                clock.instant()));
+    }
+
     private String auditId() {
         return AUDIT_ID_PREFIX + nextId();
+    }
+
+    private static String auditPayload(Map<String, ?> payload) {
+        try {
+            return AUDIT_OBJECT_MAPPER.writeValueAsString(payload);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize sandbox audit payload", ex);
+        }
     }
 
     private static String requireText(String value, String message) {
@@ -1676,18 +1719,35 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         }
     }
 
-    private record RuntimeCreateRecovery(boolean releaseReservation, boolean failoverAllowed) {
+    private enum RuntimeCreateFailoverRecovery {
+        ABSENT,
+        CLOSED
+    }
+
+    private record RuntimeCreateFailoverAudit(String fromNodeId, RuntimeCreateFailoverRecovery recovery) {
+
+        private RuntimeCreateFailoverAudit {
+            fromNodeId = requireText(fromNodeId, "fromNodeId must not be blank");
+            recovery = Objects.requireNonNull(recovery, "recovery must not be null");
+        }
+    }
+
+    private record RuntimeCreateRecovery(boolean releaseReservation,
+                                         boolean failoverAllowed,
+                                         RuntimeCreateFailoverRecovery failoverRecovery) {
 
         private static RuntimeCreateRecovery releaseOnly(boolean cleanupConfirmed) {
-            return new RuntimeCreateRecovery(cleanupConfirmed, false);
+            return new RuntimeCreateRecovery(cleanupConfirmed, false, null);
         }
 
-        private static RuntimeCreateRecovery safeToFailOver() {
-            return new RuntimeCreateRecovery(true, true);
+        private static RuntimeCreateRecovery safeToFailOver(RuntimeCreateFailoverRecovery recovery) {
+            return new RuntimeCreateRecovery(true, true, recovery);
         }
 
-        private static RuntimeCreateRecovery safeToFailOver(boolean cleanupConfirmed) {
-            return new RuntimeCreateRecovery(cleanupConfirmed, cleanupConfirmed);
+        private static RuntimeCreateRecovery safeToFailOver(boolean cleanupConfirmed,
+                                                            RuntimeCreateFailoverRecovery recovery) {
+            return new RuntimeCreateRecovery(cleanupConfirmed, cleanupConfirmed,
+                    cleanupConfirmed ? recovery : null);
         }
     }
 
