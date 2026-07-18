@@ -80,6 +80,7 @@ export interface SandboxRuntimeHealth {
   maxSessionFileBytes?: number;
   maxSessionWorkspaceFiles?: number;
   failureMessages?: string[];
+  ociRuntime?: string;
 }
 
 export interface SandboxRuntimeNodeHealth {
@@ -105,6 +106,7 @@ export interface SandboxRuntimeNodeHealth {
   orphanContainerCount?: number;
   failedContainerInspectionCount?: number;
   failureMessages?: string[];
+  ociRuntime?: string;
 }
 
 export interface SandboxRuntimeNodeRegistration {

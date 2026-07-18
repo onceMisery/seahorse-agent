@@ -48,11 +48,13 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.nio.file.attribute.PosixFilePermission;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -359,10 +361,17 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     }
 
     private static void prepareWorkspacePermissions(Path workspace) throws IOException {
+        try {
+            Files.setPosixFilePermissions(workspace, EnumSet.allOf(PosixFilePermission.class));
+            return;
+        } catch (UnsupportedOperationException ignored) {
+            // Windows filesystems do not expose POSIX permissions through NIO.
+        }
         java.io.File directory = workspace.toFile();
-        if (!directory.setReadable(true, false)
-                || !directory.setWritable(true, false)
-                || !directory.setExecutable(true, false)) {
+        boolean readable = directory.setReadable(true, false) || directory.canRead();
+        boolean writable = directory.setWritable(true, false) || directory.canWrite();
+        boolean executable = directory.setExecutable(true, false) || directory.canExecute();
+        if (!readable || !writable || !executable) {
             throw new IOException("sandbox workspace permissions could not be prepared");
         }
     }
@@ -2877,7 +2886,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 properties.isReadOnlyRootFilesystem(),
                 properties.getMaxSessionFileBytes(),
                 MAX_SESSION_WORKSPACE_FILES,
-                failureMessages);
+                failureMessages,
+                properties.getOciRuntime());
     }
 
     private int ownedActiveSessionCount(Set<String> activeSessionIds) {
@@ -2930,6 +2940,10 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         List<String> commandLine = new ArrayList<>();
         commandLine.add(properties.getEngine());
         commandLine.add("run");
+        if (!properties.getOciRuntime().isBlank()) {
+            commandLine.add("--runtime");
+            commandLine.add(properties.getOciRuntime());
+        }
         commandLine.add("--rm");
         commandLine.add("--name");
         commandLine.add(containerName(session.sessionId()));

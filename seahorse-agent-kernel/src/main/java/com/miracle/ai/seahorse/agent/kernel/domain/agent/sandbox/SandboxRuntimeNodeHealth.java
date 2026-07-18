@@ -43,7 +43,8 @@ public record SandboxRuntimeNodeHealth(Instant checkedAt,
                                        int inspectedContainerCount,
                                        int orphanContainerCount,
                                        int failedContainerInspectionCount,
-                                       List<String> failureMessages) {
+                                       List<String> failureMessages,
+                                       String ociRuntime) {
 
     public static final String ADMISSION_AVAILABLE = "AVAILABLE";
     public static final String ADMISSION_DEGRADED = "DEGRADED";
@@ -65,6 +66,22 @@ public record SandboxRuntimeNodeHealth(Instant checkedAt,
         activeSessionRemaining = Math.max(activeSessionRemaining, 0);
         capacityStatus = normalize(capacityStatus, SandboxRuntimeHealth.CAPACITY_UNBOUNDED);
         failureMessages = failureMessages == null ? List.of() : List.copyOf(failureMessages);
+        ociRuntime = ociRuntime == null ? "" : ociRuntime.trim();
+    }
+
+    public SandboxRuntimeNodeHealth(Instant checkedAt, String nodeId, String runtime, String engine,
+                                    String status, boolean admissionAvailable, String admissionStatus,
+                                    boolean engineAvailable, boolean workspaceAvailable, long workspaceFreeBytes,
+                                    long workspaceMinFreeBytes, boolean workspaceDiskAvailable,
+                                    String workspaceDiskStatus, int activeSessionCount, int activeSessionLimit,
+                                    int activeSessionRemaining, boolean activeSessionCapacityAvailable,
+                                    String capacityStatus, int inspectedContainerCount, int orphanContainerCount,
+                                    int failedContainerInspectionCount, List<String> failureMessages) {
+        this(checkedAt, nodeId, runtime, engine, status, admissionAvailable, admissionStatus, engineAvailable,
+                workspaceAvailable, workspaceFreeBytes, workspaceMinFreeBytes, workspaceDiskAvailable,
+                workspaceDiskStatus, activeSessionCount, activeSessionLimit, activeSessionRemaining,
+                activeSessionCapacityAvailable, capacityStatus, inspectedContainerCount, orphanContainerCount,
+                failedContainerInspectionCount, failureMessages, "");
     }
 
     public static SandboxRuntimeNodeHealth fromHealth(SandboxRuntimeHealth health) {
@@ -94,7 +111,8 @@ public record SandboxRuntimeNodeHealth(Instant checkedAt,
                 safeHealth.inspectedContainerCount(),
                 safeHealth.orphanContainerCount(),
                 safeHealth.failedContainerInspectionCount(),
-                safeHealth.failureMessages());
+                safeHealth.failureMessages(),
+                safeHealth.ociRuntime());
     }
 
     private static String admissionStatus(SandboxRuntimeHealth health) {

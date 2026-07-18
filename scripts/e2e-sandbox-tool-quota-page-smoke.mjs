@@ -36,6 +36,7 @@ const username = readArg("--username", process.env.E2E_USERNAME || "admin");
 const password = readArg("--password", process.env.E2E_PASSWORD || "admin123");
 const marker = readArg("--marker", process.env.E2E_MARKER || "seahorse-sandbox-tool-quota-page-smoke");
 const runtimeNodeId = readArg("--runtime-node-id", process.env.E2E_RUNTIME_NODE_ID || "sandbox-node-b");
+const expectedOciRuntime = readArg("--expected-oci-runtime", process.env.E2E_EXPECTED_OCI_RUNTIME || "").trim();
 const browserSessionArtifactId = readArg(
   "--browser-session-artifact-id",
   process.env.E2E_BROWSER_SESSION_ARTIFACT_ID || ""
@@ -216,6 +217,9 @@ try {
   if (runtimeHealth?.runtime !== "container") {
     throw new Error(`Expected container sandbox runtime health: ${JSON.stringify(runtimeHealth)}`);
   }
+  if (expectedOciRuntime && runtimeHealth?.ociRuntime !== expectedOciRuntime) {
+    throw new Error(`Expected OCI runtime ${expectedOciRuntime}: ${JSON.stringify(runtimeHealth)}`);
+  }
   if (runtimeHealth.dropAllCapabilities !== true
       || runtimeHealth.noNewPrivileges !== true
       || runtimeHealth.readOnlyRootFilesystem !== true
@@ -332,6 +336,13 @@ try {
     await assertLocatorText(page.getByTestId("sandbox-runtime-file-quota"), "64 MB", "Sandbox file quota");
     await assertLocatorText(page.getByTestId("sandbox-runtime-file-count-limit"), "Workspace files", "Sandbox file count limit");
     await assertLocatorText(page.getByTestId("sandbox-runtime-file-count-limit"), "256 max", "Sandbox file count limit");
+    if (expectedOciRuntime) {
+      await assertLocatorText(
+        page.getByTestId("sandbox-runtime-oci-runtime"),
+        expectedOciRuntime,
+        "Sandbox OCI runtime"
+      );
+    }
     const scannerPanel = page.getByTestId("sandbox-artifact-scanner-panel");
     await scannerPanel.waitFor({ state: "visible", timeout: 20000 });
     await assertLocatorText(scannerPanel, expectedScannerId, "Artifact scanner panel");

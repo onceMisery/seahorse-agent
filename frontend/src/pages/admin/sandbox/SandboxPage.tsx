@@ -330,6 +330,9 @@ function RuntimeGovernancePanel({
                 <div className="mt-2 truncate font-mono text-xs text-slate-600">
                   {health?.runtime || "-"} / {health?.engine || "-"}
                 </div>
+                <div className="mt-1 truncate text-xs text-muted-foreground" data-testid="sandbox-runtime-oci-runtime">
+                  OCI runtime: {health?.ociRuntime || "engine default"}
+                </div>
                 <div className="mt-1 text-xs text-muted-foreground">{checkedAt}</div>
               </div>
 
@@ -490,7 +493,7 @@ function RuntimeGovernancePanel({
                         {node.nodeId || "local-runtime"}
                       </div>
                       <div className="truncate text-xs text-muted-foreground">
-                        {node.runtime || "-"} / {node.engine || "-"} / {node.status || "UNKNOWN"}
+                        {node.runtime || "-"} / {node.engine || "-"} / {node.ociRuntime || "engine default"} / {node.status || "UNKNOWN"}
                       </div>
                     </div>
                     <Badge variant={nodeAdmissionBadgeVariant(node.admissionStatus)}>

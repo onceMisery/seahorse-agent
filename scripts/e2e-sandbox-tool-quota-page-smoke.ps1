@@ -4,6 +4,7 @@ param(
     [string]$Password = "admin123",
     [string]$Marker = "seahorse-sandbox-tool-quota-page-smoke",
     [string]$ArtifactDir = "output/playwright/artifacts",
+    [string]$ExpectedOciRuntime = "",
     [switch]$VerifyExternalVirusScanner,
     [switch]$Headed
 )
@@ -57,6 +58,9 @@ if ($Headed) {
 }
 if ($VerifyExternalVirusScanner) {
     $nodeArgs += "--verify-external-virus-scanner"
+}
+if (-not [string]::IsNullOrWhiteSpace($ExpectedOciRuntime)) {
+    $nodeArgs += @("--expected-oci-runtime", $ExpectedOciRuntime)
 }
 
 node @nodeArgs

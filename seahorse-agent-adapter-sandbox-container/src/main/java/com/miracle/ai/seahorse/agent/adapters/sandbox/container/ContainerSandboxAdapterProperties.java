@@ -29,6 +29,9 @@ public class ContainerSandboxAdapterProperties {
 
     private String engine = "docker";
 
+    /** Optional Docker/Podman OCI runtime name, for example runsc or runc. */
+    private String ociRuntime = "";
+
     private String nodeId = DEFAULT_NODE_ID;
 
     private boolean admissionEnabled = true;
@@ -97,6 +100,23 @@ public class ContainerSandboxAdapterProperties {
 
     public void setEngine(String engine) {
         this.engine = requireTextOrDefault(engine, "docker");
+    }
+
+    public String getOciRuntime() {
+        return ociRuntime;
+    }
+
+    public void setOciRuntime(String ociRuntime) {
+        if (ociRuntime == null || ociRuntime.isBlank()) {
+            this.ociRuntime = "";
+            return;
+        }
+        String normalized = ociRuntime.trim();
+        if (normalized.length() > 64 || !normalized.matches("[a-z0-9][a-z0-9._-]*")) {
+            throw new IllegalArgumentException(
+                    "sandbox container oci-runtime must use 1-64 lowercase letters, numbers, dots, underscores, or hyphens");
+        }
+        this.ociRuntime = normalized;
     }
 
     public String getNodeId() {

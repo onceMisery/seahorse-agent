@@ -154,6 +154,27 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldPassConfiguredOciRuntimeToDockerRun() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded(
+                "hello from sandbox\n",
+                Duration.ofMillis(250)));
+        ContainerSandboxAdapterProperties properties = properties();
+        properties.setOciRuntime("runsc");
+        ContainerSandboxRuntimeAdapter adapter = new ContainerSandboxRuntimeAdapter(properties, runner, CLOCK);
+        SandboxSession session = adapter.createSession(sessionRequest(SandboxRuntimeType.CODE_INTERPRETER));
+
+        SandboxExecutionResult result = adapter.execute(new SandboxExecutionRequest(
+                session,
+                "print('hello from sandbox')",
+                false,
+                List.of()));
+
+        assertThat(result.execution().status()).isEqualTo(SandboxExecutionStatus.SUCCEEDED);
+        assertThat(runner.lastCommand.commandLine())
+                .containsSubsequence("docker", "run", "--runtime", "runsc", "--rm");
+    }
+
+    @Test
     void shouldFailClosedWhenCodeInterpreterNetworkIsRequested() {
         RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded("", Duration.ZERO));
         ContainerSandboxRuntimeAdapter adapter = adapter(runner);

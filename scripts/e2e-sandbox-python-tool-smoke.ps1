@@ -7,6 +7,7 @@ param(
     [string]$PostgresUser = "seahorse",
     [string]$PostgresDatabase = "seahorse",
     [long]$KernelRunProfileId = -9101,
+    [string]$ExpectedOciRuntime = "",
     [switch]$SkipHealth
 )
 
@@ -251,6 +252,15 @@ try {
     if (-not $login) { exit 1 }
 
     $headers = @{ Authorization = "Bearer $($login.data.token)" }
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedOciRuntime)) {
+        Test-Step "Verify configured OCI runtime health" {
+            $health = Invoke-Json -Method GET -Path "/api/sandbox/runtime/health" -Headers $headers
+            Assert-ApiOk $health "Sandbox runtime health"
+            if ("$($health.data.ociRuntime)" -ne $ExpectedOciRuntime) {
+                throw "Expected OCI runtime '$ExpectedOciRuntime' but got '$($health.data.ociRuntime)'"
+            }
+        } | Out-Null
+    }
     $suffix = ([guid]::NewGuid().ToString('N')).Substring(0, 8)
     $smokeRun = Test-Step "Create real agent run for governed sandbox_python binding" {
         New-RealAgentRunId -Headers $headers -Marker $Marker -RunProfileId $KernelRunProfileId
