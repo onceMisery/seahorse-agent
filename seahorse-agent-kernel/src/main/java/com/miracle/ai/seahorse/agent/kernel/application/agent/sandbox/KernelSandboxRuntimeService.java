@@ -686,7 +686,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 throw ex;
             }
             releaseCapacityReservation(runtimeAdmission);
-            if (pendingFailoverAudit != null) {
+            if (pendingFailoverAudit != null && saved.status() == SandboxExecutionStatus.CREATED) {
                 appendRuntimeCreateFailoverAudit(saved, pendingFailoverAudit, runtimeCreateAttempts);
             }
             appendSessionAudit(saved, AuditEventType.SANDBOX_SESSION_CREATED);

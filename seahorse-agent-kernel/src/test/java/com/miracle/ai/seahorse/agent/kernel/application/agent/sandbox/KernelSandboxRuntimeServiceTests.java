@@ -516,6 +516,40 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldNotAuditAutomaticCreateFailoverWhenSecondRuntimeReturnsFailedSession() {
+        RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
+        localRuntime.returnFailedCreateSession = true;
+        RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
+        remoteRuntime.failCreateSession = true;
+        remoteRuntime.sessionOwnership = SandboxRuntimeSessionOwnership.ABSENT;
+        RecordingAuditEventRepository auditRepository = new RecordingAuditEventRepository();
+        KernelAuditLedgerService auditLedger = new KernelAuditLedgerService(
+                auditRepository,
+                new AuditRedactionPolicy(),
+                AuditWriteFailurePolicy.FAIL_CLOSED);
+        KernelSandboxRuntimeService service = remoteRoutingService(
+                localRuntime,
+                remoteRuntime,
+                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(
+                        SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true, 0, 0, 2048L)),
+                repositoryWithActiveLocalSession(),
+                new RecordingCapacityReservationPort(RESERVED),
+                auditLedger);
+
+        SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
+                "tenant-1",
+                "run-create-failover-second-failed",
+                SandboxRuntimeType.CODE_INTERPRETER,
+                false,
+                List.of()));
+
+        assertEquals(SandboxExecutionStatus.FAILED, session.status());
+        assertEquals("local-container-docker", session.runtimeNodeId());
+        assertTrue(auditRepository.events.stream()
+                .noneMatch(event -> event.eventType() == AuditEventType.SANDBOX_RUNTIME_CREATE_FAILED_OVER));
+    }
+
+    @Test
     void shouldNotFailOverAutomaticCreateWhenRemoteReconciliationIsUnsupported() {
         RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
         RecordingSandboxRemoteRuntimePort remoteRuntime = new RecordingSandboxRemoteRuntimePort();
@@ -2724,6 +2758,7 @@ class KernelSandboxRuntimeServiceTests {
         private boolean executeCalled;
         private boolean closeSessionCalled;
         private boolean failCreateSession;
+        private boolean returnFailedCreateSession;
         private SandboxSessionRequest createSessionRequest;
         private final List<String> closedSessionIds = new ArrayList<>();
         private Set<String> orphanSweepActiveSessionIds = Set.of();
@@ -2748,6 +2783,17 @@ class KernelSandboxRuntimeServiceTests {
             createSessionRequest = request;
             if (failCreateSession) {
                 throw new IllegalStateException("local runtime create failed");
+            }
+            if (returnFailedCreateSession) {
+                return SandboxSession.failed(
+                        request.sessionId() == null ? "session-1" : request.sessionId(),
+                        request.tenantId(),
+                        request.runId(),
+                        request.runtimeType(),
+                        SandboxPolicyReasonCode.RUNTIME_EXECUTION_FAILED,
+                        request.profileId(),
+                        request.expiresAt(),
+                        NOW);
             }
             return SandboxSession.created(
                     request.sessionId() == null ? "session-1" : request.sessionId(),
