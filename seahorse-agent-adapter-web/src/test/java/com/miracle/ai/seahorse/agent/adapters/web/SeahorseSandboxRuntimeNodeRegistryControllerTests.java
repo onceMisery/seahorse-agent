@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionOverride;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeMaintenanceStatus;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeNodeRegistryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
@@ -35,6 +36,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -71,12 +73,43 @@ class SeahorseSandboxRuntimeNodeRegistryControllerTests {
     }
 
     @Test
-    void nonAdminShouldNotChangeRuntimeNodeAdmission() throws Exception {
+    void adminShouldReadDatabaseBackedMaintenanceStatus() throws Exception {
+        SandboxRuntimeNodeRegistryInboundPort registry = mock(SandboxRuntimeNodeRegistryInboundPort.class);
+        when(registry.maintenanceStatus("sandbox-node-b"))
+                .thenReturn(new SandboxRuntimeNodeMaintenanceStatus(
+                        "sandbox-node-b", true, 1, 2, true, 1, NOW.minusSeconds(60), NOW));
+        MockMvc mvc = mvc(registry, currentUser("operator-admin", "admin"),
+                AdvancedFeatureGate.allEnabledForTests());
+
+        mvc.perform(get("/api/admin/sandbox/runtime/registrations/sandbox-node-b/maintenance-status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.nodeId").value("sandbox-node-b"))
+                .andExpect(jsonPath("$.data.operatorDraining").value(true))
+                .andExpect(jsonPath("$.data.persistedActiveSessionCount").value(1))
+                .andExpect(jsonPath("$.data.pendingReservationCount").value(2))
+                .andExpect(jsonPath("$.data.createOperationTrackingAvailable").value(true))
+                .andExpect(jsonPath("$.data.inFlightCreateOperationCount").value(1))
+                .andExpect(jsonPath("$.data.stabilizationElapsed").value(false))
+                .andExpect(jsonPath("$.data.maintenanceReady").value(false));
+
+        verify(registry).maintenanceStatus("sandbox-node-b");
+    }
+
+    @Test
+    void nonAdminShouldNotAccessRuntimeNodeAdminOperations() throws Exception {
         SandboxRuntimeNodeRegistryInboundPort registry = mock(SandboxRuntimeNodeRegistryInboundPort.class);
         MockMvc mvc = mvc(registry, currentUser("ordinary-user", "user"),
                 AdvancedFeatureGate.allEnabledForTests());
 
         mvc.perform(post("/api/admin/sandbox/runtime/registrations/sandbox-node-b/drain"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        mvc.perform(get("/api/admin/sandbox/runtime/registrations/sandbox-node-b/maintenance-status"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        mvc.perform(get("/api/admin/sandbox/runtime/registrations"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"));
 
@@ -94,6 +127,10 @@ class SeahorseSandboxRuntimeNodeRegistryControllerTests {
                 .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"));
 
         mvc.perform(post("/api/admin/sandbox/runtime/registrations/sandbox-node-b/resume"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"));
+
+        mvc.perform(get("/api/admin/sandbox/runtime/registrations/sandbox-node-b/maintenance-status"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"));
 

@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeN
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeEndpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionOverride;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionChange;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeMaintenanceStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditActorType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEventType;
@@ -117,6 +118,38 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
             SET expires_at = CASE WHEN expires_at > ? THEN expires_at ELSE ? END
             WHERE node_id = ? AND owner_id = ? AND expires_at > ?
             """;
+    private static final String SQL_UPDATE_MAINTENANCE_CAPABILITY = """
+            UPDATE sa_sandbox_runtime_node_maintenance_capability
+            SET owner_id = ?, create_operation_tracking = TRUE, updated_at = ?
+            WHERE node_id = ?
+            """;
+    private static final String SQL_INSERT_MAINTENANCE_CAPABILITY = """
+            INSERT INTO sa_sandbox_runtime_node_maintenance_capability
+            (node_id, owner_id, create_operation_tracking, updated_at)
+            VALUES (?, ?, TRUE, ?)
+            """;
+    private static final String SQL_BEGIN_CREATE_OPERATION = """
+            INSERT INTO sa_sandbox_runtime_node_create_operation
+            (operation_id, node_id, owner_id, started_at)
+            SELECT ?, node_id, owner_id, ?
+            FROM sa_sandbox_runtime_node
+            WHERE node_id = ? AND owner_id = ? AND expires_at > ?
+            """;
+    private static final String SQL_BEGIN_LOCAL_CREATE_OPERATION = """
+            INSERT INTO sa_sandbox_runtime_node_create_operation
+            (operation_id, node_id, owner_id, started_at)
+            SELECT ?, node_id, owner_id, ?
+            FROM sa_sandbox_runtime_node
+            WHERE node_id = ? AND expires_at > ?
+            """;
+    private static final String SQL_END_CREATE_OPERATION = """
+            DELETE FROM sa_sandbox_runtime_node_create_operation
+            WHERE operation_id = ? AND node_id = ? AND owner_id = ?
+            """;
+    private static final String SQL_END_LOCAL_CREATE_OPERATION = """
+            DELETE FROM sa_sandbox_runtime_node_create_operation
+            WHERE operation_id = ? AND node_id = ?
+            """;
     private static final String SQL_LIST_STALE_NODE_IDS = """
             SELECT node_id FROM sa_sandbox_runtime_node
             WHERE expires_at <= ?
@@ -154,8 +187,11 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
     private static final String SQL_DELETE_NODE_CAPACITY_RESERVATIONS = """
             DELETE FROM sa_sandbox_runtime_capacity_reservation WHERE node_id = ?
             """;
+    private static final String SQL_DELETE_NODE_MAINTENANCE_CAPABILITY = """
+            DELETE FROM sa_sandbox_runtime_node_maintenance_capability WHERE node_id = ?
+            """;
     private static final String SQL_FIND_OPERATOR_DRAINING = """
-            SELECT draining FROM sa_sandbox_runtime_node_admission_override WHERE node_id = ?
+            SELECT draining FROM sa_sandbox_runtime_node_admission_override WHERE node_id = ? FOR UPDATE
             """;
     private static final String SQL_LOCK_NODE_FOR_ADMISSION_OVERRIDE = """
             SELECT node_id FROM sa_sandbox_runtime_node WHERE node_id = ? FOR UPDATE
@@ -172,6 +208,31 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
             INSERT INTO sa_sandbox_runtime_node_admission_override
             (node_id, draining, operator_id, updated_at)
             VALUES (?, ?, ?, ?)
+            """;
+    private static final String SQL_FIND_MAINTENANCE_STATUS = """
+            SELECT known.node_id,
+                   COALESCE(o.draining, FALSE) AS operator_draining,
+                   (SELECT COUNT(*) FROM sa_sandbox_session s
+                    WHERE s.runtime_node_id = known.node_id
+                      AND s.status NOT IN (?, ?, ?, ?)) AS persisted_active,
+                   (SELECT COUNT(*) FROM sa_sandbox_runtime_capacity_reservation r
+                    WHERE r.node_id = known.node_id
+                      AND r.expires_at > CURRENT_TIMESTAMP) AS pending_reservations,
+                   CASE WHEN n.node_id IS NULL THEN TRUE
+                        ELSE COALESCE(c.owner_id = n.owner_id AND c.create_operation_tracking, FALSE)
+                   END AS create_operation_tracking_available,
+                   (SELECT COUNT(*) FROM sa_sandbox_runtime_node_create_operation op
+                    WHERE op.node_id = known.node_id) AS in_flight_create_operations,
+                   o.updated_at AS drain_requested_at,
+                   CURRENT_TIMESTAMP AS checked_at
+            FROM (
+                SELECT node_id FROM sa_sandbox_runtime_node WHERE node_id = ?
+                UNION
+                SELECT node_id FROM sa_sandbox_runtime_node_admission_override WHERE node_id = ?
+            ) known
+            LEFT JOIN sa_sandbox_runtime_node n ON n.node_id = known.node_id
+            LEFT JOIN sa_sandbox_runtime_node_admission_override o ON o.node_id = known.node_id
+            LEFT JOIN sa_sandbox_runtime_node_maintenance_capability c ON c.node_id = known.node_id
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -231,6 +292,7 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                 safeOwnerId,
                 toTimestamp(databaseNow));
         if (updated > 0) {
+            persistMaintenanceCapability(safeRegistration.nodeId(), safeOwnerId, databaseNow);
             return Optional.of(persisted);
         }
         try {
@@ -251,6 +313,7 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                     toTimestamp(persisted.expiresAt()),
                     toTimestamp(persisted.heartbeatAt()),
                     safeTransportUri);
+            persistMaintenanceCapability(safeRegistration.nodeId(), safeOwnerId, databaseNow);
             return Optional.of(persisted);
         } catch (DuplicateKeyException ignored) {
             return Optional.empty();
@@ -309,6 +372,65 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
     }
 
     @Override
+    public boolean beginCreateOperation(String nodeId, String ownerId, String operationId) {
+        String safeNodeId = requireText(nodeId, "nodeId must not be blank");
+        String safeOwnerId = requireText(ownerId, "ownerId must not be blank");
+        String safeOperationId = requireText(operationId, "operationId must not be blank");
+        if (safeOperationId.length() > 128) {
+            throw new IllegalArgumentException("operationId must contain at most 128 characters");
+        }
+        Instant now = databaseNow();
+        return jdbcTemplate.update(
+                SQL_BEGIN_CREATE_OPERATION,
+                safeOperationId,
+                toTimestamp(now),
+                safeNodeId,
+                safeOwnerId,
+                toTimestamp(now)) == 1;
+    }
+
+    @Override
+    public boolean endCreateOperation(String nodeId, String ownerId, String operationId) {
+        if (nodeId == null || nodeId.isBlank()
+                || ownerId == null || ownerId.isBlank()
+                || operationId == null || operationId.isBlank()) {
+            return false;
+        }
+        return jdbcTemplate.update(
+                SQL_END_CREATE_OPERATION,
+                operationId.trim(),
+                nodeId.trim(),
+                ownerId.trim()) == 1;
+    }
+
+    @Override
+    public boolean beginCreateOperation(String nodeId, String operationId) {
+        String safeNodeId = requireText(nodeId, "nodeId must not be blank");
+        String safeOperationId = requireText(operationId, "operationId must not be blank");
+        if (safeOperationId.length() > 128) {
+            throw new IllegalArgumentException("operationId must contain at most 128 characters");
+        }
+        Instant now = databaseNow();
+        return jdbcTemplate.update(
+                SQL_BEGIN_LOCAL_CREATE_OPERATION,
+                safeOperationId,
+                toTimestamp(now),
+                safeNodeId,
+                toTimestamp(now)) == 1;
+    }
+
+    @Override
+    public boolean endCreateOperation(String nodeId, String operationId) {
+        if (nodeId == null || nodeId.isBlank() || operationId == null || operationId.isBlank()) {
+            return false;
+        }
+        return jdbcTemplate.update(
+                SQL_END_LOCAL_CREATE_OPERATION,
+                operationId.trim(),
+                nodeId.trim()) == 1;
+    }
+
+    @Override
     public int deleteStaleRegistrations(Duration retention, int limit) {
         Duration safeRetention = Objects.requireNonNull(retention, "retention must not be null");
         if (safeRetention.isNegative() || safeRetention.isZero() || limit <= 0) {
@@ -326,6 +448,7 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                 int deleted = jdbcTemplate.update(SQL_DELETE_STALE_NODE, nodeId, toTimestamp(cutoff));
                 if (deleted == 1) {
                     jdbcTemplate.update(SQL_DELETE_NODE_CAPACITY_RESERVATIONS, nodeId);
+                    jdbcTemplate.update(SQL_DELETE_NODE_MAINTENANCE_CAPABILITY, nodeId);
                     return true;
                 }
                 return false;
@@ -394,6 +517,30 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                     changedAt));
         });
         return Objects.requireNonNullElse(result, Optional.empty());
+    }
+
+    @Override
+    public Optional<SandboxRuntimeNodeMaintenanceStatus> findMaintenanceStatus(String nodeId) {
+        String safeNodeId = requireText(nodeId, "nodeId must not be blank");
+        return jdbcTemplate.query(
+                        SQL_FIND_MAINTENANCE_STATUS,
+                        (rs, rowNum) -> new SandboxRuntimeNodeMaintenanceStatus(
+                                rs.getString("node_id"),
+                                rs.getBoolean("operator_draining"),
+                                rs.getInt("persisted_active"),
+                                rs.getInt("pending_reservations"),
+                                rs.getBoolean("create_operation_tracking_available"),
+                                rs.getInt("in_flight_create_operations"),
+                                toNullableInstant(rs.getTimestamp("drain_requested_at")),
+                                toInstant(rs.getTimestamp("checked_at"))),
+                        "SUCCEEDED",
+                        "FAILED",
+                        "TIMED_OUT",
+                        "CANCELLED",
+                        safeNodeId,
+                        safeNodeId)
+                .stream()
+                .findFirst();
     }
 
     @Override
@@ -520,12 +667,6 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                         rs.getInt("active_session_limit"),
                         toInstant(rs.getTimestamp("expires_at"))),
                 nodeId);
-        if (nodes.isEmpty()) {
-            jdbcTemplate.update(SQL_DELETE_EXPIRED_CAPACITY_RESERVATIONS, nodeId, toTimestamp(now));
-            return ReservationResult.NOT_REQUIRED;
-        }
-        CapacityNode node = nodes.get(0);
-        jdbcTemplate.update(SQL_DELETE_EXPIRED_CAPACITY_RESERVATIONS, nodeId, toTimestamp(now));
         boolean operatorDraining = jdbcTemplate.query(
                         SQL_FIND_OPERATOR_DRAINING,
                         (rs, rowNum) -> rs.getBoolean("draining"),
@@ -533,6 +674,12 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
                 .stream()
                 .findFirst()
                 .orElse(false);
+        if (nodes.isEmpty()) {
+            jdbcTemplate.update(SQL_DELETE_EXPIRED_CAPACITY_RESERVATIONS, nodeId, toTimestamp(now));
+            return operatorDraining ? ReservationResult.REJECTED : ReservationResult.NOT_REQUIRED;
+        }
+        CapacityNode node = nodes.get(0);
+        jdbcTemplate.update(SQL_DELETE_EXPIRED_CAPACITY_RESERVATIONS, nodeId, toTimestamp(now));
         if (!node.expiresAt().isAfter(now)
                 || operatorDraining
                 || !node.admissionAvailable()
@@ -540,7 +687,8 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
             return ReservationResult.REJECTED;
         }
         if (node.activeSessionLimit() <= 0) {
-            return ReservationResult.NOT_REQUIRED;
+            insertCapacityReservation(reservationId, nodeId, now, leaseTtl);
+            return ReservationResult.RESERVED;
         }
         CapacityUsage usage = jdbcTemplate.queryForObject(
                 SQL_COUNT_CAPACITY_USAGE,
@@ -562,13 +710,44 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
         if (effectiveActive >= node.activeSessionLimit()) {
             return ReservationResult.REJECTED;
         }
+        insertCapacityReservation(reservationId, nodeId, now, leaseTtl);
+        return ReservationResult.RESERVED;
+    }
+
+    private void insertCapacityReservation(String reservationId,
+                                           String nodeId,
+                                           Instant now,
+                                           Duration leaseTtl) {
         jdbcTemplate.update(
                 SQL_INSERT_CAPACITY_RESERVATION,
                 reservationId,
                 nodeId,
                 toTimestamp(now.plus(leaseTtl)),
                 toTimestamp(now));
-        return ReservationResult.RESERVED;
+    }
+
+    private void persistMaintenanceCapability(String nodeId, String ownerId, Instant updatedAt) {
+        int updated = jdbcTemplate.update(
+                SQL_UPDATE_MAINTENANCE_CAPABILITY,
+                ownerId,
+                toTimestamp(updatedAt),
+                nodeId);
+        if (updated > 0) {
+            return;
+        }
+        try {
+            jdbcTemplate.update(
+                    SQL_INSERT_MAINTENANCE_CAPABILITY,
+                    nodeId,
+                    ownerId,
+                    toTimestamp(updatedAt));
+        } catch (DuplicateKeyException ignored) {
+            jdbcTemplate.update(
+                    SQL_UPDATE_MAINTENANCE_CAPABILITY,
+                    ownerId,
+                    toTimestamp(updatedAt),
+                    nodeId);
+        }
     }
 
     private Instant databaseNow() {

@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeN
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeEndpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionOverride;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionChange;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeMaintenanceStatus;
 
 import java.time.Duration;
 import java.util.List;
@@ -55,8 +56,28 @@ public interface SandboxRuntimeNodeRegistryPort {
         return false;
     }
 
+    default boolean beginCreateOperation(String nodeId, String ownerId, String operationId) {
+        return true;
+    }
+
+    default boolean endCreateOperation(String nodeId, String ownerId, String operationId) {
+        return true;
+    }
+
+    default boolean beginCreateOperation(String nodeId, String operationId) {
+        return true;
+    }
+
+    default boolean endCreateOperation(String nodeId, String operationId) {
+        return true;
+    }
+
     default int deleteStaleRegistrations(Duration retention, int limit) {
         return 0;
+    }
+
+    default Optional<SandboxRuntimeNodeMaintenanceStatus> findMaintenanceStatus(String nodeId) {
+        return Optional.empty();
     }
 
     default Optional<SandboxRuntimeNodeAdmissionOverride> setOperatorDraining(String nodeId,

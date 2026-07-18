@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeNodeRegistryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -47,12 +48,15 @@ public class SeahorseSandboxRuntimeNodeRegistryController {
     @GetMapping("/api/admin/sandbox/runtime/registrations")
     public ApiResponse<Object> listRegistrations(@RequestParam(defaultValue = "100") int limit) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
-        CurrentUserPort currentUser = currentUserProvider.getIfAvailable();
-        if (currentUser == null) {
-            throw new IllegalStateException("Current user service is unavailable");
-        }
-        currentUser.requireRole("admin");
+        requireAdmin();
         return ApiResponses.requireService(registryProvider, registry -> registry.listRegistrations(limit));
+    }
+
+    @GetMapping("/api/admin/sandbox/runtime/registrations/{nodeId}/maintenance-status")
+    public ApiResponse<Object> maintenanceStatus(@PathVariable String nodeId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        requireAdmin();
+        return ApiResponses.requireService(registryProvider, registry -> registry.maintenanceStatus(nodeId));
     }
 
     @PostMapping("/api/admin/sandbox/runtime/registrations/{nodeId}/drain")
@@ -67,6 +71,14 @@ public class SeahorseSandboxRuntimeNodeRegistryController {
 
     private ApiResponse<Object> setDraining(String nodeId, boolean draining) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
+        var operator = requireAdmin();
+        return ApiResponses.requireService(
+                registryProvider,
+                registry -> registry.setOperatorDraining(
+                        nodeId, draining, operator.operator(), operator.effectiveTenantId()));
+    }
+
+    private CurrentUser requireAdmin() {
         CurrentUserPort currentUser = currentUserProvider.getIfAvailable();
         if (currentUser == null) {
             throw new IllegalStateException("Current user service is unavailable");
@@ -75,9 +87,6 @@ public class SeahorseSandboxRuntimeNodeRegistryController {
         if (!operator.hasRole("admin")) {
             throw new SecurityException("Insufficient permissions");
         }
-        return ApiResponses.requireService(
-                registryProvider,
-                registry -> registry.setOperatorDraining(
-                        nodeId, draining, operator.operator(), operator.effectiveTenantId()));
+        return operator;
     }
 }

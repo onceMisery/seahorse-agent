@@ -123,6 +123,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private static final int MAX_SESSION_LIST_LIMIT = 100;
     private static final int MAX_RUNTIME_CREATE_ATTEMPTS = 2;
     private static final String CAPACITY_RESERVATION_ID_PREFIX = "sandbox_res_";
+    private static final String CREATE_OPERATION_ID_PREFIX = "sandbox_create_";
     private static final Duration CAPACITY_RESERVATION_LEASE_TTL = Duration.ofMinutes(5);
     private static final String DOWNLOAD_BLOCKED = "Sandbox artifact is not available for download";
     private static final String UNSAFE_STORAGE_REF_BLOCKED =
@@ -636,7 +637,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             SandboxSession session;
             try {
                 session = Objects.requireNonNull(runtimeAdmission.remoteEndpoint() == null
-                        ? runtimePort.createSession(runtimeRequest)
+                        ? createLocalRuntimeSession(runtimeAdmission.runtimeNodeId(), runtimeRequest)
                         : remoteRuntimePort.createSession(runtimeAdmission.remoteEndpoint(), runtimeRequest),
                         "runtime createSession result must not be null");
             } catch (RuntimeException ex) {
@@ -699,6 +700,23 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 profileId,
                 expiresAt,
                 now);
+    }
+
+    private SandboxSession createLocalRuntimeSession(String runtimeNodeId, SandboxSessionRequest request) {
+        if (runtimeNodeRegistryPort == null) {
+            return runtimePort.createSession(request);
+        }
+        String operationId = CREATE_OPERATION_ID_PREFIX + nextId();
+        if (!runtimeNodeRegistryPort.beginCreateOperation(runtimeNodeId, operationId)) {
+            throw new IllegalStateException("Sandbox local runtime create operation could not be tracked");
+        }
+        try {
+            return runtimePort.createSession(request);
+        } finally {
+            if (!runtimeNodeRegistryPort.endCreateOperation(runtimeNodeId, operationId)) {
+                throw new IllegalStateException("Sandbox local runtime create operation tracking could not be released");
+            }
+        }
     }
 
     private SandboxSession saveFailedRuntimeSession(SandboxSessionCreateCommand command,

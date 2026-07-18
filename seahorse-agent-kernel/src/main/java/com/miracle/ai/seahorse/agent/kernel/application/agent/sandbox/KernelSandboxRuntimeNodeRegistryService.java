@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeN
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeRegistration;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionOverride;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionChange;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeMaintenanceStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeOwnerIdentity;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
@@ -158,6 +159,12 @@ public class KernelSandboxRuntimeNodeRegistryService implements SandboxRuntimeNo
     public List<SandboxRuntimeNodeRegistration> listRegistrations(int limit) {
         int safeLimit = limit <= 0 ? DEFAULT_LIST_LIMIT : Math.min(limit, MAX_LIST_LIMIT);
         return registryPort.listRegistrations(safeLimit);
+    }
+
+    @Override
+    public SandboxRuntimeNodeMaintenanceStatus maintenanceStatus(String nodeId) {
+        return registryPort.findMaintenanceStatus(requireText(nodeId, "nodeId must not be blank"))
+                .orElseThrow(() -> new IllegalArgumentException("sandbox runtime node is not registered"));
     }
 
     @Override

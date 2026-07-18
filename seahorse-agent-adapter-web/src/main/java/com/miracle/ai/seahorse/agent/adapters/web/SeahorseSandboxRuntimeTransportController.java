@@ -80,8 +80,10 @@ public class SeahorseSandboxRuntimeTransportController {
     public SandboxSession createSession(@RequestBody String body,
                                         @RequestHeader Map<String, String> headers,
                                         HttpServletRequest servletRequest) throws IOException {
-        authenticate(servletRequest, body, headers);
-        return localRuntimePort.createSession(objectMapper.readValue(body, SandboxSessionRequest.class));
+        try (var ignored = authenticator.authenticateCreate(
+                servletRequest.getMethod(), servletRequest.getRequestURI(), body, headers)) {
+            return localRuntimePort.createSession(objectMapper.readValue(body, SandboxSessionRequest.class));
+        }
     }
 
     @PostMapping(EXECUTION_PATH)

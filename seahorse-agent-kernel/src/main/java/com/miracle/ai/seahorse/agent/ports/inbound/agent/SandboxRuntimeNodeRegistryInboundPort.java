@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeRegistration;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionOverride;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeMaintenanceStatus;
 import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
 
 import java.time.Duration;
@@ -29,6 +30,10 @@ public interface SandboxRuntimeNodeRegistryInboundPort {
     SandboxRuntimeNodeHeartbeatResult heartbeat(Duration leaseTtl);
 
     List<SandboxRuntimeNodeRegistration> listRegistrations(int limit);
+
+    default SandboxRuntimeNodeMaintenanceStatus maintenanceStatus(String nodeId) {
+        throw new UnsupportedOperationException("sandbox runtime node maintenance status is unavailable");
+    }
 
     default SandboxRuntimeNodeAdmissionOverride setOperatorDraining(String nodeId,
                                                                     boolean draining,

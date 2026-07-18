@@ -155,6 +155,15 @@ function Get-Registration {
     return $matches[0]
 }
 
+function Get-MaintenanceStatus {
+    param([string]$NodeId)
+    $response = Invoke-Json -Method GET `
+        -Path "/api/admin/sandbox/runtime/registrations/$NodeId/maintenance-status" `
+        -Headers $script:headers
+    Assert-ApiOk $response "Get runtime node maintenance status"
+    return $response.data
+}
+
 function Assert-AdmissionAudit {
     param([bool]$Draining)
     $expectedCount = $script:admissionAuditCount + 1
@@ -258,6 +267,23 @@ try {
             "$($remote.effectiveAdmissionStatus)" -notin @("AVAILABLE", "DEGRADED")) {
             throw "runtime-node baseline is not schedulable"
         }
+        $maintenance = Get-MaintenanceStatus $RemoteNodeId
+        if ($maintenance.operatorDraining -ne $false -or $maintenance.maintenanceReady -ne $false -or
+            [int]$maintenance.persistedActiveSessionCount -ne 0 -or
+            [int]$maintenance.pendingReservationCount -ne 0 -or
+            $maintenance.createOperationTrackingAvailable -ne $true -or
+            [int]$maintenance.inFlightCreateOperationCount -ne 0 -or
+            $maintenance.stabilizationElapsed -ne $false -or
+            $null -ne $maintenance.drainRequestedAt -or
+            $null -ne $maintenance.stabilizationDeadline) {
+            throw "unexpected maintenance baseline: $($maintenance | ConvertTo-Json -Compress)"
+        }
+        $unknown = Invoke-Json -Method GET `
+            -Path "/api/admin/sandbox/runtime/registrations/unknown-maintenance-node/maintenance-status" `
+            -Headers $headers -ExpectedStatus 400
+        if ("$($unknown.code)" -ne "INVALID_ARGUMENT") {
+            throw "unknown maintenance node did not fail closed"
+        }
     } | Out-Null
 
     $run = Test-Step "Create a real agent run for sandbox ownership" {
@@ -310,6 +336,17 @@ try {
             throw "unexpected drain response: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         Assert-AdmissionAudit -Draining $true
+        $maintenance = Get-MaintenanceStatus $RemoteNodeId
+        if ($maintenance.operatorDraining -ne $true -or $maintenance.maintenanceReady -ne $false -or
+            [int]$maintenance.persistedActiveSessionCount -ne 1 -or
+            [int]$maintenance.pendingReservationCount -ne 0 -or
+            $maintenance.createOperationTrackingAvailable -ne $true -or
+            [int]$maintenance.inFlightCreateOperationCount -ne 0 -or
+            $maintenance.stabilizationElapsed -ne $false -or
+            [string]::IsNullOrWhiteSpace("$($maintenance.drainRequestedAt)") -or
+            [string]::IsNullOrWhiteSpace("$($maintenance.stabilizationDeadline)")) {
+            throw "drained worker became maintenance-ready with an active session"
+        }
     } | Out-Null
 
     Test-Step "Keep drain effective across a real worker heartbeat" {
@@ -405,6 +442,48 @@ WHERE node_id='$RemoteNodeId';
         $script:existingWorkerSessionId = $null
         & docker exec $WorkerContainer sh -lc "test ! -e '/var/lib/seahorse-sandbox/$closedWorkerSessionId'"
         if ($LASTEXITCODE -ne 0) { throw "existing worker workspace remains after close" }
+        $maintenance = Get-MaintenanceStatus $RemoteNodeId
+        if ($maintenance.operatorDraining -ne $true -or $maintenance.maintenanceReady -ne $false -or
+            [int]$maintenance.persistedActiveSessionCount -ne 0 -or
+            [int]$maintenance.pendingReservationCount -ne 0 -or
+            $maintenance.createOperationTrackingAvailable -ne $true -or
+            [int]$maintenance.inFlightCreateOperationCount -ne 0 -or
+            $maintenance.stabilizationElapsed -ne $false) {
+            throw "drained worker bypassed the compatibility stabilization window"
+        }
+        & docker exec $PostgresContainer psql -U seahorse -d seahorse -v ON_ERROR_STOP=1 `
+            -c "UPDATE sa_sandbox_runtime_node_admission_override SET updated_at=CURRENT_TIMESTAMP - INTERVAL '11 minutes' WHERE node_id='$RemoteNodeId';" `
+            | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "failed to advance the drain stabilization window" }
+        $maintenance = Get-MaintenanceStatus $RemoteNodeId
+        if ($maintenance.operatorDraining -ne $true -or
+            $maintenance.stabilizationElapsed -ne $true -or
+            $maintenance.maintenanceReady -ne $true -or
+            [int]$maintenance.persistedActiveSessionCount -ne 0 -or
+            [int]$maintenance.pendingReservationCount -ne 0 -or
+            $maintenance.createOperationTrackingAvailable -ne $true -or
+            [int]$maintenance.inFlightCreateOperationCount -ne 0) {
+            throw "drained worker did not become maintenance-ready after the stabilization window"
+        }
+        $workerOwnerId = Invoke-PostgresScalar "SELECT owner_id FROM sa_sandbox_runtime_node WHERE node_id='$RemoteNodeId';"
+        & docker exec $PostgresContainer psql -U seahorse -d seahorse -v ON_ERROR_STOP=1 `
+            -c "INSERT INTO sa_sandbox_runtime_node_create_operation(operation_id,node_id,owner_id,started_at) VALUES ('e2e-$Marker','$RemoteNodeId','$workerOwnerId',CURRENT_TIMESTAMP);" `
+            | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "failed to simulate an in-flight worker create" }
+        $maintenance = Get-MaintenanceStatus $RemoteNodeId
+        if ([int]$maintenance.inFlightCreateOperationCount -ne 1 -or
+            $maintenance.maintenanceReady -ne $false) {
+            throw "maintenance status ignored an in-flight worker create"
+        }
+        & docker exec $PostgresContainer psql -U seahorse -d seahorse -v ON_ERROR_STOP=1 `
+            -c "DELETE FROM sa_sandbox_runtime_node_create_operation WHERE operation_id='e2e-$Marker';" `
+            | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "failed to clear the simulated in-flight worker create" }
+        $maintenance = Get-MaintenanceStatus $RemoteNodeId
+        if ([int]$maintenance.inFlightCreateOperationCount -ne 0 -or
+            $maintenance.maintenanceReady -ne $true) {
+            throw "maintenance status did not recover after the worker create completed"
+        }
     } | Out-Null
 
     Test-Step "Route automatic placement away from the drained worker" {
@@ -446,6 +525,17 @@ WHERE node_id='$RemoteNodeId';
             "$($registration.effectiveAdmissionStatus)" -ne "AVAILABLE") {
             throw "worker admission did not recover after resume"
         }
+        $maintenance = Get-MaintenanceStatus $RemoteNodeId
+        if ($maintenance.operatorDraining -ne $false -or $maintenance.maintenanceReady -ne $false -or
+            [int]$maintenance.persistedActiveSessionCount -ne 0 -or
+            [int]$maintenance.pendingReservationCount -ne 0 -or
+            $maintenance.createOperationTrackingAvailable -ne $true -or
+            [int]$maintenance.inFlightCreateOperationCount -ne 0 -or
+            $maintenance.stabilizationElapsed -ne $false -or
+            $null -ne $maintenance.drainRequestedAt -or
+            $null -ne $maintenance.stabilizationDeadline) {
+            throw "resumed worker incorrectly remained maintenance-ready"
+        }
         $override = Invoke-PostgresScalar "SELECT draining, operator_id FROM sa_sandbox_runtime_node_admission_override WHERE node_id='$RemoteNodeId';"
         if ($override -ne "f`t$Username") { throw "resume override was not persisted: $override" }
     } | Out-Null
@@ -482,20 +572,28 @@ WHERE node_id='$RemoteNodeId';
 SELECT
   (SELECT COUNT(*) FROM sa_sandbox_session WHERE run_id='$runId' AND status NOT IN ('SUCCEEDED','FAILED','TIMED_OUT','CANCELLED')),
   (SELECT COUNT(*) FROM sa_sandbox_runtime_capacity_reservation),
+  (SELECT COUNT(*) FROM sa_sandbox_runtime_node_create_operation),
   (SELECT active_session_count FROM sa_sandbox_runtime_node WHERE node_id='$LocalNodeId'),
   (SELECT active_session_count FROM sa_sandbox_runtime_node WHERE node_id='$RemoteNodeId'),
   (SELECT draining FROM sa_sandbox_runtime_node_admission_override WHERE node_id='$RemoteNodeId');
 "@
-            if ($state -eq "0`t0`t0`t0`tf") { break }
+            if ($state -eq "0`t0`t0`t0`t0`tf") { break }
             Start-Sleep -Seconds 2
         } while ((Get-Date) -lt $deadline)
-        if ($state -ne "0`t0`t0`t0`tf") { throw "runtime state did not converge after cleanup: $state" }
+        if ($state -ne "0`t0`t0`t0`t0`tf") { throw "runtime state did not converge after cleanup: $state" }
         $managed = @(& docker ps -a --format '{{.Names}}' --filter 'name=^seahorse-sandbox-')
         if ($managed.Count -ne 0) { throw "managed sandbox containers remain: $($managed -join ',')" }
     } | Out-Null
 } catch {
     $failure = $_
 } finally {
+    try {
+        & docker exec $PostgresContainer psql -U seahorse -d seahorse -v ON_ERROR_STOP=1 `
+            -c "DELETE FROM sa_sandbox_runtime_node_create_operation WHERE operation_id='e2e-$Marker';" `
+            | Out-Null
+    } catch {
+        if (-not $failure) { $failure = $_ }
+    }
     if ($headers) {
         try {
             Invoke-Json -Method POST `

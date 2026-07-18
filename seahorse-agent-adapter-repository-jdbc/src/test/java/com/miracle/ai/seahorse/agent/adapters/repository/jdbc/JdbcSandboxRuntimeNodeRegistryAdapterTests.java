@@ -98,6 +98,8 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                 .get()
                 .extracting(endpoint -> endpoint.transportUri())
                 .isEqualTo(URI.create("http://runtime-a-new:8080/internal/sandbox/runtime"));
+        assertThat(adapter.beginCreateOperation(
+                "local-container-docker", "owner-a", "create-owner-a")).isTrue();
         Timestamp databaseNow = jdbcTemplate.queryForObject("SELECT CURRENT_TIMESTAMP", Timestamp.class);
         jdbcTemplate.update(
                 "UPDATE sa_sandbox_runtime_node SET expires_at = ?",
@@ -111,6 +113,14 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                 .get()
                 .extracting(endpoint -> endpoint.transportUri())
                 .isEqualTo(URI.create("http://runtime-b:8080/internal/sandbox/runtime"));
+        assertThat(adapter.findMaintenanceStatus("local-container-docker"))
+                .get()
+                .satisfies(status -> {
+                    assertThat(status.createOperationTrackingAvailable()).isTrue();
+                    assertThat(status.inFlightCreateOperationCount()).isEqualTo(1);
+                });
+        assertThat(adapter.endCreateOperation(
+                "local-container-docker", "owner-a", "create-owner-a")).isTrue();
 
         List<SandboxRuntimeNodeRegistration> registrations = adapter.listRegistrations(10);
         assertThat(registrations).hasSize(1);
@@ -264,6 +274,16 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                 "SELECT draining FROM sa_sandbox_runtime_node_admission_override "
                         + "WHERE node_id = 'local-container-docker'",
                 Boolean.class)).isTrue();
+        assertThat(adapter.tryReserve(
+                "local-container-docker", "reservation-override-only-drained", Duration.ofMinutes(1)))
+                .isEqualTo(REJECTED);
+        assertThat(adapter.findMaintenanceStatus("local-container-docker"))
+                .get()
+                .satisfies(status -> {
+                    assertThat(status.operatorDraining()).isTrue();
+                    assertThat(status.stabilizationElapsed()).isFalse();
+                    assertThat(status.maintenanceReady()).isFalse();
+                });
 
         adapter = auditedAdapter(dataSource);
         assertThat(adapter.heartbeat(
@@ -334,6 +354,116 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                         + "WHERE node_id = 'local-container-docker'",
                 String.class)).isEqualTo("admin");
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sa_audit_event", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void shouldReportDatabaseBackedMaintenanceReadiness() {
+        DriverManagerDataSource dataSource = dataSource();
+        createSchema(dataSource);
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        JdbcSandboxRuntimeNodeRegistryAdapter adapter = auditedAdapter(dataSource);
+
+        assertThat(adapter.findMaintenanceStatus("unknown-node")).isEmpty();
+        assertThat(adapter.heartbeat(
+                registration(NOW, NOW.plusSeconds(45), 0),
+                "owner-a",
+                "http://runtime-a:8080/internal/sandbox/runtime",
+                Duration.ofSeconds(45))).isPresent();
+        assertThat(adapter.findMaintenanceStatus("local-container-docker"))
+                .get()
+                .satisfies(status -> {
+                    assertThat(status.operatorDraining()).isFalse();
+                    assertThat(status.persistedActiveSessionCount()).isZero();
+                    assertThat(status.pendingReservationCount()).isZero();
+                    assertThat(status.createOperationTrackingAvailable()).isTrue();
+                    assertThat(status.inFlightCreateOperationCount()).isZero();
+                    assertThat(status.drainRequestedAt()).isNull();
+                    assertThat(status.stabilizationDeadline()).isNull();
+                    assertThat(status.stabilizationElapsed()).isFalse();
+                    assertThat(status.maintenanceReady()).isFalse();
+                    assertThat(status.checkedAt()).isNotNull();
+                });
+
+        jdbcTemplate.update("""
+                INSERT INTO sa_sandbox_session
+                (session_id, tenant_id, run_id, runtime_type, status, reason_code, profile_id,
+                 runtime_node_id, expires_at, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                "session-maintenance",
+                "default",
+                "run-maintenance",
+                "CODE_INTERPRETER",
+                "CREATED",
+                "VALID_REQUEST",
+                "python-small",
+                "local-container-docker",
+                Timestamp.from(NOW.plusSeconds(3600)),
+                Timestamp.from(NOW),
+                Timestamp.from(NOW));
+        assertThat(adapter.tryReserve(
+                "local-container-docker", "reservation-maintenance", Duration.ofMinutes(1)))
+                .isEqualTo(RESERVED);
+        adapter.setOperatorDraining(change("audit-drain", "local-container-docker", true, "admin"));
+
+        assertThat(adapter.findMaintenanceStatus("local-container-docker"))
+                .get()
+                .satisfies(status -> {
+                    assertThat(status.operatorDraining()).isTrue();
+                    assertThat(status.persistedActiveSessionCount()).isEqualTo(1);
+                    assertThat(status.pendingReservationCount()).isEqualTo(1);
+                    assertThat(status.maintenanceReady()).isFalse();
+                });
+
+        jdbcTemplate.update(
+                "UPDATE sa_sandbox_session SET status = 'CANCELLED' WHERE session_id = 'session-maintenance'");
+        assertThat(adapter.findMaintenanceStatus("local-container-docker"))
+                .get()
+                .satisfies(status -> {
+                    assertThat(status.persistedActiveSessionCount()).isZero();
+                    assertThat(status.pendingReservationCount()).isEqualTo(1);
+                    assertThat(status.maintenanceReady()).isFalse();
+                });
+        assertThat(adapter.release("reservation-maintenance")).isTrue();
+        assertThat(adapter.findMaintenanceStatus("local-container-docker"))
+                .get()
+                .satisfies(status -> {
+                    assertThat(status.persistedActiveSessionCount()).isZero();
+                    assertThat(status.pendingReservationCount()).isZero();
+                    assertThat(status.stabilizationElapsed()).isFalse();
+                    assertThat(status.maintenanceReady()).isFalse();
+                });
+
+        Timestamp databaseNow = jdbcTemplate.queryForObject("SELECT CURRENT_TIMESTAMP", Timestamp.class);
+        jdbcTemplate.update(
+                "UPDATE sa_sandbox_runtime_node_admission_override SET updated_at = ? "
+                        + "WHERE node_id = 'local-container-docker'",
+                Timestamp.from(databaseNow.toInstant().minus(Duration.ofMinutes(11))));
+        assertThat(adapter.findMaintenanceStatus("local-container-docker"))
+                .get()
+                .satisfies(status -> {
+                    assertThat(status.stabilizationElapsed()).isTrue();
+                    assertThat(status.maintenanceReady()).isTrue();
+                });
+
+        assertThat(adapter.beginCreateOperation(
+                "local-container-docker", "owner-a", "create-maintenance")).isTrue();
+        assertThat(adapter.findMaintenanceStatus("local-container-docker"))
+                .get()
+                .satisfies(status -> {
+                    assertThat(status.inFlightCreateOperationCount()).isEqualTo(1);
+                    assertThat(status.maintenanceReady()).isFalse();
+                });
+        assertThat(adapter.endCreateOperation(
+                "local-container-docker", "owner-a", "create-maintenance")).isTrue();
+        assertThat(adapter.findMaintenanceStatus("local-container-docker"))
+                .get()
+                .satisfies(status -> assertThat(status.maintenanceReady()).isTrue());
+
+        adapter.setOperatorDraining(change("audit-resume", "local-container-docker", false, "admin"));
+        assertThat(adapter.findMaintenanceStatus("local-container-docker"))
+                .get()
+                .satisfies(status -> assertThat(status.maintenanceReady()).isFalse());
     }
 
     private static JdbcSandboxRuntimeNodeRegistryAdapter auditedAdapter(DriverManagerDataSource dataSource) {
@@ -414,6 +544,22 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                   draining BOOLEAN NOT NULL,
                   operator_id VARCHAR(128) NOT NULL,
                   updated_at TIMESTAMP NOT NULL
+                )
+                """);
+        new JdbcTemplate(dataSource).execute("""
+                CREATE TABLE sa_sandbox_runtime_node_maintenance_capability (
+                  node_id VARCHAR(64) PRIMARY KEY,
+                  owner_id VARCHAR(64) NOT NULL,
+                  create_operation_tracking BOOLEAN NOT NULL,
+                  updated_at TIMESTAMP NOT NULL
+                )
+                """);
+        new JdbcTemplate(dataSource).execute("""
+                CREATE TABLE sa_sandbox_runtime_node_create_operation (
+                  operation_id VARCHAR(128) PRIMARY KEY,
+                  node_id VARCHAR(64) NOT NULL,
+                  owner_id VARCHAR(64) NOT NULL,
+                  started_at TIMESTAMP NOT NULL
                 )
                 """);
         new JdbcTemplate(dataSource).execute("""

@@ -849,7 +849,28 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 (requestedNodeId, requestedOwnerId) -> registryPort.reserveOperationLease(
                         requestedNodeId,
                         requestedOwnerId,
-                        operationLeaseTtl));
+                        operationLeaseTtl),
+                new SandboxRuntimeTransportAuthenticator.CreateOperationTracker() {
+                    @Override
+                    public boolean begin(String requestedNodeId,
+                                         String requestedOwnerId,
+                                         String operationId) {
+                        return registryPort.beginCreateOperation(
+                                requestedNodeId,
+                                requestedOwnerId,
+                                operationId);
+                    }
+
+                    @Override
+                    public boolean end(String requestedNodeId,
+                                       String requestedOwnerId,
+                                       String operationId) {
+                        return registryPort.endCreateOperation(
+                                requestedNodeId,
+                                requestedOwnerId,
+                                operationId);
+                    }
+                });
     }
 
     @Bean

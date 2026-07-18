@@ -161,6 +161,37 @@ class SandboxRuntimeTransportAuthenticatorTests {
     }
 
     @Test
+    void shouldTrackAuthenticatedCreateUntilOperationCloses() {
+        AtomicInteger inFlight = new AtomicInteger();
+        SandboxRuntimeTransportAuthenticator authenticator = new SandboxRuntimeTransportAuthenticator(
+                SECRET,
+                NODE_ID,
+                "owner-a",
+                Duration.ofMinutes(2),
+                CLOCK,
+                (nodeId, ownerId) -> true,
+                new SandboxRuntimeTransportAuthenticator.CreateOperationTracker() {
+                    @Override
+                    public boolean begin(String nodeId, String ownerId, String operationId) {
+                        return inFlight.incrementAndGet() == 1;
+                    }
+
+                    @Override
+                    public boolean end(String nodeId, String ownerId, String operationId) {
+                        return inFlight.decrementAndGet() == 0;
+                    }
+                });
+        Map<String, String> headers = signer("nonce-create-operation").sign(
+                NODE_ID, "owner-a", "POST", PATH, BODY);
+
+        try (var ignored = authenticator.authenticateCreate("POST", PATH, BODY, headers)) {
+            assertThat(inFlight).hasValue(1);
+        }
+
+        assertThat(inFlight).hasValue(0);
+    }
+
+    @Test
     void shouldRejectPlainHttpRemoteEndpointByDefault() {
         HttpSandboxRemoteRuntimeAdapter adapter = new HttpSandboxRemoteRuntimeAdapter(
                 new ObjectMapper().findAndRegisterModules(),

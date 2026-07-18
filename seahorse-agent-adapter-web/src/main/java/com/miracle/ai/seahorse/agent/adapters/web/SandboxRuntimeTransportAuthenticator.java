@@ -43,29 +43,62 @@ public final class SandboxRuntimeTransportAuthenticator {
     private final String localNodeId;
     private final String localOwnerId;
     private final BiPredicate<String, String> liveOwnerValidator;
+    private final CreateOperationTracker createOperationTracker;
     private final Duration allowedTimestampSkew;
     private final Clock clock;
     private final Map<String, Instant> nonceExpirations = new ConcurrentHashMap<>();
 
     public SandboxRuntimeTransportAuthenticator(String secret,
-                                                String localNodeId,
-                                                Duration allowedTimestampSkew) {
-        this(secret, localNodeId, "transport-owner", allowedTimestampSkew, (nodeId, ownerId) -> true);
+                                                 String localNodeId,
+                                                 Duration allowedTimestampSkew) {
+        this(secret,
+                localNodeId,
+                "transport-owner",
+                allowedTimestampSkew,
+                (nodeId, ownerId) -> true,
+                CreateOperationTracker.noop());
     }
 
     SandboxRuntimeTransportAuthenticator(String secret,
                                          String localNodeId,
                                          Duration allowedTimestampSkew,
                                          Clock clock) {
-        this(secret, localNodeId, "transport-owner", allowedTimestampSkew, clock, (nodeId, ownerId) -> true);
+        this(secret,
+                localNodeId,
+                "transport-owner",
+                allowedTimestampSkew,
+                clock,
+                (nodeId, ownerId) -> true,
+                CreateOperationTracker.noop());
     }
 
     public SandboxRuntimeTransportAuthenticator(String secret,
                                                 String localNodeId,
                                                 String localOwnerId,
-                                                Duration allowedTimestampSkew,
-                                                BiPredicate<String, String> liveOwnerValidator) {
-        this(secret, localNodeId, localOwnerId, allowedTimestampSkew, Clock.systemUTC(), liveOwnerValidator);
+                                                 Duration allowedTimestampSkew,
+                                                 BiPredicate<String, String> liveOwnerValidator) {
+        this(secret,
+                localNodeId,
+                localOwnerId,
+                allowedTimestampSkew,
+                Clock.systemUTC(),
+                liveOwnerValidator,
+                CreateOperationTracker.noop());
+    }
+
+    public SandboxRuntimeTransportAuthenticator(String secret,
+                                                 String localNodeId,
+                                                 String localOwnerId,
+                                                 Duration allowedTimestampSkew,
+                                                 BiPredicate<String, String> liveOwnerValidator,
+                                                 CreateOperationTracker createOperationTracker) {
+        this(secret,
+                localNodeId,
+                localOwnerId,
+                allowedTimestampSkew,
+                Clock.systemUTC(),
+                liveOwnerValidator,
+                createOperationTracker);
     }
 
     SandboxRuntimeTransportAuthenticator(String secret,
@@ -74,10 +107,29 @@ public final class SandboxRuntimeTransportAuthenticator {
                                          Duration allowedTimestampSkew,
                                          Clock clock,
                                          BiPredicate<String, String> liveOwnerValidator) {
+        this(secret,
+                localNodeId,
+                localOwnerId,
+                allowedTimestampSkew,
+                clock,
+                liveOwnerValidator,
+                CreateOperationTracker.noop());
+    }
+
+    SandboxRuntimeTransportAuthenticator(String secret,
+                                         String localNodeId,
+                                         String localOwnerId,
+                                         Duration allowedTimestampSkew,
+                                         Clock clock,
+                                         BiPredicate<String, String> liveOwnerValidator,
+                                         CreateOperationTracker createOperationTracker) {
         this.secret = SandboxRuntimeTransportSigner.requireSecret(secret);
         this.localNodeId = requireHeaderValue(localNodeId, "sandbox transport local node id");
         this.localOwnerId = requireHeaderValue(localOwnerId, "sandbox transport local owner id");
         this.liveOwnerValidator = Objects.requireNonNull(liveOwnerValidator, "liveOwnerValidator must not be null");
+        this.createOperationTracker = Objects.requireNonNull(
+                createOperationTracker,
+                "createOperationTracker must not be null");
         this.allowedTimestampSkew = Objects.requireNonNullElse(allowedTimestampSkew, Duration.ofMinutes(2));
         if (this.allowedTimestampSkew.isNegative() || this.allowedTimestampSkew.isZero()
                 || this.allowedTimestampSkew.compareTo(Duration.ofMinutes(10)) > 0) {
@@ -87,6 +139,28 @@ public final class SandboxRuntimeTransportAuthenticator {
     }
 
     public void authenticate(String method, String path, String body, Map<String, String> headers) {
+        authenticateIdentity(method, path, body, headers);
+    }
+
+    public AuthenticatedCreateOperation authenticateCreate(String method,
+                                                           String path,
+                                                           String body,
+                                                           Map<String, String> headers) {
+        AuthenticatedIdentity identity = authenticateIdentity(method, path, body, headers);
+        if (!createOperationTracker.begin(identity.nodeId(), identity.ownerId(), identity.operationId())) {
+            unauthorized();
+        }
+        return new AuthenticatedCreateOperation(
+                createOperationTracker,
+                identity.nodeId(),
+                identity.ownerId(),
+                identity.operationId());
+    }
+
+    private AuthenticatedIdentity authenticateIdentity(String method,
+                                                       String path,
+                                                       String body,
+                                                       Map<String, String> headers) {
         String nodeId = requiredHeader(headers, SandboxRuntimeTransportSigner.HEADER_NODE);
         if (!constantTimeEquals(localNodeId, nodeId)) {
             unauthorized();
@@ -118,6 +192,7 @@ public final class SandboxRuntimeTransportAuthenticator {
         if (!liveOwnerValidator.test(nodeId, ownerId)) {
             unauthorized();
         }
+        return new AuthenticatedIdentity(nodeId, ownerId, nonce);
     }
 
     private void rememberNonce(String nodeId, String ownerId, String nonce, Instant requestTime) {
@@ -188,5 +263,56 @@ public final class SandboxRuntimeTransportAuthenticator {
 
     private static void unauthorized() {
         throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid sandbox transport credentials");
+    }
+
+    public interface CreateOperationTracker {
+
+        boolean begin(String nodeId, String ownerId, String operationId);
+
+        boolean end(String nodeId, String ownerId, String operationId);
+
+        static CreateOperationTracker noop() {
+            return new CreateOperationTracker() {
+                @Override
+                public boolean begin(String nodeId, String ownerId, String operationId) {
+                    return true;
+                }
+
+                @Override
+                public boolean end(String nodeId, String ownerId, String operationId) {
+                    return true;
+                }
+            };
+        }
+    }
+
+    public static final class AuthenticatedCreateOperation implements AutoCloseable {
+
+        private final CreateOperationTracker tracker;
+        private final String nodeId;
+        private final String ownerId;
+        private final String operationId;
+        private boolean closed;
+
+        private AuthenticatedCreateOperation(CreateOperationTracker tracker,
+                                             String nodeId,
+                                             String ownerId,
+                                             String operationId) {
+            this.tracker = tracker;
+            this.nodeId = nodeId;
+            this.ownerId = ownerId;
+            this.operationId = operationId;
+        }
+
+        @Override
+        public void close() {
+            if (!closed) {
+                closed = true;
+                tracker.end(nodeId, ownerId, operationId);
+            }
+        }
+    }
+
+    private record AuthenticatedIdentity(String nodeId, String ownerId, String operationId) {
     }
 }

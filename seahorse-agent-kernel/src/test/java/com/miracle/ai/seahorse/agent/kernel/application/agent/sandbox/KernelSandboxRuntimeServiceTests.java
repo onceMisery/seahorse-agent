@@ -786,10 +786,11 @@ class KernelSandboxRuntimeServiceTests {
     void shouldStillReserveLocalCapacityWhenRemoteRegistryListingFails() {
         RecordingSandboxRuntimePort localRuntime = new RecordingSandboxRuntimePort();
         RecordingCapacityReservationPort reservations = new RecordingCapacityReservationPort(RESERVED);
+        ThrowingListSandboxRuntimeNodeRegistry registry = new ThrowingListSandboxRuntimeNodeRegistry();
         KernelSandboxRuntimeService service = remoteRoutingService(
                 localRuntime,
                 new RecordingSandboxRemoteRuntimePort(),
-                new ThrowingListSandboxRuntimeNodeRegistry(),
+                registry,
                 new MemorySandboxSessionRepository(),
                 reservations);
 
@@ -805,6 +806,8 @@ class KernelSandboxRuntimeServiceTests {
         assertEquals(List.of("local-container-docker"), reservations.reservedNodeIds);
         assertEquals(reservations.reservationIds, reservations.releasedReservationIds);
         assertTrue(localRuntime.createSessionCalled);
+        assertEquals(1, registry.startedCreateOperationIds.size());
+        assertEquals(registry.startedCreateOperationIds, registry.endedCreateOperationIds);
     }
 
     @Test
@@ -2728,6 +2731,9 @@ class KernelSandboxRuntimeServiceTests {
 
     private static final class ThrowingListSandboxRuntimeNodeRegistry implements SandboxRuntimeNodeRegistryPort {
 
+        private final List<String> startedCreateOperationIds = new ArrayList<>();
+        private final List<String> endedCreateOperationIds = new ArrayList<>();
+
         @Override
         public Optional<SandboxRuntimeNodeRegistration> heartbeat(SandboxRuntimeNodeRegistration registration,
                                                                   String ownerId,
@@ -2748,6 +2754,18 @@ class KernelSandboxRuntimeServiceTests {
         @Override
         public List<SandboxRuntimeNodeEndpoint> listLiveEndpoints() {
             throw new IllegalStateException("runtime node registry unavailable");
+        }
+
+        @Override
+        public boolean beginCreateOperation(String nodeId, String operationId) {
+            startedCreateOperationIds.add(operationId);
+            return true;
+        }
+
+        @Override
+        public boolean endCreateOperation(String nodeId, String operationId) {
+            endedCreateOperationIds.add(operationId);
+            return true;
         }
     }
 

@@ -276,6 +276,12 @@ class JdbcTenantSchemaUpgradeTests {
                 "idx_sa_sandbox_runtime_node_lease")).isTrue();
         assertThat(tableExists(jdbcTemplate, "sa_sandbox_runtime_node_admission_override")).isTrue();
         assertThat(tableExists(jdbcTemplate, "sa_sandbox_runtime_capacity_reservation")).isTrue();
+        assertThat(tableExists(jdbcTemplate, "sa_sandbox_runtime_node_maintenance_capability")).isTrue();
+        assertThat(tableExists(jdbcTemplate, "sa_sandbox_runtime_node_create_operation")).isTrue();
+        assertThat(indexExists(
+                jdbcTemplate,
+                "sa_sandbox_runtime_node_create_operation",
+                "idx_sa_sandbox_runtime_node_create_operation_owner")).isTrue();
         assertThat(columnExists(jdbcTemplate,
                 "sa_sandbox_runtime_capacity_reservation",
                 "expires_at")).isTrue();
