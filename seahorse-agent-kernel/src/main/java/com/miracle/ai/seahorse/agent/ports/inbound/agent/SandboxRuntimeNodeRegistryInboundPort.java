@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeRegistration;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionOverride;
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
 
 import java.time.Duration;
 import java.util.List;
@@ -32,6 +33,13 @@ public interface SandboxRuntimeNodeRegistryInboundPort {
     default SandboxRuntimeNodeAdmissionOverride setOperatorDraining(String nodeId,
                                                                     boolean draining,
                                                                     String operatorId) {
+        return setOperatorDraining(nodeId, draining, operatorId, TenantConstants.DEFAULT_TENANT_ID);
+    }
+
+    default SandboxRuntimeNodeAdmissionOverride setOperatorDraining(String nodeId,
+                                                                    boolean draining,
+                                                                    String operatorId,
+                                                                    String tenantId) {
         throw new UnsupportedOperationException("sandbox runtime node admission control is unavailable");
     }
 

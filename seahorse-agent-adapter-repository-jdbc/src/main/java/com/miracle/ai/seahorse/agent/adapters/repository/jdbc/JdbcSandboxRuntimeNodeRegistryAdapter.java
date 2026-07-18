@@ -20,6 +20,10 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeRegistration;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeEndpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionOverride;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionChange;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditActorType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEventType;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
 import org.springframework.dao.DuplicateKeyException;
@@ -172,11 +176,18 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
 
     private final JdbcTemplate jdbcTemplate;
     private final TransactionTemplate transactionTemplate;
+    private final JdbcAuditEventRepositoryAdapter auditEventRepository;
 
     public JdbcSandboxRuntimeNodeRegistryAdapter(DataSource dataSource) {
+        this(dataSource, null);
+    }
+
+    public JdbcSandboxRuntimeNodeRegistryAdapter(DataSource dataSource,
+                                                JdbcAuditEventRepositoryAdapter auditEventRepository) {
         DataSource safeDataSource = Objects.requireNonNull(dataSource, "dataSource must not be null");
         this.jdbcTemplate = new JdbcTemplate(safeDataSource);
         this.transactionTemplate = new TransactionTemplate(new DataSourceTransactionManager(safeDataSource));
+        this.auditEventRepository = auditEventRepository;
     }
 
     @Override
@@ -327,44 +338,60 @@ public class JdbcSandboxRuntimeNodeRegistryAdapter implements SandboxRuntimeNode
     }
 
     @Override
-    public Optional<SandboxRuntimeNodeAdmissionOverride> setOperatorDraining(String nodeId,
-                                                                             boolean draining,
-                                                                             String operatorId) {
-        String safeNodeId = requireText(nodeId, "nodeId must not be blank");
-        String safeOperatorId = requireText(operatorId, "operatorId must not be blank");
+    public Optional<SandboxRuntimeNodeAdmissionOverride> setOperatorDraining(
+            SandboxRuntimeNodeAdmissionChange change) {
+        SandboxRuntimeNodeAdmissionChange safeChange = Objects.requireNonNull(change, "change must not be null");
+        if (auditEventRepository == null) {
+            throw new UnsupportedOperationException(
+                    "atomic sandbox runtime node admission control requires JDBC audit event persistence");
+        }
         Optional<SandboxRuntimeNodeAdmissionOverride> result = transactionTemplate.execute(status -> {
             List<String> nodes = jdbcTemplate.queryForList(
                     SQL_LOCK_NODE_FOR_ADMISSION_OVERRIDE,
                     String.class,
-                    safeNodeId);
+                    safeChange.nodeId());
             List<String> overrides = jdbcTemplate.queryForList(
                     SQL_LOCK_ADMISSION_OVERRIDE,
                     String.class,
-                    safeNodeId);
+                    safeChange.nodeId());
+            // A retained override is the durable identity of a previously registered node;
+            // stale-registration cleanup must not turn that known node into an unknown node.
             if (nodes.isEmpty() && overrides.isEmpty()) {
                 return Optional.empty();
             }
-            Instant updatedAt = databaseNow();
+            Instant changedAt = databaseNow();
             if (overrides.isEmpty()) {
                 jdbcTemplate.update(
                         SQL_INSERT_ADMISSION_OVERRIDE,
-                        safeNodeId,
-                        draining,
-                        safeOperatorId,
-                        toTimestamp(updatedAt));
+                        safeChange.nodeId(),
+                        safeChange.draining(),
+                        safeChange.operatorId(),
+                        toTimestamp(changedAt));
             } else {
                 jdbcTemplate.update(
                         SQL_UPDATE_ADMISSION_OVERRIDE,
-                        draining,
-                        safeOperatorId,
-                        toTimestamp(updatedAt),
-                        safeNodeId);
+                        safeChange.draining(),
+                        safeChange.operatorId(),
+                        toTimestamp(changedAt),
+                        safeChange.nodeId());
             }
+            auditEventRepository.save(new AuditEvent(
+                    safeChange.auditId(),
+                    safeChange.tenantId(),
+                    AuditEventType.SANDBOX_RUNTIME_NODE_ADMISSION_CHANGED,
+                    AuditActorType.USER,
+                    safeChange.operatorId(),
+                    null,
+                    null,
+                    "SANDBOX_RUNTIME_NODE",
+                    safeChange.nodeId(),
+                    "{\"draining\":" + safeChange.draining() + "}",
+                    changedAt));
             return Optional.of(new SandboxRuntimeNodeAdmissionOverride(
-                    safeNodeId,
-                    draining,
-                    safeOperatorId,
-                    updatedAt));
+                    safeChange.nodeId(),
+                    safeChange.draining(),
+                    safeChange.operatorId(),
+                    changedAt));
         });
         return Objects.requireNonNullElse(result, Optional.empty());
     }

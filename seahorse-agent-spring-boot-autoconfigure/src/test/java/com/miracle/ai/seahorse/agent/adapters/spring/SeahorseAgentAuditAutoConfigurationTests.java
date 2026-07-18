@@ -19,17 +19,20 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAuditEventRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcProductionGateRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSandboxRuntimeNodeRegistryAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.gate.KernelProductionGateService;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditRedactionPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.gate.ProductionGateReport;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionChange;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AuditQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ProductionGateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ProductionGateRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -42,6 +45,7 @@ import java.time.Instant;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SeahorseAgentAuditAutoConfigurationTests {
 
@@ -57,6 +61,8 @@ class SeahorseAgentAuditAutoConfigurationTests {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(JdbcAuditEventRepositoryAdapter.class);
                     assertThat(context).hasSingleBean(AuditEventRepositoryPort.class);
+                    assertThat(context).hasSingleBean(JdbcSandboxRuntimeNodeRegistryAdapter.class);
+                    assertThat(context).hasSingleBean(SandboxRuntimeNodeRegistryPort.class);
                     assertThat(context).hasSingleBean(JdbcProductionGateRepositoryAdapter.class);
                     assertThat(context).hasSingleBean(ProductionGateRepositoryPort.class);
                     assertThat(context).hasSingleBean(AuditRedactionPolicy.class);
@@ -64,6 +70,26 @@ class SeahorseAgentAuditAutoConfigurationTests {
                     assertThat(context).hasSingleBean(KernelAuditLedgerService.class);
                     assertThat(context).hasSingleBean(ProductionGateInboundPort.class);
                     assertThat(context).hasSingleBean(KernelProductionGateService.class);
+                });
+    }
+
+    @Test
+    void customAuditRepositoryShouldDisableAtomicNodeAdmissionCommands() {
+        contextRunner.withUserConfiguration(
+                        TestInfrastructureConfiguration.class,
+                        CustomAuditRepositoryConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).doesNotHaveBean(JdbcAuditEventRepositoryAdapter.class);
+                    SandboxRuntimeNodeRegistryPort registry = context.getBean(SandboxRuntimeNodeRegistryPort.class);
+                    assertThatThrownBy(() -> registry.setOperatorDraining(new SandboxRuntimeNodeAdmissionChange(
+                            "audit-custom",
+                            "sandbox-node-b",
+                            true,
+                            "admin",
+                            "default")))
+                            .isInstanceOf(UnsupportedOperationException.class)
+                            .hasMessageContaining("requires JDBC audit event persistence");
                 });
     }
 
@@ -130,6 +156,30 @@ class SeahorseAgentAuditAutoConfigurationTests {
                 @Override
                 public Optional<ProductionGateReport> latest(String agentId) {
                     return Optional.empty();
+                }
+            };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class CustomAuditRepositoryConfiguration {
+
+        @Bean
+        AuditEventRepositoryPort customAuditEventRepositoryPort() {
+            return new AuditEventRepositoryPort() {
+                @Override
+                public AuditEvent save(AuditEvent event) {
+                    return event;
+                }
+
+                @Override
+                public Optional<AuditEvent> findById(String auditId) {
+                    return Optional.empty();
+                }
+
+                @Override
+                public AuditEventPage page(com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventQuery query) {
+                    return new AuditEventPage(java.util.List.of(), 0L, query.size(), query.current(), 0L);
                 }
             };
         }

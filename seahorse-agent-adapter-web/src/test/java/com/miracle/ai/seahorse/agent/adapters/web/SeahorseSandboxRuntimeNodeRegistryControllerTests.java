@@ -45,10 +45,10 @@ class SeahorseSandboxRuntimeNodeRegistryControllerTests {
     @Test
     void adminShouldDrainAndResumeRuntimeNodeWithOperatorIdentity() throws Exception {
         SandboxRuntimeNodeRegistryInboundPort registry = mock(SandboxRuntimeNodeRegistryInboundPort.class);
-        when(registry.setOperatorDraining("sandbox-node-b", true, "operator-admin"))
+        when(registry.setOperatorDraining("sandbox-node-b", true, "operator-admin", "default"))
                 .thenReturn(new SandboxRuntimeNodeAdmissionOverride(
                         "sandbox-node-b", true, "operator-admin", NOW));
-        when(registry.setOperatorDraining("sandbox-node-b", false, "operator-admin"))
+        when(registry.setOperatorDraining("sandbox-node-b", false, "operator-admin", "default"))
                 .thenReturn(new SandboxRuntimeNodeAdmissionOverride(
                         "sandbox-node-b", false, "operator-admin", NOW.plusSeconds(1)));
         MockMvc mvc = mvc(registry, currentUser("operator-admin", "admin"),
@@ -66,8 +66,8 @@ class SeahorseSandboxRuntimeNodeRegistryControllerTests {
                 .andExpect(jsonPath("$.data.draining").value(false))
                 .andExpect(jsonPath("$.data.operatorId").value("operator-admin"));
 
-        verify(registry).setOperatorDraining("sandbox-node-b", true, "operator-admin");
-        verify(registry).setOperatorDraining("sandbox-node-b", false, "operator-admin");
+        verify(registry).setOperatorDraining("sandbox-node-b", true, "operator-admin", "default");
+        verify(registry).setOperatorDraining("sandbox-node-b", false, "operator-admin", "default");
     }
 
     @Test

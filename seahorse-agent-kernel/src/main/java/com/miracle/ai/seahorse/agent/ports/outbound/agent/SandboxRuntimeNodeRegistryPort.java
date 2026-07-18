@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeRegistration;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeEndpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionOverride;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionChange;
 
 import java.time.Duration;
 import java.util.List;
@@ -61,7 +62,14 @@ public interface SandboxRuntimeNodeRegistryPort {
     default Optional<SandboxRuntimeNodeAdmissionOverride> setOperatorDraining(String nodeId,
                                                                               boolean draining,
                                                                               String operatorId) {
-        return Optional.empty();
+        throw new UnsupportedOperationException(
+                "atomic sandbox runtime node admission control requires tenant and audit identity");
+    }
+
+    default Optional<SandboxRuntimeNodeAdmissionOverride> setOperatorDraining(
+            SandboxRuntimeNodeAdmissionChange change) {
+        throw new UnsupportedOperationException(
+                "atomic sandbox runtime node admission control is unavailable");
     }
 
     boolean release(String nodeId, String ownerId);

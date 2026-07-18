@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionChange;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeRegistration;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -27,8 +29,10 @@ import java.time.Instant;
 import java.net.URI;
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort.ReservationResult.NOT_REQUIRED;
 import static com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort.ReservationResult.REJECTED;
 import static com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeCapacityReservationPort.ReservationResult.RESERVED;
@@ -187,20 +191,33 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
         DriverManagerDataSource dataSource = dataSource();
         createSchema(dataSource);
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
-        JdbcSandboxRuntimeNodeRegistryAdapter adapter = new JdbcSandboxRuntimeNodeRegistryAdapter(dataSource);
+        JdbcSandboxRuntimeNodeRegistryAdapter adapter = auditedAdapter(dataSource);
 
-        assertThat(adapter.setOperatorDraining("unknown-node", true, "admin")).isEmpty();
+        assertThat(adapter.setOperatorDraining(change("audit-unknown", "unknown-node", true, "admin"))).isEmpty();
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sa_audit_event", Integer.class)).isZero();
         assertThat(adapter.heartbeat(
                 registration(NOW, NOW.plusSeconds(45), 1),
                 "owner-a",
                 "http://runtime-a:8080/internal/sandbox/runtime",
                 Duration.ofSeconds(45))).isPresent();
 
-        assertThat(adapter.setOperatorDraining("local-container-docker", true, "admin"))
+        assertThat(adapter.setOperatorDraining(change("audit-drain", "local-container-docker", true, "admin")))
                 .get()
                 .satisfies(override -> {
                     assertThat(override.draining()).isTrue();
                     assertThat(override.operatorId()).isEqualTo("admin");
+                    Map<String, Object> audit = jdbcTemplate.queryForMap(
+                            "SELECT * FROM sa_audit_event WHERE audit_id = 'audit-drain'");
+                    assertThat(audit.get("TENANT_ID")).isEqualTo("tenant-a");
+                    assertThat(audit.get("EVENT_TYPE"))
+                            .isEqualTo("SANDBOX_RUNTIME_NODE_ADMISSION_CHANGED");
+                    assertThat(audit.get("ACTOR_TYPE")).isEqualTo("USER");
+                    assertThat(audit.get("ACTOR_ID")).isEqualTo("admin");
+                    assertThat(audit.get("RESOURCE_TYPE")).isEqualTo("SANDBOX_RUNTIME_NODE");
+                    assertThat(audit.get("RESOURCE_ID")).isEqualTo("local-container-docker");
+                    assertThat(audit.get("REDACTED_PAYLOAD")).isEqualTo("{\"draining\":true}");
+                    assertThat(((Timestamp) audit.get("OCCURRED_AT")).toInstant())
+                            .isEqualTo(override.updatedAt());
                 });
         assertThat(adapter.listRegistrations(10)).singleElement()
                 .satisfies(registration -> {
@@ -233,7 +250,7 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                     assertThat(registration.effectiveAdmissionStatus()).isEqualTo("DRAINING");
                 });
 
-        adapter = new JdbcSandboxRuntimeNodeRegistryAdapter(dataSource);
+        adapter = auditedAdapter(dataSource);
         assertThat(adapter.listRegistrations(10)).singleElement()
                 .satisfies(registration -> assertThat(registration.effectiveAdmissionStatus())
                         .isEqualTo("DRAINING"));
@@ -248,7 +265,7 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                         + "WHERE node_id = 'local-container-docker'",
                 Boolean.class)).isTrue();
 
-        adapter = new JdbcSandboxRuntimeNodeRegistryAdapter(dataSource);
+        adapter = auditedAdapter(dataSource);
         assertThat(adapter.heartbeat(
                 registration(NOW.plusSeconds(2), NOW.plusSeconds(47), 1),
                 "owner-b",
@@ -264,9 +281,10 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                 "local-container-docker", "reservation-reregistered-drained", Duration.ofMinutes(1)))
                 .isEqualTo(REJECTED);
 
-        assertThat(adapter.setOperatorDraining("local-container-docker", false, "admin"))
+        assertThat(adapter.setOperatorDraining(change("audit-resume", "local-container-docker", false, "admin")))
                 .get()
                 .satisfies(override -> assertThat(override.draining()).isFalse());
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sa_audit_event", Integer.class)).isEqualTo(2);
         assertThat(adapter.listRegistrations(10)).singleElement()
                 .satisfies(registration -> {
                     assertThat(registration.effectiveAdmissionAvailable()).isTrue();
@@ -278,6 +296,57 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                 "local-container-docker", "reservation-resumed", Duration.ofMinutes(1)))
                 .isEqualTo(RESERVED);
         assertThat(adapter.release("reservation-resumed")).isTrue();
+    }
+
+    @Test
+    void shouldRollbackAdmissionOverrideWhenAuditPersistenceFails() {
+        DriverManagerDataSource dataSource = dataSource();
+        createSchema(dataSource);
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        JdbcSandboxRuntimeNodeRegistryAdapter adapter = auditedAdapter(dataSource);
+
+        assertThat(adapter.heartbeat(
+                registration(NOW, NOW.plusSeconds(45), 1),
+                "owner-a",
+                "http://runtime-a:8080/internal/sandbox/runtime",
+                Duration.ofSeconds(45))).isPresent();
+        adapter.setOperatorDraining(change("audit-drain", "local-container-docker", true, "admin"));
+
+        JdbcAuditEventRepositoryAdapter failingAuditRepository = new JdbcAuditEventRepositoryAdapter(dataSource) {
+            @Override
+            public AuditEvent save(AuditEvent event) {
+                throw new IllegalStateException("audit persistence unavailable");
+            }
+        };
+        JdbcSandboxRuntimeNodeRegistryAdapter failingAdapter =
+                new JdbcSandboxRuntimeNodeRegistryAdapter(dataSource, failingAuditRepository);
+
+        assertThatThrownBy(() -> failingAdapter.setOperatorDraining(
+                change("audit-resume", "local-container-docker", false, "other-admin")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("audit persistence unavailable");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT draining FROM sa_sandbox_runtime_node_admission_override "
+                        + "WHERE node_id = 'local-container-docker'",
+                Boolean.class)).isTrue();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT operator_id FROM sa_sandbox_runtime_node_admission_override "
+                        + "WHERE node_id = 'local-container-docker'",
+                String.class)).isEqualTo("admin");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sa_audit_event", Integer.class)).isEqualTo(1);
+    }
+
+    private static JdbcSandboxRuntimeNodeRegistryAdapter auditedAdapter(DriverManagerDataSource dataSource) {
+        return new JdbcSandboxRuntimeNodeRegistryAdapter(
+                dataSource,
+                new JdbcAuditEventRepositoryAdapter(dataSource));
+    }
+
+    private static SandboxRuntimeNodeAdmissionChange change(String auditId,
+                                                            String nodeId,
+                                                            boolean draining,
+                                                            String operatorId) {
+        return new SandboxRuntimeNodeAdmissionChange(auditId, nodeId, draining, operatorId, "tenant-a");
     }
 
     private static SandboxRuntimeNodeRegistration registration(Instant heartbeatAt, Instant expiresAt) {
@@ -360,6 +429,21 @@ class JdbcSandboxRuntimeNodeRegistryAdapterTests {
                   expires_at TIMESTAMP NOT NULL,
                   created_at TIMESTAMP NOT NULL,
                   updated_at TIMESTAMP NOT NULL
+                )
+                """);
+        new JdbcTemplate(dataSource).execute("""
+                CREATE TABLE sa_audit_event (
+                  audit_id VARCHAR(64) PRIMARY KEY,
+                  tenant_id VARCHAR(64) NOT NULL,
+                  event_type VARCHAR(64) NOT NULL,
+                  actor_type VARCHAR(32) NOT NULL,
+                  actor_id VARCHAR(128) NOT NULL,
+                  run_id VARCHAR(64),
+                  agent_id VARCHAR(64),
+                  resource_type VARCHAR(64),
+                  resource_id VARCHAR(128),
+                  redacted_payload CLOB NOT NULL,
+                  occurred_at TIMESTAMP NOT NULL
                 )
                 """);
     }

@@ -21,7 +21,10 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeH
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeHealth;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeRegistration;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionOverride;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeAdmissionChange;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeNodeOwnerIdentity;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeNodeRegistryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeNodeHeartbeatResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegistryPort;
@@ -161,10 +164,21 @@ public class KernelSandboxRuntimeNodeRegistryService implements SandboxRuntimeNo
     public SandboxRuntimeNodeAdmissionOverride setOperatorDraining(String nodeId,
                                                                    boolean draining,
                                                                    String operatorId) {
-        return registryPort.setOperatorDraining(
-                        requireText(nodeId, "nodeId must not be blank"),
-                        draining,
-                        requireText(operatorId, "operatorId must not be blank"))
+        return setOperatorDraining(nodeId, draining, operatorId, TenantConstants.DEFAULT_TENANT_ID);
+    }
+
+    @Override
+    public SandboxRuntimeNodeAdmissionOverride setOperatorDraining(String nodeId,
+                                                                   boolean draining,
+                                                                   String operatorId,
+                                                                   String tenantId) {
+        SandboxRuntimeNodeAdmissionChange change = new SandboxRuntimeNodeAdmissionChange(
+                "audit_" + SnowflakeIds.nextIdString(),
+                requireText(nodeId, "nodeId must not be blank"),
+                draining,
+                requireText(operatorId, "operatorId must not be blank"),
+                requireText(tenantId, "tenantId must not be blank"));
+        return registryPort.setOperatorDraining(change)
                 .orElseThrow(() -> new IllegalArgumentException("sandbox runtime node is not registered"));
     }
 

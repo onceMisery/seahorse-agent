@@ -77,6 +77,7 @@ public class SeahorseSandboxRuntimeNodeRegistryController {
         }
         return ApiResponses.requireService(
                 registryProvider,
-                registry -> registry.setOperatorDraining(nodeId, draining, operator.operator()));
+                registry -> registry.setOperatorDraining(
+                        nodeId, draining, operator.operator(), operator.effectiveTenantId()));
     }
 }

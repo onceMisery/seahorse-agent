@@ -343,8 +343,10 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(SandboxRuntimeNodeRegistryPort.class)
-    public JdbcSandboxRuntimeNodeRegistryAdapter seahorseJdbcSandboxRuntimeNodeRegistryAdapter(DataSource dataSource) {
-        return new JdbcSandboxRuntimeNodeRegistryAdapter(dataSource);
+    public JdbcSandboxRuntimeNodeRegistryAdapter seahorseJdbcSandboxRuntimeNodeRegistryAdapter(
+            DataSource dataSource,
+            ObjectProvider<JdbcAuditEventRepositoryAdapter> auditEventRepository) {
+        return new JdbcSandboxRuntimeNodeRegistryAdapter(dataSource, auditEventRepository.getIfAvailable());
     }
 
     @Bean

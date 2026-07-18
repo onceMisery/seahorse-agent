@@ -25,6 +25,7 @@ $existingWorkerSessionId = $null
 $drainedAutomaticSessionId = $null
 $explicitRejectedSessionId = $null
 $resumedAutomaticSessionId = $null
+$admissionAuditCount = 0
 
 function Test-Step {
     param([string]$Name, [scriptblock]$Action)
@@ -154,6 +155,68 @@ function Get-Registration {
     return $matches[0]
 }
 
+function Assert-AdmissionAudit {
+    param([bool]$Draining)
+    $expectedCount = $script:admissionAuditCount + 1
+    $auditResponse = Invoke-Json -Method GET `
+        -Path "/api/audit-events?tenantId=default&resourceType=SANDBOX_RUNTIME_NODE&resourceId=$RemoteNodeId&eventType=SANDBOX_RUNTIME_NODE_ADMISSION_CHANGED&current=1&size=100" `
+        -Headers $script:headers
+    Assert-ApiOk $auditResponse "List runtime node admission audit events"
+    $records = @($auditResponse.data.records)
+    $databaseCount = [int](Invoke-PostgresScalar "SELECT COUNT(*) FROM sa_audit_event WHERE tenant_id='default' AND resource_type='SANDBOX_RUNTIME_NODE' AND resource_id='$RemoteNodeId' AND event_type='SANDBOX_RUNTIME_NODE_ADMISSION_CHANGED';")
+    if ([int]$auditResponse.data.total -ne $expectedCount -or $databaseCount -ne $expectedCount -or
+        $records.Count -lt 1) {
+        throw "admission command did not emit exactly one API and database audit event"
+    }
+
+    $event = $records[0]
+    if ("$($event.tenantId)" -ne "default" -or
+        "$($event.eventType)" -ne "SANDBOX_RUNTIME_NODE_ADMISSION_CHANGED" -or
+        "$($event.actorType)" -ne "USER" -or "$($event.actorId)" -ne $Username -or
+        "$($event.resourceType)" -ne "SANDBOX_RUNTIME_NODE" -or
+        "$($event.resourceId)" -ne $RemoteNodeId) {
+        throw "runtime node admission audit identity is incorrect"
+    }
+    $payload = "$($event.redactedPayload)" | ConvertFrom-Json
+    $payloadKeys = @($payload.PSObject.Properties.Name)
+    if ($payloadKeys.Count -ne 1 -or $payloadKeys[0] -ne "draining" -or
+        [bool]$payload.draining -ne $Draining) {
+        throw "runtime node admission audit payload is not minimal or has the wrong state"
+    }
+
+    $databaseRow = Invoke-PostgresScalar @"
+SELECT tenant_id, event_type, actor_type, actor_id, resource_type, resource_id,
+       redacted_payload,
+       occurred_at = (SELECT updated_at FROM sa_sandbox_runtime_node_admission_override WHERE node_id='$RemoteNodeId')
+FROM sa_audit_event
+WHERE tenant_id='default'
+  AND resource_type='SANDBOX_RUNTIME_NODE'
+  AND resource_id='$RemoteNodeId'
+  AND event_type='SANDBOX_RUNTIME_NODE_ADMISSION_CHANGED'
+ORDER BY occurred_at DESC, audit_id DESC
+LIMIT 1;
+"@
+    $databaseParts = "$databaseRow" -split "`t", 8
+    $expectedPayload = if ($Draining) { '{"draining":true}' } else { '{"draining":false}' }
+    if ($databaseParts.Count -ne 8 -or $databaseParts[0] -ne "default" -or
+        $databaseParts[1] -ne "SANDBOX_RUNTIME_NODE_ADMISSION_CHANGED" -or
+        $databaseParts[2] -ne "USER" -or $databaseParts[3] -ne $Username -or
+        $databaseParts[4] -ne "SANDBOX_RUNTIME_NODE" -or $databaseParts[5] -ne $RemoteNodeId -or
+        $databaseParts[6] -ne $expectedPayload -or $databaseParts[7] -ne "t") {
+        throw "database admission audit is not atomically correlated to the override: $databaseRow"
+    }
+
+    [string]$auditJson = $event | ConvertTo-Json -Depth 20 -Compress
+    $forbiddenMarkers = @("transportUri", "transport_uri", "ownerId", "owner_id", "endpoint", "sharedSecret", "http://", "https://")
+    foreach ($forbidden in $forbiddenMarkers) {
+        if ($auditJson.IndexOf($forbidden, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+            $databaseParts[6].IndexOf($forbidden, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            throw "runtime node admission audit leaked infrastructure detail marker: $forbidden"
+        }
+    }
+    $script:admissionAuditCount = $expectedCount
+}
+
 try {
     Assert-SafeId $LocalNodeId "local node id"
     Assert-SafeId $RemoteNodeId "remote node id"
@@ -178,6 +241,7 @@ try {
         return $response
     }
     $headers = @{ Authorization = "Bearer $($login.data.token)" }
+    $admissionAuditCount = [int](Invoke-PostgresScalar "SELECT COUNT(*) FROM sa_audit_event WHERE tenant_id='default' AND resource_type='SANDBOX_RUNTIME_NODE' AND resource_id='$RemoteNodeId' AND event_type='SANDBOX_RUNTIME_NODE_ADMISSION_CHANGED';")
 
     Test-Step "Resume worker to establish a clean admission baseline" {
         $response = Invoke-Json -Method POST `
@@ -186,6 +250,7 @@ try {
         if ($response.data.draining -ne $false -or "$($response.data.operatorId)" -ne $Username) {
             throw "unexpected resume response: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
+        Assert-AdmissionAudit -Draining $false
         $local = Get-Registration $LocalNodeId
         $remote = Get-Registration $RemoteNodeId
         if ("$($local.registrationStatus)" -ne "LIVE" -or "$($remote.registrationStatus)" -ne "LIVE" -or
@@ -244,6 +309,7 @@ try {
             "$($response.data.operatorId)" -ne $Username) {
             throw "unexpected drain response: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
+        Assert-AdmissionAudit -Draining $true
     } | Out-Null
 
     Test-Step "Keep drain effective across a real worker heartbeat" {
@@ -373,6 +439,7 @@ WHERE node_id='$RemoteNodeId';
         if ($response.data.draining -ne $false -or "$($response.data.operatorId)" -ne $Username) {
             throw "unexpected resume response"
         }
+        Assert-AdmissionAudit -Draining $false
         $registration = Get-Registration $RemoteNodeId
         if ($registration.operatorDraining -ne $false -or
             $registration.effectiveAdmissionAvailable -ne $true -or
