@@ -44,7 +44,8 @@ public record SandboxRuntimeNodeHealth(Instant checkedAt,
                                        int orphanContainerCount,
                                        int failedContainerInspectionCount,
                                        List<String> failureMessages,
-                                       String ociRuntime) {
+                                       String ociRuntime,
+                                       boolean ociRuntimeAvailable) {
 
     public static final String ADMISSION_AVAILABLE = "AVAILABLE";
     public static final String ADMISSION_DEGRADED = "DEGRADED";
@@ -76,12 +77,28 @@ public record SandboxRuntimeNodeHealth(Instant checkedAt,
                                     String workspaceDiskStatus, int activeSessionCount, int activeSessionLimit,
                                     int activeSessionRemaining, boolean activeSessionCapacityAvailable,
                                     String capacityStatus, int inspectedContainerCount, int orphanContainerCount,
+                                    int failedContainerInspectionCount, List<String> failureMessages,
+                                    String ociRuntime) {
+        this(checkedAt, nodeId, runtime, engine, status, admissionAvailable, admissionStatus, engineAvailable,
+                workspaceAvailable, workspaceFreeBytes, workspaceMinFreeBytes, workspaceDiskAvailable,
+                workspaceDiskStatus, activeSessionCount, activeSessionLimit, activeSessionRemaining,
+                activeSessionCapacityAvailable, capacityStatus, inspectedContainerCount, orphanContainerCount,
+                failedContainerInspectionCount, failureMessages, ociRuntime, true);
+    }
+
+    public SandboxRuntimeNodeHealth(Instant checkedAt, String nodeId, String runtime, String engine,
+                                    String status, boolean admissionAvailable, String admissionStatus,
+                                    boolean engineAvailable, boolean workspaceAvailable, long workspaceFreeBytes,
+                                    long workspaceMinFreeBytes, boolean workspaceDiskAvailable,
+                                    String workspaceDiskStatus, int activeSessionCount, int activeSessionLimit,
+                                    int activeSessionRemaining, boolean activeSessionCapacityAvailable,
+                                    String capacityStatus, int inspectedContainerCount, int orphanContainerCount,
                                     int failedContainerInspectionCount, List<String> failureMessages) {
         this(checkedAt, nodeId, runtime, engine, status, admissionAvailable, admissionStatus, engineAvailable,
                 workspaceAvailable, workspaceFreeBytes, workspaceMinFreeBytes, workspaceDiskAvailable,
                 workspaceDiskStatus, activeSessionCount, activeSessionLimit, activeSessionRemaining,
                 activeSessionCapacityAvailable, capacityStatus, inspectedContainerCount, orphanContainerCount,
-                failedContainerInspectionCount, failureMessages, "");
+                failedContainerInspectionCount, failureMessages, "", true);
     }
 
     public static SandboxRuntimeNodeHealth fromHealth(SandboxRuntimeHealth health) {
@@ -112,14 +129,16 @@ public record SandboxRuntimeNodeHealth(Instant checkedAt,
                 safeHealth.orphanContainerCount(),
                 safeHealth.failedContainerInspectionCount(),
                 safeHealth.failureMessages(),
-                safeHealth.ociRuntime());
+                safeHealth.ociRuntime(),
+                safeHealth.ociRuntimeAvailable());
     }
 
     private static String admissionStatus(SandboxRuntimeHealth health) {
         if (SandboxRuntimeHealth.STATUS_UNAVAILABLE.equals(health.status())
                 || SandboxRuntimeHealth.STATUS_UNSUPPORTED.equals(health.status())
                 || !health.engineAvailable()
-                || !health.workspaceAvailable()) {
+                || !health.workspaceAvailable()
+                || !health.ociRuntimeAvailable()) {
             return ADMISSION_UNAVAILABLE;
         }
         if (!health.admissionEnabled()) {

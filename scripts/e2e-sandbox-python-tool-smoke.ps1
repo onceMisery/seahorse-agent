@@ -259,6 +259,9 @@ try {
             if ("$($health.data.ociRuntime)" -ne $ExpectedOciRuntime) {
                 throw "Expected OCI runtime '$ExpectedOciRuntime' but got '$($health.data.ociRuntime)'"
             }
+            if ($health.data.ociRuntimeAvailable -ne $true) {
+                throw "Expected OCI runtime '$ExpectedOciRuntime' to be available: $($health.data | ConvertTo-Json -Depth 20 -Compress)"
+            }
         } | Out-Null
     }
     $suffix = ([guid]::NewGuid().ToString('N')).Substring(0, 8)

@@ -2351,6 +2351,49 @@ class ContainerSandboxRuntimeAdapterTests {
     }
 
     @Test
+    void shouldReportConfiguredOciRuntimeAvailableWhenRegisteredWithEngine() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded(
+                "io.containerd.runc.v2\nrunc\n",
+                Duration.ofMillis(50)));
+        ContainerSandboxAdapterProperties properties = properties();
+        properties.setOciRuntime("runc");
+        ContainerSandboxRuntimeAdapter adapter = new ContainerSandboxRuntimeAdapter(properties, runner, CLOCK);
+
+        SandboxRuntimeHealth health = adapter.inspectHealth(Set.of());
+
+        assertThat(health.status()).isEqualTo(SandboxRuntimeHealth.STATUS_HEALTHY);
+        assertThat(health.engineAvailable()).isTrue();
+        assertThat(health.ociRuntime()).isEqualTo("runc");
+        assertThat(health.ociRuntimeAvailable()).isTrue();
+        assertThat(health.failureMessages()).isEmpty();
+        assertThat(runner.lastCommand.commandLine())
+                .containsExactly(
+                        "docker",
+                        "info",
+                        "--format",
+                        "{{range $name, $_ := .Runtimes}}{{println $name}}{{end}}");
+    }
+
+    @Test
+    void shouldReportConfiguredOciRuntimeUnavailableWhenNotRegisteredWithEngine() {
+        RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded(
+                "io.containerd.runc.v2\nrunc\n",
+                Duration.ofMillis(50)));
+        ContainerSandboxAdapterProperties properties = properties();
+        properties.setOciRuntime("runsc");
+        ContainerSandboxRuntimeAdapter adapter = new ContainerSandboxRuntimeAdapter(properties, runner, CLOCK);
+
+        SandboxRuntimeHealth health = adapter.inspectHealth(Set.of());
+
+        assertThat(health.status()).isEqualTo(SandboxRuntimeHealth.STATUS_UNAVAILABLE);
+        assertThat(health.engineAvailable()).isTrue();
+        assertThat(health.ociRuntime()).isEqualTo("runsc");
+        assertThat(health.ociRuntimeAvailable()).isFalse();
+        assertThat(health.failureMessages()).containsExactly("configured OCI runtime is not available");
+        assertThat(health.failureMessages().toString()).doesNotContain("runc", "runsc", "containerd");
+    }
+
+    @Test
     void shouldReportRuntimeHealthDegradedWhenWorkspaceDiskThresholdIsNotMet() {
         RecordingRunner runner = new RecordingRunner(ContainerCommandResult.succeeded(
                 "",

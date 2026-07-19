@@ -2839,9 +2839,11 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         Set<String> safeActiveSessionIds = normalizeActiveSessionIds(activeSessionIds);
         Set<String> activeContainerNames = normalizeActiveContainerNames(safeActiveSessionIds);
         ContainerInspectionSummary containerSummary = inspectManagedContainers(activeContainerNames);
+        OciRuntimeAvailability ociRuntimeAvailability = inspectConfiguredOciRuntime();
         boolean workspaceAvailable = Files.isDirectory(workspaceRoot, LinkOption.NOFOLLOW_LINKS)
                 && Files.isWritable(workspaceRoot);
         List<String> failureMessages = new ArrayList<>(containerSummary.failureMessages());
+        failureMessages.addAll(ociRuntimeAvailability.failureMessages());
         if (!workspaceAvailable) {
             failureMessages.add("sandbox workspace root is not available");
         }
@@ -2858,6 +2860,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 properties.isAdmissionEnabled(),
                 healthStatus(
                         engineAvailable,
+                        ociRuntimeAvailability.available(),
                         workspaceAvailable,
                         diskSummary.available(),
                         capacitySummary.available(),
@@ -2887,7 +2890,8 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 properties.getMaxSessionFileBytes(),
                 MAX_SESSION_WORKSPACE_FILES,
                 failureMessages,
-                properties.getOciRuntime());
+                properties.getOciRuntime(),
+                ociRuntimeAvailability.available());
     }
 
     private int ownedActiveSessionCount(Set<String> activeSessionIds) {
@@ -3183,6 +3187,22 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                 properties.getStderrLimitBytes());
     }
 
+    private ContainerCommand ociRuntimeInspectionCommand() {
+        List<String> commandLine = new ArrayList<>();
+        commandLine.add(properties.getEngine());
+        commandLine.add("info");
+        commandLine.add("--format");
+        commandLine.add("docker".equalsIgnoreCase(properties.getEngine())
+                ? "{{range $name, $_ := .Runtimes}}{{println $name}}{{end}}"
+                : "{{.Host.OCIRuntime.Name}}");
+        return new ContainerCommand(
+                commandLine,
+                workspaceRoot,
+                properties.getExecutionTimeout(),
+                properties.getStdoutLimitBytes(),
+                properties.getStderrLimitBytes());
+    }
+
     private ContainerCommand containerRemoveCommand(String containerName) {
         List<String> commandLine = new ArrayList<>();
         commandLine.add(properties.getEngine());
@@ -3245,6 +3265,32 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         } catch (RuntimeException ex) {
             return ContainerInspectionSummary.failed(
                     "container inspection failure: " + nullToEmpty(ex.getMessage()));
+        }
+    }
+
+    private OciRuntimeAvailability inspectConfiguredOciRuntime() {
+        String configuredRuntime = properties.getOciRuntime();
+        if (!hasText(configuredRuntime)) {
+            return OciRuntimeAvailability.confirmed();
+        }
+        try {
+            ContainerCommandResult result = commandRunner.run(ociRuntimeInspectionCommand());
+            if (result.timedOut() || result.exitCode() != 0) {
+                return OciRuntimeAvailability.unavailable("OCI runtime availability inspection failed");
+            }
+            boolean available = result.stdout().lines()
+                    .map(String::trim)
+                    .anyMatch(configuredRuntime::equals);
+            return available
+                    ? OciRuntimeAvailability.confirmed()
+                    : OciRuntimeAvailability.unavailable("configured OCI runtime is not available");
+        } catch (IOException ex) {
+            return OciRuntimeAvailability.unavailable("OCI runtime availability inspection failed");
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return OciRuntimeAvailability.unavailable("OCI runtime availability inspection interrupted");
+        } catch (RuntimeException ex) {
+            return OciRuntimeAvailability.unavailable("OCI runtime availability inspection failed");
         }
     }
 
@@ -3331,12 +3377,13 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
     }
 
     private String healthStatus(boolean engineAvailable,
+                                boolean ociRuntimeAvailable,
                                 boolean workspaceAvailable,
                                 boolean workspaceDiskAvailable,
                                 boolean capacityAvailable,
                                 int orphanContainerCount,
                                 List<String> failureMessages) {
-        if (!engineAvailable || !workspaceAvailable) {
+        if (!engineAvailable || !ociRuntimeAvailable || !workspaceAvailable) {
             return SandboxRuntimeHealth.STATUS_UNAVAILABLE;
         }
         if (!workspaceDiskAvailable || !capacityAvailable || orphanContainerCount > 0 || !failureMessages.isEmpty()) {
@@ -3765,6 +3812,22 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
                     List.of(),
                     List.of(),
                     List.of(nullToEmpty(message)));
+        }
+    }
+
+    private record OciRuntimeAvailability(boolean available,
+                                          List<String> failureMessages) {
+
+        private OciRuntimeAvailability {
+            failureMessages = failureMessages == null ? List.of() : List.copyOf(failureMessages);
+        }
+
+        private static OciRuntimeAvailability confirmed() {
+            return new OciRuntimeAvailability(true, List.of());
+        }
+
+        private static OciRuntimeAvailability unavailable(String message) {
+            return new OciRuntimeAvailability(false, List.of(nullToEmpty(message)));
         }
     }
 

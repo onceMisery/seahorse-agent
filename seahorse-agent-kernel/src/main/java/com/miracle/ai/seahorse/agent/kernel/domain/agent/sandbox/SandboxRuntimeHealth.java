@@ -50,7 +50,8 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                                    long maxSessionFileBytes,
                                    int maxSessionWorkspaceFiles,
                                    List<String> failureMessages,
-                                   String ociRuntime) {
+                                   String ociRuntime,
+                                   boolean ociRuntimeAvailable) {
 
     public static final String STATUS_HEALTHY = "HEALTHY";
     public static final String STATUS_DEGRADED = "DEGRADED";
@@ -96,6 +97,27 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                                 int failedContainerInspectionCount, List<String> activeContainerNames,
                                 List<String> orphanContainerNames, List<String> browserPrivateNetworkAllowedHosts,
                                 boolean dropAllCapabilities, boolean noNewPrivileges, boolean readOnlyRootFilesystem,
+                                long maxSessionFileBytes, int maxSessionWorkspaceFiles, List<String> failureMessages,
+                                String ociRuntime) {
+        this(checkedAt, runtime, engine, nodeId, admissionEnabled, status, engineAvailable, workspaceAvailable,
+                workspaceFreeBytes, workspaceMinFreeBytes, workspaceDiskAvailable, workspaceDiskStatus,
+                activeSessionCount, activeSessionLimit, activeSessionRemaining, activeSessionCapacityAvailable,
+                capacityStatus, inspectedContainerCount, activeContainerCount, orphanContainerCount,
+                failedContainerInspectionCount, activeContainerNames, orphanContainerNames,
+                browserPrivateNetworkAllowedHosts, dropAllCapabilities, noNewPrivileges, readOnlyRootFilesystem,
+                maxSessionFileBytes, maxSessionWorkspaceFiles, failureMessages, ociRuntime, true);
+    }
+
+    public SandboxRuntimeHealth(Instant checkedAt, String runtime, String engine, String nodeId,
+                                boolean admissionEnabled, String status, boolean engineAvailable,
+                                boolean workspaceAvailable, long workspaceFreeBytes, long workspaceMinFreeBytes,
+                                boolean workspaceDiskAvailable, String workspaceDiskStatus, int activeSessionCount,
+                                int activeSessionLimit, int activeSessionRemaining,
+                                boolean activeSessionCapacityAvailable, String capacityStatus,
+                                int inspectedContainerCount, int activeContainerCount, int orphanContainerCount,
+                                int failedContainerInspectionCount, List<String> activeContainerNames,
+                                List<String> orphanContainerNames, List<String> browserPrivateNetworkAllowedHosts,
+                                boolean dropAllCapabilities, boolean noNewPrivileges, boolean readOnlyRootFilesystem,
                                 long maxSessionFileBytes, int maxSessionWorkspaceFiles, List<String> failureMessages) {
         this(checkedAt, runtime, engine, nodeId, admissionEnabled, status, engineAvailable, workspaceAvailable,
                 workspaceFreeBytes, workspaceMinFreeBytes, workspaceDiskAvailable, workspaceDiskStatus,
@@ -103,7 +125,7 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                 capacityStatus, inspectedContainerCount, activeContainerCount, orphanContainerCount,
                 failedContainerInspectionCount, activeContainerNames, orphanContainerNames,
                 browserPrivateNetworkAllowedHosts, dropAllCapabilities, noNewPrivileges, readOnlyRootFilesystem,
-                maxSessionFileBytes, maxSessionWorkspaceFiles, failureMessages, "");
+                maxSessionFileBytes, maxSessionWorkspaceFiles, failureMessages, "", true);
     }
 
     public SandboxRuntimeHealth(Instant checkedAt, String runtime, String engine, String status,
@@ -122,7 +144,7 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                 inspectedContainerCount, activeContainerCount, orphanContainerCount, failedContainerInspectionCount,
                 activeContainerNames, orphanContainerNames, browserPrivateNetworkAllowedHosts, dropAllCapabilities,
                 noNewPrivileges, readOnlyRootFilesystem, maxSessionFileBytes, maxSessionWorkspaceFiles, failureMessages,
-                "");
+                "", true);
     }
 
     public SandboxRuntimeHealth(Instant checkedAt, String runtime, String engine, String nodeId, String status,
@@ -156,7 +178,7 @@ public record SandboxRuntimeHealth(Instant checkedAt,
                 activeSessionLimit, activeSessionRemaining, activeSessionCapacityAvailable, capacityStatus,
                 inspectedContainerCount, activeContainerCount, orphanContainerCount, failedContainerInspectionCount,
                 activeContainerNames, orphanContainerNames, browserPrivateNetworkAllowedHosts,
-                false, false, false, 0L, 0, failureMessages, "");
+                false, false, false, 0L, 0, failureMessages, "", true);
     }
 
     public static SandboxRuntimeHealth unsupported(Instant checkedAt, int activeSessionCount) {

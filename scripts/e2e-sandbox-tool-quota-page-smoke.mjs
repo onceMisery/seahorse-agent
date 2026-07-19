@@ -220,6 +220,9 @@ try {
   if (expectedOciRuntime && runtimeHealth?.ociRuntime !== expectedOciRuntime) {
     throw new Error(`Expected OCI runtime ${expectedOciRuntime}: ${JSON.stringify(runtimeHealth)}`);
   }
+  if (expectedOciRuntime && runtimeHealth?.ociRuntimeAvailable !== true) {
+    throw new Error(`Expected OCI runtime ${expectedOciRuntime} to be available: ${JSON.stringify(runtimeHealth)}`);
+  }
   if (runtimeHealth.dropAllCapabilities !== true
       || runtimeHealth.noNewPrivileges !== true
       || runtimeHealth.readOnlyRootFilesystem !== true
@@ -341,6 +344,11 @@ try {
         page.getByTestId("sandbox-runtime-oci-runtime"),
         expectedOciRuntime,
         "Sandbox OCI runtime"
+      );
+      await assertLocatorText(
+        page.getByTestId("sandbox-runtime-oci-runtime"),
+        "AVAILABLE",
+        "Sandbox OCI runtime availability"
       );
     }
     const scannerPanel = page.getByTestId("sandbox-artifact-scanner-panel");

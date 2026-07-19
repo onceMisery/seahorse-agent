@@ -167,6 +167,12 @@ function formatWorkspaceDisk(health?: SandboxRuntimeHealth | null) {
   return `${status} ${free}`;
 }
 
+function formatOciRuntime(runtime?: string, available?: boolean) {
+  if (!runtime) return "engine default";
+  const status = available === true ? "AVAILABLE" : available === false ? "UNAVAILABLE" : "UNKNOWN";
+  return `${runtime} / ${status}`;
+}
+
 function previewList(values?: string[], limit = 4) {
   const items = (values || []).filter(Boolean);
   if (items.length === 0) return "-";
@@ -331,7 +337,7 @@ function RuntimeGovernancePanel({
                   {health?.runtime || "-"} / {health?.engine || "-"}
                 </div>
                 <div className="mt-1 truncate text-xs text-muted-foreground" data-testid="sandbox-runtime-oci-runtime">
-                  OCI runtime: {health?.ociRuntime || "engine default"}
+                  OCI runtime: {formatOciRuntime(health?.ociRuntime, health?.ociRuntimeAvailable)}
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">{checkedAt}</div>
               </div>
@@ -493,7 +499,7 @@ function RuntimeGovernancePanel({
                         {node.nodeId || "local-runtime"}
                       </div>
                       <div className="truncate text-xs text-muted-foreground">
-                        {node.runtime || "-"} / {node.engine || "-"} / {node.ociRuntime || "engine default"} / {node.status || "UNKNOWN"}
+                        {node.runtime || "-"} / {node.engine || "-"} / {formatOciRuntime(node.ociRuntime, node.ociRuntimeAvailable)} / {node.status || "UNKNOWN"}
                       </div>
                     </div>
                     <Badge variant={nodeAdmissionBadgeVariant(node.admissionStatus)}>
