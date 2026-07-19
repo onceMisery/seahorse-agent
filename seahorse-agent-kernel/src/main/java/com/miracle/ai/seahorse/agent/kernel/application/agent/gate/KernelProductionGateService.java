@@ -36,12 +36,14 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthStatus;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ProductionGateInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResults;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentEvalSummaryRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentPublishCheckRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ProductionGateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.QuotaPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthReportProviderPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.gate.GateResultRepositoryPort;
 
 import java.time.Clock;
 import java.util.ArrayList;
@@ -63,6 +65,7 @@ public class KernelProductionGateService implements ProductionGateInboundPort {
     private final QuotaPolicyRepositoryPort quotaPolicyRepository;
     private final SreHealthReportProviderPort sreHealthReportProvider;
     private final AgentPublishCheckRepositoryPort publishCheckRepository;
+    private final GateResultRepositoryPort gateResultRepository;
     private final Clock clock;
 
     public KernelProductionGateService(ProductionGateRepositoryPort repository, Clock clock) {
@@ -99,12 +102,25 @@ public class KernelProductionGateService implements ProductionGateInboundPort {
                                        SreHealthReportProviderPort sreHealthReportProvider,
                                        AgentPublishCheckRepositoryPort publishCheckRepository,
                                        Clock clock) {
+        this(repository, agentRepository, evalSummaryRepository, quotaPolicyRepository, sreHealthReportProvider,
+                publishCheckRepository, null, clock);
+    }
+
+    public KernelProductionGateService(ProductionGateRepositoryPort repository,
+                                       AgentDefinitionRepositoryPort agentRepository,
+                                       AgentEvalSummaryRepositoryPort evalSummaryRepository,
+                                       QuotaPolicyRepositoryPort quotaPolicyRepository,
+                                       SreHealthReportProviderPort sreHealthReportProvider,
+                                       AgentPublishCheckRepositoryPort publishCheckRepository,
+                                       GateResultRepositoryPort gateResultRepository,
+                                       Clock clock) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
         this.agentRepository = agentRepository;
         this.evalSummaryRepository = evalSummaryRepository;
         this.quotaPolicyRepository = quotaPolicyRepository;
         this.sreHealthReportProvider = sreHealthReportProvider;
         this.publishCheckRepository = publishCheckRepository;
+        this.gateResultRepository = gateResultRepository;
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
@@ -117,7 +133,11 @@ public class KernelProductionGateService implements ProductionGateInboundPort {
                 null,
                 checks(safeAgent),
                 clock.instant());
-        return repository.save(report);
+        ProductionGateReport saved = repository.save(report);
+        if (gateResultRepository != null) {
+            gateResultRepository.save(GateResults.fromAgentReport(saved));
+        }
+        return saved;
     }
 
     @Override

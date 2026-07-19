@@ -44,6 +44,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.cost.KernelCostUsa
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelAgentEvalQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.factory.KernelAgentFactoryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.gate.KernelProductionGateService;
+import com.miracle.ai.seahorse.agent.kernel.application.gate.KernelGateResultService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.DefaultMeshPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.KernelAgentHandoffService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.quota.KernelQuotaDecisionService;
@@ -102,6 +103,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.TaskTemplateQueryInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResultInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCatalogQueryPort;
@@ -129,6 +131,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.EnterprisePilotReadine
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.MeshPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.OpenApiSpecParserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ProductionGateRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.gate.GateResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.QuotaPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessAgentDefinitionEvidencePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessAuditEvidencePort;
@@ -656,6 +659,14 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(GateResultRepositoryPort.class)
+    @ConditionalOnMissingBean(GateResultInboundPort.class)
+    public KernelGateResultService seahorseGateResultInboundPort(
+            GateResultRepositoryPort gateResultRepositoryPort) {
+        return new KernelGateResultService(gateResultRepositoryPort);
+    }
+
+    @Bean
     @ConditionalOnBean({ProductionGateRepositoryPort.class, AgentDefinitionRepositoryPort.class})
     @ConditionalOnMissingBean(ProductionGateInboundPort.class)
     public KernelProductionGateService seahorseProductionGateInboundPort(
@@ -665,6 +676,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             ObjectProvider<QuotaPolicyRepositoryPort> quotaPolicyRepositoryPort,
             ObjectProvider<SreHealthReportProviderPort> sreHealthReportProviderPort,
             ObjectProvider<AgentPublishCheckRepositoryPort> agentPublishCheckRepositoryPort,
+            ObjectProvider<GateResultRepositoryPort> gateResultRepositoryPort,
             ObjectProvider<Clock> clockProvider) {
         return new KernelProductionGateService(
                 productionGateRepositoryPort,
@@ -673,6 +685,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 quotaPolicyRepositoryPort.getIfAvailable(),
                 sreHealthReportProviderPort.getIfAvailable(),
                 agentPublishCheckRepositoryPort.getIfAvailable(),
+                gateResultRepositoryPort.getIfAvailable(),
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 

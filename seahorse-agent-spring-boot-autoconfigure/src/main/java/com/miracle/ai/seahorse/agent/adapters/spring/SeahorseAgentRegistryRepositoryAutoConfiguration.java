@@ -44,6 +44,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcContextPackRep
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentPublishCheckRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentTemplateRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcProductionGateRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcGateResultRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQuotaPolicyRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcResourceAclRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSandboxRepositoryAdapter;
@@ -76,6 +77,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ContextPackRepositoryP
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.EnterprisePilotReadinessRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ProductionGateRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.gate.GateResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.QuotaPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAclRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
@@ -313,6 +315,14 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
     @ConditionalOnMissingBean(ProductionGateRepositoryPort.class)
     public JdbcProductionGateRepositoryAdapter seahorseJdbcProductionGateRepositoryAdapter(DataSource dataSource) {
         return new JdbcProductionGateRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(GateResultRepositoryPort.class)
+    public JdbcGateResultRepositoryAdapter seahorseJdbcGateResultRepositoryAdapter(DataSource dataSource) {
+        return new JdbcGateResultRepositoryAdapter(dataSource);
     }
 
     @Bean

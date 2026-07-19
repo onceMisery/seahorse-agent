@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.runprofile;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
+import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResults;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileAuditSummary;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.runprofile.RunProfileInboundPort;
@@ -31,8 +32,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileDetails
 import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileToolBindingRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.gate.GateResultRepositoryPort;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 
 import java.util.List;
 import java.util.Locale;
@@ -41,7 +42,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-@RequiredArgsConstructor
 public class KernelRunProfileService implements RunProfileInboundPort {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -51,9 +51,25 @@ public class KernelRunProfileService implements RunProfileInboundPort {
     private final RunProfileRepositoryPort repositoryPort;
     @NonNull
     private final Set<String> supportedExecutorEngines;
+    private final GateResultRepositoryPort gateResultRepository;
 
     public KernelRunProfileService(RunProfileRepositoryPort repositoryPort) {
-        this(repositoryPort, Set.of("kernel", "agentscope"));
+        this(repositoryPort, Set.of("kernel", "agentscope"), null);
+    }
+
+    public KernelRunProfileService(RunProfileRepositoryPort repositoryPort,
+                                   Set<String> supportedExecutorEngines) {
+        this(repositoryPort, supportedExecutorEngines, null);
+    }
+
+    public KernelRunProfileService(RunProfileRepositoryPort repositoryPort,
+                                   Set<String> supportedExecutorEngines,
+                                   GateResultRepositoryPort gateResultRepository) {
+        this.repositoryPort = Objects.requireNonNull(repositoryPort, "repositoryPort must not be null");
+        this.supportedExecutorEngines = Objects.requireNonNull(
+                supportedExecutorEngines,
+                "supportedExecutorEngines must not be null");
+        this.gateResultRepository = gateResultRepository;
     }
 
     @Override
@@ -178,13 +194,17 @@ public class KernelRunProfileService implements RunProfileInboundPort {
                     .filter(item -> "BLOCK".equals(item.getStatus()))
                     .map(RunProfileProductionGateCheck.CheckItem::getCode)
                     .toList();
-            return RunProfileProductionGateCheck.builder()
+            RunProfileProductionGateCheck check = RunProfileProductionGateCheck.builder()
                     .runProfileId(profile.getId())
                     .passed(blockingCodes.isEmpty())
                     .riskLevel(summary.getRiskLevel())
                     .blockingCodes(blockingCodes)
                     .checkItems(List.copyOf(items))
                     .build();
+            if (gateResultRepository != null) {
+                gateResultRepository.save(GateResults.fromRunProfileCheck(check));
+            }
+            return check;
         });
     }
 

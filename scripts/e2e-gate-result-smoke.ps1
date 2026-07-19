@@ -1,7 +1,10 @@
 param(
     [string]$BaseUrl = "http://127.0.0.1:9090",
     [string]$Username = "admin",
-    [string]$Password = "admin123"
+    [string]$Password = "admin123",
+    [string]$PostgresContainer = "seahorse-postgres",
+    [string]$PostgresUser = "seahorse",
+    [string]$PostgresDatabase = "seahorse"
 )
 
 $ErrorActionPreference = "Stop"
@@ -138,6 +141,54 @@ function Assert-Equal {
     }
 }
 
+function ConvertTo-SqlLiteral {
+    param([string]$Value)
+    return "'" + ($Value -replace "'", "''") + "'"
+}
+
+function Invoke-PostgresScalar {
+    param([string]$Sql)
+    $output = & docker.exe exec $PostgresContainer psql `
+        -U $PostgresUser `
+        -d $PostgresDatabase `
+        -v "ON_ERROR_STOP=1" `
+        -t `
+        -A `
+        -c $Sql 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "psql failed with exit code $LASTEXITCODE`: $output"
+    }
+    return (@($output) -join "`n").Trim()
+}
+
+function Get-PersistedGateResult {
+    param([string]$SubjectType, [string]$SubjectId)
+    $subjectTypeLiteral = ConvertTo-SqlLiteral $SubjectType
+    $subjectIdLiteral = ConvertTo-SqlLiteral $SubjectId
+    $json = Invoke-PostgresScalar @"
+SELECT json_build_object(
+    'tenantId', tenant_id,
+    'subjectType', subject_type,
+    'subjectId', subject_id,
+    'status', status,
+    'passed', passed,
+    'blockingCodes', blocking_codes_json::json,
+    'items', items_json::json,
+    'checkedAt', checked_at,
+    'sourceType', source_type,
+    'sourceId', source_id
+)::text
+FROM sa_gate_result
+WHERE tenant_id = 'default'
+  AND subject_type = $subjectTypeLiteral
+  AND subject_id = $subjectIdLiteral
+ORDER BY checked_at DESC, pk_id DESC
+LIMIT 1;
+"@
+    Assert-True (-not [string]::IsNullOrWhiteSpace($json)) "Persisted $SubjectType/$SubjectId gate row missing"
+    return $json | ConvertFrom-Json
+}
+
 function Assert-GateResult {
     param(
         [object]$Response,
@@ -264,14 +315,34 @@ $runProfile = Test-Step "Select real run profile" {
 }
 if (-not $runProfile) { exit 1 }
 
-Test-Step "Run Profile GateResult API executes real production gate check" {
+$runProfileGate = Test-Step "Run Profile GateResult API executes real production gate check" {
     $response = Invoke-Api -Method POST -Path "/api/run-profiles/$($runProfile.id)/production-gate/gate-result" -Headers $headers
-    Assert-GateResult `
+    return Assert-GateResult `
         -Response $response `
         -SubjectType "RUN_PROFILE" `
         -SubjectIdPattern "^$([regex]::Escape([string]$runProfile.id))$" `
         -ExpectedItemCodes @("RUN_PROFILE_RISK_ASSESSED", "RUN_PROFILE_EXECUTOR_SUPPORTED", "RUN_PROFILE_HIGH_RISK_APPROVAL_GOVERNED") `
         -Name "Run Profile GateResult"
+}
+if (-not $runProfileGate) { exit 1 }
+
+Test-Step "Run Profile unified latest API reads persisted GateResult" {
+    $response = Invoke-Api -Method GET -Path "/api/gate-results/run_profile/$($runProfile.id)" -Headers $headers
+    $persisted = Assert-GateResult `
+        -Response $response `
+        -SubjectType "RUN_PROFILE" `
+        -SubjectIdPattern "^$([regex]::Escape([string]$runProfile.id))$" `
+        -ExpectedItemCodes @("RUN_PROFILE_RISK_ASSESSED", "RUN_PROFILE_EXECUTOR_SUPPORTED") `
+        -Name "Persisted Run Profile GateResult"
+    Assert-Equal $persisted.sourceId $runProfileGate.sourceId "Persisted Run Profile sourceId"
+}
+
+Test-Step "Run Profile GateResult row is durable in PostgreSQL" {
+    $row = Get-PersistedGateResult -SubjectType "RUN_PROFILE" -SubjectId ([string]$runProfile.id)
+    Assert-Equal $row.tenantId "default" "Run Profile persisted tenant"
+    Assert-Equal $row.status $runProfileGate.status "Run Profile persisted status"
+    Assert-Equal $row.sourceType "RunProfileProductionGateCheck" "Run Profile persisted sourceType"
+    Assert-True (@($row.items).Count -gt 0) "Run Profile persisted items missing"
 }
 
 $agent = Test-Step "Select real published agent" {
@@ -280,13 +351,14 @@ $agent = Test-Step "Select real published agent" {
 }
 if (-not $agent) { exit 1 }
 
-Test-Step "Generate real agent production gate report" {
+$agentReport = Test-Step "Generate real agent production gate report" {
     $response = Invoke-Api -Method POST -Path "/api/agents/$($agent.agentId)/production-gate" -Headers $headers
     Assert-ApiOk $response "Generate agent production gate"
     Assert-Equal $response.data.agentId $agent.agentId "Agent production gate agentId"
     Assert-True (-not [string]::IsNullOrWhiteSpace([string]$response.data.reportId)) "Agent production gate reportId missing"
     $response.data
 }
+if (-not $agentReport) { exit 1 }
 
 Test-Step "Agent GateResult API projects latest production gate report" {
     $response = Invoke-Api -Method GET -Path "/api/agents/$($agent.agentId)/production-gate/gate-result" -Headers $headers
@@ -296,6 +368,52 @@ Test-Step "Agent GateResult API projects latest production gate report" {
         -SubjectIdPattern "^$([regex]::Escape([string]$agent.agentId))$" `
         -ExpectedItemCodes @("TOOL_RISK_REVIEWED", "HIGH_RISK_APPROVAL_PRESENT", "AUDIT_LEDGER_ENABLED") `
         -Name "Agent GateResult"
+}
+
+Test-Step "Agent unified latest API reads persisted GateResult" {
+    $response = Invoke-Api -Method GET -Path "/api/gate-results/AGENT/$($agent.agentId)" -Headers $headers
+    $persisted = Assert-GateResult `
+        -Response $response `
+        -SubjectType "AGENT" `
+        -SubjectIdPattern "^$([regex]::Escape([string]$agent.agentId))$" `
+        -ExpectedItemCodes @("TOOL_RISK_REVIEWED", "HIGH_RISK_APPROVAL_PRESENT", "AUDIT_LEDGER_ENABLED") `
+        -Name "Persisted Agent GateResult"
+    Assert-Equal $persisted.sourceId $agentReport.reportId "Persisted Agent sourceId"
+}
+
+Test-Step "Agent GateResult row is durable in PostgreSQL" {
+    $row = Get-PersistedGateResult -SubjectType "AGENT" -SubjectId ([string]$agent.agentId)
+    Assert-Equal $row.tenantId "default" "Agent persisted tenant"
+    Assert-Equal $row.sourceId $agentReport.reportId "Agent persisted sourceId"
+    Assert-True (@($row.items).Count -gt 0) "Agent persisted items missing"
+    Assert-True ($null -ne $row.blockingCodes) "Agent persisted blockingCodes missing"
+}
+
+Test-Step "Unified latest API isolates GateResult by tenant" {
+    $isolationTenant = ConvertTo-SqlLiteral "$marker-isolation"
+    $agentIdLiteral = ConvertTo-SqlLiteral ([string]$agent.agentId)
+    $isolationGateId = ConvertTo-SqlLiteral "gr_isolation_$suffix"
+    try {
+        Invoke-PostgresScalar @"
+INSERT INTO sa_gate_result (
+    gate_id, tenant_id, subject_type, subject_id, status, passed,
+    blocking_codes_json, items_json, checked_at, source_type, source_id, created_at
+) VALUES (
+    $isolationGateId, $isolationTenant, 'AGENT', $agentIdLiteral, 'FAIL', false,
+    json_build_array('TENANT_ISOLATION_SENTINEL')::text,
+    json_build_array(json_build_object(
+        'code', 'TENANT_ISOLATION_SENTINEL',
+        'status', 'FAIL',
+        'message', 'must stay isolated'))::text,
+    CURRENT_TIMESTAMP + INTERVAL '1 day', 'TenantIsolationProbe', 'tenant-isolation-sentinel', CURRENT_TIMESTAMP
+);
+"@ | Out-Null
+        $response = Invoke-Api -Method GET -Path "/api/gate-results/AGENT/$($agent.agentId)" -Headers $headers
+        Assert-ApiOk $response "Tenant-isolated Agent GateResult"
+        Assert-Equal $response.data.sourceId $agentReport.reportId "Tenant-isolated sourceId"
+    } finally {
+        Invoke-PostgresScalar "DELETE FROM sa_gate_result WHERE gate_id = $isolationGateId;" | Out-Null
+    }
 }
 
 $pipeline = Test-Step "Create real ingestion pipeline for GateResult" {

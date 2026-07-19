@@ -65,6 +65,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapsho
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.runexperiment.RunExperimentTrialExecutorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.gate.GateResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import java.time.Duration;
@@ -159,8 +160,12 @@ public class SeahorseAgentKernelOpsAutoConfiguration {
     @ConditionalOnMissingBean(RunProfileInboundPort.class)
     public KernelRunProfileService seahorseRunProfileInboundPort(
             RunProfileRepositoryPort repositoryPort,
-            ObjectProvider<ReActExecutorPort> executorPorts) {
-        return new KernelRunProfileService(repositoryPort, supportedExecutorEngines(executorPorts));
+            ObjectProvider<ReActExecutorPort> executorPorts,
+            ObjectProvider<GateResultRepositoryPort> gateResultRepositoryPort) {
+        return new KernelRunProfileService(
+                repositoryPort,
+                supportedExecutorEngines(executorPorts),
+                gateResultRepositoryPort.getIfAvailable());
     }
 
     @Bean

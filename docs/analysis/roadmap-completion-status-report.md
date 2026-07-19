@@ -1228,6 +1228,12 @@ Fresh evidence: the focused adapter regression passed 3/3, `KernelSandboxRuntime
 
 The local Docker daemon exposes `runc` but not `runsc`; this evidence therefore verifies configurable runtime selection and real `runc` execution only. gVisor/Firecracker deployment and broader node-pool scheduling remain follow-up isolation work. The broad adapter reactor still has two pre-existing Windows/Docker Desktop path/PDF fixture failures, and the broad kernel reactor still has three PDF active-content fixture failures; the focused paths and real E2E above are green.
 
+### 2026-07-19 Unified GateResult Persistence Foundation Evidence Update
+
+The unified GateResult model now has an append-only tenant-scoped JDBC persistence foundation and a generic latest-query API. Agent production-gate generation and Run Profile production-gate checks write complete decisions to `sa_gate_result`, while their existing object-specific stores and APIs remain compatible. The remaining GateResult persistence work is narrowed to Tool, Skill, RAG Strategy, Model Config, and Ingestion Pipeline integration, followed by any deliberate retirement or backfill policy.
+
+Fresh evidence: the complete backend package passed across 28 modules; the final backend image `sha256:41564bf025c4fefdf51c4b6d0d0cee451f4efac63c0d0504665845700ca7662e` reached healthy; real full-Docker GateResult smoke passed 24/24 with API, PostgreSQL, JSON evidence, source correlation, and tenant-isolation checks; and the broad backend smoke passed 20/20. Docker cache cleanup reclaimed about 23.12 GB in two passes without pruning business volumes.
+
 ### 2026-07-19 Sandbox OCI Runtime Capability Health Evidence Update
 
 Configured OCI runtime selection now has a runtime-owned availability check. Docker uses a bounded `docker info` template that returns only registered runtime names; Podman checks the current `Host.OCIRuntime.Name`. A configured runtime that is absent or cannot be inspected makes the local runtime `UNAVAILABLE` and prevents node admission, while an empty configuration keeps engine-default behavior. Health and node projections expose `ociRuntimeAvailable`, and the UI renders the value as `runc / AVAILABLE` without exposing runtime paths or feature metadata.
