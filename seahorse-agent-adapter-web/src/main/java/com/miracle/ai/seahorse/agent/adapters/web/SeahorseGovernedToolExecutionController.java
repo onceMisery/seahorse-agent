@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolExecutionPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,10 +36,11 @@ public class SeahorseGovernedToolExecutionController {
 
     private final ObjectProvider<GovernedToolExecutionPort> governedToolExecutionPortProvider;
     private final AdvancedFeatureGate advancedFeatureGate;
+    private final CurrentUserPort currentUserPort;
 
     public SeahorseGovernedToolExecutionController(
             ObjectProvider<GovernedToolExecutionPort> governedToolExecutionPortProvider) {
-        this(governedToolExecutionPortProvider, AdvancedFeatureGate.allEnabledForTests());
+        this(governedToolExecutionPortProvider, AdvancedFeatureGate.allEnabledForTests(), null);
     }
 
     @Autowired
@@ -45,16 +48,28 @@ public class SeahorseGovernedToolExecutionController {
             ObjectProvider<GovernedToolExecutionPort> governedToolExecutionPortProvider,
             ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(governedToolExecutionPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults),
+                null);
     }
 
     public SeahorseGovernedToolExecutionController(
             ObjectProvider<GovernedToolExecutionPort> governedToolExecutionPortProvider,
-            AdvancedFeatureGate advancedFeatureGate) {
+            ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider,
+            ObjectProvider<CurrentUserPort> currentUserPortProvider) {
+        this(governedToolExecutionPortProvider,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults),
+                currentUserPortProvider.getIfAvailable());
+    }
+
+    public SeahorseGovernedToolExecutionController(
+            ObjectProvider<GovernedToolExecutionPort> governedToolExecutionPortProvider,
+            AdvancedFeatureGate advancedFeatureGate,
+            CurrentUserPort currentUserPort) {
         this.governedToolExecutionPortProvider = governedToolExecutionPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
                 ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
+        this.currentUserPort = currentUserPort;
     }
 
     @PostMapping({"/tools/{toolId}/preflight", "/api/tools/{toolId}/preflight"})
@@ -64,7 +79,7 @@ public class SeahorseGovernedToolExecutionController {
         advancedFeatureGate.requireEnabled(AdvancedFeature.TOOL_CATALOG_MANAGEMENT);
         ToolPreflightRequest safeRequest = request == null ? ToolPreflightRequest.empty() : request;
         return ApiResponses.requireService(governedToolExecutionPortProvider,
-                port -> port.preflight(safeRequest.toInvocationRequest(toolId)));
+                port -> port.preflight(bindCurrentUser(safeRequest).toInvocationRequest(toolId)));
     }
 
     @PostMapping({"/tools/{toolId}/invoke", "/api/tools/{toolId}/invoke"})
@@ -74,7 +89,15 @@ public class SeahorseGovernedToolExecutionController {
         advancedFeatureGate.requireEnabled(AdvancedFeature.TOOL_CATALOG_MANAGEMENT);
         ToolPreflightRequest safeRequest = request == null ? ToolPreflightRequest.empty() : request;
         return ApiResponses.requireService(governedToolExecutionPortProvider,
-                port -> port.invoke(safeRequest.toInvocationRequest(toolId)));
+                port -> port.invoke(bindCurrentUser(safeRequest).toInvocationRequest(toolId)));
+    }
+
+    private ToolPreflightRequest bindCurrentUser(ToolPreflightRequest request) {
+        if (currentUserPort == null) {
+            return request;
+        }
+        CurrentUser currentUser = currentUserPort.requireCurrentUser();
+        return request.withIdentity(currentUser.effectiveTenantId(), currentUser.operator());
     }
 
     public record ToolPreflightRequest(
@@ -107,6 +130,23 @@ public class SeahorseGovernedToolExecutionController {
                     Map.of(),
                     null,
                     List.of());
+        }
+
+        ToolPreflightRequest withIdentity(String effectiveTenantId, String effectiveUserId) {
+            return new ToolPreflightRequest(
+                    runId,
+                    stepId,
+                    toolCallId,
+                    agentId,
+                    versionId,
+                    rolloutId,
+                    effectiveTenantId,
+                    effectiveUserId,
+                    agentIdentityId,
+                    arguments,
+                    resourceRefs,
+                    idempotencyKey,
+                    allowedToolIds);
         }
 
         ToolInvocationRequest toInvocationRequest(String toolId) {
