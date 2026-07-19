@@ -53,6 +53,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeTo
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GenerationToolArtifactPublicationPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GitHubRepositoryReaderToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolResultSpillService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryForgetToolPortAdapter;
@@ -66,6 +67,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxFileCo
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxPythonToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolResultSpillOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.web.WebFetchSafetyPolicy;
@@ -104,6 +106,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResultSpillPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
@@ -167,6 +170,9 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     private static final String PROP_MCP_INCLUDE = "seahorse-agent.chat.agent.tools.mcp.include";
     private static final String PROP_DEFERRED_TOOL_SEARCH_ENABLED =
             "seahorse-agent.chat.agent.tools.deferred-search.enabled";
+    private static final String PROP_TOOL_RESULT_SPILL_PREFIX =
+            "seahorse-agent.chat.agent.tools.result-spill";
+    private static final String PROP_TOOL_RESULT_SPILL_ENABLED = PROP_TOOL_RESULT_SPILL_PREFIX + ".enabled";
     private static final String PROP_SEARCH_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.search.enabled";
     private static final String PROP_MEMORY_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.memory.enabled";
     private static final String PROP_SANDBOX_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.sandbox.enabled";
@@ -395,6 +401,40 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnMissingBean
+    public ToolResultSpillOptions seahorseToolResultSpillOptions(Environment environment) {
+        ToolResultSpillOptions defaults = ToolResultSpillOptions.defaults();
+        return new ToolResultSpillOptions(
+                environment.getProperty(PROP_TOOL_RESULT_SPILL_ENABLED, Boolean.class, defaults.enabled()),
+                environment.getProperty(PROP_TOOL_RESULT_SPILL_PREFIX + ".threshold-chars",
+                        Integer.class, defaults.thresholdChars()),
+                environment.getProperty(PROP_TOOL_RESULT_SPILL_PREFIX + ".preview-chars",
+                        Integer.class, defaults.previewChars()),
+                environment.getProperty(PROP_TOOL_RESULT_SPILL_PREFIX + ".max-read-chars",
+                        Integer.class, defaults.maxReadChars()));
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean({AgentArtifactRepositoryPort.class, ObjectStoragePort.class})
+    @ConditionalOnProperty(name = PROP_TOOL_RESULT_SPILL_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean(ToolResultSpillPort.class)
+    public ToolResultSpillPort seahorseToolResultSpillPort(
+            AgentArtifactRepositoryPort artifactRepository,
+            ObjectStoragePort objectStorage,
+            ToolResultSpillOptions options,
+            ObjectProvider<ObjectMapper> objectMapper,
+            ObjectProvider<Clock> clockProvider) {
+        return new KernelToolResultSpillService(
+                artifactRepository,
+                objectStorage,
+                objectMapper.getIfAvailable(ObjectMapper::new),
+                clockProvider.getIfAvailable(Clock::systemUTC),
+                options);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnMissingBean
     public ToolOutputRedactionPort seahorseToolOutputRedactionPort() {
         return ToolOutputRedactionPort.basicSecretPatterns();
     }
@@ -410,6 +450,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                                                    ObjectProvider<ApprovalRequestQueryPort> approvalRequestQueryPort,
                                                    ObjectProvider<ToolOutputRedactionPort> toolOutputRedactionPort,
                                                    ObjectProvider<ToolArtifactPublicationPort> toolArtifactPublicationPort,
+                                                   ObjectProvider<ToolResultSpillPort> toolResultSpillPort,
                                                    ObjectProvider<Clock> clockProvider) {
         return new LocalToolGatewayPort(
                 toolRegistry,
@@ -419,6 +460,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 approvalRequestQueryPort.getIfAvailable(ApprovalRequestQueryPort::empty),
                 toolOutputRedactionPort.getIfAvailable(ToolOutputRedactionPort::noop),
                 toolArtifactPublicationPort.getIfAvailable(ToolArtifactPublicationPort::noop),
+                toolResultSpillPort.getIfAvailable(ToolResultSpillPort::noop),
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 

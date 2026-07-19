@@ -45,6 +45,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolOutputRedactionPor
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResultSpillPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -113,6 +114,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     private final ApprovalRequestQueryPort approvalQueryPort;
     private final ToolOutputRedactionPort outputRedactionPort;
     private final ToolArtifactPublicationPort artifactPublicationPort;
+    private final ToolResultSpillPort toolResultSpillPort;
     private final Clock clock;
 
     public LocalToolGatewayPort(ToolRegistryPort toolRegistry) {
@@ -200,6 +202,26 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                                 ToolOutputRedactionPort outputRedactionPort,
                                 ToolArtifactPublicationPort artifactPublicationPort,
                                 Clock clock) {
+        this(toolRegistry,
+                toolPolicy,
+                auditPort,
+                approvalRequestRepository,
+                approvalQueryPort,
+                outputRedactionPort,
+                artifactPublicationPort,
+                ToolResultSpillPort.noop(),
+                clock);
+    }
+
+    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
+                                ToolPolicyPort toolPolicy,
+                                ToolInvocationAuditPort auditPort,
+                                ToolApprovalRequestRepositoryPort approvalRequestRepository,
+                                ApprovalRequestQueryPort approvalQueryPort,
+                                ToolOutputRedactionPort outputRedactionPort,
+                                ToolArtifactPublicationPort artifactPublicationPort,
+                                ToolResultSpillPort toolResultSpillPort,
+                                Clock clock) {
         this.toolRegistry = Objects.requireNonNullElse(toolRegistry, ToolRegistryPort.empty());
         this.toolPolicy = Objects.requireNonNullElseGet(toolPolicy, ToolPolicyPort::defaults);
         this.auditPort = Objects.requireNonNullElseGet(auditPort, ToolInvocationAuditPort::noop);
@@ -211,6 +233,9 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         this.artifactPublicationPort = Objects.requireNonNullElseGet(
                 artifactPublicationPort,
                 ToolArtifactPublicationPort::noop);
+        this.toolResultSpillPort = Objects.requireNonNullElseGet(
+                toolResultSpillPort,
+                ToolResultSpillPort::noop);
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
@@ -276,7 +301,10 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             if (rawResult.success()) {
                 publishArtifacts(safeRequest, rawResult);
             }
-            ToolInvocationResult result = outputRedactionPort.redact(safeRequest, rawResult);
+            ToolInvocationResult redactedResult = outputRedactionPort.redact(safeRequest, rawResult);
+            ToolInvocationResult result = redactedResult.success()
+                    ? toolResultSpillPort.spill(safeRequest, redactedResult)
+                    : redactedResult;
             String auditError = auditErrorMessage(result.error());
             auditPort.recordCompleted(new ToolInvocationAuditCompletion(
                     invocationId,
