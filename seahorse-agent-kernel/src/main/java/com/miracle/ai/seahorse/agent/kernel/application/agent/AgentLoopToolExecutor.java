@@ -35,6 +35,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResultSpillPort;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -331,6 +332,9 @@ final class AgentLoopToolExecutor {
         }
         if (ToolSearchToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
             effective.put(ToolSearchToolPortAdapter.TOOL_ID, true);
+        }
+        if (ToolResultSpillPort.READ_TOOL_ID.equals(toolCall.toolId())) {
+            effective.put(ToolResultSpillPort.READ_TOOL_ID, true);
         }
         return List.copyOf(effective.keySet());
     }

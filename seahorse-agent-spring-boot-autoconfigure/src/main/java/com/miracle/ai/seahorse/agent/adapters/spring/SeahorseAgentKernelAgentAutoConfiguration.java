@@ -67,6 +67,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxFileCo
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxPythonToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolResultReadToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolResultSpillOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
@@ -855,6 +856,23 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             ToolRegistryPort toolRegistry,
             AgentToolJsonSupport jsonSupport) {
         return new ToolSearchToolPortAdapter(toolRegistry, jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean({AgentArtifactRepositoryPort.class, ObjectStoragePort.class, ToolResultSpillPort.class})
+    @ConditionalOnProperty(name = PROP_TOOL_RESULT_SPILL_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public ToolResultReadToolPortAdapter seahorseToolResultReadToolPortAdapter(
+            AgentArtifactRepositoryPort artifactRepository,
+            ObjectStoragePort objectStorage,
+            ToolResultSpillOptions options,
+            ObjectProvider<ObjectMapper> objectMapper) {
+        return new ToolResultReadToolPortAdapter(
+                artifactRepository,
+                objectStorage,
+                objectMapper.getIfAvailable(ObjectMapper::new),
+                options);
     }
 
     @Bean

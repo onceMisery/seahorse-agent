@@ -28,6 +28,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxBrowse
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxFileConvertToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SandboxPythonToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolResultReadToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
@@ -141,6 +142,7 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
             case GitHubRepositoryReaderToolPortAdapter.TOOL_ID -> "GITHUB";
             case LoadSkillResourceToolPortAdapter.TOOL_ID -> "SKILL";
             case ToolSearchToolPortAdapter.TOOL_ID -> "TOOL";
+            case ToolResultReadToolPortAdapter.TOOL_ID -> "AGENT_ARTIFACT";
             case SandboxPythonToolPortAdapter.TOOL_ID,
                     SandboxFileConvertToolPortAdapter.TOOL_ID,
                     SandboxBrowserToolPortAdapter.TOOL_ID -> "SANDBOX";

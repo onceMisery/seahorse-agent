@@ -38,6 +38,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResultSpillPort;
 
 import java.util.EnumSet;
 import java.util.Objects;
@@ -138,7 +139,7 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
         // Legacy agent mode uses allowedToolIds list instead of explicit bindings
         boolean isLegacyAgent = request.agentId() == null
                 || "legacy-react-agent".equals(request.agentId());
-        if (!isLegacyAgent) {
+        if (!isLegacyAgent && !ToolResultSpillPort.READ_TOOL_ID.equals(request.toolId())) {
             AgentToolBinding binding = bindingRepository
                     .findBinding(request.agentId(), request.versionId(), request.toolId())
                     .orElse(null);

@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolResultReadToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
@@ -155,6 +156,11 @@ final class AgentLoopModelTurns {
             toolRegistry.find(ToolSearchToolPortAdapter.TOOL_ID)
                     .flatMap(ignored -> toolRegistry.listTools().stream()
                             .filter(tool -> ToolSearchToolPortAdapter.TOOL_ID.equals(tool.toolId()))
+                            .findFirst())
+                    .ifPresent(result::add);
+            toolRegistry.find(ToolResultReadToolPortAdapter.TOOL_ID)
+                    .flatMap(ignored -> toolRegistry.listTools().stream()
+                            .filter(tool -> ToolResultReadToolPortAdapter.TOOL_ID.equals(tool.toolId()))
                             .findFirst())
                     .ifPresent(result::add);
         }
