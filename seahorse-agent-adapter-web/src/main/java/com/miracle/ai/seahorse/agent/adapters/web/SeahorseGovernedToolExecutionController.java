@@ -51,6 +51,12 @@ public class SeahorseGovernedToolExecutionController {
                 null);
     }
 
+    public SeahorseGovernedToolExecutionController(
+            ObjectProvider<GovernedToolExecutionPort> governedToolExecutionPortProvider,
+            AdvancedFeatureGate advancedFeatureGate) {
+        this(governedToolExecutionPortProvider, advancedFeatureGate, null);
+    }
+
     @Autowired
     public SeahorseGovernedToolExecutionController(
             ObjectProvider<GovernedToolExecutionPort> governedToolExecutionPortProvider,
