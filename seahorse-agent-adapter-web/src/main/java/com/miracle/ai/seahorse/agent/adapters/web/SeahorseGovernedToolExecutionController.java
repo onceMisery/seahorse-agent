@@ -43,7 +43,6 @@ public class SeahorseGovernedToolExecutionController {
         this(governedToolExecutionPortProvider, AdvancedFeatureGate.allEnabledForTests(), null);
     }
 
-    @Autowired
     public SeahorseGovernedToolExecutionController(
             ObjectProvider<GovernedToolExecutionPort> governedToolExecutionPortProvider,
             ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
@@ -52,13 +51,14 @@ public class SeahorseGovernedToolExecutionController {
                 null);
     }
 
+    @Autowired
     public SeahorseGovernedToolExecutionController(
             ObjectProvider<GovernedToolExecutionPort> governedToolExecutionPortProvider,
             ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider,
-            ObjectProvider<CurrentUserPort> currentUserPortProvider) {
+            CurrentUserPort currentUserPort) {
         this(governedToolExecutionPortProvider,
                 advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults),
-                currentUserPortProvider.getIfAvailable());
+                currentUserPort);
     }
 
     public SeahorseGovernedToolExecutionController(
