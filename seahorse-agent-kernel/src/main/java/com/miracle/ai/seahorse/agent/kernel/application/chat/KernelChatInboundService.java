@@ -497,7 +497,12 @@ public class KernelChatInboundService implements ChatInboundPort {
                 TRACE_ENTRY_STREAM_CHAT,
                 safeCommand.conversationId(),
                 safeCommand.taskId(),
-                safeCommand.userId()));
+                safeCommand.userId(),
+                Map.of(
+                        "seahorse.tenant.id", Objects.requireNonNullElse(safeCommand.tenantId(), "default"),
+                        "seahorse.agent.id", defaultAgentId(safeCommand).orElse(
+                                AgentRuntimeConstants.LEGACY_REACT_AGENT_ID),
+                        "seahorse.executor.engine", effectiveExecutorEngine(safeCommand))));
         StreamCallback errorCallback = safeCallback;
         try {
             if (safeCommand.chatMode() == ChatMode.AGENT) {
@@ -505,6 +510,9 @@ public class KernelChatInboundService implements ChatInboundPort {
                     validateAgentVersionSelection(safeCommand);
                     String metadataJson = agentRunMetadataJson(safeCommand);
                     AgentRun run = startAgentRun(safeCommand, traceRunScope, metadataJson);
+                    if (run != null) {
+                        traceRecorder.recordRunAttribute(traceRunScope, "seahorse.run.id", run.runId());
+                    }
                     saveRunContextSnapshot(safeCommand, run, traceRunScope, metadataJson);
                     if (run != null) {
                         safeCallback.onRunStarted(run.runId());

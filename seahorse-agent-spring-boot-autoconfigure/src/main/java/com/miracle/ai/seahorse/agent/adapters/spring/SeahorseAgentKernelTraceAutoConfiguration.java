@@ -17,16 +17,20 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.adapters.observation.micrometer.MicrometerTraceTelemetryAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceService;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.RagTraceRecorderOptions;
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.TraceTelemetryPort;
+import io.micrometer.tracing.Tracer;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -38,17 +42,31 @@ import org.springframework.context.annotation.Configuration;
  * <p>trace 记录、查询入口和 TTL 清理任务同属可观测治理职责域，独立配置后主 kernel 配置不再承载 trace 治理细节。
  */
 @Configuration(proxyBeanMethods = false)
-@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentOpsRepositoryAutoConfiguration.class})
+@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentOpsRepositoryAutoConfiguration.class,
+        SeahorseAgentObservationAdapterAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelTraceAutoConfiguration {
+
+    @Bean
+    @ConditionalOnClass(name = "io.micrometer.tracing.Tracer")
+    @ConditionalOnProperty(prefix = "seahorse.observability.tracing", name = "enabled", havingValue = "true")
+    @ConditionalOnMissingBean(TraceTelemetryPort.class)
+    public TraceTelemetryPort seahorseMicrometerTraceTelemetryPort(ObjectProvider<Tracer> tracerProvider) {
+        Tracer tracer = tracerProvider.getIfAvailable();
+        return tracer == null ? TraceTelemetryPort.noop() : new MicrometerTraceTelemetryAdapter(tracer);
+    }
 
     @Bean
     @ConditionalOnBean(RagTraceRepositoryPort.class)
     @ConditionalOnMissingBean
     public KernelRagTraceRecorder seahorseRagTraceRecorder(
             RagTraceRepositoryPort traceRepositoryPort,
+            ObjectProvider<TraceTelemetryPort> telemetryPortProvider,
             @Value("${seahorse.agent.rag-trace.sample-rate:1.0}") double sampleRate) {
-        return new KernelRagTraceRecorder(traceRepositoryPort, new RagTraceRecorderOptions(sampleRate));
+        return new KernelRagTraceRecorder(
+                traceRepositoryPort,
+                new RagTraceRecorderOptions(sampleRate),
+                telemetryPortProvider.getIfAvailable(TraceTelemetryPort::noop));
     }
 
     @Bean

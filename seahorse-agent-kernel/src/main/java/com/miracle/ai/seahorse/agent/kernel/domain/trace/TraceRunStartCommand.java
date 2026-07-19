@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.domain.trace;
 
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -26,7 +27,8 @@ public record TraceRunStartCommand(String traceName,
                                    String entryMethod,
                                    String conversationId,
                                    String taskId,
-                                   String userId) {
+                                   String userId,
+                                   Map<String, String> attributes) {
 
     public TraceRunStartCommand {
         traceName = requireText(traceName, "traceName");
@@ -34,6 +36,15 @@ public record TraceRunStartCommand(String traceName,
         conversationId = blankToNull(conversationId);
         taskId = blankToNull(taskId);
         userId = blankToNull(userId);
+        attributes = Map.copyOf(Objects.requireNonNullElse(attributes, Map.of()));
+    }
+
+    public TraceRunStartCommand(String traceName,
+                                String entryMethod,
+                                String conversationId,
+                                String taskId,
+                                String userId) {
+        this(traceName, entryMethod, conversationId, taskId, userId, Map.of());
     }
 
     private static String requireText(String value, String name) {

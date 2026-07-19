@@ -28,6 +28,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNodeFinish;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRun;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRunFinish;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.TraceTelemetryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,25 +53,34 @@ public class KernelRagTraceRecorder {
     private final RagTraceRepositoryPort repositoryPort;
     private final boolean enabled;
     private final RagTraceRecorderOptions options;
+    private final TraceTelemetryPort telemetryPort;
 
     public KernelRagTraceRecorder(RagTraceRepositoryPort repositoryPort) {
-        this(repositoryPort, RagTraceRecorderOptions.always());
+        this(repositoryPort, RagTraceRecorderOptions.always(), TraceTelemetryPort.noop());
     }
 
     public KernelRagTraceRecorder(RagTraceRepositoryPort repositoryPort, RagTraceRecorderOptions options) {
-        this(Objects.requireNonNull(repositoryPort, "repositoryPort must not be null"), true, options);
+        this(repositoryPort, options, TraceTelemetryPort.noop());
+    }
+
+    public KernelRagTraceRecorder(RagTraceRepositoryPort repositoryPort,
+                                  RagTraceRecorderOptions options,
+                                  TraceTelemetryPort telemetryPort) {
+        this(Objects.requireNonNull(repositoryPort, "repositoryPort must not be null"), true, options, telemetryPort);
     }
 
     private KernelRagTraceRecorder(RagTraceRepositoryPort repositoryPort, boolean enabled) {
-        this(repositoryPort, enabled, RagTraceRecorderOptions.always());
+        this(repositoryPort, enabled, RagTraceRecorderOptions.always(), TraceTelemetryPort.noop());
     }
 
     private KernelRagTraceRecorder(RagTraceRepositoryPort repositoryPort,
                                    boolean enabled,
-                                   RagTraceRecorderOptions options) {
+                                   RagTraceRecorderOptions options,
+                                   TraceTelemetryPort telemetryPort) {
         this.repositoryPort = repositoryPort;
         this.enabled = enabled;
         this.options = Objects.requireNonNullElseGet(options, RagTraceRecorderOptions::always);
+        this.telemetryPort = Objects.requireNonNullElseGet(telemetryPort, TraceTelemetryPort::noop);
     }
 
     public static KernelRagTraceRecorder noop() {
@@ -94,6 +104,7 @@ public class KernelRagTraceRecorder {
         run.setStartTime(startTime);
         try {
             repositoryPort.startRun(run);
+            startTelemetryRun(traceId, command, startTime);
             return TraceRunScope.active(traceId, startTime);
         } catch (RuntimeException ex) {
             LOG.warn("RAG Trace run 启动失败，按无 Trace 降级，traceName={}", command.traceName(), ex);
@@ -117,6 +128,7 @@ public class KernelRagTraceRecorder {
                 endTime,
                 durationMs(scope.startTime(), endTime));
         try {
+            finishTelemetryRun(scope.traceId(), sanitizeError(error), endTime);
             repositoryPort.finishRun(finish);
         } catch (RuntimeException ex) {
             LOG.warn("RAG Trace run 结束记录失败，traceId={}", scope.traceId(), ex);
@@ -143,6 +155,7 @@ public class KernelRagTraceRecorder {
         node.setExtraData(command.extraData());
         try {
             repositoryPort.startNode(node);
+            startTelemetryNode(runScope.traceId(), nodeId, command, startTime);
             return TraceNodeScope.active(runScope.traceId(), nodeId, startTime);
         } catch (RuntimeException ex) {
             LOG.warn("RAG Trace node 启动失败，按无节点 Trace 降级，traceId={}，nodeName={}",
@@ -173,9 +186,22 @@ public class KernelRagTraceRecorder {
                 durationMs(scope.startTime(), endTime),
                 extraData);
         try {
+            finishTelemetryNode(scope.traceId(), scope.nodeId(), sanitizeError(error), endTime);
             repositoryPort.finishNode(finish);
         } catch (RuntimeException ex) {
             LOG.warn("RAG Trace node 结束记录失败，traceId={}，nodeId={}", scope.traceId(), scope.nodeId(), ex);
+        }
+    }
+
+    public void recordRunAttribute(TraceRunScope scope, String key, String value) {
+        if (!enabled || scope == null || !scope.active() || key == null || key.isBlank()
+                || value == null || value.isBlank()) {
+            return;
+        }
+        try {
+            telemetryPort.recordRunAttribute(scope.traceId(), key, value);
+        } catch (RuntimeException ex) {
+            LOG.warn("Trace telemetry attribute recording failed, traceId={}, key={}", scope.traceId(), key, ex);
         }
     }
 
@@ -230,6 +256,42 @@ public class KernelRagTraceRecorder {
 
     private String newTraceId() {
         return SnowflakeIds.nextIdString();
+    }
+
+    private void startTelemetryRun(String traceId, TraceRunStartCommand command, Instant startTime) {
+        try {
+            telemetryPort.startRun(traceId, command, startTime);
+        } catch (RuntimeException ex) {
+            LOG.warn("Trace telemetry run start failed, traceId={}", traceId, ex);
+        }
+    }
+
+    private void finishTelemetryRun(String traceId, String errorMessage, Instant endTime) {
+        try {
+            telemetryPort.finishRun(traceId, errorMessage, endTime);
+        } catch (RuntimeException ex) {
+            LOG.warn("Trace telemetry run finish failed, traceId={}", traceId, ex);
+        }
+    }
+
+    private void startTelemetryNode(
+            String traceId,
+            String nodeId,
+            TraceNodeStartCommand command,
+            Instant startTime) {
+        try {
+            telemetryPort.startNode(traceId, nodeId, command, startTime);
+        } catch (RuntimeException ex) {
+            LOG.warn("Trace telemetry node start failed, traceId={}, nodeId={}", traceId, nodeId, ex);
+        }
+    }
+
+    private void finishTelemetryNode(String traceId, String nodeId, String errorMessage, Instant endTime) {
+        try {
+            telemetryPort.finishNode(traceId, nodeId, errorMessage, endTime);
+        } catch (RuntimeException ex) {
+            LOG.warn("Trace telemetry node finish failed, traceId={}, nodeId={}", traceId, nodeId, ex);
+        }
     }
 
     private boolean sampled() {

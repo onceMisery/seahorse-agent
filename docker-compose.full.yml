@@ -501,6 +501,11 @@ services:
       # Actuator (for Prometheus scraping)
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
       MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: when-authorized
+      SEAHORSE_OBSERVABILITY_TRACING_ENABLED: ${SEAHORSE_OBSERVABILITY_TRACING_ENABLED:-false}
+      SEAHORSE_OBSERVABILITY_TRACING_SAMPLING_PROBABILITY: ${SEAHORSE_OBSERVABILITY_TRACING_SAMPLING_PROBABILITY:-1.0}
+      SEAHORSE_OBSERVABILITY_TRACING_OTLP_ENDPOINT: ${SEAHORSE_OBSERVABILITY_TRACING_OTLP_ENDPOINT:-http://jaeger:4318/v1/traces}
+      MANAGEMENT_TRACING_ENABLED: ${SEAHORSE_OBSERVABILITY_TRACING_ENABLED:-false}
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${SEAHORSE_OBSERVABILITY_TRACING_OTLP_ENDPOINT:-http://jaeger:4318/v1/traces}
       # AI 模型
       SEAHORSE_AGENT_ADAPTERS_AI_TYPE: ${SEAHORSE_AGENT_ADAPTERS_AI_TYPE:-openai-compatible}
       SEAHORSE_AGENT_ADAPTERS_AI_BASE_URL: ${SEAHORSE_AGENT_ADAPTERS_AI_BASE_URL:-https://api.openai.com/v1}
@@ -547,6 +552,19 @@ services:
     restart: unless-stopped
 
   # ==================== 可观测性 ====================
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    container_name: seahorse-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - seahorse-net
 
   prometheus:
     image: prom/prometheus:v2.51.0

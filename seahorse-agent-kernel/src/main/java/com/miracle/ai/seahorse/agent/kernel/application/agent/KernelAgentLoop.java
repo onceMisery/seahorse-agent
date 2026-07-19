@@ -85,6 +85,7 @@ public class KernelAgentLoop implements ReActExecutorPort {
     private static final String MODEL_TURN_TIMEOUT_PREFIX = "Model streaming call timed out after ";
     private static final String WAITING_APPROVAL_MESSAGE = "Waiting for tool approval.";
     private static final String TRACE_TYPE_AGENT_STEP = "AGENT_STEP";
+    private static final String TRACE_TYPE_AGENT_MODEL = "AGENT_MODEL";
     private static final String MODEL_STEP_ID_PREFIX = "model-turn-";
     private static final String MODEL_STEP_TITLE = "Model turn";
     private static final String TOOL_CALL_STARTED_SUMMARY = "Tool call started";
@@ -214,7 +215,8 @@ public class KernelAgentLoop implements ReActExecutorPort {
             TraceNodeScope stepScope = traceRecorder.startNode(traceRunScope, agentStepCommand(stepNo));
             boolean modelTurnRecorded = false;
             try {
-                ModelTurn turn = modelTurns.requestModelTurn(request, messages, runControl, exhaustedToolIds);
+                ModelTurn turn = requestModelTurnTraced(
+                        request, messages, runControl, exhaustedToolIds, traceRunScope, stepScope, false);
                 recordModelTurn(request, messages, turn, exhaustedToolIds, null);
                 modelTurnRecorded = true;
                 if (turn.toolCalls().isEmpty()) {
@@ -316,7 +318,8 @@ public class KernelAgentLoop implements ReActExecutorPort {
         streamEvents.emitStepStarted(callback, request, stepId, stepNo, stepStartedAt);
         TraceNodeScope stepScope = traceRecorder.startNode(traceRunScope, agentStepCommand(stepNo));
         try {
-            ModelTurn turn = modelTurns.requestFinalModelTurn(request, messages, runControl);
+            ModelTurn turn = requestModelTurnTraced(
+                    request, messages, runControl, Set.of(), traceRunScope, stepScope, true);
             recordModelTurn(request, messages, turn, Set.of(), null);
             if (!turn.toolCalls().isEmpty()) {
                 streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
@@ -593,6 +596,33 @@ public class KernelAgentLoop implements ReActExecutorPort {
                 "run",
                 null,
                 0);
+    }
+
+    private ModelTurn requestModelTurnTraced(
+            AgentLoopRequest request,
+            List<ChatMessage> messages,
+            AgentRunControl runControl,
+            Set<String> exhaustedToolIds,
+            TraceRunScope traceRunScope,
+            TraceNodeScope stepScope,
+            boolean finalTurn) {
+        TraceNodeScope modelScope = traceRecorder.startNode(traceRunScope, new TraceNodeStartCommand(
+                finalTurn ? "agent-model-final" : "agent-model-turn",
+                TRACE_TYPE_AGENT_MODEL,
+                TRACE_CLASS_NAME,
+                finalTurn ? "requestFinalModelTurn" : "requestModelTurn",
+                stepScope == null ? null : stepScope.nodeId(),
+                1));
+        try {
+            ModelTurn turn = finalTurn
+                    ? modelTurns.requestFinalModelTurn(request, messages, runControl)
+                    : modelTurns.requestModelTurn(request, messages, runControl, exhaustedToolIds);
+            traceRecorder.finishNode(modelScope);
+            return turn;
+        } catch (RuntimeException ex) {
+            traceRecorder.finishNode(modelScope, ex);
+            throw ex;
+        }
     }
 
 }
