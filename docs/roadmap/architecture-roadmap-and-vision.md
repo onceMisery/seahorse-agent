@@ -1,5 +1,13 @@
 # 架构路线图与未来展望
 
+## 2026-07-19 Update: OTEL Run Context Deep Link
+
+The OTEL trace slice now carries the actual Micrometer/OTel trace id and a configured Jaeger query URL back through `TraceRunScope`. Agent run context snapshots persist these value-free `otelTraceId` and `otelTraceUrl` fields beside the existing Seahorse logical `traceId`; the admin Agent Inspector renders a validated HTTP(S) external link without replacing the internal trace owner or exposing credentials.
+
+Fresh real full-Docker evidence: the backend and packaged frontend were rebuilt through the local `192.168.1.9:7890` proxy. `scripts/e2e-agentscope-smoke.ps1 -VerifyOtelTrace` passed `11/11` against real login, run profiles, AgentScope and kernel model SSE, PostgreSQL snapshots, Jaeger trace lookup, `agent.run` operation, and `seahorse.run.id` correlation. The real packaged frontend browser flow opened the kernel Agent Inspector context tab, rendered the OTEL trace id and Jaeger link, then opened the link in a second tab; Jaeger displayed the corresponding four-span trace with `agent.run -> agent.step -> model.call`.
+
+The existing logical trace id remains the Seahorse API/database query key. Tracing stays opt-in and the environment was restored to `SEAHORSE_OBSERVABILITY_TRACING_ENABLED=false` after verification. AgentScope Studio trace lookup remains a separate link when its metadata is configured; this slice does not claim upstream AgentScope registry deletion or a Studio-to-Jaeger federation API.
+
 ## 2026-07-14 Update: Non-Root Container Sandbox Execution
 
 Container sandbox processes now run as the dedicated non-root `65532:65532` identity by default. Session workspace preparation grants only the per-session directory the access needed for that identity to write generated output; the existing read-only root filesystem, dropped capabilities, `no-new-privileges`, network boundary, and file-size limit remain in effect. The project browser runtime image now includes the same named system user, with temporary HOME/cache paths rooted in the existing writable `/tmp` tmpfs.

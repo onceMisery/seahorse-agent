@@ -1,5 +1,5 @@
 import * as React from "react";
-import { AlertCircle, CheckCircle2, Database, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Database, ExternalLink, Loader2 } from "lucide-react";
 
 import { InspectorEmptyState } from "@/components/chat/workbench/InspectorEmptyState";
 import {
@@ -69,6 +69,43 @@ function FieldRow({ label, value }: { label: string; value?: string | number | n
       <span className="min-w-0 break-all text-right font-mono" style={{ color: "var(--theme-text-primary)" }}>
         {value}
       </span>
+    </div>
+  );
+}
+
+function safeExternalUrl(value: unknown): string | null {
+  const url = asString(value);
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.username || parsed.password) {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function ExternalTraceRow({ label, traceId, url }: { label: string; traceId?: string | null; url?: string | null }) {
+  if (!traceId) return null;
+  const safeUrl = safeExternalUrl(url);
+  if (!safeUrl) return <FieldRow label={label} value={traceId} />;
+  return (
+    <div className="flex items-start justify-between gap-3 py-1.5 text-xs">
+      <span className="shrink-0" style={{ color: "var(--theme-text-muted)" }}>
+        {label}
+      </span>
+      <a
+        className="flex min-w-0 items-center gap-1 break-all text-right font-mono hover:underline"
+        href={safeUrl}
+        rel="noreferrer"
+        target="_blank"
+        style={{ color: "var(--sh-workbench-accent)" }}
+      >
+        <span>{traceId}</span>
+        <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
+      </a>
     </div>
   );
 }
@@ -198,6 +235,9 @@ export function ContextSnapshotInspectorTab({ agentRunId }: ContextSnapshotInspe
   const runProfileId = asString(snapshotJson.runProfileId) ?? asString(snapshot.runProfileId);
   const branchLeafMessageId = asString(snapshotJson.branchLeafMessageId) ?? asString(snapshot.branchLeafMessageId);
   const studioTraceId = asString(agentScope.studioTraceId) ?? asString(traceContext.studioTraceId);
+  const otelTraceId = asString(traceContext.otelTraceId);
+  const otelTraceUrl = asString(traceContext.otelTraceUrl);
+  const studioTraceUrl = asString(traceContext.studioTraceUrl);
 
   return (
     <div className="space-y-3 p-3">
@@ -213,7 +253,8 @@ export function ContextSnapshotInspectorTab({ agentRunId }: ContextSnapshotInspe
         <FieldRow label="分支叶子" value={branchLeafMessageId} />
         <FieldRow label="运行方案" value={runProfileId} />
         <FieldRow label="Trace" value={asString(traceContext.traceId)} />
-        <FieldRow label="Studio Trace" value={studioTraceId} />
+        <ExternalTraceRow label="OTEL Trace" traceId={otelTraceId} url={otelTraceUrl} />
+        <ExternalTraceRow label="Studio Trace" traceId={studioTraceId} url={studioTraceUrl} />
         <FieldRow label="创建" value={snapshot.createTime} />
       </Section>
 
@@ -248,7 +289,7 @@ export function ContextSnapshotInspectorTab({ agentRunId }: ContextSnapshotInspe
 
       {(studioTraceId || asString(agentScope.nacosNamespace) || asString(agentScope.nacosGroup)) ? (
         <Section title="AgentScope">
-          <FieldRow label="Studio Trace" value={studioTraceId} />
+          <ExternalTraceRow label="Studio Trace" traceId={studioTraceId} url={studioTraceUrl} />
           <FieldRow label="Nacos Namespace" value={asString(agentScope.nacosNamespace)} />
           <FieldRow label="Nacos Group" value={asString(agentScope.nacosGroup)} />
         </Section>

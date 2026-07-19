@@ -1060,6 +1060,10 @@ public class KernelChatInboundService implements ChatInboundPort {
                 : run == null ? null : run.traceId();
         Map<String, Object> traceContext = new LinkedHashMap<>();
         putTextIfPresent(traceContext, "traceId", traceId);
+        if (traceRunScope != null) {
+            putTextIfPresent(traceContext, "otelTraceId", traceRunScope.telemetryTraceId());
+            putTextIfPresent(traceContext, "otelTraceUrl", traceRunScope.telemetryTraceUrl());
+        }
         appendAgentScopeTraceContext(traceContext, agentScopeMetadata(metadataJson), traceId);
         if (traceContext.isEmpty()) {
             return null;

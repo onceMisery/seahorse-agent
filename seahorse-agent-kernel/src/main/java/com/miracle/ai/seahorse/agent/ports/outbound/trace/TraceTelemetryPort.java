@@ -21,13 +21,14 @@ import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunStartCommand;
 
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * Best-effort bridge from the explicit Seahorse trace lifecycle to an external tracing backend.
  */
 public interface TraceTelemetryPort {
 
-    void startRun(String traceId, TraceRunStartCommand command, Instant startTime);
+    TraceTelemetryLink startRun(String traceId, TraceRunStartCommand command, Instant startTime);
 
     void finishRun(String traceId, String errorMessage, Instant endTime);
 
@@ -41,11 +42,31 @@ public interface TraceTelemetryPort {
         return NoopTraceTelemetryPort.INSTANCE;
     }
 
+    record TraceTelemetryLink(String traceId, String traceUrl) {
+
+        private static final TraceTelemetryLink EMPTY = new TraceTelemetryLink(null, null);
+
+        public TraceTelemetryLink {
+            traceId = normalize(traceId);
+            traceUrl = traceId == null ? null : normalize(traceUrl);
+        }
+
+        public static TraceTelemetryLink empty() {
+            return EMPTY;
+        }
+
+        private static String normalize(String value) {
+            String safeValue = Objects.requireNonNullElse(value, "").trim();
+            return safeValue.isEmpty() ? null : safeValue;
+        }
+    }
+
     enum NoopTraceTelemetryPort implements TraceTelemetryPort {
         INSTANCE;
 
         @Override
-        public void startRun(String traceId, TraceRunStartCommand command, Instant startTime) {
+        public TraceTelemetryLink startRun(String traceId, TraceRunStartCommand command, Instant startTime) {
+            return TraceTelemetryLink.empty();
         }
 
         @Override

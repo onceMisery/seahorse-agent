@@ -22,15 +22,36 @@ import java.time.Instant;
 /**
  * Trace run 生命周期句柄。
  */
-public record TraceRunScope(String traceId, Instant startTime, boolean active) {
+public record TraceRunScope(String traceId,
+                            Instant startTime,
+                            boolean active,
+                            String telemetryTraceId,
+                            String telemetryTraceUrl) {
 
-    private static final TraceRunScope DISABLED = new TraceRunScope(null, null, false);
+    private static final TraceRunScope DISABLED = new TraceRunScope(null, null, false, null, null);
 
     public static TraceRunScope active(String traceId, Instant startTime) {
-        return new TraceRunScope(traceId, startTime, traceId != null && !traceId.isBlank());
+        return active(traceId, startTime, null, null);
+    }
+
+    public static TraceRunScope active(
+            String traceId,
+            Instant startTime,
+            String telemetryTraceId,
+            String telemetryTraceUrl) {
+        return new TraceRunScope(
+                traceId,
+                startTime,
+                traceId != null && !traceId.isBlank(),
+                blankToNull(telemetryTraceId),
+                blankToNull(telemetryTraceUrl));
     }
 
     public static TraceRunScope disabled() {
         return DISABLED;
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

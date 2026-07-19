@@ -29,6 +29,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRun;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRunFinish;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.TraceTelemetryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.TraceTelemetryPort.TraceTelemetryLink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -104,8 +105,8 @@ public class KernelRagTraceRecorder {
         run.setStartTime(startTime);
         try {
             repositoryPort.startRun(run);
-            startTelemetryRun(traceId, command, startTime);
-            return TraceRunScope.active(traceId, startTime);
+            TraceTelemetryLink telemetryLink = startTelemetryRun(traceId, command, startTime);
+            return TraceRunScope.active(traceId, startTime, telemetryLink.traceId(), telemetryLink.traceUrl());
         } catch (RuntimeException ex) {
             LOG.warn("RAG Trace run 启动失败，按无 Trace 降级，traceName={}", command.traceName(), ex);
             return TraceRunScope.disabled();
@@ -258,11 +259,14 @@ public class KernelRagTraceRecorder {
         return SnowflakeIds.nextIdString();
     }
 
-    private void startTelemetryRun(String traceId, TraceRunStartCommand command, Instant startTime) {
+    private TraceTelemetryLink startTelemetryRun(String traceId, TraceRunStartCommand command, Instant startTime) {
         try {
-            telemetryPort.startRun(traceId, command, startTime);
+            return Objects.requireNonNullElseGet(
+                    telemetryPort.startRun(traceId, command, startTime),
+                    TraceTelemetryLink::empty);
         } catch (RuntimeException ex) {
             LOG.warn("Trace telemetry run start failed, traceId={}", traceId, ex);
+            return TraceTelemetryLink.empty();
         }
     }
 

@@ -51,9 +51,11 @@ public class SeahorseAgentKernelTraceAutoConfiguration {
     @ConditionalOnClass(name = "io.micrometer.tracing.Tracer")
     @ConditionalOnProperty(prefix = "seahorse.observability.tracing", name = "enabled", havingValue = "true")
     @ConditionalOnMissingBean(TraceTelemetryPort.class)
-    public TraceTelemetryPort seahorseMicrometerTraceTelemetryPort(ObjectProvider<Tracer> tracerProvider) {
+    public TraceTelemetryPort seahorseMicrometerTraceTelemetryPort(
+            ObjectProvider<Tracer> tracerProvider,
+            @Value("${seahorse.observability.tracing.query-url:}") String traceQueryUrl) {
         Tracer tracer = tracerProvider.getIfAvailable();
-        return tracer == null ? TraceTelemetryPort.noop() : new MicrometerTraceTelemetryAdapter(tracer);
+        return tracer == null ? TraceTelemetryPort.noop() : new MicrometerTraceTelemetryAdapter(tracer, traceQueryUrl);
     }
 
     @Bean

@@ -21,11 +21,13 @@ import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.TraceTelemetryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.TraceTelemetryPort.TraceTelemetryLink;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.TraceContext;
 import io.micrometer.tracing.Tracer;
 
 import java.time.Instant;
+import java.net.URI;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -46,14 +48,20 @@ public class MicrometerTraceTelemetryAdapter implements TraceTelemetryPort {
             "seahorse.run.id");
 
     private final Tracer tracer;
+    private final String traceUrlTemplate;
     private final Map<String, TraceState> traces = new ConcurrentHashMap<>();
 
     public MicrometerTraceTelemetryAdapter(Tracer tracer) {
+        this(tracer, null);
+    }
+
+    public MicrometerTraceTelemetryAdapter(Tracer tracer, String traceUrlTemplate) {
         this.tracer = Objects.requireNonNull(tracer, "tracer must not be null");
+        this.traceUrlTemplate = normalizeTraceUrlTemplate(traceUrlTemplate);
     }
 
     @Override
-    public void startRun(String traceId, TraceRunStartCommand command, Instant startTime) {
+    public TraceTelemetryLink startRun(String traceId, TraceRunStartCommand command, Instant startTime) {
         Objects.requireNonNull(command, "command must not be null");
         Span.Builder builder = tracer.spanBuilder()
                 .name("agent.run")
@@ -76,6 +84,8 @@ public class MicrometerTraceTelemetryAdapter implements TraceTelemetryPort {
         applyStartTime(builder, startTime);
         Span span = builder.start();
         traces.put(traceId, new TraceState(span));
+        String telemetryTraceId = normalize(span.context().traceId());
+        return new TraceTelemetryLink(telemetryTraceId, traceUrl(telemetryTraceId));
     }
 
     @Override
@@ -176,6 +186,39 @@ public class MicrometerTraceTelemetryAdapter implements TraceTelemetryPort {
                 .replace('\t', ' ')
                 .trim();
         return redacted.length() <= 256 ? redacted : redacted.substring(0, 256);
+    }
+
+    private String traceUrl(String traceId) {
+        if (traceUrlTemplate == null || traceId == null) {
+            return null;
+        }
+        if (traceUrlTemplate.contains("{traceId}")) {
+            return traceUrlTemplate.replace("{traceId}", traceId);
+        }
+        return traceUrlTemplate.replaceAll("/+$", "") + "/trace/" + traceId;
+    }
+
+    private String normalize(String value) {
+        String safeValue = Objects.requireNonNullElse(value, "").trim();
+        return safeValue.isEmpty() ? null : safeValue;
+    }
+
+    private String normalizeTraceUrlTemplate(String value) {
+        String safeValue = normalize(value);
+        if (safeValue == null) {
+            return null;
+        }
+        try {
+            URI parsed = URI.create(safeValue.replace("{traceId}", "trace-id"));
+            String scheme = parsed.getScheme();
+            if (!("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+                    || parsed.getRawUserInfo() != null) {
+                return null;
+            }
+            return safeValue;
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     private long toEpochNanos(Instant instant) {

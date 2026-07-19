@@ -7,7 +7,10 @@ param(
     [string]$BackendContainer = "seahorse-backend",
     [string]$PostgresContainer = "seahorse-postgres",
     [string]$PostgresUser = "seahorse",
-    [string]$PostgresDatabase = "seahorse"
+    [string]$PostgresDatabase = "seahorse",
+    [switch]$VerifyOtelTrace,
+    [string]$JaegerUrl = "http://127.0.0.1:16686",
+    [string]$OtelTraceQueryUrl = "http://localhost:16686/trace/{traceId}"
 )
 
 $ErrorActionPreference = "Stop"
@@ -220,6 +223,45 @@ function Assert-AgentScopeSnapshotTraceContext {
     }
 }
 
+function Assert-OtelSnapshotTraceContext {
+    param([string]$Name, [object]$Snapshot)
+    Assert-NotBlank $Snapshot.otelTraceId "$Name snapshot otelTraceId"
+    Assert-NotBlank $Snapshot.otelTraceUrl "$Name snapshot otelTraceUrl"
+    if ("$($Snapshot.otelTraceId)" -notmatch '^[0-9a-f]{32}$') {
+        throw "$Name snapshot otelTraceId was not a 32-character lowercase hex id"
+    }
+    $expectedUrl = $OtelTraceQueryUrl.Replace("{traceId}", "$($Snapshot.otelTraceId)")
+    Assert-Equal $Snapshot.otelTraceUrl $expectedUrl "$Name snapshot OTEL trace URL"
+
+    $response = $null
+    $deadline = (Get-Date).AddSeconds(45)
+    do {
+        try {
+            $response = Invoke-RestMethod -Uri "$($JaegerUrl.TrimEnd('/'))/api/traces/$($Snapshot.otelTraceId)" `
+                -TimeoutSec 10
+        } catch {
+            $response = $null
+        }
+        if (@($response.data).Count -gt 0) {
+            break
+        }
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $deadline)
+
+    if (@($response.data).Count -eq 0) {
+        throw "$Name OTEL trace was not queryable from Jaeger"
+    }
+    $spans = @($response.data[0].spans)
+    if (-not ($spans | Where-Object { "$($_.operationName)" -eq "agent.run" })) {
+        throw "$Name OTEL trace did not contain agent.run"
+    }
+    $runTags = @($spans | ForEach-Object { @($_.tags) } |
+        Where-Object { "$($_.key)" -eq "seahorse.run.id" -and "$($_.value)" -eq "$($Snapshot.runId)" })
+    if ($runTags.Count -eq 0) {
+        throw "$Name OTEL trace did not contain seahorse.run.id=$($Snapshot.runId)"
+    }
+}
+
 function Invoke-DbScalarRow {
     param([string]$Sql)
     $raw = & docker.exe exec $PostgresContainer psql -U $PostgresUser -d $PostgresDatabase -t -A -F "|" -c $Sql
@@ -286,7 +328,14 @@ function Invoke-Chat {
         RunId = Get-SseRunId $events
     }
     Assert-ChatSseContract "Chat" $chat
-    $chat | ConvertTo-Json -Depth 6 -Compress | Write-Host
+    [pscustomobject]@{
+        contentType = $chat.ContentType
+        bytes = $chat.Length
+        events = $chat.EventNames -join ","
+        streamEvents = $chat.StreamEventCount
+        responseChars = $chat.ResponseChars
+        runId = $chat.RunId
+    } | ConvertTo-Json -Compress | Write-Host
     return $chat
 }
 
@@ -303,6 +352,8 @@ select run_id,
        coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'studioUrl', '') as studio_url,
        coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'tracingUrl', '') as tracing_url,
        coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'studioTraceUrl', '') as studio_trace_url,
+       coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'otelTraceId', '') as otel_trace_id,
+       coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'otelTraceUrl', '') as otel_trace_url,
        coalesce(snapshot_json::jsonb #>> '{agentScope,studioTraceEnabled}', '') as agent_scope_trace_enabled,
        coalesce(snapshot_json::jsonb #>> '{agentScope,studioUrl}', '') as agent_scope_studio_url
 from t_run_context_snapshot
@@ -315,8 +366,8 @@ limit 1;
     if (-not $row) {
         throw "No t_run_context_snapshot row found for conversation $ConversationId"
     }
-    $parts = $row -split "\|", 11
-    if ($parts.Count -lt 11) {
+    $parts = $row -split "\|", 13
+    if ($parts.Count -lt 13) {
         throw "Unexpected snapshot row format: $row"
     }
     return [PSCustomObject]@{
@@ -329,8 +380,10 @@ limit 1;
         studioUrl = $parts[6]
         tracingUrl = $parts[7]
         studioTraceUrl = $parts[8]
-        agentScopeTraceEnabled = $parts[9]
-        agentScopeStudioUrl = $parts[10]
+        otelTraceId = $parts[9]
+        otelTraceUrl = $parts[10]
+        agentScopeTraceEnabled = $parts[11]
+        agentScopeStudioUrl = $parts[12]
     }
 }
 
@@ -345,6 +398,15 @@ Test-Step "Verify AgentScope runtime flags" {
         $script:a2aEnabled = $false
     } else {
         throw "SEAHORSE_AGENTSCOPE_A2A_ENABLED was not found on $BackendContainer"
+    }
+    if ($VerifyOtelTrace) {
+        if (-not ($envLines | Where-Object { $_ -eq "SEAHORSE_OBSERVABILITY_TRACING_ENABLED=true" })) {
+            throw "SEAHORSE_OBSERVABILITY_TRACING_ENABLED=true was not found on $BackendContainer"
+        }
+        $expectedQueryUrl = "SEAHORSE_OBSERVABILITY_TRACING_QUERY_URL=$OtelTraceQueryUrl"
+        if (-not ($envLines | Where-Object { $_ -eq $expectedQueryUrl })) {
+            throw "Expected OTEL query URL was not found on $BackendContainer"
+        }
     }
 }
 
@@ -402,6 +464,9 @@ $agentScopeSnapshot = Test-Step "Verify AgentScope run context snapshot" {
     Assert-Equal $snapshot.executorEngine "agentscope" "AgentScope snapshot executor_engine"
     Assert-SnapshotMatchesChat "AgentScope" $snapshot $agentScopeChat
     Assert-AgentScopeSnapshotTraceContext $snapshot
+    if ($VerifyOtelTrace) {
+        Assert-OtelSnapshotTraceContext "AgentScope" $snapshot
+    }
     $snapshot | ConvertTo-Json -Compress | Write-Host
     $snapshot
 }
@@ -453,6 +518,9 @@ $kernelSnapshot = Test-Step "Verify kernel run context snapshot" {
     Assert-Equal $snapshot.runProfileId $KernelRunProfileId "Kernel snapshot run_profile_id"
     Assert-Equal $snapshot.executorEngine "kernel" "Kernel snapshot executor_engine"
     Assert-SnapshotMatchesChat "Kernel" $snapshot $kernelChat
+    if ($VerifyOtelTrace) {
+        Assert-OtelSnapshotTraceContext "Kernel" $snapshot
+    }
     $snapshot | ConvertTo-Json -Compress | Write-Host
     $snapshot
 }
