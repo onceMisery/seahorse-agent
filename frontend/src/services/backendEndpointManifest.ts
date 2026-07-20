@@ -233,6 +233,14 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/admin/sandbox/runtime/registrations"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/sandbox/runtime/registrations/{}/maintenance-status"
+  },
+  {
+    "method": "GET",
     "path": "/api/admin/tenants"
   },
   {
@@ -469,6 +477,14 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/gate-results/{}/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/api/gate-results/{}/{}/history"
+  },
+  {
+    "method": "GET",
     "path": "/api/knowledge-bases/{}/shares"
   },
   {
@@ -585,6 +601,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/sandbox/runtime/browser-profiles"
+  },
+  {
+    "method": "GET",
     "path": "/api/sandbox/runtime/egress-policy"
   },
   {
@@ -594,10 +614,6 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/api/sandbox/runtime/nodes"
-  },
-  {
-    "method": "GET",
-    "path": "/api/admin/sandbox/runtime/registrations"
   },
   {
     "method": "GET",
@@ -1145,6 +1161,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/"
+  },
+  {
+    "method": "POST",
     "path": "/admin/ai-config"
   },
   {
@@ -1214,6 +1234,14 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/api/admin/marketplace/revenue/settle/{}"
+  },
+  {
+    "method": "POST",
+    "path": "/api/admin/sandbox/runtime/registrations/{}/drain"
+  },
+  {
+    "method": "POST",
+    "path": "/api/admin/sandbox/runtime/registrations/{}/resume"
   },
   {
     "method": "POST",
@@ -1501,15 +1529,23 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/api/sandbox/runtime/browser-profiles"
+  },
+  {
+    "method": "POST",
+    "path": "/api/sandbox/runtime/browser-profiles/{}:disable"
+  },
+  {
+    "method": "POST",
+    "path": "/api/sandbox/runtime/egress-policy"
+  },
+  {
+    "method": "POST",
     "path": "/api/sandbox/runtime/orphan-containers:reap"
   },
   {
     "method": "POST",
     "path": "/api/sandbox/runtime/orphans:sweep"
-  },
-  {
-    "method": "POST",
-    "path": "/api/sandbox/runtime/egress-policy"
   },
   {
     "method": "POST",

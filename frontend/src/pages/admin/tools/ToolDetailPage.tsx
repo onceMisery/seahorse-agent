@@ -20,6 +20,7 @@ import {
   type ToolInvocation
 } from "@/services/toolCatalogService";
 import { ToolRiskBadge } from "./components/ToolRiskBadge";
+import { GateResultHistory } from "@/components/common/GateResultHistory";
 import { getErrorMessage } from "@/utils/error";
 
 export function ToolDetailPage() {
@@ -254,6 +255,11 @@ export function ToolDetailPage() {
                   </div>
                 ))}
               </div>
+
+              <GateResultHistory
+                subjectType={gateResult.subjectType}
+                subjectId={gateResult.subjectId}
+              />
             </div>
           ) : (
             <div className="text-sm text-muted-foreground">No GateResult</div>
