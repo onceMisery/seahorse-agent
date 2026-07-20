@@ -303,6 +303,7 @@ Agent 能力围绕可管理的 Skill、Tool、运行记录、审批、审计和�
 | AgentScope / Nacos A2A | 增加 AgentScope 执行器、Nacos 配置中心和 A2A 注册/调用链路，用于本地 Agent 与远端 Agent 的编排验证 | `seahorse-agent-adapter-agent-agentscope` |
 | MCP stdio / HTTP 工具 | 在原 MCP HTTP 基础上补充本地 stdio MCP 工具运行路径，便于接入本地工具和调试型工具服务 | `/admin/plugins`、工具绑定 |
 | 治理后台入口 | Skill 管理、Agent 控制台、审批中心、工具目录、OpenAPI 连接器、资源 ACL、访问决策、审计和成本页面已作为控制面入口接入，缺少后端数据时按空态或不可用态降级 | `/admin/*` |
+| 统一门禁结果 | 把 Agent、运行方案、RAG 策略、模型配置、工具、Skill 和入库 Pipeline 七类高风险对象的发布门禁收敛成统一 `GateResult`，写入租户隔离的 append-only 门禁表，并提供最新结果与历史追溯查询 | `/api/gate-results/{type}/{id}`、`/api/gate-results/{type}/{id}/history` |
 | Docker 与本地验证 | 修复本地 Nacos、AgentScope、MCP stdio 示例和部署链路，便于在本机复现实验路径 | `docker-compose*`、`resources/docker` |
 
 ### 当前边界
@@ -487,6 +488,7 @@ npm run dev
 - 将运行方案升级为模板化、可审批、可回滚的 Agent 执行配置资产。
 - 将运行实验接入评分、成本、trace 和分支报告，支撑方案对比和灰度验证。
 - 建设统一 Tool Gateway，覆盖 MCP、OpenAPI、A2A 和内置工具的凭证、审批、限额、审计脱敏和故障降级。
+- 建设统一 GateResult 证据模型，让高风险对象发布前都产出可追溯到 evaluation、trace、审计和配置快照的门禁结果，并支持历史回溯。
 - 完善 AgentScope 远端 Agent 生命周期、Nacos 配置治理、A2A 健康检查和跨 Agent 成本归因。
 - 提供面向管理员的 RAG 质量面板、记忆质量面板和策略调优入口。
 
