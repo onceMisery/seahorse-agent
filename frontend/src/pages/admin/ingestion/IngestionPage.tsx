@@ -51,6 +51,7 @@ import {
 import { getSystemSettings } from "@/services/settingsService";
 import { fetchUserMap, resolveUserName } from "@/services/userService";
 import { getErrorMessage } from "@/utils/error";
+import { GateResultHistory } from "@/components/common/GateResultHistory";
 const PIPELINE_PAGE_SIZE = 10;
 const TASK_PAGE_SIZE = 10;
 
@@ -1969,6 +1970,10 @@ function PipelineGateResultDialog({
                 </Table>
               )}
             </div>
+
+            {gateResult ? (
+              <GateResultHistory subjectType={gateResult.subjectType} subjectId={gateResult.subjectId} />
+            ) : null}
           </div>
         ) : (
           <div className="py-8 text-center text-sm text-muted-foreground">No GateResult</div>

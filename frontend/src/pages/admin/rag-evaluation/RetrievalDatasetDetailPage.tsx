@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdvancedFeatureState, ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
+import { GateResultHistory } from "@/components/common/GateResultHistory";
 import {
   getDataset,
   evaluateDataset,
@@ -339,6 +340,7 @@ export function RetrievalDatasetDetailPage() {
                   </div>
                 ))}
               </div>
+              <GateResultHistory subjectType={gateResult.subjectType} subjectId={gateResult.subjectId} />
             </div>
           ) : (
             <div className="py-8 text-center text-sm text-muted-foreground">No GateResult</div>

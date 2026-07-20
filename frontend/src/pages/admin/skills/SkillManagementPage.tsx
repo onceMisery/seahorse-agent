@@ -3,6 +3,7 @@ import { AlertCircle, BookOpen, Check, FileUp, History, PackagePlus, Pencil, Plu
 import { toast } from "sonner";
 
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
+import { GateResultHistory } from "@/components/common/GateResultHistory";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -712,6 +713,8 @@ function SkillGateResultDialog({
                 </div>
               )}
             </div>
+
+            <GateResultHistory subjectType={gateResult.subjectType} subjectId={gateResult.subjectId} />
           </div>
         ) : (
           <div className="py-8 text-center text-sm text-muted-foreground">No GateResult</div>

@@ -18,6 +18,7 @@ import {
   type AiModelConfigItem,
   type GateResult
 } from "@/services/aiConfigService";
+import { GateResultHistory } from "@/components/common/GateResultHistory";
 import { getErrorMessage } from "@/utils/error";
 import { storage } from "@/utils/storage";
 
@@ -484,6 +485,10 @@ function ModelConfigGateResultDialog({
                 </div>
               )}
             </div>
+
+            {gateResult.subjectType && gateResult.subjectId ? (
+              <GateResultHistory subjectType={gateResult.subjectType} subjectId={gateResult.subjectId} />
+            ) : null}
           </div>
         ) : (
           <div className="py-8 text-center text-sm text-muted-foreground">No GateResult</div>
