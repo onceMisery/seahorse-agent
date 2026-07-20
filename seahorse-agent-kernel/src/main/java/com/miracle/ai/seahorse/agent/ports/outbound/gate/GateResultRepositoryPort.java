@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.outbound.gate;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResult;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface GateResultRepositoryPort {
@@ -26,4 +27,6 @@ public interface GateResultRepositoryPort {
     GateResult save(GateResult result);
 
     Optional<GateResult> latest(String subjectType, String subjectId);
+
+    List<GateResult> history(String subjectType, String subjectId, int limit);
 }

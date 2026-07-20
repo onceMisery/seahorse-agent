@@ -2689,3 +2689,27 @@ The append-only persistence owner now covers all seven unified GateResult subjec
 The object-specific gate stores, APIs, and projection semantics remain in place. This slice does not backfill historical decisions, replace release approval workflows, or retire legacy gate models; those changes require a separate migration and retention decision.
 
 Fresh evidence: the focused Web regression passed 59/59, and the complete in-image 28-module backend build finished with `BUILD SUCCESS`. Backend image `sha256:449853483d5c2f7701cfba6e98422e52f8c72aa49dfc2e29244ab3901a2a06b6` was built through `192.168.1.9:7890`, deployed, and reached healthy. `scripts/e2e-gate-result-smoke.ps1` passed 31/31 against the real full-Docker API and PostgreSQL, including unified latest readback and durable row checks for all seven subject types, tenant isolation, cross-tenant Model Config source ownership, zero default-tenant pollution, and temporary-data cleanup. `scripts/e2e-backend-smoke.ps1 -RuntimeProfile full-compose` passed 20/20 across the broader backend workflow.
+
+## 2026-07-20 Update: Unified GateResult History Query
+
+The append-only gate-result store now exposes its accumulated decisions through a
+`history` read path. `GateResultInboundPort.history(subjectType, subjectId, limit)`
+returns the tenant-scoped decisions newest-first, backed by the existing
+`(tenant_id, subject_type, subject_id, checked_at)` index; the kernel service clamps
+the caller limit to a bounded `[1, 100]` window with a default of 20, and the JDBC
+adapter reuses the same column projection as the latest read. `GET
+/api/gate-results/{subjectType}/{subjectId}/history?limit=N` surfaces the audit trail
+alongside the existing latest lookup, so a reviewer can trace how an object's release
+decision evolved across successive checks instead of only seeing the current verdict.
+
+This slice only adds a read path over already-persisted rows. It does not change how
+rows are written, add retention or purge behavior, or introduce cross-subject
+aggregation; those remain separate retention and reporting decisions.
+
+Verification in this slice: kernel, JDBC repository, and Web modules compile clean
+with the new port method and endpoint, and `scripts/e2e-gate-result-smoke.ps1` parses
+and now asserts the history endpoint (records present, requested limit honored,
+newest-first ordering, and subject match) for every subject type it already exercises.
+The full real full-Docker API/PostgreSQL smoke run for this history path is not yet
+re-executed and remains the pending real-evidence step before this moves to the
+completion report.

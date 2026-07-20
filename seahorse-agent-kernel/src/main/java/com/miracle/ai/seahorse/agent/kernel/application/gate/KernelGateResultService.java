@@ -21,10 +21,14 @@ import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResultInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.gate.GateResultRepositoryPort;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
 public class KernelGateResultService implements GateResultInboundPort {
+
+    private static final int DEFAULT_HISTORY_LIMIT = 20;
+    private static final int MAX_HISTORY_LIMIT = 100;
 
     private final GateResultRepositoryPort repository;
 
@@ -40,5 +44,17 @@ public class KernelGateResultService implements GateResultInboundPort {
     @Override
     public Optional<GateResult> latest(String subjectType, String subjectId) {
         return repository.latest(subjectType, subjectId);
+    }
+
+    @Override
+    public List<GateResult> history(String subjectType, String subjectId, int limit) {
+        return repository.history(subjectType, subjectId, clampLimit(limit));
+    }
+
+    private int clampLimit(int limit) {
+        if (limit < 1) {
+            return DEFAULT_HISTORY_LIMIT;
+        }
+        return Math.min(limit, MAX_HISTORY_LIMIT);
     }
 }

@@ -21,10 +21,13 @@ import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResultInboundPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class SeahorseGateResultController {
+
+    private static final int DEFAULT_HISTORY_LIMIT = 20;
 
     private final ObjectProvider<GateResultInboundPort> gateResultPortProvider;
 
@@ -36,5 +39,14 @@ public class SeahorseGateResultController {
     public ApiResponse<Object> latest(@PathVariable String subjectType, @PathVariable String subjectId) {
         return ApiResponses.requireService(gateResultPortProvider, port -> port.latest(subjectType, subjectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Gate result not found")));
+    }
+
+    @GetMapping("/api/gate-results/{subjectType}/{subjectId}/history")
+    public ApiResponse<Object> history(@PathVariable String subjectType,
+                                       @PathVariable String subjectId,
+                                       @RequestParam(name = "limit", required = false) Integer limit) {
+        int effectiveLimit = limit == null ? DEFAULT_HISTORY_LIMIT : limit;
+        return ApiResponses.requireService(gateResultPortProvider,
+                port -> port.history(subjectType, subjectId, effectiveLimit));
     }
 }

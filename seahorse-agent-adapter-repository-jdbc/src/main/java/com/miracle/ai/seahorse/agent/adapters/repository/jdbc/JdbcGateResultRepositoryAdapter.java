@@ -58,6 +58,13 @@ public class JdbcGateResultRepositoryAdapter implements GateResultRepositoryPort
             ORDER BY checked_at DESC, pk_id DESC
             LIMIT 1
             """.formatted(COLUMNS);
+    private static final String SQL_FIND_HISTORY = """
+            SELECT %s
+            FROM sa_gate_result
+            WHERE tenant_id = ? AND subject_type = ? AND subject_id = ?
+            ORDER BY checked_at DESC, pk_id DESC
+            LIMIT ?
+            """.formatted(COLUMNS);
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -100,6 +107,19 @@ public class JdbcGateResultRepositoryAdapter implements GateResultRepositoryPort
                         safeSubjectId)
                 .stream()
                 .findFirst();
+    }
+
+    @Override
+    public List<GateResult> history(String subjectType, String subjectId, int limit) {
+        String safeSubjectType = normalizeSubjectType(subjectType);
+        String safeSubjectId = requireText(subjectId, "subjectId");
+        int safeLimit = limit < 1 ? 1 : limit;
+        return jdbcTemplate.query(SQL_FIND_HISTORY,
+                this::mapResult,
+                JdbcTenantSupport.resolveTenantId(),
+                safeSubjectType,
+                safeSubjectId,
+                safeLimit);
     }
 
     private GateResult mapResult(ResultSet resultSet, int rowNum) throws SQLException {

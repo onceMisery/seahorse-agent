@@ -261,6 +261,29 @@ function Assert-GateResultPersisted {
     Assert-Equal $row.sourceId $Gate.sourceId "$Name persisted database sourceId"
     Assert-True (@($row.items).Count -gt 0) "$Name persisted items missing"
     Assert-True ($null -ne $row.blockingCodes) "$Name persisted blockingCodes missing"
+
+    $historyResponse = Invoke-Api `
+        -Method GET `
+        -Path "/api/gate-results/$encodedSubjectType/$encodedSubjectId/history?limit=5" `
+        -Headers $Headers
+    Assert-ApiOk $historyResponse "$Name history"
+    $historyRecords = @($historyResponse.data)
+    Assert-True ($historyRecords.Count -gt 0) "$Name history returned no records"
+    Assert-True ($historyRecords.Count -le 5) "$Name history exceeded requested limit"
+    $newest = $historyRecords[0]
+    Assert-Equal $newest.subjectId ([string]$Gate.subjectId) "$Name history newest subjectId"
+    Assert-Equal $newest.status $Gate.status "$Name history newest status"
+    Assert-Equal $newest.sourceId $Gate.sourceId "$Name history newest sourceId"
+    foreach ($record in $historyRecords) {
+        Assert-Equal $record.subjectId ([string]$Gate.subjectId) "$Name history record subjectId"
+    }
+    $descending = $true
+    for ($i = 1; $i -lt $historyRecords.Count; $i++) {
+        if ([string]$historyRecords[$i].checkedAt -gt [string]$historyRecords[$i - 1].checkedAt) {
+            $descending = $false
+        }
+    }
+    Assert-True $descending "$Name history not ordered newest-first"
 }
 
 function First-Record {
