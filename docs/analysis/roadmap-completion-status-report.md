@@ -1,5 +1,11 @@
 # 架构路线图近期与中期设计完成情况分析报告
 
+## 2026-07-20 Unified GateResult History Query Evidence Update
+
+The unified GateResult query surface now exposes append-only history alongside the existing latest lookup. `GateResultInboundPort` and `GateResultRepositoryPort` gained a `history(subjectType, subjectId, limit)` method backed by the same tenant-scoped `sa_gate_result` table, ordered newest-first by `checked_at`. The service clamps the caller limit to a 1–100 range with a default of 20, and the Web controller serves it at `GET /api/gate-results/{subjectType}/{subjectId}/history`. The admin frontend adds a reusable `GateResultHistory` component and a shared `gateResultService`, wired into the Tool detail page so operators can audit prior gate decisions from the same view.
+
+Fresh real full-Docker evidence: the bootstrap reactor rebuilt with `BUILD SUCCESS`, the backend image was rebuilt from the new jar, and the full compose stack (PostgreSQL, Redis, Milvus, Pulsar, Elasticsearch, MinIO, Nacos, Ollama, Jaeger) reached healthy. `scripts/e2e-gate-result-smoke.ps1` passed 31/31 against the live API and PostgreSQL, including the history endpoint's newest-first ordering, limit bound, and subject consistency checks embedded in the Tool, Skill, Ingestion Pipeline, Model Config, and RAG Strategy persisted-readback steps, plus cross-tenant Model Config source ownership with zero default-tenant pollution. Frontend `tsc`, the service endpoint coverage test, and the Tool detail page test passed, and the production `vite build` succeeded. The history query is read-only over the existing append-only store; it does not add retention, deletion, or backfill semantics.
+
 ## 2026-07-14 Sandbox Artifact Scanner Health Evidence Update
 
 `SandboxArtifactScannerHealth` extends the existing scanner port and sandbox runtime inbound port with an availability projection. `DefaultSandboxArtifactScannerPort` is locally available, while `ClamAvSandboxArtifactScannerPort` issues a bounded clamd `PING` probe and reports only value-free availability. The sandbox Web controller exposes the result at `/api/sandbox/runtime/artifact-scanner-health` under the existing SANDBOX feature gate.
