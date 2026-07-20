@@ -47,24 +47,34 @@ public class SeahorseIngestionPipelineController {
 
     private final ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider;
     private final AdvancedFeatureGate advancedFeatureGate;
+    private final GateResultRecorder gateResultRecorder;
 
     public SeahorseIngestionPipelineController(ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider) {
-        this(pipelinePortProvider, AdvancedFeatureGate.allEnabledForTests());
+        this(pipelinePortProvider, AdvancedFeatureGate.allEnabledForTests(), GateResultRecorder.passthrough());
     }
 
     @Autowired
     public SeahorseIngestionPipelineController(ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider,
-                                               ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+                                               ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider,
+                                               GateResultRecorder gateResultRecorder) {
         this(pipelinePortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults),
+                gateResultRecorder);
     }
 
     public SeahorseIngestionPipelineController(ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider,
                                                AdvancedFeatureGate advancedFeatureGate) {
+        this(pipelinePortProvider, advancedFeatureGate, GateResultRecorder.passthrough());
+    }
+
+    public SeahorseIngestionPipelineController(ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider,
+                                               AdvancedFeatureGate advancedFeatureGate,
+                                               GateResultRecorder gateResultRecorder) {
         this.pipelinePortProvider = pipelinePortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
                 ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
+        this.gateResultRecorder = Objects.requireNonNull(gateResultRecorder, "gateResultRecorder must not be null");
     }
 
     @PostMapping("/ingestion/pipelines")
@@ -93,7 +103,8 @@ public class SeahorseIngestionPipelineController {
     @GetMapping("/ingestion/pipelines/{id}/gate-result")
     public ApiResponse<Object> gateResult(@PathVariable String id) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_PIPELINE_MANAGEMENT);
-        return ApiResponses.requireServiceOrError(pipelinePortProvider, port -> GateResults.fromIngestionPipeline(port.get(id)));
+        return ApiResponses.requireServiceOrError(pipelinePortProvider,
+                port -> gateResultRecorder.record(GateResults.fromIngestionPipeline(port.get(id))));
     }
 
     @GetMapping("/ingestion/pipelines")

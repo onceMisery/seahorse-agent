@@ -27,6 +27,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Objects;
+
 /**
  * Tool Gateway 工具目录管理 API。
  *
@@ -42,24 +44,34 @@ public class SeahorseToolCatalogController {
 
     private final ObjectProvider<ToolCatalogManagementInboundPort> toolCatalogPortProvider;
     private final AdvancedFeatureGate advancedFeatureGate;
+    private final GateResultRecorder gateResultRecorder;
 
     public SeahorseToolCatalogController(ObjectProvider<ToolCatalogManagementInboundPort> toolCatalogPortProvider) {
-        this(toolCatalogPortProvider, AdvancedFeatureGate.allEnabledForTests());
+        this(toolCatalogPortProvider, AdvancedFeatureGate.allEnabledForTests(), GateResultRecorder.passthrough());
     }
 
     @Autowired
     public SeahorseToolCatalogController(ObjectProvider<ToolCatalogManagementInboundPort> toolCatalogPortProvider,
-                                         ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+                                         ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider,
+                                         GateResultRecorder gateResultRecorder) {
         this(toolCatalogPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults),
+                gateResultRecorder);
     }
 
     public SeahorseToolCatalogController(ObjectProvider<ToolCatalogManagementInboundPort> toolCatalogPortProvider,
                                          AdvancedFeatureGate advancedFeatureGate) {
+        this(toolCatalogPortProvider, advancedFeatureGate, GateResultRecorder.passthrough());
+    }
+
+    public SeahorseToolCatalogController(ObjectProvider<ToolCatalogManagementInboundPort> toolCatalogPortProvider,
+                                         AdvancedFeatureGate advancedFeatureGate,
+                                         GateResultRecorder gateResultRecorder) {
         this.toolCatalogPortProvider = toolCatalogPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
                 ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
+        this.gateResultRecorder = Objects.requireNonNull(gateResultRecorder, "gateResultRecorder must not be null");
     }
 
     @GetMapping({"/tools", "/api/tools"})
@@ -86,8 +98,8 @@ public class SeahorseToolCatalogController {
     public ApiResponse<Object> gateResult(@PathVariable String toolId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.TOOL_CATALOG_MANAGEMENT);
         return ApiResponses.requireService(toolCatalogPortProvider,
-                port -> GateResults.fromToolCatalogEntry(
-                        port.findById(toolId).orElseThrow(() -> new ResourceNotFoundException("Tool not found"))));
+                port -> gateResultRecorder.record(GateResults.fromToolCatalogEntry(
+                        port.findById(toolId).orElseThrow(() -> new ResourceNotFoundException("Tool not found")))));
     }
 
     @PostMapping({"/tools/{toolId}/enable", "/api/tools/{toolId}/enable"})

@@ -48,14 +48,24 @@ public class SeahorseSkillController {
     private final ObjectProvider<AgentSkillManagementInboundPort> managementPortProvider;
     private final ObjectProvider<AgentSkillBindingInboundPort> bindingPortProvider;
     private final AdvancedFeatureGate advancedFeatureGate;
+    private final GateResultRecorder gateResultRecorder;
+
+    public SeahorseSkillController(ObjectProvider<AgentSkillManagementInboundPort> managementPortProvider,
+                                   ObjectProvider<AgentSkillBindingInboundPort> bindingPortProvider,
+                                   ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(managementPortProvider, bindingPortProvider, advancedFeatureGateProvider,
+                GateResultRecorder.passthrough());
+    }
 
     @Autowired
     public SeahorseSkillController(ObjectProvider<AgentSkillManagementInboundPort> managementPortProvider,
                                    ObjectProvider<AgentSkillBindingInboundPort> bindingPortProvider,
-                                   ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+                                   ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider,
+                                   GateResultRecorder gateResultRecorder) {
         this.managementPortProvider = managementPortProvider;
         this.bindingPortProvider = bindingPortProvider;
         this.advancedFeatureGate = advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults);
+        this.gateResultRecorder = Objects.requireNonNull(gateResultRecorder, "gateResultRecorder must not be null");
     }
 
     @GetMapping("/api/skills")
@@ -87,7 +97,7 @@ public class SeahorseSkillController {
                     .filter(item -> Objects.equals(item.revisionId(), latestRevisionId))
                     .findFirst()
                     .orElseThrow(() -> new ResourceNotFoundException("Latest skill revision not found"));
-            return GateResults.fromSkillRevision(revision);
+            return gateResultRecorder.record(GateResults.fromSkillRevision(revision), revision.tenantId());
         });
     }
 

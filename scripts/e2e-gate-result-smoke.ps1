@@ -12,6 +12,8 @@ $passed = 0
 $failed = 0
 $total = 0
 $createdModelConfigKey = $null
+$createdCrossTenantModelConfigKey = $null
+$crossTenantId = $null
 $createdPipelineId = $null
 $createdKnowledgeBaseId = $null
 
@@ -162,9 +164,14 @@ function Invoke-PostgresScalar {
 }
 
 function Get-PersistedGateResult {
-    param([string]$SubjectType, [string]$SubjectId)
+    param(
+        [string]$SubjectType,
+        [string]$SubjectId,
+        [string]$TenantId = "default"
+    )
     $subjectTypeLiteral = ConvertTo-SqlLiteral $SubjectType
     $subjectIdLiteral = ConvertTo-SqlLiteral $SubjectId
+    $tenantIdLiteral = ConvertTo-SqlLiteral $TenantId
     $json = Invoke-PostgresScalar @"
 SELECT json_build_object(
     'tenantId', tenant_id,
@@ -179,7 +186,7 @@ SELECT json_build_object(
     'sourceId', source_id
 )::text
 FROM sa_gate_result
-WHERE tenant_id = 'default'
+WHERE tenant_id = $tenantIdLiteral
   AND subject_type = $subjectTypeLiteral
   AND subject_id = $subjectIdLiteral
 ORDER BY checked_at DESC, pk_id DESC
@@ -221,6 +228,39 @@ function Assert-GateResult {
         }
     }
     return $gate
+}
+
+function Assert-GateResultPersisted {
+    param(
+        [object]$Gate,
+        [string]$SubjectType,
+        [string[]]$ExpectedItemCodes,
+        [string]$ExpectedSourceType,
+        [hashtable]$Headers,
+        [string]$Name
+    )
+    $encodedSubjectType = [System.Uri]::EscapeDataString($SubjectType)
+    $encodedSubjectId = [System.Uri]::EscapeDataString([string]$Gate.subjectId)
+    $response = Invoke-Api `
+        -Method GET `
+        -Path "/api/gate-results/$encodedSubjectType/$encodedSubjectId" `
+        -Headers $Headers
+    $persisted = Assert-GateResult `
+        -Response $response `
+        -SubjectType $SubjectType `
+        -SubjectIdPattern "^$([regex]::Escape([string]$Gate.subjectId))$" `
+        -ExpectedItemCodes $ExpectedItemCodes `
+        -Name "Persisted $Name"
+    Assert-Equal $persisted.status $Gate.status "$Name persisted API status"
+    Assert-Equal $persisted.sourceId $Gate.sourceId "$Name persisted API sourceId"
+
+    $row = Get-PersistedGateResult -SubjectType $SubjectType -SubjectId ([string]$Gate.subjectId)
+    Assert-Equal $row.tenantId "default" "$Name persisted tenant"
+    Assert-Equal $row.status $Gate.status "$Name persisted database status"
+    Assert-Equal $row.sourceType $ExpectedSourceType "$Name persisted sourceType"
+    Assert-Equal $row.sourceId $Gate.sourceId "$Name persisted database sourceId"
+    Assert-True (@($row.items).Count -gt 0) "$Name persisted items missing"
+    Assert-True ($null -ne $row.blockingCodes) "$Name persisted blockingCodes missing"
 }
 
 function First-Record {
@@ -279,13 +319,24 @@ $tool = Test-Step "Select real tool catalog entry" {
 }
 if (-not $tool) { exit 1 }
 
-Test-Step "Tool GateResult API uses real catalog metadata" {
+$toolGateResult = Test-Step "Tool GateResult API uses real catalog metadata" {
     $response = Invoke-Api -Method GET -Path "/api/tools/$($tool.toolId)/gate-result" -Headers $headers
-    Assert-GateResult `
+    return Assert-GateResult `
         -Response $response `
         -SubjectType "TOOL" `
         -SubjectIdPattern "^$([regex]::Escape([string]$tool.toolId))$" `
         -ExpectedItemCodes @("TOOL_ENABLED", "TOOL_RISK_LEVEL_DECLARED", "TOOL_ACTION_TYPE_DECLARED", "TOOL_INPUT_SCHEMA_VALID") `
+        -Name "Tool GateResult"
+}
+if (-not $toolGateResult) { exit 1 }
+
+Test-Step "Tool GateResult is readable from API and durable in PostgreSQL" {
+    Assert-GateResultPersisted `
+        -Gate $toolGateResult `
+        -SubjectType "TOOL" `
+        -ExpectedItemCodes @("TOOL_ENABLED", "TOOL_RISK_LEVEL_DECLARED", "TOOL_INPUT_SCHEMA_VALID") `
+        -ExpectedSourceType "ToolCatalogEntry" `
+        -Headers $headers `
         -Name "Tool GateResult"
 }
 
@@ -295,14 +346,25 @@ $skill = Test-Step "Select real skill catalog entry" {
 }
 if (-not $skill) { exit 1 }
 
-Test-Step "Skill GateResult API uses latest real revision" {
+$skillGateResult = Test-Step "Skill GateResult API uses latest real revision" {
     $encodedSkill = [System.Uri]::EscapeDataString([string]$skill.name)
     $response = Invoke-Api -Method GET -Path "/api/skills/$encodedSkill/gate-result?tenantId=default" -Headers $headers
-    Assert-GateResult `
+    return Assert-GateResult `
         -Response $response `
         -SubjectType "SKILL" `
         -SubjectIdPattern "^default:" `
         -ExpectedItemCodes @("SKILL_SECURITY_SCAN") `
+        -Name "Skill GateResult"
+}
+if (-not $skillGateResult) { exit 1 }
+
+Test-Step "Skill GateResult is readable from API and durable in PostgreSQL" {
+    Assert-GateResultPersisted `
+        -Gate $skillGateResult `
+        -SubjectType "SKILL" `
+        -ExpectedItemCodes @("SKILL_SECURITY_SCAN") `
+        -ExpectedSourceType "AgentSkillRevision" `
+        -Headers $headers `
         -Name "Skill GateResult"
 }
 
@@ -445,13 +507,24 @@ $pipeline = Test-Step "Create real ingestion pipeline for GateResult" {
 }
 if (-not $pipeline) { exit 1 }
 
-Test-Step "Ingestion Pipeline GateResult API projects real pipeline" {
+$pipelineGateResult = Test-Step "Ingestion Pipeline GateResult API projects real pipeline" {
     $response = Invoke-Api -Method GET -Path "/ingestion/pipelines/$($pipeline.id)/gate-result" -Headers $headers
-    Assert-GateResult `
+    return Assert-GateResult `
         -Response $response `
         -SubjectType "INGESTION_PIPELINE" `
         -SubjectIdPattern "^$([regex]::Escape([string]$pipeline.id))$" `
         -ExpectedItemCodes @("INGESTION_PIPELINE_NODES_PRESENT", "INGESTION_PIPELINE_NODE_IDS_PRESENT", "INGESTION_PIPELINE_CHAIN_ACYCLIC") `
+        -Name "Ingestion Pipeline GateResult"
+}
+if (-not $pipelineGateResult) { exit 1 }
+
+Test-Step "Ingestion Pipeline GateResult is readable from API and durable in PostgreSQL" {
+    Assert-GateResultPersisted `
+        -Gate $pipelineGateResult `
+        -SubjectType "INGESTION_PIPELINE" `
+        -ExpectedItemCodes @("INGESTION_PIPELINE_NODES_PRESENT", "INGESTION_PIPELINE_CHAIN_ACYCLIC") `
+        -ExpectedSourceType "IngestionPipelineRecord" `
+        -Headers $headers `
         -Name "Ingestion Pipeline GateResult"
 }
 
@@ -471,15 +544,67 @@ $modelConfig = Test-Step "Create real model config for GateResult" {
 }
 if (-not $modelConfig) { exit 1 }
 
-Test-Step "Model Config GateResult API projects real config" {
+$modelConfigGateResult = Test-Step "Model Config GateResult API projects real config" {
     $encodedKey = [System.Uri]::EscapeDataString($script:createdModelConfigKey)
     $response = Invoke-Api -Method GET -Path "/admin/ai-config/$encodedKey/gate-result?tenantId=default" -Headers $headers
-    Assert-GateResult `
+    return Assert-GateResult `
         -Response $response `
         -SubjectType "MODEL_CONFIG" `
         -SubjectIdPattern "^default:" `
         -ExpectedItemCodes @("MODEL_CONFIG_KEY_PRESENT", "MODEL_CONFIG_VALUE_PRESENT", "MODEL_CONFIG_JSON_VALUE_VALID", "MODEL_CONFIG_SENSITIVE_VALUE_ENCRYPTED") `
         -Name "Model Config GateResult"
+}
+if (-not $modelConfigGateResult) { exit 1 }
+
+Test-Step "Model Config GateResult is readable from API and durable in PostgreSQL" {
+    Assert-GateResultPersisted `
+        -Gate $modelConfigGateResult `
+        -SubjectType "MODEL_CONFIG" `
+        -ExpectedItemCodes @("MODEL_CONFIG_KEY_PRESENT", "MODEL_CONFIG_JSON_VALUE_VALID") `
+        -ExpectedSourceType "AiModelConfig" `
+        -Headers $headers `
+        -Name "Model Config GateResult"
+}
+
+Test-Step "Cross-tenant Model Config GateResult keeps source tenant ownership" {
+    $script:crossTenantId = "$marker-tenant"
+    $script:createdCrossTenantModelConfigKey = "codex.gateResult.crossTenant.$suffix"
+    $created = Invoke-Api -Method POST -Path "/admin/ai-config" -Headers $headers -Body @{
+        tenantId = $script:crossTenantId
+        configKey = $script:createdCrossTenantModelConfigKey
+        configValue = '{"provider":"codex-cross-tenant-smoke","enabled":true}'
+        configType = "JSON"
+        encrypted = $false
+        description = "Codex cross-tenant GateResult ownership smoke"
+    }
+    Assert-ApiOk $created "Create cross-tenant model config"
+
+    $encodedKey = [System.Uri]::EscapeDataString($script:createdCrossTenantModelConfigKey)
+    $encodedTenant = [System.Uri]::EscapeDataString($script:crossTenantId)
+    $response = Invoke-Api `
+        -Method GET `
+        -Path "/admin/ai-config/$encodedKey/gate-result?tenantId=$encodedTenant" `
+        -Headers $headers
+    $gate = Assert-GateResult `
+        -Response $response `
+        -SubjectType "MODEL_CONFIG" `
+        -SubjectIdPattern "^$([regex]::Escape($script:crossTenantId)):" `
+        -ExpectedItemCodes @("MODEL_CONFIG_KEY_PRESENT", "MODEL_CONFIG_JSON_VALUE_VALID") `
+        -Name "Cross-tenant Model Config GateResult"
+
+    $row = Get-PersistedGateResult `
+        -SubjectType "MODEL_CONFIG" `
+        -SubjectId ([string]$gate.subjectId) `
+        -TenantId $script:crossTenantId
+    Assert-Equal $row.sourceId $gate.sourceId "Cross-tenant persisted sourceId"
+    $defaultTenantCount = Invoke-PostgresScalar @"
+SELECT COUNT(*)
+FROM sa_gate_result
+WHERE tenant_id = 'default'
+  AND subject_type = 'MODEL_CONFIG'
+  AND subject_id = $(ConvertTo-SqlLiteral ([string]$gate.subjectId));
+"@
+    Assert-Equal $defaultTenantCount "0" "Cross-tenant GateResult default-tenant pollution count"
 }
 
 $ragComparison = Test-Step "Create real RAG strategy comparison for GateResult" {
@@ -592,6 +717,17 @@ $ragGateResult = Test-Step "RAG Strategy GateResult API projects real comparison
         -ExpectedItemCodes @("RAG_BASELINE_PRESENT", "RAG_WINNER_PRESENT", "RAG_EVALUABLE_CASES_PRESENT", "RAG_RECALL_NOT_REGRESSED", "RAG_PRECISION_NOT_REGRESSED") `
         -Name "RAG Strategy GateResult"
 }
+if (-not $ragGateResult) { exit 1 }
+
+Test-Step "RAG Strategy GateResult is readable from API and durable in PostgreSQL" {
+    Assert-GateResultPersisted `
+        -Gate $ragGateResult `
+        -SubjectType "RAG_STRATEGY" `
+        -ExpectedItemCodes @("RAG_BASELINE_PRESENT", "RAG_WINNER_PRESENT", "RAG_EVALUABLE_CASES_PRESENT") `
+        -ExpectedSourceType "RetrievalEvaluationComparisonRecord" `
+        -Headers $headers `
+        -Name "RAG Strategy GateResult"
+}
 
 Test-Step "Cleanup temporary model config" {
     if ([string]::IsNullOrWhiteSpace($script:createdModelConfigKey)) {
@@ -600,6 +736,20 @@ Test-Step "Cleanup temporary model config" {
     $encodedKey = [System.Uri]::EscapeDataString($script:createdModelConfigKey)
     $response = Invoke-Api -Method DELETE -Path "/admin/ai-config/$encodedKey?tenantId=default" -Headers $headers
     Assert-ApiOk $response "Delete model config"
+}
+
+Test-Step "Cleanup temporary cross-tenant model config" {
+    if ([string]::IsNullOrWhiteSpace($script:createdCrossTenantModelConfigKey) -or
+            [string]::IsNullOrWhiteSpace($script:crossTenantId)) {
+        return
+    }
+    $encodedKey = [System.Uri]::EscapeDataString($script:createdCrossTenantModelConfigKey)
+    $encodedTenant = [System.Uri]::EscapeDataString($script:crossTenantId)
+    $response = Invoke-Api `
+        -Method DELETE `
+        -Path "/admin/ai-config/$encodedKey?tenantId=$encodedTenant" `
+        -Headers $headers
+    Assert-ApiOk $response "Delete cross-tenant model config"
 }
 
 Test-Step "Cleanup temporary ingestion pipeline" {

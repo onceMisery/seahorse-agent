@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResults;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetPayload;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCase;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,10 +43,19 @@ import java.util.Objects;
 public class SeahorseRetrievalEvaluationDatasetController {
 
     private final ObjectProvider<RetrievalEvaluationDatasetInboundPort> datasetPortProvider;
+    private final GateResultRecorder gateResultRecorder;
 
     public SeahorseRetrievalEvaluationDatasetController(
             ObjectProvider<RetrievalEvaluationDatasetInboundPort> datasetPortProvider) {
+        this(datasetPortProvider, GateResultRecorder.passthrough());
+    }
+
+    @Autowired
+    public SeahorseRetrievalEvaluationDatasetController(
+            ObjectProvider<RetrievalEvaluationDatasetInboundPort> datasetPortProvider,
+            GateResultRecorder gateResultRecorder) {
         this.datasetPortProvider = datasetPortProvider;
+        this.gateResultRecorder = Objects.requireNonNull(gateResultRecorder, "gateResultRecorder must not be null");
     }
 
     @GetMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets")
@@ -151,8 +161,8 @@ public class SeahorseRetrievalEvaluationDatasetController {
                                                        @PathVariable("dataset-id") String datasetId,
                                                        @PathVariable("comparison-id") String comparisonId) {
         return ApiResponses.requireServiceOrError(datasetPortProvider,
-                port -> GateResults.fromRetrievalStrategyComparison(
-                        port.getComparison(kbId, datasetId, comparisonId)));
+                port -> gateResultRecorder.record(GateResults.fromRetrievalStrategyComparison(
+                        port.getComparison(kbId, datasetId, comparisonId))));
     }
 
     @GetMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/runs")

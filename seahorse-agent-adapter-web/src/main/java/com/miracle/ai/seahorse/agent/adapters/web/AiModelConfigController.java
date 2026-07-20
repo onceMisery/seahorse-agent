@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.model.AiModelConfig;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResults;
 import com.miracle.ai.seahorse.agent.ports.outbound.config.AiModelConfigRepositoryPort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
@@ -46,9 +47,17 @@ public class AiModelConfigController {
     private static final String ERROR_CODE = "1";
 
     private final AiModelConfigRepositoryPort configRepository;
+    private final GateResultRecorder gateResultRecorder;
 
     public AiModelConfigController(AiModelConfigRepositoryPort configRepository) {
+        this(configRepository, GateResultRecorder.passthrough());
+    }
+
+    @Autowired
+    public AiModelConfigController(AiModelConfigRepositoryPort configRepository,
+                                   GateResultRecorder gateResultRecorder) {
         this.configRepository = configRepository;
+        this.gateResultRecorder = Objects.requireNonNull(gateResultRecorder, "gateResultRecorder must not be null");
     }
 
     @GetMapping
@@ -84,7 +93,8 @@ public class AiModelConfigController {
         try {
             StpUtil.checkLogin();
             return configRepository.findByKey(normalizeTenantId(tenantId), key)
-                    .map(config -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, GateResults.fromAiModelConfig(config)))
+                    .map(config -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                            gateResultRecorder.record(GateResults.fromAiModelConfig(config), config.getTenantId())))
                     .orElse(Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Config not found"));
         } catch (Exception e) {
             return failure("Failed to get config gate result", e);
