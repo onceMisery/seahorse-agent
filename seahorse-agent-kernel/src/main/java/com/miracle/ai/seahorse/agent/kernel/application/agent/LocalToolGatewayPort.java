@@ -45,6 +45,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolOutputRedactionPor
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceReferenceResolverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResultSpillPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -246,35 +247,52 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         String effectiveRunId = auditRunId(safeRequest.runId(), invocationId);
         String effectiveUserId = auditUserId(safeRequest.userId());
         Instant startedAt = clock.instant();
+        Optional<ToolPort> toolPort = toolRegistry.find(safeRequest.toolId());
+        ToolInvocationRequest effectiveRequest = safeRequest;
+        PolicyDecision referenceResolutionDecision = null;
+        if (toolPort.isPresent() && toolPort.get() instanceof ToolResourceReferenceResolverPort resolver) {
+            try {
+                Map<String, String> resolvedResourceRefs = Objects.requireNonNull(
+                        resolver.resolveResourceRefs(safeRequest),
+                        "trusted resource reference resolver returned null");
+                effectiveRequest = safeRequest.withResourceRefs(resolvedResourceRefs);
+            } catch (RuntimeException ex) {
+                referenceResolutionDecision = PolicyDecision.deny(
+                        "builtin-resource-reference-resolution",
+                        ToolPolicyReasonCodes.RESOURCE_FORBIDDEN,
+                        "Trusted resource reference resolution failed");
+            }
+        }
         auditPort.recordRequested(new ToolInvocationAuditRecord(
                 invocationId,
                 effectiveRunId,
-                safeRequest.stepId(),
-                safeRequest.agentId(),
-                safeRequest.versionId(),
-                safeRequest.rolloutId(),
-                safeRequest.tenantId(),
+                effectiveRequest.stepId(),
+                effectiveRequest.agentId(),
+                effectiveRequest.versionId(),
+                effectiveRequest.rolloutId(),
+                effectiveRequest.tenantId(),
                 effectiveUserId,
-                safeRequest.toolId(),
-                safeRequest.idempotencyKey(),
+                effectiveRequest.toolId(),
+                effectiveRequest.idempotencyKey(),
                 ToolInvocationStatus.REQUESTED,
-                summarizeArguments(safeRequest),
+                summarizeArguments(effectiveRequest),
                 startedAt));
-        Optional<ToolPort> toolPort = toolRegistry.find(safeRequest.toolId());
 
         // 策略裁决必须发生在真实工具执行之前；非 ALLOW 结果不得触达 ToolPort。
-        PolicyDecision decision = Objects.requireNonNullElseGet(
-                toolPolicy.decide(ToolPolicyRequest.from(safeRequest, toolPort.isPresent())),
-                () -> PolicyDecision.deny("builtin-policy-null", ToolPolicyReasonCodes.POLICY_DECISION_MISSING,
-                        "Tool policy did not return a decision"));
-        boolean approvalSatisfied = approvalSatisfied(safeRequest, decision);
+        PolicyDecision decision = referenceResolutionDecision != null
+                ? referenceResolutionDecision
+                : Objects.requireNonNullElseGet(
+                        toolPolicy.decide(ToolPolicyRequest.from(effectiveRequest, toolPort.isPresent())),
+                        () -> PolicyDecision.deny("builtin-policy-null", ToolPolicyReasonCodes.POLICY_DECISION_MISSING,
+                                "Tool policy did not return a decision"));
+        boolean approvalSatisfied = approvalSatisfied(effectiveRequest, decision);
         ToolInvocationStatus decisionStatus = approvalSatisfied ? ToolInvocationStatus.ALLOWED : decisionStatus(decision);
         auditPort.recordDecision(new ToolInvocationAuditDecision(invocationId, decision.decisionId(), decisionStatus));
         if (!decision.allowsExecution() && !approvalSatisfied) {
             String approvalId = null;
             if (decision.effect() == PolicyDecision.Effect.APPROVAL_REQUIRED) {
                 approvalId = createApprovalRequest(
-                        safeRequest,
+                        effectiveRequest,
                         decision,
                         invocationId,
                         effectiveRunId,
@@ -293,17 +311,21 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         }
 
         try {
-            ToolPort executableTool = toolPort
-                    .orElseGet(() -> ToolPort.notFound(safeRequest.toolId()));
+            ToolPort executableTool = toolPort.isPresent()
+                    ? toolPort.get()
+                    : ToolPort.notFound(effectiveRequest.toolId());
             ToolInvocationResult rawResult = executableTool instanceof ToolInvocationRequestAwarePort awareTool
-                    ? awareTool.invoke(safeRequest)
-                    : executableTool.invoke(safeRequest.toolCallId(), safeRequest.toolId(), safeRequest.arguments());
+                    ? awareTool.invoke(effectiveRequest)
+                    : executableTool.invoke(
+                            effectiveRequest.toolCallId(),
+                            effectiveRequest.toolId(),
+                            effectiveRequest.arguments());
             if (rawResult.success()) {
-                publishArtifacts(safeRequest, rawResult);
+                publishArtifacts(effectiveRequest, rawResult);
             }
-            ToolInvocationResult redactedResult = outputRedactionPort.redact(safeRequest, rawResult);
+            ToolInvocationResult redactedResult = outputRedactionPort.redact(effectiveRequest, rawResult);
             ToolInvocationResult result = redactedResult.success()
-                    ? toolResultSpillPort.spill(safeRequest, redactedResult)
+                    ? toolResultSpillPort.spill(effectiveRequest, redactedResult)
                     : redactedResult;
             String auditError = auditErrorMessage(result.error());
             auditPort.recordCompleted(new ToolInvocationAuditCompletion(

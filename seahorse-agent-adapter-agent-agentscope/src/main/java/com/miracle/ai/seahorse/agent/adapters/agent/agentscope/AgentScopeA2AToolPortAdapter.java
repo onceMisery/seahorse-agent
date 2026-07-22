@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.A2AAgentConnectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.A2AAgentRequest;
@@ -25,12 +26,13 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.A2AAgentResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceReferenceResolverPort;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-public class AgentScopeA2AToolPortAdapter implements DescribedToolPort {
+public class AgentScopeA2AToolPortAdapter implements DescribedToolPort, ToolResourceReferenceResolverPort {
 
     public static final String TOOL_ID = "invoke_remote_a2a_agent";
     private static final int MAX_AGENT_NAME_LENGTH = 128;
@@ -56,6 +58,13 @@ public class AgentScopeA2AToolPortAdapter implements DescribedToolPort {
     @Override
     public ToolDescriptor descriptor() {
         return DESCRIPTOR;
+    }
+
+    @Override
+    public Map<String, String> resolveResourceRefs(ToolInvocationRequest request) {
+        Objects.requireNonNull(request, "request must not be null");
+        String agentName = requiredText(request.arguments(), "agentName");
+        return Map.of("agentName", agentName);
     }
 
     @Override

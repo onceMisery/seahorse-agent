@@ -25,6 +25,7 @@ $ErrorActionPreference = "Stop"
 $passed = 0
 $failed = 0
 $total = 0
+$createdRuleIds = [System.Collections.Generic.List[string]]::new()
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $RunSuffix = ([guid]::NewGuid().ToString('N')).Substring(0, 8)
@@ -133,6 +134,31 @@ function Assert-ApiOk {
     if ($null -eq $Response -or "$($Response.code)" -ne "0") {
         throw "$Name API error: $($Response | ConvertTo-Json -Depth 20 -Compress)"
     }
+}
+
+function New-ResourceAclRule {
+    param(
+        [hashtable]$Headers,
+        [string]$ResourceId,
+        [string]$Effect
+    )
+
+    $response = Invoke-Json -Method POST -Path "/api/resource-acl-rules" -Headers $Headers -Body @{
+        tenantId = "default"
+        resourceType = "REMOTE_AGENT"
+        resourceId = $ResourceId
+        subjectType = "USER_DELEGATED_AGENT"
+        subjectId = $Username
+        action = "EXECUTE"
+        effect = $Effect
+        priority = 100
+    }
+    Assert-ApiOk $response "Create $Effect REMOTE_AGENT ACL"
+    if ([string]::IsNullOrWhiteSpace("$($response.data.ruleId)")) {
+        throw "Create $Effect REMOTE_AGENT ACL did not return ruleId"
+    }
+    $createdRuleIds.Add("$($response.data.ruleId)")
+    return $response.data
 }
 
 function Get-PageRecords {
@@ -356,6 +382,12 @@ try {
     if (-not $login) { exit 1 }
     $headers = @{ Authorization = "Bearer $($login.data.token)" }
 
+    $blockedAgentName = "blocked-a2a-agent-$RunSuffix"
+    Test-Step "Create canonical REMOTE_AGENT ALLOW and DENY ACL rules" {
+        New-ResourceAclRule -Headers $headers -ResourceId $RemoteAgentName -Effect "ALLOW" | Out-Null
+        New-ResourceAclRule -Headers $headers -ResourceId $blockedAgentName -Effect "DENY" | Out-Null
+    } | Out-Null
+
     Test-Step "Verify remote A2A tool catalog entry" {
         $response = Invoke-Json -Method GET -Path "/api/tools?current=1&size=50&keyword=invoke_remote_a2a_agent" -Headers $headers
         Assert-ApiOk $response "List tools"
@@ -393,7 +425,9 @@ try {
                 source = "success-source-secret-$RunSuffix"
             }
         }
-        resourceRefs = @{}
+        # Deliberately untrusted: the provider-owned resolver must replace this
+        # with the agentName resource before the policy decision.
+        resourceRefs = @{ callerSupplied = "unrelated-resource-$RunSuffix" }
         idempotencyKey = "${successRunId}:${successToolCallId}"
         allowedToolIds = @("invoke_remote_a2a_agent")
     }
@@ -471,7 +505,9 @@ try {
                 source = $metadataSource
             }
         }
-        resourceRefs = @{}
+        # Deliberately points at the allowed agent; the provider resolver must
+        # replace it with the blocked agentName before policy evaluation.
+        resourceRefs = @{ callerSupplied = $RemoteAgentName }
         idempotencyKey = "${runId}:${toolCallId}"
         allowedToolIds = @("invoke_remote_a2a_agent")
     }
@@ -482,8 +518,8 @@ try {
             throw "Remote A2A invocation unexpectedly succeeded: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
         }
         $errorText = "$($response.data.error)"
-        if (-not $errorText.Contains("invoke_remote_a2a_agent failed for agentName=$agentName")) {
-            throw "Remote A2A failure did not include target agent diagnostic: $errorText"
+        if ($errorText -ne "RESOURCE_FORBIDDEN") {
+            throw "Remote A2A denial did not fail closed with RESOURCE_FORBIDDEN: $errorText"
         }
         foreach ($forbidden in @($prompt, $metadataVersion, $metadataSource)) {
             if ($errorText.Contains($forbidden)) {
@@ -497,9 +533,12 @@ try {
         $response = Invoke-Json -Method GET -Path "/api/tool-invocations?current=1&size=20&runId=$runId&toolId=invoke_remote_a2a_agent" -Headers $headers
         Assert-ApiOk $response "Read remote A2A tool audit"
         $records = Get-PageRecords $response.data
-        $audit = @($records | Where-Object { $_.status -eq "FAILED" -and $_.toolId -eq "invoke_remote_a2a_agent" })[0]
+        $audit = @($records | Where-Object { $_.status -eq "DENIED" -and $_.toolId -eq "invoke_remote_a2a_agent" })[0]
         if (-not $audit) {
-            throw "Remote A2A Tool Gateway invocation did not create FAILED tool audit: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+            throw "Remote A2A Tool Gateway invocation did not create DENIED tool audit: $($response.data | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($audit.errorMessage)" -ne "RESOURCE_FORBIDDEN") {
+            throw "Remote A2A denial audit did not record RESOURCE_FORBIDDEN: $($audit | ConvertTo-Json -Depth 20 -Compress)"
         }
         $summary = "$($audit.argumentsSummary)"
         $metadataValueTotalLength = $metadataVersion.Length + $metadataSource.Length
@@ -542,6 +581,25 @@ try {
         $audit | ConvertTo-Json -Compress | Write-Host
     } | Out-Null
 
+    Test-Step "Verify canonical REMOTE_AGENT access decisions" {
+        $response = Invoke-Json -Method GET `
+            -Path "/api/access-decisions?tenantId=default&subjectType=USER_DELEGATED_AGENT&subjectId=$Username&action=EXECUTE&resourceType=REMOTE_AGENT&current=1&size=100" `
+            -Headers $headers
+        Assert-ApiOk $response "Read remote A2A access decisions"
+        $records = Get-PageRecords $response.data
+        $allow = @($records | Where-Object { "$($_.resourceId)" -eq $RemoteAgentName })[0]
+        $deny = @($records | Where-Object { "$($_.resourceId)" -eq $blockedAgentName })[0]
+        if (-not $allow -or -not $deny) {
+            throw "Remote A2A access decision API did not return canonical ALLOW and DENY rows"
+        }
+        if ("$($allow.effect)" -ne "ALLOW" -or "$($allow.reasonCode)" -ne "RESOURCE_ACL_ALLOW") {
+            throw "Remote A2A ALLOW decision mismatch: $($allow | ConvertTo-Json -Depth 20 -Compress)"
+        }
+        if ("$($deny.effect)" -ne "DENY" -or "$($deny.reasonCode)" -ne "RESOURCE_ACL_DENY") {
+            throw "Remote A2A DENY decision mismatch: $($deny | ConvertTo-Json -Depth 20 -Compress)"
+        }
+    } | Out-Null
+
     Write-Host "`nSummary: $passed / $total passed, $failed failed" -ForegroundColor Cyan
     Write-Host "Smoke backend: $BaseUrl"
     Write-Host "Remote backend: $RemoteBaseUrl"
@@ -552,6 +610,17 @@ try {
     Write-Error $_.Exception.Message
     exit 1
 } finally {
+    if ($null -ne $headers) {
+        foreach ($ruleId in $createdRuleIds) {
+            try {
+                $cleanup = Invoke-Json -Method POST -Path "/api/resource-acl-rules/$ruleId/disable" -Headers $headers
+                Assert-ApiOk $cleanup "Disable remote A2A ACL $ruleId"
+            } catch {
+                Write-Host "ACL CLEANUP WARN: $($_.Exception.Message)" -ForegroundColor Yellow
+                $failed++
+            }
+        }
+    }
     if (-not $KeepContainer) {
         Remove-SmokeContainer -Name $BackendContainerName
         Remove-SmokeContainer -Name $RemoteBackendContainerName

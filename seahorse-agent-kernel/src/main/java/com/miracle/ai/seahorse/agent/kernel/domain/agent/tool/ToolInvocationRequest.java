@@ -103,6 +103,24 @@ public record ToolInvocationRequest(String runId,
         allowedToolIds = List.copyOf(Objects.requireNonNullElse(allowedToolIds, List.of()));
     }
 
+    public ToolInvocationRequest withResourceRefs(Map<String, String> resolvedResourceRefs) {
+        return new ToolInvocationRequest(
+                runId,
+                stepId,
+                toolCallId,
+                agentId,
+                versionId,
+                rolloutId,
+                tenantId,
+                userId,
+                agentIdentityId,
+                toolId,
+                arguments,
+                resolvedResourceRefs,
+                idempotencyKey,
+                allowedToolIds);
+    }
+
     private static String requireText(String value, String message) {
         String trimmed = trimToNull(value);
         if (trimmed == null) {

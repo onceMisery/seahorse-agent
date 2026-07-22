@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 
 import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.A2AAgentConnectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.A2AAgentRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.A2AAgentResolveRequest;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 import java.util.stream.Collectors;
@@ -60,6 +62,27 @@ class AgentScopeA2AToolPortAdapterTests {
         assertEquals("planner", captured.agentName());
         assertEquals("draft a plan", captured.prompt());
         assertEquals("agent-loop", captured.metadata().get("source"));
+    }
+
+    @Test
+    void resolvesAgentNameAsAuthoritativeRemoteResourceReference() {
+        AgentScopeA2AToolPortAdapter adapter = new AgentScopeA2AToolPortAdapter(new CapturingConnector());
+        ToolInvocationRequest request = new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-a",
+                "user-1",
+                "agent-identity-1",
+                AgentScopeA2AToolPortAdapter.TOOL_ID,
+                Map.of("agentName", "planner", "prompt", "draft a plan"),
+                Map.of("callerSupplied", "untrusted-resource"),
+                "run-1:call-1",
+                List.of());
+
+        assertEquals(Map.of("agentName", "planner"), adapter.resolveResourceRefs(request));
     }
 
     @Test

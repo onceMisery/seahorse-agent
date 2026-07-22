@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceReferenceResolverPort;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -93,6 +94,21 @@ class LocalToolGatewayPortPolicyTests {
         assertEquals(0, tool.calls.get());
     }
 
+    @Test
+    void shouldUseProviderOwnedResourceReferencesBeforePolicyDecision() {
+        TrustedResourceToolPort tool = new TrustedResourceToolPort();
+        RecordingToolPolicyPort policy = new RecordingToolPolicyPort(PolicyDecision.allow("allow-1"));
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(new SingleToolRegistry(tool), policy);
+
+        ToolInvocationRequest original = request("weather", List.of("weather"))
+                .withResourceRefs(Map.of("callerSupplied", "untrusted-resource"));
+        ToolInvocationResult result = gateway.invoke(original);
+
+        assertEquals("ok", result.content());
+        assertEquals(Map.of("providerOwned", "canonical-resource"), policy.requests.get(0).resourceRefs());
+        assertEquals(1, tool.calls.get());
+    }
+
     private static ToolInvocationRequest request(String toolId, List<String> allowedToolIds) {
         return new ToolInvocationRequest(
                 "run-1",
@@ -143,8 +159,8 @@ class LocalToolGatewayPortPolicyTests {
         }
     }
 
-    private static final class CountingToolPort implements ToolPort {
-        private final AtomicInteger calls = new AtomicInteger();
+    private static class CountingToolPort implements ToolPort {
+        protected final AtomicInteger calls = new AtomicInteger();
         private final AtomicReference<Map<String, Object>> arguments = new AtomicReference<>();
         private final ToolInvocationResult result;
 
@@ -157,6 +173,19 @@ class LocalToolGatewayPortPolicyTests {
             calls.incrementAndGet();
             this.arguments.set(arguments);
             return result;
+        }
+    }
+
+    private static final class TrustedResourceToolPort extends CountingToolPort
+            implements ToolResourceReferenceResolverPort {
+
+        private TrustedResourceToolPort() {
+            super(ToolInvocationResult.ok("ok"));
+        }
+
+        @Override
+        public Map<String, String> resolveResourceRefs(ToolInvocationRequest request) {
+            return Map.of("providerOwned", "canonical-resource");
         }
     }
 }
