@@ -32,6 +32,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelAcce
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackBuilderService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelResourceAclManagementService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.context.PolicyBackedToolResourceAccessPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.cost.KernelCostUsageQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelAgentEvalQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.factory.KernelAgentFactoryService;
@@ -120,6 +121,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPor
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.junit.jupiter.api.Test;
@@ -178,6 +180,11 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(AccessDecisionQueryPort.class);
                     assertThat(context).hasSingleBean(ResourceAclRepositoryPort.class);
                     assertThat(context).hasSingleBean(ResourceAccessPolicyPort.class);
+                    assertThat(context).hasSingleBean(ToolResourceAccessPort.class);
+                    assertThat(context.getBean(ToolResourceAccessPort.class))
+                            .isInstanceOf(PolicyBackedToolResourceAccessPort.class);
+                    assertThat(field(context.getBean(ToolResourceAccessPort.class), "policy"))
+                            .isSameAs(context.getBean(ResourceAccessPolicyPort.class));
                     assertThat(context.getBean(ResourceAccessPolicyPort.class))
                             .isInstanceOf(AuditedResourceAccessPolicyPort.class)
                             .isNotInstanceOf(DefaultResourceAccessPolicyPort.class);

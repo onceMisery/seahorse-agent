@@ -377,7 +377,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 agentToolBindingRepositoryPort,
                 toolInvocationUsagePort.getIfAvailable(ToolInvocationUsagePort::empty),
                 ToolPolicyRequest::toolRegistered,
-                toolResourceAccessPort.getIfAvailable(ToolResourceAccessPort::allowAll),
+                toolResourceAccessPort.getIfAvailable(ToolResourceAccessPort::denyAll),
                 quotaManagementPort.getIfAvailable());
     }
 

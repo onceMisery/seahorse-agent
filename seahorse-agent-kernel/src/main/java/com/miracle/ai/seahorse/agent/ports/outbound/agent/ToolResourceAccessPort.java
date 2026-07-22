@@ -25,4 +25,8 @@ public interface ToolResourceAccessPort {
     static ToolResourceAccessPort allowAll() {
         return request -> ToolResourceAccessDecision.allow();
     }
+
+    static ToolResourceAccessPort denyAll() {
+        return request -> ToolResourceAccessDecision.deny("Resource access policy unavailable");
+    }
 }

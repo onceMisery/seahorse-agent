@@ -81,7 +81,7 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
                                        ToolInvocationUsagePort invocationUsagePort,
                                        Predicate<ToolPolicyRequest> toolRegisteredPredicate) {
         this(toolCatalogRepository, bindingRepository, invocationUsagePort, toolRegisteredPredicate,
-                ToolResourceAccessPort.allowAll());
+                ToolResourceAccessPort.denyAll());
     }
 
     public CatalogBackedToolPolicyPort(ToolCatalogRepositoryPort toolCatalogRepository,
@@ -113,7 +113,7 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
                 () -> ToolPolicyRequest::toolRegistered);
         this.resourceAccessPort = Objects.requireNonNullElseGet(
                 resourceAccessPort,
-                ToolResourceAccessPort::allowAll);
+                ToolResourceAccessPort::denyAll);
         this.quotaManagementPort = quotaManagementPort;
     }
 
@@ -198,6 +198,7 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
                 request.agentIdentityId(),
                 request.toolId(),
                 tool.resourceType(),
+                tool.actionType(),
                 request.resourceRefs()));
         if (accessDecision != null && accessDecision.allowed()) {
             return null;

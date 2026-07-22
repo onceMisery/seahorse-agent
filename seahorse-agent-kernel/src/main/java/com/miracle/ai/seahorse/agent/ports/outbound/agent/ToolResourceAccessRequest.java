@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
+
 import java.util.Map;
 import java.util.Objects;
 
@@ -28,6 +30,7 @@ public record ToolResourceAccessRequest(String runId,
                                         String agentIdentityId,
                                         String toolId,
                                         String resourceType,
+                                        ToolActionType actionType,
                                         Map<String, String> resourceRefs) {
 
     public ToolResourceAccessRequest {
@@ -39,6 +42,7 @@ public record ToolResourceAccessRequest(String runId,
         agentIdentityId = trimToNull(agentIdentityId);
         toolId = requireText(toolId, "toolId must not be blank");
         resourceType = trimToNull(resourceType);
+        actionType = Objects.requireNonNull(actionType, "actionType must not be null");
         resourceRefs = Map.copyOf(Objects.requireNonNullElse(resourceRefs, Map.of()));
     }
 

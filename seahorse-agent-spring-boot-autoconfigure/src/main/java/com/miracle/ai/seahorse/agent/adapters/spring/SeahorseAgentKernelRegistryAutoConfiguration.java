@@ -39,6 +39,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelAcce
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackBuilderService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelResourceAclManagementService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.context.PolicyBackedToolResourceAccessPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.cost.KernelAgentRunCostSummaryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.cost.KernelCostUsageQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelAgentEvalQueryService;
@@ -160,6 +161,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthReportProvide
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
@@ -318,6 +320,14 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             return policy;
         }
         return new AuditedResourceAccessPolicyPort(policy, auditLog, auditLedgerService.getIfAvailable());
+    }
+
+    @Bean
+    @ConditionalOnBean(ResourceAccessPolicyPort.class)
+    @ConditionalOnMissingBean(ToolResourceAccessPort.class)
+    public ToolResourceAccessPort seahorseToolResourceAccessPort(
+            ResourceAccessPolicyPort resourceAccessPolicyPort) {
+        return new PolicyBackedToolResourceAccessPort(resourceAccessPolicyPort);
     }
 
     @Bean
