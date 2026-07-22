@@ -20,6 +20,8 @@ package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.AgentRunMetadataContributor;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -101,10 +103,16 @@ public class AgentScopeRunMetadataContributor implements AgentRunMetadataContrib
         Map<String, Object> metadata = new LinkedHashMap<>();
         if (studio.isEnabled()) {
             metadata.put("studioTraceEnabled", true);
-            putIfPresent(metadata, "studioUrl", studio.getStudioUrl());
-            putIfPresent(metadata, "tracingUrl", studio.getTracingUrl());
+            String publicUrl = firstText(studio.getPublicUrl(), studio.getStudioUrl());
+            putIfPresent(metadata, "studioUrl", publicUrl);
             putIfPresent(metadata, "project", studio.getProject());
             putIfPresent(metadata, "runName", studio.getRunName());
+            putIfPresent(metadata, "studioProject", studio.getProject());
+            putIfPresent(metadata, "studioRunId", studio.getRuntimeRunId());
+            putIfPresent(metadata, "studioTraceUrl", studioRunUrl(
+                    publicUrl,
+                    studio.getProject(),
+                    studio.getRuntimeRunId()));
         }
         if (includeNacos) {
             putIfPresent(metadata, "nacosNamespace", properties.getNacos().getNamespace());
@@ -125,5 +133,26 @@ public class AgentScopeRunMetadataContributor implements AgentRunMetadataContrib
 
     private String trimToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private String firstText(String primary, String fallback) {
+        String value = trimToNull(primary);
+        return value == null ? trimToNull(fallback) : value;
+    }
+
+    private String studioRunUrl(String publicUrl, String project, String runId) {
+        String baseUrl = trimToNull(publicUrl);
+        String safeProject = trimToNull(project);
+        String safeRunId = trimToNull(runId);
+        if (baseUrl == null || safeProject == null || safeRunId == null) {
+            return null;
+        }
+        return baseUrl.replaceAll("/+$", "")
+                + "/projects/" + encodePathSegment(safeProject)
+                + "/runs/" + encodePathSegment(safeRunId);
+    }
+
+    private String encodePathSegment(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 }

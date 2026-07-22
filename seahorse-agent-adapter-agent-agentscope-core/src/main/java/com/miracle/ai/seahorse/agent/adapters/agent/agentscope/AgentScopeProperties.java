@@ -528,11 +528,13 @@ public class AgentScopeProperties {
         private boolean enabled;
         private boolean autoInitialize = true;
         private String studioUrl = "";
+        private String publicUrl = "";
         private String tracingUrl = "";
         private String project = "seahorse-agent";
         private String runName = "seahorse-agent";
         private int maxRetries = 3;
         private int reconnectAttempts = 3;
+        private volatile String runtimeRunId = "";
 
         public boolean isEnabled() {
             return enabled;
@@ -556,6 +558,14 @@ public class AgentScopeProperties {
 
         public void setStudioUrl(String studioUrl) {
             this.studioUrl = studioUrl;
+        }
+
+        public String getPublicUrl() {
+            return publicUrl;
+        }
+
+        public void setPublicUrl(String publicUrl) {
+            this.publicUrl = publicUrl;
         }
 
         public String getTracingUrl() {
@@ -596,6 +606,14 @@ public class AgentScopeProperties {
 
         public void setReconnectAttempts(int reconnectAttempts) {
             this.reconnectAttempts = reconnectAttempts;
+        }
+
+        public String getRuntimeRunId() {
+            return runtimeRunId;
+        }
+
+        void setRuntimeRunId(String runtimeRunId) {
+            this.runtimeRunId = runtimeRunId == null ? "" : runtimeRunId;
         }
     }
 }

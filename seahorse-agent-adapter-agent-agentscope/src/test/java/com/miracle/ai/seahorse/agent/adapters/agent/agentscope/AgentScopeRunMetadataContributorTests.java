@@ -76,10 +76,12 @@ class AgentScopeRunMetadataContributorTests {
         properties.getNacos().setNamespace("prod-ns");
         properties.getNacos().setGroup("AGENT_GROUP");
         properties.getStudio().setEnabled(true);
-        properties.getStudio().setStudioUrl(" http://studio.local ");
+        properties.getStudio().setStudioUrl(" http://studio.internal ");
+        properties.getStudio().setPublicUrl(" http://studio.local ");
         properties.getStudio().setTracingUrl(" http://trace.local/{traceId} ");
         properties.getStudio().setProject(" seahorse-prod ");
         properties.getStudio().setRunName(" agent-chat ");
+        properties.getStudio().setRuntimeRunId(" runtime run/1 ");
         AgentScopeRunMetadataContributor contributor = new AgentScopeRunMetadataContributor(properties);
 
         Map<String, Object> metadata = contributor.metadata(null);
@@ -88,11 +90,15 @@ class AgentScopeRunMetadataContributorTests {
         assertThat(mapValue(metadata, "agentScope"))
                 .containsEntry("studioTraceEnabled", true)
                 .containsEntry("studioUrl", "http://studio.local")
-                .containsEntry("tracingUrl", "http://trace.local/{traceId}")
                 .containsEntry("project", "seahorse-prod")
                 .containsEntry("runName", "agent-chat")
+                .containsEntry("studioProject", "seahorse-prod")
+                .containsEntry("studioRunId", "runtime run/1")
+                .containsEntry("studioTraceUrl",
+                        "http://studio.local/projects/seahorse-prod/runs/runtime%20run%2F1")
                 .containsEntry("nacosNamespace", "prod-ns")
-                .containsEntry("nacosGroup", "AGENT_GROUP");
+                .containsEntry("nacosGroup", "AGENT_GROUP")
+                .doesNotContainKey("tracingUrl");
     }
 
     @SuppressWarnings("unchecked")

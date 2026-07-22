@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 import io.agentscope.core.studio.StudioManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Disposable;
 
 import java.util.Objects;
 
@@ -29,17 +30,23 @@ public class AgentScopeStudioLifecycle {
     private static final Logger LOG = LoggerFactory.getLogger(AgentScopeStudioLifecycle.class);
 
     private final AgentScopeProperties properties;
+    private volatile Disposable initialization;
     private volatile boolean startedBySeahorse;
 
     public AgentScopeStudioLifecycle(AgentScopeProperties properties) {
         this.properties = Objects.requireNonNull(properties, "properties must not be null");
     }
 
-    public void start() {
+    public synchronized void start() {
         AgentScopeProperties.Studio studio = properties.getStudio();
-        if (!studio.isAutoInitialize() || StudioManager.isInitialized()) {
+        if (!studio.isAutoInitialize()) {
             return;
         }
+        if (StudioManager.isInitialized()) {
+            updateRuntimeRunId(studio);
+            return;
+        }
+        studio.setRuntimeRunId("");
         StudioManager.Builder builder = StudioManager.init()
                 .project(textOrDefault(studio.getProject(), "seahorse-agent"))
                 .runName(textOrDefault(studio.getRunName(), "seahorse-agent"))
@@ -51,23 +58,40 @@ public class AgentScopeStudioLifecycle {
         if (!isBlank(studio.getTracingUrl())) {
             builder.tracingUrl(studio.getTracingUrl().trim());
         }
-        builder.initialize()
+        startedBySeahorse = true;
+        initialization = builder.initialize()
                 .doOnSuccess(ignored -> {
-                    startedBySeahorse = true;
+                    updateRuntimeRunId(studio);
                     LOG.info("AgentScope Studio initialized for project {}", textOrDefault(studio.getProject(),
                             "seahorse-agent"));
                 })
-                .doOnError(error -> LOG.warn("AgentScope Studio initialization failed; continuing without Studio",
-                        error))
+                .doOnError(error -> {
+                    startedBySeahorse = false;
+                    studio.setRuntimeRunId("");
+                    LOG.warn("AgentScope Studio initialization failed; continuing without Studio", error);
+                })
                 .onErrorComplete()
                 .subscribe();
+        // The SDK creates its immutable run id before the asynchronous registration completes.
+        updateRuntimeRunId(studio);
     }
 
-    public void stop() {
+    public synchronized void stop() {
+        Disposable pendingInitialization = initialization;
+        initialization = null;
+        if (pendingInitialization != null) {
+            pendingInitialization.dispose();
+        }
         if (startedBySeahorse && StudioManager.isInitialized()) {
             StudioManager.shutdown();
-            startedBySeahorse = false;
         }
+        startedBySeahorse = false;
+        properties.getStudio().setRuntimeRunId("");
+    }
+
+    private static void updateRuntimeRunId(AgentScopeProperties.Studio studio) {
+        var config = StudioManager.getConfig();
+        studio.setRuntimeRunId(config == null ? "" : config.getRunId());
     }
 
     private static int nonNegative(int value) {

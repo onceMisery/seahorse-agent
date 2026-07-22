@@ -367,6 +367,8 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
+      agentscope-studio:
+        condition: service_healthy
     environment:
       SERVER_PORT: "9090"
       # Redis (for Redisson auto-config)
@@ -434,6 +436,12 @@ services:
       SEAHORSE_AGENTSCOPE_CONFIG_CENTER_SKILL_NAMESPACE: ${SEAHORSE_AGENTSCOPE_CONFIG_CENTER_SKILL_NAMESPACE:-agent-skills}
       SEAHORSE_AGENTSCOPE_CONFIG_CENTER_SKILL_VERSION: ${SEAHORSE_AGENTSCOPE_CONFIG_CENTER_SKILL_VERSION:-}
       SEAHORSE_AGENTSCOPE_CONFIG_CENTER_SKILL_LABEL: ${SEAHORSE_AGENTSCOPE_CONFIG_CENTER_SKILL_LABEL:-}
+      SEAHORSE_AGENTSCOPE_STUDIO_ENABLED: ${SEAHORSE_AGENTSCOPE_STUDIO_ENABLED:-false}
+      SEAHORSE_AGENTSCOPE_STUDIO_STUDIO_URL: ${SEAHORSE_AGENTSCOPE_STUDIO_STUDIO_URL:-http://agentscope-studio:3000}
+      SEAHORSE_AGENTSCOPE_STUDIO_PUBLIC_URL: ${SEAHORSE_AGENTSCOPE_STUDIO_PUBLIC_URL:-http://localhost:3000}
+      SEAHORSE_AGENTSCOPE_STUDIO_TRACING_URL: ${SEAHORSE_AGENTSCOPE_STUDIO_TRACING_URL:-http://agentscope-studio:3000/v1/traces}
+      SEAHORSE_AGENTSCOPE_STUDIO_PROJECT: ${SEAHORSE_AGENTSCOPE_STUDIO_PROJECT:-seahorse-agent}
+      SEAHORSE_AGENTSCOPE_STUDIO_RUN_NAME: ${SEAHORSE_AGENTSCOPE_STUDIO_RUN_NAME:-seahorse-agent-backend}
       # Agent runtime
       SEAHORSE_AGENT_CHAT_AGENT_MODE_ENABLED: ${SEAHORSE_AGENT_CHAT_AGENT_MODE_ENABLED:-true}
       SEAHORSE_AGENT_CHAT_AGENT_MAX_STEPS: ${SEAHORSE_AGENT_CHAT_AGENT_MAX_STEPS:-24}
@@ -567,6 +575,24 @@ services:
     networks:
       - seahorse-net
 
+  agentscope-studio:
+    image: agentscope/studio:latest
+    container_name: seahorse-agentscope-studio
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "14317:4317"
+    volumes:
+      - agentscope-studio-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - seahorse-net
+
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: seahorse-prometheus
@@ -618,6 +644,7 @@ volumes:
   seahorse-storage:
   prometheus-data:
   grafana-data:
+  agentscope-studio-data:
 
 networks:
   seahorse-net:

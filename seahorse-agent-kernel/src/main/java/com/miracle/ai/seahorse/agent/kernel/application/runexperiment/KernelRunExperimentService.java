@@ -780,8 +780,12 @@ public class KernelRunExperimentService implements RunExperimentInboundPort {
                 snapshot == null ? null : snapshot.getTraceContextJson(),
                 "studioTraceUrl",
                 "traceUrl");
+        String studioRunId = firstJsonScalar(
+                snapshot == null ? null : snapshot.getTraceContextJson(),
+                "studioRunId",
+                "studioTraceId");
         String traceId = firstNonBlank(
-                firstJsonScalar(snapshot == null ? null : snapshot.getTraceContextJson(), "studioTraceId"),
+                studioRunId,
                 firstJsonScalar(snapshot == null ? null : snapshot.getTraceContextJson(), "traceId"),
                 jsonScalar(trial.getMetricJson(), "traceId"));
         if (directUrl != null && traceId != null) {

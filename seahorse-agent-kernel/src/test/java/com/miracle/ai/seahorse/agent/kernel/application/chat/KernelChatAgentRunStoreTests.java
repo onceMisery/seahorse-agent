@@ -304,7 +304,7 @@ class KernelChatAgentRunStoreTests {
     }
 
     @Test
-    void shouldPersistAgentScopeTraceLookupMetadataInLatestChatSnapshot() {
+    void shouldPersistAgentScopeStudioRunMetadataInLatestChatSnapshot() {
         AgentRun run = new AgentRun(
                 "run-agentscope-trace-1",
                 "ops-agent",
@@ -331,7 +331,9 @@ class KernelChatAgentRunStoreTests {
                 "agentScope", Map.of(
                         "studioTraceEnabled", true,
                         "studioUrl", "http://studio.local",
-                        "tracingUrl", "http://trace.local/{traceId}",
+                        "studioProject", "seahorse-prod",
+                        "studioRunId", "studio-run-1",
+                        "studioTraceUrl", "http://studio.local/projects/seahorse-prod/runs/studio-run-1",
                         "apiKey", "secret-api-key-value",
                         "authorization", "Bearer trace-secret-123456",
                         "project", "seahorse-prod",
@@ -377,7 +379,7 @@ class KernelChatAgentRunStoreTests {
         assertTrue(snapshot.getSnapshotJson().contains("\"agentScope\""), snapshot.getSnapshotJson());
         assertTrue(snapshot.getSnapshotJson().contains("\"studioUrl\":\"http://studio.local\""),
                 snapshot.getSnapshotJson());
-        assertTrue(snapshot.getSnapshotJson().contains("\"tracingUrl\":\"http://trace.local/{traceId}\""),
+        assertTrue(snapshot.getSnapshotJson().contains("\"studioRunId\":\"studio-run-1\""),
                 snapshot.getSnapshotJson());
         assertTrue(snapshot.getSnapshotJson().contains("\"apiKey\":\"[REDACTED]\""), snapshot.getSnapshotJson());
         assertTrue(snapshot.getSnapshotJson().contains("\"authorization\":\"[REDACTED]\""),
@@ -386,9 +388,12 @@ class KernelChatAgentRunStoreTests {
                 snapshot.getTraceContextJson());
         assertTrue(snapshot.getTraceContextJson().contains("\"studioUrl\":\"http://studio.local\""),
                 snapshot.getTraceContextJson());
-        assertTrue(snapshot.getTraceContextJson().contains("\"tracingUrl\":\"http://trace.local/{traceId}\""),
+        assertTrue(snapshot.getTraceContextJson().contains("\"studioProject\":\"seahorse-prod\""),
                 snapshot.getTraceContextJson());
-        assertTrue(snapshot.getTraceContextJson().contains("\"studioTraceUrl\":\"http://studio.local/traces/trace-studio-1\""),
+        assertTrue(snapshot.getTraceContextJson().contains("\"studioRunId\":\"studio-run-1\""),
+                snapshot.getTraceContextJson());
+        assertTrue(snapshot.getTraceContextJson().contains(
+                "\"studioTraceUrl\":\"http://studio.local/projects/seahorse-prod/runs/studio-run-1\""),
                 snapshot.getTraceContextJson());
     }
 

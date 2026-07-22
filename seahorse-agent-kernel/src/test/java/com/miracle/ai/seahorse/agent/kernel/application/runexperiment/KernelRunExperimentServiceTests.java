@@ -257,7 +257,7 @@ class KernelRunExperimentServiceTests {
         snapshot.setTenantId("default");
         snapshot.setRunId("run-exp-1-trial-10");
         snapshot.setTraceContextJson("""
-                {"traceId":"trace-success","studioTraceId":"studio-success","studioUrl":"http://studio.local"}
+                {"traceId":"trace-success","studioRunId":"studio-run-success","studioProject":"seahorse-agent","studioTraceUrl":"http://studio.local/projects/seahorse-agent/runs/studio-run-success"}
                 """);
         snapshotRepository.snapshots.put("run-exp-1-trial-10", snapshot);
         branchRepository.add(message("301", "101", "100", "assistant", "Kernel output with audit trail",
@@ -300,7 +300,7 @@ class KernelRunExperimentServiceTests {
         assertTrue(report.markdown().contains("- Traced trials: 1"));
         assertTrue(report.markdown().contains("| Trial | Run ID | Trace Evidence |"));
         assertTrue(report.markdown().contains(
-                "| 10 | run-exp-1-trial-10 | studio=[studio-success](http://studio.local/traces/studio-success) |"));
+                "| 10 | run-exp-1-trial-10 | studio=[studio-run-success](http://studio.local/projects/seahorse-agent/runs/studio-run-success) |"));
         assertTrue(report.markdown().contains("## Evidence Index"));
         assertTrue(report.markdown().contains("## Reproduction Appendix"));
         assertTrue(report.markdown().contains("run-exp-1-trial-10"));
@@ -309,7 +309,8 @@ class KernelRunExperimentServiceTests {
         assertTrue(report.markdown().contains("leaf=301 parent=202 root=202 sibling=1"));
         assertTrue(report.markdown().contains("Trial branch leaves: trial 10 -> leaf=301 parent=202 root=202 sibling=1"));
         assertTrue(report.markdown().contains("smoke-pass"));
-        assertTrue(report.markdown().contains("studio=[studio-success](http://studio.local/traces/studio-success)"));
+        assertTrue(report.markdown().contains(
+                "studio=[studio-run-success](http://studio.local/projects/seahorse-agent/runs/studio-run-success)"));
         assertTrue(report.markdown().contains("sa_cost_usage_record cost=0.42 tokens=123 calls=2 records=1"));
         assertTrue(report.markdown().contains("Kernel output with audit trail"));
         assertTrue(report.markdown().contains(

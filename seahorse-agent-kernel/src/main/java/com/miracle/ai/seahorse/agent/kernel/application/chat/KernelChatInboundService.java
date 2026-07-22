@@ -1064,7 +1064,7 @@ public class KernelChatInboundService implements ChatInboundPort {
             putTextIfPresent(traceContext, "otelTraceId", traceRunScope.telemetryTraceId());
             putTextIfPresent(traceContext, "otelTraceUrl", traceRunScope.telemetryTraceUrl());
         }
-        appendAgentScopeTraceContext(traceContext, agentScopeMetadata(metadataJson), traceId);
+        appendAgentScopeTraceContext(traceContext, agentScopeMetadata(metadataJson));
         if (traceContext.isEmpty()) {
             return null;
         }
@@ -1080,16 +1080,14 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     private void appendAgentScopeTraceContext(
             Map<String, Object> traceContext,
-            Map<String, Object> agentScope,
-            String traceId) {
+            Map<String, Object> agentScope) {
         if (agentScope.isEmpty()) {
             return;
         }
-        String studioUrl = stringValue(agentScope.get("studioUrl"));
-        String tracingUrl = stringValue(agentScope.get("tracingUrl"));
-        putTextIfPresent(traceContext, "studioUrl", studioUrl);
-        putTextIfPresent(traceContext, "tracingUrl", tracingUrl);
-        putTextIfPresent(traceContext, "studioTraceUrl", studioTraceUrl(firstText(studioUrl, tracingUrl), traceId));
+        putTextIfPresent(traceContext, "studioUrl", stringValue(agentScope.get("studioUrl")));
+        putTextIfPresent(traceContext, "studioProject", stringValue(agentScope.get("studioProject")));
+        putTextIfPresent(traceContext, "studioRunId", stringValue(agentScope.get("studioRunId")));
+        putTextIfPresent(traceContext, "studioTraceUrl", stringValue(agentScope.get("studioTraceUrl")));
     }
 
     private Map<String, Object> agentScopeMetadata(String metadataJson) {
@@ -1110,22 +1108,6 @@ public class KernelChatInboundService implements ChatInboundPort {
             LOG.warn("AgentScope metadata is not valid JSON, ignoring trace lookup metadata", ex);
             return Map.of();
         }
-    }
-
-    private String studioTraceUrl(String url, String traceId) {
-        if (!hasText(url) || !hasText(traceId)) {
-            return null;
-        }
-        String safeUrl = url.trim();
-        String encodedTraceId = java.net.URLEncoder.encode(traceId.trim(), java.nio.charset.StandardCharsets.UTF_8);
-        if (safeUrl.contains("{traceId}")) {
-            return safeUrl.replace("{traceId}", encodedTraceId);
-        }
-        return safeUrl.replaceAll("/+$", "") + "/traces/" + encodedTraceId;
-    }
-
-    private String firstText(String primary, String fallback) {
-        return hasText(primary) ? primary.trim() : hasText(fallback) ? fallback.trim() : null;
     }
 
     private String stringValue(Object value) {

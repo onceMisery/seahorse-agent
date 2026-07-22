@@ -1,5 +1,15 @@
 # 架构路线图与未来展望
 
+## 2026-07-22 Update: OTEL and AgentScope Studio Full-Docker Production Integration
+
+The AgentScope production path now integrates the official AgentScope Studio runtime with the full Docker deployment. `docker-compose.full.yml` provides a persistent Studio data volume, the browser UI on port `3000`, OTLP gRPC on host port `14317`, and a backend dependency on Studio health. The backend uses the container-only Studio URL and OTLP endpoint, while run-context metadata carries a separate browser-facing public URL. Studio initialization relies on `StudioManager.initialize()` to install the SDK system hook; Seahorse no longer creates a duplicate empty `StudioMessageHook`.
+
+Run identity is now explicit across the observation chain: Seahorse `traceId` remains the logical application trace, `otelTraceId` is the Jaeger/OTEL trace, and `studioRunId` is the AgentScope Studio runtime run. The snapshot and Inspector expose `Studio Run` with the real `/projects/{project}/runs/{studioRunId}` route. Studio lifecycle startup publishes the SDK-generated run id as soon as the immutable configuration exists, clears it on initialization failure, and cancels pending initialization during shutdown. Run experiment evidence also prefers the real Studio run id, preserving the legacy `studioTraceId` fallback for older snapshots.
+
+Fresh real evidence: the focused backend regression passed `51/51`, the frontend production build, backend and frontend Docker images, Compose model validation, and E2E PowerShell parsing passed. The full-Docker `scripts/e2e-agentscope-smoke.ps1 -VerifyOtelTrace -VerifyStudio` flow passed `11/11` against real login, AgentScope and kernel model SSE, PostgreSQL snapshots, Jaeger trace lookup, Studio SQLite run/message/span persistence, and the Studio run page. The representative AgentScope call persisted Seahorse run `run_338343621407985664`, logical trace `338343621269573632`, OTEL trace `ce926e93336fd7c0faf360d8072345d7`, and Studio run `52a1ce46-d2c2-4c39-ae87-170323b3715d` as distinct identities. The browser flow authenticated against the packaged frontend, opened the Agent Inspector context tab, rendered the Studio run id and link, and loaded the corresponding Studio project/run route in a second tab. The Studio evidence binds spans to the exact run and unique E2E request marker rather than relying on a global span count.
+
+This slice does not add Studio history retention, cross-instance run federation, automatic cleanup of old Studio runs, or migration of legacy snapshots. Studio remains an optional backend capability outside the full-compose deployment, and tracing remains opt-in through the existing observability flag.
+
 ## 2026-07-19 Update: OTEL Run Context Deep Link
 
 The OTEL trace slice now carries the actual Micrometer/OTel trace id and a configured Jaeger query URL back through `TraceRunScope`. Agent run context snapshots persist these value-free `otelTraceId` and `otelTraceUrl` fields beside the existing Seahorse logical `traceId`; the admin Agent Inspector renders a validated HTTP(S) external link without replacing the internal trace owner or exposing credentials.

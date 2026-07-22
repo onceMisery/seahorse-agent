@@ -234,7 +234,11 @@ export function ContextSnapshotInspectorTab({ agentRunId }: ContextSnapshotInspe
   const engine = asString(snapshotJson.executorEngine) ?? snapshot.executorEngine;
   const runProfileId = asString(snapshotJson.runProfileId) ?? asString(snapshot.runProfileId);
   const branchLeafMessageId = asString(snapshotJson.branchLeafMessageId) ?? asString(snapshot.branchLeafMessageId);
-  const studioTraceId = asString(agentScope.studioTraceId) ?? asString(traceContext.studioTraceId);
+  const studioRunId = asString(agentScope.studioRunId)
+    ?? asString(traceContext.studioRunId)
+    ?? asString(agentScope.studioTraceId)
+    ?? asString(traceContext.studioTraceId);
+  const studioProject = asString(agentScope.studioProject) ?? asString(traceContext.studioProject);
   const otelTraceId = asString(traceContext.otelTraceId);
   const otelTraceUrl = asString(traceContext.otelTraceUrl);
   const studioTraceUrl = asString(traceContext.studioTraceUrl);
@@ -254,7 +258,7 @@ export function ContextSnapshotInspectorTab({ agentRunId }: ContextSnapshotInspe
         <FieldRow label="运行方案" value={runProfileId} />
         <FieldRow label="Trace" value={asString(traceContext.traceId)} />
         <ExternalTraceRow label="OTEL Trace" traceId={otelTraceId} url={otelTraceUrl} />
-        <ExternalTraceRow label="Studio Trace" traceId={studioTraceId} url={studioTraceUrl} />
+        <ExternalTraceRow label="Studio Run" traceId={studioRunId} url={studioTraceUrl} />
         <FieldRow label="创建" value={snapshot.createTime} />
       </Section>
 
@@ -287,9 +291,9 @@ export function ContextSnapshotInspectorTab({ agentRunId }: ContextSnapshotInspe
         <ToolList toolIds={a2aAgentIds} />
       </Section>
 
-      {(studioTraceId || asString(agentScope.nacosNamespace) || asString(agentScope.nacosGroup)) ? (
+      {(studioRunId || studioProject || asString(agentScope.nacosNamespace) || asString(agentScope.nacosGroup)) ? (
         <Section title="AgentScope">
-          <ExternalTraceRow label="Studio Trace" traceId={studioTraceId} url={studioTraceUrl} />
+          <FieldRow label="Studio Project" value={studioProject} />
           <FieldRow label="Nacos Namespace" value={asString(agentScope.nacosNamespace)} />
           <FieldRow label="Nacos Group" value={asString(agentScope.nacosGroup)} />
         </Section>

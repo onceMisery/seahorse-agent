@@ -19,7 +19,6 @@ package com.miracle.ai.seahorse.agent.adapters.agent.agentscope;
 
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.studio.StudioManager;
-import io.agentscope.core.studio.StudioMessageHook;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -32,15 +31,6 @@ import org.springframework.context.annotation.Conditional;
 @ConditionalOnClass(ReActAgent.class)
 @EnableConfigurationProperties(AgentScopeProperties.class)
 public class AgentScopeStudioAutoConfiguration {
-
-    @Bean
-    @ConditionalOnClass(StudioMessageHook.class)
-    @Conditional(AgentScopeAutoConfigurationSupport.AgentScopeExecutorEnabledCondition.class)
-    @ConditionalOnProperty(prefix = "seahorse.agentscope.studio", name = "enabled", havingValue = "true")
-    @ConditionalOnMissingBean
-    public StudioMessageHook seahorseAgentScopeStudioMessageHook() {
-        return new StudioMessageHook(StudioManager.getClient());
-    }
 
     @Bean(initMethod = "start", destroyMethod = "stop")
     @ConditionalOnClass(StudioManager.class)

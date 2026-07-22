@@ -50,7 +50,6 @@ import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.nacos.skill.NacosSkillRepository;
 import io.agentscope.core.skill.repository.AgentSkillRepository;
-import io.agentscope.core.studio.StudioMessageHook;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -186,7 +185,6 @@ class AgentScopeReActAutoConfigurationTests {
                     assertThat(context).doesNotHaveBean(AgentScopePromptConfigCenter.class);
                     assertThat(context).doesNotHaveBean(AgentScopeRunMetadataContributor.class);
                     assertThat(context).doesNotHaveBean(AgentScopeStudioLifecycle.class);
-                    assertThat(context).doesNotHaveBean(StudioMessageHook.class);
                 });
     }
 
@@ -240,7 +238,7 @@ class AgentScopeReActAutoConfigurationTests {
     }
 
     @Test
-    void agentscopeEngineCreatesStudioHookWhenStudioIsEnabled() {
+    void agentscopeEngineLetsStudioManagerInstallItsSystemHookWhenStudioIsEnabled() {
         contextRunner
                 .withUserConfiguration(StreamingModelConfiguration.class)
                 .withPropertyValues(
@@ -248,17 +246,18 @@ class AgentScopeReActAutoConfigurationTests {
                         "seahorse.agentscope.studio.enabled=true",
                         "seahorse.agentscope.studio.auto-initialize=false",
                         "seahorse.agentscope.studio.studio-url=http://studio.local",
+                        "seahorse.agentscope.studio.public-url=http://studio.public",
                         "seahorse.agentscope.studio.tracing-url=http://trace.local/{traceId}")
                 .run(context -> {
                     assertThat(context).hasSingleBean(AgentScopeStudioLifecycle.class);
-                    assertThat(context).hasSingleBean(StudioMessageHook.class);
                     assertThat(context).hasSingleBean(AgentScopeAgentClient.class);
                     assertThat(context).hasSingleBean(AgentRunMetadataContributor.class);
                     assertThat(mapValue(context.getBean(AgentRunMetadataContributor.class).metadata(null),
                             "agentScope"))
                             .containsEntry("studioTraceEnabled", true)
-                            .containsEntry("studioUrl", "http://studio.local")
-                            .containsEntry("tracingUrl", "http://trace.local/{traceId}");
+                            .containsEntry("studioUrl", "http://studio.public")
+                            .containsEntry("studioProject", "seahorse-agent")
+                            .doesNotContainKey("tracingUrl");
                 });
     }
 

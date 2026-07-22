@@ -9,8 +9,11 @@ param(
     [string]$PostgresUser = "seahorse",
     [string]$PostgresDatabase = "seahorse",
     [switch]$VerifyOtelTrace,
+    [switch]$VerifyStudio,
     [string]$JaegerUrl = "http://127.0.0.1:16686",
-    [string]$OtelTraceQueryUrl = "http://localhost:16686/trace/{traceId}"
+    [string]$OtelTraceQueryUrl = "http://localhost:16686/trace/{traceId}",
+    [string]$StudioUrl = "http://127.0.0.1:3000",
+    [string]$StudioContainer = "seahorse-agentscope-studio"
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,6 +21,7 @@ $passed = 0
 $failed = 0
 $total = 0
 $a2aEnabled = $false
+$agentScopeStudioMarker = "agentscope-studio-e2e-$([guid]::NewGuid().ToString('N'))"
 
 function Test-Step {
     param([string]$Name, [scriptblock]$Action)
@@ -31,6 +35,9 @@ function Test-Step {
     } catch {
         $script:failed++
         Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red
+        if (-not [string]::IsNullOrWhiteSpace($_.ScriptStackTrace)) {
+            Write-Host "  $($_.ScriptStackTrace)" -ForegroundColor DarkRed
+        }
         return $null
     }
 }
@@ -219,7 +226,16 @@ function Assert-AgentScopeSnapshotTraceContext {
     param([object]$Snapshot)
     if ("$($Snapshot.agentScopeTraceEnabled)" -eq "true") {
         Assert-NotBlank $Snapshot.agentScopeStudioUrl "AgentScope snapshot agentScope.studioUrl"
+        Assert-NotBlank $Snapshot.studioRunId "AgentScope trace_context studioRunId"
+        Assert-NotBlank $Snapshot.studioProject "AgentScope trace_context studioProject"
         Assert-NotBlank $Snapshot.studioTraceUrl "AgentScope trace_context studioTraceUrl"
+        if ("$($Snapshot.studioRunId)" -eq "$($Snapshot.traceId)") {
+            throw "Studio runtime run id must remain distinct from the Seahorse logical trace id"
+        }
+        $expectedStudioUrl = "$($Snapshot.studioUrl.TrimEnd('/'))/projects/" `
+            + [System.Uri]::EscapeDataString("$($Snapshot.studioProject)") `
+            + "/runs/" + [System.Uri]::EscapeDataString("$($Snapshot.studioRunId)")
+        Assert-Equal $Snapshot.studioTraceUrl $expectedStudioUrl "AgentScope Studio run URL"
     }
 }
 
@@ -234,6 +250,7 @@ function Assert-OtelSnapshotTraceContext {
     Assert-Equal $Snapshot.otelTraceUrl $expectedUrl "$Name snapshot OTEL trace URL"
 
     $response = $null
+    $trace = $null
     $deadline = (Get-Date).AddSeconds(45)
     do {
         try {
@@ -242,16 +259,19 @@ function Assert-OtelSnapshotTraceContext {
         } catch {
             $response = $null
         }
-        if (@($response.data).Count -gt 0) {
+        if ($null -ne $response -and $null -ne $response.data) {
+            $trace = @($response.data | Where-Object { $null -ne $_ }) | Select-Object -First 1
+        }
+        if ($null -ne $trace) {
             break
         }
         Start-Sleep -Seconds 2
     } while ((Get-Date) -lt $deadline)
 
-    if (@($response.data).Count -eq 0) {
+    if ($null -eq $trace) {
         throw "$Name OTEL trace was not queryable from Jaeger"
     }
-    $spans = @($response.data[0].spans)
+    $spans = @($trace.spans)
     if (-not ($spans | Where-Object { "$($_.operationName)" -eq "agent.run" })) {
         throw "$Name OTEL trace did not contain agent.run"
     }
@@ -273,6 +293,58 @@ function Invoke-DbScalarRow {
         return $null
     }
     return $rows[0]
+}
+
+function Invoke-StudioScalar {
+    param([string]$Sql)
+    $raw = & docker.exe exec $StudioContainer sqlite3 /app/data/AgentScope-Studio/database.sqlite $Sql
+    if ($LASTEXITCODE -ne 0) {
+        throw "Studio sqlite query failed with exit code $LASTEXITCODE"
+    }
+    return "$($raw | Select-Object -First 1)".Trim()
+}
+
+function Assert-StudioRuntimeEvidence {
+    param([object]$Snapshot, [string]$Marker)
+    $safeRunId = "$($Snapshot.studioRunId)".Replace("'", "''")
+    $safeProject = "$($Snapshot.studioProject)".Replace("'", "''")
+    $safeMarker = $Marker.Replace("'", "''")
+    $deadline = (Get-Date).AddSeconds(45)
+    $runRow = ""
+    $messageCount = 0
+    $spanCount = 0
+    do {
+        $runRow = Invoke-StudioScalar `
+            "select project || '|' || name || '|' || status from run_table where id='$safeRunId';"
+        $messageCount = [int](Invoke-StudioScalar `
+            "select count(*) from message_table where run_id='$safeRunId';")
+        $spanCount = [int](Invoke-StudioScalar `
+            "select count(*) from span_table where conversationId='$safeRunId' and instr(attributes, '$safeMarker') > 0;")
+        if (-not [string]::IsNullOrWhiteSpace($runRow) `
+                -and $messageCount -gt 0 `
+                -and $spanCount -gt 0) {
+            break
+        }
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $deadline)
+
+    if ([string]::IsNullOrWhiteSpace($runRow)) {
+        throw "Studio run $($Snapshot.studioRunId) was not persisted"
+    }
+    $runParts = $runRow -split "\|", 3
+    Assert-Equal $runParts[0] $Snapshot.studioProject "Studio persisted project"
+    if ($messageCount -le 0) {
+        throw "Studio run $($Snapshot.studioRunId) did not receive an AgentScope output message"
+    }
+    if ($spanCount -le 0) {
+        throw "Studio did not ingest an AgentScope OTLP span for run $($Snapshot.studioRunId) and marker $Marker"
+    }
+    $status = & curl.exe -sS -o NUL -w "%{http_code}" "$($Snapshot.studioTraceUrl)"
+    if ($LASTEXITCODE -ne 0) {
+        throw "curl failed for Studio run URL"
+    }
+    Assert-Equal ([int]$status) 200 "Studio run page status"
+    Write-Host "Studio run: $runRow, messages=$messageCount, matching spans=$spanCount"
 }
 
 function Invoke-HttpStatus {
@@ -350,12 +422,14 @@ select run_id,
        coalesce(snapshot_json::jsonb #>> '{runProfile,name}', '') as run_profile_name,
        coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'traceId', '') as trace_id,
        coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'studioUrl', '') as studio_url,
-       coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'tracingUrl', '') as tracing_url,
+       coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'studioRunId', '') as studio_run_id,
+       coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'studioProject', '') as studio_project,
        coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'studioTraceUrl', '') as studio_trace_url,
        coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'otelTraceId', '') as otel_trace_id,
        coalesce(coalesce(nullif(trace_context_json, ''), '{}')::jsonb ->> 'otelTraceUrl', '') as otel_trace_url,
        coalesce(snapshot_json::jsonb #>> '{agentScope,studioTraceEnabled}', '') as agent_scope_trace_enabled,
-       coalesce(snapshot_json::jsonb #>> '{agentScope,studioUrl}', '') as agent_scope_studio_url
+       coalesce(snapshot_json::jsonb #>> '{agentScope,studioUrl}', '') as agent_scope_studio_url,
+       coalesce(snapshot_json::jsonb #>> '{agentScope,studioRunId}', '') as agent_scope_studio_run_id
 from t_run_context_snapshot
 where conversation_id = $ConversationId
   and deleted = 0
@@ -366,8 +440,8 @@ limit 1;
     if (-not $row) {
         throw "No t_run_context_snapshot row found for conversation $ConversationId"
     }
-    $parts = $row -split "\|", 13
-    if ($parts.Count -lt 13) {
+    $parts = $row -split "\|", 15
+    if ($parts.Count -lt 15) {
         throw "Unexpected snapshot row format: $row"
     }
     return [PSCustomObject]@{
@@ -378,12 +452,14 @@ limit 1;
         runProfileName = $parts[4]
         traceId = $parts[5]
         studioUrl = $parts[6]
-        tracingUrl = $parts[7]
-        studioTraceUrl = $parts[8]
-        otelTraceId = $parts[9]
-        otelTraceUrl = $parts[10]
-        agentScopeTraceEnabled = $parts[11]
-        agentScopeStudioUrl = $parts[12]
+        studioRunId = $parts[7]
+        studioProject = $parts[8]
+        studioTraceUrl = $parts[9]
+        otelTraceId = $parts[10]
+        otelTraceUrl = $parts[11]
+        agentScopeTraceEnabled = $parts[12]
+        agentScopeStudioUrl = $parts[13]
+        agentScopeStudioRunId = $parts[14]
     }
 }
 
@@ -407,6 +483,19 @@ Test-Step "Verify AgentScope runtime flags" {
         if (-not ($envLines | Where-Object { $_ -eq $expectedQueryUrl })) {
             throw "Expected OTEL query URL was not found on $BackendContainer"
         }
+    }
+    if ($VerifyStudio) {
+        foreach ($expected in @(
+                "SEAHORSE_AGENTSCOPE_STUDIO_ENABLED=true",
+                "SEAHORSE_AGENTSCOPE_STUDIO_PUBLIC_URL=http://localhost:3000")) {
+            if (-not ($envLines | Where-Object { $_ -eq $expected })) {
+                throw "$expected was not found on $BackendContainer"
+            }
+        }
+        $health = & docker.exe inspect $StudioContainer --format '{{.State.Health.Status}}'
+        Assert-Equal $health "healthy" "AgentScope Studio container health"
+        $rootStatus = & curl.exe -sS -o NUL -w "%{http_code}" "$($StudioUrl.TrimEnd('/'))/"
+        Assert-Equal ([int]$rootStatus) 200 "AgentScope Studio root status"
     }
 }
 
@@ -455,7 +544,7 @@ if (-not $agentScopeConversationId) { exit 1 }
 $agentScopeChat = Test-Step "Chat through AgentScope run profile" {
     Invoke-Chat -ConversationId $agentScopeConversationId -Headers $headers `
         -RunProfileId $AgentScopeRunProfileId -ChatMode "agent" `
-        -Question "AgentScope smoke $(Get-Date -Format yyyyMMddHHmmss): answer with one short sentence."
+        -Question "${agentScopeStudioMarker}: answer with one short sentence."
 }
 
 $agentScopeSnapshot = Test-Step "Verify AgentScope run context snapshot" {
@@ -466,6 +555,9 @@ $agentScopeSnapshot = Test-Step "Verify AgentScope run context snapshot" {
     Assert-AgentScopeSnapshotTraceContext $snapshot
     if ($VerifyOtelTrace) {
         Assert-OtelSnapshotTraceContext "AgentScope" $snapshot
+    }
+    if ($VerifyStudio) {
+        Assert-StudioRuntimeEvidence $snapshot $agentScopeStudioMarker
     }
     $snapshot | ConvertTo-Json -Compress | Write-Host
     $snapshot
