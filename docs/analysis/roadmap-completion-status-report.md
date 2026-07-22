@@ -1,5 +1,11 @@
 # 架构路线图近期与中期设计完成情况分析报告
 
+## 2026-07-22 OTEL and AgentScope Studio Production Integration Evidence Update
+
+The full Docker deployment now contains a persistent AgentScope Studio service and separates backend-internal Studio/OTLP endpoints from the browser-facing public URL. Run context snapshots carry the Seahorse logical `traceId`, the actual `otelTraceId`, and the AgentScope `studioRunId` as independent identities. The Inspector and Run Experiment report use the real Studio route `/projects/{project}/runs/{studioRunId}`, and Studio initialization relies on the SDK-installed system hook without a duplicate empty client hook.
+
+Fresh evidence: focused backend verification passed `51/51`, the complete 28-module backend image and frontend production image built successfully, and `scripts/e2e-agentscope-smoke.ps1 -VerifyOtelTrace -VerifyStudio` passed `11/11` against the rebuilt full-Docker backend. The run proved real AgentScope and kernel model SSE, PostgreSQL snapshot persistence, Jaeger lookups for both executors, Studio SQLite run/message/span persistence tied to the exact Studio run and E2E marker, and HTTP/browser rendering of the corresponding Studio project/run page. This closes the roadmap's near-term AgentScope Studio/OTEL hardening item and medium-term OTEL/Studio production integration item. Remaining AgentScope debt is the upstream complete Agent Card deletion contract and precise Nacos/AgentScope config revision semantics.
+
 ## 2026-07-20 Unified GateResult History Query Evidence Update
 
 The unified GateResult query surface now exposes append-only history alongside the existing latest lookup. `GateResultInboundPort` and `GateResultRepositoryPort` gained a `history(subjectType, subjectId, limit)` method backed by the same tenant-scoped `sa_gate_result` table, ordered newest-first by `checked_at`. The service clamps the caller limit to a 1–100 range with a default of 20, and the Web controller serves it at `GET /api/gate-results/{subjectType}/{subjectId}/history`. The admin frontend adds a reusable `GateResultHistory` component and a shared `gateResultService`, wired into the Tool detail page so operators can audit prior gate decisions from the same view.

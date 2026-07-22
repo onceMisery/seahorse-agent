@@ -10,6 +10,8 @@ Fresh real evidence: the focused backend regression passed `51/51`, the frontend
 
 This slice does not add Studio history retention, cross-instance run federation, automatic cleanup of old Studio runs, or migration of legacy snapshots. Studio remains an optional backend capability outside the full-compose deployment, and tracing remains opt-in through the existing observability flag.
 
+Roadmap disposition: this evidence closes the near-term `AgentScope production hardening phase 1` Studio/OTEL item and the medium-term `OTEL/Studio production integration` item. Those rows are retained below only as historical planning context and are superseded by this update. The remaining AgentScope integration debt is limited to an upstream-supported complete Agent Card delete/deregister contract and a precise Nacos/AgentScope config revision contract; neither is silently approximated by the Studio run id or the Seahorse logical trace id.
+
 ## 2026-07-19 Update: OTEL Run Context Deep Link
 
 The OTEL trace slice now carries the actual Micrometer/OTel trace id and a configured Jaeger query URL back through `TraceRunScope`. Agent run context snapshots persist these value-free `otelTraceId` and `otelTraceUrl` fields beside the existing Seahorse logical `traceId`; the admin Agent Inspector renders a validated HTTP(S) external link without replacing the internal trace owner or exposing credentials.
