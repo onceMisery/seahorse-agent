@@ -17,7 +17,7 @@ Seahorse 当前并不是从零开始：
 - **已经领先 VCP**：通用 Tool Result Spill、受治理范围回读、统一 `run -> step -> model/tool` trace、OTEL/Jaeger/AgentScope Studio 生产联调、Tool Gateway 治理。
 - **已经基本对齐**：Skill 按需加载、工具搜索、MCP 刷新/重启、OpenAPI/A2A 能力接入、轮内工具并发与保序。
 - **仍是主要缺口**：统一动态上下文预算、结构化会话折叠、通用进程重启恢复、工具幂等执行闭环。
-- **需要立即补证据**：Spill 已有实现，但仓库没有对应的真实 full-Docker E2E，也没有直接覆盖 Spill/回读服务的聚焦测试。
+- **已完成 P0-A 生产验收**：Spill 已由真实 full-Docker E2E 覆盖 Gateway、PostgreSQL、当前 Object Storage、范围回读、越权拒绝、审计防泄漏和清理，并有 Spill/回读聚焦测试保护精确契约。
 - **需要数据治理修正**：运行步骤和审批 checkpoint 会持久化 `thinking`/`thinkingContent`；现有凭据脱敏不会删除原始推理文本。
 
 因此，不应把 VCP 的 Node.js 插件体系或文本工具协议移植进来。推荐复用 Seahorse 已有的 PostgreSQL、Artifact/Object Storage、Tool Gateway、Run/Checkpoint、OTEL 和 Studio，在现有 owner 上补齐预算、折叠、恢复与证据。
@@ -51,7 +51,7 @@ Seahorse 当前并不是从零开始：
 | --- | --- | --- | --- | --- |
 | 短期记忆 | OneRing 完整持久化；ContextFoldingV2 按深度和语义折叠；OneRingMemo 递归摘要；硬裁剪兜底 | `t_message` 完整保存会话和分支；普通历史固定读取最近 20 条；分支路径可完整读取；Context Pack/Memory 使用固定字符预算 | 没有统一 token envelope；普通路径按条数而非 token；分支路径无预算上限；没有版本化、可恢复的结构化会话摘要 | P0/P1 |
 | 可观测性 | ToolCallRecordStore、最终请求快照、实时日志；无统一 span 树；刻意不落盘 reasoning | 已有 run/step/model/tool span 树、RAG trace、Tool audit、Run step、RunContextSnapshot、Jaeger 和 Studio | 未保存每轮最终有效上下文的安全指纹/预算决策；`thinking` 仍会进入 step/checkpoint 持久化 | P1 |
-| Spill | 仅规范和 Base64 剔除，未落地 | 超 8192 字符结果在 Gateway 脱敏后进入对象存储和 Artifact，模型收到 preview/pointer；`read_tool_result` 按 run/tenant/user 范围回读 | 缺真实 Docker E2E；缺直接测试；只支持 UTF-8 文本，未记录内容 hash，缺 TTL/保留策略和按 tool 配置 | P0 验证与硬化 |
+| Spill | 仅规范和 Base64 剔除，未落地 | 超 8192 字符结果在 Gateway 脱敏后进入对象存储和 Artifact，模型收到带 SHA-256/字节数/MIME 的 preview/pointer；`read_tool_result` 按 run/tenant/user 范围回读；真实 full-Docker E2E 与聚焦测试已通过 | 当前只支持 UTF-8 文本；仍缺 TTL/保留策略和按 tool 配置 | P0-A 已验收，后续治理进入 P2 |
 | 能力供给 | 六类插件、热重载、Skill/Tool 按需加载 | Skill revision/runtime block、`load_skill_resource`、`tool_search`、MCP refresh/restart、OpenAPI import、A2A、统一 Catalog/Gateway | 在途调用的 provider 引用计数/延迟关闭没有明确证据；需要持续做 provider 覆盖而非新体系 | P2 |
 | 并行工具 | `Promise.all` 并发、保序、轮间串行 | `invokeAll` 分批并发，按 Future 列表保序；有并发上限、单工具超时、取消和独立 trace | full Docker 默认 `maxParallelTools=1`；没有基于 READ/WRITE/DELETE/EXTERNAL_SEND 的副作用并行资格策略 | P1/P2 |
 | 动态预算 | 字符近似；OneRingMemo 先扣输出；真 tokenizer 只观测 | `ContextBudget.defaults()` 固定 20 项/4000 字符；`TokenCounterPort` 是字符/4 近似，主要用于模型路由查询，Agent Loop 不使用 | 没有扣除 system、skill、tool schema、当前输入、输出预留和安全缓冲；没有压缩触发决策和预算证据 | P0 |
@@ -59,15 +59,16 @@ Seahorse 当前并不是从零开始：
 
 ## 4. 关键代码证据
 
-### 4.1 Spill 已实现，但验收未闭环
+### 4.1 Spill 已实现并完成生产验收
 
 - `KernelToolResultSpillService` 在 Tool Gateway 脱敏后处理成功结果，默认阈值 8192 字符、预览 800 字符、单次回读 4096 字符。
 - 完整文本写入 `agent-artifacts` bucket，并保存 `AgentArtifact`；模型只拿到 `artifactId`、长度、preview 和回读指令。
 - `ToolResultReadToolPortAdapter` 要求 artifact 同时匹配当前 run、tenant、user，并限制 `provenance.kind=tool_result_spill`。
 - `LocalToolGatewayPort` 的顺序是：真实执行 -> artifact side effect -> 输出脱敏 -> Spill -> 审计完成。
-- 仓库中未找到 Spill 专属 E2E 脚本，也未找到直接覆盖两个实现类的测试。
+- `scripts/e2e-tool-result-spill-smoke.ps1` 已在 full-Docker 环境通过 13 步真实 E2E，覆盖真实 `web_fetch`、Artifact/Object Storage 完整性、范围回读、三类越权拒绝、审计防泄漏和零残留清理。
+- `KernelToolResultSpillServiceTests` 与 `ToolResultReadToolPortAdapterTests` 直接覆盖 UTF-8 字符/字节数、SHA-256、MIME、失败清理、范围上限及 run/tenant/user/provenance 拒绝。
 
-判断：功能代码已完成，当前状态应标记为 **implemented, not production-accepted**，而不是“尚未实现”。
+判断：P0-A 当前状态为 **implemented and production-accepted**；TTL/保留策略、非文本载荷和按 tool 配置仍属于后续治理范围。
 
 ### 4.2 Trace 基座已完成，认知语义仍不足
 
@@ -108,12 +109,12 @@ Seahorse 当前并不是从零开始：
 
 ## 5. 推荐开发顺序
 
-### P0-A：先补 Spill 真实 E2E 和最小硬化
+### P0-A（已完成）：Spill 真实 E2E 和最小硬化
 
 不新增抽象，先证明现有实现可用：
 
 - 新增 full-Docker smoke，调用真实 Gateway 工具产生超过阈值的文本。
-- 验证 PostgreSQL Artifact、MinIO 完整对象、pointer preview 和中后段 marker 回读。
+- 验证 PostgreSQL Artifact、当前 `ObjectStoragePort` 的完整对象、pointer preview 和中后段回读；现有 full-Docker profile 实际使用 Local adapter，不能把已启动但未被 backend 选中的 MinIO 当作验收 owner。
 - 验证跨 run、跨用户、跨租户读取均失败。
 - 验证 Tool audit、API 和模型 observation 不泄露 `storageRef`、密钥或完整大结果。
 - 增加 SHA-256、原始字符/字节数；为文本 Spill 保留明确 MIME。
@@ -179,7 +180,7 @@ historyBudget = max(0, effectiveWindow - fixedCost)
 
 | 切片 | 真实场景 | 必须查询的证据 |
 | --- | --- | --- |
-| Spill | 真实 Tool Gateway 返回大文本，含头/中/尾唯一 marker | API observation、`sa_agent_artifact`、MinIO object、`sa_tool_invocation`、范围回读与越权失败 |
+| Spill | 真实 Tool Gateway 返回大文本 | API observation、`sa_agent_artifact`、当前配置的 Object Storage object、SHA-256/字节数、`sa_tool_invocation`、范围回读与越权失败 |
 | Context Envelope | 真实模型 + 中文/英文/JSON 长历史 + 多工具 schema | 模型请求成功、预算记录、最新意图保留、上下文 hash、无 provider overflow |
 | Folding | 50+ turn 分支会话，摘要成功与失败各一次 | 原始 `t_message` 不变、摘要版本状态、working view、分支隔离、Trace evidence ids |
 | Recovery | 工具产生可计数副作用后强制停止 backend，再重启 worker | checkpoint/invocation 状态、外部副作用次数为 1、重放 observation、无悬空 tool pair |
@@ -197,13 +198,12 @@ historyBudget = max(0, effectiveWindow - fixedCost)
 
 ## 8. 最终路线图
 
-推荐从现在开始按以下顺序提交独立切片，并在每个切片后运行真实 full-Docker E2E：
+P0-A Spill 已完成；后续按以下顺序提交独立切片，并在每个切片后运行真实 full-Docker E2E：
 
-1. **Spill full-Docker E2E + hash/MIME 最小硬化**。
-2. **Model Context Envelope + 预算 trace + 长上下文 E2E**。
-3. **原始 thinking 持久化收敛**。
-4. **BEFORE_TOOL/AFTER_TOOL checkpoint + Gateway 幂等恢复 + 重启 E2E**。
-5. **版本化结构化会话折叠 + 长会话/分支 E2E**。
-6. **副作用感知并发 + provider drain/ref-count**。
+1. **Model Context Envelope + 预算 trace + 长上下文 E2E**。
+2. **原始 thinking 持久化收敛**。
+3. **BEFORE_TOOL/AFTER_TOOL checkpoint + Gateway 幂等恢复 + 重启 E2E**。
+4. **版本化结构化会话折叠 + 长会话/分支 E2E**。
+5. **副作用感知并发 + provider drain/ref-count**。
 
-这条路线先关闭已经存在但未验收的风险，再建立预算和恢复两个运行时基础设施，最后才增加语义折叠复杂度。它保留 Seahorse 的现有架构优势，也吸收了 VCP 在渐进降级和能力按需供给上的有效经验。
+这条路线在 Spill 风险已验收的基础上，继续建立预算和恢复两个运行时基础设施，最后再增加语义折叠复杂度。它保留 Seahorse 的现有架构优势，也吸收了 VCP 在渐进降级和能力按需供给上的有效经验。

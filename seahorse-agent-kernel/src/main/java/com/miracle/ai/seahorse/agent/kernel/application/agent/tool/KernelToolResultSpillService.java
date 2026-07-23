@@ -32,8 +32,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -46,6 +48,9 @@ public class KernelToolResultSpillService implements ToolResultSpillPort {
 
     public static final String ARTIFACT_BUCKET = "agent-artifacts";
     public static final String PROVENANCE_KIND = "tool_result_spill";
+    public static final String TEXT_CONTENT_TYPE = "text/plain; charset=utf-8";
+
+    private static final String SHA_256 = "SHA-256";
 
     private static final Set<String> EXISTING_ARTIFACT_TOOL_IDS = Set.of(
             ImageGenerationToolPortAdapter.TOOL_ID,
@@ -87,6 +92,7 @@ public class KernelToolResultSpillService implements ToolResultSpillPort {
 
         String artifactId = SnowflakeIds.nextIdString();
         byte[] bytes = result.content().getBytes(StandardCharsets.UTF_8);
+        String contentSha256 = sha256(bytes);
         StoredObject stored = null;
         try {
             objectStorage.ensureBucket(ARTIFACT_BUCKET);
@@ -95,7 +101,7 @@ public class KernelToolResultSpillService implements ToolResultSpillPort {
                     new ByteArrayInputStream(bytes),
                     bytes.length,
                     "tool-result-" + artifactId + ".txt",
-                    "text/plain; charset=utf-8");
+                    TEXT_CONTENT_TYPE);
             AgentArtifact artifact = new AgentArtifact(
                     artifactId,
                     request.runId(),
@@ -104,15 +110,20 @@ public class KernelToolResultSpillService implements ToolResultSpillPort {
                     defaultText(request.userId(), "system"),
                     AgentArtifactType.FILE,
                     "Tool result: " + boundedToolId(request.toolId()),
-                    "text/plain; charset=utf-8",
+                    TEXT_CONTENT_TYPE,
                     stored.url(),
                     preview(result.content()),
-                    provenanceJson(request, result.content().length()),
+                    provenanceJson(request, result.content().length(), bytes.length, contentSha256),
                     AgentArtifactScanStatus.CLEAN,
                     Instant.now(clock));
             artifactRepository.save(artifact);
             return ToolInvocationResult.ok(pointerJson(
-                    request, artifactId, result.content(), result.content().length(), bytes.length));
+                    request,
+                    artifactId,
+                    result.content(),
+                    result.content().length(),
+                    bytes.length,
+                    contentSha256));
         } catch (RuntimeException ex) {
             if (stored != null) {
                 try {
@@ -135,27 +146,44 @@ public class KernelToolResultSpillService implements ToolResultSpillPort {
                                String artifactId,
                                String content,
                                int contentChars,
-                               int contentBytes) {
+                               int contentBytes,
+                               String contentSha256) {
         Map<String, Object> pointer = new LinkedHashMap<>();
         pointer.put("kind", PROVENANCE_KIND);
         pointer.put("artifactId", artifactId);
         pointer.put("toolId", request.toolId());
         pointer.put("contentChars", contentChars);
         pointer.put("contentBytes", contentBytes);
+        pointer.put("contentSha256", contentSha256);
+        pointer.put("contentType", TEXT_CONTENT_TYPE);
         pointer.put("preview", preview(content));
         pointer.put("readToolId", ToolResultSpillPort.READ_TOOL_ID);
         pointer.put("readInstruction", "Use read_tool_result with artifactId, offset, and limit to read more.");
         return writeJson(pointer);
     }
 
-    private String provenanceJson(ToolInvocationRequest request, int contentChars) {
+    private String provenanceJson(ToolInvocationRequest request,
+                                  int contentChars,
+                                  int contentBytes,
+                                  String contentSha256) {
         Map<String, Object> provenance = new LinkedHashMap<>();
         provenance.put("kind", PROVENANCE_KIND);
         provenance.put("toolId", request.toolId());
         provenance.put("toolCallId", request.toolCallId());
         provenance.put("stepId", request.stepId());
         provenance.put("contentChars", contentChars);
+        provenance.put("contentBytes", contentBytes);
+        provenance.put("contentSha256", contentSha256);
+        provenance.put("contentType", TEXT_CONTENT_TYPE);
         return writeJson(provenance);
+    }
+
+    private String sha256(byte[] content) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance(SHA_256).digest(content));
+        } catch (java.security.NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 algorithm is unavailable", ex);
+        }
     }
 
     private String writeJson(Object value) {
