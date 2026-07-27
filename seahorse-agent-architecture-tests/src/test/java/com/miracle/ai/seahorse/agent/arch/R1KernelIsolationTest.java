@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.miracle.ai.seahorse.agent.arch;
 
 import com.tngtech.archunit.core.domain.JavaClasses;
@@ -24,20 +41,7 @@ public class R1KernelIsolationTest {
                 .that().resideInAPackage("com.miracle.ai.seahorse.agent.kernel..")
                 .should().dependOnClassesThat().resideInAPackage("com.miracle.ai.seahorse.agent.adapters..")
                 .because("Kernel must be framework-agnostic and not depend on adapter layer (Ports & Adapters)");
-        try {
-            rule.check(kernelClasses);
-            System.out.println("R1 kernel->adapter: PASS");
-        } catch (AssertionError e) {
-            System.out.println("R1 kernel->adapter violations detected (should be 0, Phase0 tolerance 5):\n" + e.getMessage());
-            // Count violations roughly by line breaks
-            long count = e.getMessage().lines().filter(l -> l.contains("does not")).count();
-            // Allow up to 5 for Phase0 to keep build green
-            if (count > 10) {
-                throw e;
-            } else {
-                System.out.println("WARNING: R1 violation within tolerance, Phase1 must fix");
-            }
-        }
+        rule.check(kernelClasses);
     }
 
     @Test

@@ -2155,8 +2155,16 @@ class ContainerSandboxRuntimeAdapterTests {
                 .isEqualTo(containerWorkspaceRoot.resolve(session.sessionId()).toAbsolutePath().normalize());
         assertThat(Files.readString(runner.lastCommand.workingDirectory().resolve("main.py")))
                 .isEqualTo("print('mount source smoke')");
+        String expectedMountSource = hostMountSourceRoot.toString();
+        if (expectedMountSource.length() >= 3
+                && Character.isLetter(expectedMountSource.charAt(0))
+                && expectedMountSource.charAt(1) == ':') {
+            expectedMountSource = "/run/desktop/mnt/host/"
+                    + Character.toLowerCase(expectedMountSource.charAt(0))
+                    + expectedMountSource.substring(2).replace('\\', '/');
+        }
         assertThat(runner.lastCommand.commandLine())
-                .contains(hostMountSourceRoot + "/" + session.sessionId() + ":/workspace:rw");
+                .contains(expectedMountSource + "/" + session.sessionId() + ":/workspace:rw");
     }
 
     @Test

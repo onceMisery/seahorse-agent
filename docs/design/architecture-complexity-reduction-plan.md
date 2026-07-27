@@ -13,13 +13,13 @@
 
 | 指标 | 当前值 | 说明 | 期望趋势 |
 |------|--------|------|----------|
-| **Ports 接口数量** | **804** | `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/ports` 下除 `NoopFallback` 外的 Java 文件数（代表 inbound/outbound port 定义膨胀） | 只许减不许增 |
-| **>800 行大类** | **15** | 业务主路径下（排除 `spring-boot-autoconfigure` 自动装配类）行数超过 800 的类 | 只许减不许增，Phase1 拆分为 <400 行 |
+| **Ports 接口数量** | **808** | `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/ports` 下除 `NoopFallback` 外的 Java 文件数（代表 inbound/outbound port 定义膨胀） | 只许减不许增 |
+| **>800 行大类** | **17** | 业务主路径下（排除 `spring-boot-autoconfigure` 自动装配类）行数超过 800 的类 | 只许减不许增，Phase1 拆分为 <400 行 |
 | **AutoConfiguration imports** | **106** | `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` 文件行数，代表启动器装配复杂度 | 只许减不许增，Phase1 收敛至 <80 |
 
 附加观测：
 
-- `seahorse-agent-kernel` 模块中子域（`application/<domain>`）达 34 个，跨域直接引用经 import 扫描约 30+ 起，ArchUnit 深层依赖扫描约 **35** 处。
+- `seahorse-agent-kernel` 模块中子域（`application/<domain>`）达 34 个；ArchUnit 按源类与目标类归并后冻结 **40** 个跨域类对。
 - `kernel` 仍存在对 `adapter`、`spring-web`、SDK 的风险依赖入口。
 - Controller 层（`adapter-web`）存在直接依赖 `Kernel*ServiceImpl` 的隐患（绕过 Port）。
 - Adapter 之间存在潜在的隐式互相依赖。
@@ -27,7 +27,7 @@
 ### 1.2 根因
 
 1. **Clean Architecture 边界未强制化**：仅靠文档约束，缺乏 ArchUnit 自动化门禁，`kernel → adapter` 反向依赖易悄然引入。
-2. **Port 膨胀**：每个用例均新增独立 Port，缺乏组合与分层，达到 804。
+2. **Port 膨胀**：每个用例均新增独立 Port，缺乏组合与分层，达到 808。
 3. **大类**：`KernelChatInboundService`、`KernelSandboxRuntimeService`、`DefaultMemoryEnginePort` 等承担多重职责，测试成本高。
 4. **AutoConfiguration 过载**：106 个自动配置类，启动链路隐式耦合，难以做增量裁剪与可观测。
 5. **子域隔离缺失**：`application` 下 34 个子域互相 `import`，形成事务脚本。
@@ -39,7 +39,7 @@
 ### 2.1 北极星指标
 
 - Phase 0：**冻结存量 + 自动化门禁 + 棘轮基线**
-- Phase 1：Ports 从 804 → <600（合并 CQRS 读写、引入组合 Port）；>800 行类从 15 → 5；imports 106 → 80
+- Phase 1：Ports 从 808 → <600（合并 CQRS 读写、引入组合 Port）；>800 行类从 17 → 5；imports 106 → 80
 - Phase 2：所有子域通过 Event / Port 通信，移除白名单；Adapter → SPI 注册
 
 ### 2.2 设计原则
@@ -47,7 +47,7 @@
 1. **依赖方向强制化**：`kernel` 零依赖 adapter / `spring-web` / SDK；`domain` 零依赖 `application`。
 2. **显式依赖优于隐式**：Controller 只允许依赖 `InboundPort`，禁止直接依赖 `Kernel*Service`。
 3. **Adapter 隔离**：每个 `seahorse-agent-adapter-*` 仅依赖 `kernel` + `spring-boot` + 自身 SDK，互不依赖。
-4. **子域隔离**：`application.<domain>` 之间默认隔离，跨域必须通过 `ports` 或领域事件，存量 35 处加入白名单逐步消化。
+4. **子域隔离**：`application.<domain>` 之间默认隔离，跨域必须通过 `ports` 或领域事件，存量 40 个精确类对加入基线逐步消化。
 5. **棘轮（Ratchet）**：CI 中复杂度预算只许减不许增，任何 PR 若使指标上升则失败。
 
 ---
@@ -59,7 +59,7 @@
 ```bash
 find seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/ports \
   -type f -name "*.java" ! -name "NoopFallback.java" | wc -l
-# 当前 804
+# 当前 808
 ```
 
 方法说明：统计 Port 定义目录下所有 Java 文件，排除非 Port 的 NoopFallback。未来若拆包，该脚本需同步更新，但趋势保持不变。
@@ -70,19 +70,19 @@ find seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/ports \
 find . -type f -path "*/src/main/java/*" -name "*.java" \
   ! -path "*/seahorse-agent-spring-boot-autoconfigure/*" \
   -exec wc -l {} \; | awk '$1>800' | wc -l
-# 当前 15
+# 当前 17
 ```
 
 排除 `spring-boot-autoconfigure`，因为该模块包含大量自动装配类，其大类属于配置聚合，单独治理。
 
-当前 15 个清单（>800 行）：
+当前 17 个清单（>800 行）：
 
 - `ContainerSandboxRuntimeAdapter` 3849
 - `KernelSandboxRuntimeService` 2040
 - `DefaultMemoryEnginePort` 1757
-- `KernelChatInboundService` 1681
+- `KernelChatInboundService` 1672
 - `HybridMemoryRecallPipeline` 1338
-- `LocalToolGatewayPort` 1205
+- `LocalToolGatewayPort` 1268
 - `KernelRunExperimentService` 1198
 - `JdbcChatSchemaUpgrade` 1177
 - `SandboxBrowserToolPortAdapter` 1044
@@ -92,6 +92,8 @@ find . -type f -path "*/src/main/java/*" -name "*.java" \
 - `AgentScopeReActExecutor` 886
 - `JdbcMemoryLifecycleRepositoryAdapter` 880
 - `KernelMemoryManagementService` 872
+- `KernelAgentRunResumeService` 830
+- `ModelContextEnvelopeBuilder` 809
 
 ### 3.3 AutoConfiguration imports
 
@@ -137,7 +139,7 @@ noClasses().that().resideInAPackage("com.miracle.ai.seahorse.agent.kernel.domain
 
 Domain 仅可依赖自身子包、`ports.common`、`java`。该规则防止领域模型被用例污染。
 
-### 4.1.3 R3: Application 子域间隔离（白名单 35 处）
+### 4.1.3 R3: Application 子域间隔离（基线 40 个类对）
 
 - 将 `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application` 下一级子文件夹视为子域。
 - 默认：`application.<domainA>..` 不依赖 `application.<domainB>..` (A≠B)。
@@ -147,8 +149,8 @@ Domain 仅可依赖自身子包、`ports.common`、`java`。该规则防止领�
 
 1. 扫描阶段收集所有 `JavaClass.getDirectDependenciesFromSelf()`。
 2. 若 sourcePackage = `..application.<X>..` 且 targetPackage = `..application.<Y>..` 且 X≠Y，则判定跨域。
-3. 生成 key：`sourceClass -> targetClass` 或 `sourceClass -> targetPackage`。
-4. 白名单文件 `src/main/resources/archunit/cross-domain-whitelist.txt` 包含当前 35 条，格式：
+3. 生成唯一 key：`sourceClass -> targetClass`。
+4. 基线文件 `src/main/resources/archunit/cross-domain-whitelist.txt` 包含当前 40 个精确类对，格式：
 
 ```
 # 格式：sourceDomain -> targetDomain | sourceClass | targetClass
@@ -156,9 +158,7 @@ chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChat
 ...
 ```
 
-测试逻辑：若依赖在白名单中则忽略，否则失败。Phase1 目标：将 35 条逐步清零，任何新增跨域需要 ADR。
-
-产出物：`scripts/scan-cross-domain.sh` 扫描脚本已确认当前 imports 级别 30 处，ArchUnit 依赖级别 35 处，取 35 作为冻结值。
+测试要求实际类对集合与基线完全相等：新增跨域依赖会失败，代码删除依赖后留下的过期基线也会失败。Phase1 目标是逐步清零；任何新增跨域类对都需要 ADR 并显式更新基线。
 
 ### 4.1.4 R4: Adapter 互不依赖
 
@@ -173,9 +173,9 @@ for each adapterA != adapterB:
 
 允许共同依赖：`kernel`, `org.springframework`, `java`, SDK。
 
-实现中通过 Maven 依赖导入所有 `seahorse-agent-adapter-*` 的 jar，扫描 `com.miracle.ai.seahorse.agent.adapters..`。
+实现中通过 Maven 依赖导入所有 `seahorse-agent-adapter-*` 的 classes 目录或 jar，扫描 `com.miracle.ai.seahorse.agent.adapters..`，并从 `JavaClass.getSource().getUri()` 提取真实 Maven 模块名，避免把共享 Java 包前缀误当成模块边界。
 
-例外：`adapter-agent-agentscope` 与 `adapter-agent-agentscope-core` 为父子关系，允许 core → 无，agentscope 可依赖 core，记作白名单。
+唯一例外：`seahorse-agent-adapter-agent-agentscope` 可以依赖 `seahorse-agent-adapter-agent-agentscope-core`。
 
 ### 4.1.5 R5: Controller 不直接引用 Kernel*Service 实现类
 
@@ -190,7 +190,7 @@ noClasses().that().resideInAPackage("..adapters.web..")
   .and().resideInAPackage("..kernel.application..")
 ```
 
-推荐：Controller 只能构造注入 `*InboundPort`。
+当前 37 个底层依赖事件归并为 6 个精确的 Controller → Kernel Service 类对，并要求实际集合与 Phase 0 基线完全相等。推荐后续将这些依赖替换为 `*InboundPort`，每移除一对时同步收缩基线。
 
 ---
 
@@ -201,18 +201,18 @@ noClasses().that().resideInAPackage("..adapters.web..")
 `complexity-baseline.txt`（仓库根）：
 
 ```
-ports=804
-large_classes_gt_800=15
+ports=808
+large_classes_gt_800=17
 autoconfig_imports=106
-cross_domain_whitelist_size=35
+cross_domain_whitelist_size=40
 ```
 
 该文件由 `scripts/complexity-report.sh` 生成并对比。
 
 ### 5.2 脚本逻辑 `scripts/complexity-report.sh`
 
-1. 计算当前三个指标（同 3 节方法）。
-2. 读取基线文件。
+1. 计算当前四个指标（同 3 节方法并统计跨域类对基线）。
+2. 只读取仓库根目录的基线文件；缺失或格式非法时退出 2。
 3. 若当前 > 基线：报错 `::error::` 并退出 1，且打印对比表。
 4. 若当前 < 基线：提示可更新基线（但 CI 不自动更新，需人工 `make baseline-update`）。
 5. 输出 Markdown 报告，供 CI summary。
@@ -241,17 +241,12 @@ CI 步骤：
 
 ### 6.2 本方案新增
 
-在 `backend` job 中新增两步（位于 Build & unit test 之后）：
+`backend` job 的 `verify` 会随 Maven reactor 执行 R1-R5，随后单独执行复杂度预算硬门禁：
 
 ```yaml
-- name: Architecture tests (ArchUnit R1-R5)
-  run: ./mvnw -B -ntp -pl seahorse-agent-architecture-tests -am test -Dtest=ArchitectureRulesTest
-
 - name: Complexity budget check (ratchet)
   run: bash scripts/complexity-report.sh
 ```
-
-同时，`.github/workflows-proposed/ci.yml` 为提案路径，实际激活时需 `mv` 至 `.github/workflows/ci.yml`。本 PR 同时更新两处文件以保持一致。
 
 ### 6.3 本地验证命令
 
@@ -278,7 +273,7 @@ bash scripts/complexity-report.sh
 seahorse-agent-architecture-tests/
   pom.xml
   src/main/resources/archunit/
-    cross-domain-whitelist.txt  # 35 条
+    cross-domain-whitelist.txt  # 40 个精确类对
   src/test/java/com/miracle/ai/seahorse/agent/arch/
     ArchitectureRulesTest.java
     R1KernelIsolationTest.java
@@ -315,7 +310,7 @@ seahorse-agent-architecture-tests/
 | 风险 | 概率 | 影响 | 缓解 |
 |------|------|------|------|
 | ArchUnit 扫描范围过大导致误报（Spring） | 中 | 构建失败阻塞 | 细化 forbidden package，引入 allow-list |
-| 白名单 35 处无法短期消化 | 高 | 债务残留 | PR 模板要求新增跨域需 ADR + 否决默认 |
+| 40 个跨域类对无法短期消化 | 高 | 债务残留 | PR 模板要求新增跨域需 ADR + 否决默认 |
 | Ports 计数方法争议 | 低 | 指标波动 | 明确脚本口径为 `ports/.../*.java - NoopFallback` |
 | CI 成本增加 | 低 | +2 min | 架构测试仅扫描已编译类，缓存 Maven |
 
@@ -323,12 +318,9 @@ seahorse-agent-architecture-tests/
 
 ## 10 附录
 
-### 10.1 本地扫描跨域脚本（已执行）
+### 10.1 本地扫描跨域依赖
 
-```bash
-python3 scripts/scan-cross-domain.py
-# 输出 30 imports, 35 ArchUnit级，取 35 为冻结值
-```
+运行 `R3SubdomainIsolationTest`，由 ArchUnit 对编译后的直接依赖进行扫描并与 40 个精确类对的基线双向比较。
 
 ### 10.2 基线文件内容
 
@@ -338,7 +330,7 @@ python3 scripts/scan-cross-domain.py
 
 - `docs/architecture/current-code-architecture.md`
 - `seahorse-architecture.md`
-- `.github/workflows-proposed/ci.yml`（新版）
+- `.github/workflows/ci.yml`
 
 ---
 

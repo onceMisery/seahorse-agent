@@ -336,9 +336,6 @@
                 <configuration>
                     <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
                     <excludedGroups>integration</excludedGroups>
-                    <!-- Phase 0: 主干新引入的测试在 CI 环境不稳定，暂时跳过所有测试以保证治理 PR 可合并，主干修复后移除 skipTests -->
-                    <skipTests>true</skipTests>
-                    <testFailureIgnore>true</testFailureIgnore>
                 </configuration>
             </plugin>
 
@@ -347,7 +344,6 @@
                 <artifactId>spotless-maven-plugin</artifactId>
                 <version>${spotless-maven-plugin.version}</version>
                 <configuration>
-                    <skip>true</skip>
                     <java>
                         <licenseHeader>
                             <!-- ${maven.multiModuleProjectDirectory} 爆红属于正常，并不影响编译或者运行，忽略就好 -->

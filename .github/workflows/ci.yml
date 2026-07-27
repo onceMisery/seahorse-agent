@@ -40,6 +40,9 @@ jobs:
               - '.mvn/**'
               - 'seahorse-agent-*/**'
               - 'resources/**'
+              - 'scripts/**'
+              - 'complexity-baseline.txt'
+              - 'docs/design/architecture-complexity-reduction-plan.md'
               - '.github/workflows/ci.yml'
             frontend:
               - 'frontend/**'
@@ -64,7 +67,7 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Build & unit test
+      - name: Build, unit, and architecture tests
         # 说明：
         # - 根 pom 的 surefire 已排除 @Tag("integration")
         # - seahorse-agent-tests 里的 e2e 包（SeahorseE2E*）是 @SpringBootTest
@@ -75,6 +78,9 @@ jobs:
           ./mvnw -B -ntp verify
           -Dtest='!SeahorseE2E*'
           -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: Complexity budget check
+        run: bash scripts/complexity-report.sh
 
       - name: Upload surefire reports (on failure)
         if: failure()
@@ -89,7 +95,7 @@ jobs:
         with:
           name: seahorse-agent-bootstrap-jar
           path: seahorse-agent-bootstrap/target/seahorse-agent-bootstrap-*-exec.jar
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 7
 
   # ==========================================================

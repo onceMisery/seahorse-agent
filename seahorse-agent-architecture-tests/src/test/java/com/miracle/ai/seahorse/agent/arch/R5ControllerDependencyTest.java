@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.miracle.ai.seahorse.agent.arch;
 
 import com.tngtech.archunit.core.domain.Dependency;
@@ -6,87 +23,57 @@ import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/**
- * R5: Controller 不直接引用 Kernel*Service 实现类
- * - Controllers in adapter-web should not directly depend on Kernel*Service classes in kernel.application
- * - Must depend on InboundPort interfaces
- */
+/** R5: freeze the exact controller-to-kernel-service dependencies present in Phase 0. */
 public class R5ControllerDependencyTest {
+
+    private static final Set<String> PHASE_ZERO_BASELINE = Set.of(
+            "com.miracle.ai.seahorse.agent.adapters.web.SeahorseAdminTenantController"
+                    + " -> com.miracle.ai.seahorse.agent.kernel.application.admin.KernelAdminTenantService",
+            "com.miracle.ai.seahorse.agent.adapters.web.SeahorseAdminUserController"
+                    + " -> com.miracle.ai.seahorse.agent.kernel.application.admin.KernelAdminTenantService",
+            "com.miracle.ai.seahorse.agent.adapters.web.SeahorseAuditLogController"
+                    + " -> com.miracle.ai.seahorse.agent.kernel.application.admin.KernelAuditLogService",
+            "com.miracle.ai.seahorse.agent.adapters.web.SeahorseEvalCandidateDecisionController"
+                    + " -> com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalCandidateDecisionService",
+            "com.miracle.ai.seahorse.agent.adapters.web.SeahorseEvalCandidateDecisionController"
+                    + " -> com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalRegressionService",
+            "com.miracle.ai.seahorse.agent.adapters.web.SeahorseMarketplaceController"
+                    + " -> com.miracle.ai.seahorse.agent.kernel.application.agent.marketplace.KernelAgentMarketplaceService");
 
     private final JavaClasses webClasses = new ClassFileImporter()
             .importPackages("com.miracle.ai.seahorse.agent.adapters.web", "com.miracle.ai.seahorse.agent.adapters.local");
 
     @Test
-    void controllersShouldNotDirectlyReferenceKernelServiceImplementation() {
-        List<String> violations = new ArrayList<>();
+    void controllerToKernelServiceDependenciesMustMatchPhaseZeroBaseline() {
+        Set<String> actualDependencies = new TreeSet<>();
 
-        for (JavaClass clazz : webClasses) {
-            String simpleName = clazz.getSimpleName();
-            String pkg = clazz.getPackageName();
-            boolean isController = simpleName.endsWith("Controller") || clazz.getName().endsWith("Controller");
-            if (!isController) continue;
-            if (!pkg.contains("adapters.web") && !pkg.contains("adapters.local")) continue;
+        for (JavaClass controller : webClasses) {
+            if (!controller.getSimpleName().endsWith("Controller")) {
+                continue;
+            }
 
-            for (Dependency dep : clazz.getDirectDependenciesFromSelf()) {
-                JavaClass target = dep.getTargetClass();
-                String targetName = target.getSimpleName();
-                String targetPackage = target.getPackageName();
-
-                if (targetPackage.startsWith("com.miracle.ai.seahorse.agent.kernel.application")
-                        && targetName.startsWith("Kernel")
-                        && targetName.endsWith("Service")
-                        && !targetName.equals("KernelService")) {
-
-                    violations.add(String.format("%s -> %s via %s:%d",
-                            clazz.getName(), target.getName(), dep.getDescription(), dep.getLineNumber()));
+            for (Dependency dependency : controller.getDirectDependenciesFromSelf()) {
+                JavaClass target = dependency.getTargetClass();
+                if (isKernelService(target)) {
+                    actualDependencies.add(controller.getName() + " -> " + target.getName());
                 }
             }
         }
 
-        if (!violations.isEmpty()) {
-            System.out.println("Controller -> KernelService violations (Phase 0 baseline, should be reduced in Phase1): " + violations.size());
-            violations.forEach(System.out::println);
-            if (violations.size() > 50) {
-                fail("Controllers should not directly reference Kernel*Service implementations. Found " + violations.size() + " violations (threshold 50 for Phase0, target 0 for Phase1):\n"
-                        + String.join("\n", violations) + "\n"
-                        + "Controllers must depend on InboundPort interfaces (e.g., ChatInboundPort) instead.");
-            } else {
-                System.out.println("WARNING: R5 violations within Phase0 tolerance (" + violations.size() + " <= 50), please refactor to Port in Phase1.");
-            }
-        } else {
-            System.out.println("R5 controller isolation: PASS - no direct Kernel*Service references");
-        }
+        assertEquals(new TreeSet<>(PHASE_ZERO_BASELINE), actualDependencies,
+                "Controller-to-kernel-service dependencies changed; replace them with inbound ports or update the reviewed baseline");
     }
 
-    @Test
-    void controllersShouldNotDependOnKernelApplicationImpl() {
-        // Broader check: controller should not depend on any class in kernel.application that is not a Port or Domain?
-        // For Phase 0 we only enforce Kernel*Service, but we add this as additional guard
-        // This test is informational
-        List<String> violations = new ArrayList<>();
-
-        for (JavaClass clazz : webClasses) {
-            if (!clazz.getSimpleName().endsWith("Controller")) continue;
-
-            for (Dependency dep : clazz.getDirectDependenciesFromSelf()) {
-                JavaClass target = dep.getTargetClass();
-                String targetPkg = target.getPackageName();
-                if (targetPkg.startsWith("com.miracle.ai.seahorse.agent.kernel.application")) {
-                    String targetSimple = target.getSimpleName();
-                    // Allow if target is in .ports (but ports is not in application, it's in ports package)
-                    // So any direct dependency on application service is considered violation unless it's a Port? But application does not contain Port, it contains services
-                    // So we flag anything that ends with Service
-                    if (targetSimple.endsWith("Service") && targetSimple.startsWith("Kernel")) {
-                        // already covered
-                        continue;
-                    }
-                }
-            }
-        }
+    private static boolean isKernelService(JavaClass target) {
+        String targetName = target.getSimpleName();
+        return target.getPackageName().startsWith("com.miracle.ai.seahorse.agent.kernel.application")
+                && targetName.startsWith("Kernel")
+                && targetName.endsWith("Service")
+                && !targetName.equals("KernelService");
     }
 }

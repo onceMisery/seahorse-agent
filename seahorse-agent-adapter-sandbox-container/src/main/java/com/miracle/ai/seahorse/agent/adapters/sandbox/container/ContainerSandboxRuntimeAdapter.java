@@ -593,7 +593,7 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
             throw new IllegalArgumentException("encrypted pdf is not supported");
         }
         if (java.util.regex.Pattern.compile(
-                "/(AA|EmbeddedFile|GoToE|GoToR|ImportData|JavaScript|JS|Launch|Rendition|RichMedia|SubmitForm)\\b",
+                "/(AA|EmbeddedFile|GoToE|GoToR|ImportData|JavaScript|JS|Launch|OpenAction|Rendition|RichMedia|SubmitForm)\\b",
                 java.util.regex.Pattern.CASE_INSENSITIVE).matcher(prefixText).find()) {
             throw new IllegalArgumentException("pdf active content is not supported");
         }
@@ -3565,7 +3565,9 @@ public class ContainerSandboxRuntimeAdapter implements SandboxRuntimePort {
         String root = stripTrailingSeparators(workspaceMountSourceRoot);
         if (root.length() >= 3 && Character.isLetter(root.charAt(0)) && root.charAt(1) == ':'
                 && (root.charAt(2) == '/' || root.charAt(2) == '\\')) {
-            root = "/run/desktop/mnt/host/" + Character.toLowerCase(root.charAt(0)) + root.substring(2);
+            root = "/run/desktop/mnt/host/"
+                    + Character.toLowerCase(root.charAt(0))
+                    + root.substring(2).replace('\\', '/');
         }
         return root + "/" + safeFilesystemName(sessionId);
     }
