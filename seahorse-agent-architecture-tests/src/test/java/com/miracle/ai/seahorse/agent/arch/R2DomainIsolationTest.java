@@ -22,18 +22,27 @@ public class R2DomainIsolationTest {
                 .that().resideInAPackage("com.miracle.ai.seahorse.agent.kernel.domain..")
                 .should().dependOnClassesThat().resideInAPackage("com.miracle.ai.seahorse.agent.kernel.application..")
                 .because("Domain layer should be independent of application layer (DDD principle)");
-
-        rule.check(kernelClasses);
+        try {
+            rule.check(kernelClasses);
+            System.out.println("R2 domain->application: PASS");
+        } catch (AssertionError e) {
+            System.out.println("R2 violation:\n" + e.getMessage());
+            throw e;
+        }
     }
 
     @Test
     void domainShouldNotDependOnAdapters() {
-        // Extra safety: domain also should not depend on adapters
         ArchRule rule = noClasses()
                 .that().resideInAPackage("com.miracle.ai.seahorse.agent.kernel.domain..")
                 .should().dependOnClassesThat().resideInAPackage("com.miracle.ai.seahorse.agent.adapters..")
                 .because("Domain must not depend on adapter layer");
-
-        rule.check(kernelClasses);
+        try {
+            rule.check(kernelClasses);
+            System.out.println("R2 domain->adapter: PASS");
+        } catch (AssertionError e) {
+            System.out.println("R2 domain->adapter violation:\n" + e.getMessage());
+            throw e;
+        }
     }
 }
