@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.trace;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentFinalModelTurnPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
@@ -34,6 +35,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class KernelRagTraceRecorderTests {
 
@@ -55,6 +57,22 @@ class KernelRagTraceRecorderTests {
 
         assertEquals("{\"input\":\"query\"}", repository.startedNode.getExtraData());
         assertEquals("{\"output\":\"hits\"}", repository.finishedNode.extraData());
+    }
+
+    @Test
+    void recordsOnlyStableModelFailureClassification() {
+        RecordingTraceRepository repository = new RecordingTraceRepository();
+        KernelRagTraceRecorder recorder = new KernelRagTraceRecorder(repository);
+        TraceRunScope runScope = TraceRunScope.active("trace-1", Instant.now());
+        TraceNodeScope nodeScope = recorder.startNode(runScope, new TraceNodeStartCommand(
+                "model", "AGENT_MODEL", "Model", "stream", null, 1));
+        String rawReasoning = "reasoning_content=private-chain-of-thought";
+
+        recorder.finishNode(nodeScope, new AgentFinalModelTurnPort.FinalModelTurnException(
+                new IllegalStateException("provider failed: " + rawReasoning), "{}"));
+
+        assertEquals("MODEL_TURN_FAILED:IllegalStateException", repository.finishedNode.errorMessage());
+        assertFalse(repository.finishedNode.errorMessage().contains(rawReasoning));
     }
 
     private static final class RecordingTraceRepository implements RagTraceRepositoryPort {

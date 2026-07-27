@@ -60,10 +60,24 @@ class RepositoryAgentRunStepRecorderTests {
         assertEquals(AgentStepStatus.FAILED, step.status());
         assertEquals("{\"messages\":[{\"content\":\"[REDACTED]\"}],\"safe\":\"ok\"}", step.inputJson());
         assertEquals("{\"authorization\":\"[REDACTED]\",\"safe\":\"ok\"}", step.outputJson());
-        assertEquals("failed with [REDACTED]", step.errorMessage());
+        assertEquals("MODEL_TURN_FAILED:IllegalStateException", step.errorMessage());
         assertFalse(step.inputJson().contains("secret-api-key-value"));
         assertFalse(step.outputJson().contains("output-secret-123456"));
         assertFalse(step.errorMessage().contains("session-secret-value"));
+    }
+
+    @Test
+    void shouldNeverPersistRawReasoningFromModelFailureMessages() {
+        RecordingAgentRunRepository repository = new RecordingAgentRunRepository();
+        RepositoryAgentRunStepRecorder recorder = new RepositoryAgentRunStepRecorder(repository, FIXED_CLOCK);
+        String rawReasoning = "reasoning_content=private-chain-of-thought";
+
+        recorder.recordModelTurn("run-1", "{}", null,
+                new IllegalStateException("provider failed: " + rawReasoning));
+
+        AgentStep step = repository.steps.getFirst();
+        assertEquals("MODEL_TURN_FAILED:IllegalStateException", step.errorMessage());
+        assertFalse(step.errorMessage().contains(rawReasoning));
     }
 
     @Test

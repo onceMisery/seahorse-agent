@@ -42,6 +42,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageSource;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
@@ -632,7 +633,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .maxSteps(agentLoopOptions.maxSteps())
                 .contextPack(contextPack)
                 .memoryContext(memoryContext)
-                .skillRuntimeContext(agentRuntimeContext(selectedVersion, mergedSkills, roleCard))
+                .skillRuntimeContext(agentRuntimeContext(selectedVersion, mergedSkills))
                 .skillRuntimeBlocks(mergedSkills)
                 .runId(runId)
                 .agentId(agentId)
@@ -645,17 +646,13 @@ public class KernelChatInboundService implements ChatInboundPort {
     }
 
     private String agentRuntimeContext(Optional<AgentVersion> selectedVersion,
-                                       List<SkillRuntimeBlock> mergedSkills,
-                                       ResolvedRoleCard roleCard) {
+                                       List<SkillRuntimeBlock> mergedSkills) {
         List<String> parts = new java.util.ArrayList<>();
         selectedVersion
                 .map(AgentVersion::instructions)
                 .filter(this::hasText)
                 .map(String::trim)
                 .ifPresent(parts::add);
-        if (roleCard != null && roleCard.higherPerm()) {
-            parts.add(roleCardPrompt(roleCard));
-        }
         if (mergedSkills != null && !mergedSkills.isEmpty()) {
             parts.add(skillRuntimeComposer.compose(mergedSkills));
         }
@@ -664,11 +661,13 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     private List<ChatMessage> agentHistory(StreamChatCommand command, ResolvedRoleCard roleCard) {
         List<ChatMessage> history = command.history().isEmpty() ? loadAgentHistory(command) : command.history();
-        if (roleCard == null || roleCard.higherPerm()) {
+        if (roleCard == null) {
             return history;
         }
         List<ChatMessage> messages = new java.util.ArrayList<>();
-        messages.add(ChatMessage.user(roleCardPrompt(roleCard)));
+        messages.add(roleCard.higherPerm()
+                ? ChatMessage.system(roleCardPrompt(roleCard))
+                : ChatMessage.user(roleCardPrompt(roleCard)));
         messages.addAll(history);
         return List.copyOf(messages);
     }
@@ -1260,8 +1259,8 @@ public class KernelChatInboundService implements ChatInboundPort {
         if (versionBound.isEmpty() && perTurn.isEmpty() && enableSmartSkillMatching && chatSkillResolver != null) {
             List<String> recommendations = matchSkillsIntelligently(tenantId, command.question());
             if (!recommendations.isEmpty()) {
-                LOG.info("Smart skill matching triggered: question='{}', recommendations={}",
-                        logQuestion(command.question()), recommendations);
+                LOG.info("Smart skill matching triggered: questionLength={}, recommendations={}",
+                        command.question().length(), recommendations);
                 perTurn = chatSkillResolver.resolve(tenantId, recommendations);
             }
         }
@@ -1458,19 +1457,11 @@ public class KernelChatInboundService implements ChatInboundPort {
     }
 
     private String inputSummary(String question) {
-        String value = Objects.requireNonNullElse(question, "").trim();
+        String value = CredentialTextRedactor.redactStructured(Objects.requireNonNullElse(question, "")).trim();
         if (value.length() <= 500) {
             return value;
         }
         return value.substring(0, 500);
-    }
-
-    private String logQuestion(String question) {
-        String value = Objects.requireNonNullElse(question, "").trim();
-        if (value.length() <= 80) {
-            return value;
-        }
-        return value.substring(0, 80) + "...";
     }
 
     private String text(JsonNode root, String fieldName) {

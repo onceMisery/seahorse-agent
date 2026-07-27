@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.domain.agent.output;
 
 import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 
 public final class CredentialTextRedactor {
 
@@ -30,6 +31,8 @@ public final class CredentialTextRedactor {
                     + "|(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|session[_-]?id"
                     + "|session[_-]?token|secret[_-]?key|private[_-]?key|set[_-]?cookie|cookie)"
                     + "\\s*[:=]\\s*[^\\s&;]+)");
+    private static final Pattern QUOTED_JSON_FIELD_PATTERN = Pattern.compile(
+            "([\\\"'])([^\\\"']+)\\1(\\s*:\\s*)([\\\"'])([^\\\"']*)\\4");
 
     private CredentialTextRedactor() {
     }
@@ -48,5 +51,24 @@ public final class CredentialTextRedactor {
         }
         return OPENAI_KEY_PATTERN.matcher(value).find()
                 || CREDENTIAL_VALUE_PATTERN.matcher(value).find();
+    }
+
+    public static String redactStructured(String value) {
+        if (value == null) {
+            return null;
+        }
+        Matcher matcher = QUOTED_JSON_FIELD_PATTERN.matcher(value);
+        StringBuffer redacted = new StringBuffer(value.length());
+        while (matcher.find()) {
+            if (!CredentialJsonFieldClassifier.isSensitiveProviderOrAuditField(matcher.group(2))) {
+                matcher.appendReplacement(redacted, Matcher.quoteReplacement(matcher.group()));
+                continue;
+            }
+            String replacement = matcher.group(1) + matcher.group(2) + matcher.group(1)
+                    + matcher.group(3) + matcher.group(4) + REDACTED_VALUE + matcher.group(4);
+            matcher.appendReplacement(redacted, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(redacted);
+        return redact(redacted.toString());
     }
 }

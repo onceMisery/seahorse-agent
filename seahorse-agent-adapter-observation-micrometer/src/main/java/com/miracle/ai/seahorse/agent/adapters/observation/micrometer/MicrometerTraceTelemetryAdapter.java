@@ -45,7 +45,30 @@ public class MicrometerTraceTelemetryAdapter implements TraceTelemetryPort {
             "seahorse.tenant.id",
             "seahorse.agent.id",
             "seahorse.executor.engine",
-            "seahorse.run.id");
+            "seahorse.run.id",
+            "seahorse.operation",
+            "seahorse.resume.original_run_id",
+            "seahorse.resume.original_trace_id",
+            "seahorse.resume.checkpoint_id");
+    private static final Set<String> ALLOWED_NODE_ATTRIBUTES = Set.of(
+            "seahorse.context.payload_hash",
+            "seahorse.context.payload_hash_source",
+            "seahorse.context.model_id",
+            "seahorse.context.mode",
+            "seahorse.context.estimator_mode",
+            "seahorse.context.estimator_version",
+            "seahorse.context.window",
+            "seahorse.context.window_source",
+            "seahorse.context.output_reserve",
+            "seahorse.context.safety_buffer",
+            "seahorse.context.effective_window",
+            "seahorse.context.selected_input_tokens",
+            "seahorse.context.remaining_tokens",
+            "seahorse.context.provider_usage_available",
+            "seahorse.context.provider_input_tokens",
+            "seahorse.context.provider_output_tokens",
+            "seahorse.context.estimator_delta_tokens",
+            "seahorse.context.reason_code");
 
     private final Tracer tracer;
     private final String traceUrlTemplate;
@@ -137,6 +160,15 @@ public class MicrometerTraceTelemetryAdapter implements TraceTelemetryPort {
         TraceState state = traces.get(traceId);
         if (state != null && ALLOWED_RUN_ATTRIBUTES.contains(key) && value != null && !value.isBlank()) {
             state.root.tag(key, value);
+        }
+    }
+
+    @Override
+    public void recordNodeAttribute(String traceId, String nodeId, String key, String value) {
+        TraceState state = traces.get(traceId);
+        Span span = state == null ? null : state.activeNodes.get(nodeId);
+        if (span != null && ALLOWED_NODE_ATTRIBUTES.contains(key) && value != null && !value.isBlank()) {
+            span.tag(key, safeValue(value));
         }
     }
 

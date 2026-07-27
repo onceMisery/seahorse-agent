@@ -1,0 +1,55 @@
+services:
+  model-context-e2e-redis:
+    image: redis:7-alpine
+    container_name: seahorse-model-context-e2e-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks:
+      - seahorse-net
+
+  model-provider-e2e-proxy:
+    image: python:3.12-alpine
+    container_name: seahorse-model-provider-e2e-proxy
+    command: ["python", "/app/model-provider-e2e-proxy.py"]
+    environment:
+      UPSTREAM_BASE_URL: ${SEAHORSE_AGENT_ADAPTERS_AI_BASE_URL:-https://api.openai.com/v1}
+      CONTROL_TOKEN: ${SEAHORSE_MODEL_E2E_PROXY_TOKEN:-seahorse-model-envelope-e2e}
+      PUBLIC_PREFIX: /v1
+    extra_hosts:
+      - "apihub.agnes-ai.com:104.18.18.62"
+    volumes:
+      - ./scripts/model-provider-e2e-proxy.py:/app/model-provider-e2e-proxy.py:ro
+    ports:
+      - "127.0.0.1:18081:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - seahorse-net
+
+  backend:
+    depends_on:
+      model-context-e2e-redis:
+        condition: service_healthy
+      model-provider-e2e-proxy:
+        condition: service_healthy
+    environment:
+      SEAHORSE_AGENT_ADAPTERS_AI_BASE_URL: http://model-provider-e2e-proxy:8080/v1
+      SEAHORSE_AGENT_ADAPTERS_CACHE_TYPE: redis
+      SEAHORSE_AGENT_ADAPTERS_CACHE_REDIS_HOST: model-context-e2e-redis
+      SEAHORSE_AGENT_ADAPTERS_CACHE_REDIS_PORT: "6379"
+      SPRING_DATA_REDIS_HOST: model-context-e2e-redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      SEAHORSE_OBSERVABILITY_TRACING_ENABLED: "true"
+      MANAGEMENT_TRACING_ENABLED: "true"
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,postgres,redis,milvus-standalone,nacos,pulsar-broker,pulsar-zookeeper,pulsar-bookie,ollama,elasticsearch,seahorse-elasticsearch,backend,seahorse-backend},model-provider-e2e-proxy,model-context-e2e-redis
+
+networks:
+  seahorse-net:
+    external: false

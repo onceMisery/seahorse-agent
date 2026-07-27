@@ -22,19 +22,22 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToo
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolResultReadToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillToolPolicyMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatTokenUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
-import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
+import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelRequestFingerprint;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelContextWindowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.TokenCounterPort;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -67,40 +70,47 @@ final class AgentLoopModelTurns {
     private final ContextWeaverPort contextWeaver;
     private final ToolCallParser toolCallParser;
     private final Duration modelTurnTimeout;
+    private final ModelContextEnvelopeBuilder contextEnvelopeBuilder;
+    private final ModelContextEnvelopeCalibrator contextEnvelopeCalibrator;
+    private final ModelContextEnvelopeOptions.Mode contextEnvelopeMode;
+    private final ModelContextEnvelopeOptions contextEnvelopeOptions;
 
     AgentLoopModelTurns(
             StreamingChatModelPort modelPort,
             ToolRegistryPort toolRegistry,
             ContextWeaverPort contextWeaver,
             ToolCallParser toolCallParser,
-            Duration modelTurnTimeout) {
+            Duration modelTurnTimeout,
+            TokenCounterPort tokenCounter,
+            ModelContextWindowPort modelContextWindow,
+            ModelContextEnvelopeOptions contextEnvelopeOptions) {
+        this(modelPort, toolRegistry, contextWeaver, toolCallParser, modelTurnTimeout,
+                tokenCounter, modelContextWindow, contextEnvelopeOptions, null);
+    }
+
+    AgentLoopModelTurns(
+            StreamingChatModelPort modelPort,
+            ToolRegistryPort toolRegistry,
+            ContextWeaverPort contextWeaver,
+            ToolCallParser toolCallParser,
+            Duration modelTurnTimeout,
+            TokenCounterPort tokenCounter,
+            ModelContextWindowPort modelContextWindow,
+            ModelContextEnvelopeOptions contextEnvelopeOptions,
+            KeyValueCachePort contextCalibrationCache) {
         this.modelPort = Objects.requireNonNull(modelPort, "modelPort must not be null");
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry must not be null");
         this.contextWeaver = Objects.requireNonNull(contextWeaver, "contextWeaver must not be null");
         this.toolCallParser = Objects.requireNonNull(toolCallParser, "toolCallParser must not be null");
         this.modelTurnTimeout = Objects.requireNonNull(modelTurnTimeout, "modelTurnTimeout must not be null");
-    }
-
-    void installRuntimeContext(
-            List<ChatMessage> messages,
-            ContextPack contextPack,
-            MemoryContext memoryContext,
-            String skillRuntimeContext) {
-        String contextText = contextWeaver.weave(contextPack, memoryContext, ContextBudget.defaults());
-        if (skillRuntimeContext != null && !skillRuntimeContext.isBlank()) {
-            contextText = contextText.isBlank()
-                    ? skillRuntimeContext.trim()
-                    : contextText + System.lineSeparator() + System.lineSeparator() + skillRuntimeContext.trim();
-        }
-        if (contextText.isBlank()) {
-            return;
-        }
-        if (!messages.isEmpty() && messages.get(0).getRole() == ChatRole.SYSTEM) {
-            ChatMessage first = messages.get(0);
-            messages.set(0, ChatMessage.system(appendContextText(first.getContent(), contextText)));
-            return;
-        }
-        messages.add(0, ChatMessage.system(contextText));
+        ModelContextEnvelopeOptions safeContextEnvelopeOptions = Objects.requireNonNullElseGet(
+                contextEnvelopeOptions, ModelContextEnvelopeOptions::defaults);
+        this.contextEnvelopeCalibrator = new ModelContextEnvelopeCalibrator(contextCalibrationCache);
+        this.contextEnvelopeBuilder = new ModelContextEnvelopeBuilder(
+                tokenCounter, modelContextWindow, contextWeaver, safeContextEnvelopeOptions,
+                STRUCTURED_TOOL_CALL_PROTOCOL, contextEnvelopeCalibrator);
+        this.contextEnvelopeMode = safeContextEnvelopeOptions.mode();
+        this.contextEnvelopeOptions = safeContextEnvelopeOptions;
     }
 
     ModelTurn requestModelTurn(
@@ -142,10 +152,9 @@ final class AgentLoopModelTurns {
                 .filter(Objects::nonNull)
                 .toList());
         if (hasLoadableSkills(skillRuntimeBlocks)) {
-            boolean registeredLoadSkill = toolRegistry.find(LoadSkillResourceToolPortAdapter.TOOL_ID)
-                    .flatMap(ignored -> toolRegistry.listTools().stream()
-                            .filter(tool -> LoadSkillResourceToolPortAdapter.TOOL_ID.equals(tool.toolId()))
-                            .findFirst())
+            boolean registeredLoadSkill = all.stream()
+                    .filter(tool -> LoadSkillResourceToolPortAdapter.TOOL_ID.equals(tool.toolId()))
+                    .findFirst()
                     .map(result::add)
                     .orElse(false);
             if (!registeredLoadSkill) {
@@ -153,15 +162,13 @@ final class AgentLoopModelTurns {
             }
         }
         if (!safeAllowedToolIds.isEmpty()) {
-            toolRegistry.find(ToolSearchToolPortAdapter.TOOL_ID)
-                    .flatMap(ignored -> toolRegistry.listTools().stream()
-                            .filter(tool -> ToolSearchToolPortAdapter.TOOL_ID.equals(tool.toolId()))
-                            .findFirst())
+            all.stream()
+                    .filter(tool -> ToolSearchToolPortAdapter.TOOL_ID.equals(tool.toolId()))
+                    .findFirst()
                     .ifPresent(result::add);
-            toolRegistry.find(ToolResultReadToolPortAdapter.TOOL_ID)
-                    .flatMap(ignored -> toolRegistry.listTools().stream()
-                            .filter(tool -> ToolResultReadToolPortAdapter.TOOL_ID.equals(tool.toolId()))
-                            .findFirst())
+            all.stream()
+                    .filter(tool -> ToolResultReadToolPortAdapter.TOOL_ID.equals(tool.toolId()))
+                    .findFirst()
                     .ifPresent(result::add);
         }
         return List.copyOf(result);
@@ -191,6 +198,35 @@ final class AgentLoopModelTurns {
                 .collect(java.util.stream.Collectors.toCollection(HashSet::new));
     }
 
+    boolean usesLegacyContextAssembly() {
+        return contextEnvelopeMode != ModelContextEnvelopeOptions.Mode.ENFORCE;
+    }
+
+    String resumeRuntimeContextSnapshot(AgentLoopRequest request) {
+        return usesLegacyContextAssembly() ? null : contextEnvelopeBuilder.runtimeContextSnapshot(request);
+    }
+
+    void installLegacyRuntimeContext(AgentLoopRequest request, List<ChatMessage> messages) {
+        String contextText = request.runtimeContextSnapshot() == null
+                ? contextWeaver.weave(request.contextPack(), request.memoryContext(), ContextBudget.defaults())
+                : request.runtimeContextSnapshot();
+        if (request.skillRuntimeContext() != null && !request.skillRuntimeContext().isBlank()) {
+            contextText = contextText.isBlank()
+                    ? request.skillRuntimeContext().trim()
+                    : contextText + System.lineSeparator() + System.lineSeparator()
+                    + request.skillRuntimeContext().trim();
+        }
+        if (contextText.isBlank()) {
+            return;
+        }
+        if (!messages.isEmpty() && messages.getFirst().getRole() == ChatRole.SYSTEM) {
+            ChatMessage first = messages.getFirst();
+            messages.set(0, ChatMessage.system(appendContextText(first.getContent(), contextText)));
+        } else {
+            messages.add(0, ChatMessage.system(contextText));
+        }
+    }
+
     private ModelTurn requestModelTurn(
             AgentLoopRequest request,
             List<ChatMessage> messages,
@@ -201,22 +237,40 @@ final class AgentLoopModelTurns {
         AtomicReference<List<AgentToolCall>> collectedCalls = new AtomicReference<>();
         AtomicBoolean collectorInvoked = new AtomicBoolean(false);
         List<ToolDescriptor> safeTools = tools == null ? List.of() : tools;
+        ChatRequest outboundRequest;
+        ModelContextEnvelopeEvidence evidence = null;
+        if (contextEnvelopeMode == ModelContextEnvelopeOptions.Mode.DISABLED) {
+            outboundRequest = legacyRequest(request, messages, safeTools, toolChoice);
+        } else if (contextEnvelopeMode == ModelContextEnvelopeOptions.Mode.OBSERVE) {
+            outboundRequest = legacyRequest(request, messages, safeTools, toolChoice);
+            try {
+                ModelContextEnvelope observed = contextEnvelopeBuilder.observe(request, outboundRequest);
+                evidence = observed.evidence();
+            } catch (RuntimeException ignored) {
+                evidence = observeFallbackEvidence(outboundRequest);
+            }
+        } else {
+            ModelContextEnvelope enforced = contextEnvelopeBuilder.build(
+                    request, messages, safeTools, toolChoice);
+            outboundRequest = enforced.request();
+            evidence = enforced.evidence();
+        }
+        evidence = fingerprint(outboundRequest, evidence);
 
-        StreamCancellationHandle handle = modelPort.streamChatWithTools(ChatRequest.builder()
-                .messages(modelRequestMessages(messages, safeTools))
-                .modelId(request.modelId())
-                .samplingOptions(request.samplingOptions())
-                .tools(safeTools)
-                .toolChoice(toolChoice)
-                .build(), callback, toolCalls -> {
-                    if (callback.completed()) {
-                        throw new AgentLoopException("Model adapter protocol error: collector called after onComplete");
-                    }
-                    if (!collectorInvoked.compareAndSet(false, true)) {
-                        throw new AgentLoopException("Tool call collector was called more than once");
-                    }
-                    collectedCalls.set(toolCalls == null ? List.of() : List.copyOf(toolCalls));
-                });
+        StreamCancellationHandle handle;
+        try {
+            handle = modelPort.streamChatWithTools(outboundRequest, callback, toolCalls -> {
+                if (callback.completed()) {
+                    throw new AgentLoopException("Model adapter protocol error: collector called after onComplete");
+                }
+                if (!collectorInvoked.compareAndSet(false, true)) {
+                    throw new AgentLoopException("Tool call collector was called more than once");
+                }
+                collectedCalls.set(toolCalls == null ? List.of() : List.copyOf(toolCalls));
+            });
+        } catch (RuntimeException ex) {
+            throw withEvidence(ex, evidence);
+        }
         control.bindModelHandle(handle);
         try {
             callback.awaitCompletion(control, modelTurnTimeout);
@@ -224,38 +278,110 @@ final class AgentLoopModelTurns {
             if (handle != null) {
                 handle.cancel();
             }
-            throw ex;
+            throw withEvidence(ex, evidence);
         } finally {
             control.clearModelHandle(handle);
         }
 
+        ModelContextEnvelopeEvidence completedEvidence = withProviderUsage(evidence, callback.usage());
+        contextEnvelopeCalibrator.record(completedEvidence, callback.usage());
         if (callback.error() != null) {
-            throw new AgentLoopException("Model streaming call failed", callback.error());
+            throw withEvidence(
+                    new AgentLoopException("Model streaming call failed", callback.error()), completedEvidence);
         }
         if (!collectorInvoked.get()) {
-            throw new AgentLoopException("Model adapter protocol error: collector was not called");
+            throw withEvidence(
+                    new AgentLoopException("Model adapter protocol error: collector was not called"),
+                    completedEvidence);
         }
         ModelTurn turn = new ModelTurn(callback.content(), callback.thinking(),
-                Objects.requireNonNullElse(collectedCalls.get(), List.of()));
+                Objects.requireNonNullElse(collectedCalls.get(), List.of()), completedEvidence);
         return normalizeTextEncodedToolCalls(turn, safeTools);
     }
 
-    private List<ChatMessage> modelRequestMessages(List<ChatMessage> messages, List<ToolDescriptor> tools) {
-        List<ChatMessage> safeMessages = messages == null ? List.of() : messages;
-        if (tools == null || tools.isEmpty()) {
-            return List.copyOf(safeMessages);
+    private ModelContextEnvelopeEvidence fingerprint(
+            ChatRequest request, ModelContextEnvelopeEvidence evidence) {
+        if (evidence == null) {
+            return null;
         }
-        List<ChatMessage> requestMessages = new ArrayList<>(safeMessages);
-        if (!requestMessages.isEmpty() && requestMessages.get(0).getRole() == ChatRole.SYSTEM) {
-            ChatMessage first = requestMessages.get(0);
+        try {
+            ModelRequestFingerprint fingerprint = modelPort.fingerprint(request);
+            return fingerprint != null && fingerprint.available()
+                    ? evidence.withPayloadHash(fingerprint.payloadHash(), fingerprint.source())
+                    : evidence;
+        } catch (RuntimeException ignored) {
+            return evidence;
+        }
+    }
+
+    private ModelContextEnvelopeEvidence withProviderUsage(
+            ModelContextEnvelopeEvidence evidence, ChatTokenUsage usage) {
+        return evidence == null || usage == null
+                ? evidence
+                : evidence.withProviderUsage(usage.inputTokens(), usage.outputTokens());
+    }
+
+    private ModelContextEnvelopeEvidence observeFallbackEvidence(ChatRequest request) {
+        Integer requestedMaxTokens = request.getMaxTokens();
+        int outputReserve = requestedMaxTokens != null && requestedMaxTokens > 0
+                ? requestedMaxTokens
+                : contextEnvelopeOptions.defaultOutputReserveTokens();
+        return ModelContextEnvelopeEvidence.observeFallback(
+                request.getModelId(),
+                outputReserve,
+                contextEnvelopeOptions.conservativeSafetyBufferTokens(),
+                request.getMessages() == null ? 0 : request.getMessages().size(),
+                request.getTools() == null ? 0 : request.getTools().size());
+    }
+
+    private ChatRequest legacyRequest(
+            AgentLoopRequest request,
+            List<ChatMessage> messages,
+            List<ToolDescriptor> tools,
+            String toolChoice) {
+        List<ChatMessage> requestMessages = new ArrayList<>(
+                Objects.requireNonNullElse(messages, List.of()));
+        return ChatRequest.builder()
+                .messages(modelRequestMessages(requestMessages, tools))
+                .modelId(request.modelId())
+                .samplingOptions(request.samplingOptions())
+                .tools(tools)
+                .toolChoice(toolChoice)
+                .build();
+    }
+
+    private List<ChatMessage> modelRequestMessages(
+            List<ChatMessage> messages, List<ToolDescriptor> tools) {
+        if (tools == null || tools.isEmpty()) {
+            return List.copyOf(messages);
+        }
+        List<ChatMessage> requestMessages = new ArrayList<>(messages);
+        if (!requestMessages.isEmpty() && requestMessages.getFirst().getRole() == ChatRole.SYSTEM) {
+            ChatMessage first = requestMessages.getFirst();
             String content = Objects.requireNonNullElse(first.getContent(), "");
             if (!content.contains(STRUCTURED_TOOL_CALL_PROTOCOL)) {
-                requestMessages.set(0, ChatMessage.system(appendContextText(content, STRUCTURED_TOOL_CALL_PROTOCOL)));
+                requestMessages.set(0, ChatMessage.system(
+                        appendContextText(content, STRUCTURED_TOOL_CALL_PROTOCOL)));
             }
             return List.copyOf(requestMessages);
         }
         requestMessages.add(0, ChatMessage.system(STRUCTURED_TOOL_CALL_PROTOCOL));
         return List.copyOf(requestMessages);
+    }
+
+    private String appendContextText(String systemPrompt, String contextText) {
+        String safeSystemPrompt = Objects.requireNonNullElse(systemPrompt, "").trim();
+        return safeSystemPrompt.isBlank()
+                ? contextText
+                : safeSystemPrompt + "\n\n" + contextText;
+    }
+
+    private RuntimeException withEvidence(RuntimeException error, ModelContextEnvelopeEvidence evidence) {
+        if (error instanceof ModelContextEnvelopeException
+                || error instanceof ModelTurnExecutionException) {
+            return error;
+        }
+        return new ModelTurnExecutionException(error, evidence);
     }
 
     private ModelTurn normalizeTextEncodedToolCalls(ModelTurn turn, List<ToolDescriptor> tools) {
@@ -271,7 +397,7 @@ final class AgentLoopModelTurns {
         if (parsed.toolCalls().isEmpty()) {
             return turn;
         }
-        return new ModelTurn(parsed.content(), turn.thinking(), parsed.toolCalls());
+        return new ModelTurn(parsed.content(), turn.thinking(), parsed.toolCalls(), turn.contextEvidence());
     }
 
     private Set<String> selectedSkillAllowedToolIds(List<SkillRuntimeBlock> skillRuntimeBlocks) {
@@ -291,11 +417,4 @@ final class AgentLoopModelTurns {
         return skills != null && skills.stream().anyMatch(skill -> skill != null && !skill.content().isBlank());
     }
 
-    private String appendContextText(String systemPrompt, String contextText) {
-        String safeSystemPrompt = Objects.requireNonNullElse(systemPrompt, "").trim();
-        if (safeSystemPrompt.isBlank()) {
-            return contextText;
-        }
-        return safeSystemPrompt + "\n\n" + contextText;
-    }
 }

@@ -74,6 +74,31 @@ public class LocalCacheAdapter implements KeyValueCachePort, RateLimiterPort, Pu
     }
 
     @Override
+    public long mergeDecayingMaximum(
+            String key,
+            long candidate,
+            long maximum,
+            long observedAtMillis,
+            Duration halfLife,
+            Duration ttl) {
+        validateDecayingMaximum(candidate, maximum, observedAtMillis, halfLife);
+        String safeKey = requireText(key, "key");
+        AtomicLong merged = new AtomicLong();
+        cache.compute(safeKey, (ignored, current) -> {
+            DecayingValue currentValue = current == null || current.expired()
+                    ? DecayingValue.invalid()
+                    : decayedValue(current.value(), maximum, observedAtMillis, halfLife);
+            if (!currentValue.valid() || candidate > currentValue.value()) {
+                merged.set(candidate);
+                return new CacheEntry(candidate + ":" + observedAtMillis, expireAt(ttl));
+            }
+            merged.set(currentValue.value());
+            return current;
+        });
+        return merged.get();
+    }
+
+    @Override
     public RateLimitDecision tryAcquire(String resource, String subject, int permits, Duration ttl) {
         requireText(resource, "resource");
         requireText(subject, "subject");
@@ -143,6 +168,40 @@ public class LocalCacheAdapter implements KeyValueCachePort, RateLimiterPort, Pu
         return Instant.now().plus(ttl);
     }
 
+    private void validateDecayingMaximum(
+            long candidate,
+            long maximum,
+            long observedAtMillis,
+            Duration halfLife) {
+        if (maximum <= 0L || candidate < 0L || candidate > maximum) {
+            throw new IllegalArgumentException("candidate must be within the positive maximum");
+        }
+        if (observedAtMillis <= 0L) {
+            throw new IllegalArgumentException("observedAtMillis must be positive");
+        }
+        if (halfLife == null || halfLife.toMillis() <= 0L) {
+            throw new IllegalArgumentException("halfLife must be at least one millisecond");
+        }
+    }
+
+    private DecayingValue decayedValue(String encoded, long maximum, long observedAtMillis, Duration halfLife) {
+        String[] parts = Objects.requireNonNullElse(encoded, "").split(":", -1);
+        if (parts.length != 2) {
+            return DecayingValue.invalid();
+        }
+        try {
+            long value = Long.parseLong(parts[0]);
+            long updatedAtMillis = Long.parseLong(parts[1]);
+            if (value <= 0L || value > maximum || updatedAtMillis <= 0L) {
+                return DecayingValue.invalid();
+            }
+            long periods = Math.max(0L, observedAtMillis - updatedAtMillis) / halfLife.toMillis();
+            return new DecayingValue(true, periods >= Long.SIZE - 1 ? 0L : value >> (int) periods);
+        } catch (NumberFormatException ignored) {
+            return DecayingValue.invalid();
+        }
+    }
+
     private String requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + " must not be blank");
@@ -154,6 +213,13 @@ public class LocalCacheAdapter implements KeyValueCachePort, RateLimiterPort, Pu
 
         private boolean expired() {
             return Instant.now().isAfter(expireAt);
+        }
+    }
+
+    private record DecayingValue(boolean valid, long value) {
+
+        private static DecayingValue invalid() {
+            return new DecayingValue(false, 0L);
         }
     }
 

@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatTokenUsage;
 
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
@@ -30,6 +31,7 @@ final class TurnBuffer implements StreamCallback {
     private final CountDownLatch done = new CountDownLatch(1);
     private Throwable error;
     private volatile boolean completed;
+    private volatile ChatTokenUsage usage;
 
     @Override
     public void onContent(String chunk) {
@@ -42,6 +44,13 @@ final class TurnBuffer implements StreamCallback {
     public void onThinking(String chunk) {
         if (chunk != null) {
             thinking.append(chunk);
+        }
+    }
+
+    @Override
+    public void onUsage(ChatTokenUsage usage) {
+        if (usage != null) {
+            this.usage = usage;
         }
     }
 
@@ -67,6 +76,10 @@ final class TurnBuffer implements StreamCallback {
 
     Throwable error() {
         return error;
+    }
+
+    ChatTokenUsage usage() {
+        return usage;
     }
 
     boolean completed() {

@@ -22,6 +22,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentObservation;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.ModelFailureSanitizer;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialJsonFieldClassifier;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeConstants;
@@ -70,7 +71,7 @@ public class RepositoryAgentRunStepRecorder implements AgentRunStepRecorder {
                 safeJsonText(inputJson),
                 safeJsonText(outputJson),
                 error == null ? null : AgentRuntimeConstants.AGENT_STEP_FAILURE_CODE,
-                error == null ? null : safeText(errorMessage(error)),
+                error == null ? null : ModelFailureSanitizer.safeMessage(error),
                 now,
                 now));
     }
@@ -137,11 +138,6 @@ public class RepositoryAgentRunStepRecorder implements AgentRunStepRecorder {
             return "Tool observation missing";
         }
         return observation.error();
-    }
-
-    private String errorMessage(Throwable error) {
-        String message = error.getMessage();
-        return isBlank(message) ? error.getClass().getName() : message;
     }
 
     private String safeJsonText(String value) {

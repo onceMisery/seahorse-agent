@@ -123,7 +123,7 @@ class KernelAgentLoopToolExposureTests {
                 modelPort,
                 toolRegistry,
                 toolGateway,
-                options,
+                legacyTestOptions(options),
                 null,
                 null,
                 null,
@@ -132,6 +132,16 @@ class KernelAgentLoopToolExposureTests {
                 null,
                 null,
                 null));
+    }
+
+    private static KernelAgentLoopOptions legacyTestOptions(KernelAgentLoopOptions options) {
+        return KernelAgentLoopOptions.builder()
+                .maxSteps(options.maxSteps())
+                .perToolTimeout(options.perToolTimeout())
+                .modelTurnTimeout(options.modelTurnTimeout())
+                .maxParallelTools(options.maxParallelTools())
+                .contextEnvelope(options.contextEnvelope().withMode(ModelContextEnvelopeOptions.Mode.DISABLED))
+                .build();
     }
 
     private static AgentLoopRequest requestWithAllowedTools(int maxSteps, String... toolIds) {

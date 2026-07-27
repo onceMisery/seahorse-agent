@@ -18,10 +18,12 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.Instant;
 
 public interface AgentRunRepositoryPort {
 
@@ -34,6 +36,51 @@ public interface AgentRunRepositoryPort {
      * 更新运行状态、成本或错误信息。
      */
     void updateRun(AgentRun run);
+
+    /**
+     * Updates a run only when its persisted status still matches the expected status.
+     * Production adapters should override this with a storage-level compare-and-set.
+     */
+    default boolean updateRunIfStatus(AgentRun run, AgentRunStatus expectedStatus) {
+        synchronized (this) {
+            Optional<AgentRun> current = findRunById(run.runId());
+            if (current.isEmpty() || current.get().status() != expectedStatus) {
+                return false;
+            }
+            updateRun(run);
+            return true;
+        }
+    }
+
+    /**
+     * Acquires or reclaims the durable execution lease used by approval resume.
+     * Implementations must atomically reject runs outside WAITING_APPROVAL or RUNNING.
+     */
+    default boolean acquireResumeLease(String runId, String ownerId, Instant leaseUntil, Instant now) {
+        return false;
+    }
+
+    /** Extends a resume lease only while the same owner still holds an unexpired lease. */
+    default boolean heartbeatResumeLease(String runId, String ownerId, Instant leaseUntil, Instant now) {
+        return false;
+    }
+
+    /** Releases a resume lease without affecting a newer owner. */
+    default boolean releaseResumeLease(String runId, String ownerId) {
+        return false;
+    }
+
+    /**
+     * Updates a run only while both its status and durable resume-lease owner match.
+     * Production adapters must implement this as one storage-level fenced update.
+     */
+    default boolean updateRunIfStatusAndResumeLeaseOwner(
+            AgentRun run,
+            AgentRunStatus expectedStatus,
+            String ownerId,
+            Instant now) {
+        return false;
+    }
 
     /**
      * 按 runId 查询运行记录。
@@ -51,6 +98,11 @@ public interface AgentRunRepositoryPort {
      * 追加执行步骤；调用方负责生成 run 内递增 stepNo。
      */
     void appendStep(AgentStep step);
+
+    /** Appends a resume step only while the caller still owns an unexpired durable lease. */
+    default boolean appendStepIfResumeLeaseOwner(AgentStep step, String ownerId, Instant now) {
+        return false;
+    }
 
     /**
      * 查询 run 内执行步骤，返回顺序应与 stepNo 一致。

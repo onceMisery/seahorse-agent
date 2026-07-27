@@ -118,6 +118,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthReportProvide
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationIdempotencyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
@@ -158,6 +159,7 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(ToolCatalogRepositoryPort.class);
                     assertThat(context).hasSingleBean(AgentToolBindingRepositoryPort.class);
                     assertThat(context).hasSingleBean(ToolInvocationAuditPort.class);
+                    assertThat(context).hasSingleBean(ToolInvocationIdempotencyPort.class);
                     assertThat(context).hasSingleBean(ToolInvocationAuditQueryPort.class);
                     assertThat(context).hasSingleBean(ToolInvocationUsagePort.class);
                     assertThat(context).hasSingleBean(ToolApprovalRequestRepositoryPort.class);
@@ -332,6 +334,19 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                 });
     }
 
+    @Test
+    void shouldKeepJdbcIdempotencyWhenAuditPortIsCustomized() {
+        contextRunner.withUserConfiguration(
+                        TestInfrastructureConfiguration.class,
+                        CustomToolInvocationAuditConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context.getBean(ToolInvocationAuditPort.class))
+                            .isSameAs(context.getBean("customToolInvocationAuditPort"));
+                    assertThat(context).hasSingleBean(ToolInvocationIdempotencyPort.class);
+                });
+    }
+
     private static Object field(Object target, String fieldName) {
         try {
             var field = target.getClass().getDeclaredField(fieldName);
@@ -374,6 +389,15 @@ class SeahorseAgentRegistryAutoConfigurationTests {
         @Bean
         ResourceAccessPolicyPort customResourceAccessPolicyPort() {
             return ResourceAccessPolicyPort.denyAll();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class CustomToolInvocationAuditConfiguration {
+
+        @Bean
+        ToolInvocationAuditPort customToolInvocationAuditPort() {
+            return ToolInvocationAuditPort.noop();
         }
     }
 }

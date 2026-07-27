@@ -30,11 +30,13 @@ import com.miracle.ai.seahorse.agent.ports.outbound.id.IdGeneratorPort;
 import org.redisson.api.RAtomicLong;
 import org.redisson.api.RBucket;
 import org.redisson.api.RLock;
+import org.redisson.api.RScript;
 import org.redisson.api.RTopic;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -55,6 +57,41 @@ public class RedisCacheAdapter implements KeyValueCachePort, RateLimiterPort, Pu
     private static final String KEY_PUBSUB_PREFIX = KEY_PREFIX + "topic:";
     private static final String KEY_RATE_LIMIT_PREFIX = KEY_PREFIX + "ratelimit:";
     private static final String KEY_ID_PREFIX = KEY_PREFIX + "id:";
+    private static final String MERGE_DECAYING_MAXIMUM_SCRIPT = """
+            local candidate = tonumber(ARGV[1])
+            local maximum = tonumber(ARGV[2])
+            local observedAt = tonumber(ARGV[3])
+            local halfLife = tonumber(ARGV[4])
+            local ttl = tonumber(ARGV[5])
+            local currentValue = 0
+            local currentValid = false
+            local encoded = redis.call('GET', KEYS[1])
+            if encoded then
+                local separator = string.find(encoded, ':', 1, true)
+                if separator then
+                    local storedValue = tonumber(string.sub(encoded, 1, separator - 1))
+                    local storedAt = tonumber(string.sub(encoded, separator + 1))
+                    if storedValue and storedAt and storedValue > 0 and storedValue <= maximum and storedAt > 0 then
+                        currentValid = true
+                        local age = math.max(0, observedAt - storedAt)
+                        local periods = math.floor(age / halfLife)
+                        if periods < 63 then
+                            currentValue = math.floor(storedValue / (2 ^ periods))
+                        end
+                    end
+                end
+            end
+            if candidate > currentValue or not currentValid then
+                local mergedValue = tostring(candidate) .. ':' .. tostring(observedAt)
+                if ttl and ttl > 0 then
+                    redis.call('PSETEX', KEYS[1], ttl, mergedValue)
+                else
+                    redis.call('SET', KEYS[1], mergedValue)
+                end
+                return candidate
+            end
+            return currentValue
+            """;
 
     private final RedissonClient redissonClient;
 
@@ -83,6 +120,37 @@ public class RedisCacheAdapter implements KeyValueCachePort, RateLimiterPort, Pu
     public boolean delete(String key) {
         RBucket<String> bucket = redissonClient.getBucket(cacheKey(key), StringCodec.INSTANCE);
         return bucket.delete();
+    }
+
+    @Override
+    public long mergeDecayingMaximum(
+            String key,
+            long candidate,
+            long maximum,
+            long observedAtMillis,
+            Duration halfLife,
+            Duration ttl) {
+        if (maximum <= 0L || candidate < 0L || candidate > maximum) {
+            throw new IllegalArgumentException("candidate must be within the positive maximum");
+        }
+        if (observedAtMillis <= 0L) {
+            throw new IllegalArgumentException("observedAtMillis must be positive");
+        }
+        if (halfLife == null || halfLife.toMillis() <= 0L) {
+            throw new IllegalArgumentException("halfLife must be at least one millisecond");
+        }
+        long ttlMillis = ttl == null || ttl.isZero() || ttl.isNegative() ? 0L : ttl.toMillis();
+        Number merged = redissonClient.getScript(StringCodec.INSTANCE).eval(
+                RScript.Mode.READ_WRITE,
+                MERGE_DECAYING_MAXIMUM_SCRIPT,
+                RScript.ReturnType.LONG,
+                List.<Object>of(cacheKey(key)),
+                candidate,
+                maximum,
+                observedAtMillis,
+                halfLife.toMillis(),
+                ttlMillis);
+        return merged.longValue();
     }
 
     @Override

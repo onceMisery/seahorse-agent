@@ -78,7 +78,6 @@ public class JdbcToolInvocationAuditRepositoryAdapter implements ToolInvocationA
               AND version_id = ?
               AND tool_id = ?
             """;
-
     private final JdbcTemplate jdbcTemplate;
 
     public JdbcToolInvocationAuditRepositoryAdapter(DataSource dataSource) {

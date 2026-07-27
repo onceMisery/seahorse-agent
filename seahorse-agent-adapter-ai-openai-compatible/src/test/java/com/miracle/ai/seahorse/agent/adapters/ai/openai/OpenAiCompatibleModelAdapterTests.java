@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatTokenUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelRequestFingerprint;
 import okhttp3.OkHttpClient;
 import okhttp3.Protocol;
 import okhttp3.Response;
@@ -33,6 +34,9 @@ import okio.Buffer;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -154,6 +158,45 @@ class OpenAiCompatibleModelAdapterTests {
         assertThat(callback.contents).containsExactly("hello");
         assertThat(callback.usage.get()).isEqualTo(new ChatTokenUsage(12, 5));
         assertThat(callback.completeCount).isEqualTo(1);
+    }
+
+    @Test
+    void fingerprintShouldMatchFinalStreamingWireJson() throws Exception {
+        AtomicReference<String> capturedBody = new AtomicReference<>();
+        OkHttpClient httpClient = new OkHttpClient.Builder()
+                .addInterceptor(chain -> {
+                    Buffer buffer = new Buffer();
+                    chain.request().body().writeTo(buffer);
+                    capturedBody.set(buffer.readUtf8());
+                    return new Response.Builder()
+                            .request(chain.request())
+                            .protocol(Protocol.HTTP_1_1)
+                            .code(200)
+                            .message("OK")
+                            .body(ResponseBody.create("data: [DONE]\n\n", null))
+                            .build();
+                })
+                .build();
+        OpenAiCompatibleModelAdapter adapter = new OpenAiCompatibleModelAdapter(
+                httpClient,
+                new ObjectMapper(),
+                new OpenAiCompatibleModelProperties(
+                        "http://127.0.0.1:65535/v1", "", "gpt-test", "", "", List.of()),
+                Runnable::run);
+        ChatRequest request = ChatRequest.builder()
+                .messages(List.of(ChatMessage.user("hello")))
+                .modelId("gpt-test")
+                .build();
+
+        ModelRequestFingerprint fingerprint = adapter.fingerprint(request);
+        adapter.streamChatWithTools(request, new NoopStreamCallback(), ignored -> {
+        });
+
+        String actualHash = "sha256:" + HexFormat.of().formatHex(
+                MessageDigest.getInstance("SHA-256")
+                        .digest(capturedBody.get().getBytes(StandardCharsets.UTF_8)));
+        assertThat(fingerprint.payloadHash()).isEqualTo(actualHash);
+        assertThat(fingerprint.source()).isEqualTo("OPENAI_COMPATIBLE_WIRE_JSON");
     }
 
     @Test

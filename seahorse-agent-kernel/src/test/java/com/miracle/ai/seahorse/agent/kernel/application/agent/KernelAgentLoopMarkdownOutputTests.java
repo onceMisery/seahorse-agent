@@ -355,7 +355,7 @@ class KernelAgentLoopMarkdownOutputTests {
                 modelPort,
                 toolRegistry,
                 null,
-                options,
+                legacyTestOptions(options),
                 null,
                 null,
                 null,
@@ -364,6 +364,16 @@ class KernelAgentLoopMarkdownOutputTests {
                 null,
                 null,
                 null));
+    }
+
+    private static KernelAgentLoopOptions legacyTestOptions(KernelAgentLoopOptions options) {
+        return KernelAgentLoopOptions.builder()
+                .maxSteps(options.maxSteps())
+                .perToolTimeout(options.perToolTimeout())
+                .modelTurnTimeout(options.modelTurnTimeout())
+                .maxParallelTools(options.maxParallelTools())
+                .contextEnvelope(options.contextEnvelope().withMode(ModelContextEnvelopeOptions.Mode.DISABLED))
+                .build();
     }
 
     private static final class FinalAnswerModel implements StreamingChatModelPort {

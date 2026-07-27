@@ -152,15 +152,16 @@ final class KernelChatPreparationSupport {
                     context.getMemoryContext());
             context.setQueryOptimizationResult(result);
             if (result != null && !result.protectedTerms().isEmpty()) {
-                LOG.debug("查询优化检测到保护词: question={}, protected={}",
-                        context.getOriginalQuestion(), result.protectedTerms().keySet());
+                LOG.debug("查询优化检测到保护词: questionLength={}, protectedTermCount={}",
+                        context.getOriginalQuestion().length(), result.protectedTerms().size());
             }
             if (result != null && !result.expandedTerms().isEmpty()) {
-                LOG.debug("查询优化检测到扩展词: question={}, expanded={}",
-                        context.getOriginalQuestion(), result.expandedTerms());
+                LOG.debug("查询优化检测到扩展词: questionLength={}, expandedTermCount={}",
+                        context.getOriginalQuestion().length(), result.expandedTerms().size());
             }
         } catch (Exception ex) {
-            LOG.warn("查询优化失败，降级使用原始问题: question={}", context.getOriginalQuestion(), ex);
+            LOG.warn("查询优化失败，降级使用原始问题: questionLength={}, errorType={}",
+                    context.getOriginalQuestion().length(), ex.getClass().getSimpleName());
         }
     }
 

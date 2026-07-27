@@ -22,12 +22,19 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import java.util.List;
 import java.util.Objects;
 
-record ModelTurn(String content, String thinking, List<AgentToolCall> toolCalls) {
+record ModelTurn(String content,
+                 String thinking,
+                 List<AgentToolCall> toolCalls,
+                 ModelContextEnvelopeEvidence contextEvidence) {
 
     ModelTurn {
         content = Objects.requireNonNullElse(content, "");
         thinking = Objects.requireNonNullElse(thinking, "");
         toolCalls = toolCalls == null ? List.of() : List.copyOf(toolCalls);
+    }
+
+    ModelTurn(String content, String thinking, List<AgentToolCall> toolCalls) {
+        this(content, thinking, toolCalls, null);
     }
 
     String thought() {

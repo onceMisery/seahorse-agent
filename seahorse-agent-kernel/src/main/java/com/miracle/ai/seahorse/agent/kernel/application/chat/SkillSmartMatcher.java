@@ -111,11 +111,11 @@ public class SkillSmartMatcher {
         // 1. 提取关键词
         List<String> keywords = extractKeywords(question);
         if (keywords.isEmpty()) {
-            LOG.debug("No keywords extracted from question: {}", question);
+            LOG.debug("No keywords extracted from question; questionLength={}", question.length());
             return List.of();
         }
 
-        LOG.debug("Extracted keywords: {}", keywords);
+        LOG.debug("Extracted keyword count: {}", keywords.size());
 
         // 2. 查询所有可用 Skill
         List<AgentSkill> availableSkills = fetchAvailableSkills(tenantId);
@@ -135,7 +135,8 @@ public class SkillSmartMatcher {
                 .toList();
 
         if (scores.isEmpty()) {
-            LOG.debug("No skills matched with sufficient score for question: {}", question);
+            LOG.debug("No skills matched with sufficient score; questionLength={}, keywordCount={}",
+                    question.length(), keywords.size());
             return List.of();
         }
 
@@ -143,8 +144,8 @@ public class SkillSmartMatcher {
                 .map(SkillScore::skillName)
                 .toList();
 
-        LOG.info("Skill recommendations for question '{}': {} (keywords: {})",
-                truncate(question, 50), recommendations, keywords);
+        LOG.info("Skill recommendations: {} (questionLength={}, keywordCount={})",
+                recommendations, question.length(), keywords.size());
 
         return scores;
     }
@@ -320,13 +321,6 @@ public class SkillSmartMatcher {
         }
 
         return Math.min(1.0, (double) matches / keywords.size());
-    }
-
-    private String truncate(String text, int maxLength) {
-        if (text == null || text.length() <= maxLength) {
-            return text;
-        }
-        return text.substring(0, maxLength) + "...";
     }
 
     private String defaultTenantId(String tenantId) {

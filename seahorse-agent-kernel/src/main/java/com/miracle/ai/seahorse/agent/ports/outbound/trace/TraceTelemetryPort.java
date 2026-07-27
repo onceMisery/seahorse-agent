@@ -38,6 +38,9 @@ public interface TraceTelemetryPort {
 
     void recordRunAttribute(String traceId, String key, String value);
 
+    default void recordNodeAttribute(String traceId, String nodeId, String key, String value) {
+    }
+
     static TraceTelemetryPort noop() {
         return NoopTraceTelemetryPort.INSTANCE;
     }

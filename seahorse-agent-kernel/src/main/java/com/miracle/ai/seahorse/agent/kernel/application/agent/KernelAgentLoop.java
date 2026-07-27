@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.output.OutputGovernanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitCommand;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentResumeDescriptor;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualizationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
@@ -61,6 +62,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.time.Duration;
@@ -78,11 +81,11 @@ import java.util.concurrent.Future;
 /**
  * Kernel layer LLM-driven ReAct loop.
  */
-public class KernelAgentLoop implements ReActExecutorPort {
+public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPort {
+    private static final Logger LOG = LoggerFactory.getLogger(KernelAgentLoop.class);
 
     private static final String TRUNCATED_MESSAGE =
             "Task step limit reached. Narrow the question or check tool configuration.";
-    private static final String MODEL_TURN_TIMEOUT_PREFIX = "Model streaming call timed out after ";
     private static final String WAITING_APPROVAL_MESSAGE = "Waiting for tool approval.";
     private static final String TRACE_TYPE_AGENT_STEP = "AGENT_STEP";
     private static final String TRACE_TYPE_AGENT_MODEL = "AGENT_MODEL";
@@ -149,7 +152,8 @@ public class KernelAgentLoop implements ReActExecutorPort {
         this.streamEmitter = deps.streamEmitter();
         this.streamEvents = new AgentLoopStreamEvents(streamEmitter);
         this.modelTurns = new AgentLoopModelTurns(modelPort, deps.toolRegistry(), deps.contextWeaver(),
-                deps.toolCallParser(), this.options.modelTurnTimeout());
+                deps.toolCallParser(), this.options.modelTurnTimeout(), deps.tokenCounter(),
+                deps.modelContextWindow(), this.options.contextEnvelope(), deps.contextCalibrationCache());
         this.toolExecutor = new AgentLoopToolExecutor(options, toolGateway, traceRecorder, runStepRecorder,
                 modelTurns);
     }
@@ -158,6 +162,35 @@ public class KernelAgentLoop implements ReActExecutorPort {
         return run(request, null, AgentRunControl.direct(), TraceRunScope.disabled());
     }
 
+    @Override public FinalModelTurnResult requestFinalModelTurn(
+            AgentLoopRequest request, List<ChatMessage> messages) {
+        return requestFinalModelTurn(request, messages, TraceRunScope.disabled());
+    }
+    @Override
+    public FinalModelTurnResult requestFinalModelTurn(
+            AgentLoopRequest request,
+            List<ChatMessage> messages,
+            TraceRunScope traceRunScope) {
+        Objects.requireNonNull(request, "AgentLoopRequest must not be null");
+        List<ChatMessage> requestMessages = new ArrayList<>(
+                Objects.requireNonNullElse(messages, List.of()));
+        if (modelTurns.usesLegacyContextAssembly()) {
+            modelTurns.installLegacyRuntimeContext(request, requestMessages);
+        }
+        ModelTurn turn = requestModelTurnTraced(
+                request,
+                requestMessages,
+                AgentRunControl.direct(),
+                Set.of(),
+                Objects.requireNonNullElseGet(traceRunScope, TraceRunScope::disabled),
+                TraceNodeScope.disabled(),
+                true);
+        if (!turn.toolCalls().isEmpty()) {
+            throw new AgentLoopException("Final model turn attempted to call tools");
+        }
+        return new FinalModelTurnResult(
+                turn.content(), ModelContextEnvelopeTelemetry.toJson(turn.contextEvidence()));
+    }
     public StreamCancellationHandle streamExecute(AgentLoopRequest request, StreamCallback callback) {
         return streamExecute(request, callback, TraceRunScope.disabled());
     }
@@ -197,8 +230,9 @@ public class KernelAgentLoop implements ReActExecutorPort {
         Objects.requireNonNull(request, "AgentLoopRequest must not be null");
         AgentRunControl runControl = Objects.requireNonNullElseGet(control, AgentRunControl::direct);
         List<ChatMessage> messages = new ArrayList<>(request.history());
-        modelTurns.installRuntimeContext(messages, request.contextPack(), request.memoryContext(),
-                request.skillRuntimeContext());
+        if (modelTurns.usesLegacyContextAssembly()) {
+            modelTurns.installLegacyRuntimeContext(request, messages);
+        }
         streamEvents.emitSkillRuntimeEvents(callback, request);
         messages.add(ChatMessage.user(request.question()));
 
@@ -255,7 +289,12 @@ public class KernelAgentLoop implements ReActExecutorPort {
                                     allowedToolIdSet(effectiveAllowedToolIds),
                                     request),
                             waitingApprovalStateJson(turn, observations),
-                            waitingApprovalMessages(messages, turn)));
+                            waitingApprovalMessages(messages, turn),
+                            AgentResumeDescriptor.capture(
+                                    request,
+                                    effectiveModelId(request, turn),
+                                    modelTurns.resumeRuntimeContextSnapshot(request),
+                                    modelTurns.usesLegacyContextAssembly())));
                     streamEvents.emitContent(callback, WAITING_APPROVAL_MESSAGE);
                     streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
                             null, WAITING_APPROVAL_MESSAGE);
@@ -287,7 +326,7 @@ public class KernelAgentLoop implements ReActExecutorPort {
                 streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
                         ex, null);
                 traceRecorder.finishNode(stepScope, ex);
-                if (hasToolObservations && isModelTurnTimeout(ex)) {
+                if (hasToolObservations && ModelFailureSanitizer.isModelTurnTimeout(ex)) {
                     return completeWithDegradedFinalAnswer(request, steps, callback, ex);
                 }
                 throw ex;
@@ -343,7 +382,7 @@ public class KernelAgentLoop implements ReActExecutorPort {
             streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
                     ex, null);
             traceRecorder.finishNode(stepScope, ex);
-            if (isModelTurnTimeout(ex)) {
+            if (ModelFailureSanitizer.isModelTurnTimeout(ex)) {
                 return completeWithDegradedFinalAnswer(request, steps, callback, ex);
             }
             throw ex;
@@ -352,11 +391,6 @@ public class KernelAgentLoop implements ReActExecutorPort {
 
     private boolean requiresApproval(List<AgentObservation> observations) {
         return observations.stream().anyMatch(this::isApprovalRequired);
-    }
-
-    private boolean isModelTurnTimeout(RuntimeException ex) {
-        String message = ex == null ? "" : Objects.requireNonNullElse(ex.getMessage(), "");
-        return message.startsWith(MODEL_TURN_TIMEOUT_PREFIX);
     }
 
     private AgentLoopResult completeWithDegradedFinalAnswer(AgentLoopRequest request,
@@ -544,29 +578,53 @@ public class KernelAgentLoop implements ReActExecutorPort {
                                  ModelTurn turn,
                                  Set<String> exhaustedToolIds,
                                  Throwable error) {
-        runStepRecorder.recordModelTurn(
-                request.runId(),
-                AgentRunStepRecorder.modelTurnInput(messages,
-                        modelTurns.exposedTools(modelTurns.effectiveAllowedToolIds(request),
-                                request.skillRuntimeBlocks(), exhaustedToolIds)),
-                turn == null ? null : modelTurnOutputJson(turn),
-                error);
+        try {
+            ModelContextEnvelopeEvidence evidence = turn == null
+                    ? ModelContextEnvelopeTelemetry.from(error)
+                    : turn.contextEvidence();
+            String inputJson;
+            if (evidence != null) {
+                inputJson = evidence.toJson();
+            } else {
+                List<?> tools = List.of();
+                try {
+                    tools = modelTurns.exposedTools(modelTurns.effectiveAllowedToolIds(request),
+                            request.skillRuntimeBlocks(), exhaustedToolIds);
+                } catch (RuntimeException registryError) {
+                    LOG.warn("Failed to resolve tools while recording model turn: runId={}",
+                            request.runId(), registryError);
+                }
+                inputJson = AgentRunStepRecorder.modelTurnInput(messages, tools);
+            }
+            runStepRecorder.recordModelTurn(
+                    request.runId(),
+                    inputJson,
+                    turn == null ? null : modelTurnOutputJson(turn),
+                    error);
+        } catch (RuntimeException recorderError) {
+            LOG.warn("Failed to record model turn without changing model execution semantics: runId={}",
+                    request.runId(), recorderError);
+        }
+    }
+
+    private String effectiveModelId(AgentLoopRequest request, ModelTurn turn) {
+        if (turn != null && turn.contextEvidence() != null) {
+            return turn.contextEvidence().modelId();
+        }
+        return request.modelId();
     }
 
     private String modelTurnOutputJson(ModelTurn turn) {
-        return "{\"content\":\"" + escapeJson(turn.content())
-                + "\",\"thinking\":\"" + escapeJson(turn.thinking())
-                + "\",\"toolCallCount\":" + turn.toolCalls().size() + "}";
-    }
-
-    private String escapeJson(String value) {
-        if (value == null) {
-            return "";
+        Map<String, Object> output = new LinkedHashMap<>();
+        output.put("content", turn.content());
+        output.put("thinkingPresent", !turn.thinking().isBlank());
+        output.put("thinkingChars", turn.thinking().codePointCount(0, turn.thinking().length()));
+        output.put("toolCallCount", turn.toolCalls().size());
+        try {
+            return OBJECT_MAPPER.writeValueAsString(output);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
+            throw new IllegalStateException("serialize model turn output failed", ex);
         }
-        return value.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\r", "\\r")
-                .replace("\n", "\\n");
     }
 
     private String applyOutputGovernance(AgentLoopRequest request, String originalContent) {
@@ -617,10 +675,17 @@ public class KernelAgentLoop implements ReActExecutorPort {
             ModelTurn turn = finalTurn
                     ? modelTurns.requestFinalModelTurn(request, messages, runControl)
                     : modelTurns.requestModelTurn(request, messages, runControl, exhaustedToolIds);
-            traceRecorder.finishNode(modelScope);
+            ModelContextEnvelopeTelemetry.record(traceRecorder, modelScope, turn.contextEvidence());
+            traceRecorder.finishNode(
+                    modelScope, null, ModelContextEnvelopeTelemetry.toJson(turn.contextEvidence()));
             return turn;
         } catch (RuntimeException ex) {
-            traceRecorder.finishNode(modelScope, ex);
+            ModelContextEnvelopeEvidence evidence = ModelContextEnvelopeTelemetry.from(ex);
+            ModelContextEnvelopeTelemetry.record(traceRecorder, modelScope, evidence);
+            traceRecorder.finishNode(modelScope, ex, ModelContextEnvelopeTelemetry.toJson(evidence));
+            if (finalTurn && !(ex instanceof FinalModelTurnException)) {
+                throw new FinalModelTurnException(ex, ModelContextEnvelopeTelemetry.toJson(evidence));
+            }
             throw ex;
         }
     }

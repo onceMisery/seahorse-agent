@@ -30,6 +30,10 @@ import java.util.List;
  */
 public interface StreamingChatModelPort {
 
+    default ModelRequestFingerprint fingerprint(ChatRequest request) {
+        return ModelRequestFingerprint.unavailable();
+    }
+
     /**
      * 执行流式对话。
      *

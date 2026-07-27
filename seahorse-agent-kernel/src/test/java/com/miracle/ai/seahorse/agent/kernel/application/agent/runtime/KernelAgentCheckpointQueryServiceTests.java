@@ -91,6 +91,45 @@ class KernelAgentCheckpointQueryServiceTests {
     }
 
     @Test
+    void shouldHideResumeSnapshotsAndLegacyThinkingFromCheckpointViews() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("user-1"));
+        MemoryCheckpointRepository checkpointRepository = new MemoryCheckpointRepository();
+        checkpointRepository.save(new AgentCheckpoint(
+                "checkpoint-1",
+                "run-1",
+                "step-1",
+                1L,
+                AgentCheckpointType.WAITING_APPROVAL,
+                """
+                        {"state":"waiting","resumeDescriptor":{
+                          "runtimeContextSnapshot":"private runtime context",
+                          "skillRuntimeContext":"private skill context"
+                        }}
+                        """,
+                """
+                        [{"role":"USER","content":"question","thinkingContent":"private reasoning",
+                          "thinkingDuration":12}]
+                        """,
+                null,
+                "{\"toolId\":\"memory-forget\"}",
+                NOW));
+        KernelAgentCheckpointQueryService service = new KernelAgentCheckpointQueryService(
+                runRepository,
+                checkpointRepository,
+                currentUser(1L, "user"));
+
+        AgentCheckpoint checkpoint = service.listByRunId("run-1").getFirst();
+
+        assertFalse(checkpoint.stateJson().contains("private runtime context"));
+        assertFalse(checkpoint.stateJson().contains("private skill context"));
+        assertEquals(true, checkpoint.stateJson().contains("runtimeContextHash"));
+        assertEquals(true, checkpoint.stateJson().contains("skillRuntimeContextHash"));
+        assertFalse(checkpoint.messageHistoryJson().contains("private reasoning"));
+        assertFalse(checkpoint.messageHistoryJson().contains("thinkingContent"));
+    }
+
+    @Test
     void shouldDenyCheckpointQueryForUnrelatedUser() {
         MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
         runRepository.createRun(run("user-1"));

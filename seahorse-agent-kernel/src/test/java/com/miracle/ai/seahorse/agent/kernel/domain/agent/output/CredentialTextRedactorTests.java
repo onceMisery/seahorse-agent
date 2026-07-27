@@ -48,6 +48,14 @@ class CredentialTextRedactorTests {
     }
 
     @Test
+    void shouldRedactQuotedStructuredFieldsWithoutChangingPlainRedactionContract() {
+        String redacted = CredentialTextRedactor.redactStructured(
+                "request={\"password\":\"json-secret-123456\",\"label\":\"safe\"}");
+
+        assertEquals("request={\"password\":\"[REDACTED]\",\"label\":\"safe\"}", redacted);
+    }
+
+    @Test
     void shouldPreserveNullValues() {
         assertNull(CredentialTextRedactor.redact(null));
         assertFalse(CredentialTextRedactor.containsCredential(null));

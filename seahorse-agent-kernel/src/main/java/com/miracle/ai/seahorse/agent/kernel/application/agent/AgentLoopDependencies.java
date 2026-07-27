@@ -24,8 +24,11 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWea
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelContextWindowPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.TokenCounterPort;
 
 import java.util.Objects;
 
@@ -44,7 +47,10 @@ public record AgentLoopDependencies(
         OutputGovernanceService outputGovernance,
         MarkdownNormalizer markdownNormalizer,
         AgentStreamEmitter streamEmitter,
-        ToolCallParser toolCallParser) {
+        ToolCallParser toolCallParser,
+        TokenCounterPort tokenCounter,
+        ModelContextWindowPort modelContextWindow,
+        KeyValueCachePort contextCalibrationCache) {
 
     public AgentLoopDependencies {
         modelPort = Objects.requireNonNull(modelPort, "modelPort must not be null");
@@ -59,5 +65,65 @@ public record AgentLoopDependencies(
         markdownNormalizer = Objects.requireNonNullElseGet(markdownNormalizer, MarkdownNormalizer::new);
         streamEmitter = Objects.requireNonNullElseGet(streamEmitter, AgentStreamEmitter::new);
         toolCallParser = Objects.requireNonNullElseGet(toolCallParser, ToolCallParser::new);
+        tokenCounter = Objects.requireNonNullElseGet(tokenCounter, TokenCounterPort::approximate);
+        modelContextWindow = Objects.requireNonNullElseGet(modelContextWindow,
+                () -> ModelContextWindowPort.strictConfigured(
+                        java.util.Map.of(), "kernel-unconfigured"));
+    }
+
+    public AgentLoopDependencies(
+            StreamingChatModelPort modelPort,
+            ToolRegistryPort toolRegistry,
+            ToolGatewayPort toolGateway,
+            KernelAgentLoopOptions options,
+            KernelRagTraceRecorder traceRecorder,
+            ContextWeaverPort contextWeaver,
+            AgentRunStepRecorder runStepRecorder,
+            AgentApprovalWaitHandler approvalWaitHandler,
+            OutputGovernanceService outputGovernance,
+            MarkdownNormalizer markdownNormalizer,
+            AgentStreamEmitter streamEmitter,
+            ToolCallParser toolCallParser,
+            TokenCounterPort tokenCounter,
+            ModelContextWindowPort modelContextWindow) {
+        this(modelPort, toolRegistry, toolGateway, options, traceRecorder, contextWeaver,
+                runStepRecorder, approvalWaitHandler, outputGovernance, markdownNormalizer,
+                streamEmitter, toolCallParser, tokenCounter, modelContextWindow, null);
+    }
+
+    public AgentLoopDependencies(
+            StreamingChatModelPort modelPort,
+            ToolRegistryPort toolRegistry,
+            ToolGatewayPort toolGateway,
+            KernelAgentLoopOptions options,
+            KernelRagTraceRecorder traceRecorder,
+            ContextWeaverPort contextWeaver,
+            AgentRunStepRecorder runStepRecorder,
+            AgentApprovalWaitHandler approvalWaitHandler,
+            OutputGovernanceService outputGovernance,
+            MarkdownNormalizer markdownNormalizer,
+            AgentStreamEmitter streamEmitter,
+            ToolCallParser toolCallParser) {
+        this(modelPort, toolRegistry, toolGateway, legacyOptions(options), traceRecorder, contextWeaver,
+                runStepRecorder, approvalWaitHandler, outputGovernance, markdownNormalizer,
+                streamEmitter, toolCallParser, null, null, null);
+    }
+
+    private static KernelAgentLoopOptions legacyOptions(KernelAgentLoopOptions options) {
+        if (options != null && options.contextEnvelope().mode() == ModelContextEnvelopeOptions.Mode.ENFORCE) {
+            throw new IllegalArgumentException(
+                    "ENFORCE context Envelope requires tokenCounter and modelContextWindow dependencies");
+        }
+        KernelAgentLoopOptions safe = Objects.requireNonNullElseGet(options, KernelAgentLoopOptions::defaults);
+        ModelContextEnvelopeOptions envelope = options == null
+                ? safe.contextEnvelope().withMode(ModelContextEnvelopeOptions.Mode.DISABLED)
+                : safe.contextEnvelope();
+        return KernelAgentLoopOptions.builder()
+                .maxSteps(safe.maxSteps())
+                .perToolTimeout(safe.perToolTimeout())
+                .modelTurnTimeout(safe.modelTurnTimeout())
+                .maxParallelTools(safe.maxParallelTools())
+                .contextEnvelope(envelope)
+                .build();
     }
 }

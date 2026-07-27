@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.trace;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.ModelFailureSanitizer;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
@@ -206,6 +207,19 @@ public class KernelRagTraceRecorder {
         }
     }
 
+    public void recordNodeAttribute(TraceNodeScope scope, String key, String value) {
+        if (!enabled || scope == null || !scope.active() || key == null || key.isBlank()
+                || value == null || value.isBlank()) {
+            return;
+        }
+        try {
+            telemetryPort.recordNodeAttribute(scope.traceId(), scope.nodeId(), key, value);
+        } catch (RuntimeException ex) {
+            LOG.warn("Trace telemetry node attribute recording failed, traceId={}, nodeId={}, key={}",
+                    scope.traceId(), scope.nodeId(), key, ex);
+        }
+    }
+
     public void recordNode(TraceRunScope runScope, TraceNodeStartCommand command, Runnable action) {
         Objects.requireNonNull(action, "action must not be null");
         TraceNodeScope nodeScope = startNode(runScope, command);
@@ -241,6 +255,9 @@ public class KernelRagTraceRecorder {
     private String sanitizeError(Throwable throwable) {
         if (throwable == null) {
             return null;
+        }
+        if (ModelFailureSanitizer.isModelFailure(throwable)) {
+            return ModelFailureSanitizer.safeMessage(throwable);
         }
         String message = throwable.getClass().getSimpleName() + ": "
                 + Objects.requireNonNullElse(throwable.getMessage(), "");

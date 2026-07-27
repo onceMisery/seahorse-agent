@@ -30,6 +30,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class AgentLoopDependenciesTests {
 
@@ -59,10 +61,12 @@ class AgentLoopDependenciesTests {
         assertNotNull(dependencies.markdownNormalizer());
         assertNotNull(dependencies.streamEmitter());
         assertNotNull(dependencies.toolCallParser());
+        assertEquals(ModelContextEnvelopeOptions.Mode.DISABLED,
+                dependencies.options().contextEnvelope().mode());
     }
 
     @Test
-    void keepsExplicitCollaborators() {
+    void rejectsLegacyConstructorWhenEnvelopeEnforcementWasExplicitlyRequested() {
         ToolRegistryPort registry = ToolRegistryPort.empty();
         ToolGatewayPort gateway = request -> null;
         ContextWeaverPort contextWeaver = new DefaultContextWeaver();
@@ -72,27 +76,22 @@ class AgentLoopDependenciesTests {
         AgentStreamEmitter streamEmitter = new AgentStreamEmitter();
         ToolCallParser toolCallParser = new ToolCallParser();
 
-        AgentLoopDependencies dependencies = new AgentLoopDependencies(
-                StreamingChatModelPort.noop(),
-                registry,
-                gateway,
-                KernelAgentLoopOptions.defaults(),
-                KernelRagTraceRecorder.noop(),
-                contextWeaver,
-                recorder,
-                approval,
-                null,
-                markdownNormalizer,
-                streamEmitter,
-                toolCallParser);
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> new AgentLoopDependencies(
+                        StreamingChatModelPort.noop(),
+                        registry,
+                        gateway,
+                        KernelAgentLoopOptions.defaults(),
+                        KernelRagTraceRecorder.noop(),
+                        contextWeaver,
+                        recorder,
+                        approval,
+                        null,
+                        markdownNormalizer,
+                        streamEmitter,
+                        toolCallParser));
 
-        assertSame(registry, dependencies.toolRegistry());
-        assertSame(gateway, dependencies.toolGateway());
-        assertSame(contextWeaver, dependencies.contextWeaver());
-        assertSame(recorder, dependencies.runStepRecorder());
-        assertSame(approval, dependencies.approvalWaitHandler());
-        assertSame(markdownNormalizer, dependencies.markdownNormalizer());
-        assertSame(streamEmitter, dependencies.streamEmitter());
-        assertSame(toolCallParser, dependencies.toolCallParser());
+        assertEquals("ENFORCE context Envelope requires tokenCounter and modelContextWindow dependencies",
+                error.getMessage());
     }
 }

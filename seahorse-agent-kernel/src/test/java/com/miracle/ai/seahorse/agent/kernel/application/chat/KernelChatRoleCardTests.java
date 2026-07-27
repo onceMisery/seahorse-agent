@@ -151,7 +151,7 @@ class KernelChatRoleCardTests {
     }
 
     @Test
-    void shouldInjectHigherPermissionRoleCardIntoAgentRuntimeContext() {
+    void shouldInjectHigherPermissionRoleCardAsSystemMessage() {
         RecordingAgentLoop agentLoop = new RecordingAgentLoop();
         RecordingRoleCardPort roleCardPort = new RecordingRoleCardPort(
                 new ResolvedRoleCard("99", "Operator", "Use terse operational language.", true));
@@ -189,10 +189,10 @@ class KernelChatRoleCardTests {
                 99L), new RecordingCallback());
 
         assertNotNull(agentLoop.request);
-        assertTrue(agentLoop.request.history().isEmpty());
-        assertNotNull(agentLoop.request.skillRuntimeContext());
-        assertTrue(agentLoop.request.skillRuntimeContext().contains("Operator"));
-        assertTrue(agentLoop.request.skillRuntimeContext().contains("Use terse operational language."));
+        assertEquals(1, agentLoop.request.history().size());
+        assertEquals(ChatRole.SYSTEM, agentLoop.request.history().get(0).getRole());
+        assertTrue(agentLoop.request.history().get(0).getContent().contains("Operator"));
+        assertTrue(agentLoop.request.history().get(0).getContent().contains("Use terse operational language."));
     }
 
     private static KernelChatPipeline pipeline(RagPromptPort ragPromptPort) {

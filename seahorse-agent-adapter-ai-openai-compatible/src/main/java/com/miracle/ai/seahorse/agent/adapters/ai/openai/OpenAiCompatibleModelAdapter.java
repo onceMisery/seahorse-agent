@@ -32,6 +32,7 @@ import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelRequestFingerprint;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelHealthPort;
@@ -52,6 +53,8 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -127,6 +130,19 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
             }
         }, streamingExecutor);
         return call::cancel;
+    }
+
+    @Override
+    public ModelRequestFingerprint fingerprint(ChatRequest request) {
+        String payload = serialize(chatPayload(request, request == null ? null : request.getModelId(), true));
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(payload.getBytes(StandardCharsets.UTF_8));
+            return new ModelRequestFingerprint(
+                    "sha256:" + java.util.HexFormat.of().formatHex(digest),
+                    "OPENAI_COMPATIBLE_WIRE_JSON");
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is not available", ex);
+        }
     }
 
     @Override

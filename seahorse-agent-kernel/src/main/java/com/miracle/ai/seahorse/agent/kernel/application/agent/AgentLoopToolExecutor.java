@@ -30,6 +30,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReason
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillInjectMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationIdentity;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
@@ -55,7 +56,6 @@ final class AgentLoopToolExecutor {
     private static final int MAX_TOOL_OBSERVATION_CHARS = 8 * 1024;
     private static final String TOOL_OBSERVATION_TRUNCATED_SUFFIX = "...[truncated]";
     private static final String RAW_ARGUMENTS_KEY = "_raw";
-    private static final String IDEMPOTENCY_KEY_SEPARATOR = ":";
     private static final String LEGACY_LOAD_SKILL_TOOL_ID = "load_skill";
     private static final String TRACE_TYPE_AGENT_TOOL = "AGENT_TOOL";
     private static final String TRACE_CLASS_NAME =
@@ -139,7 +139,7 @@ final class AgentLoopToolExecutor {
                 toolCall.toolId(),
                 toolArguments(toolCall, request),
                 java.util.Map.of(),
-                idempotencyKey(runId, toolCall.id()),
+                ToolInvocationIdentity.deterministicKey(runId, toolCall.id()),
                 effectiveAllowedToolIds(toolCall, allowedToolIds));
     }
 
@@ -337,13 +337,6 @@ final class AgentLoopToolExecutor {
             effective.put(ToolResultSpillPort.READ_TOOL_ID, true);
         }
         return List.copyOf(effective.keySet());
-    }
-
-    private String idempotencyKey(String runId, String toolCallId) {
-        if (runId == null || runId.isBlank()) {
-            return toolCallId;
-        }
-        return runId + IDEMPOTENCY_KEY_SEPARATOR + toolCallId;
     }
 
     private boolean hasRawArguments(AgentToolCall toolCall) {

@@ -257,9 +257,6 @@ final class AgentLoopStreamEvents {
         if (callback == null) {
             return;
         }
-        if (!turn.thought().isBlank()) {
-            callback.onThinking(turn.thought());
-        }
         for (int i = 0; i < turn.toolCalls().size(); i++) {
             AgentToolCall toolCall = turn.toolCalls().get(i);
             AgentObservation observation = observations.get(i);

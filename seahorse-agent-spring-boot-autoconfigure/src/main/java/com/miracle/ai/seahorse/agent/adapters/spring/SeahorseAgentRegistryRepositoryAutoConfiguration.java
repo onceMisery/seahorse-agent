@@ -51,6 +51,8 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSandboxReposit
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcToolApprovalRequestRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcToolCatalogRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcToolInvocationAuditRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcToolInvocationIdempotencyAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcTenantSchemaUpgrade;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSandboxRuntimeNodeRegistryAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCatalogQueryPort;
@@ -86,6 +88,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionReposito
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationIdempotencyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.EvalCandidateRepositoryPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.EvalDatasetQueryPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.EvalDatasetRepositoryPort;
@@ -102,7 +105,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import javax.sql.DataSource;
 
 @Configuration(proxyBeanMethods = false)
-@AutoConfigureAfter(DataSourceAutoConfiguration.class)
+@AutoConfigureAfter({DataSourceAutoConfiguration.class, SeahorseAgentTenantAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentRegistryRepositoryAutoConfiguration {
 
@@ -206,8 +209,22 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(ToolInvocationAuditPort.class)
-    public JdbcToolInvocationAuditRepositoryAdapter seahorseJdbcToolInvocationAuditRepositoryAdapter(DataSource dataSource) {
+    public JdbcToolInvocationAuditRepositoryAdapter seahorseJdbcToolInvocationAuditRepositoryAdapter(
+            DataSource dataSource,
+            ObjectProvider<JdbcTenantSchemaUpgrade> schemaUpgradeProvider) {
+        schemaUpgradeProvider.getIfAvailable();
         return new JdbcToolInvocationAuditRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(ToolInvocationIdempotencyPort.class)
+    public JdbcToolInvocationIdempotencyAdapter seahorseJdbcToolInvocationIdempotencyAdapter(
+            DataSource dataSource,
+            ObjectProvider<JdbcTenantSchemaUpgrade> schemaUpgradeProvider) {
+        schemaUpgradeProvider.getIfAvailable();
+        return new JdbcToolInvocationIdempotencyAdapter(dataSource);
     }
 
     @Bean

@@ -31,9 +31,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -59,6 +65,89 @@ class JdbcAgentRunRepositoryAdapterTests {
         assertThat(found.finishedAt()).isEqualTo(startedAt.plusSeconds(30));
         assertThat(found.costTotal()).isEqualByComparingTo("0.010000");
         assertThat(found.metadataJson()).contains("\"versionId\":\"version-1\"");
+    }
+
+    @Test
+    void shouldUpdateRunOnlyWhenPersistedStatusMatches() {
+        DriverManagerDataSource dataSource = dataSource("agent-run-status-cas");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createRunSchema(jdbcTemplate);
+        JdbcAgentRunRepositoryAdapter adapter = new JdbcAgentRunRepositoryAdapter(dataSource);
+        Instant startedAt = Instant.parse("2026-05-23T00:00:00Z");
+        AgentRun waiting = new AgentRun("run-cas", "agent-1", "version-1", null, "tenant-a", "user-1",
+                "conversation-1", AgentRunTriggerType.CHAT, "summary", AgentRunStatus.WAITING_APPROVAL, "trace-1",
+                0L, 0L, BigDecimal.ZERO, null, null, startedAt, null, null);
+        adapter.createRun(waiting);
+
+        AgentRun running = waiting.withStatus(AgentRunStatus.RUNNING, null, null, null);
+        boolean winner = adapter.updateRunIfStatus(running, AgentRunStatus.WAITING_APPROVAL);
+        boolean loser = adapter.updateRunIfStatus(running, AgentRunStatus.WAITING_APPROVAL);
+
+        assertThat(winner).isTrue();
+        assertThat(loser).isFalse();
+        assertThat(adapter.findRunById("run-cas").orElseThrow().status()).isEqualTo(AgentRunStatus.RUNNING);
+    }
+
+    @Test
+    void shouldFenceResumeUpdatesAndAllowExpiredLeaseTakeover() {
+        DriverManagerDataSource dataSource = dataSource("agent-run-resume-fencing");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createRunSchema(jdbcTemplate);
+        createStepSchema(jdbcTemplate);
+        JdbcAgentRunLeaseRepositoryAdapterTests.createRunLeaseSchema(jdbcTemplate);
+        JdbcAgentRunRepositoryAdapter adapter = new JdbcAgentRunRepositoryAdapter(dataSource);
+        Instant now = Instant.parse("2026-05-23T00:00:00Z");
+        AgentRun waiting = new AgentRun("run-fenced", "agent-1", "version-1", null, "tenant-a", "user-1",
+                "conversation-1", AgentRunTriggerType.CHAT, "summary", AgentRunStatus.WAITING_APPROVAL, "trace-1",
+                0L, 0L, BigDecimal.ZERO, null, null, now, null, null);
+        adapter.createRun(waiting);
+
+        assertThat(adapter.acquireResumeLease("run-fenced", "owner-a", now.plusSeconds(30), now)).isTrue();
+        AgentRun running = waiting.withStatus(AgentRunStatus.RUNNING, null, null, null);
+        assertThat(adapter.updateRunIfStatusAndResumeLeaseOwner(
+                running, AgentRunStatus.WAITING_APPROVAL, "owner-a", now.plusSeconds(1))).isTrue();
+        assertThat(adapter.acquireResumeLease(
+                "run-fenced", "owner-b", now.plusSeconds(40), now.plusSeconds(10))).isFalse();
+        assertThat(adapter.acquireResumeLease(
+                "run-fenced", "owner-b", now.plusSeconds(70), now.plusSeconds(31))).isTrue();
+
+        AgentStep staleStep = new AgentStep(
+                "step-stale", "run-fenced", 1, AgentStepType.TOOL_CALL, AgentStepStatus.SUCCEEDED,
+                null, "{}", null, null, now.plusSeconds(32), now.plusSeconds(32));
+        AgentStep currentStep = new AgentStep(
+                "step-current", "run-fenced", 1, AgentStepType.TOOL_CALL, AgentStepStatus.SUCCEEDED,
+                null, "{}", null, null, now.plusSeconds(32), now.plusSeconds(32));
+        assertThat(adapter.appendStepIfResumeLeaseOwner(staleStep, "owner-a", now.plusSeconds(32))).isFalse();
+        assertThat(adapter.appendStepIfResumeLeaseOwner(currentStep, "owner-b", now.plusSeconds(32))).isTrue();
+
+        AgentRun staleSuccess = running.withStatus(AgentRunStatus.SUCCEEDED, null, null, now.plusSeconds(32));
+        assertThat(adapter.updateRunIfStatusAndResumeLeaseOwner(
+                staleSuccess, AgentRunStatus.RUNNING, "owner-a", now.plusSeconds(32))).isFalse();
+        AgentRun currentSuccess = running.withStatus(AgentRunStatus.SUCCEEDED, null, null, now.plusSeconds(33));
+        assertThat(adapter.updateRunIfStatusAndResumeLeaseOwner(
+                currentSuccess, AgentRunStatus.RUNNING, "owner-b", now.plusSeconds(33))).isTrue();
+        assertThat(adapter.findRunById("run-fenced").orElseThrow().status()).isEqualTo(AgentRunStatus.SUCCEEDED);
+        assertThat(adapter.listSteps("run-fenced")).extracting(AgentStep::stepId).containsExactly("step-current");
+        assertThat(adapter.acquireResumeLease(
+                "run-fenced", "owner-c", now.plusSeconds(160), now.plusSeconds(100))).isFalse();
+    }
+
+    @Test
+    void shouldRejectResumeLeaseForTerminalRunWithoutExistingLease() {
+        DriverManagerDataSource dataSource = dataSource("agent-run-terminal-resume-lease");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createRunSchema(jdbcTemplate);
+        JdbcAgentRunLeaseRepositoryAdapterTests.createRunLeaseSchema(jdbcTemplate);
+        JdbcAgentRunRepositoryAdapter adapter = new JdbcAgentRunRepositoryAdapter(dataSource);
+        Instant now = Instant.parse("2026-05-23T00:00:00Z");
+        AgentRun succeeded = new AgentRun(
+                "run-terminal", "agent-1", "version-1", null, "tenant-a", "user-1", "conversation-1",
+                AgentRunTriggerType.CHAT, "summary", AgentRunStatus.SUCCEEDED, "trace-1", 0L, 0L,
+                BigDecimal.ZERO, null, null, now, now, null);
+        adapter.createRun(succeeded);
+
+        assertThat(adapter.acquireResumeLease(
+                "run-terminal", "owner-a", now.plusSeconds(30), now)).isFalse();
     }
 
     @Test
@@ -110,6 +199,92 @@ class JdbcAgentRunRepositoryAdapterTests {
         } finally {
             jdbcTemplate.update("DELETE FROM sa_agent_run WHERE run_id = ?", runId);
         }
+    }
+
+    @Test
+    @EnabledIfSystemProperty(named = "seahorse.postgres.contract", matches = "true")
+    void shouldSerializeResumeFencesAgainstConcurrentPostgresLeaseTakeover() throws Exception {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                System.getProperty("seahorse.postgres.url", "jdbc:postgresql://localhost:5432/seahorse"),
+                System.getProperty("seahorse.postgres.username", "seahorse"),
+                System.getProperty("seahorse.postgres.password", "seahorse"));
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        JdbcAgentRunRepositoryAdapter adapter = new JdbcAgentRunRepositoryAdapter(dataSource);
+        String runId = "resume-fence-contract-" + UUID.randomUUID();
+        Instant now = Instant.now();
+        AgentRun running = new AgentRun(
+                runId, "agent-1", "version-1", null, "tenant-a", "user-1", "conversation-1",
+                AgentRunTriggerType.CHAT, "summary", AgentRunStatus.RUNNING, "trace-1", 0L, 0L,
+                BigDecimal.ZERO, null, null, now, null, null);
+        adapter.createRun(running);
+        assertThat(adapter.acquireResumeLease(runId, "owner-a", now.plusSeconds(60), now)).isTrue();
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            assertStaleStepFenceRejectedAfterTakeover(dataSource, adapter, executor, running, now);
+            jdbcTemplate.update(
+                    "UPDATE sa_agent_run_lease SET worker_id = ?, lease_until = ? WHERE run_id = ?",
+                    "owner-a", java.sql.Timestamp.from(now.plusSeconds(60)), runId);
+            assertStaleTerminalFenceRejectedAfterTakeover(dataSource, adapter, executor, running, now);
+        } finally {
+            jdbcTemplate.update("DELETE FROM sa_agent_step WHERE run_id = ?", runId);
+            jdbcTemplate.update("DELETE FROM sa_agent_run_lease WHERE run_id = ?", runId);
+            jdbcTemplate.update("DELETE FROM sa_agent_run WHERE run_id = ?", runId);
+        }
+    }
+
+    private void assertStaleStepFenceRejectedAfterTakeover(
+            DriverManagerDataSource dataSource,
+            JdbcAgentRunRepositoryAdapter adapter,
+            ExecutorService executor,
+            AgentRun run,
+            Instant now) throws Exception {
+        try (Connection takeover = beginLeaseTakeover(dataSource, run.runId(), "owner-b", now.plusSeconds(60))) {
+            AgentStep step = new AgentStep(
+                    "step-" + UUID.randomUUID(), run.runId(), 1, AgentStepType.TOOL_CALL,
+                    AgentStepStatus.SUCCEEDED, "{}", "{}", null, null, now, now);
+            Future<Boolean> staleWrite = executor.submit(
+                    () -> adapter.appendStepIfResumeLeaseOwner(step, "owner-a", now));
+            Thread.sleep(150L);
+            assertThat(staleWrite.isDone()).isFalse();
+            takeover.commit();
+            assertThat(staleWrite.get(5, TimeUnit.SECONDS)).isFalse();
+            assertThat(adapter.listSteps(run.runId())).isEmpty();
+        }
+    }
+
+    private void assertStaleTerminalFenceRejectedAfterTakeover(
+            DriverManagerDataSource dataSource,
+            JdbcAgentRunRepositoryAdapter adapter,
+            ExecutorService executor,
+            AgentRun run,
+            Instant now) throws Exception {
+        try (Connection takeover = beginLeaseTakeover(dataSource, run.runId(), "owner-b", now.plusSeconds(60))) {
+            AgentRun succeeded = run.withStatus(AgentRunStatus.SUCCEEDED, null, null, now);
+            Future<Boolean> staleTransition = executor.submit(() -> adapter.updateRunIfStatusAndResumeLeaseOwner(
+                    succeeded, AgentRunStatus.RUNNING, "owner-a", now));
+            Thread.sleep(150L);
+            assertThat(staleTransition.isDone()).isFalse();
+            takeover.commit();
+            assertThat(staleTransition.get(5, TimeUnit.SECONDS)).isFalse();
+            assertThat(adapter.findRunById(run.runId()).orElseThrow().status()).isEqualTo(AgentRunStatus.RUNNING);
+        }
+    }
+
+    private Connection beginLeaseTakeover(
+            DriverManagerDataSource dataSource,
+            String runId,
+            String ownerId,
+            Instant leaseUntil) throws Exception {
+        Connection connection = dataSource.getConnection();
+        connection.setAutoCommit(false);
+        try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE sa_agent_run_lease SET worker_id = ?, lease_until = ? WHERE run_id = ?")) {
+            statement.setString(1, ownerId);
+            statement.setTimestamp(2, java.sql.Timestamp.from(leaseUntil));
+            statement.setString(3, runId);
+            assertThat(statement.executeUpdate()).isEqualTo(1);
+        }
+        return connection;
     }
 
     @Test

@@ -24,6 +24,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.MarkdownNormalizer
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ToolCallParser;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelContextWindow;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelContextWindowPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -52,6 +54,52 @@ class SeahorseAgentKernelAgentExecutorAutoConfigurationTests {
             assertThat(context.getBean(ReActExecutorPort.class)).isSameAs(context.getBean(KernelAgentLoop.class));
             assertThat(context.getBean(ReActExecutorPort.class).engineId()).isEqualTo("kernel");
         });
+    }
+
+    @Test
+    void preservesDefaultModelIdCaseAndExplicitCaseInsensitiveWindow() {
+        contextRunner.withPropertyValues(
+                        "seahorse-agent.adapters.ai.chat-model=Vendor/Model-X",
+                        "seahorse-agent.chat.agent.context-envelope.default-context-window-tokens=32768",
+                        "seahorse-agent.chat.agent.context-envelope.model-windows[vendor/Model-X]=131072")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    ModelContextWindowPort port = context.getBean(ModelContextWindowPort.class);
+                    assertThat(port.resolveModelId(null)).isEqualTo("Vendor/Model-X");
+                    ModelContextWindow window = port.resolve(port.resolveModelId(null));
+                    assertThat(window.tokens()).isEqualTo(131072);
+                    assertThat(window.source()).contains("vendor/model-x");
+                });
+    }
+
+    @Test
+    void resolvesDefaultModelFromLegacyDotPrefix() {
+        contextRunner.withPropertyValues(
+                        "seahorse.agent.adapters.ai.chat-model=Legacy/Model-X",
+                        "seahorse-agent.chat.agent.context-envelope.default-context-window-tokens=65536",
+                        "seahorse-agent.chat.agent.context-envelope.default-model-safe-profile-enabled=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    ModelContextWindowPort port = context.getBean(ModelContextWindowPort.class);
+                    assertThat(port.resolveModelId(null)).isEqualTo("Legacy/Model-X");
+                    ModelContextWindow window = port.resolve(port.resolveModelId(null));
+                    assertThat(window.tokens()).isEqualTo(65536);
+                    assertThat(window.source()).contains("safe-profile:default-model");
+                });
+    }
+
+    @Test
+    void leavesDefaultModelWindowUnknownWithoutExplicitWindowOrSafeProfile() {
+        contextRunner.withPropertyValues(
+                        "seahorse-agent.adapters.ai.chat-model=Unknown/Model-X",
+                        "seahorse-agent.chat.agent.context-envelope.default-context-window-tokens=65536")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    ModelContextWindowPort port = context.getBean(ModelContextWindowPort.class);
+                    ModelContextWindow window = port.resolve(port.resolveModelId(null));
+                    assertThat(window.resolved()).isFalse();
+                    assertThat(window.source()).contains("unconfigured-model");
+                });
     }
 
     @Configuration(proxyBeanMethods = false)

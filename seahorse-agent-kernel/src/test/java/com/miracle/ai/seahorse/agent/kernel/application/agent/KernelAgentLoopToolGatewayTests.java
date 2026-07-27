@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
@@ -82,6 +83,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -90,6 +92,60 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class KernelAgentLoopToolGatewayTests {
 
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-05-23T00:00:00Z"), ZoneOffset.UTC);
+
+    @Test
+    void shouldKeepModelResultWhenRecorderAndRecordingToolLookupFail() {
+        ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("recording is best effort")));
+        AtomicInteger listCalls = new AtomicInteger();
+        ToolRegistryPort registry = new ToolRegistryPort() {
+            @Override
+            public List<ToolDescriptor> listTools() {
+                if (listCalls.incrementAndGet() > 1) {
+                    throw new IllegalStateException("recording lookup unavailable");
+                }
+                return List.of();
+            }
+
+            @Override
+            public Optional<ToolPort> find(String toolId) {
+                return Optional.empty();
+            }
+        };
+        AgentRunStepRecorder recorder = new AgentRunStepRecorder() {
+            @Override
+            public void recordModelTurn(String runId, String inputJson, String outputJson, Throwable error) {
+                throw new IllegalStateException("step store unavailable");
+            }
+
+            @Override
+            public void recordToolCall(String runId,
+                                       com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall toolCall,
+                                       com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentObservation observation) {
+            }
+        };
+        KernelAgentLoop loop = new KernelAgentLoop(new AgentLoopDependencies(
+                model,
+                registry,
+                new RecordingToolGateway(),
+                legacyTestOptions(KernelAgentLoopOptions.defaults()),
+                null,
+                null,
+                recorder,
+                null,
+                null,
+                null,
+                null,
+                null));
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("answer directly")
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-recorder-best-effort")
+                .build());
+
+        assertEquals("recording is best effort", result.finalAnswer());
+        assertEquals(2, listCalls.get());
+    }
 
     @Test
     void shouldInvokeToolsThroughGatewayWithRunContext() {
@@ -527,7 +583,7 @@ class KernelAgentLoopToolGatewayTests {
         assertEquals("call-1", checkpoint.stepId());
         assertTrue(checkpoint.pendingToolCallJson().contains("\"toolId\":\"memory-forget\""));
         assertTrue(checkpoint.pendingToolCallJson().contains("\"toolCallId\":\"call-1\""));
-        assertTrue(checkpoint.pendingToolCallJson().contains("\"idempotencyKey\":\"run-approval:call-1\""));
+        assertFalse(checkpoint.pendingToolCallJson().contains("idempotencyKey"));
         assertTrue(checkpoint.pendingToolCallJson().contains("\"agentId\":\"agent-1\""));
         assertTrue(checkpoint.pendingToolCallJson().contains("\"tenantId\":\"tenant-1\""));
     }
@@ -1024,10 +1080,39 @@ class KernelAgentLoopToolGatewayTests {
                 .map(StreamAgentStepEvent.class::cast)
                 .toList();
         assertFalse(stepEvents.isEmpty());
-        assertTrue(stepEvents.stream().allMatch(event -> event.message().contains("[REDACTED]")));
+        assertTrue(stepEvents.stream().allMatch(event ->
+                "MODEL_TURN_FAILED:IllegalStateException".equals(event.message())));
         assertTrue(stepEvents.stream().noneMatch(event ->
                 event.message().contains("abcdefghijklmnop")
-                        || event.message().contains("plain-loop-model-secret")));
+                        || event.message().contains("plain-loop-model-secret")
+                        || event.message().contains("Authorization")));
+    }
+
+    @Test
+    void shouldNotStreamProviderReasoningFromToolTurns() {
+        String rawReasoning = "private reasoning Authorization: Bearer raw-reasoning-secret";
+        AgentToolCall toolCall = AgentToolCall.of("call-safe-thinking", "web_search", Map.of("query", "seahorse"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls(rawReasoning, List.of(toolCall)),
+                Turn.finalAnswer("done")));
+        KernelAgentLoop loop = kernelLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                new RecordingToolGateway(ToolInvocationResult.ok("result")),
+                KernelAgentLoopOptions.defaults());
+        RecordingStreamCallback callback = new RecordingStreamCallback();
+
+        loop.streamExecute(AgentLoopRequest.builder()
+                .question("research")
+                .allowedToolIds(List.of("web_search"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-safe-tool-thinking")
+                .build(), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertTrue(callback.thoughts.stream().noneMatch(thought -> thought.contains(rawReasoning)));
+        assertTrue(callback.thoughts.stream().noneMatch(thought -> thought.contains("raw-reasoning-secret")));
+        assertTrue(callback.thoughts.stream().anyMatch(thought -> thought.contains("web_search -> ok")));
     }
 
     @Test
@@ -1136,7 +1221,7 @@ class KernelAgentLoopToolGatewayTests {
                 modelPort,
                 toolRegistry,
                 toolGateway,
-                options,
+                legacyTestOptions(options),
                 traceRecorder,
                 null,
                 null,
@@ -1145,6 +1230,16 @@ class KernelAgentLoopToolGatewayTests {
                 null,
                 null,
                 null));
+    }
+
+    private static KernelAgentLoopOptions legacyTestOptions(KernelAgentLoopOptions options) {
+        return KernelAgentLoopOptions.builder()
+                .maxSteps(options.maxSteps())
+                .perToolTimeout(options.perToolTimeout())
+                .modelTurnTimeout(options.modelTurnTimeout())
+                .maxParallelTools(options.maxParallelTools())
+                .contextEnvelope(options.contextEnvelope().withMode(ModelContextEnvelopeOptions.Mode.DISABLED))
+                .build();
     }
 
     private static final class RecordingToolGateway implements ToolGatewayPort {
@@ -1335,9 +1430,15 @@ class KernelAgentLoopToolGatewayTests {
         private final java.util.concurrent.CountDownLatch terminal = new java.util.concurrent.CountDownLatch(1);
         private final List<StreamEvent> events = new ArrayList<>();
         private final List<Throwable> errors = new ArrayList<>();
+        private final List<String> thoughts = new ArrayList<>();
 
         @Override
         public void onContent(String content) {
+        }
+
+        @Override
+        public void onThinking(String content) {
+            thoughts.add(content);
         }
 
         @Override

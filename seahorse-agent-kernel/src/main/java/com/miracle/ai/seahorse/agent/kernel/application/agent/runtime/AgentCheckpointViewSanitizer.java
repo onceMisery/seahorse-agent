@@ -20,6 +20,8 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 
 import java.nio.charset.StandardCharsets;
@@ -46,8 +48,8 @@ final class AgentCheckpointViewSanitizer {
                 checkpoint.stepId(),
                 checkpoint.sequenceNo(),
                 checkpoint.checkpointType(),
-                checkpoint.stateJson(),
-                checkpoint.messageHistoryJson(),
+                stateJsonForView(checkpoint.stateJson()),
+                messageHistoryJsonForView(checkpoint.messageHistoryJson()),
                 checkpoint.contextPackId(),
                 pendingToolCallJsonForView(checkpoint.pendingToolCallJson()),
                 checkpoint.createdAt());
@@ -76,6 +78,55 @@ final class AgentCheckpointViewSanitizer {
         } catch (JsonProcessingException ex) {
             return null;
         }
+    }
+
+    private String stateJsonForView(String stateJson) {
+        if (!hasText(stateJson)) {
+            return stateJson;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(stateJson);
+            if (!(root instanceof ObjectNode objectRoot)) {
+                return null;
+            }
+            ObjectNode safeRoot = objectRoot.deepCopy();
+            JsonNode descriptorNode = safeRoot.path("resumeDescriptor");
+            if (descriptorNode instanceof ObjectNode descriptor) {
+                replaceSnapshotWithEvidence(descriptor, "runtimeContextSnapshot", "runtimeContext");
+                replaceSnapshotWithEvidence(descriptor, "skillRuntimeContext", "skillRuntimeContext");
+            }
+            return objectMapper.writeValueAsString(safeRoot);
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+
+    private String messageHistoryJsonForView(String messageHistoryJson) {
+        if (!hasText(messageHistoryJson)) {
+            return messageHistoryJson;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(messageHistoryJson);
+            if (!(root instanceof ArrayNode messages)) {
+                return null;
+            }
+            ArrayNode safeMessages = messages.deepCopy();
+            safeMessages.forEach(message -> {
+                if (message instanceof ObjectNode objectMessage) {
+                    objectMessage.remove(List.of("thinkingContent", "thinkingDuration"));
+                }
+            });
+            return objectMapper.writeValueAsString(safeMessages);
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+
+    private void replaceSnapshotWithEvidence(ObjectNode descriptor, String field, String evidencePrefix) {
+        JsonNode value = descriptor.remove(field);
+        String text = value == null || value.isNull() ? "" : value.asText("");
+        descriptor.put(evidencePrefix + "Length", text.length());
+        descriptor.put(evidencePrefix + "Hash", sha256(text));
     }
 
     private List<String> safeResourceRefKeys(JsonNode resourceRefs) {

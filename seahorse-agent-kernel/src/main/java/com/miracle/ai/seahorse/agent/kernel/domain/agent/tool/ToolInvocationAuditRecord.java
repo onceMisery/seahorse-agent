@@ -87,7 +87,7 @@ public record ToolInvocationAuditRecord(String invocationId,
         rolloutId = trimToNull(rolloutId);
         tenantId = requireText(tenantId, "tenantId 不能为空");
         userId = requireText(userId, "userId 不能为空");
-        idempotencyKey = trimToNull(idempotencyKey);
+        idempotencyKey = ToolInvocationIdentity.digest(tenantId, idempotencyKey);
         status = Objects.requireNonNullElse(status, ToolInvocationStatus.REQUESTED);
         argumentsSummary = trimToNull(argumentsSummary);
         startedAt = Objects.requireNonNull(startedAt, "startedAt 不能为空");

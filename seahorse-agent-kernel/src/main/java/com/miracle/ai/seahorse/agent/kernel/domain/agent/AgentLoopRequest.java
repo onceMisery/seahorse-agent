@@ -49,6 +49,7 @@ public final class AgentLoopRequest {
     private final int maxSteps;
     private final ContextPack contextPack;
     private final MemoryContext memoryContext;
+    private final String runtimeContextSnapshot;
     private final String skillRuntimeContext;
     private final List<SkillRuntimeBlock> skillRuntimeBlocks;
     private final SkillToolPolicyMode skillToolPolicyMode;
@@ -79,6 +80,7 @@ public final class AgentLoopRequest {
         this.maxSteps = b.maxSteps <= 0 ? DEFAULT_MAX_STEPS : b.maxSteps;
         this.contextPack = b.contextPack;
         this.memoryContext = b.memoryContext;
+        this.runtimeContextSnapshot = trimToNull(b.runtimeContextSnapshot);
         this.skillRuntimeContext = trimToNull(b.skillRuntimeContext);
         this.skillRuntimeBlocks = b.skillRuntimeBlocks == null ? List.of() : List.copyOf(b.skillRuntimeBlocks);
         this.skillToolPolicyMode = Objects.requireNonNullElse(b.skillToolPolicyMode, SkillToolPolicyMode.ADVISORY);
@@ -131,6 +133,10 @@ public final class AgentLoopRequest {
 
     public MemoryContext memoryContext() {
         return memoryContext;
+    }
+
+    public String runtimeContextSnapshot() {
+        return runtimeContextSnapshot;
     }
 
     public String skillRuntimeContext() {
@@ -196,6 +202,7 @@ public final class AgentLoopRequest {
         private int maxSteps;
         private ContextPack contextPack;
         private MemoryContext memoryContext;
+        private String runtimeContextSnapshot;
         private String skillRuntimeContext;
         private List<SkillRuntimeBlock> skillRuntimeBlocks;
         private SkillToolPolicyMode skillToolPolicyMode;
@@ -256,6 +263,11 @@ public final class AgentLoopRequest {
 
         public Builder memoryContext(MemoryContext memoryContext) {
             this.memoryContext = memoryContext;
+            return this;
+        }
+
+        public Builder runtimeContextSnapshot(String runtimeContextSnapshot) {
+            this.runtimeContextSnapshot = runtimeContextSnapshot;
             return this;
         }
 

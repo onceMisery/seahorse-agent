@@ -20,7 +20,10 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialJsonFieldClassifier;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpointType;
@@ -36,20 +39,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 public class RepositoryAgentApprovalWaitHandler implements AgentApprovalWaitHandler {
 
     private static final String CHECKPOINT_ID_PREFIX = "checkpoint_";
-    private static final String REDACTED_VALUE = "[REDACTED]";
-    private static final Set<String> SENSITIVE_ARGUMENT_NAMES = Set.of(
-            "password",
-            "secret",
-            "token",
-            "apiKey",
-            "authorization",
-            "credential");
-
     private final AgentRunRepositoryPort runRepository;
     private final AgentCheckpointRepositoryPort checkpointRepository;
     private final Clock clock;
@@ -97,9 +90,9 @@ public class RepositoryAgentApprovalWaitHandler implements AgentApprovalWaitHand
                 request.stepId(),
                 nextSequenceNo(request.runId()),
                 AgentCheckpointType.WAITING_APPROVAL,
-                safeCommand.stateJson(),
+                checkpointStateJson(safeCommand),
                 messageHistoryJson(safeCommand.messageHistory()),
-                null,
+                safeCommand.resumeDescriptor().contextPackId(),
                 pendingToolCallJson(request),
                 now);
         checkpointRepository.save(checkpoint);
@@ -128,9 +121,7 @@ public class RepositoryAgentApprovalWaitHandler implements AgentApprovalWaitHand
             return payload;
         }
         payload.put("role", message.getRole() == null ? null : message.getRole().name());
-        payload.put("content", message.getContent());
-        payload.put("thinkingContent", message.getThinkingContent());
-        payload.put("thinkingDuration", message.getThinkingDuration());
+        payload.put("content", safeStructuredText(message.getContent()));
         payload.put("toolCallId", message.getToolCallId());
         payload.put("toolCalls", toolCallsJson(message.getToolCalls()));
         return payload;
@@ -156,8 +147,7 @@ public class RepositoryAgentApprovalWaitHandler implements AgentApprovalWaitHand
         payload.put("toolId", request.toolId());
         payload.put("toolCallId", request.toolCallId());
         payload.put("arguments", redactArguments(request.arguments()));
-        payload.put("resourceRefs", request.resourceRefs());
-        payload.put("idempotencyKey", request.idempotencyKey());
+        payload.put("resourceRefs", redactMap(request.resourceRefs()));
         payload.put("agentId", request.agentId());
         payload.put("versionId", request.versionId());
         payload.put("runId", request.runId());
@@ -169,22 +159,35 @@ public class RepositoryAgentApprovalWaitHandler implements AgentApprovalWaitHand
     }
 
     private Map<String, Object> redactArguments(Map<String, Object> arguments) {
-        if (arguments == null || arguments.isEmpty()) {
+        return redactMap(arguments);
+    }
+
+    private Map<String, Object> redactMap(Map<?, ?> values) {
+        if (values == null || values.isEmpty()) {
             return Map.of();
         }
         LinkedHashMap<String, Object> redacted = new LinkedHashMap<>();
-        arguments.forEach((key, value) -> redacted.put(key, shouldRedact(key) ? REDACTED_VALUE : value));
+        values.forEach((key, value) -> {
+            String fieldName = key == null ? null : String.valueOf(key);
+            redacted.put(fieldName, redactValue(fieldName, value));
+        });
         return redacted;
     }
 
-    private boolean shouldRedact(String key) {
-        if (key == null) {
-            return false;
+    private Object redactValue(String fieldName, Object value) {
+        if (fieldName != null && CredentialJsonFieldClassifier.isSensitiveProviderOrAuditField(fieldName)) {
+            return CredentialTextRedactor.REDACTED_VALUE;
         }
-        String normalized = key.replace("_", "").replace("-", "").toLowerCase();
-        return SENSITIVE_ARGUMENT_NAMES.stream()
-                .map(name -> name.toLowerCase().replace("_", "").replace("-", ""))
-                .anyMatch(normalized::contains);
+        if (value instanceof String text) {
+            return safeStructuredText(text);
+        }
+        if (value instanceof Map<?, ?> map) {
+            return redactMap(map);
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(item -> redactValue(null, item)).toList();
+        }
+        return value;
     }
 
     private String toJson(Object payload) {
@@ -195,8 +198,38 @@ public class RepositoryAgentApprovalWaitHandler implements AgentApprovalWaitHand
         }
     }
 
+    private String checkpointStateJson(AgentApprovalWaitCommand command) {
+        try {
+            JsonNode state = objectMapper.readTree(command.stateJson());
+            if (!(state instanceof ObjectNode objectState)) {
+                throw new IllegalStateException("Approval checkpoint state must be a JSON object");
+            }
+            ObjectNode checkpointState = objectState.deepCopy();
+            checkpointState.set("resumeDescriptor", objectMapper.valueToTree(command.resumeDescriptor()));
+            return toJson(redactValue(null, objectMapper.convertValue(checkpointState, Object.class)));
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Approval checkpoint state is not valid JSON", ex);
+        }
+    }
+
     private String safeText(String value) {
         return CredentialTextRedactor.redact(value);
+    }
+
+    private String safeStructuredText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String stripped = value.stripLeading();
+        if (stripped.startsWith("{") || stripped.startsWith("[")) {
+            try {
+                Object structured = objectMapper.readValue(value, Object.class);
+                return objectMapper.writeValueAsString(redactValue(null, structured));
+            } catch (JsonProcessingException ignored) {
+                // Continue with bounded text redaction for malformed or embedded JSON.
+            }
+        }
+        return CredentialTextRedactor.redactStructured(value);
     }
 
     private boolean isBlank(String value) {

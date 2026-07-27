@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.outbound.model;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
 
@@ -29,23 +30,40 @@ public interface TokenCounterPort {
 
     int countTextTokens(String modelId, String text);
 
+    default EstimatorMode estimatorMode() {
+        return EstimatorMode.CONSERVATIVE_FALLBACK;
+    }
+
+    default String estimatorVersion() {
+        return "utf8-byte-upper-bound-v1";
+    }
+
     default int countMessages(String modelId, List<ChatMessage> messages) {
-        int total = 0;
+        long total = 0L;
         for (ChatMessage message : Objects.requireNonNullElse(messages, List.<ChatMessage>of())) {
             if (message != null) {
                 total += countTextTokens(modelId, message.getContent());
+                if (total >= Integer.MAX_VALUE) {
+                    return Integer.MAX_VALUE;
+                }
             }
         }
-        return total;
+        return (int) Math.max(0L, total);
     }
 
     static TokenCounterPort approximate() {
         return (modelId, text) -> {
             String value = Objects.requireNonNullElse(text, "");
-            if (value.isBlank()) {
+            if (value.isEmpty()) {
                 return 0;
             }
-            return Math.max(1, (int) Math.ceil(value.codePointCount(0, value.length()) / 4.0D));
+            return value.getBytes(StandardCharsets.UTF_8).length;
         };
+    }
+
+    enum EstimatorMode {
+        EXACT_PROVIDER,
+        CALIBRATED_APPROXIMATION,
+        CONSERVATIVE_FALLBACK
     }
 }

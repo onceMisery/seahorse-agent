@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopDependenc
 import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegistry;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.ModelContextEnvelopeOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorRouter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
@@ -142,8 +143,9 @@ class KernelChatAgentRunStoreTests {
                 MemoryEnginePort.noop(),
                 Optional.of(runService));
 
+        String question = "What is the weather? {\"password\":\"summary-secret-123456\"}";
         service.streamChat(new StreamChatCommand(
-                "What is the weather?", "conversation-1", "task-1", "user-1", false, ChatMode.AGENT), callback);
+                question, "conversation-1", "task-1", "user-1", false, ChatMode.AGENT), callback);
 
         assertTrue(callback.awaitTerminal());
         assertEquals(List.of("Shanghai 21C"), callback.contents);
@@ -152,6 +154,9 @@ class KernelChatAgentRunStoreTests {
         assertEquals(run.runId(), callback.runId);
         assertEquals(AgentRunStatus.SUCCEEDED, run.status());
         assertEquals("conversation-1", run.conversationId());
+        assertTrue(run.inputSummary().contains("[REDACTED]"));
+        assertTrue(!run.inputSummary().contains("summary-secret-123456"));
+        assertEquals(question, model.requests.get(0).getMessages().getLast().getContent());
         List<AgentStep> steps = runRepository.listSteps(run.runId());
         assertEquals(3, steps.size());
         assertEquals(AgentStepType.MODEL_TURN, steps.get(0).stepType());
@@ -1425,7 +1430,7 @@ class KernelChatAgentRunStoreTests {
                 model,
                 toolRegistry,
                 toolGateway,
-                options,
+                legacyTestOptions(options),
                 KernelRagTraceRecorder.noop(),
                 new DefaultContextWeaver(),
                 runStepRecorder,
@@ -1434,6 +1439,16 @@ class KernelChatAgentRunStoreTests {
                 null,
                 null,
                 null));
+    }
+
+    private static KernelAgentLoopOptions legacyTestOptions(KernelAgentLoopOptions options) {
+        return KernelAgentLoopOptions.builder()
+                .maxSteps(options.maxSteps())
+                .perToolTimeout(options.perToolTimeout())
+                .modelTurnTimeout(options.modelTurnTimeout())
+                .maxParallelTools(options.maxParallelTools())
+                .contextEnvelope(options.contextEnvelope().withMode(ModelContextEnvelopeOptions.Mode.DISABLED))
+                .build();
     }
 
     private static final class RecordingToolGateway implements ToolGatewayPort {

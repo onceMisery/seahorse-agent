@@ -39,6 +39,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolArtifactPublicatio
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationIdempotencyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationRequestAwarePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolOutputRedactionPort;
@@ -116,6 +117,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     private final ToolOutputRedactionPort outputRedactionPort;
     private final ToolArtifactPublicationPort artifactPublicationPort;
     private final ToolResultSpillPort toolResultSpillPort;
+    private final ToolInvocationIdempotencyPort idempotencyPort;
     private final Clock clock;
 
     public LocalToolGatewayPort(ToolRegistryPort toolRegistry) {
@@ -223,6 +225,20 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                                 ToolArtifactPublicationPort artifactPublicationPort,
                                 ToolResultSpillPort toolResultSpillPort,
                                 Clock clock) {
+        this(toolRegistry, toolPolicy, auditPort, approvalRequestRepository, approvalQueryPort, outputRedactionPort,
+                artifactPublicationPort, toolResultSpillPort, ToolInvocationIdempotencyPort.noop(), clock);
+    }
+
+    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
+                                ToolPolicyPort toolPolicy,
+                                ToolInvocationAuditPort auditPort,
+                                ToolApprovalRequestRepositoryPort approvalRequestRepository,
+                                ApprovalRequestQueryPort approvalQueryPort,
+                                ToolOutputRedactionPort outputRedactionPort,
+                                ToolArtifactPublicationPort artifactPublicationPort,
+                                ToolResultSpillPort toolResultSpillPort,
+                                ToolInvocationIdempotencyPort idempotencyPort,
+                                Clock clock) {
         this.toolRegistry = Objects.requireNonNullElse(toolRegistry, ToolRegistryPort.empty());
         this.toolPolicy = Objects.requireNonNullElseGet(toolPolicy, ToolPolicyPort::defaults);
         this.auditPort = Objects.requireNonNullElseGet(auditPort, ToolInvocationAuditPort::noop);
@@ -237,6 +253,9 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         this.toolResultSpillPort = Objects.requireNonNullElseGet(
                 toolResultSpillPort,
                 ToolResultSpillPort::noop);
+        this.idempotencyPort = Objects.requireNonNullElseGet(
+                idempotencyPort,
+                ToolInvocationIdempotencyPort::noop);
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
@@ -310,6 +329,25 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             return result;
         }
 
+        if (effectiveRequest.idempotencyKey() != null) {
+            boolean claimed;
+            try {
+                claimed = idempotencyPort.tryClaim(
+                        effectiveRequest.tenantId(), effectiveRequest.idempotencyKey(), startedAt);
+            } catch (RuntimeException ex) {
+                return completeWithoutExecution(
+                        invocationId,
+                        "Tool idempotency claim failed",
+                        clock.instant());
+            }
+            if (!claimed) {
+                return completeWithoutExecution(
+                        invocationId,
+                        "Duplicate or unresolved tool invocation",
+                        clock.instant());
+            }
+        }
+
         try {
             ToolPort executableTool = toolPort.isPresent()
                     ? toolPort.get()
@@ -334,6 +372,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     summarizeResult(result, auditError),
                     auditError,
                     clock.instant()));
+            markIdempotencyCompleted(effectiveRequest);
             return result;
         } catch (Exception ex) {
             ToolInvocationResult result = ToolInvocationResult.failed(
@@ -347,6 +386,30 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     clock.instant()));
             return result;
         }
+    }
+
+    private void markIdempotencyCompleted(ToolInvocationRequest request) {
+        if (request.idempotencyKey() == null) {
+            return;
+        }
+        try {
+            idempotencyPort.markCompleted(request.tenantId(), request.idempotencyKey(), clock.instant());
+        } catch (RuntimeException ex) {
+            log.warn("Tool idempotency completion failed for tool={}, errorType={}",
+                    request.toolId(), ex.getClass().getSimpleName());
+        }
+    }
+
+    private ToolInvocationResult completeWithoutExecution(
+            String invocationId, String error, Instant completedAt) {
+        ToolInvocationResult result = ToolInvocationResult.failed(error);
+        auditPort.recordCompleted(new ToolInvocationAuditCompletion(
+                invocationId,
+                ToolInvocationStatus.FAILED,
+                summarizeResult(result, error),
+                error,
+                completedAt));
+        return result;
     }
 
     private void publishArtifacts(ToolInvocationRequest request, ToolInvocationResult result) {

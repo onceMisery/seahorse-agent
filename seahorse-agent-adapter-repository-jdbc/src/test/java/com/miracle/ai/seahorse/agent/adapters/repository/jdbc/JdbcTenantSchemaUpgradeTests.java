@@ -31,6 +31,23 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class JdbcTenantSchemaUpgradeTests {
 
     @Test
+    void shouldEnsureToolInvocationIdempotencySchema() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:tenant-schema-upgrade-tool-idempotency-" + System.nanoTime()
+                        + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+                "sa",
+                "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+
+        JdbcTenantSchemaUpgrade upgrade = new JdbcTenantSchemaUpgrade(dataSource);
+        upgrade.upgrade();
+        upgrade.upgrade();
+
+        assertThat(tableExists(jdbcTemplate, "sa_idempotency_key")).isTrue();
+        assertThat(indexExists(jdbcTemplate, "sa_idempotency_key", "idx_idempotency_expires")).isTrue();
+    }
+
+    @Test
     void shouldBackfillSandboxSessionRuntimeGovernanceForExistingTable() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:tenant-schema-upgrade-sandbox-" + System.nanoTime()

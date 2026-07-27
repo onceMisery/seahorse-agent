@@ -25,12 +25,14 @@ import java.util.Objects;
 
 public record AgentApprovalWaitCommand(ToolInvocationRequest toolInvocationRequest,
                                        String stateJson,
-                                       List<ChatMessage> messageHistory) {
+                                       List<ChatMessage> messageHistory,
+                                       AgentResumeDescriptor resumeDescriptor) {
 
     public AgentApprovalWaitCommand {
         toolInvocationRequest = Objects.requireNonNull(toolInvocationRequest, "toolInvocationRequest must not be null");
         stateJson = requireText(stateJson, "stateJson must not be blank");
         messageHistory = messageHistory == null ? List.of() : List.copyOf(messageHistory);
+        resumeDescriptor = Objects.requireNonNull(resumeDescriptor, "resumeDescriptor must not be null");
     }
 
     private static String requireText(String value, String message) {

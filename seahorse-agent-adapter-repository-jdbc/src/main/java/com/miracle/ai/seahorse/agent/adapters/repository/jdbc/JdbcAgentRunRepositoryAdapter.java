@@ -27,6 +27,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -87,6 +90,14 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
              error_code, error_message, started_at, finished_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
+    private static final String SQL_LOCK_RESUME_LEASE_OWNER = """
+            SELECT worker_id
+            FROM sa_agent_run_lease
+            WHERE run_id = ?
+              AND worker_id = ?
+              AND lease_until > ?
+            FOR UPDATE
+            """;
     private static final String SQL_LIST_STEPS = """
             SELECT step_id, run_id, step_no, step_type, status, input_json, output_json,
                    error_code, error_message, started_at, finished_at
@@ -94,17 +105,51 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
             WHERE run_id = ?
             ORDER BY step_no ASC
             """;
+    private static final String SQL_INSERT_RESUME_LEASE = """
+            INSERT INTO sa_agent_run_lease (run_id, worker_id, lease_until, heartbeat_at)
+            SELECT run_id, ?, ?, ?
+            FROM sa_agent_run
+            WHERE run_id = ?
+              AND status IN ('WAITING_APPROVAL', 'RUNNING')
+            """;
+    private static final String SQL_ACQUIRE_RESUME_LEASE = """
+            UPDATE sa_agent_run_lease
+            SET worker_id = ?, lease_until = ?, heartbeat_at = ?
+            WHERE run_id = ?
+              AND (worker_id = ? OR lease_until <= ?)
+              AND EXISTS (
+                  SELECT 1
+                  FROM sa_agent_run run
+                  WHERE run.run_id = sa_agent_run_lease.run_id
+                    AND run.status IN ('WAITING_APPROVAL', 'RUNNING')
+              )
+            """;
+    private static final String SQL_HEARTBEAT_RESUME_LEASE = """
+            UPDATE sa_agent_run_lease
+            SET lease_until = ?, heartbeat_at = ?
+            WHERE run_id = ?
+              AND worker_id = ?
+              AND lease_until > ?
+            """;
+    private static final String SQL_RELEASE_RESUME_LEASE = """
+            DELETE FROM sa_agent_run_lease
+            WHERE run_id = ? AND worker_id = ?
+            """;
 
     private final JdbcTemplate jdbcTemplate;
+    private final TransactionTemplate transactionTemplate;
     private final String sqlInsertRun;
     private final String sqlUpdateRun;
+    private final String sqlUpdateRunIfStatus;
 
     public JdbcAgentRunRepositoryAdapter(DataSource dataSource) {
         DataSource safeDataSource = Objects.requireNonNull(dataSource, "dataSource must not be null");
         this.jdbcTemplate = new JdbcTemplate(safeDataSource);
+        this.transactionTemplate = new TransactionTemplate(new DataSourceTransactionManager(safeDataSource));
         String metadataJsonPlaceholder = isPostgres(safeDataSource) ? "?::jsonb" : "?";
         this.sqlInsertRun = SQL_INSERT_RUN_TEMPLATE.formatted(metadataJsonPlaceholder);
         this.sqlUpdateRun = SQL_UPDATE_RUN_TEMPLATE.formatted(metadataJsonPlaceholder);
+        this.sqlUpdateRunIfStatus = this.sqlUpdateRun.stripTrailing() + " AND status = ?";
     }
 
     @Override
@@ -135,7 +180,78 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
     @Override
     public void updateRun(AgentRun run) {
         AgentRun safeRun = Objects.requireNonNull(run, "run must not be null");
-        jdbcTemplate.update(sqlUpdateRun,
+        jdbcTemplate.update(sqlUpdateRun, updateRunParameters(safeRun));
+    }
+
+    @Override
+    public boolean updateRunIfStatus(AgentRun run, AgentRunStatus expectedStatus) {
+        AgentRun safeRun = Objects.requireNonNull(run, "run must not be null");
+        AgentRunStatus safeExpectedStatus = Objects.requireNonNull(
+                expectedStatus, "expectedStatus must not be null");
+        Object[] parameters = updateRunParameters(safeRun);
+        Object[] conditionalParameters = java.util.Arrays.copyOf(parameters, parameters.length + 1);
+        conditionalParameters[parameters.length] = safeExpectedStatus.name();
+        return jdbcTemplate.update(sqlUpdateRunIfStatus, conditionalParameters) == 1;
+    }
+
+    @Override
+    public boolean acquireResumeLease(String runId, String ownerId, Instant leaseUntil, Instant now) {
+        if (!hasText(runId) || !hasText(ownerId) || leaseUntil == null || now == null || !leaseUntil.isAfter(now)) {
+            return false;
+        }
+        try {
+            return jdbcTemplate.update(SQL_INSERT_RESUME_LEASE,
+                    ownerId.trim(), toTimestamp(leaseUntil), toTimestamp(now), runId.trim()) == 1;
+        } catch (DuplicateKeyException ex) {
+            return jdbcTemplate.update(SQL_ACQUIRE_RESUME_LEASE,
+                    ownerId.trim(), toTimestamp(leaseUntil), toTimestamp(now), runId.trim(), ownerId.trim(),
+                    toTimestamp(now)) == 1;
+        }
+    }
+
+    @Override
+    public boolean heartbeatResumeLease(String runId, String ownerId, Instant leaseUntil, Instant now) {
+        if (!hasText(runId) || !hasText(ownerId) || leaseUntil == null || now == null || !leaseUntil.isAfter(now)) {
+            return false;
+        }
+        return jdbcTemplate.update(SQL_HEARTBEAT_RESUME_LEASE,
+                toTimestamp(leaseUntil), toTimestamp(now), runId.trim(), ownerId.trim(), toTimestamp(now)) == 1;
+    }
+
+    @Override
+    public boolean releaseResumeLease(String runId, String ownerId) {
+        if (!hasText(runId) || !hasText(ownerId)) {
+            return false;
+        }
+        return jdbcTemplate.update(SQL_RELEASE_RESUME_LEASE, runId.trim(), ownerId.trim()) == 1;
+    }
+
+    @Override
+    public boolean updateRunIfStatusAndResumeLeaseOwner(
+            AgentRun run,
+            AgentRunStatus expectedStatus,
+            String ownerId,
+            Instant now) {
+        AgentRun safeRun = Objects.requireNonNull(run, "run must not be null");
+        AgentRunStatus safeExpectedStatus = Objects.requireNonNull(
+                expectedStatus, "expectedStatus must not be null");
+        if (!hasText(ownerId) || now == null) {
+            return false;
+        }
+        Object[] parameters = updateRunParameters(safeRun);
+        Object[] conditionalParameters = java.util.Arrays.copyOf(parameters, parameters.length + 1);
+        conditionalParameters[parameters.length] = safeExpectedStatus.name();
+        Boolean updated = transactionTemplate.execute(status -> {
+            if (!lockResumeLeaseOwner(safeRun.runId(), ownerId, now)) {
+                return false;
+            }
+            return jdbcTemplate.update(sqlUpdateRunIfStatus, conditionalParameters) == 1;
+        });
+        return Boolean.TRUE.equals(updated);
+    }
+
+    private Object[] updateRunParameters(AgentRun safeRun) {
+        return new Object[]{
                 safeRun.agentId(),
                 safeRun.versionId(),
                 safeRun.rolloutId(),
@@ -154,7 +270,7 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
                 toTimestamp(safeRun.startedAt()),
                 toTimestamp(safeRun.finishedAt()),
                 safeRun.metadataJson(),
-                safeRun.runId());
+                safeRun.runId()};
     }
 
     @Override
@@ -194,7 +310,11 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
     @Override
     public void appendStep(AgentStep step) {
         AgentStep safeStep = Objects.requireNonNull(step, "step must not be null");
-        jdbcTemplate.update(SQL_INSERT_STEP,
+        insertStep(safeStep);
+    }
+
+    private int insertStep(AgentStep safeStep) {
+        return jdbcTemplate.update(SQL_INSERT_STEP,
                 safeStep.stepId(),
                 safeStep.runId(),
                 safeStep.stepNo(),
@@ -206,6 +326,30 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
                 safeStep.errorMessage(),
                 toTimestamp(safeStep.startedAt()),
                 toTimestamp(safeStep.finishedAt()));
+    }
+
+    @Override
+    public boolean appendStepIfResumeLeaseOwner(AgentStep step, String ownerId, Instant now) {
+        AgentStep safeStep = Objects.requireNonNull(step, "step must not be null");
+        if (!hasText(ownerId) || now == null) {
+            return false;
+        }
+        Boolean inserted = transactionTemplate.execute(status -> {
+            if (!lockResumeLeaseOwner(safeStep.runId(), ownerId, now)) {
+                return false;
+            }
+            return insertStep(safeStep) == 1;
+        });
+        return Boolean.TRUE.equals(inserted);
+    }
+
+    private boolean lockResumeLeaseOwner(String runId, String ownerId, Instant now) {
+        return !jdbcTemplate.query(
+                SQL_LOCK_RESUME_LEASE_OWNER,
+                (resultSet, rowNum) -> resultSet.getString(1),
+                runId,
+                ownerId.trim(),
+                toTimestamp(now)).isEmpty();
     }
 
     @Override

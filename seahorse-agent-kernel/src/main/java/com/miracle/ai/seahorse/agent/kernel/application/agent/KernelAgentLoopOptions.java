@@ -34,6 +34,7 @@ public final class KernelAgentLoopOptions {
     private final Duration perToolTimeout;
     private final Duration modelTurnTimeout;
     private final int maxParallelTools;
+    private final ModelContextEnvelopeOptions contextEnvelope;
 
     private KernelAgentLoopOptions(Builder b) {
         if (b.maxSteps <= 0) {
@@ -54,6 +55,8 @@ public final class KernelAgentLoopOptions {
         this.perToolTimeout = b.perToolTimeout;
         this.modelTurnTimeout = b.modelTurnTimeout;
         this.maxParallelTools = b.maxParallelTools;
+        this.contextEnvelope = Objects.requireNonNullElseGet(
+                b.contextEnvelope, ModelContextEnvelopeOptions::defaults);
     }
 
     public int maxSteps() {
@@ -72,6 +75,10 @@ public final class KernelAgentLoopOptions {
         return maxParallelTools;
     }
 
+    public ModelContextEnvelopeOptions contextEnvelope() {
+        return contextEnvelope;
+    }
+
     public static KernelAgentLoopOptions defaults() {
         return builder().build();
     }
@@ -85,6 +92,7 @@ public final class KernelAgentLoopOptions {
         private Duration perToolTimeout = DEFAULT_PER_TOOL_TIMEOUT;
         private Duration modelTurnTimeout = DEFAULT_MODEL_TURN_TIMEOUT;
         private int maxParallelTools = DEFAULT_MAX_PARALLEL_TOOLS;
+        private ModelContextEnvelopeOptions contextEnvelope = ModelContextEnvelopeOptions.defaults();
 
         public Builder maxSteps(int maxSteps) {
             this.maxSteps = maxSteps;
@@ -103,6 +111,11 @@ public final class KernelAgentLoopOptions {
 
         public Builder maxParallelTools(int maxParallelTools) {
             this.maxParallelTools = maxParallelTools;
+            return this;
+        }
+
+        public Builder contextEnvelope(ModelContextEnvelopeOptions contextEnvelope) {
+            this.contextEnvelope = contextEnvelope;
             return this;
         }
 

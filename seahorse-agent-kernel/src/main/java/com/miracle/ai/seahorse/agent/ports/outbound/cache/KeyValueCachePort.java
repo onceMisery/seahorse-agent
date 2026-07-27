@@ -30,4 +30,19 @@ public interface KeyValueCachePort {
     void set(String key, String value, Duration ttl);
 
     boolean delete(String key);
+
+    /**
+     * Atomically merges a timestamped value using exponential half-life decay.
+     * Values are stored as {@code value:observedAtMillis}.
+     */
+    default long mergeDecayingMaximum(
+            String key,
+            long candidate,
+            long maximum,
+            long observedAtMillis,
+            Duration halfLife,
+            Duration ttl) {
+        throw new UnsupportedOperationException(
+                "Atomic decaying-maximum merge is not supported by this cache adapter");
+    }
 }

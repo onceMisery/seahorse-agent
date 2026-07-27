@@ -37,7 +37,10 @@ class ReActExecutorPortTests {
                 StreamingChatModelPort.noop(),
                 ToolRegistryPort.empty(),
                 null,
-                KernelAgentLoopOptions.defaults(),
+                KernelAgentLoopOptions.builder()
+                        .contextEnvelope(ModelContextEnvelopeOptions.defaults()
+                                .withMode(ModelContextEnvelopeOptions.Mode.DISABLED))
+                        .build(),
                 null,
                 null,
                 null,

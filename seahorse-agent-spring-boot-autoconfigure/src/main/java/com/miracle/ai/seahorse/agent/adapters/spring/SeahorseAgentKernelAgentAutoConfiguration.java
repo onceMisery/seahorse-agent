@@ -21,12 +21,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.web.AdvancedFeatureGate;
 import com.miracle.ai.seahorse.agent.adapters.web.ProductMode;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopDependencies;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentFinalModelTurnPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentStreamEmitter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.CatalogBackedToolPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.GovernedToolExecutionPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegistry;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.ModelContextEnvelopeOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.LocalGovernedToolExecutionPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.LocalToolGatewayPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.MarkdownNormalizer;
@@ -100,6 +102,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRep
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationIdempotencyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolArtifactPublicationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolOutputRedactionPort;
@@ -114,9 +117,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelContextWindowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.TokenCounterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialMaterial;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialProviderPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.source.GitHubRepositoryPort;
@@ -130,6 +136,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.convert.DurationStyle;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Condition;
 import org.springframework.context.annotation.ConditionContext;
@@ -146,7 +154,9 @@ import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * AgentLoop 鑷姩瑁呴厤銆傞粯璁ゅ叧闂紝浠呭湪鏄惧紡鎵撳紑 agent-mode-enabled 鍚庣敓鏁堛€?
@@ -154,6 +164,7 @@ import java.util.List;
 @AutoConfiguration
 @AutoConfigureAfter({
         SeahorseAgentStorageAdapterAutoConfiguration.class,
+        SeahorseAgentCacheAdapterAutoConfiguration.class,
         SeahorseAgentKernelMemoryAutoConfiguration.class,
         SeahorseAgentKernelRegistryAutoConfiguration.class,
         SeahorseAgentKernelRetrievalAutoConfiguration.class
@@ -168,6 +179,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     private static final String PROP_PER_TOOL_TIMEOUT = "seahorse-agent.chat.agent.per-tool-timeout";
     private static final String PROP_MODEL_TURN_TIMEOUT = "seahorse-agent.chat.agent.model-turn-timeout";
     private static final String PROP_MAX_PARALLEL_TOOLS = "seahorse-agent.chat.agent.max-parallel-tools";
+    private static final String PROP_CONTEXT_ENVELOPE_PREFIX =
+            "seahorse-agent.chat.agent.context-envelope";
     private static final String PROP_MCP_INCLUDE = "seahorse-agent.chat.agent.tools.mcp.include";
     private static final String PROP_DEFERRED_TOOL_SEARCH_ENABLED =
             "seahorse-agent.chat.agent.tools.deferred-search.enabled";
@@ -203,6 +216,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             "seahorse-agent.adapters.ai.image-model";
     private static final String PROP_CHAT_MODEL =
             "seahorse-agent.adapters.ai.chat-model";
+    private static final String LEGACY_PROP_CHAT_MODEL =
+            "seahorse.agent.adapters.ai.chat-model";
     private static final String PROP_PRODUCT_MODE = "seahorse-agent.product-mode";
     private static final String PROP_ADVANCED_AGENT_HANDOFF =
             "seahorse-agent.advanced.agent-handoff-enabled";
@@ -257,7 +272,59 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 .modelTurnTimeout(parseDuration(
                         environment.getProperty(PROP_MODEL_TURN_TIMEOUT), Duration.ofMinutes(3)))
                 .maxParallelTools(environment.getProperty(PROP_MAX_PARALLEL_TOOLS, Integer.class, 1))
+                .contextEnvelope(new ModelContextEnvelopeOptions(
+                        ModelContextEnvelopeOptions.Mode.parse(environment.getProperty(
+                                PROP_CONTEXT_ENVELOPE_PREFIX + ".mode", "ENFORCE")),
+                        environment.getProperty(
+                                PROP_CONTEXT_ENVELOPE_PREFIX + ".default-output-reserve-tokens",
+                                Integer.class, 8_192),
+                        environment.getProperty(
+                                PROP_CONTEXT_ENVELOPE_PREFIX + ".safety-buffer-tokens",
+                                Integer.class, 2_048),
+                        environment.getProperty(
+                                PROP_CONTEXT_ENVELOPE_PREFIX + ".conservative-safety-buffer-tokens",
+                                Integer.class, 4_096),
+                        environment.getProperty(
+                                PROP_CONTEXT_ENVELOPE_PREFIX + ".max-runtime-context-tokens",
+                                Integer.class, 8_192),
+                        environment.getProperty(
+                                PROP_CONTEXT_ENVELOPE_PREFIX + ".max-runtime-context-items",
+                                Integer.class, 100),
+                        environment.getProperty(
+                                PROP_CONTEXT_ENVELOPE_PREFIX + ".estimated-chars-per-token",
+                                Integer.class, 4),
+                        environment.getProperty(
+                                PROP_CONTEXT_ENVELOPE_PREFIX + ".message-overhead-tokens",
+                                Integer.class, 6),
+                        environment.getProperty(
+                                PROP_CONTEXT_ENVELOPE_PREFIX + ".tool-overhead-tokens",
+                                Integer.class, 12)))
                 .build();
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnMissingBean
+    public ModelContextWindowPort seahorseModelContextWindowPort(Environment environment) {
+        Map<String, Integer> modelWindows = new LinkedHashMap<>(Binder.get(environment)
+                .bind(PROP_CONTEXT_ENVELOPE_PREFIX + ".model-windows",
+                        Bindable.mapOf(String.class, Integer.class))
+                .orElse(Map.of()));
+        int defaultWindow = environment.getProperty(
+                PROP_CONTEXT_ENVELOPE_PREFIX + ".default-context-window-tokens",
+                Integer.class, 32_768);
+        boolean safeDefaultProfileEnabled = environment.getProperty(
+                PROP_CONTEXT_ENVELOPE_PREFIX + ".default-model-safe-profile-enabled",
+                Boolean.class, false);
+        String configuredChatModel = environment.getProperty(PROP_CHAT_MODEL, "").trim();
+        if (configuredChatModel.isBlank()) {
+            configuredChatModel = environment.getProperty(LEGACY_PROP_CHAT_MODEL, "").trim();
+        }
+        return ModelContextWindowPort.strictConfigured(
+                modelWindows,
+                "spring-context-envelope",
+                configuredChatModel,
+                safeDefaultProfileEnabled ? defaultWindow : null);
     }
 
     @Bean
@@ -295,6 +362,9 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             ObjectProvider<AgentRunStepRecorder> runStepRecorder,
             ObjectProvider<AgentApprovalWaitHandler> approvalWaitHandler,
             ObjectProvider<OutputGovernanceService> outputGovernanceService,
+            ObjectProvider<TokenCounterPort> tokenCounterPort,
+            ObjectProvider<KeyValueCachePort> contextCalibrationCache,
+            ModelContextWindowPort modelContextWindowPort,
             MarkdownNormalizer markdownNormalizer,
             AgentStreamEmitter streamEmitter,
             ToolCallParser toolCallParser) {
@@ -311,7 +381,10 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 outputGovernanceService.getIfAvailable(),
                 markdownNormalizer,
                 streamEmitter,
-                toolCallParser);
+                toolCallParser,
+                tokenCounterPort.getIfAvailable(TokenCounterPort::approximate),
+                modelContextWindowPort,
+                contextCalibrationCache.getIfAvailable());
     }
 
     @Bean
@@ -447,6 +520,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     public ToolGatewayPort seahorseToolGatewayPort(ToolRegistryPort toolRegistry,
                                                    ObjectProvider<ToolPolicyPort> toolPolicyPort,
                                                    ObjectProvider<ToolInvocationAuditPort> toolInvocationAuditPort,
+                                                   ObjectProvider<ToolInvocationIdempotencyPort> toolInvocationIdempotencyPort,
                                                    ObjectProvider<ToolApprovalRequestRepositoryPort> toolApprovalRequestRepositoryPort,
                                                    ObjectProvider<ApprovalRequestQueryPort> approvalRequestQueryPort,
                                                    ObjectProvider<ToolOutputRedactionPort> toolOutputRedactionPort,
@@ -462,6 +536,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 toolOutputRedactionPort.getIfAvailable(ToolOutputRedactionPort::noop),
                 toolArtifactPublicationPort.getIfAvailable(ToolArtifactPublicationPort::noop),
                 toolResultSpillPort.getIfAvailable(ToolResultSpillPort::noop),
+                toolInvocationIdempotencyPort.getIfAvailable(ToolInvocationIdempotencyPort::noop),
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
@@ -508,7 +583,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             AgentCheckpointRepositoryPort.class,
             ApprovalRequestQueryPort.class,
             ToolGatewayPort.class,
-            StreamingChatModelPort.class,
+            AgentFinalModelTurnPort.class,
             CurrentUserPort.class
     })
     @ConditionalOnMissingBean(AgentRunResumeInboundPort.class)
@@ -517,17 +592,21 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             AgentCheckpointRepositoryPort agentCheckpointRepositoryPort,
             ApprovalRequestQueryPort approvalRequestQueryPort,
             ToolGatewayPort toolGatewayPort,
-            StreamingChatModelPort streamingChatModelPort,
+            AgentFinalModelTurnPort finalModelTurnPort,
             CurrentUserPort currentUserPort,
-            ObjectProvider<Clock> clockProvider) {
+            ObjectProvider<Clock> clockProvider,
+            ObjectProvider<ObjectMapper> objectMapperProvider,
+            ObjectProvider<KernelRagTraceRecorder> traceRecorderProvider) {
         return new KernelAgentRunResumeService(
                 agentRunRepositoryPort,
                 agentCheckpointRepositoryPort,
                 approvalRequestQueryPort,
                 toolGatewayPort,
-                streamingChatModelPort,
+                finalModelTurnPort,
                 currentUserPort,
-                clockProvider.getIfAvailable(Clock::systemUTC));
+                clockProvider.getIfAvailable(Clock::systemUTC),
+                objectMapperProvider.getIfAvailable(ObjectMapper::new),
+                traceRecorderProvider.getIfAvailable(KernelRagTraceRecorder::noop));
     }
 
     @Bean

@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAudi
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditRecord;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationIdentity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolArtifactPublicationPort;
@@ -35,12 +36,14 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationIdempotencyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationRequestAwarePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolOutputRedactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResultSpillPort;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -80,6 +83,9 @@ class LocalToolGatewayPortAuditTests {
         assertEquals(1, audit.completed.size());
         assertEquals(ToolInvocationStatus.REQUESTED, audit.requested.get(0).status());
         assertEquals("run-1", audit.requested.get(0).runId());
+        assertEquals(
+                ToolInvocationIdentity.digest("tenant-1", "run-1:call-1"),
+                audit.requested.get(0).idempotencyKey());
         String argumentsSummary = audit.requested.get(0).argumentsSummary();
         assertTrue(argumentsSummary.contains("\"toolId\":\"weather\""));
         assertTrue(argumentsSummary.contains("\"argumentKeys\":[\"input\"]"));
@@ -1334,6 +1340,79 @@ class LocalToolGatewayPortAuditTests {
 
         assertTrue(result.success());
         assertEquals("{\"artifactType\":\"REPORT\"}", result.content());
+    }
+
+    @Test
+    void shouldClaimIdempotencyKeyBeforeExecutingToolAndFailClosedOnDuplicate() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("executed"));
+        AtomicInteger claims = new AtomicInteger();
+        AtomicInteger completions = new AtomicInteger();
+        ToolInvocationIdempotencyPort idempotencyPort = new ToolInvocationIdempotencyPort() {
+            @Override
+            public boolean tryClaim(String tenantId, String idempotencyKey, Instant now) {
+                assertEquals("tenant-1", tenantId);
+                assertEquals("run-1:call-1", idempotencyKey);
+                return claims.getAndIncrement() == 0;
+            }
+
+            @Override
+            public void markCompleted(String tenantId, String idempotencyKey, Instant completedAt) {
+                completions.incrementAndGet();
+            }
+        };
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                ToolInvocationAuditPort.noop(),
+                ToolApprovalRequestRepositoryPort.noop(),
+                ApprovalRequestQueryPort.empty(),
+                ToolOutputRedactionPort.noop(),
+                ToolArtifactPublicationPort.noop(),
+                ToolResultSpillPort.noop(),
+                idempotencyPort,
+                FIXED_CLOCK);
+
+        ToolInvocationResult first = gateway.invoke(request("weather"));
+        ToolInvocationResult duplicate = gateway.invoke(request("weather"));
+
+        assertTrue(first.success());
+        assertFalse(duplicate.success());
+        assertEquals("Duplicate or unresolved tool invocation", duplicate.error());
+        assertEquals(2, claims.get());
+        assertEquals(1, completions.get());
+        assertEquals(1, tool.calls.get());
+    }
+
+    @Test
+    void shouldKeepIdempotencyClaimProcessingWhenToolOutcomeIsUnknown() {
+        AtomicInteger completions = new AtomicInteger();
+        ToolInvocationIdempotencyPort idempotencyPort = new ToolInvocationIdempotencyPort() {
+            @Override
+            public boolean tryClaim(String tenantId, String idempotencyKey, Instant now) {
+                return true;
+            }
+
+            @Override
+            public void markCompleted(String tenantId, String idempotencyKey, Instant completedAt) {
+                completions.incrementAndGet();
+            }
+        };
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(new ThrowingToolPort("side effect outcome unknown")),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                ToolInvocationAuditPort.noop(),
+                ToolApprovalRequestRepositoryPort.noop(),
+                ApprovalRequestQueryPort.empty(),
+                ToolOutputRedactionPort.noop(),
+                ToolArtifactPublicationPort.noop(),
+                ToolResultSpillPort.noop(),
+                idempotencyPort,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("weather"));
+
+        assertFalse(result.success());
+        assertEquals(0, completions.get());
     }
 
     @Test

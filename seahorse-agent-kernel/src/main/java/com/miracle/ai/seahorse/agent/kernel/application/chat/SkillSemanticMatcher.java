@@ -131,13 +131,14 @@ public class SkillSemanticMatcher {
                 return fallbackMatcher.match(safeTenantId, question);
             }
 
-            LOG.info("Semantic skill matching for question '{}': {} (embedding model: {})",
-                    truncate(question, 50), recommendations, embeddingPort.modelName());
+            LOG.info("Semantic skill matching recommendations: {} (questionLength={}, embeddingModel={})",
+                    recommendations, question.length(), embeddingPort.modelName());
 
             return recommendations;
 
         } catch (Exception ex) {
-            LOG.error("Semantic matching failed, falling back to rule-based matching: {}", ex.getMessage(), ex);
+            LOG.warn("Semantic matching failed, falling back to rule-based matching: errorType={}",
+                    ex.getClass().getSimpleName());
             return fallbackMatcher.match(safeTenantId, question);
         }
     }
@@ -229,13 +230,6 @@ public class SkillSemanticMatcher {
                 .filter(word -> word.length() > 2)
                 .filter(word -> !STOP_WORDS.contains(word))
                 .collect(Collectors.toSet());
-    }
-
-    private String truncate(String text, int maxLength) {
-        if (text == null || text.length() <= maxLength) {
-            return text;
-        }
-        return text.substring(0, maxLength) + "...";
     }
 
     private String defaultTenantId(String tenantId) {
