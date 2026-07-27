@@ -1,0 +1,44 @@
+# Cross-domain class-pair baseline captured from main at c94efdf2.
+# Format: sourceDomain -> targetDomain | sourceClass | targetClass | reason
+# The R3 test requires exact equality, so additions and stale entries both fail.
+
+agent -> memory | com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopDependencies | com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver | Phase 0 baseline
+agent -> trace | com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopDependencies | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
+agent -> trace | com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopToolExecutor | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
+agent -> trace | com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
+agent -> mcp | com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter | com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator | Phase 0 baseline
+agent -> trace | com.miracle.ai.seahorse.agent.kernel.application.agent.ModelContextEnvelopeTelemetry | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
+agent -> trace | com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunResumeService | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
+agent -> billing | com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService | com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService | Phase 0 baseline
+agent -> runcontext | com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService | com.miracle.ai.seahorse.agent.kernel.application.runcontext.RunContextSnapshotRedactor | Phase 0 baseline
+agent -> retrieval | com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter | com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine | Phase 0 baseline
+billing -> agent | com.miracle.ai.seahorse.agent.kernel.application.billing.KernelPaymentService | com.miracle.ai.seahorse.agent.kernel.application.agent.marketplace.RevenueService | Phase 0 baseline
+chat -> memory | com.miracle.ai.seahorse.agent.kernel.application.chat.ChatPreparationPorts | com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy | Phase 0 baseline
+chat -> memory | com.miracle.ai.seahorse.agent.kernel.application.chat.ChatResponsePorts | com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver | Phase 0 baseline
+chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService | com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions | Phase 0 baseline
+chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService | com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort | Phase 0 baseline
+chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService | com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillRuntimeComposer | Phase 0 baseline
+chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService | com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillSetJsonSupport | Phase 0 baseline
+chat -> runcontext | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService | com.miracle.ai.seahorse.agent.kernel.application.runcontext.RunContextSnapshotRedactor | Phase 0 baseline
+chat -> trace | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
+chat -> trace | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService$3 | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
+chat -> trace | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatPipeline | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
+chat -> memory | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatPreparationSupport | com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy | Phase 0 baseline
+chat -> memory | com.miracle.ai.seahorse.agent.kernel.application.chat.MemoryTurnCaptureStage | com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy | Phase 0 baseline
+chat -> memory | com.miracle.ai.seahorse.agent.kernel.application.chat.MemoryTurnCaptureStage$CapturingStreamCallback | com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy | Phase 0 baseline
+knowledge -> billing | com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeDocumentService | com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService | Phase 0 baseline
+knowledge -> ingestion | com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeDocumentService | com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionEngine | Phase 0 baseline
+knowledge -> ingestion | com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentServicePorts | com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionEngine | Phase 0 baseline
+memory -> agent | com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryManagementService | com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService | Phase 0 baseline
+memory -> agent | com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryManagementServicePorts | com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService | Phase 0 baseline
+metadata -> ingestion | com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataBackfillService | com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionEngine | Phase 0 baseline
+retrieval -> trace | com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelMultiChannelRetrievalEngine | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
+retrieval -> mcp | com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine | com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator | Phase 0 baseline
+retrieval -> mcp | com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine$KernelRetrievalEnginePorts | com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator | Phase 0 baseline
+retrieval -> trace | com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEvaluationService | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
+retrieval -> trace | com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalPostProcessorChain | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
+retrieval -> agent | com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalStrategyTemplateService | com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService | Phase 0 baseline
+retrieval -> trace | com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelSearchChannelExecutor | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
+runexperiment -> agent | com.miracle.ai.seahorse.agent.kernel.application.runexperiment.KernelRunExperimentTrialExecutor | com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort | Phase 0 baseline
+runexperiment -> runcontext | com.miracle.ai.seahorse.agent.kernel.application.runexperiment.KernelRunExperimentTrialExecutor | com.miracle.ai.seahorse.agent.kernel.application.runcontext.RunContextSnapshotRedactor | Phase 0 baseline
+trace -> agent | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | com.miracle.ai.seahorse.agent.kernel.application.agent.ModelFailureSanitizer | Phase 0 baseline

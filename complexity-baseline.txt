@@ -1,0 +1,6 @@
+# Complexity baseline captured from main at c94efdf2.
+# Ratchet policy: values may only decrease.
+ports=808
+large_classes_gt_800=17
+autoconfig_imports=106
+cross_domain_whitelist_size=40
