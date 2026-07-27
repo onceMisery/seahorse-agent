@@ -40,7 +40,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -52,7 +51,7 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKernelKnowledgeAutoConfiguration.class, SeahorseAgentKnowledgeRepositoryAutoConfiguration.class, SeahorseAgentIngestionRepositoryAutoConfiguration.class, SeahorseAgentStorageAdapterAutoConfiguration.class, SeahorseAgentS3StorageAutoConfiguration.class, SeahorseAgentLocalAdapterAutoConfiguration.class, SeahorseAgentMqAdapterAutoConfiguration.class})
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelDocumentRefreshAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(SeahorseAgentKernelDocumentRefreshAutoConfiguration.class);
@@ -94,7 +93,7 @@ public class SeahorseAgentKernelDocumentRefreshAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DocumentRefreshInboundPort.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.document-refresh", name = "scheduler-enabled",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.document-refresh", name = "scheduler-enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public SeahorseDocumentRefreshJob seahorseDocumentRefreshJob(

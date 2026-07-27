@@ -174,7 +174,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -188,7 +187,7 @@ import java.util.List;
         SeahorseAgentRegistryRepositoryAutoConfiguration.class,
         SeahorseAgentKernelAuthAutoConfiguration.class
 })
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelRegistryAutoConfiguration {
 
     @Bean
@@ -849,7 +848,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse.agent.sandbox.node-transport", name = "enabled", havingValue = "true")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.sandbox.node-transport", name = "enabled", havingValue = "true")
     @ConditionalOnMissingBean(SandboxRuntimeTransportAuthenticator.class)
     public SandboxRuntimeTransportAuthenticator seahorseSandboxRuntimeTransportAuthenticator(
             @Value("${seahorse.agent.sandbox.node-transport.shared-secret:}") String sharedSecret,
@@ -897,7 +896,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse.agent.sandbox.node-transport", name = "enabled", havingValue = "true")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.sandbox.node-transport", name = "enabled", havingValue = "true")
     @ConditionalOnMissingBean(SandboxRemoteRuntimePort.class)
     public SandboxRemoteRuntimePort seahorseSandboxRemoteRuntimePort(
             ObjectMapper objectMapper,

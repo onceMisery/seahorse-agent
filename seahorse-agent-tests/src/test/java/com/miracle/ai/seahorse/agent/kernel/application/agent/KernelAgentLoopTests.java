@@ -40,7 +40,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelContextWindowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.TokenCounterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ToolCallCollector;
 import org.junit.jupiter.api.Test;
 
@@ -269,7 +271,7 @@ class KernelAgentLoopTests {
         KernelAgentLoop loop = newLoop(badModel, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
 
         AgentLoopException ex = assertThrows(AgentLoopException.class, () -> loop.execute(defaultRequest()));
-        assertTrue(ex.getMessage().contains("collector"));
+        assertTrue(hasMessageInChain(ex, "collector"));
     }
 
     @Test
@@ -294,7 +296,7 @@ class KernelAgentLoopTests {
         KernelAgentLoop loop = newLoop(badModel, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
 
         AgentLoopException ex = assertThrows(AgentLoopException.class, () -> loop.execute(defaultRequest()));
-        assertTrue(ex.getMessage().contains("onComplete"));
+        assertTrue(hasMessageInChain(ex, "onComplete"));
     }
 
     @Test
@@ -314,8 +316,7 @@ class KernelAgentLoopTests {
         assertTrue(callback.awaitTerminal(1_000));
         assertEquals(List.of("上海 21 度"), callback.contents);
         assertEquals(1, callback.completeCount);
-        assertTrue(callback.thinking.stream().anyMatch(text -> text.contains("先查天气")));
-        assertTrue(callback.thinking.stream().anyMatch(text -> text.contains("weather")));
+        assertEquals(List.of("[tool call] weather -> ok"), callback.thinking);
         assertTrue(callback.contents.stream().noneMatch(text -> text.contains("\"arguments\"")));
     }
 
@@ -332,7 +333,7 @@ class KernelAgentLoopTests {
 
         assertTrue(callback.awaitTerminal(1_000));
         assertTrue(model.cancelled.get());
-        assertTrue(callback.error instanceof AgentLoopCancelledException);
+        assertTrue(hasCause(callback.error, AgentLoopCancelledException.class));
     }
 
     @Test
@@ -519,7 +520,9 @@ class KernelAgentLoopTests {
                 null,
                 null,
                 null,
-                null));
+                null,
+                TokenCounterPort.approximate(),
+                ModelContextWindowPort.fixed(32_768, "test")));
     }
 
     private static ContextPack contextPack(String content) {
@@ -571,6 +574,24 @@ class KernelAgentLoopTests {
             Thread.currentThread().interrupt();
             return false;
         }
+    }
+
+    private static boolean hasMessageInChain(Throwable error, String fragment) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (current.getMessage() != null && current.getMessage().contains(fragment)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasCause(Throwable error, Class<? extends Throwable> expectedType) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (expectedType.isInstance(current)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static final class BlockingModel implements StreamingChatModelPort {

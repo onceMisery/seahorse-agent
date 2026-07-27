@@ -30,7 +30,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -48,7 +47,7 @@ import org.springframework.core.env.Environment;
  *
  * <p>配置开关：
  * <pre>
- * seahorse.agent.skill.vector-index.enabled=true  # 默认 true
+ * seahorse-agent.skill.vector-index.enabled=true  # 默认 true
  * </pre>
  */
 @Configuration(proxyBeanMethods = false)
@@ -56,8 +55,8 @@ import org.springframework.core.env.Environment;
         SeahorseAgentAiAdapterAutoConfiguration.class,
         SeahorseAgentKernelAutoConfiguration.class
 })
-@ConditionalOnProperty(
-        prefix = "seahorse.agent.skill.vector-index",
+@ConditionalOnSeahorseAgentProperty(
+        prefix = "seahorse-agent.skill.vector-index",
         name = "enabled",
         havingValue = "true",
         matchIfMissing = true

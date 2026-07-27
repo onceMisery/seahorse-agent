@@ -44,7 +44,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentOpsRepositoryAutoConfiguration.class,
         SeahorseAgentObservationAdapterAutoConfiguration.class})
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelTraceAutoConfiguration {
 
     @Bean
@@ -81,7 +81,7 @@ public class SeahorseAgentKernelTraceAutoConfiguration {
     @Bean
     @ConditionalOnBean(RagTraceRepositoryPort.class)
     @ConditionalOnMissingBean(SeahorseRagTraceCleanupJob.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.rag-trace.cleanup", name = "enabled",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.rag-trace.cleanup", name = "enabled",
             havingValue = "true", matchIfMissing = true)
     public SeahorseRagTraceCleanupJob seahorseRagTraceCleanupJob(
             RagTraceRepositoryPort traceRepositoryPort,

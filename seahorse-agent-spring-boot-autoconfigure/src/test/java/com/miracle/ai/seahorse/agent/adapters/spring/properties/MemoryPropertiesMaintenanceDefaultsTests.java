@@ -17,7 +17,9 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring.properties;
 
+import com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelMemoryAutoConfiguration;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
@@ -42,11 +44,37 @@ class MemoryPropertiesMaintenanceDefaultsTests {
 
     @Test
     void shouldAllowDisablingCompactionWithCanonicalProperty() {
-        contextRunner.withPropertyValues("seahorse.agent.memory.maintenance.compaction-enabled=false")
+        contextRunner.withPropertyValues("seahorse-agent.memory.maintenance.compaction-enabled=false")
                 .run(context -> {
                     MemoryProperties.Maintenance maintenance = context.getBean(MemoryProperties.class).getMaintenance();
 
                     assertThat(maintenance.isCompactionEnabled()).isFalse();
+                });
+    }
+
+    @Test
+    void shouldBindLegacyGarbageCollectionDryRunProperty() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(SeahorseAgentKernelMemoryAutoConfiguration.class))
+                .withPropertyValues("seahorse.agent.memory.maintenance.gc.dry-run=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context.getBean(MemoryProperties.class).getMaintenance().getGc().isDryRun())
+                            .isTrue();
+                });
+    }
+
+    @Test
+    void shouldPreferCanonicalGarbageCollectionDryRunProperty() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(SeahorseAgentKernelMemoryAutoConfiguration.class))
+                .withPropertyValues(
+                        "seahorse.agent.memory.maintenance.gc.dry-run=true",
+                        "seahorse-agent.memory.maintenance.gc.dry-run=false")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context.getBean(MemoryProperties.class).getMaintenance().getGc().isDryRun())
+                            .isFalse();
                 });
     }
 

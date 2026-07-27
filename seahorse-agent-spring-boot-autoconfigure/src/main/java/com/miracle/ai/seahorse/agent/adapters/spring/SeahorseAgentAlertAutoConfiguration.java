@@ -26,7 +26,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -42,7 +41,7 @@ import java.util.List;
  * with a sensible set of default alert rules.
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(prefix = "seahorse.agent.observability.alert", name = "enabled", havingValue = "true")
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.observability.alert", name = "enabled", havingValue = "true")
 public class SeahorseAgentAlertAutoConfiguration {
 
     private static final Logger LOG = LoggerFactory.getLogger(SeahorseAgentAlertAutoConfiguration.class);

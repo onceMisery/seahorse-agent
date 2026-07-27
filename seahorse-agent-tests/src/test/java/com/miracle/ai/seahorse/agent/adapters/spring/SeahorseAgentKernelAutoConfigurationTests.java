@@ -467,7 +467,8 @@ class SeahorseAgentKernelAutoConfigurationTests {
 
     @Test
     void shouldRegisterAuthAndUserInboundPortsWhenAuthPortsExist() {
-        contextRunner.withUserConfiguration(AuthPortsConfiguration.class)
+        contextRunner.withConfiguration(AutoConfigurations.of(SeahorseAgentKernelAuthAutoConfiguration.class))
+                .withUserConfiguration(AuthPortsConfiguration.class)
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(KernelAuthService.class);

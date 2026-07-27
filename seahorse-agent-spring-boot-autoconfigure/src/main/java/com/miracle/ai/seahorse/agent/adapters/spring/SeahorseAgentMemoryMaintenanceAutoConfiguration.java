@@ -42,9 +42,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -192,7 +190,7 @@ public class SeahorseAgentMemoryMaintenanceAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(MemoryMaintenanceInboundPort.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.memory.maintenance", name = "scheduler-enabled",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.memory.maintenance", name = "scheduler-enabled",
             havingValue = "true")
     @ConditionalOnMissingBean
     public SeahorseMemoryMaintenanceJob seahorseMemoryMaintenanceJob(
@@ -210,11 +208,9 @@ public class SeahorseAgentMemoryMaintenanceAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(MemoryGarbageCollectionService.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.memory.gc", name = "scheduler-enabled",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.memory.gc", name = "scheduler-enabled",
             havingValue = "true", matchIfMissing = true)
-    @ConditionalOnExpression("!${seahorse.agent.memory.maintenance.scheduler-enabled:false}"
-            + " || !${seahorse.agent.memory.maintenance.gc-enabled:true}")
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean({SeahorseMemoryGarbageCollectionJob.class, SeahorseMemoryMaintenanceJob.class})
     public SeahorseMemoryGarbageCollectionJob seahorseMemoryGarbageCollectionJob(
             MemoryGarbageCollectionService garbageCollectionService,
             ObjectProvider<DistributedLockPort> lockPort) {

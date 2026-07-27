@@ -34,7 +34,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputValidationRecordPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelContextWindowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.TokenCounterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ToolCallCollector;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
@@ -116,7 +118,9 @@ class KernelAgentLoopOutputGovernanceTests {
                 null,
                 null,
                 null,
-                null));
+                null,
+                TokenCounterPort.approximate(),
+                ModelContextWindowPort.fixed(32_768, "test")));
 
         AgentLoopResult result = loop.execute(jsonRequest("生成计划", JSON_SCHEMA_TITLE_STEPS));
 
@@ -163,7 +167,9 @@ class KernelAgentLoopOutputGovernanceTests {
                 governance,
                 null,
                 null,
-                null));
+                null,
+                TokenCounterPort.approximate(),
+                ModelContextWindowPort.fixed(32_768, "test")));
     }
 
     private static AgentLoopRequest jsonRequest(String question, String schema) {

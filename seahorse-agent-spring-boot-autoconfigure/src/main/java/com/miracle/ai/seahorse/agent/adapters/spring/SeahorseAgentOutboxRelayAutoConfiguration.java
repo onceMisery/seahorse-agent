@@ -28,7 +28,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -40,12 +39,12 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({SeahorseAgentMqAdapterAutoConfiguration.class, SeahorseAgentOpsRepositoryAutoConfiguration.class, JacksonAutoConfiguration.class})
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentOutboxRelayAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({OutboxEventRepositoryPort.class, MessageQueuePort.class})
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.mq.outbox.relay", name = "enabled",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.mq.outbox.relay", name = "enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(SeahorseOutboxRelayJob.class)
     public SeahorseOutboxRelayJob seahorseOutboxRelayJob(

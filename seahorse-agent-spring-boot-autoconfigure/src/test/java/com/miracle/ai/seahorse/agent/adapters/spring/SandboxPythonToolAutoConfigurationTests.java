@@ -35,7 +35,11 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCom
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionSweepResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxBrowserProfileRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeProfilePolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -48,6 +52,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class SandboxPythonToolAutoConfigurationTests {
 
@@ -165,6 +170,26 @@ class SandboxPythonToolAutoConfigurationTests {
                     return List.of();
                 }
             };
+        }
+
+        @Bean
+        SandboxPolicyPort sandboxPolicyPort() {
+            return mock(SandboxPolicyPort.class);
+        }
+
+        @Bean
+        SandboxRuntimePort sandboxRuntimePort() {
+            return mock(SandboxRuntimePort.class);
+        }
+
+        @Bean
+        SandboxRuntimeProfilePolicyRepositoryPort sandboxRuntimeProfilePolicyRepositoryPort() {
+            return mock(SandboxRuntimeProfilePolicyRepositoryPort.class);
+        }
+
+        @Bean
+        SandboxBrowserProfileRepositoryPort sandboxBrowserProfileRepositoryPort() {
+            return mock(SandboxBrowserProfileRepositoryPort.class);
         }
     }
 

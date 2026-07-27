@@ -18,6 +18,8 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import cn.dev33.satoken.dao.SaTokenDao;
+import cn.dev33.satoken.dao.SaTokenDaoDefaultImpl;
+import cn.dev33.satoken.dao.SaTokenDaoForRedisTemplate;
 import cn.dev33.satoken.stp.StpInterface;
 import com.miracle.ai.seahorse.agent.adapters.web.IpApiGeolocationAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.SaTokenCurrentUserAdapter;
@@ -36,11 +38,12 @@ import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.util.ClassUtils;
 
 import javax.sql.DataSource;
 
@@ -54,12 +57,16 @@ import javax.sql.DataSource;
     DataSourceAutoConfiguration.class,
     org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration.class
 })
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentAuthAdapterAutoConfiguration {
+
+    private static final String REDIS_CONNECTION_FACTORY_CLASS =
+            "org.springframework.data.redis.connection.RedisConnectionFactory";
+    private static final String REDIS_SA_TOKEN_DAO_CLASS = "cn.dev33.satoken.dao.SaTokenDaoForRedisTemplate";
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(UserRepositoryPort.class)
     public JdbcUserRepositoryAdapter seahorseJdbcUserRepositoryAdapter(DataSource dataSource) {
         return new JdbcUserRepositoryAdapter(dataSource);
@@ -86,7 +93,7 @@ public class SeahorseAgentAuthAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(UserRepositoryPort.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.auth", name = "current-user", havingValue = "sa-token",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.auth", name = "current-user", havingValue = "sa-token",
             matchIfMissing = true)
     @ConditionalOnMissingBean(CurrentUserPort.class)
     public SaTokenCurrentUserAdapter seahorseSaTokenCurrentUserAdapter(UserRepositoryPort userRepositoryPort) {
@@ -95,7 +102,7 @@ public class SeahorseAgentAuthAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(UserRepositoryPort.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.auth", name = "current-user", havingValue = "spring-header")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.auth", name = "current-user", havingValue = "spring-header")
     @ConditionalOnMissingBean(CurrentUserPort.class)
     public SpringCurrentUserAdapter seahorseSpringCurrentUserAdapter(UserRepositoryPort userRepositoryPort) {
         return new SpringCurrentUserAdapter(userRepositoryPort);
@@ -110,32 +117,49 @@ public class SeahorseAgentAuthAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(IpGeolocationPort.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.auth.geolocation", name = "enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.auth.geolocation", name = "enabled", havingValue = "true", matchIfMissing = true)
     public IpApiGeolocationAdapter seahorseIpGeolocationAdapter() {
         return new IpApiGeolocationAdapter();
     }
 
-    /**
-     * sa-token Redis持久化配置.
-     * 使用ObjectProvider确保兼容性.
-     */
+    /** sa-token Redis持久化配置. */
     @Bean
     @ConditionalOnMissingBean(SaTokenDao.class)
-    public SaTokenDao saTokenDao(org.springframework.beans.factory.ObjectProvider<org.springframework.data.redis.connection.RedisConnectionFactory> factoryProvider) {
-        var factory = factoryProvider.getIfAvailable();
-        if (factory != null) {
+    public SaTokenDao saTokenDao(ConfigurableListableBeanFactory beanFactory) {
+        ClassLoader classLoader = beanFactory.getBeanClassLoader();
+        if (ClassUtils.isPresent(REDIS_CONNECTION_FACTORY_CLASS, classLoader)
+                && ClassUtils.isPresent(REDIS_SA_TOKEN_DAO_CLASS, classLoader)) {
+            return RedisSaTokenDaoFactory.create(beanFactory);
+        }
+        org.slf4j.LoggerFactory.getLogger(getClass()).warn("Redis依赖不可用，sa-token使用内存存储（token在重启后丢失）");
+        return new SaTokenDaoDefaultImpl();
+    }
+
+    private static final class RedisSaTokenDaoFactory {
+
+        private RedisSaTokenDaoFactory() {
+        }
+
+        private static SaTokenDao create(ConfigurableListableBeanFactory beanFactory) {
+            RedisConnectionFactory factory = beanFactory.getBeanProvider(RedisConnectionFactory.class).getIfAvailable();
+            if (factory == null) {
+                org.slf4j.LoggerFactory.getLogger(SeahorseAgentAuthAdapterAutoConfiguration.class)
+                        .warn("RedisConnectionFactory不可用，sa-token使用内存存储（token在重启后丢失）");
+                return new SaTokenDaoDefaultImpl();
+            }
             try {
-                org.slf4j.LoggerFactory.getLogger(getClass()).info("创建SaTokenDaoForRedisTemplate，使用RedisConnectionFactory: {}", factory.getClass().getName());
-                cn.dev33.satoken.dao.SaTokenDaoForRedisTemplate dao = new cn.dev33.satoken.dao.SaTokenDaoForRedisTemplate();
+                org.slf4j.LoggerFactory.getLogger(SeahorseAgentAuthAdapterAutoConfiguration.class)
+                        .info("创建SaTokenDaoForRedisTemplate，使用RedisConnectionFactory: {}", factory.getClass().getName());
+                SaTokenDaoForRedisTemplate dao = new SaTokenDaoForRedisTemplate();
                 dao.init(factory);
-                org.slf4j.LoggerFactory.getLogger(getClass()).info("SaTokenDaoForRedisTemplate初始化成功，token将持久化到Redis");
+                org.slf4j.LoggerFactory.getLogger(SeahorseAgentAuthAdapterAutoConfiguration.class)
+                        .info("SaTokenDaoForRedisTemplate初始化成功，token将持久化到Redis");
                 return dao;
             } catch (Exception e) {
-                org.slf4j.LoggerFactory.getLogger(getClass()).warn("SaTokenDaoForRedisTemplate创建失败，回退到内存存储: {}", e.getMessage());
+                org.slf4j.LoggerFactory.getLogger(SeahorseAgentAuthAdapterAutoConfiguration.class)
+                        .warn("SaTokenDaoForRedisTemplate创建失败，回退到内存存储: {}", e.getMessage());
+                return new SaTokenDaoDefaultImpl();
             }
-        } else {
-            org.slf4j.LoggerFactory.getLogger(getClass()).warn("RedisConnectionFactory不可用，sa-token使用内存存储（token在重启后丢失）");
         }
-        return new cn.dev33.satoken.dao.SaTokenDaoDefaultImpl();
     }
 }

@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import cn.dev33.satoken.dao.SaTokenDao;
+import cn.dev33.satoken.dao.SaTokenDaoDefaultImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelAdapter;
 import com.miracle.ai.seahorse.agent.adapters.cache.local.LocalCacheAdapter;
@@ -237,6 +239,8 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                         "io.milvus.v2.client",
                         "org.apache.pulsar.client.api",
                         "org.redisson.api",
+                        "org.springframework.data.redis",
+                        "cn.dev33.satoken.dao.SaTokenDaoForRedisTemplate",
                         "software.amazon.awssdk.services.s3",
                         "io.micrometer.core.instrument"))
                 .withPropertyValues(
@@ -252,6 +256,8 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(LocalObjectStorageAdapter.class);
                     assertThat(context).hasSingleBean(NoopVectorStoreAdapter.class);
                     assertThat(context).hasSingleBean(NoopObservationAdapter.class);
+                    assertThat(context).hasSingleBean(SaTokenDao.class);
+                    assertThat(context.getBean(SaTokenDao.class)).isInstanceOf(SaTokenDaoDefaultImpl.class);
                 });
     }
 
@@ -468,6 +474,7 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
     @Test
     void shouldRegisterMilvusVectorAdapterWithConfigurableProperties() {
         contextRunner.withBean(MilvusClientV2.class, () -> mock(MilvusClientV2.class))
+                .withBean(ObjectMapper.class, ObjectMapper::new)
                 .withPropertyValues(
                         "seahorse-agent.adapters.vector.type=milvus",
                         "seahorse-agent.adapters.vector.collection-name=kb_chunks",
@@ -547,6 +554,7 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                 "jdbc:h2:mem:native-metadata-index;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
 
         contextRunner.withBean(DriverManagerDataSource.class, () -> dataSource)
+                .withBean(ObjectMapper.class, ObjectMapper::new)
                 .withPropertyValues("seahorse-agent.adapters.metadata-schema-index.type=jdbc")
                 .run(context -> {
                     assertThat(context).hasNotFailed();

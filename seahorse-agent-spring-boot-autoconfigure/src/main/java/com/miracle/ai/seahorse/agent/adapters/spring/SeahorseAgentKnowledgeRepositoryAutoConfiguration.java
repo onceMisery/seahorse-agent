@@ -31,7 +31,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentR
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -45,12 +44,12 @@ import javax.sql.DataSource;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKnowledgeRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(KnowledgeBaseQueryPort.class)
     public JdbcKnowledgeBaseQueryAdapter seahorseJdbcKnowledgeBaseQueryAdapter(DataSource dataSource) {
         return new JdbcKnowledgeBaseQueryAdapter(dataSource);
@@ -58,7 +57,7 @@ public class SeahorseAgentKnowledgeRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(KnowledgeBaseRepositoryPort.class)
     public JdbcKnowledgeBaseRepositoryAdapter seahorseJdbcKnowledgeBaseRepositoryAdapter(DataSource dataSource) {
         return new JdbcKnowledgeBaseRepositoryAdapter(dataSource);
@@ -66,7 +65,7 @@ public class SeahorseAgentKnowledgeRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(KnowledgeChunkRepositoryPort.class)
     public JdbcKnowledgeChunkRepositoryAdapter seahorseJdbcKnowledgeChunkRepositoryAdapter(DataSource dataSource) {
         return new JdbcKnowledgeChunkRepositoryAdapter(dataSource);
@@ -74,7 +73,7 @@ public class SeahorseAgentKnowledgeRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(KnowledgeDocumentRepositoryPort.class)
     public JdbcKnowledgeDocumentRepositoryAdapter seahorseJdbcKnowledgeDocumentRepositoryAdapter(DataSource dataSource) {
         return new JdbcKnowledgeDocumentRepositoryAdapter(dataSource);
@@ -82,7 +81,7 @@ public class SeahorseAgentKnowledgeRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(JdbcDocumentRefreshScheduleAdapter.class)
     public JdbcDocumentRefreshScheduleAdapter seahorseJdbcDocumentRefreshScheduleAdapter(DataSource dataSource) {
         return new JdbcDocumentRefreshScheduleAdapter(dataSource);

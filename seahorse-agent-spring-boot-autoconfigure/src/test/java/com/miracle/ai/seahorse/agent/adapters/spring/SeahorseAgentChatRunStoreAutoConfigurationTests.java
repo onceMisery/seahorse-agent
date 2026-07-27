@@ -141,7 +141,11 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-05-23T00:00:00Z"), ZoneOffset.UTC);
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-            .withPropertyValues("seahorse-agent.chat.agent-mode-enabled=true")
+            .withPropertyValues(
+                    "seahorse-agent.chat.agent-mode-enabled=true",
+                    "seahorse-agent.adapters.ai.chat-model=test-model",
+                    "seahorse-agent.chat.agent.context-envelope.default-context-window-tokens=32768",
+                    "seahorse-agent.chat.agent.context-envelope.default-model-safe-profile-enabled=true")
             .withConfiguration(AutoConfigurations.of(SeahorseAgentKernelAutoConfiguration.class));
 
     @Test

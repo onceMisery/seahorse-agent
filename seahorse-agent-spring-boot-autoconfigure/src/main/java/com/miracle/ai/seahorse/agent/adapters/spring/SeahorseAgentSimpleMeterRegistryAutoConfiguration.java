@@ -20,7 +20,6 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -34,7 +33,7 @@ import org.springframework.context.annotation.Configuration;
  * and this bean will not be created (due to {@code @ConditionalOnMissingBean}).
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(prefix = "seahorse.agent.adapters.observation", name = "type", havingValue = "micrometer", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.observation", name = "type", havingValue = "micrometer", matchIfMissing = true)
 public class SeahorseAgentSimpleMeterRegistryAutoConfiguration {
 
     @Bean

@@ -84,7 +84,17 @@ class KernelChatInboundServiceAgentModeTests {
         AgentLoopRequest request = requestCaptor.getValue();
         assertThat(request.question()).isEqualTo("hello");
         assertThat(request.history()).isEmpty();
-        assertThat(request.allowedToolIds()).isEmpty();
+        assertThat(request.allowedToolIds()).containsExactly(
+                "search_knowledge_base",
+                "web_search",
+                "web_fetch",
+                "get_current_datetime",
+                "image_generation",
+                "frontend_design",
+                "chart_visualization",
+                "memory_read",
+                "memory_write",
+                "tool_search");
         assertThat(request.samplingOptions().getTemperature()).isEqualTo(0.3D);
         assertThat(request.contextPack()).isNull();
         assertThat(request.memoryContext().getUserId()).isEqualTo("user-1");

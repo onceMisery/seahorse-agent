@@ -87,7 +87,6 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -104,7 +103,7 @@ import org.springframework.core.env.Environment;
         SeahorseAgentMemoryRepositoryAutoConfiguration.class, SeahorseAgentAiAdapterAutoConfiguration.class,
         SeahorseAgentKernelRegistryAutoConfiguration.class, SeahorseAgentKernelAgentAutoConfiguration.class,
         SeahorseAgentS3StorageAutoConfiguration.class})
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelChatAutoConfiguration {
 
     private static final String PROP_AGENT_EXECUTOR_ENGINE = "seahorse.agent.executor.engine";
@@ -130,7 +129,7 @@ public class SeahorseAgentKernelChatAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(ChatModelPort.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.query-optimizer", name = "llm-enabled", havingValue = "true")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.query-optimizer", name = "llm-enabled", havingValue = "true")
     @ConditionalOnMissingBean(QueryOptimizerPort.class)
     public QueryOptimizerPort seahorseLlmQueryOptimizer(
             ChatModelPort chatModelPort,
