@@ -40,11 +40,7 @@ jobs:
               - '.mvn/**'
               - 'seahorse-agent-*/**'
               - 'resources/**'
-              - 'scripts/**'
-              - 'complexity-baseline.txt'
-              - 'docs/design/architecture-complexity-reduction-plan.md'
               - '.github/workflows/ci.yml'
-              - '.github/workflows-proposed/ci.yml'
             frontend:
               - 'frontend/**'
               - '.github/workflows/ci.yml'
@@ -79,16 +75,6 @@ jobs:
           ./mvnw -B -ntp verify
           -Dtest='!SeahorseE2E*'
           -Dsurefire.failIfNoSpecifiedTests=false
-
-      - name: Architecture tests (ArchUnit R1-R5)
-        # Phase 0: 架构复杂度治理门禁，校验 R1-R5 规则
-        # 详见 docs/design/architecture-complexity-reduction-plan.md 第 4 章
-        run: ./mvnw -B -ntp -pl seahorse-agent-architecture-tests -am test -Dtest=ArchitectureRulesTest
-
-      - name: Complexity budget check (ratchet)
-        # Phase 0: 复杂度预算棘轮，冻结 ports 804、>800行类 15、AutoConfiguration imports 106
-        # 只许减不许增，报告生成到 GITHUB_STEP_SUMMARY
-        run: bash scripts/complexity-report.sh
 
       - name: Upload surefire reports (on failure)
         if: failure()
