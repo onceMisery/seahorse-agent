@@ -86,7 +86,7 @@ jobs:
         # 详见 docs/design/architecture-complexity-reduction-plan.md 第 4 章
         # 单独运行，不影响主 verify，失败容忍度已设为 Phase0 宽松模式
         run: |
-          ./mvnw -B -ntp -pl seahorse-agent-architecture-tests -am test -Dtest=ArchitectureRulesTest -Dsurefire.failIfNoSpecifiedTests=false || echo "Architecture tests failed but within Phase0 tolerance, check logs"
+          ./mvnw -B -ntp -pl seahorse-agent-architecture-tests -am test -Dtest=ArchitectureRulesTest -DskipTests=false -Dsurefire.failIfNoSpecifiedTests=false || echo "Architecture tests failed but within Phase0 tolerance, check logs"
 
       - name: Complexity budget check (ratchet)
         # Phase 0: 复杂度预算棘轮，冻结 ports 804、>800行类 15、AutoConfiguration imports 106

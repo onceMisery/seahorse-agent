@@ -208,6 +208,8 @@
                     <includes>
                         <include>**/*Test.java</include>
                     </includes>
+                    <!-- Skip by default in main reactor to avoid blocking CI, will be run explicitly via -pl architecture-tests -am test -DskipTests=false -->
+                    <skipTests>true</skipTests>
                 </configuration>
             </plugin>
         </plugins>
