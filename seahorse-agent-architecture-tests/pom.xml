@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.miracle.ai</groupId>
+        <artifactId>seahorse-agent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>seahorse-agent-architecture-tests</artifactId>
+    <packaging>jar</packaging>
+
+    <name>seahorse-agent-architecture-tests</name>
+    <description>ArchUnit architecture governance tests implementing R1-R5 and ratchet baseline.</description>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <java.version>21</java.version>
+        <archunit.version>1.2.1</archunit.version>
+    </properties>
+
+    <dependencies>
+        <!-- Core domain to scan -->
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-kernel</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- Web adapter to scan controllers -->
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-web</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- ArchUnit -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <version>${archunit.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- JUnit 5 -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- All adapters as optional for R4 scanning - include compile scope so ArchUnit can resolve -->
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-ai-openai-compatible</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-repository-jdbc</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-cache-redis</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-vector-milvus</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-storage-s3</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-mq-pulsar</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-agent-agentscope-core</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-agent-agentscope</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- remaining adapters, scope test to allow classpath scanning -->
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-cache-local</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-mq-direct</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-parser-tika</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-source-feishu</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-mcp-http</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-openapi</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-sandbox-container</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-storage-local</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-search-elasticsearch</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-search-lucene</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-observation-micrometer</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-observation-noop</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-vector-noop</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-vector-pgvector</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven-compiler-plugin.version}</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <encoding>UTF-8</encoding>
+                    <parameters>true</parameters>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <includes>
+                        <include>**/*Test.java</include>
+                    </includes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

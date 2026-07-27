@@ -1,0 +1,11 @@
+# Complexity baseline - ratchet, only decrease allowed
+# Generated at 2026-07-27 - Phase 0 frozen
+# Methodology:
+# - ports: find seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/ports -name "*.java" ! -name "NoopFallback.java" | wc -l
+# - large_classes_gt_800: find all src/main/java excluding spring-boot-autoconfigure with >800 LOC | wc -l
+# - autoconfig_imports: wc -l < AutoConfiguration.imports
+# - cross_domain_whitelist_size: whitelist file line count (35)
+ports=804
+large_classes_gt_800=15
+autoconfig_imports=106
+cross_domain_whitelist_size=35
