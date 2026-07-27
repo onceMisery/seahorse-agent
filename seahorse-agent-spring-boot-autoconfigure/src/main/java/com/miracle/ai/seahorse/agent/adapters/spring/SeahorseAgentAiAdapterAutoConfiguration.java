@@ -74,11 +74,16 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(OkHttpClient.class)
     public OkHttpClient seahorseOkHttpClient(
-            @Value("${seahorse.agent.adapters.http.connect-timeout:10s}") String connectTimeout,
-            @Value("${seahorse.agent.adapters.http.read-timeout:60s}") String readTimeout,
-            @Value("${seahorse.agent.adapters.http.write-timeout:60s}") String writeTimeout,
-            @Value("${seahorse.agent.adapters.http.call-timeout:120s}") String callTimeout,
-            @Value("${seahorse.agent.adapters.http.protocols:}") String protocols) {
+            @Value("${seahorse-agent.adapters.http.connect-timeout:${seahorse.agent.adapters.http.connect-timeout:10s}}")
+            String connectTimeout,
+            @Value("${seahorse-agent.adapters.http.read-timeout:${seahorse.agent.adapters.http.read-timeout:60s}}")
+            String readTimeout,
+            @Value("${seahorse-agent.adapters.http.write-timeout:${seahorse.agent.adapters.http.write-timeout:60s}}")
+            String writeTimeout,
+            @Value("${seahorse-agent.adapters.http.call-timeout:${seahorse.agent.adapters.http.call-timeout:120s}}")
+            String callTimeout,
+            @Value("${seahorse-agent.adapters.http.protocols:${seahorse.agent.adapters.http.protocols:}}")
+            String protocols) {
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
                 .connectTimeout(parseDuration(connectTimeout, Duration.ofSeconds(10)))
                 .readTimeout(parseDuration(readTimeout, Duration.ofSeconds(60)))

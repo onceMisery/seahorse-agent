@@ -35,7 +35,6 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -129,7 +128,7 @@ public class SeahorseAgentMemoryOutboxAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(MemoryOutboxRelayService.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.memory.outbox", name = "relay-enabled",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.memory.outbox", name = "relay-enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public SeahorseMemoryOutboxRelayJob seahorseMemoryOutboxRelayJob(

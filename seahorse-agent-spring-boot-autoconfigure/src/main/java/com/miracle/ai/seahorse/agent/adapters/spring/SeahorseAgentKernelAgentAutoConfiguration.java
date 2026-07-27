@@ -134,7 +134,6 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.convert.DurationStyle;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -169,7 +168,7 @@ import java.util.Map;
         SeahorseAgentKernelRegistryAutoConfiguration.class,
         SeahorseAgentKernelRetrievalAutoConfiguration.class
 })
-@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
         matchIfMissing = true)
 public class SeahorseAgentKernelAgentAutoConfiguration {
 
@@ -490,7 +489,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean({AgentArtifactRepositoryPort.class, ObjectStoragePort.class})
-    @ConditionalOnProperty(name = PROP_TOOL_RESULT_SPILL_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_TOOL_RESULT_SPILL_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(ToolResultSpillPort.class)
     public ToolResultSpillPort seahorseToolResultSpillPort(
             AgentArtifactRepositoryPort artifactRepository,
@@ -661,7 +660,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(KernelRetrievalEngine.class)
-    @ConditionalOnProperty(name = PROP_SEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_SEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public SearchKnowledgeBaseToolPortAdapter seahorseSearchKnowledgeBaseToolPortAdapter(
             KernelRetrievalEngine retrievalEngine,
@@ -671,7 +670,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
 
     @Bean
     @ConditionalOnAgentRuntimeEnabled
-    @ConditionalOnProperty(name = PROP_SEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_SEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public QueryMetadataToolPortAdapter seahorseQueryMetadataToolPortAdapter(AgentToolJsonSupport jsonSupport) {
         return new QueryMetadataToolPortAdapter(jsonSupport);
@@ -680,7 +679,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(MemoryEnginePort.class)
-    @ConditionalOnProperty(name = PROP_MEMORY_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_MEMORY_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public MemoryReadToolPortAdapter seahorseMemoryReadToolPortAdapter(MemoryEnginePort memoryEnginePort,
                                                                        AgentToolJsonSupport jsonSupport) {
@@ -690,7 +689,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(MemoryEnginePort.class)
-    @ConditionalOnProperty(name = PROP_MEMORY_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_MEMORY_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public MemoryWriteToolPortAdapter seahorseMemoryWriteToolPortAdapter(MemoryEnginePort memoryEnginePort,
                                                                          ObjectProvider<MemoryIngestionWorkflowPort> memoryIngestionWorkflowPort,
@@ -706,7 +705,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(MemoryManagementInboundPort.class)
-    @ConditionalOnProperty(name = PROP_MEMORY_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_MEMORY_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public MemoryForgetToolPortAdapter seahorseMemoryForgetToolPortAdapter(
             MemoryManagementInboundPort memoryManagementPort,
@@ -724,7 +723,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(SandboxRuntimeInboundPort.class)
-    @ConditionalOnProperty(name = PROP_SANDBOX_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_SANDBOX_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public SandboxPythonToolPortAdapter seahorseSandboxPythonToolPortAdapter(
             SandboxRuntimeInboundPort sandboxRuntimeInboundPort,
@@ -735,7 +734,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(SandboxRuntimeInboundPort.class)
-    @ConditionalOnProperty(name = PROP_SANDBOX_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_SANDBOX_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public SandboxFileConvertToolPortAdapter seahorseSandboxFileConvertToolPortAdapter(
             SandboxRuntimeInboundPort sandboxRuntimeInboundPort,
@@ -746,7 +745,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(SandboxRuntimeInboundPort.class)
-    @ConditionalOnProperty(name = PROP_SANDBOX_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_SANDBOX_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public SandboxBrowserToolPortAdapter seahorseSandboxBrowserToolPortAdapter(
             SandboxRuntimeInboundPort sandboxRuntimeInboundPort,
@@ -756,7 +755,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
 
     @Bean
     @ConditionalOnAgentRuntimeEnabled
-    @ConditionalOnProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public WebFetchSafetyPolicy seahorseWebFetchSafetyPolicy() {
         return new WebFetchSafetyPolicy();
@@ -764,7 +763,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
 
     @Bean
     @ConditionalOnAgentRuntimeEnabled
-    @ConditionalOnProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(WebFetchPort.class)
     public JdkHttpWebFetchPortAdapter seahorseWebFetchPort(ObjectProvider<HttpClient> httpClient,
                                                            WebFetchSafetyPolicy safetyPolicy,
@@ -780,7 +779,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(WebFetchPort.class)
-    @ConditionalOnProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public WebFetchToolPortAdapter seahorseWebFetchToolPortAdapter(WebFetchPort webFetchPort,
                                                                    WebFetchSafetyPolicy safetyPolicy,
@@ -790,7 +789,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
 
     @Bean
     @ConditionalOnAgentRuntimeEnabled
-    @ConditionalOnProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(WebSearchPort.class)
     public JdkHttpWebSearchPortAdapter seahorseWebSearchPort(ObjectProvider<HttpClient> httpClient,
                                                              Environment environment) {
@@ -803,7 +802,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
 
     @Bean
     @ConditionalOnAgentRuntimeEnabled
-    @ConditionalOnProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(GitHubRepositoryPort.class)
     public JdkHttpGitHubRepositoryPortAdapter seahorseGitHubRepositoryPort(
             ObjectProvider<HttpClient> httpClient,
@@ -821,7 +820,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(GitHubRepositoryPort.class)
-    @ConditionalOnProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public GitHubRepositoryReaderToolPortAdapter seahorseGitHubRepositoryReaderToolPortAdapter(
             GitHubRepositoryPort gitHubRepositoryPort,
@@ -902,7 +901,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(WebSearchPort.class)
-    @ConditionalOnProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public WebSearchToolPortAdapter seahorseWebSearchToolPortAdapter(WebSearchPort webSearchPort,
                                                                      AgentToolJsonSupport jsonSupport) {
@@ -929,7 +928,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(ToolRegistryPort.class)
-    @ConditionalOnProperty(name = PROP_DEFERRED_TOOL_SEARCH_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_DEFERRED_TOOL_SEARCH_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public ToolSearchToolPortAdapter seahorseToolSearchToolPortAdapter(
             ToolRegistryPort toolRegistry,
@@ -940,7 +939,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean({AgentArtifactRepositoryPort.class, ObjectStoragePort.class, ToolResultSpillPort.class})
-    @ConditionalOnProperty(name = PROP_TOOL_RESULT_SPILL_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(name = PROP_TOOL_RESULT_SPILL_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public ToolResultReadToolPortAdapter seahorseToolResultReadToolPortAdapter(
             AgentArtifactRepositoryPort artifactRepository,

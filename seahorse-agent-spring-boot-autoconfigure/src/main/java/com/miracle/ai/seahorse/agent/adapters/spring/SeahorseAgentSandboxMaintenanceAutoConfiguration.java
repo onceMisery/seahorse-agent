@@ -25,7 +25,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -35,12 +34,12 @@ import java.time.Duration;
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
 @AutoConfigureAfter(SeahorseAgentKernelRegistryAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentSandboxMaintenanceAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(SandboxRuntimeInboundPort.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.sandbox.session-sweep", name = "enabled",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.sandbox.session-sweep", name = "enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public SandboxSessionTtlSweepJob seahorseSandboxSessionTtlSweepJob(
@@ -57,7 +56,7 @@ public class SeahorseAgentSandboxMaintenanceAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(SandboxRuntimeInboundPort.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.sandbox.runtime-sweep", name = "enabled",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.sandbox.runtime-sweep", name = "enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public SandboxRuntimeOrphanSweepJob seahorseSandboxRuntimeOrphanSweepJob(
@@ -70,7 +69,7 @@ public class SeahorseAgentSandboxMaintenanceAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(SandboxRuntimeNodeRegistryInboundPort.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.sandbox.node-heartbeat", name = "enabled",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.sandbox.node-heartbeat", name = "enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public SandboxRuntimeNodeHeartbeatJob seahorseSandboxRuntimeNodeHeartbeatJob(
@@ -85,7 +84,7 @@ public class SeahorseAgentSandboxMaintenanceAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(SandboxRuntimeNodeRegistryInboundPort.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.sandbox.node-cleanup", name = "enabled",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.sandbox.node-cleanup", name = "enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public SandboxRuntimeNodeCleanupJob seahorseSandboxRuntimeNodeCleanupJob(

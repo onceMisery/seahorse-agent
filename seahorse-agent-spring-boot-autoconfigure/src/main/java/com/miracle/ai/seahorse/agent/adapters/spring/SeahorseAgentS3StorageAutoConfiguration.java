@@ -23,7 +23,6 @@ import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -40,14 +39,14 @@ import java.net.URI;
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass({S3Client.class, S3ObjectStorageAdapter.class})
-@ConditionalOnProperty(prefix = "seahorse.agent.adapters.storage", name = "type", havingValue = "s3")
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.storage", name = "type", havingValue = "s3")
 @AutoConfigureAfter(SeahorseAgentStorageAdapterAutoConfiguration.class)
 @EnableConfigurationProperties(S3StorageProperties.class)
 public class SeahorseAgentS3StorageAutoConfiguration {
 
     @Bean(destroyMethod = "close")
     @ConditionalOnMissingBean(S3Client.class)
-    @ConditionalOnProperty(name = "seahorse.agent.adapters.storage.s3.endpoint")
+    @ConditionalOnSeahorseAgentProperty(name = "seahorse-agent.adapters.storage.s3.endpoint")
     public S3Client seahorseS3Client(S3StorageProperties properties) {
         var builder = S3Client.builder()
                 .region(Region.of(properties.getRegion()))

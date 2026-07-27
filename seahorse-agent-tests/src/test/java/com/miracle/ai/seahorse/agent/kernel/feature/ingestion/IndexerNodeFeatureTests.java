@@ -118,8 +118,8 @@ class IndexerNodeFeatureTests {
         Map<String, Object> vectorMetadata = ports.vectorBatches.get(0).get(0).getMetadata();
         assertThat(vectorMetadata)
                 .containsEntry("tenant_id", "tenant-1")
-                .containsEntry("kb_id", 1L)
-                .containsEntry("doc_id", 1L)
+                .containsEntry("kb_id", "1")
+                .containsEntry("doc_id", "1")
                 .containsEntry("chunk_id", "1")
                 .containsEntry("chunk_index", 0)
                 .containsEntry("collection_name", "collection-a")

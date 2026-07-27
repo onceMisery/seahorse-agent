@@ -32,7 +32,6 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -57,7 +56,7 @@ public class SeahorseAgentRagWorkflowAutoConfiguration {
      * Jina AI rerank model adapter, activated only when the API key is provided.
      */
     @Bean
-    @ConditionalOnProperty(prefix = "seahorse.agent.jina", name = "api-key")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.jina", name = "api-key")
     @ConditionalOnMissingBean(name = "advancedRagRerankModelPort")
     public RerankModelPort jinaRerankModelAdapter(
             @Value("${seahorse.agent.jina.api-key}") String apiKey,

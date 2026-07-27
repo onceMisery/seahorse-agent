@@ -65,7 +65,6 @@ import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -78,7 +77,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKnowledgeRepositoryAutoConfiguration.class, SeahorseAgentVectorAdapterAutoConfiguration.class, SeahorseAgentStorageAdapterAutoConfiguration.class, SeahorseAgentS3StorageAutoConfiguration.class, SeahorseAgentIngestionRepositoryAutoConfiguration.class, SeahorseAgentMqAdapterAutoConfiguration.class, SeahorseAgentMetadataAdapterAutoConfiguration.class})
 @AutoConfigureBefore(SeahorseAgentKernelDocumentRefreshAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelKnowledgeAutoConfiguration {
 
     @Bean

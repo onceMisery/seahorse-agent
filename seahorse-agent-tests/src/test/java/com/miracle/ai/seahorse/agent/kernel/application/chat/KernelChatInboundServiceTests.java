@@ -77,7 +77,7 @@ class KernelChatInboundServiceTests {
                         streamingModel,
                         taskPort));
 
-        when(memoryPort.loadAndAppend(any(), any(), any())).thenReturn(List.of(ChatMessage.user("hello")));
+        when(memoryPort.loadAndAppend(any(), any(), any(), any())).thenReturn(List.of(ChatMessage.user("hello")));
         when(rewritePort.rewriteWithSplit(any(), any())).thenReturn(new RewriteResult("hello", List.of()));
         when(intentPort.resolve(any())).thenReturn(List.of());
         when(intentPort.mergeIntentGroup(any())).thenReturn(new IntentGroup(List.of(), List.of()));
@@ -89,7 +89,7 @@ class KernelChatInboundServiceTests {
 
         service.streamChat(new StreamChatCommand("hello", "conv-1", "task-1", "user-1", false), callback);
 
-        verify(memoryPort).loadAndAppend("conv-1", "user-1", ChatMessage.user("hello"));
+        verify(memoryPort).loadAndAppend("conv-1", "user-1", ChatMessage.user("hello"), null);
         // 缂備礁鐬奸崕銈壦夐崨顖涱潟闁靛繈鍊楃敮娑㈡偣娴ｉ潧鈧盯鎽?FALLBACK_GENERIC闂佹寧绋掓穱娲儍閻斿吋鍋ㄩ柕濠忓閵堬妇鈧鍠栫换鎴ｅ暞闂佹悶鍔岄鍫ュ焵椤掆偓婵傛梻绮径鎰強妞ゆ牗绻勭粻鏌ユ煕閵壯冧粶婵炲瓨鍔楅埀顒冾潐绾板秹寮搁崘顭戞禆?
         verify(streamingModel).streamChat(any(), any());
         verify(callback, org.mockito.Mockito.never()).onContent("未检索到与问题相关的文档内容。");
@@ -127,7 +127,8 @@ class KernelChatInboundServiceTests {
                         streamingModel,
                         taskPort));
 
-        when(memoryPort.loadAndAppend(any(), any(), any())).thenReturn(List.of(ChatMessage.user("what is my job")));
+        when(memoryPort.loadAndAppend(any(), any(), any(), any()))
+                .thenReturn(List.of(ChatMessage.user("what is my job")));
         when(rewritePort.rewriteWithSplit(any(), any())).thenReturn(new RewriteResult("what is my job", List.of()));
         when(intentPort.resolve(any())).thenReturn(List.of());
         when(intentPort.mergeIntentGroup(any())).thenReturn(new IntentGroup(List.of(), List.of()));
@@ -194,7 +195,7 @@ class KernelChatInboundServiceTests {
                 com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder.noop(),
                 KernelChatPipeline.EmptyRetrievalStrategy.STATIC_MESSAGE);
 
-        when(memoryPort.loadAndAppend(any(), any(), any())).thenReturn(List.of(ChatMessage.user("hello")));
+        when(memoryPort.loadAndAppend(any(), any(), any(), any())).thenReturn(List.of(ChatMessage.user("hello")));
         when(rewritePort.rewriteWithSplit(any(), any())).thenReturn(new RewriteResult("hello", List.of()));
         when(intentPort.resolve(any())).thenReturn(List.of());
         when(intentPort.mergeIntentGroup(any())).thenReturn(new IntentGroup(List.of(), List.of()));
@@ -229,7 +230,7 @@ class KernelChatInboundServiceTests {
         StreamCallback callback = mock(StreamCallback.class);
         List<ChatMessage> history = List.of(ChatMessage.assistant("prev", "", null));
 
-        when(memoryPort.loadAndAppend(any(), any(), any())).thenReturn(history);
+        when(memoryPort.loadAndAppend(any(), any(), any(), any())).thenReturn(history);
         when(agentLoop.streamExecute(any(), any(), any(TraceRunScope.class))).thenReturn(handle);
         KernelChatInboundService service = new KernelChatInboundService(
                 pipeline,
@@ -242,7 +243,7 @@ class KernelChatInboundServiceTests {
                 "hello", "conv-1", "task-1", "user-1", false, ChatMode.AGENT), callback);
 
         ArgumentCaptor<AgentLoopRequest> requestCaptor = ArgumentCaptor.forClass(AgentLoopRequest.class);
-        verify(memoryPort).loadAndAppend("conv-1", "user-1", ChatMessage.user("hello"));
+        verify(memoryPort).loadAndAppend("conv-1", "user-1", ChatMessage.user("hello"), null);
         verify(agentLoop).streamExecute(requestCaptor.capture(), any(), any(TraceRunScope.class));
         verify(taskPort).bindHandle("task-1", handle);
         Assertions.assertEquals(history, requestCaptor.getValue().history());

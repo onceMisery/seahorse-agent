@@ -19,7 +19,6 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Import;
 
@@ -31,7 +30,7 @@ import org.springframework.context.annotation.Import;
  */
 @AutoConfiguration
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @Import({
         SeahorseAgentAiAdapterAutoConfiguration.class,
         SeahorseAgentAuthAdapterAutoConfiguration.class,

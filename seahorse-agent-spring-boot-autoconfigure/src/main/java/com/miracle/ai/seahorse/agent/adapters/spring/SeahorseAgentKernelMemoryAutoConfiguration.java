@@ -141,7 +141,6 @@ import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -164,7 +163,7 @@ import java.util.concurrent.Executor;
         SeahorseAgentKernelRetrievalAutoConfiguration.class,
         SeahorseAgentMemoryRepositoryAutoConfiguration.class
 })
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties({MemoryProperties.class, MemoryCaptureRuleProperties.class})
 public class SeahorseAgentKernelMemoryAutoConfiguration {
 
@@ -432,7 +431,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(MemoryGovernanceInboundPort.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.memory.governance", name = "scheduler-enabled",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.memory.governance", name = "scheduler-enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public SeahorseMemoryGovernanceJob seahorseMemoryGovernanceJob(

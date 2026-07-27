@@ -28,6 +28,7 @@ import java.util.List;
 import org.springframework.context.annotation.Condition;
 import org.springframework.context.annotation.ConditionContext;
 import org.springframework.context.annotation.Conditional;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.annotation.MergedAnnotation;
 import org.springframework.core.env.Environment;
 import org.springframework.core.type.AnnotatedTypeMetadata;
@@ -36,6 +37,7 @@ import org.springframework.core.type.AnnotatedTypeMetadata;
 @Retention(RetentionPolicy.RUNTIME)
 @Repeatable(ConditionalOnSeahorseAgentProperty.Container.class)
 @Conditional(SeahorseAgentPropertyCondition.class)
+@Import(SeahorseAgentPropertyAliasConfiguration.class)
 public @interface ConditionalOnSeahorseAgentProperty {
 
     String prefix() default "";

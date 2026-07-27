@@ -71,7 +71,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -85,12 +84,12 @@ import javax.sql.DataSource;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(JdbcChatSchemaUpgrade.class)
     public JdbcChatSchemaUpgrade seahorseJdbcChatSchemaUpgrade(DataSource dataSource) {
         JdbcChatSchemaUpgrade upgrade = new JdbcChatSchemaUpgrade(dataSource);
@@ -105,7 +104,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({DataSource.class, JdbcChatSchemaUpgrade.class})
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(ConversationMemoryPort.class)
     public JdbcConversationMemoryAdapter seahorseJdbcConversationMemoryAdapter(
             DataSource dataSource,
@@ -115,7 +114,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(WorkingMemoryPort.class)
     public JdbcWorkingMemoryRepositoryAdapter seahorseJdbcWorkingMemoryRepositoryAdapter(DataSource dataSource) {
         return new JdbcWorkingMemoryRepositoryAdapter(dataSource);
@@ -123,7 +122,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(ShortTermMemoryPort.class)
     public JdbcShortTermMemoryRepositoryAdapter seahorseJdbcShortTermMemoryRepositoryAdapter(
             DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
@@ -132,7 +131,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(LongTermMemoryPort.class)
     public JdbcLongTermMemoryRepositoryAdapter seahorseJdbcLongTermMemoryRepositoryAdapter(
             DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
@@ -141,7 +140,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(SemanticMemoryPort.class)
     public JdbcSemanticMemoryRepositoryAdapter seahorseJdbcSemanticMemoryRepositoryAdapter(
             DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
@@ -150,7 +149,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean(MemoryKeywordSearchPort.class)
     public JdbcMemoryKeywordSearchRepositoryAdapter seahorseJdbcMemoryKeywordSearchRepositoryAdapter(
@@ -160,7 +159,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean(MemoryKeywordIndexPort.class)
     public JdbcMemoryKeywordIndexRepositoryAdapter seahorseJdbcMemoryKeywordIndexRepositoryAdapter(
@@ -170,7 +169,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean(ProfileMemoryPort.class)
     public JdbcProfileMemoryRepositoryAdapter seahorseJdbcProfileMemoryRepositoryAdapter(
@@ -180,7 +179,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean(CorrectionLedgerPort.class)
     public JdbcCorrectionLedgerRepositoryAdapter seahorseJdbcCorrectionLedgerRepositoryAdapter(
@@ -190,7 +189,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean(MemoryOperationLogPort.class)
     public JdbcMemoryOperationLogRepositoryAdapter seahorseJdbcMemoryOperationLogRepositoryAdapter(
@@ -200,7 +199,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean(MemoryOutboxPort.class)
     public JdbcMemoryOutboxRepositoryAdapter seahorseJdbcMemoryOutboxRepositoryAdapter(
@@ -210,7 +209,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean(MemoryReviewCandidatePort.class)
     public JdbcMemoryReviewCandidateRepositoryAdapter seahorseJdbcMemoryReviewCandidateRepositoryAdapter(
@@ -220,7 +219,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean(MemoryReviewFeedbackRepositoryPort.class)
     public JdbcMemoryReviewFeedbackRepositoryAdapter seahorseJdbcMemoryReviewFeedbackRepositoryAdapter(
@@ -230,7 +229,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean(MemoryTraceRecorder.class)
     public JdbcMemoryTraceRecorderAdapter seahorseJdbcMemoryTraceRecorderAdapter(
@@ -240,21 +239,29 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
-    @ConditionalOnProperty(prefix = "seahorse.agent.memory.aggregation", name = "enabled", havingValue = "true")
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.memory.aggregation", name = "enabled",
+            havingValue = "true")
     @ConditionalOnMissingBean(MemoryAggregationBufferPort.class)
     public JdbcMemoryAggregationBufferAdapter seahorseJdbcMemoryAggregationBufferAdapter(
             DataSource dataSource,
             ObjectProvider<ObjectMapper> objectMapperProvider,
             ObjectProvider<MemoryAggregationPolicy> policyProvider,
-            @Value("${seahorse.agent.memory.aggregation.enabled:false}") boolean enabled,
-            @Value("${seahorse.agent.memory.aggregation.idle-flush-millis:40000}") long idleFlushMillis,
-            @Value("${seahorse.agent.memory.aggregation.max-turns:10}") int maxTurns,
-            @Value("${seahorse.agent.memory.aggregation.max-tokens:2000}") int maxTokens,
-            @Value("${seahorse.agent.memory.aggregation.max-context-blocks:32}") int maxContextBlocks,
-            @Value("${seahorse.agent.memory.aggregation.buffer-ttl-millis:86400000}") long bufferTtlMillis,
-            @Value("${seahorse.agent.memory.aggregation.capture-on-error:false}") boolean captureOnError) {
+            @Value("${seahorse-agent.memory.aggregation.enabled:${seahorse.agent.memory.aggregation.enabled:false}}")
+            boolean enabled,
+            @Value("${seahorse-agent.memory.aggregation.idle-flush-millis:${seahorse.agent.memory.aggregation.idle-flush-millis:40000}}")
+            long idleFlushMillis,
+            @Value("${seahorse-agent.memory.aggregation.max-turns:${seahorse.agent.memory.aggregation.max-turns:10}}")
+            int maxTurns,
+            @Value("${seahorse-agent.memory.aggregation.max-tokens:${seahorse.agent.memory.aggregation.max-tokens:2000}}")
+            int maxTokens,
+            @Value("${seahorse-agent.memory.aggregation.max-context-blocks:${seahorse.agent.memory.aggregation.max-context-blocks:32}}")
+            int maxContextBlocks,
+            @Value("${seahorse-agent.memory.aggregation.buffer-ttl-millis:${seahorse.agent.memory.aggregation.buffer-ttl-millis:86400000}}")
+            long bufferTtlMillis,
+            @Value("${seahorse-agent.memory.aggregation.capture-on-error:${seahorse.agent.memory.aggregation.capture-on-error:false}}")
+            boolean captureOnError) {
         MemoryAggregationPolicy policy = policyProvider.getIfAvailable(() -> new MemoryAggregationPolicy(
                 enabled,
                 idleFlushMillis,
@@ -268,7 +275,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean(MemoryMaintenanceRunRepositoryPort.class)
     public JdbcMemoryMaintenanceRunRepositoryAdapter seahorseJdbcMemoryMaintenanceRunRepositoryAdapter(
@@ -278,7 +285,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean(MemoryAliasPort.class)
     public JdbcMemoryAliasRepositoryAdapter seahorseJdbcMemoryAliasRepositoryAdapter(
@@ -288,7 +295,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean({MemoryGraphPort.class, MemoryGraphIndexPort.class})
     public JdbcMemoryGraphRepositoryAdapter seahorseJdbcMemoryGraphRepositoryAdapter(
@@ -298,7 +305,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc",
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
     @ConditionalOnMissingBean({MemoryLifecyclePort.class, MemoryGarbageCollectionPort.class, MemoryCompactionPort.class})
     public JdbcMemoryLifecycleRepositoryAdapter seahorseJdbcMemoryLifecycleRepositoryAdapter(DataSource dataSource) {
@@ -307,7 +314,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(MemoryQualitySnapshotRepositoryPort.class)
     public JdbcMemoryQualitySnapshotRepositoryAdapter seahorseJdbcMemoryQualitySnapshotRepositoryAdapter(
             DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
@@ -316,7 +323,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse.agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(MemoryConflictLogRepositoryPort.class)
     public JdbcMemoryConflictLogRepositoryAdapter seahorseJdbcMemoryConflictLogRepositoryAdapter(
             DataSource dataSource) {

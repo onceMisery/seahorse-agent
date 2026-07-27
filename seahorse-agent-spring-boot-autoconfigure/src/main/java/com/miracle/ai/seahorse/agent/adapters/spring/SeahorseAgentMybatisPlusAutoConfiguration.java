@@ -27,7 +27,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.billing.SubscriptionReposito
 import com.miracle.ai.seahorse.agent.ports.outbound.export.ExportTaskPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -43,7 +42,7 @@ import javax.sql.DataSource;
  * 当对应的 Mapper Bean 存在时，自动注册 MyBatis Plus 适配器替换 JdbcTemplate 适配器。
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentMybatisPlusAutoConfiguration {
 
     // ─── Batch 1: Core Business Tables ──────────────────────────────────────

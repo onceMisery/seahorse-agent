@@ -22,7 +22,6 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.mapper.Notificatio
 import com.miracle.ai.seahorse.agent.ports.outbound.notification.NotificationPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -30,7 +29,7 @@ import org.springframework.context.annotation.Configuration;
  * 通知中心自动配置。
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(prefix = "seahorse.agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentNotificationAutoConfiguration {
 
     @Bean
