@@ -497,6 +497,26 @@ LIMIT 1;
     $conversationId = $fixture.ConversationId
     $runId = $fixture.RunId
 
+    Test-Step "Reject oversized audit identifiers before JDBC persistence" {
+        $body = New-ToolBody `
+            -ToolId "read_tool_result" `
+            -InvocationRunId $runId `
+            -Suffix "$Marker-overflow" `
+            -Arguments @{ artifactId = "not-created"; offset = 0; limit = 32 } `
+            -AgentId $fixture.AgentId `
+            -VersionId $fixture.VersionId
+        $body.stepId = "s" * 65
+        $response = Invoke-Json `
+            -Method POST `
+            -Path "/api/tools/read_tool_result/invoke" `
+            -Headers $adminHeaders `
+            -Body $body `
+            -ExpectedStatus 400
+        Assert-Equal $response.code "INVALID_ARGUMENT" "oversized identifier error code"
+        Assert-Equal $response.message "stepId must not exceed 64 characters" `
+            "oversized identifier error message"
+    } | Out-Null
+
     $pointer = Test-Step "Invoke real web_fetch and receive a governed spill pointer" {
         $body = New-ToolBody `
             -ToolId "web_fetch" `

@@ -58,11 +58,45 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static java.util.Map.entry;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LocalToolGatewayPortAuditTests {
 
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-05-23T00:00:00Z"), ZoneOffset.UTC);
+
+    @Test
+    void shouldRejectOversizedAuditIdentifierBeforePersistenceOrToolExecution() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("must not run"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+        ToolInvocationRequest oversizedStep = new ToolInvocationRequest(
+                "run-1",
+                "s".repeat(65),
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "weather",
+                Map.of(),
+                Map.of(),
+                "run-1:call-1",
+                List.of("weather"));
+
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class,
+                () -> gateway.invoke(oversizedStep));
+
+        assertEquals("stepId must not exceed 64 characters", error.getMessage());
+        assertEquals(0, tool.calls.get());
+        assertTrue(audit.requested.isEmpty());
+    }
 
     @Test
     void shouldRecordRequestedDecisionAndCompletedEventsForAllowedTool() {

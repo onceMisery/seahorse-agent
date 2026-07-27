@@ -50,6 +50,9 @@ public record ToolInvocationAuditRecord(String invocationId,
                                         String argumentsSummary,
                                         Instant startedAt) {
 
+    private static final int MAX_AUDIT_ID_LENGTH = 64;
+    private static final int MAX_TOOL_ID_LENGTH = 128;
+
     public ToolInvocationAuditRecord(String invocationId,
                                      String runId,
                                      String stepId,
@@ -78,27 +81,39 @@ public record ToolInvocationAuditRecord(String invocationId,
     }
 
     public ToolInvocationAuditRecord {
-        invocationId = requireText(invocationId, "invocationId 不能为空");
-        stepId = requireText(stepId, "stepId 不能为空");
-        toolId = requireText(toolId, "toolId 不能为空");
-        runId = requireText(runId, "runId 不能为空");
-        agentId = trimToNull(agentId);
-        versionId = trimToNull(versionId);
-        rolloutId = trimToNull(rolloutId);
-        tenantId = requireText(tenantId, "tenantId 不能为空");
-        userId = requireText(userId, "userId 不能为空");
+        invocationId = requireText(invocationId, "invocationId", MAX_AUDIT_ID_LENGTH);
+        stepId = requireText(stepId, "stepId", MAX_AUDIT_ID_LENGTH);
+        toolId = requireText(toolId, "toolId", MAX_TOOL_ID_LENGTH);
+        runId = requireText(runId, "runId", MAX_AUDIT_ID_LENGTH);
+        agentId = optionalText(agentId, "agentId", MAX_AUDIT_ID_LENGTH);
+        versionId = optionalText(versionId, "versionId", MAX_AUDIT_ID_LENGTH);
+        rolloutId = optionalText(rolloutId, "rolloutId", MAX_AUDIT_ID_LENGTH);
+        tenantId = requireText(tenantId, "tenantId", MAX_AUDIT_ID_LENGTH);
+        userId = requireText(userId, "userId", MAX_AUDIT_ID_LENGTH);
         idempotencyKey = ToolInvocationIdentity.digest(tenantId, idempotencyKey);
         status = Objects.requireNonNullElse(status, ToolInvocationStatus.REQUESTED);
         argumentsSummary = trimToNull(argumentsSummary);
         startedAt = Objects.requireNonNull(startedAt, "startedAt 不能为空");
     }
 
-    private static String requireText(String value, String message) {
+    private static String requireText(String value, String field, int maxLength) {
         String trimmed = trimToNull(value);
         if (trimmed == null) {
-            throw new IllegalArgumentException(message);
+            throw new IllegalArgumentException(field + " 不能为空");
         }
-        return trimmed;
+        return requireMaxLength(trimmed, field, maxLength);
+    }
+
+    private static String optionalText(String value, String field, int maxLength) {
+        String trimmed = trimToNull(value);
+        return trimmed == null ? null : requireMaxLength(trimmed, field, maxLength);
+    }
+
+    private static String requireMaxLength(String value, String field, int maxLength) {
+        if (value.length() > maxLength) {
+            throw new IllegalArgumentException(field + " must not exceed " + maxLength + " characters");
+        }
+        return value;
     }
 
     private static String trimToNull(String value) {
