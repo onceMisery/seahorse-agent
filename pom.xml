@@ -68,7 +68,6 @@
         <module>seahorse-agent-spring-boot-starter-core</module>
         <module>seahorse-agent-spring-boot-starter</module>
         <module>seahorse-agent-spring-boot-starter-all</module>
-        <module>seahorse-agent-architecture-tests</module>
         <module>seahorse-agent-tests</module>
         <module>seahorse-agent-bootstrap</module>
     </modules>
