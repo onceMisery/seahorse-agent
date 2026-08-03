@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { RefreshCw, Search, Trash2, Pause, Eye } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { RefreshCw, Trash2, Pause, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -48,7 +48,7 @@ export function TenantListPage() {
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
 
-  const loadTenants = async () => {
+  const loadTenants = useCallback(async () => {
     try {
       setLoading(true);
       const data = await adminService.listTenants({
@@ -63,12 +63,12 @@ export function TenantListPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pageNo, statusFilter]);
 
   useEffect(() => {
     if (!featureState.enabled) return;
     loadTenants();
-  }, [pageNo, statusFilter]);
+  }, [featureState.enabled, loadTenants]);
 
   const handleRefresh = () => {
     loadTenants();

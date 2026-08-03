@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -18,7 +18,7 @@ export function PilotReadinessPanel({ agentId }: { agentId: string }) {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  const fetchReport = async () => {
+  const fetchReport = useCallback(async () => {
     if (!agentId || !versionId || !tenantId) return;
     setLoading(true);
     try {
@@ -29,11 +29,11 @@ export function PilotReadinessPanel({ agentId }: { agentId: string }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [agentId, versionId, tenantId]);
 
   useEffect(() => {
     fetchReport();
-  }, [agentId, versionId, tenantId]);
+  }, [fetchReport]);
 
   const handleGenerate = async () => {
     if (!versionId || !tenantId) {

@@ -267,7 +267,9 @@ class SeahorseAgentKernelAutoConfigurationTests {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(
                     SeahorseAgentKernelAutoConfiguration.class,
-                    SeahorseAgentKernelMetadataAutoConfiguration.class));
+                    SeahorseAgentKernelMetadataAutoConfiguration.class,
+                    SeahorseAgentKernelKnowledgeAutoConfiguration.class,
+                    SeahorseAgentKernelDocumentRefreshAutoConfiguration.class));
 
     @Test
     void shouldStartKernelInfrastructureWithNativePorts() {
@@ -2332,6 +2334,28 @@ class SeahorseAgentKernelAutoConfigurationTests {
 
                 @Override
                 public void logout() {
+                }
+            };
+        }
+
+        @Bean
+        com.miracle.ai.seahorse.agent.ports.outbound.auth.RefreshTokenRepositoryPort refreshTokenRepositoryPort() {
+            return new com.miracle.ai.seahorse.agent.ports.outbound.auth.RefreshTokenRepositoryPort() {
+                @Override
+                public void save(Long userId, String tenantId, String refreshToken, java.time.Instant expiresAt) {
+                }
+
+                @Override
+                public java.util.Optional<com.miracle.ai.seahorse.agent.ports.outbound.auth.RefreshTokenRecord> rotate(
+                        String refreshToken,
+                        String nextRefreshToken,
+                        java.time.Instant nextExpiresAt,
+                        java.time.Instant now) {
+                    return java.util.Optional.empty();
+                }
+
+                @Override
+                public void revoke(String refreshToken) {
                 }
             };
         }

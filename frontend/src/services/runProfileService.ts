@@ -127,33 +127,33 @@ export interface RunProfileRequest {
 }
 
 export async function listRunProfiles(): Promise<RunProfileVO[]> {
-  return api.get<RunProfileVO[], RunProfileVO[]>("/api/run-profiles");
+  return api.get<RunProfileVO[]>("/api/run-profiles");
 }
 
 export async function listRunProfileExecutorEngines(): Promise<RunProfileExecutorEngine[]> {
-  return api.get<RunProfileExecutorEngine[], RunProfileExecutorEngine[]>("/api/run-profiles/executor-engines");
+  return api.get<RunProfileExecutorEngine[]>("/api/run-profiles/executor-engines");
 }
 
 export async function getRunProfile(id: number | string): Promise<RunProfileDetails> {
-  return api.get<RunProfileDetails, RunProfileDetails>(`/api/run-profiles/${encodeURIComponent(String(id))}`);
+  return api.get<RunProfileDetails>(`/api/run-profiles/${encodeURIComponent(String(id))}`);
 }
 
 export async function getAppliedRunProfileForConversation(
   conversationId: number | string
 ): Promise<RunProfileDetails | undefined> {
-  return api.get<RunProfileDetails | undefined, RunProfileDetails | undefined>(
+  return api.get<RunProfileDetails | undefined>(
     `/api/conversations/${encodeURIComponent(String(conversationId))}/run-profile`
   );
 }
 
 export async function resolveRunProfilePreview(id: number | string): Promise<RunProfileResolvedPreview> {
-  return api.post<RunProfileResolvedPreview, RunProfileResolvedPreview>(
+  return api.post<RunProfileResolvedPreview>(
     `/api/run-profiles/${encodeURIComponent(String(id))}/resolve-preview`
   );
 }
 
 export async function getRunProfileRiskSummary(id: number | string): Promise<RunProfileRiskSummary> {
-  return api.get<RunProfileRiskSummary, RunProfileRiskSummary>(
+  return api.get<RunProfileRiskSummary>(
     `/api/run-profiles/${encodeURIComponent(String(id))}/risk-summary`
   );
 }
@@ -161,37 +161,37 @@ export async function getRunProfileRiskSummary(id: number | string): Promise<Run
 export async function checkRunProfileProductionGate(
   id: number | string
 ): Promise<RunProfileProductionGateCheck> {
-  return api.post<RunProfileProductionGateCheck, RunProfileProductionGateCheck>(
+  return api.post<RunProfileProductionGateCheck>(
     `/api/run-profiles/${encodeURIComponent(String(id))}/production-gate/check`
   );
 }
 
 export async function getRunProfileGateResult(id: number | string): Promise<GateResult> {
-  return api.post<GateResult, GateResult>(
+  return api.post<GateResult>(
     `/api/run-profiles/${encodeURIComponent(String(id))}/production-gate/gate-result`
   );
 }
 
 export async function submitRunProfileApproval(id: number | string, comment?: string): Promise<void> {
-  return api.post<void, void>(`/api/run-profiles/${encodeURIComponent(String(id))}/submit-approval`, {
+  return api.post<void>(`/api/run-profiles/${encodeURIComponent(String(id))}/submit-approval`, {
     comment
   });
 }
 
 export async function approveRunProfile(id: number | string, comment?: string): Promise<void> {
-  return api.post<void, void>(`/api/run-profiles/${encodeURIComponent(String(id))}/approve`, {
+  return api.post<void>(`/api/run-profiles/${encodeURIComponent(String(id))}/approve`, {
     comment
   });
 }
 
 export async function rejectRunProfile(id: number | string, comment?: string): Promise<void> {
-  return api.post<void, void>(`/api/run-profiles/${encodeURIComponent(String(id))}/reject`, {
+  return api.post<void>(`/api/run-profiles/${encodeURIComponent(String(id))}/reject`, {
     comment
   });
 }
 
 export async function getRunProfileAuditSummary(id: number | string): Promise<RunProfileAuditSummary> {
-  return api.get<RunProfileAuditSummary, RunProfileAuditSummary>(
+  return api.get<RunProfileAuditSummary>(
     `/api/run-profiles/${encodeURIComponent(String(id))}/audit-summary`
   );
 }
@@ -200,23 +200,23 @@ export async function applyRunProfileToConversation(
   conversationId: number | string,
   id: number | string
 ): Promise<RunProfileResolvedPreview> {
-  return api.post<RunProfileResolvedPreview, RunProfileResolvedPreview>(
+  return api.post<RunProfileResolvedPreview>(
     `/api/conversations/${encodeURIComponent(String(conversationId))}/run-profile/${encodeURIComponent(String(id))}/apply`
   );
 }
 
 export async function createRunProfile(request: RunProfileRequest): Promise<number | string> {
-  return api.post<number | string, number | string>("/api/run-profiles", request);
+  return api.post<number | string>("/api/run-profiles", request);
 }
 
 export async function updateRunProfile(id: number | string, request: RunProfileRequest): Promise<number | string> {
-  return api.put<number | string, number | string>(`/api/run-profiles/${encodeURIComponent(String(id))}`, request);
+  return api.put<number | string>(`/api/run-profiles/${encodeURIComponent(String(id))}`, request);
 }
 
 export async function activateRunProfile(id: number | string): Promise<void> {
-  return api.post<void, void>(`/api/run-profiles/${encodeURIComponent(String(id))}/activate`);
+  return api.post<void>(`/api/run-profiles/${encodeURIComponent(String(id))}/activate`);
 }
 
 export async function deleteRunProfile(id: number | string): Promise<void> {
-  return api.delete<void, void>(`/api/run-profiles/${encodeURIComponent(String(id))}`);
+  return api.delete<void>(`/api/run-profiles/${encodeURIComponent(String(id))}`);
 }

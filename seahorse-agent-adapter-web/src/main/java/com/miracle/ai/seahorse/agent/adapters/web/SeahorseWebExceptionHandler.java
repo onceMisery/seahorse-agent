@@ -70,7 +70,7 @@ public class SeahorseWebExceptionHandler {
                                                               HttpServletRequest request) {
         LOGGER.error("External service failure [{}]: {}", ex.getServiceName(), ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                .body(response(ex.getErrorCode(), ex.getMessage(), request,
+                .body(response(ex.getErrorCode(), ex.getMessage(), true, request,
                         Map.of("serviceName", ex.getServiceName())));
     }
 
@@ -79,7 +79,7 @@ public class SeahorseWebExceptionHandler {
                                                          HttpServletRequest request) {
         LOGGER.error("Database timeout: {}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT)
-                .body(response("DB_TIMEOUT", ex.getMessage(), request, Map.of()));
+                .body(response("DB_TIMEOUT", ex.getMessage(), true, request, Map.of()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -134,11 +134,19 @@ public class SeahorseWebExceptionHandler {
                 .body(response("UNAUTHORIZED", "登录已过期，请重新登录", request, Map.of()));
     }
 
+    @ExceptionHandler(TenantInterceptor.TenantResolutionException.class)
+    public ResponseEntity<ErrorResponse> invalidTenantSession(TenantInterceptor.TenantResolutionException ex,
+                                                              HttpServletRequest request) {
+        LOGGER.warn("Rejecting authenticated request without a valid tenant context");
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(response("AUTH_SESSION_INVALID", ex.getMessage(), request, Map.of()));
+    }
+
     @ExceptionHandler(AdvancedFeatureDisabledException.class)
     public ResponseEntity<ErrorResponse> advancedFeatureDisabled(AdvancedFeatureDisabledException ex,
                                                                  HttpServletRequest request) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(response("ADVANCED_FEATURE_DISABLED", ex.getMessage(), request, Map.of()));
+                .body(response("ADVANCED_FEATURE_DISABLED", ex.getMessage(), false, request, Map.of()));
     }
 
     @ExceptionHandler(SecurityException.class)
@@ -172,9 +180,18 @@ public class SeahorseWebExceptionHandler {
                                    String message,
                                    HttpServletRequest request,
                                    Map<String, Object> details) {
+        return response(code, message, false, request, details);
+    }
+
+    private ErrorResponse response(String code,
+                                   String message,
+                                   boolean retryable,
+                                   HttpServletRequest request,
+                                   Map<String, Object> details) {
         return ErrorResponse.of(
                 code,
                 safeMessage(code, message),
+                retryable,
                 request == null ? null : safePath(request.getRequestURI()),
                 request == null ? null : request.getHeader("X-Request-Id"),
                 TenantContext.get(),

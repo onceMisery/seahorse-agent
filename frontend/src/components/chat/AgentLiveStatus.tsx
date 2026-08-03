@@ -1,4 +1,3 @@
-import * as React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Loader2 } from "lucide-react";
 

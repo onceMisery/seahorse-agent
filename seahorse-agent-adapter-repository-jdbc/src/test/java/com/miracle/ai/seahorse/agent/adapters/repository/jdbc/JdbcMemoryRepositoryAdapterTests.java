@@ -563,6 +563,58 @@ class JdbcMemoryRepositoryAdapterTests {
     }
 
     @Test
+    void shouldClaimOutboxTaskAtomicallySoSecondInstanceDoesNotRepollIt() {
+        outboxAdapter.enqueue(new MemoryOutboxPort.MemoryOutboxTask(
+                "outbox-claim-1",
+                "VECTOR_UPSERT",
+                "stm-1",
+                "user-1",
+                "default",
+                Map.of("memoryId", "stm-1", "embeddingModel", "default"),
+                "",
+                null,
+                Instant.now()));
+
+        // 第一个 relay 实例 poll：任务被原子 claim（PENDING -> CLAIMED）。
+        assertThat(outboxAdapter.pollPending(10)).hasSize(1);
+
+        // 第二个 relay 实例 poll：同一任务已被 CLAIMED，不再返回，避免重复投递外部副作用。
+        assertThat(outboxAdapter.pollPending(10)).isEmpty();
+
+        // 只有 claim 的实例能完成它。
+        outboxAdapter.markSucceeded("outbox-claim-1");
+        assertThat(outboxAdapter.pollPending(10)).isEmpty();
+    }
+
+    @Test
+    void shouldReclaimExpiredClaimedOutboxTaskAfterTimeout() throws Exception {
+        outboxAdapter.enqueue(new MemoryOutboxPort.MemoryOutboxTask(
+                "outbox-reclaim-1",
+                "VECTOR_UPSERT",
+                "stm-1",
+                "user-1",
+                "default",
+                Map.of("memoryId", "stm-1", "embeddingModel", "default"),
+                "",
+                null,
+                Instant.now()));
+
+        assertThat(outboxAdapter.pollPending(10)).hasSize(1);
+
+        // 模拟进程在 handler 后崩溃：CLAIMED 任务已过期，应被重置回 PENDING。
+        jdbcTemplate.update("""
+                UPDATE t_memory_outbox
+                SET update_time = DATEADD('SECOND', -180, CURRENT_TIMESTAMP)
+                WHERE id = 'outbox-reclaim-1'
+                """);
+        // 下一次 poll 先回收过期 CLAIMED，再返回该任务供重试。
+        assertThat(outboxAdapter.pollPending(10))
+                .hasSize(1)
+                .first()
+                .satisfies(task -> assertThat(task.id()).isEqualTo("outbox-reclaim-1"));
+    }
+
+    @Test
     void shouldIgnoreDuplicateDerivedIndexDeleteOutboxTasks() {
         outboxAdapter.enqueue(MemoryOutboxPort.MemoryOutboxTask.vectorDelete("stm-1", "user-1", "default"));
         outboxAdapter.enqueue(MemoryOutboxPort.MemoryOutboxTask.vectorDelete("stm-1", "user-1", "default"));

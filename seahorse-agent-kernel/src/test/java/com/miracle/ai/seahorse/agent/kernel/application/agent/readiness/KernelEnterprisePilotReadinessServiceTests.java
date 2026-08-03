@@ -24,13 +24,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.readiness.EnterprisePil
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.readiness.EnterprisePilotReadinessStatus;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.EnterprisePilotReadinessGenerateCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.EnterprisePilotReadinessRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessAgentDefinitionEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessAuditEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessEvalEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessQuotaEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessResourceAclEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessRollbackEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessToolRiskEvidencePort;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -56,13 +49,13 @@ class KernelEnterprisePilotReadinessServiceTests {
                 (tenantId, agentId, versionId, checkedAt) -> List.of(
                         pass(EnterprisePilotReadinessCheckCode.OWNER),
                         pass(EnterprisePilotReadinessCheckCode.PUBLISHED_VERSION),
-                        pass(EnterprisePilotReadinessCheckCode.DISABLE_SWITCH)),
-                single(EnterprisePilotReadinessCheckCode.TOOL_RISK, EnterprisePilotReadinessStatus.PASS),
-                single(EnterprisePilotReadinessCheckCode.RESOURCE_ACL, EnterprisePilotReadinessStatus.PASS),
-                single(EnterprisePilotReadinessCheckCode.EVAL, EnterprisePilotReadinessStatus.FAIL),
-                single(EnterprisePilotReadinessCheckCode.QUOTA, EnterprisePilotReadinessStatus.WARN),
-                single(EnterprisePilotReadinessCheckCode.AUDIT, EnterprisePilotReadinessStatus.PASS),
-                single(EnterprisePilotReadinessCheckCode.ROLLBACK, EnterprisePilotReadinessStatus.PASS),
+                        pass(EnterprisePilotReadinessCheckCode.DISABLE_SWITCH),
+                        result(EnterprisePilotReadinessCheckCode.TOOL_RISK, EnterprisePilotReadinessStatus.PASS, checkedAt),
+                        result(EnterprisePilotReadinessCheckCode.RESOURCE_ACL, EnterprisePilotReadinessStatus.PASS, checkedAt),
+                        result(EnterprisePilotReadinessCheckCode.EVAL, EnterprisePilotReadinessStatus.FAIL, checkedAt),
+                        result(EnterprisePilotReadinessCheckCode.QUOTA, EnterprisePilotReadinessStatus.WARN, checkedAt),
+                        result(EnterprisePilotReadinessCheckCode.AUDIT, EnterprisePilotReadinessStatus.PASS, checkedAt),
+                        result(EnterprisePilotReadinessCheckCode.ROLLBACK, EnterprisePilotReadinessStatus.PASS, checkedAt)),
                 CLOCK);
 
         EnterprisePilotReadinessReport report = service.generate(new EnterprisePilotReadinessGenerateCommand(
@@ -79,11 +72,6 @@ class KernelEnterprisePilotReadinessServiceTests {
                 report.result(EnterprisePilotReadinessCheckCode.QUOTA).orElseThrow().status());
         assertEquals(report, repository.saved);
         assertEquals(Optional.of(report), service.latest("tenant-1", "agent-1", "version-1"));
-    }
-
-    private static ReadinessToolRiskEvidencePort single(EnterprisePilotReadinessCheckCode code,
-                                                        EnterprisePilotReadinessStatus status) {
-        return (tenantId, agentId, versionId, checkedAt) -> result(code, status, checkedAt);
     }
 
     private static EnterprisePilotReadinessCheckResult pass(EnterprisePilotReadinessCheckCode code) {

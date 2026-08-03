@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -30,7 +30,7 @@ export function AgentRolloutPage() {
   const [canaryPercent, setCanaryPercent] = useState(10);
   const [actionType, setActionType] = useState<RolloutActionType | null>(null);
 
-  const fetchRollout = async () => {
+  const fetchRollout = useCallback(async () => {
     if (!agentId || !versionId || !tenantId) return;
     setLoading(true);
     try {
@@ -41,11 +41,11 @@ export function AgentRolloutPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [agentId, versionId, tenantId]);
 
   useEffect(() => {
     fetchRollout();
-  }, [agentId, versionId, tenantId]);
+  }, [fetchRollout]);
 
   const handleCreateCanary = async () => {
     if (!agentId || !versionId || !tenantId) {

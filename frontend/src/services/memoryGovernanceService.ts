@@ -120,7 +120,7 @@ export function listMemoryConflicts(params?: { userId?: string; status?: string;
 }
 
 export function resolveMemoryConflict(conflictId: string, resolution: string, mergedContent?: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/memories/conflicts/${encodeURIComponent(conflictId)}/resolve`,
     { action: resolution, mergedContent }
   );
@@ -170,19 +170,19 @@ export function getMemoryPolicyConfig() {
 }
 
 export function updateMemoryPolicyConfig(config: MemoryPolicyConfig) {
-  return api.post<MemoryPolicyConfig, MemoryPolicyConfig>("/memories/policy-config", config);
+  return api.post<MemoryPolicyConfig>("/memories/policy-config", config);
 }
 
 // ── 治理操作 ──
 
 export function runMemoryGovernance(params?: { userId?: string; reason?: string; assessQuality?: boolean }) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>("/memories/governance/run", undefined, { params });
+  return api.post<Record<string, unknown>>("/memories/governance/run", undefined, { params });
 }
 
 // ── Recall 评测 ──
 
 export function evaluateRecallQuality() {
-  return api.post<Record<string, unknown>, Record<string, unknown>>("/memories/recall-quality/evaluate");
+  return api.post<Record<string, unknown>>("/memories/recall-quality/evaluate");
 }
 
 export function runGoldenProfileEval(profileId: string) {
@@ -190,17 +190,17 @@ export function runGoldenProfileEval(profileId: string) {
 }
 
 export function runMemoryDecay() {
-  return api.post<Record<string, unknown>, Record<string, unknown>>("/memories/governance/decay");
+  return api.post<Record<string, unknown>>("/memories/governance/decay");
 }
 
 export function runMemoryQuality(params?: { userId?: string }) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>("/memories/governance/quality", undefined, { params });
+  return api.post<Record<string, unknown>>("/memories/governance/quality", undefined, { params });
 }
 
 // ── 维护任务 ──
 
 export function runMemoryMaintenance() {
-  return api.post<Record<string, unknown>, Record<string, unknown>>("/memories/maintenance/run");
+  return api.post<Record<string, unknown>>("/memories/maintenance/run");
 }
 
 export function listMemoryMaintenanceRuns(params?: { current?: number; size?: number }) {
@@ -248,21 +248,21 @@ export function exportFeedbackSamples(params?: {
 }
 
 export function approveMemoryReviewItem(itemId: string, comment?: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/memory-review/items/${encodeURIComponent(itemId)}/approve`,
     { comment }
   );
 }
 
 export function modifyMemoryReviewItem(itemId: string, modifiedContent: string, comment?: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/memory-review/items/${encodeURIComponent(itemId)}/modify`,
     { modifiedContent, comment }
   );
 }
 
 export function rejectMemoryReviewItem(itemId: string, comment?: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/memory-review/items/${encodeURIComponent(itemId)}/reject`,
     { comment }
   );

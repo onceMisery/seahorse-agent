@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,7 +29,7 @@ export function MemoryQualityPanel() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
 
-  const loadSnapshots = async () => {
+  const loadSnapshots = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getMemoryQualitySnapshots({ userId, limit: 20 });
@@ -40,11 +40,11 @@ export function MemoryQualityPanel() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     loadSnapshots();
-  }, [userId]);
+  }, [loadSnapshots]);
 
   const handleRunQuality = async () => {
     try {

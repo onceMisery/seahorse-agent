@@ -29,6 +29,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -129,9 +130,13 @@ public class SeahorseAgentNoopPortGuard implements SmartInitializingSingleton {
             Inspection inspection = inspect(portClass, bean, riskClass);
             inspections.add(inspection);
             report(inspection);
-            if (enforceClassA && inspection.isNoopFallback() && inspection.riskClass() == RiskClass.CLASS_A_FAIL_FAST) {
-                throw new NoopFallbackEnforcementException("Class A port bound to a NoopFallback fallback in production: "
-                        + portClass.getName() + " => " + inspection.actualClass().getName());
+            if (enforceClassA && inspection.riskClass() == RiskClass.CLASS_A_FAIL_FAST
+                    && (inspection.missing() || inspection.isNoopFallback())) {
+                String binding = inspection.missing()
+                        ? "missing"
+                        : "NoopFallback " + inspection.actualClass().getName();
+                throw new NoopFallbackEnforcementException("Required Class A port is not production-ready: "
+                        + portClass.getName() + " => " + binding);
             }
         }
         return inspections;
@@ -184,10 +189,10 @@ public class SeahorseAgentNoopPortGuard implements SmartInitializingSingleton {
     /**
      * Slice 2a-c 默认分类表。当前覆盖：
      * <ul>
-     *     <li>Class A：{@link OutputValidationRecordPort}（治理审计）、{@link MemoryOutboxPort}（异步派发）、
-     *         {@link MemoryReviewCandidatePort}（人工 review）、{@link MemoryOperationLogPort}（操作日志）、
+     *     <li>Class A：{@link MemoryOutboxPort}（异步派发）、{@link MemoryReviewCandidatePort}（人工 review）、
+     *         {@link MemoryOperationLogPort}（操作日志）、
      *         {@link ToolInvocationAuditPort}（工具调用审计）。</li>
-     *     <li>Class B：{@link MemoryVectorPort}（向量索引）、
+     *     <li>Class B：{@link OutputValidationRecordPort}（可选治理审计持久化）、{@link MemoryVectorPort}（向量索引）、
      *         {@link MemoryKeywordSearchPort}（关键字检索增强）、{@link ObservationPort}（观测后端）。</li>
      *     <li>Class C：{@link MemoryRefinerPort}（增强细化）、{@link MemoryCompactionSummarizerPort}
      *         （压缩摘要）、{@link MemoryGraphPort}（图谱增强）。</li>
@@ -195,11 +200,14 @@ public class SeahorseAgentNoopPortGuard implements SmartInitializingSingleton {
      */
     public static Map<Class<?>, RiskClass> defaultClassifications() {
         Map<Class<?>, RiskClass> map = new LinkedHashMap<>();
-        map.put(OutputValidationRecordPort.class, RiskClass.CLASS_A_FAIL_FAST);
+        // The port is an optional future persistence extension. Output validation itself
+        // remains active without it, so a missing binding must not prevent core startup.
+        map.put(OutputValidationRecordPort.class, RiskClass.CLASS_B_WARN);
         map.put(MemoryOutboxPort.class, RiskClass.CLASS_A_FAIL_FAST);
         map.put(MemoryReviewCandidatePort.class, RiskClass.CLASS_A_FAIL_FAST);
         map.put(MemoryOperationLogPort.class, RiskClass.CLASS_A_FAIL_FAST);
         map.put(ToolInvocationAuditPort.class, RiskClass.CLASS_A_FAIL_FAST);
+        map.put(OutboxEventRepositoryPort.class, RiskClass.CLASS_A_FAIL_FAST);
         map.put(MemoryVectorPort.class, RiskClass.CLASS_B_WARN);
         map.put(MemoryKeywordSearchPort.class, RiskClass.CLASS_B_WARN);
         map.put(ObservationPort.class, RiskClass.CLASS_B_WARN);

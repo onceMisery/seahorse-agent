@@ -71,5 +71,5 @@ export interface ModelCandidate {
 }
 
 export async function getSystemSettings(): Promise<SystemSettings> {
-  return api.get<SystemSettings, SystemSettings>("/rag/settings");
+  return api.get<SystemSettings>("/rag/settings");
 }

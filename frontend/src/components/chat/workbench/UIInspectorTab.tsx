@@ -1,6 +1,6 @@
 import { InspectorEmptyState } from "@/components/chat/workbench/InspectorEmptyState";
 import { A2UILiteRenderer } from "@/components/a2ui-lite/A2UILiteRenderer";
-import type { A2UILiteAction, A2UILiteSurface } from "@/components/a2ui-lite/a2uiTypes";
+import type { A2UILiteSurface } from "@/components/a2ui-lite/a2uiTypes";
 import { AGENT_ARTIFACT_SCAN_STATUS, type AgentArtifact, type ArtifactBlock } from "@/types";
 
 interface UIInspectorTabProps {
@@ -48,7 +48,7 @@ export function UIInspectorTab({ artifacts, serverArtifacts }: UIInspectorTabPro
         <A2UILiteRenderer
           key={i}
           surface={surface}
-          onAction={(_action: A2UILiteAction) => undefined}
+          onAction={() => undefined}
         />
       ))}
     </div>

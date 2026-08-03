@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { PageResult } from "@/services/metadataGovernanceService";
 import { getAdvancedFeatureState, ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
 import { listConnectors, type OpenApiConnector } from "@/services/openApiConnectorService";

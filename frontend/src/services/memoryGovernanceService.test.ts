@@ -23,7 +23,7 @@ describe("memoryGovernanceService", () => {
   });
 
   it("sends the current user id when resolving chat-time memory conflicts", async () => {
-    vi.mocked(storage.getUser).mockReturnValue({ userId: "user-123", username: "admin", role: "admin" } as any);
+    vi.mocked(storage.getUser).mockReturnValue({ userId: "user-123", username: "admin", role: "admin", token: "token" });
     vi.mocked(api.post).mockResolvedValueOnce({ resolved: true });
 
     await resolveMemoryConflictInteractive({ conflictId: "conflict-1", action: "keep_a" });

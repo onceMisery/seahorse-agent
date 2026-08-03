@@ -7,7 +7,7 @@ export interface QuotaSummaryParams {
 }
 
 export async function getQuotaSummary(params: QuotaSummaryParams = {}): Promise<UserQuotaSummary> {
-  return api.get<UserQuotaSummary, UserQuotaSummary>("/api/me/quota-summary", {
+  return api.get<UserQuotaSummary>("/api/me/quota-summary", {
     params: {
       tenantId: params.tenantId || undefined,
       taskTemplateId: params.taskTemplateId || undefined

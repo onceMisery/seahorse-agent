@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -47,7 +47,7 @@ export function AgentListPage() {
 
   const agents = pageData?.records || [];
 
-  const loadAgents = async (current = pageNo, kw = keyword) => {
+  const loadAgents = useCallback(async (current = pageNo, kw = keyword) => {
     try {
       setLoading(true);
       const data = await listAgents({
@@ -64,12 +64,12 @@ export function AgentListPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pageNo, keyword, statusFilter, riskFilter]);
 
   useEffect(() => {
     if (!featureState.enabled) return;
     loadAgents();
-  }, [pageNo, keyword, statusFilter, riskFilter]);
+  }, [featureState.enabled, loadAgents]);
 
   const handleSearch = () => {
     setPageNo(1);

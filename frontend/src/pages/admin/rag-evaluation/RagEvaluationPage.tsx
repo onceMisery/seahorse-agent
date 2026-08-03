@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, RefreshCw, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -38,9 +38,7 @@ export function RagEvaluationPage() {
       try {
         const data = await getKnowledgeBases(1, 100);
         setKbs(data || []);
-        if (data && data.length > 0 && !selectedKbId) {
-          setSelectedKbId(data[0].id);
-        }
+        setSelectedKbId((current) => current || data?.[0]?.id || "");
       } catch (error) {
         console.error(error);
       }
@@ -134,7 +132,7 @@ export function RagEvaluationPage() {
           ) : loading ? (
             <div className="text-center py-8 text-muted-foreground">加载中...</div>
           ) : datasets.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">暂无评测数据集，点击"新增数据集"创建</div>
+            <div className="text-center py-8 text-muted-foreground">暂无评测数据集，点击“新增数据集”创建</div>
           ) : (
             <Table>
               <TableHeader>

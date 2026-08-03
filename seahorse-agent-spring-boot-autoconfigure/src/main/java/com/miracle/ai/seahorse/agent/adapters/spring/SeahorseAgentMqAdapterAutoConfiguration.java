@@ -27,7 +27,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSubscriptionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import org.apache.pulsar.client.api.PulsarClient;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -35,6 +34,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 /**
  * 消息队列适配器自动配置。
@@ -52,14 +52,10 @@ public class SeahorseAgentMqAdapterAutoConfiguration {
     @ConditionalOnMissingBean(MessageQueuePort.class)
     public ReliableMessageQueueAdapter seahorseDirectMessageQueueAdapter(
             ObjectProvider<OutboxEventRepositoryPort> outboxRepositoryPort,
-            ObjectProvider<ObjectMapper> objectMapper,
-            @Value("${seahorse-agent.adapters.mq.reliable-outbox-enabled:${seahorse.agent.adapters.mq.reliable-outbox-enabled:true}}")
-            boolean reliableOutboxEnabled) {
+            ObjectProvider<ObjectMapper> objectMapper) {
         DirectMessageQueueAdapter delegate = new DirectMessageQueueAdapter();
-        java.util.function.Supplier<OutboxEventRepositoryPort> outboxSupplier =
-                reliableOutboxEnabled ? outboxRepositoryPort::getIfAvailable : () -> null;
         return new ReliableMessageQueueAdapter(delegate, delegate,
-                outboxSupplier, objectMapper::getIfAvailable);
+                outboxRepositoryPort::getIfAvailable, objectMapper::getIfAvailable);
     }
 
     @Configuration(proxyBeanMethods = false)
@@ -94,18 +90,14 @@ public class SeahorseAgentMqAdapterAutoConfiguration {
         }
 
         @Bean
+        @Primary
         @ConditionalOnBean(PulsarMessageQueueAdapter.class)
-        @ConditionalOnMissingBean(MessageQueuePort.class)
         public MessageQueuePort seahorseMessageQueuePort(
                 PulsarMessageQueueAdapter pulsarAdapter,
                 ObjectProvider<OutboxEventRepositoryPort> outboxRepositoryPort,
-                ObjectProvider<ObjectMapper> objectMapperProvider,
-                @Value("${seahorse-agent.adapters.mq.reliable-outbox-enabled:${seahorse.agent.adapters.mq.reliable-outbox-enabled:true}}")
-                boolean reliableOutboxEnabled) {
-            java.util.function.Supplier<OutboxEventRepositoryPort> outboxSupplier =
-                    reliableOutboxEnabled ? outboxRepositoryPort::getIfAvailable : () -> null;
+                ObjectProvider<ObjectMapper> objectMapperProvider) {
             return new ReliableMessageQueueAdapter(
-                    pulsarAdapter, pulsarAdapter, outboxSupplier,
+                    pulsarAdapter, pulsarAdapter, outboxRepositoryPort::getIfAvailable,
                     objectMapperProvider::getIfAvailable);
         }
 

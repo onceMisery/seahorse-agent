@@ -1,5 +1,4 @@
 import { Badge } from "@/components/ui/badge";
-import type { ToolItem } from "@/services/toolCatalogService";
 
 interface ToolRiskBadgeProps {
   riskLevel?: string;

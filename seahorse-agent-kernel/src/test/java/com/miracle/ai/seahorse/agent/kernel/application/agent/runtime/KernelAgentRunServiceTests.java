@@ -130,7 +130,7 @@ class KernelAgentRunServiceTests {
                 AgentRunTriggerType.CHAT,
                 "summarized input",
                 "trace-1",
-                "{\"source\":\"api\"}",
+                "{\"source\":\"api\",\"branchLeafMessageId\":123,\"roleCardId\":99}",
                 77L,
                 "agentscope",
                 Map.of(
@@ -146,10 +146,14 @@ class KernelAgentRunServiceTests {
         RunContextSnapshotRecord snapshot = snapshotRepository.records.get(0);
         assertEquals(run.runId(), snapshot.getRunId());
         assertEquals(101L, snapshot.getConversationId());
+        assertEquals(123L, snapshot.getBranchLeafMessageId());
+        assertEquals(99L, snapshot.getRoleCardId());
         assertEquals(77L, snapshot.getRunProfileId());
         assertEquals("agentscope", snapshot.getExecutorEngine());
         assertTrue(snapshot.getTraceContextJson().contains("\"traceId\":\"trace-1\""), snapshot.getTraceContextJson());
         assertTrue(snapshot.getSnapshotJson().contains("\"runProfileId\":77"), snapshot.getSnapshotJson());
+        assertTrue(snapshot.getSnapshotJson().contains("\"branchLeafMessageId\":123"), snapshot.getSnapshotJson());
+        assertTrue(snapshot.getSnapshotJson().contains("\"roleCardId\":99"), snapshot.getSnapshotJson());
         assertTrue(snapshot.getExecutorConfigJson().contains("\"apiKey\":\"[REDACTED]\""),
                 snapshot.getExecutorConfigJson());
         assertTrue(snapshot.getExecutorConfigJson().contains("\"callbackHeader\":\"[REDACTED]\""),
@@ -217,6 +221,47 @@ class KernelAgentRunServiceTests {
         assertEquals("user-1", run.userId());
         assertEquals("conversation-1", run.conversationId());
         assertTrue(runRepository.runs.containsKey(run.runId()));
+    }
+
+    @Test
+    void shouldFailCreatedRunWhenContextSnapshotPersistenceFails() {
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.save(agent("ops-agent", AgentStatus.PUBLISHED, "version-1"));
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        RunContextSnapshotRepositoryPort snapshotRepository = new RunContextSnapshotRepositoryPort() {
+            @Override
+            public Long save(RunContextSnapshotRecord record) {
+                throw new IllegalStateException("database unavailable");
+            }
+
+            @Override
+            public Optional<RunContextSnapshotRecord> findByRunId(String runId) {
+                return Optional.empty();
+            }
+        };
+        KernelAgentRunService service = new KernelAgentRunService(
+                definitionRepository,
+                runRepository,
+                currentUser(),
+                FIXED_CLOCK,
+                null,
+                snapshotRepository);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> service.startRun(
+                new AgentRunStartCommand(
+                        "ops-agent",
+                        null,
+                        AgentDefinition.DEFAULT_TENANT_ID,
+                        null,
+                        AgentRunTriggerType.API,
+                        "summary",
+                        null)));
+
+        assertEquals("Failed to persist run context snapshot", error.getMessage());
+        assertEquals(1, runRepository.runs.size());
+        AgentRun persisted = runRepository.runs.values().iterator().next();
+        assertEquals(AgentRunStatus.FAILED, persisted.status());
+        assertEquals("CONTEXT_SNAPSHOT_PERSISTENCE_FAILED", persisted.errorCode());
     }
 
     @Test

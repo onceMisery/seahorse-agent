@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.KbResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
@@ -46,7 +47,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
+import java.util.stream.IntStream;
 
 import static com.miracle.ai.seahorse.agent.kernel.domain.retrieval.KernelRagDefaults.DEFAULT_TOP_K;
 import static com.miracle.ai.seahorse.agent.kernel.domain.retrieval.KernelRagDefaults.MULTI_CHANNEL_KEY;
@@ -60,6 +63,7 @@ import static com.miracle.ai.seahorse.agent.kernel.domain.retrieval.KernelRagDef
 public class KernelRetrievalEngine implements RetrievalContextPort {
 
     private static final Logger LOG = LoggerFactory.getLogger(KernelRetrievalEngine.class);
+    private static final String FAILURE_CODE_SUBQUESTION_FAILED = "SUBQUESTION_FAILED";
 
     private final KernelMultiChannelRetrievalEngine multiChannelRetrievalEngine;
     private final KernelMcpOrchestrator mcpOrchestrator;
@@ -133,14 +137,15 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
 
         int finalTopK = topK > 0 ? topK : DEFAULT_TOP_K;
         RetrievalOptions queryExpansionOptions = queryExpansionOptions(finalTopK, queryOptimizationResult);
-        List<CompletableFuture<SubQuestionContext>> tasks = safeIntents.stream()
-                .map(intent -> CompletableFuture.supplyAsync(
-                        () -> buildSubQuestionContext(intent, resolveSubQuestionTopK(intent, finalTopK),
+        List<CompletableFuture<SubQuestionContext>> tasks = IntStream.range(0, safeIntents.size())
+                .mapToObj(index -> CompletableFuture.supplyAsync(
+                        () -> buildSubQuestionContext(index, safeIntents.get(index),
+                                resolveSubQuestionTopK(safeIntents.get(index), finalTopK),
                                 filter, traceRunScope, queryExpansionOptions),
-                        ragContextExecutor))
+                        ragContextExecutor).exceptionally(ex -> failedSubQuestionContext(index, ex)))
                 .toList();
         List<SubQuestionContext> contexts = tasks.stream()
-                .map(this::joinContext)
+                .map(CompletableFuture::join)
                 .toList();
         return mergeContexts(contexts);
     }
@@ -182,7 +187,8 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
         return multiChannelRetrievalEngine.retrieveKnowledgeChannels(subIntents, topK, filter, options, traceRunScope);
     }
 
-    private SubQuestionContext buildSubQuestionContext(SubQuestionIntent intent,
+    private SubQuestionContext buildSubQuestionContext(int subQuestionIndex,
+                                                       SubQuestionIntent intent,
                                                        int topK,
                                                        RetrievalFilter filter,
                                                        TraceRunScope traceRunScope,
@@ -195,23 +201,29 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
                 queryExpansionOptions);
         String mcpContext = mcpIntents.isEmpty() ? "" : executeMcpAndMerge(safeIntent.subQuestion(), mcpIntents);
         return new SubQuestionContext(safeIntent.subQuestion(), kbResult.groupedContext(), mcpContext,
-                kbResult.intentChunks());
+                kbResult.intentChunks(), prefixEvidence(subQuestionIndex, kbResult.failureEvidence()), false);
     }
 
-    private SubQuestionContext joinContext(CompletableFuture<SubQuestionContext> future) {
-        try {
-            return future.join();
-        } catch (Exception ex) {
-            LOG.error("子问题上下文构建失败，降级为空上下文", ex);
-            return new SubQuestionContext("", "", "", Map.of());
-        }
+    private SubQuestionContext failedSubQuestionContext(int subQuestionIndex, Throwable error) {
+        Throwable cause = unwrap(error);
+        LOG.error("子问题上下文构建失败，标记为部分检索", cause);
+        return new SubQuestionContext("", "", "", Map.of(),
+                Map.of("subquestion:" + subQuestionIndex, FAILURE_CODE_SUBQUESTION_FAILED), true);
     }
 
     private RetrievalContext mergeContexts(List<SubQuestionContext> contexts) {
+        if (contexts.stream().allMatch(SubQuestionContext::failed)) {
+            throw new IllegalStateException("Retrieval failed for all sub-questions");
+        }
         StringBuilder kbBuilder = new StringBuilder();
         StringBuilder mcpBuilder = new StringBuilder();
         Map<String, List<RetrievedChunk>> mergedIntentChunks = new HashMap<>();
+        Map<String, String> failureEvidence = new LinkedHashMap<>();
         for (SubQuestionContext context : contexts) {
+            failureEvidence.putAll(context.failureEvidence());
+            if (context.failed()) {
+                continue;
+            }
             appendIfNotBlank(kbBuilder, context.question(), context.kbContext());
             appendIfNotBlank(mcpBuilder, context.question(), context.mcpContext());
             mergedIntentChunks.putAll(Objects.requireNonNullElse(context.intentChunks(), Map.of()));
@@ -220,7 +232,25 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
                 .mcpContext(mcpBuilder.toString().trim())
                 .kbContext(kbBuilder.toString().trim())
                 .intentChunks(mergedIntentChunks)
+                .status(failureEvidence.isEmpty() ? RetrievalStatus.COMPLETE : RetrievalStatus.PARTIAL)
+                .failureEvidence(Map.copyOf(failureEvidence))
                 .build();
+    }
+
+    private Map<String, String> prefixEvidence(int subQuestionIndex, Map<String, String> evidence) {
+        if (evidence == null || evidence.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> prefixed = new LinkedHashMap<>();
+        evidence.forEach((key, value) -> prefixed.put("subquestion:" + subQuestionIndex + "/" + key, value));
+        return Map.copyOf(prefixed);
+    }
+
+    private Throwable unwrap(Throwable error) {
+        if (error instanceof CompletionException completionException && completionException.getCause() != null) {
+            return completionException.getCause();
+        }
+        return error;
     }
 
     private void appendIfNotBlank(StringBuilder builder, String question, String context) {
@@ -251,17 +281,18 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
                                        RetrievalFilter filter,
                                        TraceRunScope traceRunScope,
                                        RetrievalOptions queryExpansionOptions) {
-        List<RetrievedChunk> chunks = queryExpansionOptions == null
-                ? multiChannelRetrievalEngine.retrieveKnowledgeChannels(List.of(intent), topK, filter, null,
-                traceRunScope)
-                : multiChannelRetrievalEngine.retrieveKnowledgeChannels(
+        KernelMultiChannelRetrievalEngine.RetrievalChannelBatch batch = queryExpansionOptions == null
+                ? multiChannelRetrievalEngine.retrieveKnowledgeChannelsWithEvidence(
+                        List.of(intent), topK, filter, null, traceRunScope)
+                : multiChannelRetrievalEngine.retrieveKnowledgeChannelsWithEvidence(
                         List.of(intent), topK, filter, queryExpansionOptions, traceRunScope);
+        List<RetrievedChunk> chunks = batch.chunks();
         if (chunks == null || chunks.isEmpty()) {
-            return KbResult.empty();
+            return new KbResult("", Map.of(), batch.failureEvidence());
         }
         Map<String, List<RetrievedChunk>> intentChunks = buildIntentChunks(kbIntents, chunks);
         String groupedContext = formatPort.formatKbContext(kbIntents, intentChunks, topK);
-        return new KbResult(groupedContext, intentChunks);
+        return new KbResult(groupedContext, intentChunks, batch.failureEvidence());
     }
 
     private Map<String, List<RetrievedChunk>> buildIntentChunks(List<IntentScore> kbIntents,
@@ -345,6 +376,8 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
     private record SubQuestionContext(String question,
                                       String kbContext,
                                       String mcpContext,
-                                      Map<String, List<RetrievedChunk>> intentChunks) {
+                                      Map<String, List<RetrievedChunk>> intentChunks,
+                                      Map<String, String> failureEvidence,
+                                      boolean failed) {
     }
 }

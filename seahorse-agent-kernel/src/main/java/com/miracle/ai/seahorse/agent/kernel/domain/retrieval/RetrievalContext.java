@@ -36,6 +36,12 @@ public class RetrievalContext {
 
     private Map<String, List<RetrievedChunk>> intentChunks;
 
+    @Builder.Default
+    private RetrievalStatus status = RetrievalStatus.COMPLETE;
+
+    @Builder.Default
+    private Map<String, String> failureEvidence = Map.of();
+
     public boolean hasMcp() {
         return mcpContext != null && !mcpContext.isBlank();
     }
@@ -46,5 +52,9 @@ public class RetrievalContext {
 
     public boolean isEmpty() {
         return !hasMcp() && !hasKb();
+    }
+
+    public boolean isPartial() {
+        return status == RetrievalStatus.PARTIAL;
     }
 }

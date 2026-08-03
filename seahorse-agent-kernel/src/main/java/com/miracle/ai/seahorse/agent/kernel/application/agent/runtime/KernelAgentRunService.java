@@ -59,6 +59,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     private static final String RUN_ID_PREFIX = "run_";
     private static final String VERSION_REQUIRED_MESSAGE = "Agent run requires a versionId";
     private static final String VERSION_NOT_FOUND_MESSAGE = "Agent version does not exist";
+    private static final String CONTEXT_SNAPSHOT_PERSISTENCE_ERROR = "CONTEXT_SNAPSHOT_PERSISTENCE_FAILED";
     private static final RunContextSnapshotRedactor RUN_CONTEXT_SNAPSHOT_REDACTOR = new RunContextSnapshotRedactor();
     private static final TypeReference<LinkedHashMap<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
@@ -178,7 +179,21 @@ public class KernelAgentRunService implements AgentRunInboundPort {
                 null,
                 metadataJson);
         runRepository.createRun(run);
-        saveRunContextSnapshot(run, safeCommand, runProfileContext, metadataJson);
+        try {
+            saveRunContextSnapshot(run, safeCommand, runProfileContext, metadataJson);
+        } catch (RuntimeException snapshotFailure) {
+            AgentRun failed = run.withStatus(
+                    AgentRunStatus.FAILED,
+                    CONTEXT_SNAPSHOT_PERSISTENCE_ERROR,
+                    "Run context snapshot persistence failed",
+                    clock.instant());
+            try {
+                runRepository.updateRun(failed);
+            } catch (RuntimeException updateFailure) {
+                snapshotFailure.addSuppressed(updateFailure);
+            }
+            throw new IllegalStateException("Failed to persist run context snapshot", snapshotFailure);
+        }
         return run;
     }
 
@@ -271,6 +286,9 @@ public class KernelAgentRunService implements AgentRunInboundPort {
         snapshot.setTenantId(run.tenantId());
         snapshot.setRunId(run.runId());
         snapshot.setConversationId(parseLong(run.conversationId()));
+        Map<String, Object> metadata = readMetadata(metadataJson);
+        snapshot.setBranchLeafMessageId(metadataLong(metadata.get("branchLeafMessageId")));
+        snapshot.setRoleCardId(metadataLong(metadata.get("roleCardId")));
         snapshot.setRunProfileId(runProfileContext.runProfileId());
         snapshot.setExecutorEngine(defaultText(runProfileContext.executorEngine(), "kernel"));
         snapshot.setExecutorConfigJson(writeJsonOrNull(runProfileContext.executorConfig()));
@@ -312,6 +330,8 @@ public class KernelAgentRunService implements AgentRunInboundPort {
             snapshot.put("executorConfig", runProfileContext.executorConfig());
         }
         Map<String, Object> metadata = readMetadata(metadataJson);
+        putIfPresent(snapshot, "branchLeafMessageId", metadata.get("branchLeafMessageId"));
+        putIfPresent(snapshot, "roleCardId", metadata.get("roleCardId"));
         if (!metadata.isEmpty()) {
             snapshot.put("metadata", metadata);
         }
@@ -344,6 +364,12 @@ public class KernelAgentRunService implements AgentRunInboundPort {
         }
     }
 
+    private void putIfPresent(Map<String, Object> target, String key, Object value) {
+        if (value != null) {
+            target.put(key, value);
+        }
+    }
+
     private Long parseLong(String value) {
         String text = trimToNull(value);
         if (text == null) {
@@ -354,6 +380,13 @@ public class KernelAgentRunService implements AgentRunInboundPort {
         } catch (NumberFormatException ignored) {
             return null;
         }
+    }
+
+    private Long metadataLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return value == null ? null : parseLong(value.toString());
     }
 
     private String resolveVersionId(AgentRunStartCommand command, AgentDefinition definition) {

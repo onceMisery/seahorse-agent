@@ -226,7 +226,7 @@ function Wait-ForBackendLog {
         if ($exitCode -ne 0) {
             throw "docker logs failed for $BackendContainer"
         }
-        $matched = @($logs | Select-String -SimpleMatch "Document chunk processing completed: docId=$DocId")
+        $matched = @($logs | Select-String -SimpleMatch "Successfully processed KnowledgeDocumentChunkEvent: docId=$DocId")
         if ($matched.Count -gt 0) {
             return "$($matched[-1])"
         }

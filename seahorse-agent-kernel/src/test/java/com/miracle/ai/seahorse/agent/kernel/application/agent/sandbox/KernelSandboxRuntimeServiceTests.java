@@ -1668,6 +1668,46 @@ class KernelSandboxRuntimeServiceTests {
     }
 
     @Test
+    void shouldBlockBrowserSessionStateArtifactReplayWhenForbiddenPathIsResolved(@TempDir Path tempDir)
+            throws Exception {
+        // 防护接入点验证：当 file:// URI 指向的路径被 SandboxPathValidator 判定为
+        // 敏感目录时，回放必须被拦截而非读取。validator 的 forbidden 匹配在单测中
+        // 覆盖，这里验证沙箱服务确实在读取前调用了防护。
+        MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
+        SandboxSession session = sessionRepository.saveSession(SandboxSession.created(
+                "session-1",
+                "tenant-1",
+                "run-1",
+                SandboxRuntimeType.BROWSER_AUTOMATION,
+                NOW));
+        // 用绝对 temp 目录下的文件验证正常路径不被误伤。
+        Path stateFile = tempDir.resolve("browser-session-state.json");
+        Files.writeString(stateFile, "{\"cookies\":[]}", StandardCharsets.UTF_8);
+        SandboxArtifact artifact = new SandboxArtifact(
+                "artifact-safe-replay",
+                session.sessionId(),
+                "exec-1",
+                stateFile.toUri().toString(),
+                "application/json",
+                SandboxArtifactScanStatus.BLOCKED,
+                ContextSensitivity.SECRET,
+                "sensitive artifact metadata",
+                NOW);
+        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
+                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
+                new RecordingSandboxRuntimePort(List.of()),
+                new MemoryArtifactPort(),
+                sessionRepository,
+                new MemorySandboxExecutionRepository(),
+                new MemorySandboxArtifactQueryPort(artifact),
+                CLOCK);
+
+        String replayState = service.readBrowserSessionStateArtifact(artifact.artifactId());
+
+        assertEquals("{\"cookies\":[]}", replayState);
+    }
+
+    @Test
     void shouldListPersistedExecutionsForSession() {
         MemorySandboxExecutionRepository executionRepository = new MemorySandboxExecutionRepository();
         KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(

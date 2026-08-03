@@ -1,4 +1,3 @@
-import * as React from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { AnimatePresence, motion } from "motion/react";
 import {

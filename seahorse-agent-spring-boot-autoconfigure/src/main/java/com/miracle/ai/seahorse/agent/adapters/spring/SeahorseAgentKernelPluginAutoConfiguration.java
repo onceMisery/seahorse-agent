@@ -47,8 +47,6 @@ import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureHealthAggregator;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureType;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentFetcherPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParserPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.EnhancementPromptPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.EnrichmentPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseQueryPort;
@@ -180,24 +178,11 @@ public class SeahorseAgentKernelPluginAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean
-    public EnhancementPromptPort seahorseEnhancementPromptPort() {
-        return EnhancementPromptPort.defaults();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public EnrichmentPromptPort seahorseEnrichmentPromptPort() {
-        return EnrichmentPromptPort.defaults();
-    }
-
-    @Bean
     @ConditionalOnBean(ExtensionRegistry.class)
     public EnhancerNodeFeature seahorseEnhancerNodeFeature(ExtensionRegistry extensionRegistry,
-                                                           ObjectProvider<ChatModelPort> chatModelPort,
-                                                           EnhancementPromptPort promptPort) {
+                                                           ObjectProvider<ChatModelPort> chatModelPort) {
         EnhancerNodeFeature feature = new EnhancerNodeFeature(
-                chatModelPort.getIfAvailable(ChatModelPort::noop), promptPort);
+                chatModelPort.getIfAvailable(ChatModelPort::noop));
         register(extensionRegistry, feature, IngestionNodeFeature.class, FeatureType.INGESTION_NODE, true);
         return feature;
     }
@@ -205,10 +190,9 @@ public class SeahorseAgentKernelPluginAutoConfiguration {
     @Bean
     @ConditionalOnBean(ExtensionRegistry.class)
     public EnricherNodeFeature seahorseEnricherNodeFeature(ExtensionRegistry extensionRegistry,
-                                                           ObjectProvider<ChatModelPort> chatModelPort,
-                                                           EnrichmentPromptPort promptPort) {
+                                                           ObjectProvider<ChatModelPort> chatModelPort) {
         EnricherNodeFeature feature = new EnricherNodeFeature(
-                chatModelPort.getIfAvailable(ChatModelPort::noop), promptPort);
+                chatModelPort.getIfAvailable(ChatModelPort::noop));
         register(extensionRegistry, feature, IngestionNodeFeature.class, FeatureType.INGESTION_NODE, true);
         return feature;
     }

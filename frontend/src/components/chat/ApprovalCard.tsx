@@ -20,7 +20,7 @@ export function ApprovalCard({ approval }: ApprovalCardProps) {
   React.useEffect(() => {
     setStatus(approval.status);
     setModifiedArguments(approval.argumentsPreviewJson ?? "");
-  }, [approval.status]);
+  }, [approval.status, approval.argumentsPreviewJson]);
 
   const runAction = async (action: "approve" | "reject" | "modify") => {
     if (!pending || loading) return;

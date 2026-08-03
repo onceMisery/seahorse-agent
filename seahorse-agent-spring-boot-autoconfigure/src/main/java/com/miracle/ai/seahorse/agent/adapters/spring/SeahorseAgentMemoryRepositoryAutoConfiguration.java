@@ -71,6 +71,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -203,8 +204,13 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
             matchIfMissing = true)
     @ConditionalOnMissingBean(MemoryOutboxPort.class)
     public JdbcMemoryOutboxRepositoryAdapter seahorseJdbcMemoryOutboxRepositoryAdapter(
-            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
-        return new JdbcMemoryOutboxRepositoryAdapter(dataSource, objectMapper(objectMapperProvider));
+            DataSource dataSource,
+            ObjectProvider<ObjectMapper> objectMapperProvider,
+            ObjectProvider<PlatformTransactionManager> transactionManagerProvider) {
+        return new JdbcMemoryOutboxRepositoryAdapter(
+                dataSource,
+                objectMapper(objectMapperProvider),
+                transactionManagerProvider.getIfAvailable());
     }
 
     @Bean

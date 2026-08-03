@@ -20,10 +20,8 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import cn.dev33.satoken.listener.SaTokenListener;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcLoginHistoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.SaTokenLoginListener;
-import com.miracle.ai.seahorse.agent.kernel.application.auth.KernelAuthRefreshService;
 import com.miracle.ai.seahorse.agent.kernel.application.auth.KernelAuthService;
 import com.miracle.ai.seahorse.agent.kernel.application.user.KernelUserService;
-import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthRefreshInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
@@ -61,28 +59,22 @@ public class SeahorseAgentKernelAuthAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean({UserRepositoryPort.class, PasswordHasherPort.class, TokenServicePort.class})
+    @ConditionalOnBean({
+            UserRepositoryPort.class,
+            PasswordHasherPort.class,
+            TokenServicePort.class,
+            RefreshTokenRepositoryPort.class
+    })
     @ConditionalOnMissingBean(AuthInboundPort.class)
     public KernelAuthService seahorseAuthInboundPort(UserRepositoryPort userRepositoryPort,
                                                      PasswordHasherPort passwordHasherPort,
                                                      TokenServicePort tokenServicePort,
                                                      ObjectProvider<LoginHistoryPort> loginHistoryPortProvider,
-                                                     ObjectProvider<RefreshTokenRepositoryPort> refreshTokenRepositoryPort,
+                                                     RefreshTokenRepositoryPort refreshTokenRepositoryPort,
                                                      ObjectProvider<Clock> clockProvider) {
         return new KernelAuthService(userRepositoryPort, passwordHasherPort, tokenServicePort,
                 loginHistoryPortProvider.getIfAvailable(),
-                refreshTokenRepositoryPort.getIfAvailable(),
-                clockProvider.getIfAvailable(Clock::systemUTC));
-    }
-
-    @Bean
-    @ConditionalOnBean({RefreshTokenRepositoryPort.class, TokenServicePort.class})
-    @ConditionalOnMissingBean(AuthRefreshInboundPort.class)
-    public KernelAuthRefreshService seahorseAuthRefreshInboundPort(
-            RefreshTokenRepositoryPort refreshTokenRepositoryPort,
-            TokenServicePort tokenServicePort,
-            ObjectProvider<Clock> clockProvider) {
-        return new KernelAuthRefreshService(refreshTokenRepositoryPort, tokenServicePort,
+                refreshTokenRepositoryPort,
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 

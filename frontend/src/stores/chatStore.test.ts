@@ -4,6 +4,7 @@ import { useChatStore } from "@/stores/chatStore";
 import { getAgentRunCostSummary, getAgentRunSnapshot, listAgentRunEvents } from "@/services/agentRunService";
 import { createStreamResponse } from "@/hooks/useStreamResponse";
 import { forkMessage, listMessages, listMessageTree, switchMessageBranch } from "@/services/sessionService";
+import type { ConversationMessageVO } from "@/services/sessionService";
 import { AGENT_STREAM_EVENTS, type AgentRunSnapshot, type Message, type StreamEventEnvelope } from "@/types";
 import { storage } from "@/utils/storage";
 import { toast } from "sonner";
@@ -436,7 +437,7 @@ describe("chatStore snapshot hydration", () => {
     await useChatStore.getState().sendMessage("Stop me");
 
     const assistant = useChatStore.getState().messages.find((message) => message.role === "assistant");
-    expect(assistant?.status).toBe("done");
+    expect(assistant?.status).toBe("cancelled");
     expect(useChatStore.getState().cancelRequested).toBe(false);
     expect(consoleError).not.toHaveBeenCalled();
     consoleError.mockRestore();
@@ -591,7 +592,7 @@ describe("chatStore snapshot hydration", () => {
   });
 
   it("dedupes overlapping active session loads", async () => {
-    let resolveMessages: (messages: unknown[]) => void = () => undefined;
+    let resolveMessages: (messages: ConversationMessageVO[]) => void = () => undefined;
     vi.mocked(listMessages).mockReturnValue(new Promise((resolve) => {
       resolveMessages = resolve;
     }) as ReturnType<typeof listMessages>);
@@ -790,7 +791,7 @@ describe("chatStore snapshot hydration", () => {
   });
 
   it("does not overwrite live auto-sent messages when session history resolves later", async () => {
-    let resolveMessages: (messages: unknown[]) => void = () => undefined;
+    let resolveMessages: (messages: ConversationMessageVO[]) => void = () => undefined;
     vi.mocked(listMessages).mockReturnValue(new Promise((resolve) => {
       resolveMessages = resolve;
     }) as ReturnType<typeof listMessages>);
@@ -809,7 +810,7 @@ describe("chatStore snapshot hydration", () => {
   });
 
   it("does not apply a stale session response after the active session changes", async () => {
-    let resolveMessages: (messages: unknown[]) => void = () => undefined;
+    let resolveMessages: (messages: ConversationMessageVO[]) => void = () => undefined;
     vi.mocked(listMessages).mockReturnValue(new Promise((resolve) => {
       resolveMessages = resolve;
     }) as ReturnType<typeof listMessages>);

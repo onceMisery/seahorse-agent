@@ -21,6 +21,11 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputGovernance
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationRequest;
 import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputValidationRecordPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -30,6 +35,7 @@ import org.springframework.context.annotation.Configuration;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * Slice 2a：noop guard 启动期检测契约。
@@ -55,7 +61,7 @@ class SeahorseAgentNoopPortGuardTests {
     }
 
     @Test
-    void identifiesNoopFallbackOnClassAPort() {
+    void identifiesNoopFallbackOnOptionalPort() {
         contextRunner
                 .withUserConfiguration(NoopOutputRecordConfiguration.class)
                 .run(context -> {
@@ -66,7 +72,7 @@ class SeahorseAgentNoopPortGuardTests {
                             .singleElement()
                             .satisfies(only -> {
                                 assertThat(only.riskClass())
-                                        .isEqualTo(SeahorseAgentNoopPortGuard.RiskClass.CLASS_A_FAIL_FAST);
+                                        .isEqualTo(SeahorseAgentNoopPortGuard.RiskClass.CLASS_B_WARN);
                                 assertThat(only.isNoopFallback()).isTrue();
                                 assertThat(only.missing()).isFalse();
                             });
@@ -74,7 +80,7 @@ class SeahorseAgentNoopPortGuardTests {
     }
 
     @Test
-    void identifiesRealImplementationOnClassAPort() {
+    void identifiesRealImplementationOnOptionalPort() {
         contextRunner
                 .withUserConfiguration(RealOutputRecordConfiguration.class)
                 .run(context -> {
@@ -112,7 +118,8 @@ class SeahorseAgentNoopPortGuardTests {
                     com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort.class,
                     com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort.class,
                     com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort.class,
-                    com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort.class);
+                    com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort.class,
+                    OutboxEventRepositoryPort.class);
         });
     }
 
@@ -212,10 +219,29 @@ class SeahorseAgentNoopPortGuardTests {
     }
 
     @Test
-    void enforcementDoesNotThrowOnClassARealImplementation() {
+    void enterpriseFailsWhenClassAPortIsMissing() {
         contextRunner
-                .withUserConfiguration(RealOutputRecordConfiguration.class)
-                .withPropertyValues("seahorse-agent.runtime.noop-guard.enforce-class-a=true")
+                .withPropertyValues("seahorse-agent.product-mode=enterprise")
+                .run(context -> assertThat(context)
+                        .hasFailed()
+                        .getFailure()
+                        .isInstanceOf(SeahorseAgentNoopPortGuard.NoopFallbackEnforcementException.class)
+                        .hasMessageContaining("missing"));
+    }
+
+    @Test
+    void enterpriseStartsWhenAllClassAPortsHaveRealImplementations() {
+        contextRunner
+                .withUserConfiguration(RealClassAPortsConfiguration.class)
+                .withPropertyValues("seahorse-agent.product-mode=enterprise")
+                .run(context -> assertThat(context).hasNotFailed());
+    }
+
+    @Test
+    void enterpriseDoesNotFailWhenOptionalOutputRecordPortIsMissing() {
+        contextRunner
+                .withUserConfiguration(RealClassAPortsWithoutOutputRecordConfiguration.class)
+                .withPropertyValues("seahorse-agent.product-mode=enterprise")
                 .run(context -> assertThat(context).hasNotFailed());
     }
 
@@ -255,6 +281,69 @@ class SeahorseAgentNoopPortGuardTests {
         @Bean
         OutputValidationRecordPort outputValidationRecordPort() {
             return new RealOutputValidationRecordPort();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class RealClassAPortsConfiguration {
+
+        @Bean
+        OutputValidationRecordPort outputValidationRecordPort() {
+            return mock(OutputValidationRecordPort.class);
+        }
+
+        @Bean
+        MemoryOutboxPort memoryOutboxPort() {
+            return mock(MemoryOutboxPort.class);
+        }
+
+        @Bean
+        MemoryReviewCandidatePort memoryReviewCandidatePort() {
+            return mock(MemoryReviewCandidatePort.class);
+        }
+
+        @Bean
+        MemoryOperationLogPort memoryOperationLogPort() {
+            return mock(MemoryOperationLogPort.class);
+        }
+
+        @Bean
+        ToolInvocationAuditPort toolInvocationAuditPort() {
+            return mock(ToolInvocationAuditPort.class);
+        }
+
+        @Bean
+        OutboxEventRepositoryPort outboxEventRepositoryPort() {
+            return mock(OutboxEventRepositoryPort.class);
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class RealClassAPortsWithoutOutputRecordConfiguration {
+
+        @Bean
+        MemoryOutboxPort memoryOutboxPort() {
+            return mock(MemoryOutboxPort.class);
+        }
+
+        @Bean
+        MemoryReviewCandidatePort memoryReviewCandidatePort() {
+            return mock(MemoryReviewCandidatePort.class);
+        }
+
+        @Bean
+        MemoryOperationLogPort memoryOperationLogPort() {
+            return mock(MemoryOperationLogPort.class);
+        }
+
+        @Bean
+        ToolInvocationAuditPort toolInvocationAuditPort() {
+            return mock(ToolInvocationAuditPort.class);
+        }
+
+        @Bean
+        OutboxEventRepositoryPort outboxEventRepositoryPort() {
+            return mock(OutboxEventRepositoryPort.class);
         }
     }
 

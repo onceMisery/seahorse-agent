@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { RefreshCw, Search } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -28,14 +28,14 @@ export function AccessDecisionPage() {
 
   const decisions = pageData?.records || [];
 
-  const loadDecisions = async (current = pageNo, kw = keyword) => {
+  const loadDecisions = useCallback(async (current = pageNo, kw = keyword) => {
     try {
       setLoading(true);
       const data = await listAccessDecisions({
         current,
         size: PAGE_SIZE,
-        resource: kw || undefined,
-        result: resultFilter !== "all" ? resultFilter : undefined
+        resourceId: kw || undefined,
+        effect: resultFilter !== "all" ? resultFilter : undefined
       });
       setPageData(data);
     } catch (error) {
@@ -44,12 +44,12 @@ export function AccessDecisionPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pageNo, keyword, resultFilter]);
 
   useEffect(() => {
     if (!featureState.enabled) return;
     loadDecisions();
-  }, [pageNo, keyword, resultFilter]);
+  }, [featureState.enabled, loadDecisions]);
 
   if (!featureState.enabled) {
     return <FeatureUnavailableState featureState={featureState} featureName="访问决策" />;
@@ -68,8 +68,8 @@ export function AccessDecisionPage() {
             <SelectTrigger className="w-[120px]"><SelectValue placeholder="决策结果" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部</SelectItem>
-              <SelectItem value="allow">允许</SelectItem>
-              <SelectItem value="deny">拒绝</SelectItem>
+              <SelectItem value="ALLOW">允许</SelectItem>
+              <SelectItem value="DENY">拒绝</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={() => loadDecisions(pageNo, keyword)}>
@@ -103,7 +103,7 @@ export function AccessDecisionPage() {
                   const resource = d.resource || (d.resourceId ? `${d.resourceType || ""}: ${d.resourceId}` : "-");
                   const result = d.result || (d.effect ? d.effect.toLowerCase() : "-");
                   const denyReason = d.denyReason || d.reasonCode || "-";
-                  const time = d.decisionTime || d.createdAt || "-";
+                  const matchedRuleIds = d.matchedRules?.map((rule) => rule.ruleId).filter(Boolean).join(", ");
                   return (
                   <TableRow key={d.decisionId}>
                     <TableCell className="font-medium">{subject}</TableCell>
@@ -113,7 +113,7 @@ export function AccessDecisionPage() {
                     <TableCell className="text-sm text-muted-foreground">{d.agentId || "-"}</TableCell>
                     <TableCell className="text-sm text-muted-foreground truncate max-w-[150px]" title={denyReason}>{denyReason}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {d.matchedRules?.map((r, i) => <span key={i} className="inline-block mr-1">{r.ruleId}</span>) || denyReason !== "-" ? denyReason : "-"}
+                      {matchedRuleIds || "-"}
                     </TableCell>
                   </TableRow>
                   );

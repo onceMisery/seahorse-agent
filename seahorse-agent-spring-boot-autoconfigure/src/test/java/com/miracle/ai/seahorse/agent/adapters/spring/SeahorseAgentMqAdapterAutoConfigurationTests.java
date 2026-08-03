@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SeahorseAgentMqAdapterAutoConfigurationTests {
 
@@ -67,30 +67,16 @@ class SeahorseAgentMqAdapterAutoConfigurationTests {
     }
 
     @Test
-    void directReliablePublishCanBypassOutboxWhenDisabled() {
-        OutboxEventRepositoryPort outboxRepository = mock(OutboxEventRepositoryPort.class);
-
+    void directReliablePublishFailsWhenOutboxIsUnavailable() {
         contextRunner
-                .withBean(OutboxEventRepositoryPort.class, () -> outboxRepository)
-                .withPropertyValues(
-                        "seahorse-agent.adapters.mq.type=direct",
-                        "seahorse-agent.adapters.mq.reliable-outbox-enabled=false")
+                .withPropertyValues("seahorse-agent.adapters.mq.type=direct")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     MessageQueuePort queuePort = context.getBean(MessageQueuePort.class);
-                    MessageSubscriptionPort subscriptionPort = context.getBean(MessageSubscriptionPort.class);
-                    List<SamplePayload> received = new ArrayList<>();
-
-                    AutoCloseable subscription = subscriptionPort.subscribe(
-                            "topic-a", "sub-a", SamplePayload.class, received::add);
-                    try {
-                        queuePort.publishReliable("topic-a", "key-a", "biz", new SamplePayload("doc-1"));
-                    } finally {
-                        subscription.close();
-                    }
-
-                    assertThat(received).containsExactly(new SamplePayload("doc-1"));
-                    verifyNoInteractions(outboxRepository);
+                    assertThatThrownBy(() -> queuePort.publishReliable(
+                            "topic-a", "key-a", "biz", new SamplePayload("doc-1")))
+                            .isInstanceOf(IllegalStateException.class)
+                            .hasMessageContaining("Outbox repository is required");
                 });
     }
 

@@ -11,7 +11,7 @@ export interface AuditEvent {
   actorId?: string;
   eventType?: string;
   agentId?: string;
-  runId?: string;
+  runId?: string | null;
   tenantId?: string;
   resource?: string;
   resourceType?: string;
@@ -37,6 +37,7 @@ export interface CostUsageRecord {
 }
 
 export interface CostAggregate {
+  tenantId?: string;
   totalCost?: number;
   totalTokens?: number;
   totalCalls?: number;
@@ -130,7 +131,7 @@ export async function getAuditEvent(auditId: string) {
 // ── 成本明细与聚合 ──
 
 export function createCostUsageRecord(payload: Record<string, unknown>) {
-  return api.post<CostUsageRecord, CostUsageRecord>("/api/cost-usage-records", payload);
+  return api.post<CostUsageRecord>("/api/cost-usage-records", payload);
 }
 
 export function aggregateCostUsage(params: {

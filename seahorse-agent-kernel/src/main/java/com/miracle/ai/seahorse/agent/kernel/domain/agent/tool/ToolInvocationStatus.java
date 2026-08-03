@@ -50,5 +50,13 @@ public enum ToolInvocationStatus {
     /**
      * 真实工具执行失败或 Gateway 捕获异常。
      */
-    FAILED
+    FAILED,
+
+    /**
+     * 工具副作用结果不确定，等待对账或补偿后收敛为 SUCCEEDED / FAILED。
+     *
+     * <p>例如幂等键重复命中、进程在工具返回后被终止、或 Gateway 无法确定副作用
+     * 是否已经落盘。终端状态不可被普通重试改写；UNKNOWN 只能通过对账收敛。</p>
+     */
+    UNKNOWN
 }

@@ -20,7 +20,6 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.artifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactUpdateCommand;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactUpdateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
@@ -34,7 +33,7 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
-public class KernelAgentArtifactUpdateService implements AgentArtifactUpdateInboundPort {
+public class KernelAgentArtifactUpdateService {
 
     private static final Logger LOG = LoggerFactory.getLogger(KernelAgentArtifactUpdateService.class);
     private static final String ADMIN_ROLE = "admin";
@@ -53,8 +52,6 @@ public class KernelAgentArtifactUpdateService implements AgentArtifactUpdateInbo
         this.objectStoragePort = Objects.requireNonNull(objectStoragePort, "objectStoragePort must not be null");
         this.currentUserPort = Objects.requireNonNull(currentUserPort, "currentUserPort must not be null");
     }
-
-    @Override
     public AgentArtifact updateContent(String artifactId, AgentArtifactUpdateCommand command) {
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
         AgentArtifact current = artifactRepository.findById(requireText(artifactId, "artifactId must not be blank"))

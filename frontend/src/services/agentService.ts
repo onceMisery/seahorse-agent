@@ -22,7 +22,7 @@ export async function listAgents(params?: {
   size?: number;
   keyword?: string;
 }): Promise<AgentPageResponse> {
-  return api.get<AgentPageResponse, AgentPageResponse>("/api/agents", {
+  return api.get<AgentPageResponse>("/api/agents", {
     params: { current: 1, size: 100, ...params }
   });
 }

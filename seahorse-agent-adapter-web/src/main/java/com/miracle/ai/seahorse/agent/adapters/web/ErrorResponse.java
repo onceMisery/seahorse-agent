@@ -27,6 +27,7 @@ import java.util.UUID;
 public record ErrorResponse(
         String code,
         String message,
+        Boolean retryable,
         Instant timestamp,
         String path,
         String requestId,
@@ -35,11 +36,11 @@ public record ErrorResponse(
 ) {
 
     public static ErrorResponse of(String code, String message, String path) {
-        return of(code, message, path, nextRequestId(), "default", Map.of());
+        return of(code, message, false, path, nextRequestId(), "default", Map.of());
     }
 
     public static ErrorResponse of(String code, String message) {
-        return of(code, message, null, nextRequestId(), "default", Map.of());
+        return of(code, message, false, null, nextRequestId(), "default", Map.of());
     }
 
     public static ErrorResponse of(String code,
@@ -48,9 +49,20 @@ public record ErrorResponse(
                                    String requestId,
                                    String tenantId,
                                    Map<String, Object> details) {
+        return of(code, message, false, path, requestId, tenantId, details);
+    }
+
+    public static ErrorResponse of(String code,
+                                   String message,
+                                   boolean retryable,
+                                   String path,
+                                   String requestId,
+                                   String tenantId,
+                                   Map<String, Object> details) {
         return new ErrorResponse(
                 code,
                 message,
+                retryable,
                 Instant.now(),
                 path,
                 requestId == null || requestId.isBlank() ? nextRequestId() : requestId,

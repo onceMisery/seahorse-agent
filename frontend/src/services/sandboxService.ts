@@ -392,7 +392,7 @@ export function createSandboxSession(payload: SandboxSessionCreatePayload = {}) 
   if (payload.requiredRuntimeNodeId?.trim()) {
     request.requiredRuntimeNodeId = payload.requiredRuntimeNodeId.trim();
   }
-  return api.post<SandboxSession, SandboxSession>(`${SANDBOX_API_PREFIX}/sessions`, request);
+  return api.post<SandboxSession>(`${SANDBOX_API_PREFIX}/sessions`, request);
 }
 
 export function listSandboxSessions(tenantId = currentTenantId(), limit = 20) {
@@ -405,7 +405,7 @@ export function listSandboxSessions(tenantId = currentTenantId(), limit = 20) {
 }
 
 export function sweepExpiredSandboxSessions(tenantId = currentTenantId(), limit = 20) {
-  return api.post<SandboxSessionSweepResult, SandboxSessionSweepResult>(
+  return api.post<SandboxSessionSweepResult>(
     `${SANDBOX_API_PREFIX}/sessions/expired:sweep`,
     undefined,
     {
@@ -418,7 +418,7 @@ export function sweepExpiredSandboxSessions(tenantId = currentTenantId(), limit 
 }
 
 export function sweepOrphanedSandboxRuntimeResources() {
-  return api.post<SandboxRuntimeCleanupResult, SandboxRuntimeCleanupResult>(
+  return api.post<SandboxRuntimeCleanupResult>(
     `${SANDBOX_API_PREFIX}/runtime/orphans:sweep`
   );
 }
@@ -448,13 +448,13 @@ export function getSandboxRuntimeNodeMaintenanceStatus(nodeId: string) {
 }
 
 export function drainSandboxRuntimeNode(nodeId: string) {
-  return api.post<SandboxRuntimeNodeAdmissionOverride, SandboxRuntimeNodeAdmissionOverride>(
+  return api.post<SandboxRuntimeNodeAdmissionOverride>(
     `${sandboxRuntimeNodeRegistrationPath(nodeId)}/drain`
   );
 }
 
 export function resumeSandboxRuntimeNode(nodeId: string) {
-  return api.post<SandboxRuntimeNodeAdmissionOverride, SandboxRuntimeNodeAdmissionOverride>(
+  return api.post<SandboxRuntimeNodeAdmissionOverride>(
     `${sandboxRuntimeNodeRegistrationPath(nodeId)}/resume`
   );
 }
@@ -480,7 +480,7 @@ export function getSandboxEgressPolicy(tenantId = currentTenantId()) {
 }
 
 export function upsertSandboxEgressPolicy(payload: SandboxEgressPolicyPayload) {
-  return api.post<SandboxEgressPolicy, SandboxEgressPolicy>(
+  return api.post<SandboxEgressPolicy>(
     `${SANDBOX_API_PREFIX}/runtime/egress-policy`,
     payload
   );
@@ -493,14 +493,14 @@ export function listSandboxBrowserProfiles(tenantId = currentTenantId(), limit =
 }
 
 export function upsertSandboxBrowserProfile(payload: SandboxBrowserProfilePayload) {
-  return api.post<SandboxBrowserProfile, SandboxBrowserProfile>(
+  return api.post<SandboxBrowserProfile>(
     `${SANDBOX_API_PREFIX}/runtime/browser-profiles`,
     payload
   );
 }
 
 export function disableSandboxBrowserProfile(profileId: string, tenantId = currentTenantId()) {
-  return api.post<SandboxBrowserProfile, SandboxBrowserProfile>(
+  return api.post<SandboxBrowserProfile>(
     `${SANDBOX_API_PREFIX}/runtime/browser-profiles/${encodeURIComponent(profileId)}:disable`,
     undefined,
     { params: { tenantId } }
@@ -508,21 +508,21 @@ export function disableSandboxBrowserProfile(profileId: string, tenantId = curre
 }
 
 export function upsertSandboxRuntimeProfilePolicy(payload: SandboxRuntimeProfilePolicyPayload) {
-  return api.post<SandboxRuntimeProfilePolicy, SandboxRuntimeProfilePolicy>(
+  return api.post<SandboxRuntimeProfilePolicy>(
     `${SANDBOX_API_PREFIX}/runtime/profile-policies`,
     payload
   );
 }
 
 export function upsertSandboxToolQuotaPolicy(payload: SandboxToolQuotaPolicyPayload) {
-  return api.post<SandboxToolQuotaPolicy, SandboxToolQuotaPolicy>(
+  return api.post<SandboxToolQuotaPolicy>(
     `${SANDBOX_API_PREFIX}/runtime/tool-quota-policies`,
     payload
   );
 }
 
 export function reapOrphanedSandboxRuntimeContainers(dryRun = true) {
-  return api.post<SandboxRuntimeContainerReapResult, SandboxRuntimeContainerReapResult>(
+  return api.post<SandboxRuntimeContainerReapResult>(
     `${SANDBOX_API_PREFIX}/runtime/orphan-containers:reap`,
     undefined,
     {
@@ -533,7 +533,7 @@ export function reapOrphanedSandboxRuntimeContainers(dryRun = true) {
 
 export function executeInSandbox(sessionId: string, payload: SandboxExecutePayload) {
   const input = payload.input ?? payload.argumentsJson ?? "";
-  return api.post<SandboxExecutionResult, SandboxExecutionResult>(
+  return api.post<SandboxExecutionResult>(
     `${SANDBOX_API_PREFIX}/sessions/${encodeURIComponent(sessionId)}/execute`,
     {
       input,
@@ -544,7 +544,7 @@ export function executeInSandbox(sessionId: string, payload: SandboxExecutePaylo
 }
 
 export function closeSandboxSession(sessionId: string) {
-  return api.post<SandboxSession, SandboxSession>(
+  return api.post<SandboxSession>(
     `${SANDBOX_API_PREFIX}/sessions/${encodeURIComponent(sessionId)}/close`
   );
 }

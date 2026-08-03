@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
@@ -16,17 +16,18 @@ export function MemoryTracePanel() {
   const [pageNo, setPageNo] = useState(1);
   const [memoryIdFilter, setMemoryIdFilter] = useState("");
   const [runIdFilter, setRunIdFilter] = useState("");
+  const [appliedFilters, setAppliedFilters] = useState({ memoryId: "", runId: "" });
 
   const traces = pageData?.records || [];
 
-  const loadTraces = async () => {
+  const loadTraces = useCallback(async () => {
     try {
       setLoading(true);
       const data = await listMemoryTraces({
         current: pageNo,
         size: 10,
-        memoryId: memoryIdFilter || undefined,
-        runId: runIdFilter || undefined
+        memoryId: appliedFilters.memoryId || undefined,
+        runId: appliedFilters.runId || undefined
       });
       setPageData(data);
     } catch (error) {
@@ -35,18 +36,25 @@ export function MemoryTracePanel() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pageNo, appliedFilters]);
 
   useEffect(() => {
     loadTraces();
-  }, [pageNo]);
+  }, [loadTraces]);
 
   return (
     <>
       <div className="flex items-center gap-2 mb-4">
         <Input value={memoryIdFilter} onChange={(e) => setMemoryIdFilter(e.target.value)} placeholder="记忆 ID" className="w-[180px]" />
         <Input value={runIdFilter} onChange={(e) => setRunIdFilter(e.target.value)} placeholder="Run ID" className="w-[180px]" />
-        <Button variant="outline" size="sm" onClick={() => { setPageNo(1); loadTraces(); }}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setPageNo(1);
+            setAppliedFilters({ memoryId: memoryIdFilter.trim(), runId: runIdFilter.trim() });
+          }}
+        >
           <Search className="w-4 h-4 mr-1" />搜索
         </Button>
         <Button variant="outline" size="sm" onClick={loadTraces}>

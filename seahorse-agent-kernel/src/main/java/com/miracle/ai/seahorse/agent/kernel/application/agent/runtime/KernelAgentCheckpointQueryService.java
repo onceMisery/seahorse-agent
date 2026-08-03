@@ -19,7 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
@@ -28,7 +28,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import java.util.List;
 import java.util.Objects;
 
-public class KernelAgentCheckpointQueryService implements AgentCheckpointQueryInboundPort {
+public class KernelAgentCheckpointQueryService {
 
     private static final String ADMIN_ROLE = "admin";
     private static final String ACCESS_DENIED = "\u6743\u9650\u4e0d\u8db3";
@@ -48,8 +48,6 @@ public class KernelAgentCheckpointQueryService implements AgentCheckpointQueryIn
         this.currentUserPort = Objects.requireNonNull(currentUserPort, "currentUserPort must not be null");
         this.checkpointViewSanitizer = new AgentCheckpointViewSanitizer(null);
     }
-
-    @Override
     public List<AgentCheckpoint> listByRunId(String runId) {
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
         String safeRunId = requireText(runId, "runId must not be blank");

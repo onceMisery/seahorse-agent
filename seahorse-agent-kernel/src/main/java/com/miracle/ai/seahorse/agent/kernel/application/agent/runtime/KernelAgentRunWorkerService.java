@@ -22,13 +22,13 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalReques
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpointType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunQueryInboundPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunWorkerLimits;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunWorkerOutcome;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunWorkerSkipReason;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerTickRecord;
@@ -51,7 +51,7 @@ public class KernelAgentRunWorkerService implements AgentRunWorkerInboundPort {
     private final AgentCheckpointRepositoryPort checkpointRepository;
     private final ApprovalRequestQueryPort approvalQueryPort;
     private final AgentRunLeaseInboundPort leasePort;
-    private final AgentRunResumeInboundPort resumePort;
+    private final AgentRunQueryInboundPort resumePort;
     private final Clock clock;
 
     public KernelAgentRunWorkerService(AgentRunQueueRepositoryPort queueRepository,
@@ -59,7 +59,7 @@ public class KernelAgentRunWorkerService implements AgentRunWorkerInboundPort {
                                        AgentCheckpointRepositoryPort checkpointRepository,
                                        ApprovalRequestQueryPort approvalQueryPort,
                                        AgentRunLeaseInboundPort leasePort,
-                                       AgentRunResumeInboundPort resumePort,
+                                       AgentRunQueryInboundPort resumePort,
                                        Clock clock) {
         this.queueRepository = Objects.requireNonNull(queueRepository, "queueRepository must not be null");
         this.runRepository = Objects.requireNonNull(runRepository, "runRepository must not be null");

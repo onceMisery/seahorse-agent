@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceInspector } from "@/components/chat/workbench/WorkspaceInspector";
 import { getAgentRunContextSnapshot } from "@/services/runContextSnapshotService";
 import { useWorkbenchStore } from "@/stores/workbenchStore";

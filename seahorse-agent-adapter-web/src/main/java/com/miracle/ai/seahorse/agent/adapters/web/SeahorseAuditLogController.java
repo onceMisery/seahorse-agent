@@ -17,8 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
-import com.miracle.ai.seahorse.agent.kernel.application.admin.KernelAuditLogService;
 import com.miracle.ai.seahorse.agent.kernel.domain.audit.AuditLog;
+import com.miracle.ai.seahorse.agent.ports.inbound.admin.AuditLogInboundPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,9 +35,9 @@ import java.util.List;
 @RequestMapping("/api/admin/audit-logs")
 public class SeahorseAuditLogController {
 
-    private final ObjectProvider<KernelAuditLogService> auditLogServiceProvider;
+    private final ObjectProvider<AuditLogInboundPort> auditLogServiceProvider;
 
-    public SeahorseAuditLogController(ObjectProvider<KernelAuditLogService> auditLogServiceProvider) {
+    public SeahorseAuditLogController(ObjectProvider<AuditLogInboundPort> auditLogServiceProvider) {
         this.auditLogServiceProvider = auditLogServiceProvider;
     }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, BookOpen, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
 
@@ -42,7 +42,7 @@ export function AgentSkillBindingPanel({ agentId, onSnapshotChange }: Props) {
     );
   }, [keyword, skills]);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
@@ -59,11 +59,11 @@ export function AgentSkillBindingPanel({ agentId, onSnapshotChange }: Props) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [agentId]);
 
   useEffect(() => {
     refresh();
-  }, [agentId]);
+  }, [refresh]);
 
   useEffect(() => {
     onSnapshotChange?.(snapshotJson(bindings, skills));
@@ -71,7 +71,8 @@ export function AgentSkillBindingPanel({ agentId, onSnapshotChange }: Props) {
 
   const toggle = (skill: AgentSkill, checked: boolean) => {
     if (checked) {
-      if (!skill.latestRevisionId) {
+      const revisionId = skill.latestRevisionId;
+      if (!revisionId) {
         toast.error("该 Skill 暂无可绑定版本");
         return;
       }
@@ -79,7 +80,7 @@ export function AgentSkillBindingPanel({ agentId, onSnapshotChange }: Props) {
         ...prev.filter((item) => item.skillName !== skill.name),
         {
           skillName: skill.name,
-          revisionId: skill.latestRevisionId,
+          revisionId,
           injectMode: DEFAULT_MODE
         }
       ]);

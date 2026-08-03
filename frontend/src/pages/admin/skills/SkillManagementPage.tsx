@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo, useState } from "react";
+import { useCallback, useRef, useEffect, useMemo, useState } from "react";
 import { AlertCircle, BookOpen, Check, FileUp, History, PackagePlus, Pencil, Plus, RefreshCw, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -130,11 +130,11 @@ export function SkillManagementPage() {
     );
   }, [keyword, skills]);
 
-  const refresh = async () => {
+  const loadSkills = useCallback(async (requestKeyword = "") => {
     setLoading(true);
     setLoadError(null);
     try {
-      const page = await listSkills({ current: 1, size: 200, keyword: keyword.trim() || undefined });
+      const page = await listSkills({ current: 1, size: 200, keyword: requestKeyword || undefined });
       setSkills(page.records || []);
     } catch (error) {
       const message = getErrorMessage(error, "加载 Skill 列表失败");
@@ -143,13 +143,15 @@ export function SkillManagementPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const refresh = useCallback(() => loadSkills(keyword.trim()), [keyword, loadSkills]);
 
   useEffect(() => {
     if (featureState.enabled) {
-      refresh();
+      void loadSkills();
     }
-  }, [featureState.enabled]);
+  }, [featureState.enabled, loadSkills]);
 
   const openCreate = () => {
     setEditing(null);

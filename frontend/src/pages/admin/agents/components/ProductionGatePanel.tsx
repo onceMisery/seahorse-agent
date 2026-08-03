@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CheckCircle, XCircle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -15,7 +15,7 @@ export function ProductionGatePanel({ agentId }: { agentId: string }) {
   const [loading, setLoading] = useState(false);
   const [triggering, setTriggering] = useState(false);
 
-  const fetchReport = async () => {
+  const fetchReport = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getLatestProductionGate(agentId);
@@ -25,11 +25,11 @@ export function ProductionGatePanel({ agentId }: { agentId: string }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [agentId]);
 
   useEffect(() => {
     fetchReport();
-  }, [agentId]);
+  }, [fetchReport]);
 
   const handleTrigger = async () => {
     setTriggering(true);
@@ -98,7 +98,7 @@ export function ProductionGatePanel({ agentId }: { agentId: string }) {
         </div>
       ) : (
         <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-500">
-          暂无门禁报告，点击"触发检查"生成
+          暂无门禁报告，点击“触发检查”生成
         </div>
       )}
     </div>

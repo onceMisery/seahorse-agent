@@ -19,7 +19,6 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutActionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutCreateCommand;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutCostSummaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutRollbackCommand;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,37 +34,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class SeahorseAgentRolloutController {
 
     private final ObjectProvider<AgentRolloutInboundPort> rolloutPortProvider;
-    private final ObjectProvider<AgentRolloutCostSummaryInboundPort> costSummaryPortProvider;
     private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseAgentRolloutController(ObjectProvider<AgentRolloutInboundPort> rolloutPortProvider) {
-        this(rolloutPortProvider, null, AdvancedFeatureGate.allEnabledForTests());
-    }
-
-    public SeahorseAgentRolloutController(ObjectProvider<AgentRolloutInboundPort> rolloutPortProvider,
-                                          ObjectProvider<AgentRolloutCostSummaryInboundPort> costSummaryPortProvider) {
-        this(rolloutPortProvider, costSummaryPortProvider, AdvancedFeatureGate.allEnabledForTests());
+        this(rolloutPortProvider, AdvancedFeatureGate.allEnabledForTests());
     }
 
     @Autowired
     public SeahorseAgentRolloutController(ObjectProvider<AgentRolloutInboundPort> rolloutPortProvider,
-                                          ObjectProvider<AgentRolloutCostSummaryInboundPort> costSummaryPortProvider,
-                                          ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
-        this(rolloutPortProvider,
-                costSummaryPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
-    }
-
-    public SeahorseAgentRolloutController(ObjectProvider<AgentRolloutInboundPort> rolloutPortProvider,
-                                          AdvancedFeatureGate advancedFeatureGate) {
-        this(rolloutPortProvider, null, advancedFeatureGate);
-    }
-
-    public SeahorseAgentRolloutController(ObjectProvider<AgentRolloutInboundPort> rolloutPortProvider,
-                                          ObjectProvider<AgentRolloutCostSummaryInboundPort> costSummaryPortProvider,
                                           AdvancedFeatureGate advancedFeatureGate) {
         this.rolloutPortProvider = rolloutPortProvider;
-        this.costSummaryPortProvider = costSummaryPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
                 ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
@@ -111,7 +89,7 @@ public class SeahorseAgentRolloutController {
                                            @PathVariable String rolloutId,
                                            @RequestParam String tenantId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_ROLLOUT_MANAGEMENT);
-        return ApiResponses.requireService(costSummaryPortProvider,
+        return ApiResponses.requireService(rolloutPortProvider,
                 port -> port.getCostSummary(tenantId, agentId, rolloutId));
     }
 

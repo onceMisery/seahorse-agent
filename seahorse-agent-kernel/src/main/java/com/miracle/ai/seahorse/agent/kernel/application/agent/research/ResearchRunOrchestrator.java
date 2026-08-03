@@ -111,8 +111,8 @@ public class ResearchRunOrchestrator {
                                 "title", stepType.name(),
                                 "status", "SKIPPED",
                                 "skippedReason", "loop_detected"));
-                taskQueue.ack(task.taskId());
                 enqueueSpecificStep(task.runId(), ResearchStepType.SYNTHESIZE, context);
+                taskQueue.ack(task.taskId());
                 return true;
             }
             emitEvent(task.runId(), context, StreamEventType.STEP_STARTED,
@@ -134,9 +134,8 @@ public class ResearchRunOrchestrator {
 
             emitEvent(task.runId(), context, StreamEventType.STEP_FINISHED,
                     Map.of("stepId", task.taskId(), "title", stepType.name(), "status", "SUCCEEDED"));
-            taskQueue.ack(task.taskId());
-
             enqueueNextStep(task.runId(), stepType, context);
+            taskQueue.ack(task.taskId());
             return true;
         } catch (RetryableResearchException e) {
             if (!e.shouldRetry(task.attemptCount(), MAX_RETRY_ATTEMPTS)) {
@@ -165,9 +164,13 @@ public class ResearchRunOrchestrator {
     private void failStep(DurableTask task, ResearchStepType stepType, ResearchStepContext context, Exception e) {
         String message = failureMessage(e);
         taskQueue.fail(task.taskId(), message);
-        emitEvent(task.runId(), context, StreamEventType.RECOVERABLE_ERROR,
-                Map.of("stepId", task.taskId(), "title", stepType.name(),
-                        "message", message));
+        try {
+            emitEvent(task.runId(), context, StreamEventType.RECOVERABLE_ERROR,
+                    Map.of("stepId", task.taskId(), "title", stepType.name(),
+                            "message", message));
+        } catch (RuntimeException eventFailure) {
+            log.warn("Failed to publish research failure event for run={}", task.runId(), eventFailure);
+        }
     }
 
     private String failureMessage(Exception e) {
@@ -221,12 +224,8 @@ public class ResearchRunOrchestrator {
     }
 
     private void emitEvent(String runId, ResearchStepContext context, StreamEventType type, Object payload) {
-        try {
-            long seq = context.nextSeq();
-            StreamEventEnvelope envelope = StreamEventEnvelope.of(seq, type, runId, payload);
-            eventBuffer.append(runId, envelope);
-        } catch (Exception e) {
-            log.debug("Failed to emit event for run={}", runId, e);
-        }
+        long seq = context.nextSeq();
+        StreamEventEnvelope envelope = StreamEventEnvelope.of(seq, type, runId, payload);
+        eventBuffer.append(runId, envelope);
     }
 }

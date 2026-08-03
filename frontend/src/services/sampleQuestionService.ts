@@ -24,7 +24,7 @@ export interface SampleQuestionPayload {
 }
 
 export async function listSampleQuestions(): Promise<SampleQuestion[]> {
-  return api.get<SampleQuestion[], SampleQuestion[]>("/rag/sample-questions");
+  return api.get<SampleQuestion[]>("/rag/sample-questions");
 }
 
 export async function getSampleQuestionsPage(
@@ -32,13 +32,13 @@ export async function getSampleQuestionsPage(
   size = 10,
   keyword?: string
 ): Promise<PageResult<SampleQuestion>> {
-  return api.get<PageResult<SampleQuestion>, PageResult<SampleQuestion>>("/sample-questions", {
+  return api.get<PageResult<SampleQuestion>>("/sample-questions", {
     params: { current, size, keyword: keyword || undefined }
   });
 }
 
 export async function createSampleQuestion(payload: SampleQuestionPayload): Promise<string> {
-  return api.post<string, string>("/sample-questions", payload);
+  return api.post<string>("/sample-questions", payload);
 }
 
 export async function updateSampleQuestion(id: string, payload: SampleQuestionPayload): Promise<void> {

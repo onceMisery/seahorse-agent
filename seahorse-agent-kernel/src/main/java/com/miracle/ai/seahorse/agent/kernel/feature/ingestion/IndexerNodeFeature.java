@@ -101,6 +101,8 @@ public class IndexerNodeFeature implements IngestionNodeFeature {
             collectionAdminPort.ensureCollection(request.collectionName());
             if (!safeContext.isSkipIndexerWrite()) {
                 List<VectorChunk> indexedChunks = chunksWithSystemMetadata(safeContext, request, chunks);
+                vectorIndexPort.deleteDocumentVectors(request.collectionName(), String.valueOf(request.docId()));
+                keywordIndexPort.deleteDocumentChunks(String.valueOf(request.kbId()), String.valueOf(request.docId()));
                 chunkRepositoryPort.replaceDocumentChunks(request.kbId(), request.docId(), indexedChunks);
                 vectorIndexPort.indexDocumentChunks(request.collectionName(), String.valueOf(request.docId()),
                         vectorIndexChunks(safeContext, request, indexedChunks));

@@ -27,12 +27,12 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcTransactionRun
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.StubPaymentGatewayAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.KernelBillingService;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.KernelPaymentService;
+import com.miracle.ai.seahorse.agent.kernel.application.billing.KernelPaymentSubscriptionFacade;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.KernelSubscriptionService;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.marketplace.RevenueService;
 import com.miracle.ai.seahorse.agent.ports.inbound.billing.BillingInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.billing.PaymentInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.billing.SubscriptionInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.billing.PaymentSubscriptionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.BillLineItemRepositoryPort;
@@ -143,7 +143,7 @@ public class SeahorseAgentBillingAutoConfiguration {
             SubscriptionPlanRepositoryPort.class,
             SubscriptionRepositoryPort.class
     })
-    @ConditionalOnMissingBean(SubscriptionInboundPort.class)
+    @ConditionalOnMissingBean(PaymentSubscriptionInboundPort.class)
     public KernelSubscriptionService seahorseSubscriptionService(
             SubscriptionPlanRepositoryPort planRepository,
             SubscriptionRepositoryPort subscriptionRepository) {
@@ -164,7 +164,7 @@ public class SeahorseAgentBillingAutoConfiguration {
             PaymentCallbackLogRepositoryPort.class,
             TransactionRunnerPort.class
     })
-    @ConditionalOnMissingBean(PaymentInboundPort.class)
+    @ConditionalOnMissingBean(PaymentSubscriptionInboundPort.class)
     public KernelPaymentService seahorsePaymentService(
             PaymentOrderRepositoryPort orderRepository,
             SubscriptionPlanRepositoryPort planRepository,
@@ -175,6 +175,15 @@ public class SeahorseAgentBillingAutoConfiguration {
         return new KernelPaymentService(orderRepository, planRepository,
                 paymentGateway, callbackLogRepository, transactionRunner,
                 revenueServiceProvider.getIfAvailable());
+    }
+
+    @Bean
+    @ConditionalOnBean({KernelPaymentService.class, KernelSubscriptionService.class})
+    @ConditionalOnMissingBean(PaymentSubscriptionInboundPort.class)
+    public KernelPaymentSubscriptionFacade seahorsePaymentSubscriptionFacade(
+            KernelPaymentService paymentService,
+            KernelSubscriptionService subscriptionService) {
+        return new KernelPaymentSubscriptionFacade(paymentService, subscriptionService);
     }
 
     /**

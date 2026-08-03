@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventEnvelope;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.dao.DuplicateKeyException;
 
 import javax.sql.DataSource;
 import java.sql.ResultSet;
@@ -69,17 +70,28 @@ public class JdbcAgentRunEventBufferAdapter implements AgentRunEventBufferPort {
 
     @Override
     public void append(String runId, StreamEventEnvelope event) {
-        Objects.requireNonNull(runId, "runId must not be null");
+        String normalizedRunId = requireText(runId, "runId");
         Objects.requireNonNull(event, "event must not be null");
+        if (event.eventSeq() <= 0) {
+            throw new IllegalArgumentException("eventSeq must be positive");
+        }
+        if (!normalizedRunId.equals(event.runId())) {
+            throw new IllegalArgumentException("event runId must match append runId");
+        }
         String payloadJson = serializePayload(event.typedPayload());
-        jdbcTemplate.update(SQL_INSERT,
-                runId,
-                event.eventSeq(),
-                event.eventId(),
-                event.eventType().value(),
-                event.stepId(),
-                payloadJson,
-                Timestamp.from(event.timestamp()));
+        try {
+            jdbcTemplate.update(SQL_INSERT,
+                    normalizedRunId,
+                    event.eventSeq(),
+                    event.eventId(),
+                    event.eventType().value(),
+                    event.stepId(),
+                    payloadJson,
+                    Timestamp.from(event.timestamp()));
+        } catch (DuplicateKeyException duplicate) {
+            // A redelivered durable task may publish the same sequence again.
+            // The first durable event is authoritative; other database errors remain visible.
+        }
     }
 
     @Override
@@ -144,8 +156,15 @@ public class JdbcAgentRunEventBufferAdapter implements AgentRunEventBufferPort {
         try {
             return objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException e) {
-            return "{}";
+            throw new IllegalStateException("Failed to serialize stream event payload", e);
         }
+    }
+
+    private String requireText(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(name + " must not be blank");
+        }
+        return value.trim();
     }
 
     private Object deserializePayload(String json) {

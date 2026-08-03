@@ -63,9 +63,9 @@ import {
   rollbackAiInfraRollout,
   runEvalRegression,
   type ApiRecord,
-  type ApprovalStatus,
-  type PageResult
+  type ApprovalStatus
 } from "@/services/aiInfraService";
+import type { PageResult } from "@/services/metadataGovernanceService";
 import { getErrorMessage } from "@/utils/error";
 
 type ConsoleTab = "overview" | "approvals" | "feedback" | "agents" | "tools" | "operations";
@@ -494,14 +494,17 @@ export function AiInfraConsolePage() {
     modelId: "",
     baselinePassRate: ""
   });
-  const tabFeatureStates: Partial<Record<ConsoleTab, FeatureState>> = {
+  const tabFeatureStates = useMemo<Partial<Record<ConsoleTab, FeatureState>>>(() => ({
     overview: pageFeatureState,
     approvals: approvalFeatureState,
     feedback: feedbackFeatureState,
     agents: agentFeatureState,
     tools: toolFeatureState
-  };
-  const isTabEnabled = (tab: ConsoleTab) => tabFeatureStates[tab]?.enabled ?? true;
+  }), [pageFeatureState, approvalFeatureState, feedbackFeatureState, agentFeatureState, toolFeatureState]);
+  const isTabEnabled = useCallback(
+    (tab: ConsoleTab) => tabFeatureStates[tab]?.enabled ?? true,
+    [tabFeatureStates]
+  );
   const emptyPage = useMemo<PageResult<ApiRecord>>(
     () => ({ records: [], total: 0, size: PAGE_SIZE, current: 1, pages: 0 }),
     []
@@ -576,14 +579,7 @@ export function AiInfraConsolePage() {
     if (!isTabEnabled(activeTab)) {
       setActiveTab("overview");
     }
-  }, [
-    activeTab,
-    agentFeatureState.enabled,
-    approvalFeatureState.enabled,
-    feedbackFeatureState.enabled,
-    pageFeatureState.enabled,
-    toolFeatureState.enabled
-  ]);
+  }, [activeTab, isTabEnabled]);
 
   const metrics = useMemo<MetricCard[]>(() => {
     const pendingApprovals = pageRecords(approvals).filter((item) => asString(item.status) === "PENDING").length;

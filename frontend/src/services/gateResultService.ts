@@ -8,7 +8,7 @@ export type { GateResult, GateResultItem } from "@/services/toolCatalogService";
  * subjectType 例如 TOOL / SKILL / MODEL_CONFIG / INGESTION_PIPELINE / RAG_STRATEGY / AGENT / RUN_PROFILE。
  */
 export function getLatestGateResult(subjectType: string, subjectId: string) {
-  return api.get<GateResult, GateResult>(
+  return api.get<GateResult>(
     `/api/gate-results/${encodeURIComponent(subjectType)}/${encodeURIComponent(subjectId)}`
   );
 }
@@ -18,7 +18,7 @@ export function getLatestGateResult(subjectType: string, subjectId: string) {
  * limit 可选，服务端默认 20、上限 100。
  */
 export function getGateResultHistory(subjectType: string, subjectId: string, limit?: number) {
-  return api.get<GateResult[], GateResult[]>(
+  return api.get<GateResult[]>(
     `/api/gate-results/${encodeURIComponent(subjectType)}/${encodeURIComponent(subjectId)}/history`,
     typeof limit === "number" ? { params: { limit } } : undefined
   );

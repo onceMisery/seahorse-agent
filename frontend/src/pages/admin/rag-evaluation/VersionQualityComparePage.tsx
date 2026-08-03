@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,9 +26,7 @@ export function VersionQualityComparePage() {
       try {
         const data = await getKnowledgeBases(1, 100);
         setKbs(data || []);
-        if (data && data.length > 0 && !selectedKbId) {
-          setSelectedKbId(data[0].id);
-        }
+        setSelectedKbId((current) => current || data?.[0]?.id || "");
       } catch (error) {
         console.error(error);
       }

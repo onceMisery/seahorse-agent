@@ -1,4 +1,5 @@
 import axios from "axios";
+import type { AxiosInstance, AxiosRequestConfig } from "axios";
 import { toast } from "sonner";
 
 import { handleUnauthorizedSession } from "@/utils/authSession";
@@ -13,15 +14,55 @@ declare module "axios" {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 const API_PROXY_PREFIX = "/api";
 
+type DataOnlyMethod = <T = unknown, D = unknown>(
+  url: string,
+  config?: AxiosRequestConfig<D>
+) => Promise<T>;
+
+type DataOnlyBodyMethod = <T = unknown, D = unknown>(
+  url: string,
+  data?: D,
+  config?: AxiosRequestConfig<D>
+) => Promise<T>;
+
+export type DataOnlyAxiosInstance = Omit<
+  AxiosInstance,
+  | "request"
+  | "get"
+  | "delete"
+  | "head"
+  | "options"
+  | "post"
+  | "put"
+  | "patch"
+  | "postForm"
+  | "putForm"
+  | "patchForm"
+> & {
+  request<T = unknown, D = unknown>(config: AxiosRequestConfig<D>): Promise<T>;
+  get: DataOnlyMethod;
+  delete: DataOnlyMethod;
+  head: DataOnlyMethod;
+  options: DataOnlyMethod;
+  post: DataOnlyBodyMethod;
+  put: DataOnlyBodyMethod;
+  patch: DataOnlyBodyMethod;
+  postForm: DataOnlyBodyMethod;
+  putForm: DataOnlyBodyMethod;
+  patchForm: DataOnlyBodyMethod;
+};
+
 function isAbsoluteUrl(url: string) {
   return /^[a-z][a-z\d+\-.]*:\/\//i.test(url) || url.startsWith("//");
 }
 
+function normalizeApiPath(url: string, baseURL?: string): string;
+function normalizeApiPath(url: string | undefined, baseURL?: string): string | undefined;
 function normalizeApiPath(url?: string, baseURL?: string) {
   if (!url || isAbsoluteUrl(url)) {
     return url;
   }
-  let path = url.startsWith("/") ? url : `/${url}`;
+  const path = url.startsWith("/") ? url : `/${url}`;
 
   if (baseURL) {
     return path;
@@ -33,20 +74,24 @@ function normalizeApiPath(url?: string, baseURL?: string) {
   return `${API_PROXY_PREFIX}${path}`;
 }
 
-export const api = axios.create({
+const transport = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000
 });
 
+// The response interceptor below returns payload data, so the public client
+// exposes that same contract instead of Axios transport metadata.
+export const api = transport as DataOnlyAxiosInstance;
+
 export function setAuthToken(token: string | null) {
   if (token) {
-    api.defaults.headers.common.Authorization = `Bearer ${token}`;
+    transport.defaults.headers.common.Authorization = `Bearer ${token}`;
   } else {
-    delete api.defaults.headers.common.Authorization;
+    delete transport.defaults.headers.common.Authorization;
   }
 }
 
-api.interceptors.request.use((config) => {
+transport.interceptors.request.use((config) => {
   config.url = normalizeApiPath(config.url, config.baseURL);
   const token = storage.getToken();
   if (token) {
@@ -62,16 +107,28 @@ async function attemptTokenRefresh(): Promise<string | null> {
   if (refreshPromise) return refreshPromise;
   refreshPromise = (async () => {
     try {
+      const currentRefreshToken = storage.getRefreshToken();
+      if (!currentRefreshToken) {
+        return null;
+      }
       // Use raw axios to avoid interceptor loops
       const response = await axios.post(
-        `${API_BASE_URL || ""}${normalizeApiPath("/auth/refresh")}`,
-        null,
-        { timeout: 10000 }
+        normalizeApiPath("/auth/refresh", API_BASE_URL),
+        { refreshToken: currentRefreshToken },
+        { baseURL: API_BASE_URL || undefined, timeout: 10000 }
       );
       const payload = response.data;
-      if (payload && typeof payload === "object" && payload.code === "0" && payload.data?.token) {
+      if (
+        payload &&
+        typeof payload === "object" &&
+        payload.code === "0" &&
+        payload.data?.token &&
+        payload.data?.refreshToken
+      ) {
         const newToken = payload.data.token;
         storage.setToken(newToken);
+        storage.setRefreshToken(payload.data.refreshToken);
+        setAuthToken(newToken);
         return newToken;
       }
       return null;
@@ -90,7 +147,7 @@ function isAuthRequest(url?: string) {
   return normalized.includes("/auth/login") || normalized.includes("/auth/refresh") || normalized.includes("/auth/logout");
 }
 
-api.interceptors.response.use(
+transport.interceptors.response.use(
   (response) => {
     const payload = response.data;
     if (payload && typeof payload === "object" && "code" in payload) {
@@ -123,7 +180,7 @@ api.interceptors.response.use(
       const newToken = await attemptTokenRefresh();
       if (newToken) {
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        return api(originalRequest);
+        return transport(originalRequest);
       }
     }
 

@@ -41,7 +41,7 @@ export function MarketplaceReviewPage() {
   useEffect(() => {
     if (!featureState.enabled) return;
     loadReviews();
-  }, []);
+  }, [featureState.enabled]);
 
   const handleRefresh = () => {
     loadReviews();

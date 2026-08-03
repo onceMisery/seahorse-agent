@@ -19,7 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.cost;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageAggregate;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunCostSummaryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
@@ -28,7 +28,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 
 import java.util.Objects;
 
-public class KernelAgentRunCostSummaryService implements AgentRunCostSummaryInboundPort {
+public class KernelAgentRunCostSummaryService {
 
     private static final String ADMIN_ROLE = "admin";
     private static final String ACCESS_DENIED = "权限不足";
@@ -45,8 +45,6 @@ public class KernelAgentRunCostSummaryService implements AgentRunCostSummaryInbo
         this.costUsageRepository = Objects.requireNonNull(costUsageRepository, "costUsageRepository must not be null");
         this.currentUserPort = Objects.requireNonNull(currentUserPort, "currentUserPort must not be null");
     }
-
-    @Override
     public CostUsageAggregate getCostSummary(String runId) {
         String safeRunId = requireText(runId, "runId must not be blank");
         CurrentUser currentUser = currentUserPort.requireCurrentUser();

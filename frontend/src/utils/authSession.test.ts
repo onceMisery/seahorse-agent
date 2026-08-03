@@ -28,9 +28,9 @@ describe("handleUnauthorizedSession", () => {
 
     expect(storage.clearAuth).toHaveBeenCalled();
     const target = vi.mocked(window.location.replace).mock.calls[0][0];
-    expect(target).toContain("/login?");
-    expect(decodeURIComponent(target)).toContain("登录已过期，请重新登录");
-    expect(target).not.toContain("2f04865b");
-    expect(decodeURIComponent(target)).not.toContain("token invalid");
+    expect(String(target)).toContain("/login?");
+    expect(decodeURIComponent(String(target))).toContain("登录已过期，请重新登录");
+    expect(String(target)).not.toContain("2f04865b");
+    expect(decodeURIComponent(String(target))).not.toContain("token invalid");
   });
 });

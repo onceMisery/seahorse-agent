@@ -20,12 +20,13 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.readiness.EnterprisePilotReadinessCheckResult;
 
 import java.time.Instant;
+import java.util.List;
 
 @FunctionalInterface
 public interface ReadinessEvidencePort {
 
-    EnterprisePilotReadinessCheckResult collect(String tenantId,
-                                                String agentId,
-                                                String versionId,
-                                                Instant checkedAt);
+    List<EnterprisePilotReadinessCheckResult> collect(String tenantId,
+                                                      String agentId,
+                                                      String versionId,
+                                                      Instant checkedAt);
 }

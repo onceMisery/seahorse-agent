@@ -56,4 +56,15 @@ public class SearchChannelResult {
      */
     @Builder.Default
     private Map<String, Object> metadata = new HashMap<>();
+
+    /**
+     * Whether the channel completed normally. An empty successful result is different from a failed channel.
+     */
+    @Builder.Default
+    private boolean successful = true;
+
+    /**
+     * Stable, non-sensitive failure classification when {@link #successful} is false.
+     */
+    private String failureCode;
 }

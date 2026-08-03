@@ -18,7 +18,7 @@ export function generateReadiness(
   versionId: string,
   payload: { tenantId: string; operator: string }
 ) {
-  return api.post<PilotReadinessReport, PilotReadinessReport>(
+  return api.post<PilotReadinessReport>(
     `/api/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/pilot-readiness/generate`,
     payload
   );

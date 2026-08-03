@@ -35,6 +35,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         avatar: data.avatar
       };
       storage.setToken(user.token);
+      if (data.refreshToken) {
+        storage.setRefreshToken(data.refreshToken);
+      } else {
+        storage.clearRefreshToken();
+      }
       storage.setUser(user);
       setAuthToken(user.token);
       set({ user, token: user.token, isAuthenticated: true });
@@ -64,7 +69,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   logout: async () => {
     try {
-      await logoutRequest();
+      await logoutRequest(storage.getRefreshToken());
     } catch {
       // Ignore network errors on logout
     }

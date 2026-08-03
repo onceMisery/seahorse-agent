@@ -1,4 +1,4 @@
-import { Search } from "lucide-react";
+import { RefreshCw, Search } from "lucide-react";
 
 interface MemoryToolbarProps {
   query: string;
@@ -17,7 +17,7 @@ export function MemoryToolbar({
   onQueryChange,
   onTypeChange,
   onSensitivityChange,
-  onRefresh: _onRefresh
+  onRefresh
 }: MemoryToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -74,6 +74,21 @@ export function MemoryToolbar({
         <option value="MEDIUM">中</option>
         <option value="HIGH">高</option>
       </select>
+
+      <button
+        type="button"
+        onClick={onRefresh}
+        aria-label="刷新记忆"
+        title="刷新记忆"
+        className="flex h-9 w-9 items-center justify-center rounded-xl"
+        style={{
+          backgroundColor: "var(--theme-bg-elevated)",
+          border: "1px solid var(--theme-glass-border)",
+          color: "var(--theme-text-secondary)"
+        }}
+      >
+        <RefreshCw className="h-4 w-4" />
+      </button>
     </div>
   );
 }

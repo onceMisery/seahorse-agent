@@ -56,11 +56,11 @@ export interface IntentNodeUpdatePayload {
 }
 
 export async function getIntentTree() {
-  return api.get<IntentNodeTree[], IntentNodeTree[]>("/intent-tree/trees");
+  return api.get<IntentNodeTree[]>("/intent-tree/trees");
 }
 
 export async function createIntentNode(payload: IntentNodeCreatePayload) {
-  return api.post<string, string>("/intent-tree", payload);
+  return api.post<string>("/intent-tree", payload);
 }
 
 export async function updateIntentNode(id: number | string, payload: IntentNodeUpdatePayload) {

@@ -16,7 +16,13 @@ if [[ ! -f "$BASELINE_FILE" ]]; then
 fi
 
 PORTS_DIR="${ROOT_DIR}/seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/ports"
-CURRENT_PORTS=$(find "$PORTS_DIR" -type f -name "*.java" ! -name "NoopFallback.java" | wc -l | tr -d ' ')
+# Reporting fallback only. The blocking Port definition and count are owned by
+# PortArchitectureTest, which scans compiled public interfaces with ArchUnit.
+CURRENT_PORTS=$(grep -R -l -E '^[[:space:]]*public[[:space:]]+interface[[:space:]]+' "$PORTS_DIR" --include='*.java' | wc -l | tr -d ' ')
+CURRENT_PORT_INBOUND=$(grep -R -l -E '^[[:space:]]*public[[:space:]]+interface[[:space:]]+' "$PORTS_DIR/inbound" --include='*.java' | wc -l | tr -d ' ')
+CURRENT_PORT_OUTBOUND=$(grep -R -l -E '^[[:space:]]*public[[:space:]]+interface[[:space:]]+' "$PORTS_DIR/outbound" --include='*.java' | wc -l | tr -d ' ')
+CURRENT_PORT_COMMON=$((CURRENT_PORTS - CURRENT_PORT_INBOUND - CURRENT_PORT_OUTBOUND))
+CURRENT_PORT_FILES=$(find "$PORTS_DIR" -type f -name "*.java" | wc -l | tr -d ' ')
 
 CURRENT_LARGE=$(find "$ROOT_DIR" \
   -path "${ROOT_DIR}/.git" -prune -o \
@@ -28,18 +34,22 @@ CURRENT_LARGE=$(find "$ROOT_DIR" \
   | awk '$1 > 800 { count++ } END { print count + 0 }')
 
 AUTOCONFIG_FILE="${ROOT_DIR}/seahorse-agent-spring-boot-autoconfigure/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports"
-CURRENT_AUTOCONFIG=$(wc -l < "$AUTOCONFIG_FILE" | tr -d ' ')
+CURRENT_AUTOCONFIG=$(awk '{ sub(/\r$/, "") } !/^[[:space:]]*#/ && NF { count++ } END { print count + 0 }' "$AUTOCONFIG_FILE")
 
 WHITELIST_FILE="${ROOT_DIR}/seahorse-agent-architecture-tests/src/main/resources/archunit/cross-domain-whitelist.txt"
-CURRENT_CROSS=$(awk '!/^#/ && NF { count++ } END { print count + 0 }' "$WHITELIST_FILE")
+CURRENT_CROSS=$(awk '{ sub(/\r$/, "") } !/^[[:space:]]*#/ && NF { count++ } END { print count + 0 }' "$WHITELIST_FILE")
 
 if [[ "${1:-}" == "--update-baseline" ]]; then
   cat > "$BASELINE_FILE" <<EOF
 # Complexity baseline captured from the current reviewed source tree.
 # Ratchet policy: values may only decrease.
-ports=$CURRENT_PORTS
+port_interfaces=$CURRENT_PORTS
+port_inbound=$CURRENT_PORT_INBOUND
+port_outbound=$CURRENT_PORT_OUTBOUND
+port_common=$CURRENT_PORT_COMMON
+port_java_files_info=$CURRENT_PORT_FILES
 large_classes_gt_800=$CURRENT_LARGE
-autoconfig_imports=$CURRENT_AUTOCONFIG
+autoconfig_registrations=$CURRENT_AUTOCONFIG
 cross_domain_whitelist_size=$CURRENT_CROSS
 EOF
   echo "Baseline updated: $BASELINE_FILE"
@@ -49,7 +59,7 @@ fi
 read_metric() {
   local name=$1
   local value
-  value=$(awk -F= -v key="$name" '$1 == key { gsub(/[[:space:]]/, "", $2); print $2 }' "$BASELINE_FILE")
+  value=$(awk -F= -v key="$name" '{ sub(/\r$/, "") } $1 == key { gsub(/[[:space:]]/, "", $2); print $2 }' "$BASELINE_FILE")
   if [[ ! "$value" =~ ^[0-9]+$ ]]; then
     echo "::error::Missing or invalid baseline metric: $name"
     exit 2
@@ -57,9 +67,10 @@ read_metric() {
   printf '%s' "$value"
 }
 
-BASELINE_PORTS=$(read_metric ports)
+BASELINE_PORTS=$(read_metric port_interfaces)
+BASELINE_PORT_FILES=$(read_metric port_java_files_info)
 BASELINE_LARGE=$(read_metric large_classes_gt_800)
-BASELINE_AUTOCONFIG=$(read_metric autoconfig_imports)
+BASELINE_AUTOCONFIG=$(read_metric autoconfig_registrations)
 BASELINE_CROSS=$(read_metric cross_domain_whitelist_size)
 
 FAIL=0
@@ -76,8 +87,9 @@ check_metric() {
 }
 
 check_metric ports "$CURRENT_PORTS" "$BASELINE_PORTS"
+check_metric port_java_files_info "$CURRENT_PORT_FILES" "$BASELINE_PORT_FILES"
 check_metric large_classes_gt_800 "$CURRENT_LARGE" "$BASELINE_LARGE"
-check_metric autoconfig_imports "$CURRENT_AUTOCONFIG" "$BASELINE_AUTOCONFIG"
+check_metric autoconfig_registrations "$CURRENT_AUTOCONFIG" "$BASELINE_AUTOCONFIG"
 check_metric cross_domain_whitelist_size "$CURRENT_CROSS" "$BASELINE_CROSS"
 
 status() {
@@ -89,7 +101,8 @@ cat > "$REPORT_FILE" <<EOF
 
 | Metric | Baseline | Current | Delta | Status |
 |---|---:|---:|---:|---|
-| Ports | $BASELINE_PORTS | $CURRENT_PORTS | $((CURRENT_PORTS - BASELINE_PORTS)) | $(status "$CURRENT_PORTS" "$BASELINE_PORTS") |
+| Public Port interfaces (ArchUnit is authoritative) | $BASELINE_PORTS | $CURRENT_PORTS | $((CURRENT_PORTS - BASELINE_PORTS)) | $(status "$CURRENT_PORTS" "$BASELINE_PORTS") |
+| Java files under ports (informational) | $BASELINE_PORT_FILES | $CURRENT_PORT_FILES | $((CURRENT_PORT_FILES - BASELINE_PORT_FILES)) | $(status "$CURRENT_PORT_FILES" "$BASELINE_PORT_FILES") |
 | Large classes >800 | $BASELINE_LARGE | $CURRENT_LARGE | $((CURRENT_LARGE - BASELINE_LARGE)) | $(status "$CURRENT_LARGE" "$BASELINE_LARGE") |
 | AutoConfig imports | $BASELINE_AUTOCONFIG | $CURRENT_AUTOCONFIG | $((CURRENT_AUTOCONFIG - BASELINE_AUTOCONFIG)) | $(status "$CURRENT_AUTOCONFIG" "$BASELINE_AUTOCONFIG") |
 | Cross-domain class pairs | $BASELINE_CROSS | $CURRENT_CROSS | $((CURRENT_CROSS - BASELINE_CROSS)) | $(status "$CURRENT_CROSS" "$BASELINE_CROSS") |

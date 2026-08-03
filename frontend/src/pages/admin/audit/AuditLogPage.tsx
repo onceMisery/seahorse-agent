@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,15 +37,16 @@ export function AuditLogPage() {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [pageNo, setPageNo] = useState(1);
+  const [appliedFilters, setAppliedFilters] = useState({ tenantId: "", startTime: "", endTime: "" });
 
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
     try {
       setLoading(true);
       const data = await adminService.queryAuditLogs({
-        tenantId: tenantId.trim() || undefined,
+        tenantId: appliedFilters.tenantId || undefined,
         action: action !== "all" ? action : undefined,
-        startTime: startTime || undefined,
-        endTime: endTime || undefined,
+        startTime: appliedFilters.startTime || undefined,
+        endTime: appliedFilters.endTime || undefined,
         page: pageNo,
         size: PAGE_SIZE
       });
@@ -56,16 +57,16 @@ export function AuditLogPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [action, appliedFilters, pageNo]);
 
   useEffect(() => {
     if (!featureState.enabled) return;
     loadLogs();
-  }, [pageNo, action]);
+  }, [featureState.enabled, loadLogs]);
 
   const handleSearch = () => {
     setPageNo(1);
-    loadLogs();
+    setAppliedFilters({ tenantId: tenantId.trim(), startTime, endTime });
   };
 
   const handleRefresh = () => {

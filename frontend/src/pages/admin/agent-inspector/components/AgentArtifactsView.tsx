@@ -23,7 +23,7 @@ function formatBytes(bytes?: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function isPreviewable(mimeType?: string) {
+function isPreviewable(mimeType?: string | null) {
   if (!mimeType) return false;
   return mimeType.startsWith("text/") || mimeType === "application/json";
 }

@@ -22,9 +22,10 @@ import java.util.Optional;
 
 public interface RefreshTokenRepositoryPort {
 
-    void save(Long userId, String refreshToken, Instant expiresAt);
+    void save(Long userId, String tenantId, String refreshToken, Instant expiresAt);
 
-    Optional<RefreshTokenRecord> findValid(String refreshToken, Instant now);
+    Optional<RefreshTokenRecord> rotate(String refreshToken, String nextRefreshToken,
+                                        Instant nextExpiresAt, Instant now);
 
     void revoke(String refreshToken);
 }

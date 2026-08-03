@@ -75,8 +75,8 @@ export function MetadataQuarantinePanel() {
             {items.map((item, i) => (
               <TableRow key={(item.id as string) ?? i}>
                 <TableCell className="font-mono text-xs">{((item.id as string) ?? "-").slice(0, 12)}</TableCell>
-                <TableCell className="text-xs">{(item.itemType as string) ?? "-"}</TableCell>
-                <TableCell className="text-xs text-slate-500">{(item.reason as string) ?? "-"}</TableCell>
+                <TableCell className="text-xs">{item.stage ?? "-"}</TableCell>
+                <TableCell className="text-xs text-slate-500">{item.reasonCode ?? "-"}</TableCell>
                 <TableCell className="text-xs text-slate-400">
                   {item.createTime ? new Date(item.createTime as string).toLocaleDateString("zh-CN") : "-"}
                 </TableCell>

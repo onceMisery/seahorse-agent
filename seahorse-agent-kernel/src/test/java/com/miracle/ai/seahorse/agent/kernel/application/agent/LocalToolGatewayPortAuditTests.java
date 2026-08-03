@@ -1377,10 +1377,11 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
-    void shouldClaimIdempotencyKeyBeforeExecutingToolAndFailClosedOnDuplicate() {
+    void shouldClaimIdempotencyKeyBeforeExecutingToolAndRecordUnknownOnDuplicate() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("executed"));
         AtomicInteger claims = new AtomicInteger();
         AtomicInteger completions = new AtomicInteger();
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
         ToolInvocationIdempotencyPort idempotencyPort = new ToolInvocationIdempotencyPort() {
             @Override
             public boolean tryClaim(String tenantId, String idempotencyKey, Instant now) {
@@ -1397,7 +1398,7 @@ class LocalToolGatewayPortAuditTests {
         LocalToolGatewayPort gateway = new LocalToolGatewayPort(
                 new SingleToolRegistry(tool),
                 new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                ToolInvocationAuditPort.noop(),
+                audit,
                 ToolApprovalRequestRepositoryPort.noop(),
                 ApprovalRequestQueryPort.empty(),
                 ToolOutputRedactionPort.noop(),
@@ -1415,6 +1416,11 @@ class LocalToolGatewayPortAuditTests {
         assertEquals(2, claims.get());
         assertEquals(1, completions.get());
         assertEquals(1, tool.calls.get());
+        // 重复键命中：上一次 PROCESSING 调用的副作用结果未知，审计必须记录 UNKNOWN 而非 FAILED。
+        assertEquals(2, audit.completed.size());
+        assertEquals(ToolInvocationStatus.SUCCEEDED, audit.completed.get(0).status());
+        assertEquals(ToolInvocationStatus.UNKNOWN, audit.completed.get(1).status());
+        assertEquals("Duplicate or unresolved tool invocation", audit.completed.get(1).errorMessage());
     }
 
     @Test

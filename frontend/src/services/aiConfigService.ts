@@ -34,11 +34,11 @@ export interface GateResult {
 }
 
 export async function getAiModelConfigs(params?: { tenantId?: string }): Promise<AiModelConfigItem[]> {
-  return api.get<AiModelConfigItem[], AiModelConfigItem[]>("/admin/ai-config", { params });
+  return api.get<AiModelConfigItem[]>("/admin/ai-config", { params });
 }
 
 export async function getAiModelConfigGateResult(key: string, tenantId?: string): Promise<GateResult> {
-  return api.get<GateResult, GateResult>(`/admin/ai-config/${key}/gate-result`, { params: { tenantId } });
+  return api.get<GateResult>(`/admin/ai-config/${key}/gate-result`, { params: { tenantId } });
 }
 
 export async function updateAiModelConfig(key: string, value: string, tenantId?: string): Promise<void> {
@@ -53,7 +53,7 @@ export async function createAiModelConfig(config: {
   encrypted?: boolean;
   description?: string;
 }): Promise<AiModelConfigItem> {
-  return api.post<AiModelConfigItem, AiModelConfigItem>("/admin/ai-config", config);
+  return api.post<AiModelConfigItem>("/admin/ai-config", config);
 }
 
 export async function deleteAiModelConfig(key: string, tenantId?: string): Promise<void> {

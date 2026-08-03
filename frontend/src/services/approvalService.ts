@@ -26,20 +26,20 @@ export interface ApprovalItem {
 // ── 原有 API（保留） ──
 
 export async function listPendingApprovalRequests(runId: string) {
-  return api.get<ApprovalRequestRecord[], ApprovalRequestRecord[]>(
+  return api.get<ApprovalRequestRecord[]>(
     `/api/agent-runs/${encodeURIComponent(runId)}/pending-approvals`
   );
 }
 
 export async function approveApprovalRequest(approvalId: string, decisionComment: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/approvals/${encodeURIComponent(approvalId)}/approve`,
     { decisionComment }
   );
 }
 
 export async function rejectApprovalRequest(approvalId: string, decisionComment: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/approvals/${encodeURIComponent(approvalId)}/reject`,
     { decisionComment }
   );
@@ -50,7 +50,7 @@ export async function modifyApprovalRequest(
   argumentsPreviewJson: string,
   decisionComment: string
 ) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/approvals/${encodeURIComponent(approvalId)}/modify`,
     { argumentsPreviewJson, decisionComment }
   );

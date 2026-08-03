@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -176,7 +176,7 @@ export function IntentTreePage() {
   const selectedNode = useMemo(() => findNodeByCode(tree, selectedCode), [tree, selectedCode]);
   const treeOptions = useMemo(() => buildTreeOptions(tree), [tree]);
 
-  const loadTree = async () => {
+  const loadTree = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getIntentTree();
@@ -196,7 +196,7 @@ export function IntentTreePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [focusIntentCode]);
 
   const loadKnowledgeBases = async () => {
     try {
@@ -210,7 +210,7 @@ export function IntentTreePage() {
   useEffect(() => {
     loadTree();
     loadKnowledgeBases();
-  }, []);
+  }, [loadTree]);
 
   useEffect(() => {
     if (!focusIntentCode) return;
@@ -521,8 +521,6 @@ function IntentNodeDialog({
 
     const nextLevel = parentNode ? Math.min((parentNode.level ?? 0) + 1, 2) : 0;
     const parentKind = parentNode?.kind ?? 0;
-    const kbMatch = knowledgeBases.find((kb) => kb.collectionName === parentNode?.collectionName);
-
     return {
       name: "",
       intentCode: "",
@@ -541,7 +539,7 @@ function IntentNodeDialog({
       promptTemplate: "",
       paramPromptTemplate: ""
     };
-  }, [mode, node, parentNode, knowledgeBases]);
+  }, [mode, node, parentNode]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),

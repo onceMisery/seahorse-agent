@@ -10,6 +10,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { setAuthToken } from "@/services/api";
 import { storage } from "@/utils/storage";
 import * as registrationService from "@/services/registrationService";
+import type { User } from "@/types";
 
 const BUBBLES = [
   { size: 10, left: "7%", delay: "0s", dur: "9s" },
@@ -145,14 +146,15 @@ export function RegisterPage() {
     setSubmitting(true);
     try {
       const data = await registrationService.register(email.trim(), code.trim(), password);
-      const { token, userId, tenantId } = data as registrationService.RegisterResponse;
+      const { token, userId } = data as registrationService.RegisterResponse;
+      const user: User = { userId, username: email.trim(), role: "user", token };
 
       // Persist auth state exactly like authStore.login does
       storage.setToken(token);
-      storage.setUser({ userId, username: email.trim(), role: "user", token, avatar: null } as any);
+      storage.setUser(user);
       setAuthToken(token);
       useAuthStore.setState({
-        user: { userId, username: email.trim(), role: "user", token, avatar: null } as any,
+        user,
         token,
         isAuthenticated: true
       });

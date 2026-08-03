@@ -32,7 +32,7 @@ export function OpenApiImportDialog({ open, onOpenChange, onSuccess }: OpenApiIm
 
     try {
       setImporting(true);
-      const result = await importOpenApiSpec({
+      await importOpenApiSpec({
         name: name.trim(),
         specContent: specContent.trim(),
         specFormat

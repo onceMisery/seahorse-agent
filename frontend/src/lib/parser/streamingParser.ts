@@ -5,7 +5,7 @@ const ARTIFACT_CLOSE_RE = /^<\/artifact>/i;
 const CODE_FENCE_OPEN_RE = /^```(\w*)/;
 const CODE_FENCE_CLOSE_RE = /^```\s*$/;
 
-const ARTIFACT_LANGUAGES = new Set(["html", "css", "javascript", "js", "tsx", "vue", "markdown"]);
+const ARTIFACT_LANGUAGES = new Set(["html", "css", "javascript", "js", "json", "tsx", "vue", "markdown"]);
 
 function normalizeLang(lang: string): ArtifactLanguage {
   if (lang === "js") return "javascript";
@@ -17,7 +17,6 @@ export function parseStreamingText(rawText: string, messageId: string): ContentB
   const lines = rawText.split("\n");
 
   let inCodeBlock = false;
-  let codeBlockLang = "";
   let inArtifact = false;
   let artifactOpenedByFence = false;
 
@@ -110,7 +109,6 @@ export function parseStreamingText(rawText: string, messageId: string): ContentB
           continue;
         } else {
           inCodeBlock = true;
-          codeBlockLang = lang;
           currentTextLines.push(line);
           continue;
         }
@@ -121,7 +119,6 @@ export function parseStreamingText(rawText: string, messageId: string): ContentB
       currentTextLines.push(line);
       if (CODE_FENCE_CLOSE_RE.test(line)) {
         inCodeBlock = false;
-        codeBlockLang = "";
       }
       continue;
     }

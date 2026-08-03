@@ -63,7 +63,7 @@ export function KnowledgeListPage() {
 
   const knowledgeBases = pageData?.records || [];
 
-  const loadKnowledgeBases = async (current = pageNo, name = keyword) => {
+  const loadKnowledgeBases = useCallback(async (current = pageNo, name = keyword) => {
     try {
       setLoading(true);
       const data = await getKnowledgeBasesPage(current, PAGE_SIZE, name || undefined);
@@ -74,7 +74,7 @@ export function KnowledgeListPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pageNo, keyword]);
 
   const loadStats = useCallback(async (name = keyword) => {
     const requestId = ++statsRequestId.current;
@@ -137,7 +137,7 @@ export function KnowledgeListPage() {
 
   useEffect(() => {
     loadKnowledgeBases();
-  }, [pageNo, keyword]);
+  }, [loadKnowledgeBases]);
 
   useEffect(() => {
     loadStats(keyword);

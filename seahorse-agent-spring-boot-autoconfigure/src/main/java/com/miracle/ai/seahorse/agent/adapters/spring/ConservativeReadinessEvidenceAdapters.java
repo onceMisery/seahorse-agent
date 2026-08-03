@@ -23,13 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.readiness.EnterprisePil
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.readiness.EnterprisePilotReadinessReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.readiness.EnterprisePilotReadinessStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessAgentDefinitionEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessAuditEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessEvalEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessQuotaEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessResourceAclEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessRollbackEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessToolRiskEvidencePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessEvidencePort;
 
 import java.time.Instant;
 import java.util.List;
@@ -65,82 +59,44 @@ final class ConservativeReadinessEvidenceAdapters {
     private ConservativeReadinessEvidenceAdapters() {
     }
 
-    static ReadinessAgentDefinitionEvidencePort agentDefinition(AgentDefinitionRepositoryPort repository) {
+    static ReadinessEvidencePort aggregate(AgentDefinitionRepositoryPort repository) {
         AgentDefinitionRepositoryPort safeRepository = Objects.requireNonNull(repository,
                 "repository must not be null");
         return (tenantId, agentId, versionId, checkedAt) -> {
             Instant safeCheckedAt = Objects.requireNonNull(checkedAt, "checkedAt must not be null");
-            return safeRepository.findById(agentId)
+            List<EnterprisePilotReadinessCheckResult> definitionResults = safeRepository.findById(agentId)
                     .filter(definition -> definition.tenantId().equals(tenantId))
                     .map(definition -> definitionResults(safeRepository, definition, versionId, safeCheckedAt))
                     .orElseGet(() -> missingDefinitionResults(agentId, safeCheckedAt));
+            return appendConservativeFailures(definitionResults, safeCheckedAt);
         };
     }
 
-    static ReadinessToolRiskEvidencePort toolRisk() {
-        return (tenantId, agentId, versionId, checkedAt) -> result(
-                EnterprisePilotReadinessCheckCode.TOOL_RISK,
-                EnterprisePilotReadinessStatus.FAIL,
-                EnterprisePilotReadinessReasonCode.TOOL_RISK_UNREVIEWED,
-                TOOL_RISK_EVIDENCE,
-                PROVIDER_NOT_CONFIGURED_EVIDENCE,
-                TOOL_RISK_MESSAGE,
-                checkedAt);
-    }
-
-    static ReadinessResourceAclEvidencePort resourceAcl() {
-        return (tenantId, agentId, versionId, checkedAt) -> result(
-                EnterprisePilotReadinessCheckCode.RESOURCE_ACL,
-                EnterprisePilotReadinessStatus.FAIL,
-                EnterprisePilotReadinessReasonCode.RESOURCE_ACL_MISSING,
-                RESOURCE_ACL_EVIDENCE,
-                PROVIDER_NOT_CONFIGURED_EVIDENCE,
-                RESOURCE_ACL_MESSAGE,
-                checkedAt);
-    }
-
-    static ReadinessEvalEvidencePort eval() {
-        return (tenantId, agentId, versionId, checkedAt) -> result(
-                EnterprisePilotReadinessCheckCode.EVAL,
-                EnterprisePilotReadinessStatus.FAIL,
-                EnterprisePilotReadinessReasonCode.EVAL_MISSING,
-                EVAL_EVIDENCE,
-                PROVIDER_NOT_CONFIGURED_EVIDENCE,
-                EVAL_MESSAGE,
-                checkedAt);
-    }
-
-    static ReadinessQuotaEvidencePort quota() {
-        return (tenantId, agentId, versionId, checkedAt) -> result(
-                EnterprisePilotReadinessCheckCode.QUOTA,
-                EnterprisePilotReadinessStatus.FAIL,
-                EnterprisePilotReadinessReasonCode.QUOTA_MISSING,
-                QUOTA_EVIDENCE,
-                PROVIDER_NOT_CONFIGURED_EVIDENCE,
-                QUOTA_MESSAGE,
-                checkedAt);
-    }
-
-    static ReadinessAuditEvidencePort audit() {
-        return (tenantId, agentId, versionId, checkedAt) -> result(
-                EnterprisePilotReadinessCheckCode.AUDIT,
-                EnterprisePilotReadinessStatus.FAIL,
-                EnterprisePilotReadinessReasonCode.AUDIT_MISSING,
-                AUDIT_EVIDENCE,
-                PROVIDER_NOT_CONFIGURED_EVIDENCE,
-                AUDIT_MESSAGE,
-                checkedAt);
-    }
-
-    static ReadinessRollbackEvidencePort rollback() {
-        return (tenantId, agentId, versionId, checkedAt) -> result(
-                EnterprisePilotReadinessCheckCode.ROLLBACK,
-                EnterprisePilotReadinessStatus.FAIL,
-                EnterprisePilotReadinessReasonCode.ROLLBACK_TARGET_MISSING,
-                ROLLBACK_EVIDENCE,
-                PROVIDER_NOT_CONFIGURED_EVIDENCE,
-                ROLLBACK_MESSAGE,
-                checkedAt);
+    private static List<EnterprisePilotReadinessCheckResult> appendConservativeFailures(
+            List<EnterprisePilotReadinessCheckResult> definitionResults,
+            Instant checkedAt) {
+        return List.of(
+                definitionResults.get(0),
+                definitionResults.get(1),
+                definitionResults.get(2),
+                result(EnterprisePilotReadinessCheckCode.TOOL_RISK, EnterprisePilotReadinessStatus.FAIL,
+                        EnterprisePilotReadinessReasonCode.TOOL_RISK_UNREVIEWED, TOOL_RISK_EVIDENCE,
+                        PROVIDER_NOT_CONFIGURED_EVIDENCE, TOOL_RISK_MESSAGE, checkedAt),
+                result(EnterprisePilotReadinessCheckCode.RESOURCE_ACL, EnterprisePilotReadinessStatus.FAIL,
+                        EnterprisePilotReadinessReasonCode.RESOURCE_ACL_MISSING, RESOURCE_ACL_EVIDENCE,
+                        PROVIDER_NOT_CONFIGURED_EVIDENCE, RESOURCE_ACL_MESSAGE, checkedAt),
+                result(EnterprisePilotReadinessCheckCode.EVAL, EnterprisePilotReadinessStatus.FAIL,
+                        EnterprisePilotReadinessReasonCode.EVAL_MISSING, EVAL_EVIDENCE,
+                        PROVIDER_NOT_CONFIGURED_EVIDENCE, EVAL_MESSAGE, checkedAt),
+                result(EnterprisePilotReadinessCheckCode.QUOTA, EnterprisePilotReadinessStatus.FAIL,
+                        EnterprisePilotReadinessReasonCode.QUOTA_MISSING, QUOTA_EVIDENCE,
+                        PROVIDER_NOT_CONFIGURED_EVIDENCE, QUOTA_MESSAGE, checkedAt),
+                result(EnterprisePilotReadinessCheckCode.AUDIT, EnterprisePilotReadinessStatus.FAIL,
+                        EnterprisePilotReadinessReasonCode.AUDIT_MISSING, AUDIT_EVIDENCE,
+                        PROVIDER_NOT_CONFIGURED_EVIDENCE, AUDIT_MESSAGE, checkedAt),
+                result(EnterprisePilotReadinessCheckCode.ROLLBACK, EnterprisePilotReadinessStatus.FAIL,
+                        EnterprisePilotReadinessReasonCode.ROLLBACK_TARGET_MISSING, ROLLBACK_EVIDENCE,
+                        PROVIDER_NOT_CONFIGURED_EVIDENCE, ROLLBACK_MESSAGE, checkedAt));
     }
 
     private static List<EnterprisePilotReadinessCheckResult> definitionResults(

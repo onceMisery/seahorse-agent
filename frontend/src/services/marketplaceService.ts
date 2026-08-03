@@ -44,7 +44,7 @@ export interface MySubscription {
 // Marketplace browsing
 export function listMarketplaceAgents(params: { category?: string; sort?: string; page?: number; size?: number }) {
   return api
-    .get<MarketplaceAgent[], MarketplaceAgent[] | { records?: MarketplaceAgent[] }>("/api/marketplace/agents", {
+    .get<MarketplaceAgent[] | { records?: MarketplaceAgent[] }>("/api/marketplace/agents", {
       params
     })
     .then((data) => extractRecords(data));
@@ -52,39 +52,39 @@ export function listMarketplaceAgents(params: { category?: string; sort?: string
 
 // Subscription
 export function subscribeAgent(agentId: string) {
-  return api.post<unknown, unknown>(`/api/marketplace/agents/${encodeURIComponent(agentId)}/subscribe`);
+  return api.post<unknown>(`/api/marketplace/agents/${encodeURIComponent(agentId)}/subscribe`);
 }
 
 export function unsubscribeAgent(agentId: string) {
-  return api.delete<unknown, unknown>(`/api/marketplace/agents/${encodeURIComponent(agentId)}/subscribe`);
+  return api.delete<unknown>(`/api/marketplace/agents/${encodeURIComponent(agentId)}/subscribe`);
 }
 
 export function getMySubscriptions() {
   return api
-    .get<MySubscription[], MySubscription[] | { records?: MySubscription[] }>("/api/marketplace/agents/my-subscriptions")
+    .get<MySubscription[] | { records?: MySubscription[] }>("/api/marketplace/agents/my-subscriptions")
     .then((data) => extractRecords(data));
 }
 
 // Rating
 export function rateAgent(agentId: string, rating: number, comment: string) {
-  return api.post<unknown, unknown>(`/api/marketplace/agents/${encodeURIComponent(agentId)}/ratings`, { rating, comment });
+  return api.post<unknown>(`/api/marketplace/agents/${encodeURIComponent(agentId)}/ratings`, { rating, comment });
 }
 
 // Publishing (admin)
 export function submitForPublish(agentId: string) {
-  return api.post<unknown, unknown>(`/api/marketplace/agents/${encodeURIComponent(agentId)}/publish`);
+  return api.post<unknown>(`/api/marketplace/agents/${encodeURIComponent(agentId)}/publish`);
 }
 
 export function approvePublish(reviewId: number) {
-  return api.put<unknown, unknown>(`/api/marketplace/reviews/${reviewId}/approve`);
+  return api.put<unknown>(`/api/marketplace/reviews/${reviewId}/approve`);
 }
 
 export function rejectPublish(reviewId: number, comment: string) {
-  return api.put<unknown, unknown>(`/api/marketplace/reviews/${reviewId}/reject`, { comment });
+  return api.put<unknown>(`/api/marketplace/reviews/${reviewId}/reject`, { comment });
 }
 
 export function listPendingReviews() {
   return api
-    .get<AgentReview[], AgentReview[] | { records?: AgentReview[] }>("/api/marketplace/reviews/pending")
+    .get<AgentReview[] | { records?: AgentReview[] }>("/api/marketplace/reviews/pending")
     .then((data) => extractRecords(data));
 }

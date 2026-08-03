@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ExternalLink, RefreshCw, RotateCcw, Search, ShieldCheck, Wrench } from "lucide-react";
 import { toast } from "sonner";
@@ -71,7 +71,7 @@ export function ToolCatalogPage() {
 
   const tools = pageData?.records || [];
 
-  const loadTools = async (current = pageNo, kw = keyword) => {
+  const loadTools = useCallback(async (current = pageNo, kw = keyword) => {
     try {
       setLoading(true);
       const data = await listTools({
@@ -92,7 +92,7 @@ export function ToolCatalogPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pageNo, keyword, providerFilter, riskFilter, enabledFilter]);
 
   const loadMcpServers = async () => {
     try {
@@ -109,12 +109,12 @@ export function ToolCatalogPage() {
   useEffect(() => {
     if (!featureState.enabled) return;
     loadTools();
-  }, [pageNo, keyword, providerFilter, riskFilter, enabledFilter]);
+  }, [featureState.enabled, loadTools]);
 
   useEffect(() => {
     if (!featureState.enabled) return;
     loadMcpServers();
-  }, []);
+  }, [featureState.enabled]);
 
   const handleSearch = () => {
     setPageNo(1);

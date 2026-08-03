@@ -95,19 +95,19 @@ export function getToolGateResult(toolId: string) {
 }
 
 export function enableTool(toolId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/tools/${encodeURIComponent(toolId)}/enable`
   );
 }
 
 export function disableTool(toolId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/tools/${encodeURIComponent(toolId)}/disable`
   );
 }
 
 export function updateAgentToolBindings(agentId: string, versionId: string, payload: UpdateToolBindingsPayload) {
-  return api.put<Record<string, unknown>, Record<string, unknown>>(
+  return api.put<Record<string, unknown>>(
     `/api/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/tools`,
     payload
   );

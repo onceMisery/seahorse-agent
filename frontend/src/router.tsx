@@ -1,9 +1,14 @@
-import { Navigate, Outlet, createBrowserRouter, useLocation } from "react-router-dom";
+import { Navigate, createBrowserRouter } from "react-router-dom";
 
-import { CommandPalette } from "@/components/CommandPalette";
-import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
+import {
+  FeatureGuard,
+  GlobalLayout,
+  HomeRedirect,
+  RedirectIfAuth,
+  RequireAdmin,
+  RequireAuth
+} from "@/components/routing/RouteGuards";
 import { ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
-import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
 import { ChatPage } from "@/pages/ChatPage";
@@ -70,81 +75,11 @@ import { MarketplacePage } from "@/pages/MarketplacePage";
 import { TenantListPage } from "@/pages/admin/tenants/TenantListPage";
 import { AuditLogPage } from "@/pages/admin/audit/AuditLogPage";
 import { MarketplaceReviewPage } from "@/pages/admin/marketplace/MarketplaceReviewPage";
-import { useAuthStore } from "@/stores/authStore";
-import { useFeatureStore } from "@/stores/featureStore";
-import { loginPathWithRedirect, sanitizeAuthRedirect } from "@/utils/authRedirect";
-
-function RequireAuth({ children }: { children: JSX.Element }) {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const location = useLocation();
-  const redirectTarget = `${location.pathname}${location.search}${location.hash}`;
-  return isAuthenticated ? children : <Navigate to={loginPathWithRedirect(redirectTarget)} replace />;
-}
-
-function RequireAdmin({ children }: { children: JSX.Element }) {
-  const user = useAuthStore((state) => state.user);
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const location = useLocation();
-
-  if (!isAuthenticated) {
-    const redirectTarget = `${location.pathname}${location.search}${location.hash}`;
-    return <Navigate to={loginPathWithRedirect(redirectTarget)} replace />;
-  }
-  if (user?.role !== "admin") return <Navigate to="/workspace" replace />;
-  return children;
-}
-
-function RedirectIfAuth({ children }: { children: JSX.Element }) {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const location = useLocation();
-  const params = new URLSearchParams(location.search);
-  return isAuthenticated ? <Navigate to={sanitizeAuthRedirect(params.get("redirect"))} replace /> : children;
-}
-
-function HomeRedirect() {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  return <Navigate to={isAuthenticated ? "/workspace" : "/login"} replace />;
-}
-
-function FeatureGuard({
-  feature,
-  featureName,
-  children
-}: {
-  feature: string;
-  featureName: string;
-  children: JSX.Element;
-}) {
-  const isLoading = useFeatureStore((state) => state.isLoading);
-  const capabilities = useFeatureStore((state) => state.capabilities);
-  const featureState = useFeatureStore((state) => state.getFeatureState(feature));
-
-  if (isLoading && !capabilities) {
-    return <div className="p-6 text-sm text-slate-500">能力配置加载中...</div>;
-  }
-
-  if (!featureState.enabled) {
-    return <FeatureUnavailableState featureState={featureState} featureName={featureName} />;
-  }
-
-  return children;
-}
-
 function withFeature(feature: string, featureName: string, element: JSX.Element) {
   return (
     <FeatureGuard feature={feature} featureName={featureName}>
       {element}
     </FeatureGuard>
-  );
-}
-
-function GlobalLayout() {
-  const { open, setOpen } = useCommandPalette();
-  return (
-    <>
-      <Outlet />
-      <CommandPalette open={open} onOpenChange={setOpen} />
-    </>
   );
 }
 

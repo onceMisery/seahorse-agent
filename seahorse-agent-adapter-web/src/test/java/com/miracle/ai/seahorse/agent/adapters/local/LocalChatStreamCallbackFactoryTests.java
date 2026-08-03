@@ -35,6 +35,7 @@ import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class LocalChatStreamCallbackFactoryTests {
 
@@ -78,6 +79,66 @@ class LocalChatStreamCallbackFactoryTests {
         assertThat(eventBuffer.events)
                 .extracting(StreamEventEnvelope::eventType)
                 .containsExactly(com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType.RUN_STARTED);
+    }
+
+    @Test
+    void shouldFailStreamWhenEventBufferCannotPersistReplayableEvent() {
+        AgentRunEventBufferPort failingBuffer = new RecordingEventBuffer() {
+            @Override
+            public void append(String runId, StreamEventEnvelope event) {
+                throw new IllegalStateException("database unavailable");
+            }
+        };
+        LocalChatStreamCallbackFactory factory = new LocalChatStreamCallbackFactory(
+                new LocalStreamTaskPort(),
+                ConversationMemoryPort.noop(),
+                failingBuffer);
+        StreamCallback callback = factory.create(new SseEmitter(), "conversation-1", "task-1", "user-1");
+
+        assertThatThrownBy(() -> callback.onRunStarted("run-1"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Unable to persist event seq=1 for run=run-1")
+                .hasRootCauseMessage("database unavailable");
+    }
+
+    @Test
+    void shouldFailStreamWhenLatestSequenceCannotBeRead() {
+        AgentRunEventBufferPort failingBuffer = new RecordingEventBuffer() {
+            @Override
+            public Optional<Long> getLatestSeq(String runId) {
+                throw new IllegalStateException("database unavailable");
+            }
+        };
+        LocalChatStreamCallbackFactory factory = new LocalChatStreamCallbackFactory(
+                new LocalStreamTaskPort(),
+                ConversationMemoryPort.noop(),
+                failingBuffer);
+        StreamCallback callback = factory.create(new SseEmitter(), "conversation-1", "task-1", "user-1");
+
+        assertThatThrownBy(() -> callback.onRunStarted("run-1"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Unable to read latest event sequence for run=run-1")
+                .hasRootCauseMessage("database unavailable");
+    }
+
+    @Test
+    void shouldFailStreamWhenBufferedEventsCannotBeRead() {
+        AgentRunEventBufferPort failingBuffer = new RecordingEventBuffer() {
+            @Override
+            public List<StreamEventEnvelope> getAfter(String runId, long afterSeq) {
+                throw new IllegalStateException("database unavailable");
+            }
+        };
+        LocalChatStreamCallbackFactory factory = new LocalChatStreamCallbackFactory(
+                new LocalStreamTaskPort(),
+                ConversationMemoryPort.noop(),
+                failingBuffer);
+        StreamCallback callback = factory.create(new SseEmitter(), "conversation-1", "task-1", "user-1");
+
+        assertThatThrownBy(() -> callback.onRunStarted("run-1"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Unable to read buffered events after seq=0 for run=run-1")
+                .hasRootCauseMessage("database unavailable");
     }
 
     @Test

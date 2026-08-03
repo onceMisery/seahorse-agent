@@ -1,4 +1,5 @@
 import { api } from "@/services/api";
+import type { PageResult } from "@/services/metadataGovernanceService";
 import { emptyPage, optionalGet } from "@/services/optionalEndpoint";
 
 export type ApiRecord = Record<string, unknown>;
@@ -18,14 +19,6 @@ export interface SreHealthReport {
   items: SreHealthItem[];
   checkedAt: string;
 }
-
-export type PageResult<T> = {
-  records: T[];
-  total: number;
-  size: number;
-  current: number;
-  pages: number;
-};
 
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "MODIFIED";
 
@@ -111,7 +104,7 @@ function withPageDefaults<T extends { current?: number; size?: number }>(params:
 export async function getAiInfraAgents(params: AgentPageParams): Promise<PageResult<ApiRecord>> {
   const pageParams = withPageDefaults(params);
   return optionalGet(
-    api.get<PageResult<ApiRecord>, PageResult<ApiRecord>>("/api/agents", {
+    api.get<PageResult<ApiRecord>>("/api/agents", {
       params: pageParams,
       suppressErrorToast: true
     }),
@@ -125,7 +118,7 @@ export async function getAiInfraApprovals(params: ApprovalPageParams): Promise<P
     status: params.status || undefined
   });
   return optionalGet(
-    api.get<PageResult<ApiRecord>, PageResult<ApiRecord>>("/api/approvals", {
+    api.get<PageResult<ApiRecord>>("/api/approvals", {
       params: pageParams,
       suppressErrorToast: true
     }),
@@ -134,13 +127,13 @@ export async function getAiInfraApprovals(params: ApprovalPageParams): Promise<P
 }
 
 export async function approveAiInfraApproval(approvalId: string, decisionComment: string) {
-  return api.post<ApiRecord, ApiRecord>(`/api/approvals/${encodeURIComponent(approvalId)}/approve`, {
+  return api.post<ApiRecord>(`/api/approvals/${encodeURIComponent(approvalId)}/approve`, {
     decisionComment
   });
 }
 
 export async function rejectAiInfraApproval(approvalId: string, decisionComment: string) {
-  return api.post<ApiRecord, ApiRecord>(`/api/approvals/${encodeURIComponent(approvalId)}/reject`, {
+  return api.post<ApiRecord>(`/api/approvals/${encodeURIComponent(approvalId)}/reject`, {
     decisionComment
   });
 }
@@ -148,7 +141,7 @@ export async function rejectAiInfraApproval(approvalId: string, decisionComment:
 export async function getAiInfraTools(params: ToolPageParams): Promise<PageResult<ApiRecord>> {
   const pageParams = withPageDefaults(params);
   return optionalGet(
-    api.get<PageResult<ApiRecord>, PageResult<ApiRecord>>("/api/tools", {
+    api.get<PageResult<ApiRecord>>("/api/tools", {
       params: pageParams,
       suppressErrorToast: true
     }),
@@ -158,14 +151,14 @@ export async function getAiInfraTools(params: ToolPageParams): Promise<PageResul
 
 export async function getAiInfraSreHealth(): Promise<SreHealthReport> {
   return optionalGet(
-    api.get<SreHealthReport, SreHealthReport>("/api/sre/health", { suppressErrorToast: true }),
+    api.get<SreHealthReport>("/api/sre/health", { suppressErrorToast: true }),
     EMPTY_SRE_HEALTH
   );
 }
 
 export async function getAiInfraCostUsageAggregate(params: CostUsageAggregateParams): Promise<ApiRecord> {
   return optionalGet(
-    api.get<ApiRecord, ApiRecord>("/api/cost-usage:aggregate", { params, suppressErrorToast: true }),
+    api.get<ApiRecord>("/api/cost-usage:aggregate", { params, suppressErrorToast: true }),
     {
       tenantId: params.tenantId,
       totalTokens: 0,
@@ -180,7 +173,7 @@ export async function getFeedbackEvaluationCandidates(
 ): Promise<PageResult<ApiRecord>> {
   const pageParams = withPageDefaults(params);
   return optionalGet(
-    api.get<PageResult<ApiRecord>, PageResult<ApiRecord>>("/api/feedback/evaluation-candidates", {
+    api.get<PageResult<ApiRecord>>("/api/feedback/evaluation-candidates", {
       params: pageParams,
       suppressErrorToast: true
     }),
@@ -189,21 +182,21 @@ export async function getFeedbackEvaluationCandidates(
 }
 
 export async function acceptEvalCandidate(candidateId: string, note?: string): Promise<ApiRecord> {
-  return api.post<ApiRecord, ApiRecord>(
+  return api.post<ApiRecord>(
     `/api/eval-candidates/${encodeURIComponent(candidateId)}/accept`,
     { note: note ?? null }
   );
 }
 
 export async function rejectEvalCandidate(candidateId: string, note?: string): Promise<ApiRecord> {
-  return api.post<ApiRecord, ApiRecord>(
+  return api.post<ApiRecord>(
     `/api/eval-candidates/${encodeURIComponent(candidateId)}/reject`,
     { note: note ?? null }
   );
 }
 
 export async function runEvalRegression(request: EvalRegressionRequest): Promise<ApiRecord> {
-  return api.post<ApiRecord, ApiRecord>(
+  return api.post<ApiRecord>(
     `/api/eval-datasets/${encodeURIComponent(request.datasetId)}/regression`,
     {
       modelId: request.modelId ?? null,
@@ -213,7 +206,7 @@ export async function runEvalRegression(request: EvalRegressionRequest): Promise
 }
 
 export async function generateAiInfraReadinessReport(request: ReadinessRequest): Promise<ApiRecord> {
-  return api.post<ApiRecord, ApiRecord>(
+  return api.post<ApiRecord>(
     `/api/agents/${encodeURIComponent(request.agentId)}/versions/${encodeURIComponent(request.versionId)}/pilot-readiness/generate`,
     {
       tenantId: request.tenantId,
@@ -223,7 +216,7 @@ export async function generateAiInfraReadinessReport(request: ReadinessRequest):
 }
 
 export async function getLatestAiInfraReadinessReport(request: ReadinessRequest): Promise<ApiRecord> {
-  return api.get<ApiRecord, ApiRecord>(
+  return api.get<ApiRecord>(
     `/api/agents/${encodeURIComponent(request.agentId)}/versions/${encodeURIComponent(request.versionId)}/pilot-readiness/latest`,
     {
       params: { tenantId: request.tenantId }
@@ -232,7 +225,7 @@ export async function getLatestAiInfraReadinessReport(request: ReadinessRequest)
 }
 
 export async function createAiInfraCanaryRollout(request: RolloutRequest): Promise<ApiRecord> {
-  return api.post<ApiRecord, ApiRecord>(
+  return api.post<ApiRecord>(
     `/api/agents/${encodeURIComponent(request.agentId)}/versions/${encodeURIComponent(request.versionId)}/rollouts/canary`,
     {
       tenantId: request.tenantId,
@@ -243,7 +236,7 @@ export async function createAiInfraCanaryRollout(request: RolloutRequest): Promi
 }
 
 export async function getLatestAiInfraRollout(request: ReadinessRequest): Promise<ApiRecord> {
-  return api.get<ApiRecord, ApiRecord>(
+  return api.get<ApiRecord>(
     `/api/agents/${encodeURIComponent(request.agentId)}/versions/${encodeURIComponent(request.versionId)}/rollouts/latest`,
     {
       params: { tenantId: request.tenantId }
@@ -252,7 +245,7 @@ export async function getLatestAiInfraRollout(request: ReadinessRequest): Promis
 }
 
 export async function pauseAiInfraRollout(request: RolloutActionRequest): Promise<ApiRecord> {
-  return api.post<ApiRecord, ApiRecord>(
+  return api.post<ApiRecord>(
     `/api/agents/${encodeURIComponent(request.agentId)}/rollouts/${encodeURIComponent(request.rolloutId)}/pause`,
     {
       tenantId: request.tenantId,
@@ -263,7 +256,7 @@ export async function pauseAiInfraRollout(request: RolloutActionRequest): Promis
 }
 
 export async function promoteAiInfraRollout(request: RolloutActionRequest): Promise<ApiRecord> {
-  return api.post<ApiRecord, ApiRecord>(
+  return api.post<ApiRecord>(
     `/api/agents/${encodeURIComponent(request.agentId)}/rollouts/${encodeURIComponent(request.rolloutId)}/promote`,
     {
       tenantId: request.tenantId,
@@ -274,7 +267,7 @@ export async function promoteAiInfraRollout(request: RolloutActionRequest): Prom
 }
 
 export async function rollbackAiInfraRollout(request: RolloutActionRequest): Promise<ApiRecord> {
-  return api.post<ApiRecord, ApiRecord>(
+  return api.post<ApiRecord>(
     `/api/agents/${encodeURIComponent(request.agentId)}/rollouts/${encodeURIComponent(request.rolloutId)}/rollback`,
     {
       tenantId: request.tenantId,

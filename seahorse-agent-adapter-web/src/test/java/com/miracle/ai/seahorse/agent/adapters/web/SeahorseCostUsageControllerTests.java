@@ -20,7 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageAggregate;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageRecord;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageSource;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunCostSummaryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.CostUsageInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageQuery;
 import org.junit.jupiter.api.Test;
@@ -118,7 +118,7 @@ class SeahorseCostUsageControllerTests {
 
     @Test
     void shouldReadAgentRunCostSummaryFromApiPath() throws Exception {
-        AgentRunCostSummaryInboundPort port = mock(AgentRunCostSummaryInboundPort.class);
+        AgentRunQueryInboundPort port = mock(AgentRunQueryInboundPort.class);
         when(port.getCostSummary("run-1")).thenReturn(new CostUsageAggregate(
                 "tenant-a",
                 "agent-1",
@@ -129,11 +129,9 @@ class SeahorseCostUsageControllerTests {
                 2L));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseAgentRunController(
                 null,
+                provider(AgentRunQueryInboundPort.class, port),
                 null,
                 null,
-                null,
-                null,
-                provider(AgentRunCostSummaryInboundPort.class, port),
                 null,
                 provider(AdvancedFeatureGate.class, AdvancedFeatureGate.demoDefaults()))).build();
 

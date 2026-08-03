@@ -1,5 +1,7 @@
 import { api } from "@/services/api";
 
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+
 export interface PageResult<T> {
   records: T[];
   total: number;
@@ -34,7 +36,7 @@ export interface IngestionPipelinePayload {
     nodeId: string;
     nodeType: string;
     settings?: Record<string, unknown> | null;
-    condition?: Record<string, unknown> | null;
+    condition?: JsonValue;
     nextNodeId?: string | null;
   }>;
 }
@@ -119,7 +121,7 @@ export interface GateResult {
 }
 
 export async function getIngestionPipelines(pageNo = 1, pageSize = 10, keyword?: string) {
-  return api.get<PageResult<IngestionPipeline>, PageResult<IngestionPipeline>>(
+  return api.get<PageResult<IngestionPipeline>>(
     "/ingestion/pipelines",
     {
       params: { pageNo, pageSize, keyword: keyword || undefined }
@@ -128,19 +130,19 @@ export async function getIngestionPipelines(pageNo = 1, pageSize = 10, keyword?:
 }
 
 export async function getIngestionPipeline(id: string) {
-  return api.get<IngestionPipeline, IngestionPipeline>(`/ingestion/pipelines/${id}`);
+  return api.get<IngestionPipeline>(`/ingestion/pipelines/${id}`);
 }
 
 export async function getIngestionPipelineGateResult(id: string) {
-  return api.get<GateResult, GateResult>(`/ingestion/pipelines/${id}/gate-result`);
+  return api.get<GateResult>(`/ingestion/pipelines/${id}/gate-result`);
 }
 
 export async function createIngestionPipeline(payload: IngestionPipelinePayload) {
-  return api.post<IngestionPipeline, IngestionPipeline>("/ingestion/pipelines", payload);
+  return api.post<IngestionPipeline>("/ingestion/pipelines", payload);
 }
 
 export async function updateIngestionPipeline(id: string, payload: IngestionPipelinePayload) {
-  return api.put<IngestionPipeline, IngestionPipeline>(`/ingestion/pipelines/${id}`, payload);
+  return api.put<IngestionPipeline>(`/ingestion/pipelines/${id}`, payload);
 }
 
 export async function deleteIngestionPipeline(id: string) {
@@ -148,38 +150,38 @@ export async function deleteIngestionPipeline(id: string) {
 }
 
 export async function getIngestionTasks(pageNo = 1, pageSize = 10, status?: string) {
-  return api.get<PageResult<IngestionTask>, PageResult<IngestionTask>>("/ingestion/tasks", {
+  return api.get<PageResult<IngestionTask>>("/ingestion/tasks", {
     params: { pageNo, pageSize, status: status || undefined }
   });
 }
 
 export async function getIngestionTask(id: string) {
-  return api.get<IngestionTask, IngestionTask>(`/ingestion/tasks/${id}`);
+  return api.get<IngestionTask>(`/ingestion/tasks/${id}`);
 }
 
 export async function getIngestionTaskNodes(id: string) {
-  return api.get<IngestionTaskNode[], IngestionTaskNode[]>(`/ingestion/tasks/${id}/nodes`);
+  return api.get<IngestionTaskNode[]>(`/ingestion/tasks/${id}/nodes`);
 }
 
 export async function createIngestionTask(payload: IngestionTaskCreatePayload) {
-  return api.post<IngestionResult, IngestionResult>("/ingestion/tasks", payload);
+  return api.post<IngestionResult>("/ingestion/tasks", payload);
 }
 
 export async function uploadIngestionTask(pipelineId: string, file: File) {
   const formData = new FormData();
   formData.append("file", file);
-  return api.post<IngestionResult, IngestionResult>("/ingestion/tasks/upload", formData, {
+  return api.post<IngestionResult>("/ingestion/tasks/upload", formData, {
     params: { pipelineId },
     headers: { "Content-Type": "multipart/form-data" }
   });
 }
 
 export async function retryIngestionTask(id: string, fromNodeId?: string) {
-  return api.post<IngestionResult, IngestionResult>(`/ingestion/tasks/${id}/retry`, null, {
+  return api.post<IngestionResult>(`/ingestion/tasks/${id}/retry`, null, {
     params: { fromNodeId: fromNodeId || undefined }
   });
 }
 
 export async function rollbackIngestionTask(id: string) {
-  return api.post<IngestionResult, IngestionResult>(`/ingestion/tasks/${id}/rollback`, null);
+  return api.post<IngestionResult>(`/ingestion/tasks/${id}/rollback`, null);
 }

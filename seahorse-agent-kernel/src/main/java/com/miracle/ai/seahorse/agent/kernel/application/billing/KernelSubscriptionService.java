@@ -20,7 +20,6 @@ package com.miracle.ai.seahorse.agent.kernel.application.billing;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.PlanCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.Subscription;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.SubscriptionPlan;
-import com.miracle.ai.seahorse.agent.ports.inbound.billing.SubscriptionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.SubscriptionPlanRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.SubscriptionRepositoryPort;
 
@@ -35,7 +34,7 @@ import java.util.Objects;
  * <p>Handles plan listing, active subscription lookup, and new subscription creation.
  * New subscriptions are created from plan templates with a default 30-day expiry.
  */
-public class KernelSubscriptionService implements SubscriptionInboundPort {
+public class KernelSubscriptionService {
 
     private static final int DEFAULT_SUBSCRIPTION_DAYS = 30;
 
@@ -47,13 +46,9 @@ public class KernelSubscriptionService implements SubscriptionInboundPort {
         this.planRepository = Objects.requireNonNull(planRepository, "planRepository must not be null");
         this.subscriptionRepository = Objects.requireNonNull(subscriptionRepository, "subscriptionRepository must not be null");
     }
-
-    @Override
     public List<SubscriptionPlan> listPlans() {
         return planRepository.findAll();
     }
-
-    @Override
     public Subscription getActiveSubscription(String tenantId) {
         if (tenantId == null || tenantId.isBlank()) {
             return null;
@@ -63,8 +58,6 @@ public class KernelSubscriptionService implements SubscriptionInboundPort {
                 .filter(sub -> !sub.isExpired(Instant.now()))
                 .orElse(null);
     }
-
-    @Override
     public Subscription subscribe(String tenantId, PlanCode planCode) {
         Objects.requireNonNull(tenantId, "tenantId must not be null");
         Objects.requireNonNull(planCode, "planCode must not be null");

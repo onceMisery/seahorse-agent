@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorRouter;
 import com.miracle.ai.seahorse.agent.kernel.application.dashboard.KernelDashboardService;
 import com.miracle.ai.seahorse.agent.kernel.application.feedback.KernelFeedbackEvaluationCandidateQueryService;
+import com.miracle.ai.seahorse.agent.kernel.application.feedback.KernelMessageFeedbackFacade;
 import com.miracle.ai.seahorse.agent.kernel.application.feedback.KernelMessageFeedbackService;
 import com.miracle.ai.seahorse.agent.kernel.application.intent.KernelIntentTreeService;
 import com.miracle.ai.seahorse.agent.kernel.application.mapping.KernelQueryTermMappingService;
@@ -38,7 +39,6 @@ import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationBran
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationAttachmentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.dashboard.DashboardInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.MessageFeedbackInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.intent.IntentTreeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.mapping.QueryTermMappingInboundPort;
@@ -103,11 +103,20 @@ public class SeahorseAgentKernelOpsAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({FeedbackEvaluationCandidateQueryPort.class, CurrentUserPort.class})
-    @ConditionalOnMissingBean(FeedbackEvaluationCandidateQueryInboundPort.class)
+    @ConditionalOnMissingBean(MessageFeedbackInboundPort.class)
     public KernelFeedbackEvaluationCandidateQueryService seahorseFeedbackEvaluationCandidateQueryInboundPort(
             FeedbackEvaluationCandidateQueryPort candidateQueryPort,
             CurrentUserPort currentUserPort) {
         return new KernelFeedbackEvaluationCandidateQueryService(candidateQueryPort, currentUserPort);
+    }
+
+    @Bean
+    @ConditionalOnBean({KernelMessageFeedbackService.class, KernelFeedbackEvaluationCandidateQueryService.class})
+    @ConditionalOnMissingBean(MessageFeedbackInboundPort.class)
+    public KernelMessageFeedbackFacade seahorseMessageFeedbackFacade(
+            KernelMessageFeedbackService feedbackService,
+            KernelFeedbackEvaluationCandidateQueryService candidateQueryService) {
+        return new KernelMessageFeedbackFacade(feedbackService, candidateQueryService);
     }
 
     @Bean

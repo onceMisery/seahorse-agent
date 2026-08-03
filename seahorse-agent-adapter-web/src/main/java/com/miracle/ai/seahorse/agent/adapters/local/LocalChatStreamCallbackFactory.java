@@ -286,11 +286,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             long seq = nextSeq();
             flushBufferedEventsBefore(seq);
             StreamEventEnvelope envelope = StreamEventEnvelope.of(seq, eventType, currentRunId, payload);
-            try {
-                eventBufferPort.append(currentRunId, envelope);
-            } catch (Exception e) {
-                log.warn("Failed to buffer event seq={} type={} for run={}", seq, eventType.value(), currentRunId, e);
-            }
+            appendBufferedEvent(envelope);
             sender.sendEvent(STREAM_EVENT_NAME, envelope);
             sender.sendEvent(eventType.value(), payload);
             sentEventSeq = Math.max(sentEventSeq, seq);
@@ -342,11 +338,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
                 long seq = nextSeq();
                 flushBufferedEventsBefore(seq);
                 StreamEventEnvelope envelope = StreamEventEnvelope.of(seq, StreamEventType.MESSAGE, currentRunId, delta);
-                try {
-                    eventBufferPort.append(currentRunId, envelope);
-                } catch (Exception e) {
-                    log.warn("Failed to buffer message event seq={} for run={}", seq, currentRunId, e);
-                }
+                appendBufferedEvent(envelope);
                 sender.sendEvent(STREAM_EVENT_NAME, envelope);
                 sentEventSeq = Math.max(sentEventSeq, seq);
             }
@@ -359,12 +351,19 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             try {
                 latest = eventBufferPort.getLatestSeq(currentRunId).orElse(seqCounter.get());
             } catch (Exception e) {
-                log.warn("Failed to read latest event seq for run={}", currentRunId, e);
-                latest = seqCounter.get();
+                throw eventBufferFailure("read latest event sequence", e);
             }
             long base = Math.max(seqCounter.get(), latest);
             seqCounter.set(base);
             return seqCounter.incrementAndGet();
+        }
+
+        private void appendBufferedEvent(StreamEventEnvelope envelope) {
+            try {
+                eventBufferPort.append(currentRunId, envelope);
+            } catch (Exception e) {
+                throw eventBufferFailure("persist event seq=" + envelope.eventSeq(), e);
+            }
         }
 
         private void flushBufferedEvents() {
@@ -379,8 +378,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             try {
                 events = eventBufferPort.getAfter(currentRunId, sentEventSeq);
             } catch (Exception e) {
-                log.warn("Failed to flush buffered events after seq={} for run={}", sentEventSeq, currentRunId, e);
-                return;
+                throw eventBufferFailure("read buffered events after seq=" + sentEventSeq, e);
             }
             for (StreamEventEnvelope event : events) {
                 if (event.eventSeq() <= sentEventSeq) {
@@ -394,6 +392,12 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
                 sentEventSeq = event.eventSeq();
                 seqCounter.updateAndGet(current -> Math.max(current, event.eventSeq()));
             }
+        }
+
+        private IllegalStateException eventBufferFailure(String operation, Exception cause) {
+            return new IllegalStateException(
+                    "Unable to " + operation + " for run=" + currentRunId,
+                    cause);
         }
 
         private StreamEventType resolveEventType(String eventName) {

@@ -8,7 +8,6 @@ import {
   FileText,
   Loader2,
   Sparkles,
-  Clock,
   HardDrive,
   Activity
 } from "lucide-react";

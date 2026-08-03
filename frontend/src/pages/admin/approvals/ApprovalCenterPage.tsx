@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -39,7 +39,7 @@ export function ApprovalCenterPage() {
 
   const approvals = pageData?.records || [];
 
-  const loadApprovals = async (current = pageNo, kw = keyword) => {
+  const loadApprovals = useCallback(async (current = pageNo, kw = keyword) => {
     try {
       setLoading(true);
       const data = await listApprovals({
@@ -56,12 +56,12 @@ export function ApprovalCenterPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pageNo, keyword, statusFilter, riskFilter]);
 
   useEffect(() => {
     if (!featureState.enabled) return;
     loadApprovals();
-  }, [pageNo, keyword, statusFilter, riskFilter]);
+  }, [featureState.enabled, loadApprovals]);
 
   useEffect(() => {
     if (!featureState.enabled || !directApprovalId) return;

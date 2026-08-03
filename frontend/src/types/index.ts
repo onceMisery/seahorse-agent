@@ -3,7 +3,7 @@
  * Some endpoints return a raw array; others wrap in { records, total, ... }.
  */
 export interface ApiPageResponse<T> {
-  records: T[];
+  records?: T[];
   total?: number;
   current?: number;
   size?: number;
@@ -52,7 +52,7 @@ export interface Session {
   lastTime?: string;
 }
 
-export type ArtifactLanguage = "html" | "css" | "javascript" | "js" | "tsx" | "vue" | "markdown";
+export type ArtifactLanguage = "html" | "css" | "javascript" | "js" | "json" | "tsx" | "vue" | "markdown";
 
 export interface ArtifactBlock {
   id: string;
@@ -120,6 +120,7 @@ export interface AgentSource {
   score?: number;
   sourceType?: string;
   trustLevel?: string;
+  citationIndex?: number;
 }
 
 export interface AgentApproval {

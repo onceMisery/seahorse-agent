@@ -3,14 +3,12 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import type { MetadataReviewItem } from "@/services/metadataGovernanceService";
-import { getErrorMessage } from "@/utils/error";
 
 interface MetadataReviewDetailDrawerProps {
   open: boolean;

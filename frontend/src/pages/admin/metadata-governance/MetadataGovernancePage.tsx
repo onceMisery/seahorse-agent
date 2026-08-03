@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Database, RotateCcw, ShieldCheck, SlidersHorizontal, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Database, RotateCcw, ShieldCheck, SlidersHorizontal, XCircle, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -54,7 +54,7 @@ function StatusBadge({ value }: { value?: string | boolean }) {
   return <Badge variant="outline">{value || "UNKNOWN"}</Badge>;
 }
 
-function MetricCard({ label, value, icon: Icon }: { label: string; value: string | number; icon: any }) {
+function MetricCard({ label, value, icon: Icon }: { label: string; value: string | number; icon: LucideIcon }) {
   return (
     <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3">
       <div>

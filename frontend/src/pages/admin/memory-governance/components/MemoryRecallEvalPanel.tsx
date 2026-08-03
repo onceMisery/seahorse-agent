@@ -4,16 +4,9 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
-  evaluateRecallQuality,
-  runGoldenProfileEval,
+  evaluateRecallQuality
 } from "@/services/memoryGovernanceService";
 import { getErrorMessage } from "@/utils/error";
-
-interface GoldenProfile {
-  profileId?: string;
-  userId?: string;
-  label?: string;
-}
 
 export function MemoryRecallEvalPanel() {
   const [running, setRunning] = useState(false);
@@ -29,15 +22,6 @@ export function MemoryRecallEvalPanel() {
       toast.error(getErrorMessage(error, "评测失败"));
     } finally {
       setRunning(false);
-    }
-  };
-
-  const handleRunProfile = async (profileId: string) => {
-    try {
-      await runGoldenProfileEval(profileId);
-      toast.success(`方案 ${profileId} 评测已触发`);
-    } catch (error) {
-      toast.error(getErrorMessage(error, "评测失败"));
     }
   };
 

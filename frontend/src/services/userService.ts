@@ -41,13 +41,13 @@ export async function getUsersPage(
   size = 10,
   keyword?: string
 ): Promise<PageResult<UserItem>> {
-  return api.get<PageResult<UserItem>, PageResult<UserItem>>("/users", {
+  return api.get<PageResult<UserItem>>("/users", {
     params: { current, size, keyword: keyword || undefined }
   });
 }
 
 export async function createUser(payload: UserCreatePayload): Promise<string> {
-  return api.post<string, string>("/users", payload);
+  return api.post<string>("/users", payload);
 }
 
 export async function updateUser(id: string, payload: UserUpdatePayload): Promise<void> {

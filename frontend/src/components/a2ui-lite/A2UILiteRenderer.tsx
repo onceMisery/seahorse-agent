@@ -1,5 +1,5 @@
 import * as React from "react";
-import { renderNode } from "@/components/a2ui-lite/a2uiRegistry";
+import { A2UILiteNodeRenderer } from "@/components/a2ui-lite/a2uiRegistry";
 import type { A2UILiteAction, A2UILiteNode, A2UILiteSurface } from "@/components/a2ui-lite/a2uiTypes";
 
 interface A2UILiteRendererProps {
@@ -8,7 +8,7 @@ interface A2UILiteRendererProps {
 }
 
 function renderTree(node: A2UILiteNode, onAction: (action: A2UILiteAction) => void): React.ReactNode {
-  const rendered = renderNode(node, onAction);
+  const rendered = <A2UILiteNodeRenderer node={node} onAction={onAction} />;
   if (!node.children || node.children.length === 0) return rendered;
 
   return (

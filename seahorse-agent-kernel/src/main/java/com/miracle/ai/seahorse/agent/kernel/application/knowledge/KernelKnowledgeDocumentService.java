@@ -127,19 +127,29 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
                 quotaEnforcementService.checkStorageQuota(tenantId, safeCommand.file().size());
             } catch (com.miracle.ai.seahorse.agent.kernel.domain.billing.QuotaExceededException ex) {
                 throw ex;
-            } catch (Exception ignored) {
-                // Fail-open: quota system unavailable — do not block upload
+            } catch (Exception ex) {
+                throw new IllegalStateException("storage quota check failed", ex);
             }
         }
 
         StoredObject storedObject = uploadToStorage(knowledgeBase.collectionName(), safeCommand);
-        KnowledgeDocumentRecord document = documentRepositoryPort.createPendingDocument(new CreateKnowledgeDocumentCommand(
-                knowledgeBase.id(),
-                storedObject.originalFilename(),
-                new KnowledgeDocumentFileRef(storedObject.url(), storedObject.detectedType(), storedObject.size()),
-                new KnowledgeDocumentProcessRef("pending",
-                        safeCommand.options().processMode(), safeCommand.options().pipelineId()),
-                safeCommand.operator()));
+        KnowledgeDocumentRecord document;
+        try {
+            document = documentRepositoryPort.createPendingDocument(new CreateKnowledgeDocumentCommand(
+                    knowledgeBase.id(),
+                    storedObject.originalFilename(),
+                    new KnowledgeDocumentFileRef(storedObject.url(), storedObject.detectedType(), storedObject.size()),
+                    new KnowledgeDocumentProcessRef("pending",
+                            safeCommand.options().processMode(), safeCommand.options().pipelineId()),
+                    safeCommand.operator()));
+        } catch (RuntimeException ex) {
+            try {
+                objectStoragePort.deleteByUrl(storedObject.url());
+            } catch (RuntimeException cleanupFailure) {
+                ex.addSuppressed(cleanupFailure);
+            }
+            throw ex;
+        }
         if ("chunk".equalsIgnoreCase(safeCommand.options().processMode())) {
             startChunk(document.id(), safeCommand.operator());
             return documentRepositoryPort.findById(document.id()).orElse(document);
@@ -156,7 +166,16 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
         }
         KnowledgeDocumentChunkEvent event = new KnowledgeDocumentChunkEvent(
                 docId, document.kbId(), operator, document.process().pipelineId());
-        messageQueuePort.publishReliable(chunkTopic, String.valueOf(docId), BIZ_DESC_CHUNK, event);
+        try {
+            messageQueuePort.publishReliable(chunkTopic, String.valueOf(docId), BIZ_DESC_CHUNK, event);
+        } catch (RuntimeException ex) {
+            try {
+                documentRepositoryPort.markFailed(docId, operator, failureMessage(ex));
+            } catch (RuntimeException stateFailure) {
+                ex.addSuppressed(stateFailure);
+            }
+            throw ex;
+        }
     }
 
     @Override
@@ -234,26 +253,15 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
     @Override
     public void delete(Long docId, String operator) {
         KnowledgeDocumentDetail current = requireEditableDocument(docId, "文档正在分块中，无法删除");
+        vectorPorts.vectorIndexPort().deleteDocumentVectors(
+                current.getCollectionName(), String.valueOf(current.getId()));
+        vectorPorts.keywordIndexPort().deleteDocumentChunks(
+                String.valueOf(current.getKbId()), String.valueOf(current.getId()));
+        if (hasText(current.getFileUrl())) {
+            objectStoragePort.deleteByUrl(current.getFileUrl());
+        }
         if (!documentRepositoryPort.delete(current.getId(), operator)) {
             throw new IllegalArgumentException("文档不存在：" + docId);
-        }
-        // Best-effort cleanup: each external call is independent and should not block others
-        try {
-            vectorPorts.vectorIndexPort().deleteDocumentVectors(current.getCollectionName(), String.valueOf(current.getId()));
-        } catch (Exception ignored) {
-            // Vector cleanup failure should not block document deletion
-        }
-        try {
-            vectorPorts.keywordIndexPort().deleteDocumentChunks(String.valueOf(current.getKbId()), String.valueOf(current.getId()));
-        } catch (Exception ignored) {
-            // Keyword index cleanup failure should not block document deletion
-        }
-        if (hasText(current.getFileUrl())) {
-            try {
-                objectStoragePort.deleteByUrl(current.getFileUrl());
-            } catch (Exception ignored) {
-                // Storage cleanup failure should not block document deletion
-            }
         }
     }
 
@@ -287,7 +295,7 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
     /**
      * 当流水线未显式定义节点时，回退到内置的标准入库链：parser → chunker → embedder → indexer。
      *
-     * <p>消费端（如 {@code KnowledgeDocumentChunkConsumer}）通常只携带 pipelineId 而不携带节点定义，
+     * <p>消息消费端通常只携带 pipelineId 而不携带节点定义，
      * 若直接执行会导致引擎遍历空节点链、文档被标记为成功却产出 0 个分块。此处补齐标准节点，
      * 各节点 settings 留空以使用默认分块大小，并通过 context metadata（collectionName/kbId/docId）
      * 完成索引；embedding 模型 ID 留空时由 EmbeddingModelPort 使用其默认模型。

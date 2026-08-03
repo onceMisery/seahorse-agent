@@ -17,7 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
-import com.miracle.ai.seahorse.agent.kernel.application.admin.KernelAdminTenantService;
+import com.miracle.ai.seahorse.agent.ports.inbound.admin.AdminTenantInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.admin.TenantDetail;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
@@ -45,10 +45,10 @@ import java.util.Map;
 @RequestMapping("/api/admin/tenants")
 public class SeahorseAdminTenantController {
 
-    private final ObjectProvider<KernelAdminTenantService> adminServiceProvider;
+    private final ObjectProvider<AdminTenantInboundPort> adminServiceProvider;
     private final CurrentUserPort currentUserPort;
 
-    public SeahorseAdminTenantController(ObjectProvider<KernelAdminTenantService> adminServiceProvider,
+    public SeahorseAdminTenantController(ObjectProvider<AdminTenantInboundPort> adminServiceProvider,
                                          CurrentUserPort currentUserPort) {
         this.adminServiceProvider = adminServiceProvider;
         this.currentUserPort = currentUserPort;
@@ -59,7 +59,7 @@ public class SeahorseAdminTenantController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String status) {
-        KernelAdminTenantService service = requireService();
+        AdminTenantInboundPort service = requireService();
         List<TenantDetail> tenants = service.listTenants(page, size, status);
         long total = service.countTenants(status);
         return ApiResponse.ok(new TenantListResponse(
@@ -68,13 +68,13 @@ public class SeahorseAdminTenantController {
 
     @GetMapping("/{tenantId}")
     public ApiResponse<TenantResponse> getTenantDetail(@PathVariable String tenantId) {
-        KernelAdminTenantService service = requireService();
+        AdminTenantInboundPort service = requireService();
         return ApiResponse.ok(TenantResponse.from(service.getTenantDetail(tenantId)));
     }
 
     @PutMapping("/{tenantId}/suspend")
     public ApiResponse<Map<String, String>> suspendTenant(@PathVariable String tenantId) {
-        KernelAdminTenantService service = requireService();
+        AdminTenantInboundPort service = requireService();
         CurrentUser operator = currentUserPort.requireCurrentUser();
         service.suspendTenant(tenantId, operator.operator());
         return ApiResponse.ok(Map.of("tenantId", tenantId, "status", "SUSPENDED"));
@@ -82,7 +82,7 @@ public class SeahorseAdminTenantController {
 
     @DeleteMapping("/{tenantId}")
     public ApiResponse<Map<String, String>> deleteTenant(@PathVariable String tenantId) {
-        KernelAdminTenantService service = requireService();
+        AdminTenantInboundPort service = requireService();
         CurrentUser operator = currentUserPort.requireCurrentUser();
         service.deleteTenant(tenantId, operator.operator());
         return ApiResponse.ok(Map.of("tenantId", tenantId, "status", "DELETED"));
@@ -93,14 +93,14 @@ public class SeahorseAdminTenantController {
             @PathVariable String tenantId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        KernelAdminTenantService service = requireService();
+        AdminTenantInboundPort service = requireService();
         List<Map<String, Object>> users = service.listUsersByTenant(tenantId, page, size);
         long total = service.countUsersByTenant(tenantId);
         return ApiResponse.ok(new UserListResponse(users, total, page, size));
     }
 
-    private KernelAdminTenantService requireService() {
-        KernelAdminTenantService service = adminServiceProvider != null
+    private AdminTenantInboundPort requireService() {
+        AdminTenantInboundPort service = adminServiceProvider != null
                 ? adminServiceProvider.getIfAvailable() : null;
         if (service == null) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Admin service not available");

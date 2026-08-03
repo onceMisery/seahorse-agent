@@ -41,7 +41,7 @@ class EnhancerNodeFeatureTests {
             case 1 -> "```json\n[\"合同\", \"发票\"]\n```";
             case 2 -> "{\"department\":\"finance\"}";
             default -> "";
-        }, taskType -> "system:" + taskType);
+        });
         NodeConfig config = NodeConfig.builder()
                 .nodeType("enhancer")
                 .settings(OBJECT_MAPPER.valueToTree(Map.of(

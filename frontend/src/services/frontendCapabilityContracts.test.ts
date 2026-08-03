@@ -70,14 +70,6 @@ const backendEndpoints = new Set(
   backendEndpointManifest.map((endpoint) => `${endpoint.method} ${endpoint.path}`)
 );
 
-function normalizePath(path: string) {
-  return path
-    .replace(/\$\{encodeURIComponent\([^}]+\)\}/g, "{}")
-    .replace(/\$\{[^}]+\}/g, "{}")
-    .replace(/\{[^}]+\}/g, "{}")
-    .replace(/\/(?:agent|run|version|kb|doc|item|approval|tool|policy|dataset)-[A-Za-z0-9_-]+/g, "/{}");
-}
-
 describe("frontend capability service contracts", () => {
   beforeEach(() => {
     vi.clearAllMocks();

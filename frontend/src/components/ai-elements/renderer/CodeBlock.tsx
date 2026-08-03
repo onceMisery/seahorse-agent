@@ -17,9 +17,9 @@ export function CodeBlock({ code, language, editable = false, onChange }: CodeBl
   const [copied, setCopied] = React.useState(false);
   const [isEditing, setIsEditing] = React.useState(editable);
   const [draft, setDraft] = React.useState(code);
-  const copyTimerRef = React.useRef<ReturnType<typeof setTimeout>>();
+  const copyTimerRef = React.useRef<number>();
 
-  React.useEffect(() => () => clearTimeout(copyTimerRef.current), []);
+  React.useEffect(() => () => window.clearTimeout(copyTimerRef.current), []);
 
   React.useEffect(() => {
     setDraft(code);

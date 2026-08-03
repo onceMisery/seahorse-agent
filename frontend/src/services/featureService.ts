@@ -12,5 +12,5 @@ export interface BackendFeatureResponse {
 }
 
 export function getBackendFeatures() {
-  return api.get<BackendFeatureResponse, BackendFeatureResponse>("/api/features");
+  return api.get<BackendFeatureResponse>("/api/features");
 }

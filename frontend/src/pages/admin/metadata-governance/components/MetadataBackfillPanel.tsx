@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react";
-import { Plus, Play, RefreshCw } from "lucide-react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getKnowledgeBases, type KnowledgeBase } from "@/services/knowledgeService";
-import { getErrorMessage } from "@/utils/error";
 
 // 简化的 Backfill 面板（后端 API 需要逐个实现）
 export function MetadataBackfillPanel() {

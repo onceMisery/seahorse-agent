@@ -19,7 +19,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.task.TaskType;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactDownloadDecision;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactUpdateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
@@ -352,7 +353,7 @@ class TaskOrchestrationServiceTests {
 
     private static TaskOrchestrationService service(FakeTaskRepository repository,
                                                     TaskEventPort eventPort,
-                                                    AgentArtifactQueryInboundPort artifactQueryPort,
+                                                    AgentArtifactInboundPort artifactQueryPort,
                                                     AgentRunInboundPort agentRunPort,
                                                     CurrentUserPort currentUserPort) {
         return new TaskOrchestrationService(
@@ -559,7 +560,7 @@ class TaskOrchestrationServiceTests {
         }
     }
 
-    private static final class CountingArtifactQueryPort implements AgentArtifactQueryInboundPort {
+    private static final class CountingArtifactQueryPort implements AgentArtifactInboundPort {
         private final AtomicInteger listByRunIdCalls = new AtomicInteger();
 
         @Override
@@ -589,6 +590,11 @@ class TaskOrchestrationServiceTests {
 
         @Override
         public AgentArtifactDownloadDecision downloadDecision(String artifactId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public AgentArtifact updateContent(String artifactId, AgentArtifactUpdateCommand command) {
             throw new UnsupportedOperationException();
         }
     }

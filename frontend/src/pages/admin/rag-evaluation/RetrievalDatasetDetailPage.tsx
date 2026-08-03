@@ -159,7 +159,7 @@ export function RetrievalDatasetDetailPage() {
           </Button>
           <div>
             <h1 className="admin-page-title">数据集详情</h1>
-            <p className="admin-page-subtitle">{(dataset as Record<string, unknown>)?.name || datasetId}</p>
+            <p className="admin-page-subtitle">{typeof dataset?.name === "string" ? dataset.name : datasetId}</p>
           </div>
         </div>
         <div className="admin-page-actions">

@@ -29,6 +29,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskRecor
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskUpdateValues;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
 import java.sql.ResultSet;
@@ -157,6 +158,15 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
         for (IngestionTaskNodeValues node : Objects.requireNonNullElse(nodes, List.<IngestionTaskNodeValues>of())) {
             insertNode(node);
         }
+    }
+
+    @Override
+    @Transactional
+    public void completeTask(String taskId,
+                             IngestionTaskUpdateValues values,
+                             List<IngestionTaskNodeValues> nodes) {
+        updateTask(taskId, values);
+        replaceNodeLogs(taskId, nodes);
     }
 
     @Override

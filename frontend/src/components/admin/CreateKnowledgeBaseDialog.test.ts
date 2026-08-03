@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveEmbeddingModelCandidates } from "./CreateKnowledgeBaseDialog";
+import { resolveEmbeddingModelCandidates } from "./knowledgeBaseDialogUtils";
 import type { AiModelConfigItem } from "@/services/aiConfigService";
 
 function configItem(configKey: string, configValue: string, tenantId = "default"): AiModelConfigItem {

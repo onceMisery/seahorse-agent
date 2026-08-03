@@ -18,7 +18,6 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQuery;
-import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.MessageFeedbackInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.SubmitMessageFeedbackCommand;
 import org.springframework.beans.factory.ObjectProvider;
@@ -42,13 +41,10 @@ import java.util.Objects;
 public class SeahorseMessageFeedbackController {
 
     private final ObjectProvider<MessageFeedbackInboundPort> feedbackInboundPortProvider;
-    private final ObjectProvider<FeedbackEvaluationCandidateQueryInboundPort> candidateQueryPortProvider;
 
     public SeahorseMessageFeedbackController(
-            ObjectProvider<MessageFeedbackInboundPort> feedbackInboundPortProvider,
-            ObjectProvider<FeedbackEvaluationCandidateQueryInboundPort> candidateQueryPortProvider) {
+            ObjectProvider<MessageFeedbackInboundPort> feedbackInboundPortProvider) {
         this.feedbackInboundPortProvider = feedbackInboundPortProvider;
-        this.candidateQueryPortProvider = candidateQueryPortProvider;
     }
 
     @PostMapping("/conversations/messages/{messageId}/feedback")
@@ -73,7 +69,7 @@ public class SeahorseMessageFeedbackController {
                                                     @RequestParam(required = false) String reason,
                                                     @RequestParam(defaultValue = "1") long current,
                                                     @RequestParam(defaultValue = "10") long size) {
-        return ApiResponses.requireService(candidateQueryPortProvider, port -> port.page(
+        return ApiResponses.requireService(feedbackInboundPortProvider, port -> port.page(
                 new FeedbackEvaluationCandidateQuery(userId, runId, reason, current, size)));
     }
 

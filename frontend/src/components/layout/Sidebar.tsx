@@ -172,7 +172,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       />
       <aside
         aria-hidden={!isOpen}
-        inert={!isOpen ? "" : undefined}
+        {...(!isOpen ? { inert: "" } : {})}
         className={cn(
           "fixed left-0 top-0 z-40 flex h-screen w-[280px] flex-shrink-0 flex-col glass p-3 transition-transform",
           isOpen ? "translate-x-0" : "-translate-x-full"

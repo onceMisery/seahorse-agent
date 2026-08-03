@@ -264,6 +264,37 @@ describe("chatStreamHandlers", () => {
     });
   });
 
+  it("ignores a replayed event with the same sequence number", () => {
+    const message = assistantMessage({
+      lastEventSeq: 10,
+      artifacts: [{
+        id: "artifact-1",
+        title: "Report",
+        language: "markdown",
+        code: "hello",
+        isComplete: false
+      }]
+    });
+
+    applyAgentStreamEventToMessage(
+      message,
+      envelope(11, AGENT_STREAM_EVENTS.ARTIFACT_CONTENT, {
+        artifactId: "artifact-1",
+        delta: " world"
+      })
+    );
+    applyAgentStreamEventToMessage(
+      message,
+      envelope(11, AGENT_STREAM_EVENTS.ARTIFACT_CONTENT, {
+        artifactId: "artifact-1",
+        delta: " duplicated"
+      })
+    );
+
+    expect(message.lastEventSeq).toBe(11);
+    expect(message.artifacts?.[0]?.code).toBe("hello world");
+  });
+
   it("hydrates snapshot fields without letting older snapshots overwrite newer live data", () => {
     const message = assistantMessage({
       content: "live text",

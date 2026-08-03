@@ -17,8 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
-import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalCandidateDecisionService;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalRegressionService;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.EvalCandidateDecisionInboundPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,16 +29,13 @@ import java.util.Map;
 @RestController
 public class SeahorseEvalCandidateDecisionController {
 
-    private final ObjectProvider<KernelEvalCandidateDecisionService> decisionServiceProvider;
-    private final ObjectProvider<KernelEvalRegressionService> regressionServiceProvider;
+    private final ObjectProvider<EvalCandidateDecisionInboundPort> evalServiceProvider;
     private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseEvalCandidateDecisionController(
-            ObjectProvider<KernelEvalCandidateDecisionService> decisionServiceProvider,
-            ObjectProvider<KernelEvalRegressionService> regressionServiceProvider,
+            ObjectProvider<EvalCandidateDecisionInboundPort> evalServiceProvider,
             ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
-        this.decisionServiceProvider = decisionServiceProvider;
-        this.regressionServiceProvider = regressionServiceProvider;
+        this.evalServiceProvider = evalServiceProvider;
         this.advancedFeatureGate = advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults);
     }
 
@@ -48,7 +44,7 @@ public class SeahorseEvalCandidateDecisionController {
                                       @RequestBody(required = false) DecisionRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_EVALUATION);
         String note = request != null ? request.note() : null;
-        return ApiResponses.requireService(decisionServiceProvider, service -> {
+        return ApiResponses.requireService(evalServiceProvider, service -> {
             service.acceptCandidate(candidateId, note);
             return Map.of("candidateId", candidateId, "decision", "ACCEPTED");
         });
@@ -59,7 +55,7 @@ public class SeahorseEvalCandidateDecisionController {
                                       @RequestBody(required = false) DecisionRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_EVALUATION);
         String reason = request != null ? request.note() : null;
-        return ApiResponses.requireService(decisionServiceProvider, service -> {
+        return ApiResponses.requireService(evalServiceProvider, service -> {
             service.rejectCandidate(candidateId, reason);
             return Map.of("candidateId", candidateId, "decision", "REJECTED");
         });
@@ -71,7 +67,7 @@ public class SeahorseEvalCandidateDecisionController {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_EVALUATION);
         String modelId = request != null ? request.modelId() : null;
         Double baselinePassRate = request != null ? request.baselinePassRate() : null;
-        return ApiResponses.requireService(regressionServiceProvider,
+        return ApiResponses.requireService(evalServiceProvider,
                 service -> service.runRegression(datasetId, modelId, baselinePassRate));
     }
 

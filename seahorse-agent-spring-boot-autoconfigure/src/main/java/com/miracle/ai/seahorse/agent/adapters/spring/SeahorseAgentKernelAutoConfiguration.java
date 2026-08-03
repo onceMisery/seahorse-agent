@@ -20,20 +20,9 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentAdapterProperties;
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentKernelProperties;
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentPluginProperties;
-import com.miracle.ai.seahorse.agent.adapters.spring.metadata.MetadataIndexCompensationAdapter;
-import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentVectorPorts;
-import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenanceInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataIndexCompensationPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
 /**
@@ -52,9 +41,7 @@ import org.springframework.context.annotation.Import;
 @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @Import({
         SeahorseAgentKernelChatAutoConfiguration.class,
-        SeahorseAgentKernelDocumentRefreshAutoConfiguration.class,
         SeahorseAgentKernelKeywordAutoConfiguration.class,
-        SeahorseAgentKernelKnowledgeAutoConfiguration.class,
         SeahorseAgentKernelMemoryAutoConfiguration.class,
         SeahorseAgentMemoryAggregationAutoConfiguration.class,
         SeahorseAgentMemoryMaintenanceAutoConfiguration.class,
@@ -69,22 +56,4 @@ import org.springframework.context.annotation.Import;
         SeahorseAgentKernelTraceAutoConfiguration.class
 })
 public class SeahorseAgentKernelAutoConfiguration {
-    @Bean
-    @ConditionalOnBean({KeywordIndexMaintenanceInboundPort.class, KnowledgeDocumentRepositoryPort.class,
-            KnowledgeDocumentVectorPorts.class})
-    @ConditionalOnMissingBean(MetadataIndexCompensationPort.class)
-    public MetadataIndexCompensationPort seahorseMetadataIndexCompensationPort(
-            KnowledgeDocumentRepositoryPort documentRepositoryPort,
-            KeywordIndexMaintenanceInboundPort keywordIndexMaintenanceInboundPort,
-            KnowledgeDocumentVectorPorts documentVectorPorts,
-            ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
-            ObjectProvider<MetadataBackfillInboundPort> backfillInboundPort) {
-        return new MetadataIndexCompensationAdapter(
-                documentRepositoryPort,
-                keywordIndexMaintenanceInboundPort,
-                documentVectorPorts,
-                schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
-                backfillInboundPort.getIfAvailable());
-    }
-
 }

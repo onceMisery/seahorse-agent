@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.adapters.spring.metadata.MetadataIndexCompensationAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentVectorPorts;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataDictionaryService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataExtractionResultService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataQualityService;
@@ -33,7 +35,10 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaUsageInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityComparisonInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenanceInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultManagementRepositoryPort;
@@ -45,6 +50,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManag
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.springframework.beans.factory.ObjectProvider;
@@ -63,9 +69,27 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentMetadataAdapterAutoConfiguration.class,
-        SeahorseAgentKernelRetrievalAutoConfiguration.class})
+        SeahorseAgentKernelKnowledgeAutoConfiguration.class, SeahorseAgentKernelRetrievalAutoConfiguration.class})
 @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelMetadataAutoConfiguration {
+
+    @Bean
+    @ConditionalOnBean({KeywordIndexMaintenanceInboundPort.class, KnowledgeDocumentRepositoryPort.class,
+            KnowledgeDocumentVectorPorts.class})
+    @ConditionalOnMissingBean(MetadataIndexCompensationPort.class)
+    public MetadataIndexCompensationPort seahorseMetadataIndexCompensationPort(
+            KnowledgeDocumentRepositoryPort documentRepositoryPort,
+            KeywordIndexMaintenanceInboundPort keywordIndexMaintenanceInboundPort,
+            KnowledgeDocumentVectorPorts documentVectorPorts,
+            ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
+            ObjectProvider<MetadataBackfillInboundPort> backfillInboundPort) {
+        return new MetadataIndexCompensationAdapter(
+                documentRepositoryPort,
+                keywordIndexMaintenanceInboundPort,
+                documentVectorPorts,
+                schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
+                backfillInboundPort.getIfAvailable());
+    }
 
     @Bean
     @ConditionalOnBean(MetadataQualityReportRepositoryPort.class)

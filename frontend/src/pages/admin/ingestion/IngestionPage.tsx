@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   ClipboardList,
@@ -33,7 +33,8 @@ import type {
   IngestionTaskCreatePayload,
   IngestionTaskNode,
   GateResult,
-  PageResult
+  PageResult,
+  JsonValue
 } from "@/services/ingestionService";
 import {
   createIngestionPipeline,
@@ -254,7 +255,7 @@ export function IngestionPage() {
   const pipelines = pipelinePage?.records || [];
   const tasks = taskPage?.records || [];
 
-  const loadPipelines = async (pageNo = pipelinePageNo, keyword = pipelineKeyword) => {
+  const loadPipelines = useCallback(async (pageNo = pipelinePageNo, keyword = pipelineKeyword) => {
     setPipelineLoading(true);
     try {
       const data = await getIngestionPipelines(pageNo, PIPELINE_PAGE_SIZE, keyword || undefined);
@@ -265,7 +266,7 @@ export function IngestionPage() {
     } finally {
       setPipelineLoading(false);
     }
-  };
+  }, [pipelinePageNo, pipelineKeyword]);
 
   const loadPipelineOptions = async () => {
     try {
@@ -276,7 +277,7 @@ export function IngestionPage() {
     }
   };
 
-  const loadTasks = async (pageNo = taskPageNo, status = taskStatus) => {
+  const loadTasks = useCallback(async (pageNo = taskPageNo, status = taskStatus) => {
     setTaskLoading(true);
     try {
       const data = await getIngestionTasks(pageNo, TASK_PAGE_SIZE, status);
@@ -287,15 +288,15 @@ export function IngestionPage() {
     } finally {
       setTaskLoading(false);
     }
-  };
+  }, [taskPageNo, taskStatus]);
 
   useEffect(() => {
     loadPipelines();
-  }, [pipelinePageNo, pipelineKeyword]);
+  }, [loadPipelines]);
 
   useEffect(() => {
     loadTasks();
-  }, [taskPageNo, taskStatus]);
+  }, [loadTasks]);
 
   useEffect(() => {
     loadPipelineOptions();
@@ -800,7 +801,7 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
     }
   });
 
-  const mapSettingsTasks = (tasks: unknown): EnhancerTaskForm[] => {
+  const mapSettingsTasks = useCallback((tasks: unknown): EnhancerTaskForm[] => {
     if (!Array.isArray(tasks)) return [];
     return tasks.map((task) => ({
       id: createLocalId(),
@@ -808,9 +809,9 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
       systemPrompt: String((task as { systemPrompt?: string }).systemPrompt || ""),
       userPromptTemplate: String((task as { userPromptTemplate?: string }).userPromptTemplate || "")
     }));
-  };
+  }, []);
 
-  const buildNodeForm = (node: IngestionPipelineNode): PipelineNodeForm => {
+  const buildNodeForm = useCallback((node: IngestionPipelineNode): PipelineNodeForm => {
     const settings = (node.settings as Record<string, unknown>) || {};
     const rawCondition = node.condition as unknown;
     const condition = rawCondition
@@ -854,12 +855,12 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
           : ""
       }
     };
-  };
+  }, [mapSettingsTasks]);
 
-  const buildNodesFromPipeline = (source?: IngestionPipelineNode[] | null) => {
+  const buildNodesFromPipeline = useCallback((source?: IngestionPipelineNode[] | null) => {
     if (!source || source.length === 0) return [];
     return source.map(buildNodeForm);
-  };
+  }, [buildNodeForm]);
 
   const parseCondition = (raw: string) => {
     const trimmed = raw.trim();
@@ -979,7 +980,7 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
         return { ok: false as const, message: "节点类型不能为空" };
       }
       let settings: Record<string, unknown> | undefined;
-      let condition: unknown;
+      let condition: JsonValue = null;
       try {
         settings = buildSettings(node) as Record<string, unknown> | undefined;
         condition = parseCondition(node.condition);
@@ -1044,7 +1045,7 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
       setNodes(buildNodesFromPipeline(pipeline?.nodes));
       setNodeMode("form");
     }
-  }, [open, pipeline, defaultNodes, form]);
+  }, [open, pipeline, defaultNodes, form, buildNodesFromPipeline]);
 
   const handleSubmit = async (values: PipelineFormValues) => {
     let nodesPayload: IngestionPipelinePayload["nodes"] | undefined;

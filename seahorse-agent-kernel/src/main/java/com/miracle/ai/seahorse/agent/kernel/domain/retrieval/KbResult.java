@@ -23,9 +23,11 @@ import java.util.Map;
 /**
  * KB 检索聚合结果。
  */
-public record KbResult(String groupedContext, Map<String, List<RetrievedChunk>> intentChunks) {
+public record KbResult(String groupedContext,
+                       Map<String, List<RetrievedChunk>> intentChunks,
+                       Map<String, String> failureEvidence) {
 
     public static KbResult empty() {
-        return new KbResult("", Map.of());
+        return new KbResult("", Map.of(), Map.of());
     }
 }

@@ -51,6 +51,9 @@ import java.util.concurrent.TimeoutException;
  */
 final class KernelSearchChannelExecutor {
 
+    private static final String FAILURE_CODE_TIMEOUT = "TIMEOUT";
+    private static final String FAILURE_CODE_CHANNEL_FAILED = "CHANNEL_FAILED";
+
     private static final Logger LOG = LoggerFactory.getLogger(KernelSearchChannelExecutor.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String LOG_MSG_CHANNEL_FAILED = "Search channel {} failed, fallback to empty result";
@@ -128,8 +131,8 @@ final class KernelSearchChannelExecutor {
                     channelTraceExtraData(channel, context, safeResult, elapsedMs, timeoutMs, null, false));
             return safeResult;
         }
-        SearchChannelResult fallback = emptyResult(channel, elapsedMs);
         boolean timedOut = cause instanceof TimeoutException;
+        SearchChannelResult fallback = failedResult(channel, elapsedMs, cause, timedOut);
         observationSupport.recordChannelCompleted(channel, context, fallback, cause, elapsedMs, timeoutMs, timedOut);
         traceRecorder.finishNode(nodeScope, cause,
                 channelTraceExtraData(channel, context, fallback, elapsedMs, timeoutMs, cause, timedOut));
@@ -172,6 +175,20 @@ final class KernelSearchChannelExecutor {
                 .channelName(channel.name())
                 .chunks(List.<RetrievedChunk>of())
                 .latencyMs(latencyMs)
+                .build();
+    }
+
+    private SearchChannelResult failedResult(SearchChannelFeature channel,
+                                              long latencyMs,
+                                              Throwable cause,
+                                              boolean timedOut) {
+        return SearchChannelResult.builder()
+                .channelType(channel.channelType())
+                .channelName(channel.name())
+                .chunks(List.<RetrievedChunk>of())
+                .latencyMs(latencyMs)
+                .successful(false)
+                .failureCode(timedOut ? FAILURE_CODE_TIMEOUT : FAILURE_CODE_CHANNEL_FAILED)
                 .build();
     }
 

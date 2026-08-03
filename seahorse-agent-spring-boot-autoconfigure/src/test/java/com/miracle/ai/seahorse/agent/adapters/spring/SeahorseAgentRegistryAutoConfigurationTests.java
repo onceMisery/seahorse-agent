@@ -17,6 +17,10 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
+
+import java.io.InputStream;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAgentDefinitionService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.artifact.KernelAgentArtifactQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentCheckpointQueryService;
@@ -48,24 +52,21 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.task.KernelTaskTem
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolCatalogManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolInvocationAuditQueryService;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentEvalInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentFactoryInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentHandoffInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshotInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutCostSummaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AccessDecisionQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackQueryInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackDiffInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackRetentionInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.CostUsageInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.EnterprisePilotReadinessInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.OpenApiConnectorInboundPort;
@@ -105,13 +106,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.MeshPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.OpenApiSpecParserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ProductionGateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.QuotaPolicyRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessAgentDefinitionEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessAuditEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessEvalEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessQuotaEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessResourceAclEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessRollbackEvidencePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessToolRiskEvidencePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessEvidencePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAccessPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAclRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthReportProviderPort;
@@ -197,13 +192,13 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(field(context.getBean(ResourceAccessPolicyPort.class), "auditLedger"))
                             .isSameAs(context.getBean(KernelAuditLedgerService.class));
                     assertThat(context).hasSingleBean(AgentDefinitionInboundPort.class);
-                    assertThat(context).hasSingleBean(AgentArtifactQueryInboundPort.class);
+                    assertThat(context).hasSingleBean(AgentArtifactInboundPort.class);
                     assertThat(context).hasSingleBean(AgentRunInboundPort.class);
                     assertThat(context).hasSingleBean(AgentRunLeaseInboundPort.class);
                     assertThat(context).hasSingleBean(AgentRunSnapshotInboundPort.class);
-                    assertThat(context).hasSingleBean(AgentCheckpointQueryInboundPort.class);
+                    assertThat(context).hasSingleBean(AgentRunQueryInboundPort.class);
                     assertThat(context).hasSingleBean(ContextPackBuilderInboundPort.class);
-                    assertThat(context).hasSingleBean(ContextPackQueryInboundPort.class);
+                    assertThat(context).hasSingleBean(ContextPackInboundPort.class);
                     assertThat(context).hasSingleBean(AccessDecisionQueryInboundPort.class);
                     assertThat(context).hasSingleBean(MeshPolicyPort.class);
                     assertThat(context).hasSingleBean(AgentHandoffInboundPort.class);
@@ -215,15 +210,8 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(SreHealthInboundPort.class);
                     assertThat(context).hasSingleBean(SreHealthReportProviderPort.class);
                     assertThat(context).hasSingleBean(AgentRolloutInboundPort.class);
-                    assertThat(context).hasSingleBean(AgentRolloutCostSummaryInboundPort.class);
-                    assertThat(context).hasSingleBean(EnterprisePilotReadinessInboundPort.class);
-                    assertThat(context).hasSingleBean(ReadinessAgentDefinitionEvidencePort.class);
-                    assertThat(context).hasSingleBean(ReadinessToolRiskEvidencePort.class);
-                    assertThat(context).hasSingleBean(ReadinessResourceAclEvidencePort.class);
-                    assertThat(context).hasSingleBean(ReadinessEvalEvidencePort.class);
-                    assertThat(context).hasSingleBean(ReadinessQuotaEvidencePort.class);
-                    assertThat(context).hasSingleBean(ReadinessAuditEvidencePort.class);
-                    assertThat(context).hasSingleBean(ReadinessRollbackEvidencePort.class);
+                                        assertThat(context).hasSingleBean(EnterprisePilotReadinessInboundPort.class);
+                    assertThat(context).hasSingleBean(ReadinessEvidencePort.class);
                     assertThat(context).hasSingleBean(ResourceAclManagementInboundPort.class);
                     assertThat(context).hasSingleBean(OpenApiConnectorInboundPort.class);
                     assertThat(context).hasSingleBean(AgentFactoryInboundPort.class);
@@ -238,8 +226,6 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(KernelAgentCheckpointQueryService.class);
                     assertThat(context).hasSingleBean(KernelContextPackBuilderService.class);
                     assertThat(context).hasSingleBean(KernelContextPackQueryService.class);
-                    assertThat(context).hasSingleBean(ContextPackRetentionInboundPort.class);
-                    assertThat(context).hasSingleBean(ContextPackDiffInboundPort.class);
                     assertThat(context).hasSingleBean(KernelAccessDecisionQueryService.class);
                     assertThat(context).hasSingleBean(KernelResourceAclManagementService.class);
                     assertThat(field(context.getBean(KernelResourceAclManagementService.class), "auditLedger"))
@@ -298,9 +284,8 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                             .isSameAs(context.getBean(CostUsageRepositoryPort.class));
                     assertThat(field(context.getBean(KernelEnterprisePilotReadinessService.class), "repository"))
                             .isSameAs(context.getBean(EnterprisePilotReadinessRepositoryPort.class));
-                    assertThat(field(context.getBean(KernelEnterprisePilotReadinessService.class),
-                            "agentDefinitionEvidencePort"))
-                            .isSameAs(context.getBean(ReadinessAgentDefinitionEvidencePort.class));
+                    assertThat(field(context.getBean(KernelEnterprisePilotReadinessService.class), "evidencePort"))
+                            .isSameAs(context.getBean(ReadinessEvidencePort.class));
                     assertThat(context).hasSingleBean(KernelToolCatalogManagementService.class);
                     assertThat(context).hasSingleBean(KernelAgentToolBindingManagementService.class);
                     assertThat(context).hasSingleBean(KernelToolInvocationAuditQueryService.class);
@@ -372,6 +357,27 @@ class SeahorseAgentRegistryAutoConfigurationTests {
         @Bean
         CurrentUserPort currentUserPort() {
             return () -> Optional.of(new CurrentUser(1L, "admin", "admin", null));
+        }
+
+        @Bean
+        ObjectStoragePort objectStoragePort() {
+            return new ObjectStoragePort() {
+                @Override
+                public StoredObject upload(String bucket, InputStream input, long size, String filename,
+                                           String contentType) {
+                    return new StoredObject("mem://" + bucket + "/" + filename, contentType, size, filename);
+                }
+
+                @Override
+                public InputStream openStream(String objectUri) {
+                    return java.io.InputStream.nullInputStream();
+                }
+
+                @Override
+                public void deleteByUrl(String url) {
+                    // intentionally empty: in-memory test storage.
+                }
+            };
         }
 
         @Bean

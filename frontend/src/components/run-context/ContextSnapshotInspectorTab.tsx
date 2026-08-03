@@ -235,8 +235,8 @@ export function ContextSnapshotInspectorTab({ agentRunId }: ContextSnapshotInspe
   const runProfileId = asString(snapshotJson.runProfileId) ?? asString(snapshot.runProfileId);
   const branchLeafMessageId = asString(snapshotJson.branchLeafMessageId) ?? asString(snapshot.branchLeafMessageId);
   const studioRunId = asString(agentScope.studioRunId)
-    ?? asString(traceContext.studioRunId)
-    ?? asString(agentScope.studioTraceId)
+    ?? asString(traceContext.studioRunId);
+  const studioTraceId = asString(agentScope.studioTraceId)
     ?? asString(traceContext.studioTraceId);
   const studioProject = asString(agentScope.studioProject) ?? asString(traceContext.studioProject);
   const otelTraceId = asString(traceContext.otelTraceId);
@@ -258,7 +258,8 @@ export function ContextSnapshotInspectorTab({ agentRunId }: ContextSnapshotInspe
         <FieldRow label="运行方案" value={runProfileId} />
         <FieldRow label="Trace" value={asString(traceContext.traceId)} />
         <ExternalTraceRow label="OTEL Trace" traceId={otelTraceId} url={otelTraceUrl} />
-        <ExternalTraceRow label="Studio Run" traceId={studioRunId} url={studioTraceUrl} />
+        <ExternalTraceRow label="Studio Run" traceId={studioRunId} />
+        <ExternalTraceRow label="Studio Trace" traceId={studioTraceId} url={studioTraceUrl} />
         <FieldRow label="创建" value={snapshot.createTime} />
       </Section>
 
@@ -291,7 +292,7 @@ export function ContextSnapshotInspectorTab({ agentRunId }: ContextSnapshotInspe
         <ToolList toolIds={a2aAgentIds} />
       </Section>
 
-      {(studioRunId || studioProject || asString(agentScope.nacosNamespace) || asString(agentScope.nacosGroup)) ? (
+      {(studioRunId || studioTraceId || studioProject || asString(agentScope.nacosNamespace) || asString(agentScope.nacosGroup)) ? (
         <Section title="AgentScope">
           <FieldRow label="Studio Project" value={studioProject} />
           <FieldRow label="Nacos Namespace" value={asString(agentScope.nacosNamespace)} />

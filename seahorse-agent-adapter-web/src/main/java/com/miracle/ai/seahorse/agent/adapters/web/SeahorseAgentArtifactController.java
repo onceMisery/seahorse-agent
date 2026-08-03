@@ -22,9 +22,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactD
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactType;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactDownloadDecision;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactUpdateCommand;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactUpdateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.io.InputStreamResource;
@@ -44,27 +43,24 @@ import java.util.List;
 @RestController
 public class SeahorseAgentArtifactController {
 
-    private final ObjectProvider<AgentArtifactQueryInboundPort> artifactQueryPortProvider;
-    private final ObjectProvider<AgentArtifactUpdateInboundPort> artifactUpdatePortProvider;
+    private final ObjectProvider<AgentArtifactInboundPort> artifactPortProvider;
     private final ObjectProvider<ObjectStoragePort> objectStoragePortProvider;
 
-    public SeahorseAgentArtifactController(ObjectProvider<AgentArtifactQueryInboundPort> artifactQueryPortProvider,
-                                           ObjectProvider<AgentArtifactUpdateInboundPort> artifactUpdatePortProvider,
+    public SeahorseAgentArtifactController(ObjectProvider<AgentArtifactInboundPort> artifactPortProvider,
                                            ObjectProvider<ObjectStoragePort> objectStoragePortProvider) {
-        this.artifactQueryPortProvider = artifactQueryPortProvider;
-        this.artifactUpdatePortProvider = artifactUpdatePortProvider;
+        this.artifactPortProvider = artifactPortProvider;
         this.objectStoragePortProvider = objectStoragePortProvider;
     }
 
     @GetMapping("/api/agent-artifacts/{artifactId}")
     public ApiResponse<AgentArtifactResponse> getById(@PathVariable String artifactId) {
-        return ApiResponses.requireService(artifactQueryPortProvider,
+        return ApiResponses.requireService(artifactPortProvider,
                 port -> AgentArtifactResponse.from(port.getById(artifactId)));
     }
 
     @GetMapping("/api/agent-runs/{runId}/artifacts")
     public ApiResponse<List<AgentArtifactResponse>> listByRunId(@PathVariable String runId) {
-        return ApiResponses.requireService(artifactQueryPortProvider,
+        return ApiResponses.requireService(artifactPortProvider,
                 port -> port.listByRunId(runId).stream()
                         .map(AgentArtifactResponse::from)
                         .toList());
@@ -76,7 +72,7 @@ public class SeahorseAgentArtifactController {
         AgentArtifactUpdateRequest safeRequest = request == null
                 ? new AgentArtifactUpdateRequest("")
                 : request;
-        return ApiResponses.requireService(artifactUpdatePortProvider,
+        return ApiResponses.requireService(artifactPortProvider,
                 port -> AgentArtifactResponse.from(port.updateContent(
                         artifactId,
                         new AgentArtifactUpdateCommand(safeRequest.content()))));
@@ -84,7 +80,7 @@ public class SeahorseAgentArtifactController {
 
     @GetMapping("/api/agent-artifacts/{artifactId}/download")
     public ResponseEntity<InputStreamResource> download(@PathVariable String artifactId) {
-        AgentArtifactQueryInboundPort artifactPort = requireArtifactPort();
+        AgentArtifactInboundPort artifactPort = requireArtifactPort();
         ObjectStoragePort storagePort = requireStoragePort();
         AgentArtifactDownloadDecision decision = artifactPort.downloadDecision(artifactId);
         InputStream stream = storagePort.openStream(decision.storageRef());
@@ -94,10 +90,10 @@ public class SeahorseAgentArtifactController {
                 .body(new InputStreamResource(stream));
     }
 
-    private AgentArtifactQueryInboundPort requireArtifactPort() {
-        AgentArtifactQueryInboundPort port = artifactQueryPortProvider == null
+    private AgentArtifactInboundPort requireArtifactPort() {
+        AgentArtifactInboundPort port = artifactPortProvider == null
                 ? null
-                : artifactQueryPortProvider.getIfAvailable();
+                : artifactPortProvider.getIfAvailable();
         if (port == null) {
             throw new IllegalStateException(ApiResponses.SERVICE_NOT_AVAILABLE_MESSAGE);
         }

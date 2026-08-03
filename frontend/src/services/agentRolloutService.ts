@@ -28,7 +28,7 @@ export function createCanaryRollout(
   versionId: string,
   payload: { tenantId: string; canaryPercent: number; operator: string }
 ) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/rollouts/canary`,
     payload
   );
@@ -42,14 +42,14 @@ export function getLatestRollout(agentId: string, versionId: string, tenantId: s
 }
 
 export function pauseRollout(agentId: string, rolloutId: string, payload: RolloutAction) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/agents/${encodeURIComponent(agentId)}/rollouts/${encodeURIComponent(rolloutId)}/pause`,
     payload
   );
 }
 
 export function promoteRollout(agentId: string, rolloutId: string, payload: RolloutAction) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/agents/${encodeURIComponent(agentId)}/rollouts/${encodeURIComponent(rolloutId)}/promote`,
     payload
   );
@@ -60,7 +60,7 @@ export function rollbackRollout(
   rolloutId: string,
   payload: RolloutAction & { targetVersionId?: string }
 ) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/agents/${encodeURIComponent(agentId)}/rollouts/${encodeURIComponent(rolloutId)}/rollback`,
     payload
   );

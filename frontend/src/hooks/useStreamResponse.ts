@@ -86,6 +86,7 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
   let dataLines: string[] = [];
   let pendingDuplicate: { eventName: string; payloadKey: string } | null = null;
   let terminalEventReceived = false;
+  let lastStreamEventSeq: number | null = null;
 
   // 看门狗：每次收到数据重置定时器，超时则报错
   const watchdogMs = timeoutMs ?? 30000;
@@ -112,6 +113,9 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
 
   const dispatchTypedEvent = (name: string, payload: unknown) => {
     if (isTerminalEvent(name)) {
+      if (terminalEventReceived) {
+        return;
+      }
       terminalEventReceived = true;
     }
     safeInvoke(handlers.onEvent, name, payload);
@@ -163,6 +167,18 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
     if (eventName === "stream_event") {
       const envelope = payload as StreamEventEnvelope;
       if (envelope && typeof envelope === "object" && "eventSeq" in envelope) {
+        const eventSeq = Number(envelope.eventSeq);
+        if (Number.isFinite(eventSeq)
+          && lastStreamEventSeq !== null
+          && eventSeq <= lastStreamEventSeq) {
+          pendingDuplicate = null;
+          eventName = "message";
+          dataLines = [];
+          return;
+        }
+        if (Number.isFinite(eventSeq)) {
+          lastStreamEventSeq = eventSeq;
+        }
         safeInvoke(handlers.onStreamEvent, envelope);
         pendingDuplicate = {
           eventName: envelope.eventType,
@@ -189,7 +205,7 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
     dataLines = [];
   };
 
-  while (true) {
+  for (;;) {
     if (signal?.aborted) {
       clearWatchdog();
       reader.cancel();

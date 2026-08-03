@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -35,7 +35,7 @@ export function ToolDetailPage() {
   const [invocations, setInvocations] = useState<ToolInvocation[]>([]);
   const [toggling, setToggling] = useState(false);
 
-  const loadTool = async () => {
+  const loadTool = useCallback(async () => {
     if (!toolId) return;
     try {
       setLoading(true);
@@ -47,9 +47,9 @@ export function ToolDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toolId]);
 
-  const loadInvocations = async () => {
+  const loadInvocations = useCallback(async () => {
     if (!toolId) return;
     try {
       const data = await listToolInvocations({ toolId, current: 1, size: 20 });
@@ -57,9 +57,9 @@ export function ToolDetailPage() {
     } catch (error) {
       console.error(error);
     }
-  };
+  }, [toolId]);
 
-  const loadGateResult = async () => {
+  const loadGateResult = useCallback(async () => {
     if (!toolId) return;
     try {
       setGateLoading(true);
@@ -70,14 +70,14 @@ export function ToolDetailPage() {
     } finally {
       setGateLoading(false);
     }
-  };
+  }, [toolId]);
 
   useEffect(() => {
     if (!featureState.enabled) return;
     loadTool();
     loadGateResult();
     loadInvocations();
-  }, [toolId]);
+  }, [featureState.enabled, loadTool, loadGateResult, loadInvocations]);
 
   const handleToggle = async () => {
     if (!toolId || !tool) return;

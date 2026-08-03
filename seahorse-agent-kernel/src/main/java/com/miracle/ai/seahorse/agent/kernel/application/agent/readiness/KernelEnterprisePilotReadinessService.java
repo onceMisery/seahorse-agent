@@ -23,7 +23,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.readiness.EnterprisePil
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.EnterprisePilotReadinessGenerateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.EnterprisePilotReadinessInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.EnterprisePilotReadinessRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessAgentDefinitionEvidencePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessEvidencePort;
 
 import java.time.Clock;
@@ -38,29 +37,14 @@ public class KernelEnterprisePilotReadinessService implements EnterprisePilotRea
     private static final String REPORT_ID_PREFIX = "epr_";
 
     private final EnterprisePilotReadinessRepositoryPort repository;
-    private final ReadinessAgentDefinitionEvidencePort agentDefinitionEvidencePort;
-    private final List<ReadinessEvidencePort> evidencePorts;
+    private final ReadinessEvidencePort evidencePort;
     private final Clock clock;
 
     public KernelEnterprisePilotReadinessService(EnterprisePilotReadinessRepositoryPort repository,
-                                                 ReadinessAgentDefinitionEvidencePort agentDefinitionEvidencePort,
-                                                 ReadinessEvidencePort toolRiskEvidencePort,
-                                                 ReadinessEvidencePort resourceAclEvidencePort,
-                                                 ReadinessEvidencePort evalEvidencePort,
-                                                 ReadinessEvidencePort quotaEvidencePort,
-                                                 ReadinessEvidencePort auditEvidencePort,
-                                                 ReadinessEvidencePort rollbackEvidencePort,
+                                                 ReadinessEvidencePort evidencePort,
                                                  Clock clock) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
-        this.agentDefinitionEvidencePort = Objects.requireNonNull(agentDefinitionEvidencePort,
-                "agentDefinitionEvidencePort must not be null");
-        this.evidencePorts = List.of(
-                Objects.requireNonNull(toolRiskEvidencePort, "toolRiskEvidencePort must not be null"),
-                Objects.requireNonNull(resourceAclEvidencePort, "resourceAclEvidencePort must not be null"),
-                Objects.requireNonNull(evalEvidencePort, "evalEvidencePort must not be null"),
-                Objects.requireNonNull(quotaEvidencePort, "quotaEvidencePort must not be null"),
-                Objects.requireNonNull(auditEvidencePort, "auditEvidencePort must not be null"),
-                Objects.requireNonNull(rollbackEvidencePort, "rollbackEvidencePort must not be null"));
+        this.evidencePort = Objects.requireNonNull(evidencePort, "evidencePort must not be null");
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
@@ -69,19 +53,11 @@ public class KernelEnterprisePilotReadinessService implements EnterprisePilotRea
         EnterprisePilotReadinessGenerateCommand safeCommand = Objects.requireNonNull(command,
                 "command must not be null");
         Instant now = clock.instant();
-        List<EnterprisePilotReadinessCheckResult> results = new ArrayList<>();
-        results.addAll(agentDefinitionEvidencePort.collect(
+        List<EnterprisePilotReadinessCheckResult> results = new ArrayList<>(evidencePort.collect(
                 safeCommand.tenantId(),
                 safeCommand.agentId(),
                 safeCommand.versionId(),
                 now));
-        for (ReadinessEvidencePort evidencePort : evidencePorts) {
-            results.add(evidencePort.collect(
-                    safeCommand.tenantId(),
-                    safeCommand.agentId(),
-                    safeCommand.versionId(),
-                    now));
-        }
         EnterprisePilotReadinessReport report = new EnterprisePilotReadinessReport(
                 reportId(),
                 safeCommand.tenantId(),

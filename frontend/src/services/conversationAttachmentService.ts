@@ -7,14 +7,14 @@ export async function uploadConversationAttachment(
 ): Promise<ConversationAttachment> {
   const formData = new FormData();
   formData.append("file", file);
-  return api.post<ConversationAttachment, ConversationAttachment>(
+  return api.post<ConversationAttachment>(
     `/api/conversations/${encodeURIComponent(conversationId)}/attachments`,
     formData
   );
 }
 
 export async function listConversationAttachments(conversationId: string): Promise<ConversationAttachment[]> {
-  return api.get<ConversationAttachment[], ConversationAttachment[]>(
+  return api.get<ConversationAttachment[]>(
     `/api/conversations/${encodeURIComponent(conversationId)}/attachments`
   );
 }

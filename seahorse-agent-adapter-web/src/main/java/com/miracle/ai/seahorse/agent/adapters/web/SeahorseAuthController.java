@@ -18,7 +18,6 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.application.auth.UserAgentParser;
-import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthRefreshInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.RefreshTokenCommand;
@@ -26,7 +25,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.IpGeolocationPort;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -41,80 +39,57 @@ public class SeahorseAuthController {
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
 
-    private final ObjectProvider<AuthInboundPort> authInboundPortProvider;
-    private final ObjectProvider<AuthRefreshInboundPort> authRefreshInboundPortProvider;
+    private final AuthInboundPort authInboundPort;
     private final ObjectProvider<IpGeolocationPort> ipGeolocationPortProvider;
 
-    public SeahorseAuthController(ObjectProvider<AuthInboundPort> authInboundPortProvider) {
-        this(authInboundPortProvider, null, null);
-    }
-
-    public SeahorseAuthController(ObjectProvider<AuthInboundPort> authInboundPortProvider,
+    public SeahorseAuthController(AuthInboundPort authInboundPort,
                                   ObjectProvider<IpGeolocationPort> ipGeolocationPortProvider) {
-        this(authInboundPortProvider, null, ipGeolocationPortProvider);
-    }
-
-    @Autowired
-    public SeahorseAuthController(ObjectProvider<AuthInboundPort> authInboundPortProvider,
-                                  ObjectProvider<AuthRefreshInboundPort> authRefreshInboundPortProvider,
-                                  ObjectProvider<IpGeolocationPort> ipGeolocationPortProvider) {
-        this.authInboundPortProvider = authInboundPortProvider;
-        this.authRefreshInboundPortProvider = authRefreshInboundPortProvider;
+        this.authInboundPort = Objects.requireNonNull(authInboundPort, "authInboundPort must not be null");
         this.ipGeolocationPortProvider = ipGeolocationPortProvider;
     }
 
     @PostMapping("/auth/login")
     public Map<String, Object> login(@RequestBody @Valid AuthLoginRequest request, HttpServletRequest httpRequest) {
         AuthLoginRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-
         String ipAddress = extractIpAddress(httpRequest);
         String userAgent = httpRequest.getHeader("User-Agent");
-        String deviceInfo = UserAgentParser.parse(userAgent);
-
-        // Optionally resolve IP geolocation (graceful degradation if not available)
-        if (ipGeolocationPortProvider != null && ipAddress != null) {
-            IpGeolocationPort geoPort = ipGeolocationPortProvider.getIfAvailable();
-            if (geoPort != null) {
-                try {
-                    IpGeolocationPort.GeoInfo geoInfo = geoPort.resolve(ipAddress);
-                    if (geoInfo != null) {
-                        deviceInfo = deviceInfo + " (" + geoInfo.toDisplayString() + ")";
-                    }
-                } catch (Exception e) {
-                    // Graceful degradation: continue without geo info
-                }
-            }
-        }
-
+        String deviceInfo = withOptionalGeolocation(UserAgentParser.parse(userAgent), ipAddress);
         LoginCommand command = new LoginCommand(
                 safeRequest.getUsername(),
                 safeRequest.getPassword(),
                 ipAddress,
                 userAgent,
-                deviceInfo
-        );
-
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                authInboundPortProvider.getIfAvailable().login(command));
+                deviceInfo);
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, authInboundPort.login(command));
     }
 
     @PostMapping("/auth/refresh")
     public Map<String, Object> refresh(@RequestBody @Valid AuthRefreshRequest request) {
         AuthRefreshRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        AuthRefreshInboundPort port = authRefreshInboundPortProvider != null
-                ? authRefreshInboundPortProvider.getIfAvailable()
-                : null;
-        if (port == null) {
-            throw new IllegalStateException("Auth refresh service not available");
-        }
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                port.refresh(new RefreshTokenCommand(safeRequest.getRefreshToken())));
+                authInboundPort.refresh(new RefreshTokenCommand(safeRequest.getRefreshToken())));
     }
 
     @PostMapping("/auth/logout")
-    public Map<String, Object> logout() {
-        authInboundPortProvider.getIfAvailable().logout();
+    public Map<String, Object> logout(@RequestBody(required = false) @Valid AuthRefreshRequest request) {
+        authInboundPort.logout(request != null ? request.getRefreshToken() : null);
         return Map.of(KEY_CODE, SUCCESS_CODE);
+    }
+
+    private String withOptionalGeolocation(String deviceInfo, String ipAddress) {
+        if (ipGeolocationPortProvider == null || ipAddress == null) {
+            return deviceInfo;
+        }
+        IpGeolocationPort geoPort = ipGeolocationPortProvider.getIfAvailable();
+        if (geoPort == null) {
+            return deviceInfo;
+        }
+        try {
+            IpGeolocationPort.GeoInfo geoInfo = geoPort.resolve(ipAddress);
+            return geoInfo != null ? deviceInfo + " (" + geoInfo.toDisplayString() + ")" : deviceInfo;
+        } catch (RuntimeException ex) {
+            return deviceInfo;
+        }
     }
 
     private String extractIpAddress(HttpServletRequest request) {

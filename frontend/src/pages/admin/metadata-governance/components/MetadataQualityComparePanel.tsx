@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getKnowledgeBases, type KnowledgeBase } from "@/services/knowledgeService";
-import { getErrorMessage } from "@/utils/error";
 import { useEffect } from "react";
 
 export function MetadataQualityComparePanel() {

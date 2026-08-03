@@ -53,23 +53,23 @@ export interface RunExperimentRequest {
 }
 
 export async function createRunExperiment(request: RunExperimentRequest): Promise<RunExperimentDetails> {
-  return api.post<RunExperimentDetails, RunExperimentDetails>("/api/run-experiments", request);
+  return api.post<RunExperimentDetails>("/api/run-experiments", request);
 }
 
 export async function getRunExperiment(id: number | string): Promise<RunExperimentDetails> {
-  return api.get<RunExperimentDetails, RunExperimentDetails>(
+  return api.get<RunExperimentDetails>(
     `/api/run-experiments/${encodeURIComponent(String(id))}`
   );
 }
 
 export async function getRunExperimentReport(id: number | string): Promise<RunExperimentReport> {
-  return api.get<RunExperimentReport, RunExperimentReport>(
+  return api.get<RunExperimentReport>(
     `/api/run-experiments/${encodeURIComponent(String(id))}/report`
   );
 }
 
 export async function cancelRunExperiment(id: number | string): Promise<RunExperimentDetails> {
-  return api.post<RunExperimentDetails, RunExperimentDetails>(
+  return api.post<RunExperimentDetails>(
     `/api/run-experiments/${encodeURIComponent(String(id))}/cancel`
   );
 }
@@ -79,7 +79,7 @@ export async function scoreRunExperimentTrial(
   trialId: number | string,
   score: Record<string, unknown>
 ): Promise<RunExperimentDetails> {
-  return api.post<RunExperimentDetails, RunExperimentDetails>(
+  return api.post<RunExperimentDetails>(
     `/api/run-experiments/${encodeURIComponent(String(experimentId))}/trials/${encodeURIComponent(String(trialId))}/score`,
     { score }
   );
@@ -89,7 +89,7 @@ export async function forkRunExperimentTrialToBranch(
   experimentId: number | string,
   trialId: number | string
 ): Promise<RunExperimentForkResult> {
-  return api.post<RunExperimentForkResult, RunExperimentForkResult>(
+  return api.post<RunExperimentForkResult>(
     `/api/run-experiments/${encodeURIComponent(String(experimentId))}/trials/${encodeURIComponent(String(trialId))}/fork-to-branch`
   );
 }

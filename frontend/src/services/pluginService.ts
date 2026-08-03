@@ -39,7 +39,7 @@ export function getPluginRegistry() {
 }
 
 export function savePluginStatus(status: PluginStatus) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     "/agent/plugins/status",
     status
   );

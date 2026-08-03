@@ -17,15 +17,23 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.feedback;
 
+import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationCandidatePage;
+
 /**
- * 消息反馈入站端口。
+ * 消息反馈与评估候选查询入站用例端口。
+ *
+ * <p>合并消息反馈提交与反馈评估候选查询两个反馈能力用例，由组合 facade 提供，
+ * 供 Web 适配器通过契约依赖。</p>
  */
 public interface MessageFeedbackInboundPort {
 
     /**
      * 提交消息点赞/点踩反馈。
-     *
-     * @param command 反馈命令
      */
     void submit(SubmitMessageFeedbackCommand command);
+
+    /**
+     * 分页查询反馈评估候选。
+     */
+    FeedbackEvaluationCandidatePage page(FeedbackEvaluationCandidateQuery query);
 }

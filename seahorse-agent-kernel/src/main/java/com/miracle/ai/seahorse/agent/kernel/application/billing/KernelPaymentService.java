@@ -21,7 +21,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.billing.PlanCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.PaymentOrder;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.SubscriptionPlan;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.marketplace.RevenueService;
-import com.miracle.ai.seahorse.agent.ports.inbound.billing.PaymentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.PaymentCallbackLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.PaymentGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.PaymentOrderRepositoryPort;
@@ -45,7 +44,7 @@ import java.util.UUID;
  * <p>Optionally integrates with {@link RevenueService} to record marketplace
  * revenue shares when a payment for a marketplace agent subscription completes.
  */
-public class KernelPaymentService implements PaymentInboundPort {
+public class KernelPaymentService {
 
     private static final DateTimeFormatter PERIOD_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM").withZone(ZoneId.systemDefault());
@@ -92,8 +91,6 @@ public class KernelPaymentService implements PaymentInboundPort {
         this(orderRepository, planRepository, paymentGateway, callbackLogRepository,
                 transactionRunner, null);
     }
-
-    @Override
     public PaymentOrder createOrder(String tenantId, PlanCode planCode, String channel) {
         Objects.requireNonNull(tenantId, "tenantId must not be null");
         Objects.requireNonNull(planCode, "planCode must not be null");
@@ -125,16 +122,12 @@ public class KernelPaymentService implements PaymentInboundPort {
 
         return order;
     }
-
-    @Override
     public PaymentOrder getOrderStatus(String orderNo) {
         if (orderNo == null || orderNo.isBlank()) {
             return null;
         }
         return orderRepository.findByOrderNo(orderNo).orElse(null);
     }
-
-    @Override
     public PaymentOrder handleCallback(String channel, Map<String, String> params) {
         Objects.requireNonNull(channel, "channel must not be null");
         Objects.requireNonNull(params, "params must not be null");

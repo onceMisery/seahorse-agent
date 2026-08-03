@@ -31,21 +31,21 @@ export interface RoleCardRequest {
 }
 
 export async function listRoleCards(): Promise<RoleCardVO[]> {
-  return api.get<RoleCardVO[], RoleCardVO[]>("/api/role-cards");
+  return api.get<RoleCardVO[]>("/api/role-cards");
 }
 
 export async function createRoleCard(request: RoleCardRequest): Promise<number | string> {
-  return api.post<number | string, number | string>("/api/role-cards", request);
+  return api.post<number | string>("/api/role-cards", request);
 }
 
 export async function updateRoleCard(id: number | string, request: RoleCardRequest): Promise<void> {
-  return api.put<void, void>(`/api/role-cards/${encodeURIComponent(String(id))}`, request);
+  return api.put<void>(`/api/role-cards/${encodeURIComponent(String(id))}`, request);
 }
 
 export async function activateRoleCard(id: number | string): Promise<void> {
-  return api.put<void, void>(`/api/role-cards/${encodeURIComponent(String(id))}/activate`);
+  return api.put<void>(`/api/role-cards/${encodeURIComponent(String(id))}/activate`);
 }
 
 export async function deleteRoleCard(id: number | string): Promise<void> {
-  return api.delete<void, void>(`/api/role-cards/${encodeURIComponent(String(id))}`);
+  return api.delete<void>(`/api/role-cards/${encodeURIComponent(String(id))}`);
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
@@ -38,7 +38,7 @@ export function ToolInvocationAuditPage() {
 
   const invocations = pageData?.records || [];
 
-  const loadInvocations = async (current = pageNo, kw = keyword) => {
+  const loadInvocations = useCallback(async (current = pageNo, kw = keyword) => {
     try {
       setLoading(true);
       const data = await listToolInvocations({
@@ -55,12 +55,12 @@ export function ToolInvocationAuditPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pageNo, keyword, rolloutId, statusFilter]);
 
   useEffect(() => {
     if (!featureState.enabled) return;
     loadInvocations();
-  }, [pageNo, keyword, rolloutId, statusFilter]);
+  }, [featureState.enabled, loadInvocations]);
 
   const handleSearch = () => {
     setPageNo(1);

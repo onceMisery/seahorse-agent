@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -26,7 +26,7 @@ export function MemoryConflictPanel() {
   const [mergedContent, setMergedContent] = useState("");
   const [resolving, setResolving] = useState(false);
 
-  const loadConflicts = async () => {
+  const loadConflicts = useCallback(async () => {
     try {
       setLoading(true);
       const data = await listMemoryConflicts({ userId, status: PENDING_STATUS, limit: 50 });
@@ -37,11 +37,11 @@ export function MemoryConflictPanel() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     loadConflicts();
-  }, [userId]);
+  }, [loadConflicts]);
 
   const handleResolve = async () => {
     if (!selectedConflict?.id) return;

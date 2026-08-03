@@ -1,7 +1,7 @@
 import * as React from "react";
 import { ExternalLink } from "lucide-react";
 
-import { TRUST_STYLES, trustLevelFromSource } from "@/components/chat/SourceList";
+import { TRUST_STYLES, trustLevelFromSource } from "@/components/chat/sourceTrust";
 import { InspectorEmptyState } from "@/components/chat/workbench/InspectorEmptyState";
 import type { AgentSource } from "@/types";
 

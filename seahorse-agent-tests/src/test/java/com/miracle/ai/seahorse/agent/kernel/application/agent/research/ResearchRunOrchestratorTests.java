@@ -29,10 +29,12 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -317,6 +319,56 @@ class ResearchRunOrchestratorTests {
         assertEquals(1, taskQueue.failCount);
     }
 
+    @Test
+    void eventBufferFailureMustFailTheClaimedTaskInsteadOfBeingSwallowed() {
+        AgentRunEventBufferPort failingBuffer = new InMemoryEventBuffer() {
+            private int appendCount;
+
+            @Override
+            public void append(String runId, StreamEventEnvelope event) {
+                if (appendCount++ > 0) {
+                    throw new IllegalStateException("event buffer unavailable");
+                }
+                super.append(runId, event);
+            }
+        };
+        orchestrator = new ResearchRunOrchestrator(taskQueue, failingBuffer,
+                List.of(new TrackingHandler(ResearchStepType.PLAN, executedSteps)));
+
+        orchestrator.startResearch("run-buffer-failure", ResearchTaskProfile.defaultProfile(),
+                "q", "tenant", "user");
+
+        assertTrue(orchestrator.pollAndExecute());
+        assertEquals(1, taskQueue.failCount);
+        assertTrue(executedSteps.isEmpty(), "handler must not run after the start event failed");
+    }
+
+    @Test
+    void terminalEventFailureMustLeaveClaimedTaskUnackedForRecovery() {
+        AgentRunEventBufferPort failingBuffer = new InMemoryEventBuffer() {
+            @Override
+            public void append(String runId, StreamEventEnvelope event) {
+                if (event.eventType() == StreamEventType.FINISH) {
+                    throw new IllegalStateException("terminal event buffer unavailable");
+                }
+                super.append(runId, event);
+            }
+        };
+        orchestrator = new ResearchRunOrchestrator(taskQueue, failingBuffer,
+                List.of(new TrackingHandler(ResearchStepType.VERIFY_CITATIONS, executedSteps)));
+
+        taskQueue.enqueue(new DurableTask(
+                "task-final", "run-terminal-buffer-failure", ResearchStepType.VERIFY_CITATIONS.name(),
+                0, Instant.now(), null, new ResearchStepContext(
+                        "run-terminal-buffer-failure", "q", 0).toJson()));
+
+        assertTrue(orchestrator.pollAndExecute());
+        assertEquals(1, taskQueue.failCount);
+        assertEquals("task-final", taskQueue.lastClaimedTaskId);
+        assertFalse(taskQueue.ackedTaskIds.contains("task-final"),
+                "terminal event failure must happen before task acknowledgement");
+    }
+
     // --- In-memory test doubles ---
 
     private static class TrackingHandler implements ResearchStepHandler {
@@ -339,21 +391,27 @@ class ResearchRunOrchestratorTests {
 
     private static class InMemoryTaskQueue implements DurableTaskQueuePort {
         private final Queue<DurableTask> queue = new LinkedList<>();
+        private final Set<String> ackedTaskIds = new HashSet<>();
         int retryCount = 0;
         int failCount = 0;
         String lastRetryReason = "";
         String lastFailReason = "";
+        String lastClaimedTaskId = "";
 
         @Override
         public void enqueue(DurableTask task) { queue.add(task); }
 
         @Override
         public Optional<DurableTask> claimNext(String workerId) {
-            return Optional.ofNullable(queue.poll());
+            DurableTask task = queue.poll();
+            if (task != null) {
+                lastClaimedTaskId = task.taskId();
+            }
+            return Optional.ofNullable(task);
         }
 
         @Override
-        public void ack(String taskId) { }
+        public void ack(String taskId) { ackedTaskIds.add(taskId); }
 
         @Override
         public void retry(String taskId, Instant retryAt, String reason) {

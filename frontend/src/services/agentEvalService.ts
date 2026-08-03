@@ -35,7 +35,7 @@ export function saveEvalSummary(
   versionId: string,
   payload: AgentEvalSummary
 ) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/eval-summaries`,
     payload
   );

@@ -31,25 +31,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /** R5: freeze the exact controller-to-kernel-service dependencies present in Phase 0. */
 public class R5ControllerDependencyTest {
 
-    private static final Set<String> PHASE_ZERO_BASELINE = Set.of(
-            "com.miracle.ai.seahorse.agent.adapters.web.SeahorseAdminTenantController"
-                    + " -> com.miracle.ai.seahorse.agent.kernel.application.admin.KernelAdminTenantService",
-            "com.miracle.ai.seahorse.agent.adapters.web.SeahorseAdminUserController"
-                    + " -> com.miracle.ai.seahorse.agent.kernel.application.admin.KernelAdminTenantService",
-            "com.miracle.ai.seahorse.agent.adapters.web.SeahorseAuditLogController"
-                    + " -> com.miracle.ai.seahorse.agent.kernel.application.admin.KernelAuditLogService",
-            "com.miracle.ai.seahorse.agent.adapters.web.SeahorseEvalCandidateDecisionController"
-                    + " -> com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalCandidateDecisionService",
-            "com.miracle.ai.seahorse.agent.adapters.web.SeahorseEvalCandidateDecisionController"
-                    + " -> com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalRegressionService",
-            "com.miracle.ai.seahorse.agent.adapters.web.SeahorseMarketplaceController"
-                    + " -> com.miracle.ai.seahorse.agent.kernel.application.agent.marketplace.KernelAgentMarketplaceService");
+    private static final Set<String> PHASE_ZERO_BASELINE = Set.of();
 
     private final JavaClasses webClasses = new ClassFileImporter()
             .importPackages("com.miracle.ai.seahorse.agent.adapters.web", "com.miracle.ai.seahorse.agent.adapters.local");
 
     @Test
-    void controllerToKernelServiceDependenciesMustMatchPhaseZeroBaseline() {
+    void controllerToKernelServiceDependenciesMustBeZero() {
         Set<String> actualDependencies = new TreeSet<>();
 
         for (JavaClass controller : webClasses) {
@@ -66,7 +54,7 @@ public class R5ControllerDependencyTest {
         }
 
         assertEquals(new TreeSet<>(PHASE_ZERO_BASELINE), actualDependencies,
-                "Controller-to-kernel-service dependencies changed; replace them with inbound ports or update the reviewed baseline");
+                "Web controllers must depend on inbound use-case contracts, never concrete Kernel*Service implementations");
     }
 
     private static boolean isKernelService(JavaClass target) {

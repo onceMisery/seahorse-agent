@@ -18,7 +18,6 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQuery;
-import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.MessageFeedbackInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationCandidatePage;
@@ -45,9 +44,7 @@ class SeahorseMessageFeedbackControllerTests {
     @Test
     void shouldQueryFeedbackEvaluationCandidates() throws Exception {
         MessageFeedbackInboundPort feedbackPort = mock(MessageFeedbackInboundPort.class);
-        FeedbackEvaluationCandidateQueryInboundPort candidatePort =
-                mock(FeedbackEvaluationCandidateQueryInboundPort.class);
-        when(candidatePort.page(org.mockito.ArgumentMatchers.any())).thenReturn(new FeedbackEvaluationCandidatePage(
+        when(feedbackPort.page(org.mockito.ArgumentMatchers.any())).thenReturn(new FeedbackEvaluationCandidatePage(
                 List.of(new FeedbackEvaluationCandidate(
                         "feedback-1",
                         "message-1",
@@ -64,8 +61,7 @@ class SeahorseMessageFeedbackControllerTests {
                 1L,
                 1L));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseMessageFeedbackController(
-                provider(MessageFeedbackInboundPort.class, feedbackPort),
-                provider(FeedbackEvaluationCandidateQueryInboundPort.class, candidatePort))).build();
+                provider(MessageFeedbackInboundPort.class, feedbackPort))).build();
 
         mvc.perform(get("/api/feedback/evaluation-candidates")
                         .param("userId", "user-1")
@@ -82,7 +78,7 @@ class SeahorseMessageFeedbackControllerTests {
 
         ArgumentCaptor<FeedbackEvaluationCandidateQuery> queryCaptor =
                 ArgumentCaptor.forClass(FeedbackEvaluationCandidateQuery.class);
-        verify(candidatePort).page(queryCaptor.capture());
+        verify(feedbackPort).page(queryCaptor.capture());
         assertThat(queryCaptor.getValue().userId()).isEqualTo("user-1");
         assertThat(queryCaptor.getValue().runId()).isEqualTo("run-1");
         assertThat(queryCaptor.getValue().reason()).isEqualTo("INCORRECT");

@@ -22,7 +22,7 @@ interface TaskTimelineProps {
 }
 
 /** 事件类型 → 图标/标签映射（路线图事件规范）。 */
-const EVENT_META: Record<string, { icon: React.ComponentType<{ className?: string }>; tone: string }> = {
+const EVENT_META: Record<string, { icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; tone: string }> = {
   "task.created": { icon: Circle, tone: "var(--theme-text-muted)" },
   "task.started": { icon: Loader2, tone: "var(--theme-accent)" },
   "model.selected": { icon: Sparkles, tone: "var(--theme-accent)" },

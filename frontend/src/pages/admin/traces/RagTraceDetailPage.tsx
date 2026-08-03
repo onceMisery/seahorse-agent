@@ -674,8 +674,9 @@ export function RagTraceDetailPage() {
       console.error(error);
       setDetail(null);
     } finally {
-      if (detailRequestRef.current !== requestId) return;
-      setDetailLoading(false);
+      if (detailRequestRef.current === requestId) {
+        setDetailLoading(false);
+      }
     }
   };
 

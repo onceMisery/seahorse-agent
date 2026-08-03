@@ -5,6 +5,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.task;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifact;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactInboundPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
@@ -16,7 +17,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.task.Task;
 import com.miracle.ai.seahorse.agent.kernel.domain.task.TaskEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.task.TaskStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.task.TaskType;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
@@ -62,7 +62,7 @@ public class TaskOrchestrationService implements TaskInboundPort {
     private final ConversationManagementInboundPort conversationPort;
     private final ChatInboundPort chatPort;
     private final AgentRunInboundPort agentRunPort;
-    private final AgentArtifactQueryInboundPort artifactQueryPort;
+    private final AgentArtifactInboundPort artifactQueryPort;
     private final TaskEventPort eventPort;
     private final CurrentUserPort currentUserPort;
 
@@ -70,7 +70,7 @@ public class TaskOrchestrationService implements TaskInboundPort {
                                     ConversationManagementInboundPort conversationPort,
                                     ChatInboundPort chatPort,
                                     AgentRunInboundPort agentRunPort,
-                                    AgentArtifactQueryInboundPort artifactQueryPort,
+                                    AgentArtifactInboundPort artifactQueryPort,
                                     TaskEventPort eventPort) {
         this(taskRepository, conversationPort, chatPort, agentRunPort, artifactQueryPort, eventPort, null);
     }
@@ -79,7 +79,7 @@ public class TaskOrchestrationService implements TaskInboundPort {
                                     ConversationManagementInboundPort conversationPort,
                                     ChatInboundPort chatPort,
                                     AgentRunInboundPort agentRunPort,
-                                    AgentArtifactQueryInboundPort artifactQueryPort,
+                                    AgentArtifactInboundPort artifactQueryPort,
                                     TaskEventPort eventPort,
                                     CurrentUserPort currentUserPort) {
         this.taskRepository = Objects.requireNonNull(taskRepository, "taskRepository");

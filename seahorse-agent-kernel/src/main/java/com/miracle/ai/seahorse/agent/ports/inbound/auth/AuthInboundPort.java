@@ -21,5 +21,7 @@ public interface AuthInboundPort {
 
     LoginResult login(LoginCommand command);
 
-    void logout();
+    RefreshTokenResult refresh(RefreshTokenCommand command);
+
+    void logout(String refreshToken);
 }

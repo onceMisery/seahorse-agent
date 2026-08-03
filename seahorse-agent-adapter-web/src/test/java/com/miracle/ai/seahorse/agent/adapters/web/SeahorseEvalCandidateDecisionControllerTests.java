@@ -18,8 +18,10 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalCandidateDecisionService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalDecisionFacade;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalRegressionService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalRegressionService.EvalReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.EvalCandidateDecisionInboundPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
@@ -44,6 +46,8 @@ class SeahorseEvalCandidateDecisionControllerTests {
             mock(KernelEvalCandidateDecisionService.class);
     private final KernelEvalRegressionService regressionService =
             mock(KernelEvalRegressionService.class);
+    private final EvalCandidateDecisionInboundPort evalFacade =
+            new KernelEvalDecisionFacade(decisionService, regressionService);
 
     @Test
     void shouldAcceptCandidate() throws Exception {
@@ -109,19 +113,15 @@ class SeahorseEvalCandidateDecisionControllerTests {
 
     private MockMvc buildMvc(AdvancedFeatureGate gate) {
         StaticListableBeanFactory beanFactory = new StaticListableBeanFactory();
-        beanFactory.addBean("decisionService", decisionService);
-        beanFactory.addBean("regressionService", regressionService);
-        ObjectProvider<KernelEvalCandidateDecisionService> decisionProvider =
-                beanFactory.getBeanProvider(KernelEvalCandidateDecisionService.class);
-        ObjectProvider<KernelEvalRegressionService> regressionProvider =
-                beanFactory.getBeanProvider(KernelEvalRegressionService.class);
+        beanFactory.addBean("evalService", evalFacade);
+        ObjectProvider<EvalCandidateDecisionInboundPort> evalProvider =
+                beanFactory.getBeanProvider(EvalCandidateDecisionInboundPort.class);
         StaticListableBeanFactory gateFactory = new StaticListableBeanFactory();
         gateFactory.addBean("gate", gate);
         ObjectProvider<AdvancedFeatureGate> gateProvider =
                 gateFactory.getBeanProvider(AdvancedFeatureGate.class);
         return MockMvcBuilders.standaloneSetup(
-                        new SeahorseEvalCandidateDecisionController(
-                                decisionProvider, regressionProvider, gateProvider))
+                        new SeahorseEvalCandidateDecisionController(evalProvider, gateProvider))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
     }

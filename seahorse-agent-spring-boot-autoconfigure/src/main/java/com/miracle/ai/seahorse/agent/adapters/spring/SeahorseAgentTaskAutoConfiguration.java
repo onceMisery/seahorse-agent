@@ -21,8 +21,8 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcTaskRepository
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.mapper.TaskMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.task.InMemoryTaskEventBus;
 import com.miracle.ai.seahorse.agent.kernel.application.task.TaskOrchestrationService;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.task.TaskInboundPort;
@@ -72,7 +72,7 @@ public class SeahorseAgentTaskAutoConfiguration {
             TaskEventPort eventPort,
             ObjectProvider<ChatInboundPort> chatPort,
             ObjectProvider<AgentRunInboundPort> agentRunPort,
-            ObjectProvider<AgentArtifactQueryInboundPort> artifactQueryPort,
+            ObjectProvider<AgentArtifactInboundPort> artifactQueryPort,
             ObjectProvider<CurrentUserPort> currentUserPort
     ) {
         return new TaskOrchestrationService(

@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent.marketplace;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.marketplace.AgentPublishReview;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentMarketplaceInboundPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.marketplace.AgentRating;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.marketplace.AgentSubscription;
 import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
@@ -33,7 +34,7 @@ import java.util.Optional;
 /**
  * Agent 市场服务，支持发布审核、订阅管理、评分评论。
  */
-public class KernelAgentMarketplaceService {
+public class KernelAgentMarketplaceService implements AgentMarketplaceInboundPort {
 
     private final AgentPublishReviewRepositoryPort reviewRepository;
     private final AgentSubscriptionRepositoryPort subscriptionRepository;

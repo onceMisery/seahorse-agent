@@ -17,13 +17,13 @@ export interface RunContextSnapshotVO {
 }
 
 export async function getRunContextSnapshotByRunId(runId: string): Promise<RunContextSnapshotVO> {
-  return api.get<RunContextSnapshotVO, RunContextSnapshotVO>(
+  return api.get<RunContextSnapshotVO>(
     `/api/run-context-snapshots/by-run/${encodeURIComponent(runId)}`
   );
 }
 
 export async function getAgentRunContextSnapshot(runId: string): Promise<RunContextSnapshotVO> {
-  return api.get<RunContextSnapshotVO, RunContextSnapshotVO>(
+  return api.get<RunContextSnapshotVO>(
     `/api/agent-runs/${encodeURIComponent(runId)}/context-snapshot`
   );
 }

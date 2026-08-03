@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,7 +37,7 @@ export function MemoryReviewQueue() {
 
   const items = pageData?.records || [];
 
-  const loadItems = async () => {
+  const loadItems = useCallback(async () => {
     try {
       setLoading(true);
       const data = await listMemoryReviewItems({
@@ -52,11 +52,11 @@ export function MemoryReviewQueue() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pageNo, statusFilter]);
 
   useEffect(() => {
     loadItems();
-  }, [pageNo, statusFilter]);
+  }, [loadItems]);
 
   const openDecision = (item: MemoryReviewItem, action: "approve" | "modify" | "reject") => {
     setSelectedItem(item);

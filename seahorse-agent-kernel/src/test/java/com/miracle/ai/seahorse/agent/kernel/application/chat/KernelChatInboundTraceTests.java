@@ -84,6 +84,59 @@ class KernelChatInboundTraceTests {
         assertEquals(KernelRagTraceRecorder.STATUS_FAILED, traceRepository.finishedRun.status());
     }
 
+    @Test
+    void duplicateTerminalCallbacksNotifyConsumerAndTraceOnlyOnce() {
+        RecordingTraceRepository traceRepository = new RecordingTraceRepository();
+        KernelRagTraceRecorder traceRecorder = new KernelRagTraceRecorder(traceRepository);
+        DeferredStreamingModel model = new DeferredStreamingModel();
+        KernelChatInboundService service = new KernelChatInboundService(
+                pipeline(model, traceRecorder),
+                StreamTaskPort.noop(),
+                Optional.empty(),
+                traceRecorder,
+                ConversationMemoryPort.noop(),
+                MemoryEnginePort.noop());
+        RecordingCallback callback = new RecordingCallback();
+
+        service.streamChat(new StreamChatCommand(
+                "hello", "conversation-1", "task-1", "user-1", false, ChatMode.RAG), callback);
+
+        model.complete();
+        model.complete();
+
+        assertEquals(1, callback.completions);
+        assertEquals(1, traceRepository.finishedCount);
+        assertEquals(KernelRagTraceRecorder.STATUS_SUCCESS, traceRepository.finishedRun.status());
+    }
+
+    @Test
+    void errorWinsOverLaterCompletion() {
+        RecordingTraceRepository traceRepository = new RecordingTraceRepository();
+        KernelRagTraceRecorder traceRecorder = new KernelRagTraceRecorder(traceRepository);
+        DeferredStreamingModel model = new DeferredStreamingModel();
+        KernelChatInboundService service = new KernelChatInboundService(
+                pipeline(model, traceRecorder),
+                StreamTaskPort.noop(),
+                Optional.empty(),
+                traceRecorder,
+                ConversationMemoryPort.noop(),
+                MemoryEnginePort.noop());
+        RecordingCallback callback = new RecordingCallback();
+        RuntimeException error = new RuntimeException("stream broke");
+
+        service.streamChat(new StreamChatCommand(
+                "hello", "conversation-1", "task-1", "user-1", false, ChatMode.RAG), callback);
+
+        model.fail(error);
+        model.complete();
+
+        assertSame(error, callback.error);
+        assertEquals(1, callback.errors);
+        assertEquals(0, callback.completions);
+        assertEquals(1, traceRepository.finishedCount);
+        assertEquals(KernelRagTraceRecorder.STATUS_FAILED, traceRepository.finishedRun.status());
+    }
+
     private static KernelChatPipeline pipeline(StreamingChatModelPort model, KernelRagTraceRecorder traceRecorder) {
         ChatPreparationPorts preparationPorts = new ChatPreparationPorts(
                 ConversationMemoryPort.noop(),
@@ -115,12 +168,18 @@ class KernelChatInboundTraceTests {
         private void fail(Throwable error) {
             callback.onError(error);
         }
+
+        private void complete() {
+            callback.onComplete();
+        }
     }
 
     private static final class RecordingCallback implements StreamCallback {
 
         private final CountDownLatch terminal = new CountDownLatch(1);
         private Throwable error;
+        private int completions;
+        private int errors;
 
         @Override
         public void onContent(String content) {
@@ -128,12 +187,14 @@ class KernelChatInboundTraceTests {
 
         @Override
         public void onComplete() {
+            completions++;
             terminal.countDown();
         }
 
         @Override
         public void onError(Throwable error) {
             this.error = error;
+            errors++;
             terminal.countDown();
         }
 
@@ -151,6 +212,7 @@ class KernelChatInboundTraceTests {
 
         private RagTraceRun startedRun;
         private RagTraceRunFinish finishedRun;
+        private int finishedCount;
 
         @Override
         public RagTracePage<RagTraceRun> pageRuns(RagTracePageRequest request) {
@@ -175,6 +237,7 @@ class KernelChatInboundTraceTests {
         @Override
         public void finishRun(RagTraceRunFinish finish) {
             finishedRun = finish;
+            finishedCount++;
         }
 
         @Override

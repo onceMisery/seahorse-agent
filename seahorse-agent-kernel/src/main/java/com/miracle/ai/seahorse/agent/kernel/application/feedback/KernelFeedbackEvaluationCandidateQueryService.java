@@ -18,7 +18,6 @@
 package com.miracle.ai.seahorse.agent.kernel.application.feedback;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQuery;
-import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationCandidatePage;
@@ -26,7 +25,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationC
 
 import java.util.Objects;
 
-public class KernelFeedbackEvaluationCandidateQueryService implements FeedbackEvaluationCandidateQueryInboundPort {
+public class KernelFeedbackEvaluationCandidateQueryService {
 
     private static final String ADMIN_ROLE = "admin";
     private static final String ACCESS_DENIED = "权限不足";
@@ -39,8 +38,6 @@ public class KernelFeedbackEvaluationCandidateQueryService implements FeedbackEv
         this.queryPort = Objects.requireNonNull(queryPort, "queryPort must not be null");
         this.currentUserPort = Objects.requireNonNull(currentUserPort, "currentUserPort must not be null");
     }
-
-    @Override
     public FeedbackEvaluationCandidatePage page(FeedbackEvaluationCandidateQuery query) {
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
         if (!currentUser.hasRole(ADMIN_ROLE)) {

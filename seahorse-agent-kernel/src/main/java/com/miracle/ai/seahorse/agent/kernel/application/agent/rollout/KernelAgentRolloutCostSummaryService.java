@@ -22,7 +22,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageAggregate
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.rollout.AgentRolloutCostSummary;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.rollout.AgentVersionRollout;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutCostSummaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRolloutRepositoryPort;
@@ -37,7 +36,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-public class KernelAgentRolloutCostSummaryService implements AgentRolloutCostSummaryInboundPort {
+public class KernelAgentRolloutCostSummaryService {
 
     public static final String AGGREGATION_SCOPE_AGENT_ROLLOUT_WINDOW = "AGENT_ROLLOUT_WINDOW";
     public static final String AGGREGATION_SCOPE_AGENT_ROLLOUT_ID = "AGENT_ROLLOUT_ID";
@@ -65,8 +64,6 @@ public class KernelAgentRolloutCostSummaryService implements AgentRolloutCostSum
         this.approvalQueryPort = approvalQueryPort;
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
-
-    @Override
     public AgentRolloutCostSummary getCostSummary(String tenantId, String agentId, String rolloutId) {
         String safeTenantId = requireText(tenantId, "tenantId must not be blank");
         String safeAgentId = requireText(agentId, "agentId must not be blank");

@@ -21,8 +21,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.PlanCode;
 import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
 import com.miracle.ai.seahorse.agent.ports.inbound.billing.BillingInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.billing.PaymentInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.billing.SubscriptionInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.billing.PaymentSubscriptionInboundPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,28 +38,25 @@ import java.util.Map;
 @RestController
 public class SeahorseBillingController {
 
-    private final ObjectProvider<SubscriptionInboundPort> subscriptionPortProvider;
-    private final ObjectProvider<PaymentInboundPort> paymentPortProvider;
+    private final ObjectProvider<PaymentSubscriptionInboundPort> paymentSubscriptionPortProvider;
     private final ObjectProvider<BillingInboundPort> billingPortProvider;
 
-    public SeahorseBillingController(ObjectProvider<SubscriptionInboundPort> subscriptionPortProvider,
-                                     ObjectProvider<PaymentInboundPort> paymentPortProvider,
+    public SeahorseBillingController(ObjectProvider<PaymentSubscriptionInboundPort> paymentSubscriptionPortProvider,
                                      ObjectProvider<BillingInboundPort> billingPortProvider) {
-        this.subscriptionPortProvider = subscriptionPortProvider;
-        this.paymentPortProvider = paymentPortProvider;
+        this.paymentSubscriptionPortProvider = paymentSubscriptionPortProvider;
         this.billingPortProvider = billingPortProvider;
     }
 
     @GetMapping("/api/billing/plans")
     public ApiResponse<Object> listPlans() {
-        return ApiResponses.requireService(subscriptionPortProvider,
-                SubscriptionInboundPort::listPlans);
+        return ApiResponses.requireService(paymentSubscriptionPortProvider,
+                PaymentSubscriptionInboundPort::listPlans);
     }
 
     @GetMapping("/api/billing/subscription")
     public ApiResponse<Object> getActiveSubscription() {
         String tenantId = TenantContext.get();
-        return ApiResponses.requireService(subscriptionPortProvider,
+        return ApiResponses.requireService(paymentSubscriptionPortProvider,
                 port -> port.getActiveSubscription(tenantId));
     }
 
@@ -70,7 +66,7 @@ public class SeahorseBillingController {
         SubscribeRequest safeRequest = request == null
                 ? new SubscribeRequest(null)
                 : request;
-        return ApiResponses.requireService(subscriptionPortProvider,
+        return ApiResponses.requireService(paymentSubscriptionPortProvider,
                 port -> port.subscribe(tenantId, safeRequest.planCode()));
     }
 
@@ -80,20 +76,20 @@ public class SeahorseBillingController {
         CreateOrderRequest safeRequest = request == null
                 ? new CreateOrderRequest(null, null)
                 : request;
-        return ApiResponses.requireService(paymentPortProvider,
+        return ApiResponses.requireService(paymentSubscriptionPortProvider,
                 port -> port.createOrder(tenantId, safeRequest.planCode(), safeRequest.paymentChannel()));
     }
 
     @GetMapping("/api/billing/orders/{orderNo}")
     public ApiResponse<Object> getOrderStatus(@PathVariable String orderNo) {
-        return ApiResponses.requireService(paymentPortProvider,
+        return ApiResponses.requireService(paymentSubscriptionPortProvider,
                 port -> port.getOrderStatus(orderNo));
     }
 
     @PostMapping("/api/billing/callbacks/{channel}")
     public ApiResponse<Object> handleCallback(@PathVariable String channel,
                                               @RequestParam Map<String, String> params) {
-        return ApiResponses.requireService(paymentPortProvider,
+        return ApiResponses.requireService(paymentSubscriptionPortProvider,
                 port -> port.handleCallback(channel, params));
     }
 

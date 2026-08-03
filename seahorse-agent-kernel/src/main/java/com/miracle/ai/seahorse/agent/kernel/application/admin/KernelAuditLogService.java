@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.admin;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.audit.AuditLog;
+import com.miracle.ai.seahorse.agent.ports.inbound.admin.AuditLogInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.admin.AuditLogRepositoryPort;
 
 import java.time.Instant;
@@ -27,7 +28,7 @@ import java.util.Objects;
 /**
  * 审计日志管理服务，支持日志记录和查询。
  */
-public class KernelAuditLogService {
+public class KernelAuditLogService implements AuditLogInboundPort {
 
     private final AuditLogRepositoryPort repositoryPort;
 

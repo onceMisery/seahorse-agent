@@ -297,7 +297,7 @@ class MetadataRetrievalFilterTests {
     }
 
     @Test
-    void shouldRecordChannelFailureObservationWhenChannelFallsBack() {
+    void shouldRecordChannelFailureObservationWhenEveryEnabledChannelFailsClosed() {
         DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
         FailingSearchChannelFeature channel = new FailingSearchChannelFeature();
         RecordingObservationPort observationPort = new RecordingObservationPort();
@@ -312,10 +312,10 @@ class MetadataRetrievalFilterTests {
                 KernelRagTraceRecorder.noop(),
                 observationPort);
 
-        List<RetrievedChunk> chunks = engine.retrieveKnowledgeChannels(
-                List.of(new SubQuestionIntent("关键词检索失败", List.of())), 5);
-
-        assertThat(chunks).isEmpty();
+        assertThatThrownBy(() -> engine.retrieveKnowledgeChannels(
+                List.of(new SubQuestionIntent("关键词检索失败", List.of())), 5))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("All retrieval channels failed");
         assertThat(observationPort.events)
                 .filteredOn(event -> event.name().equals("retrieval.channel.completed"))
                 .singleElement()
@@ -326,15 +326,9 @@ class MetadataRetrievalFilterTests {
                         .containsEntry("hitCount", "0")
                         .containsEntry("success", "false")
                         .containsEntry("exception", "IllegalStateException"));
+        // 所有 channel 失败时 fail-closed 抛异常，不产生 retrieval.empty 事件。
         assertThat(observationPort.events)
-                .filteredOn(event -> event.name().equals("retrieval.empty"))
-                .singleElement()
-                .satisfies(event -> assertThat(event.attributes())
-                        .containsEntry("tenantId", "tenant-a")
-                        .containsEntry("stage", "channel")
-                        .containsEntry("reason", "channels_returned_empty")
-                        .containsEntry("channelCount", "1")
-                        .containsEntry("candidateCount", "0"));
+                .noneMatch(event -> event.name().equals("retrieval.empty"));
     }
 
     @Test

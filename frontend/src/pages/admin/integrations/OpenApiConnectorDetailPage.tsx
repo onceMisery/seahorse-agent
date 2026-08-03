@@ -44,7 +44,7 @@ export function OpenApiConnectorDetailPage() {
       }
     };
     load();
-  }, [connectorId]);
+  }, [connectorId, featureState.enabled]);
 
   const handleToggle = async (op: ConnectorOperation) => {
     if (!connectorId) return;

@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 import { RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
-import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/services/api";
 import { storage } from "@/utils/storage";
-import { getErrorMessage } from "@/utils/error";
 
 type DataView = "operations" | "outbox" | "profile-facts" | "corrections";
 

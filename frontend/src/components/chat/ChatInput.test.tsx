@@ -6,6 +6,7 @@ import { ChatInput } from "@/components/chat/ChatInput";
 
 const sendMessage = vi.fn();
 const setSelectedTaskTemplateId = vi.fn();
+const setSelectedRunProfileId = vi.fn();
 const serviceMocks = vi.hoisted(() => ({
   listRoleCards: vi.fn(),
   listRunProfiles: vi.fn(),
@@ -23,12 +24,14 @@ vi.mock("@/stores/chatStore", () => ({
     setDeepThinkingEnabled: vi.fn(),
     selectedTaskTemplateId: "quick-answer",
     setSelectedTaskTemplateId,
+    setSelectedRunProfileId,
     inputFocusKey: 1
   })
 }));
 
 vi.mock("@/components/chat/SkillTrigger", () => ({
-  SkillTrigger: React.forwardRef((_props, ref) => {
+  SkillTrigger: React.forwardRef(function SkillTriggerMock(props, ref) {
+    void props;
     React.useImperativeHandle(ref, () => ({ openPicker: vi.fn() }));
     return null;
   })
@@ -162,6 +165,7 @@ describe("ChatInput run profile selector", () => {
 
   it("passes the selected run profile when sending a message", async () => {
     render(<ChatInput />);
+    fireEvent.click(screen.getByLabelText("展开工具栏"));
 
     await waitFor(() => {
       expect(screen.getByText("Research Profile")).toBeInTheDocument();
@@ -190,6 +194,7 @@ describe("ChatInput run profile selector", () => {
       }
     ]);
     render(<ChatInput />);
+    fireEvent.click(screen.getByLabelText("展开工具栏"));
 
     await waitFor(() => {
       expect(screen.getByText("Research Profile")).toBeInTheDocument();
@@ -221,6 +226,7 @@ describe("ChatInput run profile selector", () => {
       }
     ]);
     render(<ChatInput />);
+    fireEvent.click(screen.getByLabelText("展开工具栏"));
 
     await waitFor(() => {
       expect(screen.getByText("Research Profile")).toBeInTheDocument();
@@ -264,6 +270,7 @@ describe("ChatInput run profile selector", () => {
 
   it("applies the selected run profile to the current conversation", async () => {
     render(<ChatInput />);
+    fireEvent.click(screen.getByLabelText("展开工具栏"));
 
     await waitFor(() => {
       expect(screen.getByText("Research Profile")).toBeInTheDocument();

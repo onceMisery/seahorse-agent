@@ -21,6 +21,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.Environment;
 
 /**
  * Spec §7 noop guard 自动装配。
@@ -39,11 +40,16 @@ public class SeahorseAgentRuntimeGuardAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public SeahorseAgentNoopPortGuard seahorseAgentNoopPortGuard(ApplicationContext applicationContext,
-                                                                 org.springframework.core.env.Environment environment) {
-        String enforceClassAValue = environment.getProperty(
-                PROP_ENFORCE_CLASS_A,
-                environment.getProperty(LEGACY_PROP_ENFORCE_CLASS_A, "false"));
-        boolean enforceClassA = Boolean.parseBoolean(enforceClassAValue);
+                                                                 Environment environment) {
+        String explicit = environment.getProperty(PROP_ENFORCE_CLASS_A);
+        if (explicit == null) {
+            explicit = environment.getProperty(LEGACY_PROP_ENFORCE_CLASS_A);
+        }
+        String productMode = environment.getProperty("seahorse-agent.product-mode",
+                environment.getProperty("seahorse.agent.product-mode", "demo"));
+        boolean enforceClassA = explicit == null
+                ? "rag".equalsIgnoreCase(productMode) || "enterprise".equalsIgnoreCase(productMode)
+                : Boolean.parseBoolean(explicit);
         return new SeahorseAgentNoopPortGuard(applicationContext, enforceClassA);
     }
 }

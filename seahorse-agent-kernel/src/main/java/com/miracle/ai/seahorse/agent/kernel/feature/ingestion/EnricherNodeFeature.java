@@ -24,7 +24,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeConfig;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
-import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.EnrichmentPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 
 import java.util.ArrayList;
@@ -48,11 +47,9 @@ public class EnricherNodeFeature implements IngestionNodeFeature {
     private static final String KEY_USER_PROMPT_TEMPLATE = "userPromptTemplate";
 
     private final ChatModelPort chatModelPort;
-    private final EnrichmentPromptPort promptPort;
 
-    public EnricherNodeFeature(ChatModelPort chatModelPort, EnrichmentPromptPort promptPort) {
+    public EnricherNodeFeature(ChatModelPort chatModelPort) {
         this.chatModelPort = Objects.requireNonNullElse(chatModelPort, ChatModelPort.noop());
-        this.promptPort = Objects.requireNonNullElse(promptPort, EnrichmentPromptPort.defaults());
     }
 
     @Override
@@ -96,7 +93,7 @@ public class EnricherNodeFeature implements IngestionNodeFeature {
         for (EnrichTask task : tasks) {
             String systemPrompt = hasText(task.systemPrompt())
                     ? task.systemPrompt()
-                    : promptPort.systemPrompt(task.type());
+                    : IngestionPromptTemplates.enrichmentPrompt(task.type());
             String userPrompt = hasText(task.userPromptTemplate())
                     ? render(task.userPromptTemplate(), variables(chunk, context))
                     : chunk.getContent();

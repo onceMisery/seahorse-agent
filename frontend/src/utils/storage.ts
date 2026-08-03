@@ -1,6 +1,7 @@
 import type { User } from "@/types";
 
 const TOKEN_KEY = "seahorse_agent_token";
+const REFRESH_TOKEN_KEY = "seahorse_agent_refresh_token";
 const USER_KEY = "seahorse_agent_user";
 const THEME_KEY = "seahorse_agent_theme";
 
@@ -38,6 +39,15 @@ export const storage = {
   clearToken() {
     safeRemove(TOKEN_KEY);
   },
+  getRefreshToken(): string | null {
+    return safeGet(REFRESH_TOKEN_KEY);
+  },
+  setRefreshToken(refreshToken: string) {
+    safeSet(REFRESH_TOKEN_KEY, refreshToken);
+  },
+  clearRefreshToken() {
+    safeRemove(REFRESH_TOKEN_KEY);
+  },
   getUser(): User | null {
     const raw = safeGet(USER_KEY);
     if (!raw) return null;
@@ -55,6 +65,7 @@ export const storage = {
   },
   clearAuth() {
     safeRemove(TOKEN_KEY);
+    safeRemove(REFRESH_TOKEN_KEY);
     safeRemove(USER_KEY);
   },
   getTheme(): string | null {

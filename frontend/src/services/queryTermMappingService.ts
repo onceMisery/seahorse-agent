@@ -34,13 +34,13 @@ export async function getQueryTermMappingsPage(
   size = 10,
   keyword?: string
 ): Promise<PageResult<QueryTermMapping>> {
-  return api.get<PageResult<QueryTermMapping>, PageResult<QueryTermMapping>>("/mappings", {
+  return api.get<PageResult<QueryTermMapping>>("/mappings", {
     params: { current, size, keyword: keyword || undefined }
   });
 }
 
 export async function createQueryTermMapping(payload: QueryTermMappingPayload): Promise<string> {
-  return api.post<string, string>("/mappings", payload);
+  return api.post<string>("/mappings", payload);
 }
 
 export async function updateQueryTermMapping(id: string, payload: QueryTermMappingPayload): Promise<void> {

@@ -32,10 +32,24 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ReliableMessageQueueAdapterTests {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    @Test
+    void shouldRejectReliablePublishWithoutOutboxRepository() {
+        DirectMessageQueueAdapter delegate = new DirectMessageQueueAdapter();
+        ReliableMessageQueueAdapter adapter = new ReliableMessageQueueAdapter(
+                delegate, delegate, () -> null, () -> OBJECT_MAPPER);
+
+        assertThatThrownBy(() -> adapter.publishReliable(
+                "topic-a", "key-a", "biz", new SamplePayload("doc-1")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Outbox repository is required");
+        assertThat(delegate.messages()).isEmpty();
+    }
 
     @Test
     void shouldWriteOutboxAndRelayOriginalPayload() throws Exception {

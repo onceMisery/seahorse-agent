@@ -26,8 +26,10 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JdbcAgentRunEventBufferAdapterTests {
 
@@ -65,6 +67,59 @@ class JdbcAgentRunEventBufferAdapterTests {
 
         assertThat(events).hasSize(1);
         assertThat(events.get(0).typedPayload()).isEqualTo("{\"text\":\"hello\"}");
+    }
+
+    @Test
+    void shouldTreatRepeatedEventSequenceAsIdempotent() {
+        DriverManagerDataSource dataSource = dataSource("agent-run-event-buffer-idempotent");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createEventBufferSchema(jdbcTemplate);
+        JdbcAgentRunEventBufferAdapter adapter = new JdbcAgentRunEventBufferAdapter(dataSource, new ObjectMapper());
+
+        adapter.append("run-1", new StreamEventEnvelope(
+                "event-first", 1, StreamEventType.MESSAGE, "run-1", null,
+                java.time.Instant.parse("2026-08-01T00:00:00Z"), "first"));
+        adapter.append("run-1", new StreamEventEnvelope(
+                "event-replay", 1, StreamEventType.MESSAGE, "run-1", null,
+                java.time.Instant.parse("2026-08-01T00:00:01Z"), "replay"));
+
+        List<StreamEventEnvelope> events = adapter.getAfter("run-1", 0);
+
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0).eventId()).isEqualTo("event-first");
+        assertThat(events.get(0).typedPayload()).isEqualTo("first");
+    }
+
+    @Test
+    void shouldRejectEventWhenAppendRunDoesNotMatchEnvelopeRun() {
+        DriverManagerDataSource dataSource = dataSource("agent-run-event-buffer-run-mismatch");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createEventBufferSchema(jdbcTemplate);
+        JdbcAgentRunEventBufferAdapter adapter = new JdbcAgentRunEventBufferAdapter(dataSource, new ObjectMapper());
+
+        assertThatThrownBy(() -> adapter.append(
+                "run-1", StreamEventEnvelope.of(1, StreamEventType.MESSAGE, "run-2", "payload")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("event runId must match append runId");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sa_agent_run_event_buffer", Long.class)).isZero();
+    }
+
+    @Test
+    void shouldFailWhenEventPayloadCannotBeSerializedInsteadOfStoringEmptyPayload() {
+        DriverManagerDataSource dataSource = dataSource("agent-run-event-buffer-serialization-failure");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createEventBufferSchema(jdbcTemplate);
+        JdbcAgentRunEventBufferAdapter adapter = new JdbcAgentRunEventBufferAdapter(dataSource, new ObjectMapper());
+        ArrayList<Object> recursivePayload = new ArrayList<>();
+        recursivePayload.add(recursivePayload);
+
+        assertThatThrownBy(() -> adapter.append(
+                "run-1", StreamEventEnvelope.of(1, StreamEventType.MESSAGE, "run-1", recursivePayload)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Failed to serialize stream event payload");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sa_agent_run_event_buffer", Long.class)).isZero();
     }
 
     private DriverManagerDataSource dataSource(String name) {

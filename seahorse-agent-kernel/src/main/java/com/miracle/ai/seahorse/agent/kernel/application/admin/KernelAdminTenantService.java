@@ -18,6 +18,8 @@
 package com.miracle.ai.seahorse.agent.kernel.application.admin;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.audit.AuditLog;
+import com.miracle.ai.seahorse.agent.ports.inbound.admin.AdminTenantInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.admin.AdminUserInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.admin.AdminRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.admin.AuditLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.admin.ResourceSummary;
@@ -30,7 +32,7 @@ import java.util.Objects;
 /**
  * 管理后台租户管理服务，支持租户列表、详情、状态管理、用户管理。
  */
-public class KernelAdminTenantService {
+public class KernelAdminTenantService implements AdminTenantInboundPort, AdminUserInboundPort {
 
     private final AdminRepositoryPort adminRepository;
     private final AuditLogRepositoryPort auditLogRepository;

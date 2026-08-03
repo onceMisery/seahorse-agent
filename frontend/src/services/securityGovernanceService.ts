@@ -103,7 +103,7 @@ export interface QuotaDecisionEvaluation {
 // ── 资源 ACL ──
 
 export function createAclRule(payload: Omit<ResourceAclRule, "ruleId" | "createTime" | "updateTime">) {
-  return api.post<ResourceAclRule, ResourceAclRule>("/api/resource-acl-rules", payload);
+  return api.post<ResourceAclRule>("/api/resource-acl-rules", payload);
 }
 
 export function listAclRules(params: {
@@ -123,21 +123,21 @@ export function listAclRules(params: {
 }
 
 export function dryRunImportAclRules(payload: Record<string, unknown>) {
-  return api.post<AclImportDryRunResult, AclImportDryRunResult>(
+  return api.post<AclImportDryRunResult>(
     "/api/resource-acl-rules:dry-run-import",
     payload
   );
 }
 
 export function importAclRules(payload: Record<string, unknown>) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     "/api/resource-acl-rules:import",
     payload
   );
 }
 
 export function disableAclRule(ruleId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/resource-acl-rules/${encodeURIComponent(ruleId)}/disable`
   );
 }
@@ -148,11 +148,15 @@ export function listAccessDecisions(params: {
   current?: number;
   size?: number;
   tenantId?: string;
-  subject?: string;
-  resource?: string;
+  subjectType?: string;
+  subjectId?: string;
+  resourceType?: string;
+  resourceId?: string;
   action?: string;
   agentId?: string;
   runId?: string;
+  effect?: string;
+  reasonCode?: string;
 }) {
   return optionalGet(
     api.get<PageResult<AccessDecision>>("/api/access-decisions", { params, suppressErrorToast: true }),
@@ -163,17 +167,17 @@ export function listAccessDecisions(params: {
 // ── 密钥 ──
 
 export function createSecret(payload: CreateSecretPayload) {
-  return api.post<SecretItem, SecretItem>("/api/secrets", payload);
+  return api.post<SecretItem>("/api/secrets", payload);
 }
 
 // ── 配额策略 ──
 
 export function createQuotaPolicy(payload: QuotaPolicyPayload) {
-  return api.post<QuotaPolicy, QuotaPolicy>("/api/quotas/policies", payload);
+  return api.post<QuotaPolicy>("/api/quotas/policies", payload);
 }
 
 export function disableQuotaPolicy(policyId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/quotas/policies/${encodeURIComponent(policyId)}/disable`
   );
 }
@@ -190,7 +194,7 @@ export function evaluateQuotaDecision(payload: {
   calls?: number;
   cost?: number;
 }) {
-  return api.post<QuotaDecisionEvaluation, QuotaDecisionEvaluation>(
+  return api.post<QuotaDecisionEvaluation>(
     "/api/quotas/decisions:evaluate",
     payload
   );

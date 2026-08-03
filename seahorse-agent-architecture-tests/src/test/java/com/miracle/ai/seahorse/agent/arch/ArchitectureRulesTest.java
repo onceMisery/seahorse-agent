@@ -41,6 +41,10 @@ public class ArchitectureRulesTest {
 
         new R4AdapterIsolationTest().adaptersShouldNotDependOnOtherAdapters();
 
-        new R5ControllerDependencyTest().controllerToKernelServiceDependenciesMustMatchPhaseZeroBaseline();
+        new R5ControllerDependencyTest().controllerToKernelServiceDependenciesMustBeZero();
+
+        new PortArchitectureTest().complexityBaselineMustDescribeActualPublicPortInterfaces();
+        new PortArchitectureTest().publicPortCountMustOnlyDecreaseFromTheReviewedBaseline();
+        new PortArchitectureTest().publicPortsMustNotGrowIntoGodInterfaces();
     }
 }

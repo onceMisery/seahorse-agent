@@ -118,38 +118,38 @@ export function getAgent(agentId: string) {
 }
 
 export function getAgentVersion(agentId: string, versionId: string) {
-  return api.get<AgentVersion, AgentVersion>(
+  return api.get<AgentVersion>(
     `/api/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}`
   );
 }
 
 export function createAgent(payload: AgentDefinitionDraft) {
-  return api.post<AgentDefinition, AgentDefinition>("/api/agents", payload);
+  return api.post<AgentDefinition>("/api/agents", payload);
 }
 
 export function updateAgentDraft(agentId: string, payload: AgentDefinitionDraft) {
-  return api.put<AgentDefinition, AgentDefinition>(
+  return api.put<AgentDefinition>(
     `/api/agents/${encodeURIComponent(agentId)}/draft`,
     payload
   );
 }
 
 export function publishAgent(agentId: string, payload: AgentPublishPayload) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/agents/${encodeURIComponent(agentId)}/publish`,
     payload
   );
 }
 
 export function disableAgent(agentId: string, reason?: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/agents/${encodeURIComponent(agentId)}/disable`,
     { reason }
   );
 }
 
 export function deleteAgent(agentId: string) {
-  return api.delete<unknown, unknown>(`/api/agents/${encodeURIComponent(agentId)}`);
+  return api.delete<unknown>(`/api/agents/${encodeURIComponent(agentId)}`);
 }
 
 export function getLatestPublishChecks(agentId: string) {
@@ -159,13 +159,13 @@ export function getLatestPublishChecks(agentId: string) {
 }
 
 export function validateAgent(agentId: string) {
-  return api.post<AgentPublishCheck, AgentPublishCheck>(
+  return api.post<AgentPublishCheck>(
     `/api/agents/${encodeURIComponent(agentId)}/validate`
   );
 }
 
 export function rollbackAgentVersion(agentId: string, versionId: string, payload: AgentRollbackPayload) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/rollback`,
     payload
   );

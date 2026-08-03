@@ -1,11 +1,11 @@
 import { api } from "./api";
 
 export interface PageResult<T> {
-  records?: T[];
-  total?: number;
+  records: T[];
+  total: number;
   size?: number;
-  current?: number;
-  pages?: number;
+  current: number;
+  pages: number;
 }
 
 export interface MetadataSchemaField {
@@ -122,7 +122,7 @@ export function listMetadataDictionaryItems() {
 }
 
 export function createMetadataDictionaryItem(payload: { key: string; value?: string }) {
-  return api.post<MetadataDictionaryItem, MetadataDictionaryItem>("/metadata-dictionaries/items", payload);
+  return api.post<MetadataDictionaryItem>("/metadata-dictionaries/items", payload);
 }
 
 export function deleteMetadataDictionaryItem(itemId: string) {
@@ -132,7 +132,7 @@ export function deleteMetadataDictionaryItem(itemId: string) {
 // ── Schema 字段 CRUD ──
 
 export function createMetadataSchemaField(tenantId: string, kbId: string, payload: Partial<MetadataSchemaField>) {
-  return api.post<MetadataSchemaField, MetadataSchemaField>(
+  return api.post<MetadataSchemaField>(
     `/knowledge-base/${encodeURIComponent(kbId)}/metadata-schema/fields`,
     payload,
     { params: { tenantId } }
@@ -140,7 +140,7 @@ export function createMetadataSchemaField(tenantId: string, kbId: string, payloa
 }
 
 export function updateMetadataSchemaField(fieldId: string, payload: Partial<MetadataSchemaField>) {
-  return api.put<MetadataSchemaField, MetadataSchemaField>(
+  return api.put<MetadataSchemaField>(
     `/metadata-schema/fields/${encodeURIComponent(fieldId)}`,
     payload
   );
@@ -186,21 +186,21 @@ export function getMetadataReviewAudits(itemId: string) {
 }
 
 export function correctMetadataReviewItem(itemId: string, payload: Record<string, unknown>) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/metadata-review/items/${encodeURIComponent(itemId)}/correct`,
     payload
   );
 }
 
 export function ignoreMetadataReviewField(itemId: string, payload: { fieldKey?: string; reason?: string }) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/metadata-review/items/${encodeURIComponent(itemId)}/ignore-field`,
     payload
   );
 }
 
 export function reExtractMetadataReviewItem(itemId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/metadata-review/items/${encodeURIComponent(itemId)}/re-extract`
   );
 }
@@ -215,7 +215,7 @@ export function listMetadataBackfillJobs(tenantId: string, kbId: string, params?
 }
 
 export function createMetadataBackfillJob(tenantId: string, kbId: string, payload: Record<string, unknown>) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/knowledge-base/${encodeURIComponent(kbId)}/metadata-backfill/jobs`,
     payload,
     { params: { tenantId } }
@@ -230,25 +230,25 @@ export function getMetadataBackfillOverview(tenantId: string, kbId: string) {
 }
 
 export function runNextMetadataBackfillJob(jobId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/metadata-backfill/jobs/${encodeURIComponent(jobId)}/run-next`
   );
 }
 
 export function pauseMetadataBackfillJob(jobId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/metadata-backfill/jobs/${encodeURIComponent(jobId)}/pause`
   );
 }
 
 export function resumeMetadataBackfillJob(jobId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/metadata-backfill/jobs/${encodeURIComponent(jobId)}/resume`
   );
 }
 
 export function cancelMetadataBackfillJob(jobId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/metadata-backfill/jobs/${encodeURIComponent(jobId)}/cancel`
   );
 }

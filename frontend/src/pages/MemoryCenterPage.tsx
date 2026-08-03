@@ -83,7 +83,7 @@ export function MemoryCenterPage() {
     }
   };
 
-  const memories = data?.memories ?? [];
+  const memories = React.useMemo(() => data?.memories ?? [], [data?.memories]);
   const hasFilter = Boolean(query || typeFilter || sensitivityFilter);
 
   const filteredMemories = React.useMemo(() => {

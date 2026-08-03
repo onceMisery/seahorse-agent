@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RunExperimentPage } from "@/pages/admin/run-profiles/RunExperimentPage";
+import type { RunExperimentDetails } from "@/services/runExperimentService";
 
 const experimentMocks = vi.hoisted(() => ({
   cancelRunExperiment: vi.fn(),
@@ -152,7 +153,7 @@ describe("RunExperimentPage", () => {
   });
 });
 
-function details(status: string) {
+function details(status: string): RunExperimentDetails {
   return {
     experiment: {
       id: 1,

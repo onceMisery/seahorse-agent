@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class KernelMultiChannelRetrievalEngineTraceTests {
 
@@ -78,38 +79,38 @@ class KernelMultiChannelRetrievalEngineTraceTests {
     }
 
     @Test
-    void shouldMarkChannelTraceFailedAndKeepEmptyResultFallback() {
+    void shouldMarkChannelTraceFailedAndFailClosedWhenEveryEnabledChannelFails() {
         RecordingTraceRepository repository = new RecordingTraceRepository();
         DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
         registry.register(new ExtensionDescriptor("test-channel", SearchChannelFeature.class,
                 FeatureType.SEARCH_CHANNEL, 1, true), new TestChannel(true));
         KernelMultiChannelRetrievalEngine engine = engine(registry, repository);
 
-        List<RetrievedChunk> chunks = engine.retrieveKnowledgeChannels(
+        assertThatThrownBy(() -> engine.retrieveKnowledgeChannels(
                 List.of(new SubQuestionIntent("问题", List.of())),
                 3,
-                TraceRunScope.active("trace-1", Instant.now()));
-
-        assertThat(chunks).isEmpty();
+                TraceRunScope.active("trace-1", Instant.now())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("All retrieval channels failed");
         assertThat(repository.finishedNodes).hasSize(1);
         assertThat(repository.finishedNodes.get(0).status()).isEqualTo(KernelRagTraceRecorder.STATUS_FAILED);
         assertThat(repository.finishedNodes.get(0).errorMessage()).contains("channel failed");
     }
 
     @Test
-    void shouldRedactCredentialLikeChannelFailureExtraData() {
+    void shouldRedactCredentialLikeChannelFailureExtraDataAndFailClosed() {
         RecordingTraceRepository repository = new RecordingTraceRepository();
         DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
         registry.register(new ExtensionDescriptor("secret-channel", SearchChannelFeature.class,
                 FeatureType.SEARCH_CHANNEL, 1, true), new SecretFailingChannel());
         KernelMultiChannelRetrievalEngine engine = engine(registry, repository);
 
-        List<RetrievedChunk> chunks = engine.retrieveKnowledgeChannels(
+        assertThatThrownBy(() -> engine.retrieveKnowledgeChannels(
                 List.of(new SubQuestionIntent("闂", List.of())),
                 3,
-                TraceRunScope.active("trace-secret", Instant.now()));
-
-        assertThat(chunks).isEmpty();
+                TraceRunScope.active("trace-secret", Instant.now())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("All retrieval channels failed");
         assertThat(repository.finishedNodes).hasSize(1);
         assertThat(repository.finishedNodes.get(0).extraData())
                 .contains("[REDACTED]")

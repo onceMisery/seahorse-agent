@@ -22,8 +22,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactD
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactType;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactDownloadDecision;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactUpdateInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
@@ -52,14 +51,13 @@ class SeahorseAgentArtifactControllerTests {
 
     @Test
     void shouldExposeArtifactMetadataAndRunArtifacts() throws Exception {
-        AgentArtifactQueryInboundPort port = mock(AgentArtifactQueryInboundPort.class);
+        AgentArtifactInboundPort port = mock(AgentArtifactInboundPort.class);
         AgentArtifact artifact = artifact("artifact-1", AgentArtifactType.REPORT, "text/markdown");
         when(port.getById("artifact-1")).thenReturn(artifact);
         when(port.listByRunId("run-1")).thenReturn(List.of(artifact));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseAgentArtifactController(
-                provider(AgentArtifactQueryInboundPort.class, port),
-                provider(AgentArtifactUpdateInboundPort.class, null),
+                provider(AgentArtifactInboundPort.class, port),
                 provider(ObjectStoragePort.class, null))).build();
 
         mvc.perform(get("/api/agent-artifacts/artifact-1"))
@@ -80,7 +78,7 @@ class SeahorseAgentArtifactControllerTests {
 
     @Test
     void shouldDownloadArtifactWithSafeContentDisposition() throws Exception {
-        AgentArtifactQueryInboundPort port = mock(AgentArtifactQueryInboundPort.class);
+        AgentArtifactInboundPort port = mock(AgentArtifactInboundPort.class);
         ObjectStoragePort storagePort = mock(ObjectStoragePort.class);
         AgentArtifact artifact = artifact("artifact-html", AgentArtifactType.HTML, "text/html");
         when(port.downloadDecision("artifact-html")).thenReturn(new AgentArtifactDownloadDecision(
@@ -94,8 +92,7 @@ class SeahorseAgentArtifactControllerTests {
                 .thenReturn(new ByteArrayInputStream("<html></html>".getBytes(StandardCharsets.UTF_8)));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseAgentArtifactController(
-                provider(AgentArtifactQueryInboundPort.class, port),
-                provider(AgentArtifactUpdateInboundPort.class, null),
+                provider(AgentArtifactInboundPort.class, port),
                 provider(ObjectStoragePort.class, storagePort))).build();
 
         mvc.perform(get("/api/agent-artifacts/artifact-html/download"))

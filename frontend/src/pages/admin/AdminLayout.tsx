@@ -38,11 +38,11 @@ import {
   Users,
   Workflow,
   Wrench,
-  Store,
   Building2,
   CreditCard,
   Activity,
-  ClipboardCheck
+  ClipboardCheck,
+  type LucideIcon
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -73,7 +73,7 @@ import { useFeatureStore } from "@/stores/featureStore";
 type MenuChild = {
   path: string;
   label: string;
-  icon: any;
+  icon: LucideIcon;
   search?: string;
 };
 
@@ -81,7 +81,7 @@ type MenuItem = {
   id?: string;
   path: string;
   label: string;
-  icon: any;
+  icon: LucideIcon;
   children?: MenuChild[];
   feature?: keyof typeof ADVANCED_ADMIN_FEATURES;
 };
@@ -285,7 +285,10 @@ export function AdminLayout() {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const getFeatureState = useFeatureStore((state) => state.getFeatureState);
   const capabilities = useFeatureStore((state) => state.capabilities);
-  const visibleGroups = useMemo(() => visibleMenuGroups(getFeatureState), [getFeatureState, capabilities]);
+  const visibleGroups = useMemo(() => {
+    void capabilities;
+    return visibleMenuGroups(getFeatureState);
+  }, [getFeatureState, capabilities]);
   const isDashboardRoute = location.pathname.startsWith("/admin/dashboard");
 
   useEffect(() => {
@@ -424,7 +427,7 @@ export function AdminLayout() {
     return search ? location.search === search : true;
   };
 
-  const renderLink = (path: string, label: string, Icon: any, search?: string) => {
+  const renderLink = (path: string, label: string, Icon: LucideIcon, search?: string) => {
     const isActive = isLeafActive(path, search);
     return (
       <Link

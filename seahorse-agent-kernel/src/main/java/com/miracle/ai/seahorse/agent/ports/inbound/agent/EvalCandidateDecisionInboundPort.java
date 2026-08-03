@@ -1,0 +1,36 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.miracle.ai.seahorse.agent.ports.inbound.agent;
+
+import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalRegressionService.EvalReport;
+
+/**
+ * Agent 评估候选决策与回归入站用例端口。
+ *
+ * <p>Web 适配器依赖该端口而不是具体 {@code KernelEvalCandidateDecisionService}
+ * 或 {@code KernelEvalRegressionService} 实现，保持「Web 依赖入站用例契约，而非
+ * Kernel 服务实现」的依赖方向。</p>
+ */
+public interface EvalCandidateDecisionInboundPort {
+
+    void acceptCandidate(String candidateId, String reviewerNote);
+
+    void rejectCandidate(String candidateId, String reason);
+
+    EvalReport runRegression(String datasetId, String modelId, Double baselinePassRate);
+}

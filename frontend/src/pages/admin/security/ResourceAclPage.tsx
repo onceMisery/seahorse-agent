@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Plus, RefreshCw, Search } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +33,6 @@ export function ResourceAclPage() {
   const [loading, setLoading] = useState(true);
   const [pageNo, setPageNo] = useState(1);
   const [effectFilter, setEffectFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
   const [searchInput, setSearchInput] = useState("");
   const [keyword, setKeyword] = useState("");
 
@@ -58,15 +57,14 @@ export function ResourceAclPage() {
 
   const rules = pageData?.records || [];
 
-  const loadRules = async (current = pageNo, kw = keyword) => {
+  const loadRules = useCallback(async (current = pageNo, kw = keyword) => {
     try {
       setLoading(true);
       const data = await listAclRules({
         current,
         size: PAGE_SIZE,
         resource: kw || undefined,
-        effect: effectFilter !== "all" ? effectFilter : undefined,
-        status: statusFilter !== "all" ? statusFilter : undefined
+        effect: effectFilter !== "all" ? effectFilter : undefined
       });
       setPageData(data);
     } catch (error) {
@@ -75,12 +73,12 @@ export function ResourceAclPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pageNo, keyword, effectFilter]);
 
   useEffect(() => {
     if (!featureState.enabled) return;
     loadRules();
-  }, [pageNo, keyword, effectFilter, statusFilter]);
+  }, [featureState.enabled, loadRules]);
 
   const handleCreate = async () => {
     if (!form.resource || !form.principal) {
@@ -90,7 +88,7 @@ export function ResourceAclPage() {
 
     try {
       setCreating(true);
-      await createAclRule(form as any);
+      await createAclRule(form);
       toast.success("ACL 规则创建成功");
       setCreateOpen(false);
       loadRules(pageNo, keyword);

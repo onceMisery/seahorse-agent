@@ -79,8 +79,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWea
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
@@ -585,8 +585,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             AgentFinalModelTurnPort.class,
             CurrentUserPort.class
     })
-    @ConditionalOnMissingBean(AgentRunResumeInboundPort.class)
-    public KernelAgentRunResumeService seahorseAgentRunResumeInboundPort(
+    @ConditionalOnMissingBean(AgentRunQueryInboundPort.class)
+    public KernelAgentRunResumeService seahorseAgentRunResumeService(
             AgentRunRepositoryPort agentRunRepositoryPort,
             AgentCheckpointRepositoryPort agentCheckpointRepositoryPort,
             ApprovalRequestQueryPort approvalRequestQueryPort,
@@ -616,7 +616,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             AgentCheckpointRepositoryPort.class,
             ApprovalRequestQueryPort.class,
             AgentRunLeaseInboundPort.class,
-            AgentRunResumeInboundPort.class
+            AgentRunQueryInboundPort.class
     })
     @ConditionalOnMissingBean(AgentRunWorkerInboundPort.class)
     public KernelAgentRunWorkerService seahorseAgentRunWorkerInboundPort(
@@ -625,7 +625,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             AgentCheckpointRepositoryPort agentCheckpointRepositoryPort,
             ApprovalRequestQueryPort approvalRequestQueryPort,
             AgentRunLeaseInboundPort agentRunLeaseInboundPort,
-            AgentRunResumeInboundPort agentRunResumeInboundPort,
+            AgentRunQueryInboundPort agentRunResumeInboundPort,
             ObjectProvider<Clock> clockProvider) {
         return new KernelAgentRunWorkerService(
                 agentRunQueueRepositoryPort,

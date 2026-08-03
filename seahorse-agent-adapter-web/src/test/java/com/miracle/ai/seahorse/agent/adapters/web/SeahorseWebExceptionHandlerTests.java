@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import cn.dev33.satoken.exception.NotLoginException;
+import com.miracle.ai.seahorse.agent.kernel.domain.common.exception.DatabaseTimeoutException;
 import com.miracle.ai.seahorse.agent.kernel.domain.common.exception.ExternalServiceException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
@@ -46,6 +47,24 @@ class SeahorseWebExceptionHandlerTests {
         assertThat(response.getBody().path()).isEqualTo("/api/secure");
         assertThat(response.getBody().details()).isEmpty();
         assertThat(response.toString()).doesNotContain("abc-raw-token");
+    }
+
+    @Test
+    void shouldReturnStableUnauthorizedResponseForInvalidTenantSession() {
+        SeahorseWebExceptionHandler handler = new SeahorseWebExceptionHandler();
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/secure");
+
+        ResponseEntity<ErrorResponse> response = handler.invalidTenantSession(
+                new TenantInterceptor.TenantResolutionException(
+                        "Authentication session is missing a valid tenant",
+                        new IllegalStateException("redis unavailable")),
+                request);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().code()).isEqualTo("AUTH_SESSION_INVALID");
+        assertThat(response.getBody().message()).isEqualTo("Authentication session is missing a valid tenant");
+        assertThat(response.toString()).doesNotContain("redis unavailable");
     }
 
     @Test
@@ -93,5 +112,41 @@ class SeahorseWebExceptionHandlerTests {
         assertThat(conflict.getBody().message()).doesNotContain("plain-secret").contains("[REDACTED]");
         assertThat(external.getBody().message()).doesNotContain("plain-cookie").contains("[REDACTED]");
         assertThat(responseStatus.getBody().message()).doesNotContain("sk-live-secret").contains("[REDACTED]");
+    }
+
+    @Test
+    void shouldMarkExternalServiceAndDatabaseTimeoutsRetryable() {
+        SeahorseWebExceptionHandler handler = new SeahorseWebExceptionHandler();
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/search");
+
+        ResponseEntity<ErrorResponse> external = handler.externalServiceError(
+                new ExternalServiceException("vector", "vector search is unavailable"),
+                request);
+        ResponseEntity<ErrorResponse> dbTimeout = handler.databaseTimeout(
+                new DatabaseTimeoutException("db timeout"),
+                request);
+
+        assertThat(external.getBody()).isNotNull();
+        assertThat(external.getBody().retryable()).isTrue();
+        assertThat(dbTimeout.getBody()).isNotNull();
+        assertThat(dbTimeout.getBody().retryable()).isTrue();
+    }
+
+    @Test
+    void shouldMarkPermanentFailuresNotRetryable() {
+        SeahorseWebExceptionHandler handler = new SeahorseWebExceptionHandler();
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/secure");
+
+        ResponseEntity<ErrorResponse> notLogin = handler.notLogin(
+                new NotLoginException("login", NotLoginException.INVALID_TOKEN, "bad token"),
+                request);
+        ResponseEntity<ErrorResponse> advancedDisabled = handler.advancedFeatureDisabled(
+                new AdvancedFeatureDisabledException(AdvancedFeature.SANDBOX, ProductMode.DEMO),
+                request);
+
+        assertThat(notLogin.getBody()).isNotNull();
+        assertThat(notLogin.getBody().retryable()).isFalse();
+        assertThat(advancedDisabled.getBody()).isNotNull();
+        assertThat(advancedDisabled.getBody().retryable()).isFalse();
     }
 }

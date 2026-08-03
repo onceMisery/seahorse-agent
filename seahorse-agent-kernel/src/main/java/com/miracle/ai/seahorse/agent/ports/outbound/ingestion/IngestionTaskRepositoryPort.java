@@ -31,6 +31,17 @@ public interface IngestionTaskRepositoryPort {
 
     void replaceNodeLogs(String taskId, List<IngestionTaskNodeValues> nodes);
 
+    /**
+     * Persists the task terminal state and its node logs as one aggregate operation.
+     * Database adapters should override this method with a transactional implementation.
+     */
+    default void completeTask(String taskId,
+                              IngestionTaskUpdateValues values,
+                              List<IngestionTaskNodeValues> nodes) {
+        updateTask(taskId, values);
+        replaceNodeLogs(taskId, nodes);
+    }
+
     Optional<IngestionTaskRecord> findById(String taskId);
 
     List<IngestionTaskNodeRecord> listNodes(String taskId);

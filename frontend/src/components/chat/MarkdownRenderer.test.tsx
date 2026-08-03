@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { MarkdownRenderer, normalizeAssistantMarkdown } from "@/components/chat/MarkdownRenderer";
+import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
+import { normalizeAssistantMarkdown } from "@/components/chat/markdownUtils";
 
 describe("MarkdownRenderer", () => {
   it("normalizes compact agent markdown into renderable headings", () => {

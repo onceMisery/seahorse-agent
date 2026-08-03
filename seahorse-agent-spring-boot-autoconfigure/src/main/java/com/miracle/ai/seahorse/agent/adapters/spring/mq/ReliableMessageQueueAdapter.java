@@ -26,9 +26,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSubscriptionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.ReliableMessageEnvelope;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -36,13 +33,10 @@ import java.util.function.Supplier;
 /**
  * 支持 Outbox 的消息队列装饰器。
  *
- * <p>普通发送仍委托给底层 MQ adapter；可靠发布优先写入 outbox，缺少 outbox 仓储时退化为直接发送并记录告警。
+ * <p>普通发送仍委托给底层 MQ adapter；可靠发布只写入 outbox，避免缺少持久化能力时伪装成可靠发送。
  */
 public class ReliableMessageQueueAdapter implements MessageQueuePort, MessageSubscriptionPort, AutoCloseable {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ReliableMessageQueueAdapter.class);
-    private static final String LOG_MSG_OUTBOX_UNAVAILABLE =
-            "Outbox repository unavailable, reliable publish falls back to direct send, topic={}";
     private static final String DEFAULT_TRACE_ID = "";
     private static final ObjectMapper FALLBACK_OBJECT_MAPPER = new ObjectMapper();
 
@@ -71,9 +65,7 @@ public class ReliableMessageQueueAdapter implements MessageQueuePort, MessageSub
     public void publishReliable(String topic, String key, String bizDesc, Object body) {
         OutboxEventRepositoryPort repositoryPort = outboxRepositorySupplier.get();
         if (repositoryPort == null) {
-            LOG.warn(LOG_MSG_OUTBOX_UNAVAILABLE, topic);
-            delegate.send(topic, key, bizDesc, body);
-            return;
+            throw new IllegalStateException("Outbox repository is required for reliable publish: " + topic);
         }
         String resolvedKey = resolveKey(key);
         ReliableMessageEnvelope envelope = buildEnvelope(resolvedKey, body);

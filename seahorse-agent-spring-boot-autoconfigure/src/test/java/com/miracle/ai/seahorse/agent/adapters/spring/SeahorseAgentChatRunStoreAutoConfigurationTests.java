@@ -53,6 +53,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpointType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunQueryInboundPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
@@ -69,10 +70,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventEnvelope;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaManagementInboundPort;
@@ -80,8 +79,12 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaPolicyUpsertComman
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageAggregate;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentHandoffRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
@@ -155,7 +158,7 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(AgentRunStepRecorder.class);
                     assertThat(context).hasSingleBean(AgentApprovalWaitHandler.class);
-                    assertThat(context).hasSingleBean(AgentCheckpointQueryInboundPort.class);
+                    assertThat(context).hasSingleBean(AgentRunQueryInboundPort.class);
                     assertThat(context).getBean(AgentRunStepRecorder.class)
                             .isInstanceOf(RepositoryAgentRunStepRecorder.class);
                     assertThat(context).getBean(AgentApprovalWaitHandler.class)
@@ -567,16 +570,16 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
     }
 
     @Test
-    void shouldWireAgentRunResumeInboundPortWhenRuntimeDependenciesExist() {
+    void shouldWireAgentRunQueryInboundPortWhenRuntimeDependenciesExist() {
         contextRunner.withUserConfiguration(TestApprovalRuntimeConfiguration.class)
                 .run(context -> {
                     assertThat(context).hasNotFailed();
-                    assertThat(context).hasSingleBean(AgentRunResumeInboundPort.class);
+                    assertThat(context).hasSingleBean(AgentRunQueryInboundPort.class);
                     assertThat(context).hasSingleBean(AgentRunWorkerInboundPort.class);
                     assertThat(context.getBean(AgentRunWorkerInboundPort.class))
                             .isInstanceOf(KernelAgentRunWorkerService.class);
                     assertThat(context).hasSingleBean(AgentApprovalWaitHandler.class);
-                    assertThat(context).hasSingleBean(AgentCheckpointQueryInboundPort.class);
+                    assertThat(context).hasSingleBean(AgentRunQueryInboundPort.class);
                 });
     }
 
@@ -697,6 +700,21 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         @Bean
         AgentCheckpointRepositoryPort agentCheckpointRepositoryPort() {
             return new InMemoryAgentCheckpointRepository();
+        }
+
+        @Bean
+        CostUsageRepositoryPort costUsageRepositoryPort() {
+            return new CostUsageRepositoryPort() {
+                @Override
+                public CostUsageRecord append(CostUsageRecord record) {
+                    return record;
+                }
+
+                @Override
+                public CostUsageAggregate aggregate(CostUsageQuery query) {
+                    return new CostUsageAggregate("default", null, null, 0L, 0L, 0.0d, 0L);
+                }
+            };
         }
 
         @Bean
@@ -1112,6 +1130,21 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         @Bean
         AgentCheckpointRepositoryPort agentCheckpointRepositoryPort() {
             return new InMemoryAgentCheckpointRepository();
+        }
+
+        @Bean
+        CostUsageRepositoryPort costUsageRepositoryPort() {
+            return new CostUsageRepositoryPort() {
+                @Override
+                public CostUsageRecord append(CostUsageRecord record) {
+                    return record;
+                }
+
+                @Override
+                public CostUsageAggregate aggregate(CostUsageQuery query) {
+                    return new CostUsageAggregate("default", null, null, 0L, 0L, 0.0d, 0L);
+                }
+            };
         }
 
         @Bean

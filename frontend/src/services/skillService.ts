@@ -86,23 +86,23 @@ export function getSkillGateResult(name: string, tenantId?: string) {
 }
 
 export function createCustomSkill(payload: { tenantId?: string; content: string }) {
-  return api.post<AgentSkill, AgentSkill>("/api/skills/custom", payload);
+  return api.post<AgentSkill>("/api/skills/custom", payload);
 }
 
 export function updateCustomSkill(name: string, payload: { tenantId?: string; content: string }) {
-  return api.put<AgentSkill, AgentSkill>(`/api/skills/custom/${encodeURIComponent(name)}`, payload);
+  return api.put<AgentSkill>(`/api/skills/custom/${encodeURIComponent(name)}`, payload);
 }
 
 export function installSkill(payload: { tenantId?: string; content: string }) {
-  return api.post<AgentSkill, AgentSkill>("/api/skills/install", payload);
+  return api.post<AgentSkill>("/api/skills/install", payload);
 }
 
 export function enableSkill(name: string, tenantId?: string) {
-  return api.post<AgentSkill, AgentSkill>(`/api/skills/${encodeURIComponent(name)}/enable`, { tenantId });
+  return api.post<AgentSkill>(`/api/skills/${encodeURIComponent(name)}/enable`, { tenantId });
 }
 
 export function disableSkill(name: string, tenantId?: string) {
-  return api.post<AgentSkill, AgentSkill>(`/api/skills/${encodeURIComponent(name)}/disable`, { tenantId });
+  return api.post<AgentSkill>(`/api/skills/${encodeURIComponent(name)}/disable`, { tenantId });
 }
 
 export function deleteCustomSkill(name: string, tenantId?: string) {
@@ -116,7 +116,7 @@ export function listSkillHistory(name: string, tenantId?: string) {
 }
 
 export function rollbackCustomSkill(name: string, payload: { tenantId?: string; revisionId: string }) {
-  return api.post<AgentSkill, AgentSkill>(`/api/skills/custom/${encodeURIComponent(name)}/rollback`, payload);
+  return api.post<AgentSkill>(`/api/skills/custom/${encodeURIComponent(name)}/rollback`, payload);
 }
 
 export function listAgentSkillBindings(agentId: string, tenantId?: string) {
@@ -127,7 +127,7 @@ export function replaceAgentSkillBindings(
   agentId: string,
   payload: { tenantId?: string; bindings: AgentSkillBinding[] }
 ) {
-  return api.put<AgentSkillBinding[], AgentSkillBinding[]>(
+  return api.put<AgentSkillBinding[]>(
     `/api/agents/${encodeURIComponent(agentId)}/skills`,
     payload
   );

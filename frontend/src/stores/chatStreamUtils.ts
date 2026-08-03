@@ -152,7 +152,7 @@ function normalizeStepTimeline(payload: unknown): AgentTimelineItem[] {
 }
 
 function normalizeToolWaitingApproval(payload: unknown): AgentApproval[] {
-  return payloadItems(payload).flatMap((item, index) => {
+  return payloadItems(payload).flatMap((item) => {
     if (!isRecord(item)) return [];
     const id = stringValue(item, ["approvalId", "id"]);
     if (!id) return [];
@@ -412,7 +412,7 @@ function normalizeMemories(payload: unknown): AgentMemory[] {
 }
 
 function normalizeSkills(payload: unknown, statusFallback: string): AgentSkillRuntimeView[] {
-  return payloadItems(payload).flatMap((item, index) => {
+  return payloadItems(payload).flatMap((item) => {
     if (!isRecord(item)) return [];
     const name = stringValue(item, ["name", "skillName", "id"]);
     if (!name) return [];

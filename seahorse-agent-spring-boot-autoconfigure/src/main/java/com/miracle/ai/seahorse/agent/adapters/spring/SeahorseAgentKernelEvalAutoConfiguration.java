@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.EvalCandidate
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.EvalDatasetQueryPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.EvalDatasetRepositoryPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalCandidateDecisionService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalDecisionFacade;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalRegressionService;
 import com.miracle.ai.seahorse.agent.adapters.web.RateLimitFilter;
 import com.miracle.ai.seahorse.agent.adapters.spring.properties.RoutingProperties;
@@ -108,6 +109,15 @@ public class SeahorseAgentKernelEvalAutoConfiguration {
             EvalDatasetQueryPort datasetQueryPort,
             ChatModelPort chatModel) {
         return new KernelEvalRegressionService(datasetQueryPort, chatModel);
+    }
+
+    @Bean
+    @ConditionalOnBean({KernelEvalCandidateDecisionService.class, KernelEvalRegressionService.class})
+    @ConditionalOnMissingBean
+    public KernelEvalDecisionFacade seahorseEvalDecisionFacade(
+            KernelEvalCandidateDecisionService decisionService,
+            KernelEvalRegressionService regressionService) {
+        return new KernelEvalDecisionFacade(decisionService, regressionService);
     }
 
     @Bean

@@ -133,6 +133,42 @@ class KernelKnowledgeDocumentServiceTests {
     }
 
     @Test
+    void shouldDeleteUploadedObjectWhenDocumentCreationFails() {
+        Ports ports = new Ports();
+        ports.repository.createFailure = new IllegalStateException("database unavailable");
+        KernelKnowledgeDocumentService service = newService(ports);
+
+        assertThatThrownBy(() -> service.upload(new UploadKnowledgeDocumentCommand(
+                1L,
+                new UploadFileContent(new ByteArrayInputStream("content".getBytes()), 7L, "policy.pdf", "pdf"),
+                "tester",
+                new UploadProcessOptions("pipeline", "pipeline-1"))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("database unavailable");
+
+        assertThat(ports.storage.deletedUrls).containsExactly("local://policy.pdf");
+    }
+
+    @Test
+    void shouldMarkDocumentFailedWhenChunkEventPublishFails() {
+        Ports ports = new Ports();
+        ports.messageQueue.publishFailure = new IllegalStateException("broker unavailable");
+        KernelKnowledgeDocumentService service = newService(ports);
+
+        assertThatThrownBy(() -> service.upload(new UploadKnowledgeDocumentCommand(
+                1L,
+                new UploadFileContent(new ByteArrayInputStream("content".getBytes()), 7L, "policy.pdf", "pdf"),
+                "tester",
+                new UploadProcessOptions("chunk", "pipeline-1"))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("broker unavailable");
+
+        assertThat(ports.repository.records).hasSize(1);
+        assertThat(ports.repository.records.get(0).process().status()).isEqualTo("failed");
+        assertThat(ports.repository.failedMessages).containsExactly("broker unavailable");
+    }
+
+    @Test
     void shouldExecutePipelineAndMarkSuccess() {
         Ports ports = new Ports();
         KernelKnowledgeDocumentService service = newService(ports);
@@ -269,6 +305,35 @@ class KernelKnowledgeDocumentServiceTests {
         assertThat(vectorIndexPort.deletedDocuments).containsExactly("collection-a/" + document.id(),
                 "collection-a/" + document.id());
         assertThat(vectorIndexPort.indexedDocuments).containsExactly("collection-a/" + document.id() + "/1");
+    }
+
+    @Test
+    void shouldKeepDocumentFactAndAllowRetryWhenExternalCleanupFails() {
+        Ports ports = new Ports();
+        KnowledgeDocumentRecord document = ports.repository.createPendingDocument(new CreateKnowledgeDocumentCommand(
+                1L,
+                "policy.pdf",
+                new KnowledgeDocumentFileRef("local://policy.pdf", "pdf", 7L),
+                new KnowledgeDocumentProcessRef("success", "pipeline", "pipeline-1"),
+                "tester"));
+        ports.repository.detail = documentDetail(document.id(), true);
+        RecordingVectorIndexPort vectorIndexPort = new RecordingVectorIndexPort();
+        RecordingKeywordIndexPort keywordIndexPort = new RecordingKeywordIndexPort();
+        keywordIndexPort.deleteFailure = new IllegalStateException("keyword index unavailable");
+        KernelKnowledgeDocumentService service = newService(ports, vectorIndexPort, keywordIndexPort);
+
+        assertThatThrownBy(() -> service.delete(document.id(), "tester"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("keyword index unavailable");
+        assertThat(ports.repository.deleteCalls).isZero();
+        assertThat(ports.storage.deletedUrls).isEmpty();
+
+        keywordIndexPort.deleteFailure = null;
+        service.delete(document.id(), "tester");
+
+        assertThat(ports.repository.deleteCalls).isEqualTo(1);
+        assertThat(ports.storage.deletedUrls).containsExactly("local://policy.pdf");
+        assertThat(vectorIndexPort.deletedDocuments).hasSize(2);
     }
 
     private KernelKnowledgeDocumentService newService(Ports ports) {
@@ -432,13 +497,18 @@ class KernelKnowledgeDocumentServiceTests {
     private static class InMemoryDocumentRepository implements KnowledgeDocumentRepositoryPort {
 
         private final List<KnowledgeDocumentRecord> records = new ArrayList<>();
+        private RuntimeException createFailure;
         private KnowledgeDocumentDetail detail;
         private List<KnowledgeChunkRecord> enabledChunks = List.of();
         private int successChunkCount;
+        private int deleteCalls;
         private final List<String> failedMessages = new ArrayList<>();
 
         @Override
         public KnowledgeDocumentRecord createPendingDocument(CreateKnowledgeDocumentCommand command) {
+            if (createFailure != null) {
+                throw createFailure;
+            }
             KnowledgeDocumentRecord record = new KnowledgeDocumentRecord(
                     (long) (records.size() + 1),
                     command.kbId(),
@@ -488,7 +558,11 @@ class KernelKnowledgeDocumentServiceTests {
 
         @Override
         public boolean delete(Long docId, String operator) {
-            return findById(docId).isPresent();
+            boolean exists = findById(docId).isPresent();
+            if (exists) {
+                deleteCalls++;
+            }
+            return exists;
         }
 
         @Override
@@ -564,6 +638,7 @@ class KernelKnowledgeDocumentServiceTests {
 
         private final List<String> indexedDocuments = new ArrayList<>();
         private final List<String> deletedDocuments = new ArrayList<>();
+        private RuntimeException deleteFailure;
 
         @Override
         public void indexDocumentChunks(String kbId, String docId, List<VectorChunk> chunks) {
@@ -572,6 +647,9 @@ class KernelKnowledgeDocumentServiceTests {
 
         @Override
         public void deleteDocumentChunks(String kbId, String docId) {
+            if (deleteFailure != null) {
+                throw deleteFailure;
+            }
             deletedDocuments.add(kbId + "/" + docId);
         }
     }
@@ -579,6 +657,7 @@ class KernelKnowledgeDocumentServiceTests {
     private static class InMemoryObjectStorage implements ObjectStoragePort {
 
         private final List<String> uploadedBuckets = new ArrayList<>();
+        private final List<String> deletedUrls = new ArrayList<>();
         private RuntimeException openFailure;
 
         @Override
@@ -604,12 +683,14 @@ class KernelKnowledgeDocumentServiceTests {
 
         @Override
         public void deleteByUrl(String url) {
+            deletedUrls.add(url);
         }
     }
 
     private static class RecordingMessageQueue implements MessageQueuePort {
 
         private final List<Message> messages = new ArrayList<>();
+        private RuntimeException publishFailure;
 
         @Override
         public com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSendReceipt send(
@@ -621,6 +702,9 @@ class KernelKnowledgeDocumentServiceTests {
 
         @Override
         public void publishReliable(String topic, String key, String bizDesc, Object body) {
+            if (publishFailure != null) {
+                throw publishFailure;
+            }
             send(topic, key, bizDesc, body);
         }
 

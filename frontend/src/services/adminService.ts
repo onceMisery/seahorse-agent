@@ -40,42 +40,42 @@ export interface TenantUserInfo {
 
 // Tenant management
 export function listTenants(params: { page?: number; size?: number; status?: string }) {
-  return api.get<TenantInfo[], TenantInfo[]>("/api/admin/tenants", { params });
+  return api.get<TenantInfo[]>("/api/admin/tenants", { params });
 }
 
 export function getTenantDetail(tenantId: string) {
-  return api.get<TenantDetail, TenantDetail>(`/api/admin/tenants/${encodeURIComponent(tenantId)}`);
+  return api.get<TenantDetail>(`/api/admin/tenants/${encodeURIComponent(tenantId)}`);
 }
 
 export function suspendTenant(tenantId: string) {
-  return api.put<unknown, unknown>(`/api/admin/tenants/${encodeURIComponent(tenantId)}/suspend`);
+  return api.put<unknown>(`/api/admin/tenants/${encodeURIComponent(tenantId)}/suspend`);
 }
 
 export function deleteTenant(tenantId: string, cascade: boolean) {
-  return api.delete<unknown, unknown>(`/api/admin/tenants/${encodeURIComponent(tenantId)}`, { params: { cascade } });
+  return api.delete<unknown>(`/api/admin/tenants/${encodeURIComponent(tenantId)}`, { params: { cascade } });
 }
 
 export function listTenantUsers(tenantId: string, params: { page?: number; size?: number }) {
-  return api.get<TenantUserInfo[], TenantUserInfo[]>(`/api/admin/tenants/${encodeURIComponent(tenantId)}/users`, { params });
+  return api.get<TenantUserInfo[]>(`/api/admin/tenants/${encodeURIComponent(tenantId)}/users`, { params });
 }
 
 // User management
 export function banUser(userId: number) {
-  return api.put<unknown, unknown>(`/api/admin/users/${userId}/ban`);
+  return api.put<unknown>(`/api/admin/users/${userId}/ban`);
 }
 
 export function resetPassword(userId: number) {
-  return api.put<unknown, unknown>(`/api/admin/users/${userId}/reset-password`);
+  return api.put<unknown>(`/api/admin/users/${userId}/reset-password`);
 }
 
 export function forceLogout(userId: number) {
-  return api.post<unknown, unknown>(`/api/admin/users/${userId}/force-logout`);
+  return api.post<unknown>(`/api/admin/users/${userId}/force-logout`);
 }
 
 // Audit logs
 export function queryAuditLogs(params: { tenantId?: string; action?: string; startTime?: string; endTime?: string; page?: number; size?: number }) {
   return optionalGet(
-    api.get<AuditLogEntry[], AuditLogEntry[]>("/api/admin/audit-logs", { params, suppressErrorToast: true }),
+    api.get<AuditLogEntry[]>("/api/admin/audit-logs", { params, suppressErrorToast: true }),
     []
   );
 }

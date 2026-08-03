@@ -71,7 +71,7 @@ class IndexerNodeFeatureTests {
     @Test
     void shouldWriteKeywordIndexThroughPort() {
         RecordingPorts ports = new RecordingPorts();
-        RecordingKeywordIndexPort keywordIndexPort = new RecordingKeywordIndexPort();
+        RecordingKeywordIndexPort keywordIndexPort = new RecordingKeywordIndexPort(ports.indexOperations);
         IndexerNodeFeature feature = new IndexerNodeFeature(ports, ports, ports, keywordIndexPort);
         IngestionContext context = IngestionContext.builder()
                 .taskId("1")
@@ -83,6 +83,12 @@ class IndexerNodeFeatureTests {
 
         assertThat(result.isSuccess()).isTrue();
         assertThat(keywordIndexPort.keywordWrites).containsExactly("1/1/2");
+        assertThat(ports.indexOperations).containsExactly(
+                "vector-delete:collection-a/1",
+                "keyword-delete:1/1",
+                "repository-replace:1/1/2",
+                "vector-write:collection-a/1/2",
+                "keyword-write:1/1/2");
         assertThat(keywordIndexPort.lastChunks.get(0).getMetadata())
                 .containsEntry("tenant_id", "tenant-1")
                 .containsEntry("kb_id", 1L)
@@ -240,6 +246,7 @@ class IndexerNodeFeatureTests {
         private final List<String> vectorWrites = new ArrayList<>();
         private final List<List<VectorChunk>> repositoryBatches = new ArrayList<>();
         private final List<List<VectorChunk>> vectorBatches = new ArrayList<>();
+        private final List<String> indexOperations = new ArrayList<>();
 
         @Override
         public boolean collectionExists(String collectionName) {
@@ -255,6 +262,7 @@ class IndexerNodeFeatureTests {
         public void indexDocumentChunks(String collectionName, String docId, List<VectorChunk> chunks) {
             vectorWrites.add(collectionName + "/" + docId + "/" + chunks.size());
             vectorBatches.add(List.copyOf(chunks));
+            indexOperations.add("vector-write:" + collectionName + "/" + docId + "/" + chunks.size());
         }
 
         @Override
@@ -264,7 +272,7 @@ class IndexerNodeFeatureTests {
 
         @Override
         public void deleteDocumentVectors(String collectionName, String docId) {
-            throw new UnsupportedOperationException("not used");
+            indexOperations.add("vector-delete:" + collectionName + "/" + docId);
         }
 
         @Override
@@ -281,6 +289,7 @@ class IndexerNodeFeatureTests {
         public void replaceDocumentChunks(Long kbId, Long docId, List<VectorChunk> chunks) {
             repositoryWrites.add(kbId + "/" + docId + "/" + chunks.size());
             repositoryBatches.add(List.copyOf(chunks));
+            indexOperations.add("repository-replace:" + kbId + "/" + docId + "/" + chunks.size());
         }
     }
 
@@ -289,16 +298,26 @@ class IndexerNodeFeatureTests {
 
         private final List<String> keywordWrites = new ArrayList<>();
         private List<VectorChunk> lastChunks = List.of();
+        private final List<String> indexOperations;
+
+        private RecordingKeywordIndexPort() {
+            this(new ArrayList<>());
+        }
+
+        private RecordingKeywordIndexPort(List<String> indexOperations) {
+            this.indexOperations = indexOperations;
+        }
 
         @Override
         public void indexDocumentChunks(String kbId, String docId, List<VectorChunk> chunks) {
             keywordWrites.add(kbId + "/" + docId + "/" + chunks.size());
             lastChunks = List.copyOf(chunks);
+            indexOperations.add("keyword-write:" + kbId + "/" + docId + "/" + chunks.size());
         }
 
         @Override
         public void deleteDocumentChunks(String kbId, String docId) {
-            throw new UnsupportedOperationException("not used");
+            indexOperations.add("keyword-delete:" + kbId + "/" + docId);
         }
     }
 }

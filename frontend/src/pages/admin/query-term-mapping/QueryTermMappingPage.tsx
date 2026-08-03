@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -77,7 +77,7 @@ export function QueryTermMappingPage() {
   }>({ open: false, mode: "create", item: null });
   const [form, setForm] = useState(emptyForm);
 
-  const loadData = async (current = pageNo, keywordValue = keyword) => {
+  const loadData = useCallback(async (current = pageNo, keywordValue = keyword) => {
     try {
       setLoading(true);
       const data = await getQueryTermMappingsPage(current, PAGE_SIZE, keywordValue || undefined);
@@ -88,11 +88,11 @@ export function QueryTermMappingPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pageNo, keyword]);
 
   useEffect(() => {
     loadData();
-  }, [pageNo, keyword]);
+  }, [loadData]);
 
   useEffect(() => {
     if (!dialogState.open) {

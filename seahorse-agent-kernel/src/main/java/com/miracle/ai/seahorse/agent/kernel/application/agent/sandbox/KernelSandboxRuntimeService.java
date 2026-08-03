@@ -167,6 +167,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private final CurrentUserPort currentUserPort;
     private final KernelAuditLedgerService auditLedger;
     private final Clock clock;
+    private final SandboxPathValidator pathValidator;
     private final Map<String, SandboxSession> sessions = new ConcurrentHashMap<>();
 
     public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
@@ -543,6 +544,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         this.currentUserPort = currentUserPort;
         this.auditLedger = auditLedger;
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
+        this.pathValidator = new SandboxPathValidator();
     }
 
     @Override
@@ -1463,6 +1465,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         }
         try {
             Path path = Path.of(URI.create(artifact.objectUri())).toAbsolutePath().normalize();
+            pathValidator.validate(path.toString());
             if (!Files.isRegularFile(path)) {
                 return artifact.withScanDecision(
                         SandboxArtifactScanStatus.BLOCKED,
@@ -1504,6 +1507,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             throw new IllegalStateException("Sandbox browser session-state artifact storage is not available");
         }
         Path path = Path.of(URI.create(artifact.objectUri())).toAbsolutePath().normalize();
+        pathValidator.validate(path.toString());
         return Files.newInputStream(path);
     }
 

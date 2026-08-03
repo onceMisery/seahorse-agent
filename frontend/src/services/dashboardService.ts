@@ -121,7 +121,7 @@ const normalizeDashboardTrends = (
 };
 
 export async function getDashboardOverview(window: string = "24h"): Promise<DashboardOverview> {
-  return api.get<DashboardOverview, DashboardOverview>("/admin/dashboard/overview", {
+  return api.get<DashboardOverview>("/admin/dashboard/overview", {
     params: { window }
   });
 }
@@ -129,7 +129,7 @@ export async function getDashboardOverview(window: string = "24h"): Promise<Dash
 export async function getDashboardPerformance(
   window: string = "24h"
 ): Promise<DashboardPerformance> {
-  return api.get<DashboardPerformance, DashboardPerformance>("/admin/dashboard/performance", {
+  return api.get<DashboardPerformance>("/admin/dashboard/performance", {
     params: { window }
   });
 }
@@ -139,7 +139,7 @@ export async function getDashboardTrends(
   window: string = "7d",
   granularity: string = "day"
 ): Promise<DashboardTrends> {
-  const response = await api.get<RawDashboardTrends, RawDashboardTrends>(
+  const response = await api.get<RawDashboardTrends>(
     "/admin/dashboard/trends",
     {
       params: { metric, window, granularity }

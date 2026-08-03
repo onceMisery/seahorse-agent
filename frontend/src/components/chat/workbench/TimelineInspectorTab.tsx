@@ -1,4 +1,3 @@
-import * as React from "react";
 import { InspectorEmptyState } from "@/components/chat/workbench/InspectorEmptyState";
 import type { AgentTimelineItem } from "@/types";
 

@@ -34,6 +34,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRe
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpointType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunQueryInboundPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeConstants;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
@@ -47,7 +48,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunStartCommand;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
@@ -77,7 +77,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public class KernelAgentRunResumeService implements AgentRunResumeInboundPort {
+public class KernelAgentRunResumeService {
 
     private static final Logger LOG = LoggerFactory.getLogger(KernelAgentRunResumeService.class);
 
@@ -177,8 +177,6 @@ public class KernelAgentRunResumeService implements AgentRunResumeInboundPort {
         this.resumeBlockingCallTimeout = requirePositiveDuration(
                 resumeBlockingCallTimeout, "resumeBlockingCallTimeout");
     }
-
-    @Override
     public AgentRun resume(String runId) {
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
         AgentRun current = requireReadable(loadRun(runId), currentUser);

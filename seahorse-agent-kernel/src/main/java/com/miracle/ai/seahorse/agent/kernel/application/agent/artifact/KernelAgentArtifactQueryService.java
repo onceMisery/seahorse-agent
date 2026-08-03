@@ -21,7 +21,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactDisposition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactDownloadDecision;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
@@ -33,7 +32,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-public class KernelAgentArtifactQueryService implements AgentArtifactQueryInboundPort {
+public class KernelAgentArtifactQueryService {
 
     private static final String ADMIN_ROLE = "admin";
     private static final String ACCESS_DENIED = "权限不足";
@@ -69,15 +68,16 @@ public class KernelAgentArtifactQueryService implements AgentArtifactQueryInboun
         this.runRepository = Objects.requireNonNull(runRepository, "runRepository must not be null");
         this.currentUserPort = Objects.requireNonNull(currentUserPort, "currentUserPort must not be null");
     }
-
-    @Override
     public Optional<AgentArtifact> findById(String artifactId) {
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
         return artifactRepository.findById(requireText(artifactId, "artifactId must not be blank"))
                 .map(artifact -> requireReadable(artifact, currentUser));
     }
 
-    @Override
+    public AgentArtifact getById(String artifactId) {
+        return findById(artifactId)
+                .orElseThrow(() -> new IllegalArgumentException("Agent artifact not found"));
+    }
     public List<AgentArtifact> listByRunId(String runId) {
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
         String safeRunId = requireText(runId, "runId must not be blank");
@@ -88,8 +88,6 @@ public class KernelAgentArtifactQueryService implements AgentArtifactQueryInboun
                 .filter(artifact -> isAdmin(currentUser) || ownsResource(artifact.userId(), currentUser))
                 .toList();
     }
-
-    @Override
     public AgentArtifactDownloadDecision downloadDecision(String artifactId) {
         AgentArtifact artifact = getById(artifactId);
         if (!artifact.downloadable()) {

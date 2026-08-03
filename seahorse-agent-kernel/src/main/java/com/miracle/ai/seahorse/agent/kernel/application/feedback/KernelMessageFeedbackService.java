@@ -30,15 +30,13 @@ import java.util.Objects;
  *
  * <p>默认直接写入反馈仓储，保证无 MQ 或 outbox 时反馈不丢失；需要异步化时可在 Web 层或端口 wrapper 中切换。
  */
-public class KernelMessageFeedbackService implements MessageFeedbackInboundPort {
+public class KernelMessageFeedbackService {
 
     private final MessageFeedbackRepositoryPort repositoryPort;
 
     public KernelMessageFeedbackService(MessageFeedbackRepositoryPort repositoryPort) {
         this.repositoryPort = Objects.requireNonNull(repositoryPort, "repositoryPort must not be null");
     }
-
-    @Override
     public void submit(SubmitMessageFeedbackCommand command) {
         SubmitMessageFeedbackCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         repositoryPort.upsert(new MessageFeedbackSubmission(

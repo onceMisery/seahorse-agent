@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -23,7 +23,7 @@ export function AgentEvalPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     if (!agentId || !versionId || !tenantId) return;
     setLoading(true);
     try {
@@ -40,11 +40,11 @@ export function AgentEvalPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [agentId, versionId, tenantId, evalType]);
 
   useEffect(() => {
     fetchHistory();
-  }, [agentId, versionId, tenantId, evalType]);
+  }, [fetchHistory]);
 
   if (!featureState.enabled) {
     return <FeatureUnavailableState featureState={featureState} featureName="Agent 评测" />;

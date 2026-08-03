@@ -11,6 +11,7 @@ import "katex/dist/katex.min.css";
 import { CodeBlock } from "@/components/ai-elements/renderer/CodeBlock";
 import { CitationBadge } from "@/components/chat/CitationBadge";
 import { MermaidDiagram } from "@/components/chat/MermaidDiagram";
+import { normalizeAssistantMarkdown } from "@/components/chat/markdownUtils";
 import { cn } from "@/lib/utils";
 import type { AgentSource } from "@/types";
 
@@ -59,11 +60,50 @@ interface MarkdownRendererProps {
   sources?: AgentSource[];
 }
 
+function MarkdownImage({ src, alt }: React.ComponentPropsWithoutRef<"img">) {
+  const [hasError, setHasError] = React.useState(false);
+
+  if (hasError) {
+    return (
+      <div className="my-3 flex items-center gap-2 text-sm" style={{ color: "var(--theme-text-muted)" }}>
+        <ImageIcon className="h-4 w-4" />
+        <span>图片加载失败</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt ?? ""}
+      className="my-3 max-w-full rounded-lg"
+      onError={() => setHasError(true)}
+      loading="lazy"
+    />
+  );
+}
+
 export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
   const normalizedContent = React.useMemo(() => normalizeAssistantMarkdown(content), [content]);
 
   return (
-    <ReactMarkdown
+    <div
+      className="prose max-w-none prose-p:leading-[1.8] prose-li:leading-[1.8]"
+      style={{
+        color: "var(--theme-text-primary)",
+        "--tw-prose-headings": "var(--theme-text-primary)",
+        "--tw-prose-body": "var(--theme-text-primary)",
+        "--tw-prose-bold": "var(--theme-text-primary)",
+        "--tw-prose-links": "var(--theme-accent)",
+        "--tw-prose-code": "var(--theme-text-primary)",
+        "--tw-prose-quotes": "var(--theme-text-secondary)",
+        "--tw-prose-quote-borders": "var(--theme-accent)",
+        "--tw-prose-bullets": "var(--theme-text-muted)",
+        "--tw-prose-counters": "var(--theme-text-muted)",
+        "--tw-prose-li": "var(--theme-text-primary)"
+      } as React.CSSProperties}
+    >
+      <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkMath]}
       rehypePlugins={[[rehypeRaw], [rehypeSanitize, sanitizeSchema], [rehypeKatex]]}
       components={{
@@ -145,29 +185,7 @@ export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
 
           return <CodeBlock code={value} language={language} editable />;
         },
-        img({ src, alt, ...props }) {
-          const [hasError, setHasError] = React.useState(false);
-
-          if (hasError) {
-            return (
-              <div className="my-3 flex items-center gap-2 text-sm" style={{ color: "var(--theme-text-muted)" }}>
-                <ImageIcon className="h-4 w-4" />
-                <span>图片加载失败</span>
-              </div>
-            );
-          }
-
-          return (
-            <img
-              src={src}
-              alt=""
-              className="my-3 max-w-full rounded-lg"
-              onError={() => setHasError(true)}
-              loading="lazy"
-              {...props}
-            />
-          );
-        },
+        img: MarkdownImage,
         a({ children, ...props }) {
           return (
             <a
@@ -237,54 +255,11 @@ export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
           );
         }
       }}
-      className="prose max-w-none prose-p:leading-[1.8] prose-li:leading-[1.8]"
-      style={{
-        color: "var(--theme-text-primary)",
-        "--tw-prose-headings": "var(--theme-text-primary)",
-        "--tw-prose-body": "var(--theme-text-primary)",
-        "--tw-prose-bold": "var(--theme-text-primary)",
-        "--tw-prose-links": "var(--theme-accent)",
-        "--tw-prose-code": "var(--theme-text-primary)",
-        "--tw-prose-quotes": "var(--theme-text-secondary)",
-        "--tw-prose-quote-borders": "var(--theme-accent)",
-        "--tw-prose-bullets": "var(--theme-text-muted)",
-        "--tw-prose-counters": "var(--theme-text-muted)",
-        "--tw-prose-li": "var(--theme-text-primary)"
-      }}
-    >
-      {normalizedContent}
-    </ReactMarkdown>
+      >
+        {normalizedContent}
+      </ReactMarkdown>
+    </div>
   );
-}
-
-export function normalizeAssistantMarkdown(content: string): string {
-  if (!content) {
-    return "";
-  }
-
-  return content
-    // Normalize line endings
-    .replace(/\r\n?/g, "\n")
-    // Protect $$...$$ math blocks: ensure blank lines around them for remark-math
-    .replace(/\s*\$\$([\s\S]*?)\$\$\s*/g, (_match, expression: string) => {
-      const trimmed = expression.trim();
-      return trimmed ? `\n\n$$\n${trimmed}\n$$\n\n` : "\n\n";
-    })
-    // Heading after CJK/sentence-ending punctuation: "前言。###标题" → "前言。\n\n###标题"
-    .replace(/([。！？；：.!?;:）)\]}])\s*(#{1,6})(?!#)(?=[^\n])/g, "$1\n\n$2")
-    // Heading preceded by horizontal whitespace (not at line start): insert blank line
-    .replace(/([^\S\n]+)(#{1,6})(?!#)(?=\S)/g, "\n\n$2")
-    // Heading without space after #: "###标题" → "### 标题" (line-start only)
-    .replace(/^(#{1,6})(?!#)(?=\S)/gm, "$1 ")
-    // Protect inline code spans from being broken by other regexes
-    // (no-op here; we only normalize structural issues)
-    // Ensure blank line before list items that follow a paragraph
-    .replace(/([^\n])\n(\s*[-*+])\s/g, "$1\n\n$2 ")
-    .replace(/([^\n])\n(\s*\d+\.)\s/g, "$1\n\n$2 ")
-    
-    // Collapse excessive blank lines
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
 }
 
 function renderWithCitations(children: React.ReactNode, sources?: AgentSource[]): React.ReactNode {

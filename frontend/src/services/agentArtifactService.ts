@@ -41,13 +41,15 @@ export interface AgentHandoff {
 
 export interface AgentArtifactItem {
   artifactId?: string;
-  runId?: string;
-  title?: string;
-  artifactType?: string;
-  mimeType?: string;
+  runId?: string | null;
+  title?: string | null;
+  artifactType?: string | null;
+  mimeType?: string | null;
   sizeBytes?: number;
-  previewText?: string;
-  disposition?: string;
+  previewText?: string | null;
+  scanStatus?: string | null;
+  canPreview?: boolean;
+  disposition?: string | null;
   createTime?: string;
 }
 
@@ -69,7 +71,7 @@ export interface AgentRunStartPayload {
 }
 
 export function createAgentRun(agentId: string, payload: AgentRunStartPayload) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/agents/${encodeURIComponent(agentId)}/runs`,
     payload
   );
@@ -84,19 +86,19 @@ export function getAgentRunSteps(runId: string) {
 }
 
 export function cancelAgentRun(runId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/agent-runs/${encodeURIComponent(runId)}/cancel`
   );
 }
 
 export function retryAgentRunAction(runId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/agent-runs/${encodeURIComponent(runId)}/retry`
   );
 }
 
 export function resumeAgentRunAction(runId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/agent-runs/${encodeURIComponent(runId)}/resume`
   );
 }
@@ -120,7 +122,7 @@ export function getAgentHandoff(handoffId: string) {
 }
 
 export function cancelAgentHandoff(handoffId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/agent-handoffs/${encodeURIComponent(handoffId)}/cancel`
   );
 }
@@ -136,7 +138,7 @@ export function getAgentArtifact(artifactId: string) {
 }
 
 export function updateAgentArtifact(artifactId: string, content: string) {
-  return api.put<AgentArtifactItem, AgentArtifactItem>(
+  return api.put<AgentArtifactItem>(
     `/api/agent-artifacts/${encodeURIComponent(artifactId)}`,
     { content }
   );

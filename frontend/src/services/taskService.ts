@@ -14,23 +14,23 @@ function buildApiUrl(path: string) {
 }
 
 export async function createTask(req: CreateTaskRequest): Promise<Task> {
-  return api.post<Task, Task>("/tasks", req);
+  return api.post<Task>("/tasks", req);
 }
 
 export async function getTask(taskId: string): Promise<Task> {
-  return api.get<Task, Task>(`/tasks/${encodeURIComponent(taskId)}`);
+  return api.get<Task>(`/tasks/${encodeURIComponent(taskId)}`);
 }
 
 export async function listTasks(limit = 20): Promise<Task[]> {
-  return api.get<Task[], Task[]>(`/tasks?limit=${limit}`);
+  return api.get<Task[]>(`/tasks?limit=${limit}`);
 }
 
 export async function cancelTask(taskId: string): Promise<Task> {
-  return api.post<Task, Task>(`/tasks/${encodeURIComponent(taskId)}/cancel`);
+  return api.post<Task>(`/tasks/${encodeURIComponent(taskId)}/cancel`);
 }
 
 export async function listTaskArtifacts(taskId: string): Promise<TaskArtifact[]> {
-  return api.get<TaskArtifact[], TaskArtifact[]>(`/tasks/${encodeURIComponent(taskId)}/artifacts`);
+  return api.get<TaskArtifact[]>(`/tasks/${encodeURIComponent(taskId)}/artifacts`);
 }
 
 export interface TaskEventSubscription {

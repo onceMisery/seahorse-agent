@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pencil, Plus, RefreshCw, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -45,7 +45,7 @@ export function UserListPage() {
 
   const users = pageData?.records || [];
 
-  const loadUsers = async (current = pageNo, name = keyword) => {
+  const loadUsers = useCallback(async (current = pageNo, name = keyword) => {
     try {
       setLoading(true);
       const data = await getUsersPage(current, PAGE_SIZE, name || undefined);
@@ -56,11 +56,11 @@ export function UserListPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pageNo, keyword]);
 
   useEffect(() => {
     loadUsers();
-  }, [pageNo, keyword]);
+  }, [loadUsers]);
 
   const handleSearch = () => {
     setPageNo(1);

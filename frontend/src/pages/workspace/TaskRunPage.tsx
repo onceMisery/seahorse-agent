@@ -41,7 +41,7 @@ export function TaskRunPage() {
     if (task && task.type !== "agent_run" && task.conversationId) {
       navigate(`/chat/${task.conversationId}`, { replace: true });
     }
-  }, [task?.type, task?.conversationId, navigate]);
+  }, [task, navigate]);
 
   const loadArtifacts = React.useCallback(() => {
     if (!taskId) return;

@@ -39,11 +39,11 @@ public class JdbcRefreshTokenRepositoryAdapter implements RefreshTokenRepository
     }
 
     @Override
-    public void save(Long userId, String refreshToken, Instant expiresAt) {
-        if (userId == null || !hasText(refreshToken) || expiresAt == null) {
+    public void save(Long userId, String tenantId, String refreshToken, Instant expiresAt) {
+        if (userId == null || !hasText(tenantId) || !hasText(refreshToken) || expiresAt == null) {
             throw new IllegalArgumentException("refresh token values must not be null");
         }
-        jdbcTemplate.update("""
+        int updated = jdbcTemplate.update("""
                 UPDATE t_user
                 SET refresh_token = ?, refresh_token_expires_at = ?, update_time = ?
                 WHERE id = ? AND deleted = 0 AND tenant_id = ?
@@ -52,30 +52,38 @@ public class JdbcRefreshTokenRepositoryAdapter implements RefreshTokenRepository
                 Timestamp.from(expiresAt),
                 Timestamp.from(Instant.now()),
                 userId,
-                JdbcTenantSupport.resolveTenantId());
+                tenantId.trim());
+        if (updated != 1) {
+            throw new IllegalStateException("Refresh token owner was not updated");
+        }
     }
 
     @Override
-    public Optional<RefreshTokenRecord> findValid(String refreshToken, Instant now) {
-        if (!hasText(refreshToken) || now == null) {
+    public Optional<RefreshTokenRecord> rotate(String refreshToken, String nextRefreshToken,
+                                               Instant nextExpiresAt, Instant now) {
+        if (!hasText(refreshToken) || !hasText(nextRefreshToken) || nextExpiresAt == null || now == null) {
             return Optional.empty();
         }
-        try {
-            return Optional.ofNullable(jdbcTemplate.queryForObject("""
-                    SELECT id, username, role, avatar, tenant_id, refresh_token, refresh_token_expires_at
-                    FROM t_user
-                    WHERE refresh_token = ?
-                      AND refresh_token_expires_at > ?
-                      AND deleted = 0
-                      AND tenant_id = ?
-                    """,
-                    this::mapRecord,
-                    refreshToken.trim(),
-                    Timestamp.from(now),
-                    JdbcTenantSupport.resolveTenantId()));
-        } catch (EmptyResultDataAccessException ex) {
+        Optional<RefreshTokenRecord> current = findValid(refreshToken.trim(), now);
+        if (current.isEmpty()) {
             return Optional.empty();
         }
+
+        int updated = jdbcTemplate.update("""
+                UPDATE t_user
+                SET refresh_token = ?, refresh_token_expires_at = ?, update_time = ?
+                WHERE id = ?
+                  AND refresh_token = ?
+                  AND refresh_token_expires_at > ?
+                  AND deleted = 0
+                """,
+                nextRefreshToken.trim(),
+                Timestamp.from(nextExpiresAt),
+                Timestamp.from(now),
+                current.orElseThrow().userId(),
+                refreshToken.trim(),
+                Timestamp.from(now));
+        return updated == 1 ? current : Optional.empty();
     }
 
     @Override
@@ -86,11 +94,27 @@ public class JdbcRefreshTokenRepositoryAdapter implements RefreshTokenRepository
         jdbcTemplate.update("""
                 UPDATE t_user
                 SET refresh_token = NULL, refresh_token_expires_at = NULL, update_time = ?
-                WHERE refresh_token = ? AND tenant_id = ?
+                WHERE refresh_token = ? AND deleted = 0
                 """,
                 Timestamp.from(Instant.now()),
-                refreshToken.trim(),
-                JdbcTenantSupport.resolveTenantId());
+                refreshToken.trim());
+    }
+
+    private Optional<RefreshTokenRecord> findValid(String refreshToken, Instant now) {
+        try {
+            return Optional.ofNullable(jdbcTemplate.queryForObject("""
+                    SELECT id, username, role, avatar, tenant_id, refresh_token, refresh_token_expires_at
+                    FROM t_user
+                    WHERE refresh_token = ?
+                      AND refresh_token_expires_at > ?
+                      AND deleted = 0
+                    """,
+                    this::mapRecord,
+                    refreshToken,
+                    Timestamp.from(now)));
+        } catch (EmptyResultDataAccessException ex) {
+            return Optional.empty();
+        }
     }
 
     private RefreshTokenRecord mapRecord(ResultSet resultSet, int rowNum) throws SQLException {
@@ -109,6 +133,6 @@ public class JdbcRefreshTokenRepositoryAdapter implements RefreshTokenRepository
     }
 
     private boolean hasText(String value) {
-        return value != null && !value.isBlank();
+        return value != null && !value.trim().isEmpty();
     }
 }

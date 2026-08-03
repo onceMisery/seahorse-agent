@@ -2,8 +2,6 @@ import {
   AGENT_STREAM_EVENTS,
   type AgentArtifact,
   type AgentApproval,
-  type AgentMemory,
-  type AgentQuota,
   type AgentRunSnapshot,
   type AgentRunSnapshotSource,
   type AgentRunSnapshotStep,
@@ -38,7 +36,8 @@ export function applyAgentStreamEventToMessage(
   message: Message,
   envelope: StreamEventEnvelope
 ): void {
-  if (isStale(message, envelope.eventSeq)) return;
+  if (isStale(message, envelope.eventSeq)
+    || isDuplicateSequence(message, envelope.eventSeq)) return;
   const normalized = normalizeAgentStreamEvent(envelope.eventType, envelope.typedPayload);
   if (!normalized) {
     message.lastEventSeq = maxSeq(message.lastEventSeq, envelope.eventSeq);
@@ -206,19 +205,22 @@ function toolCallTimeline(toolCalls: AgentToolCallView[]): AgentTimelineItem[] {
 }
 
 function mergeSkillRuntime(existing: AgentSkillRuntimeView, next: AgentSkillRuntimeView): AgentSkillRuntimeView {
-  const merged: AgentSkillRuntimeView = { ...existing };
-  for (const [key, value] of Object.entries(next) as [keyof AgentSkillRuntimeView, unknown][]) {
-    if (value !== undefined) {
-      (merged as Record<string, unknown>)[key] = value;
-    }
-  }
-  return merged;
+  const definedValues = Object.fromEntries(
+    Object.entries(next).filter(([, value]) => value !== undefined)
+  );
+  return { ...existing, ...definedValues };
 }
 
 function isStale(message: Message, incomingSeq?: number): boolean {
   return typeof incomingSeq === "number" &&
     typeof message.lastEventSeq === "number" &&
     incomingSeq < message.lastEventSeq;
+}
+
+function isDuplicateSequence(message: Message, incomingSeq?: number): boolean {
+  return typeof incomingSeq === "number" &&
+    typeof message.lastEventSeq === "number" &&
+    incomingSeq === message.lastEventSeq;
 }
 
 function maxSeq(current: number | undefined, incoming: number | undefined): number | undefined {
@@ -235,8 +237,9 @@ function snapshotMessageStatus(current: Message["status"], runStatus?: string): 
 }
 
 function stripAppend<T extends ArtifactBlock>(artifact: T): ArtifactBlock {
-  const { append: _append, ...rest } = artifact;
-  return rest;
+  const item: ArtifactBlock = { ...artifact };
+  delete item.append;
+  return item;
 }
 
 function stringValue(value: unknown): string | undefined {

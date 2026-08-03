@@ -20,7 +20,7 @@ export function MemoryMaintenancePanel() {
   const [runs, setRuns] = useState<MemoryMaintenanceRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
-  const [policyConfig, setPolicyConfig] = useState<MemoryPolicyConfig | null>(null);
+  const [, setPolicyConfig] = useState<MemoryPolicyConfig | null>(null);
   const [editingConfig, setEditingConfig] = useState(false);
   const [configJson, setConfigJson] = useState("");
   const [configError, setConfigError] = useState("");

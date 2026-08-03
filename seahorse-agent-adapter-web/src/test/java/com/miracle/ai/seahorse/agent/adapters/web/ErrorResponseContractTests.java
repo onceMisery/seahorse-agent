@@ -22,6 +22,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ErrorResponseContractTests {
@@ -39,5 +41,17 @@ class ErrorResponseContractTests {
         assertThat(json.has("requestId")).isTrue();
         assertThat(json.has("tenantId")).isTrue();
         assertThat(json.has("details")).isTrue();
+    }
+
+    @Test
+    void errorResponseCarriesRetryableSemantics() throws Exception {
+        JsonNode nonRetryable = objectMapper.valueToTree(
+                ErrorResponse.of("VALIDATION_ERROR", "bad input"));
+        assertThat(nonRetryable.get("retryable").asBoolean()).isFalse();
+
+        JsonNode retryable = objectMapper.valueToTree(
+                ErrorResponse.of("DEPENDENCY_UNAVAILABLE", "vector down", true, "/api/x", "req-1", "t-1", Map.of()));
+        assertThat(retryable.get("retryable").asBoolean()).isTrue();
+        assertThat(retryable.get("code").asText()).isEqualTo("DEPENDENCY_UNAVAILABLE");
     }
 }

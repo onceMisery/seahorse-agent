@@ -107,19 +107,22 @@ public class ResearchSseBridge {
                     throttledSender.accept(envelope, now, sink);
                     cursor.set(envelope.eventSeq());
                     if (envelope.eventType() == StreamEventType.FINISH) {
+                        throttledSender.flushNow(sink);
                         completeStream(emitter, closed, handle);
                         return;
                     }
                 }
                 if (System.currentTimeMillis() - startedAt > maxDurationMs) {
                     throttledSender.flushNow(sink);
-                    completeStream(emitter, closed, handle);
+                    failStream(emitter, closed, handle,
+                            "Research stream timed out before the run reached a terminal state");
                 }
             } catch (IOException ex) {
                 cancelStream(emitter, closed, handle);
             } catch (Exception ex) {
                 log.warn("Research SSE bridge poll failed run={}", runId, ex);
-                cancelStream(emitter, closed, handle);
+                failStream(emitter, closed, handle,
+                        "Research stream failed while reading buffered events");
             }
         };
 
@@ -152,6 +155,24 @@ public class ResearchSseBridge {
             return;
         }
         try {
+            emitter.send(SseEmitter.event().name(StreamEventType.DONE.value()).data("[DONE]"));
+            emitter.complete();
+        } catch (IOException ex) {
+            emitter.complete();
+        } finally {
+            cancelHandle(handle);
+        }
+    }
+
+    private void failStream(SseEmitter emitter,
+                            AtomicBoolean closed,
+                            ScheduledFuture<?>[] handle,
+                            String message) {
+        if (!closed.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            emitter.send(SseEmitter.event().name("error").data(Map.of("error", message)));
             emitter.send(SseEmitter.event().name(StreamEventType.DONE.value()).data("[DONE]"));
             emitter.complete();
         } catch (IOException ex) {

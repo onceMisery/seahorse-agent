@@ -105,6 +105,36 @@ class KernelRetrievalEngineTests {
     }
 
     @Test
+    void shouldExposePartialMarkerAndFailedChannelEvidence() {
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        registerChannel(registry, failingChannel(), 1);
+        registerChannel(registry, workingChannel(), 2);
+        KernelRetrievalEngine engine = new KernelRetrievalEngine(registry, directExecutor, activationContext());
+
+        RetrievalContext context = engine.retrieve(singleQuestionIntent(), TOP_K);
+
+        Assertions.assertTrue(context.isPartial());
+        Assertions.assertEquals(
+                "CHANNEL_FAILED",
+                context.getFailureEvidence().get("subquestion:0/channel:" + FAILING_CHANNEL));
+        Assertions.assertFalse(context.getIntentChunks().isEmpty());
+    }
+
+    @Test
+    void shouldFailWhenAllRetrievalChannelsFail() {
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        registerChannel(registry, failingChannel(), 1);
+        KernelRetrievalEngine engine = new KernelRetrievalEngine(registry, directExecutor, activationContext());
+
+        IllegalStateException failure = Assertions.assertThrows(
+                IllegalStateException.class,
+                () -> engine.retrieveKnowledgeChannels(singleQuestionIntent(), TOP_K));
+
+        Assertions.assertTrue(failure.getMessage().contains("All retrieval channels failed"));
+        Assertions.assertTrue(failure.getMessage().contains(FAILING_CHANNEL));
+    }
+
+    @Test
     void shouldSkipFailingPostProcessorAndContinueNextProcessor() {
         DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
         List<String> processorOrder = new ArrayList<>();

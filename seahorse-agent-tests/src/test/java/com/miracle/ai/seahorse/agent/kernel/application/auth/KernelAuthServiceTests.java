@@ -44,62 +44,76 @@ class KernelAuthServiceTests {
     private static final Clock FIXED_CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
 
     @Test
-    void shouldLoginWithCompatiblePayload() {
+    void shouldLoginAndPersistTenantScopedRefreshToken() {
         FakeTokenService tokenService = new FakeTokenService();
-        KernelAuthService service = new KernelAuthService(new SingleUserRepository(),
-                PasswordHasherPort.plainText(), tokenService);
+        InMemoryRefreshTokenRepository refreshTokens = new InMemoryRefreshTokenRepository();
+        KernelAuthService service = service(tokenService, refreshTokens);
 
         LoginResult result = service.login(new LoginCommand("alice", "secret"));
 
         assertThat(result.userId()).isEqualTo("1");
         assertThat(result.role()).isEqualTo("admin");
         assertThat(result.token()).isEqualTo("token-1");
-        assertThat(result.avatar()).isNotBlank();
-        assertThat(tokenService.loginId).isEqualTo("1");
-    }
-
-    @Test
-    void shouldIssueRefreshTokenWhenRepositoryIsAvailable() {
-        FakeTokenService tokenService = new FakeTokenService();
-        InMemoryRefreshTokenRepository refreshTokenRepository = new InMemoryRefreshTokenRepository();
-        KernelAuthService service = new KernelAuthService(new SingleUserRepository(),
-                PasswordHasherPort.plainText(), tokenService, null, refreshTokenRepository, FIXED_CLOCK);
-
-        LoginResult result = service.login(new LoginCommand("alice", "secret"));
-
+        assertThat(result.tenantId()).isEqualTo("tenant-a");
         assertThat(result.refreshToken()).isNotBlank();
         assertThat(result.refreshTokenExpiresAt()).isEqualTo(NOW.plusSeconds(7 * 24 * 60 * 60));
-        assertThat(refreshTokenRepository.userId).isEqualTo(1L);
-        assertThat(refreshTokenRepository.refreshToken).isEqualTo(result.refreshToken());
-        assertThat(refreshTokenRepository.expiresAt).isEqualTo(result.refreshTokenExpiresAt());
+        assertThat(refreshTokens.userId).isEqualTo(1L);
+        assertThat(refreshTokens.tenantId).isEqualTo("tenant-a");
+        assertThat(refreshTokens.refreshToken).isEqualTo(result.refreshToken());
+        assertThat(tokenService.loginTenantId).isEqualTo("tenant-a");
     }
 
     @Test
     void shouldRejectInvalidPassword() {
-        KernelAuthService service = new KernelAuthService(new SingleUserRepository(),
-                PasswordHasherPort.plainText(), new FakeTokenService());
+        KernelAuthService service = service(new FakeTokenService(), new InMemoryRefreshTokenRepository());
 
         assertThatThrownBy(() -> service.login(new LoginCommand("alice", "bad")))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("用户名或密码错误");
+                .hasMessage("Invalid username or password");
     }
 
-    private static class FakeTokenService implements TokenServicePort {
-        private String loginId;
+    @Test
+    void shouldRevokeRefreshTokenWhenLoggingOut() {
+        FakeTokenService tokenService = new FakeTokenService();
+        InMemoryRefreshTokenRepository refreshTokens = new InMemoryRefreshTokenRepository();
+        KernelAuthService service = service(tokenService, refreshTokens);
+
+        service.logout(" refresh-current ");
+
+        assertThat(tokenService.loggedOut).isTrue();
+        assertThat(refreshTokens.revokedToken).isEqualTo("refresh-current");
+    }
+
+    private KernelAuthService service(FakeTokenService tokenService,
+                                      InMemoryRefreshTokenRepository refreshTokens) {
+        return new KernelAuthService(
+                new SingleUserRepository(),
+                PasswordHasherPort.plainText(),
+                tokenService,
+                null,
+                refreshTokens,
+                FIXED_CLOCK);
+    }
+
+    private static final class FakeTokenService implements TokenServicePort {
+        private String loginTenantId;
+        private boolean loggedOut;
 
         @Override
         public String login(String userId, String tenantId) {
-            loginId = userId;
+            loginTenantId = tenantId;
             return "token-" + userId;
         }
 
         @Override
         public void logout() {
+            loggedOut = true;
         }
     }
 
-    private static class SingleUserRepository implements UserRepositoryPort {
-        private final UserRecord user = new UserRecord(1L, "alice", "secret", "admin", null, null, null);
+    private static final class SingleUserRepository implements UserRepositoryPort {
+        private final UserRecord user = new UserRecord(
+                1L, "alice", "secret", "admin", null, "tenant-a", null, null);
 
         @Override
         public Optional<UserRecord> findById(Long id) {
@@ -137,25 +151,30 @@ class KernelAuthServiceTests {
         }
     }
 
-    private static class InMemoryRefreshTokenRepository implements RefreshTokenRepositoryPort {
+    private static final class InMemoryRefreshTokenRepository implements RefreshTokenRepositoryPort {
         private Long userId;
+        private String tenantId;
         private String refreshToken;
         private Instant expiresAt;
+        private String revokedToken;
 
         @Override
-        public void save(Long userId, String refreshToken, Instant expiresAt) {
+        public void save(Long userId, String tenantId, String refreshToken, Instant expiresAt) {
             this.userId = userId;
+            this.tenantId = tenantId;
             this.refreshToken = refreshToken;
             this.expiresAt = expiresAt;
         }
 
         @Override
-        public Optional<RefreshTokenRecord> findValid(String refreshToken, Instant now) {
+        public Optional<RefreshTokenRecord> rotate(String refreshToken, String nextRefreshToken,
+                                                   Instant nextExpiresAt, Instant now) {
             return Optional.empty();
         }
 
         @Override
         public void revoke(String refreshToken) {
+            revokedToken = refreshToken;
         }
     }
 }

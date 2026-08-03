@@ -38,7 +38,7 @@ export interface GateResult {
 // ── API 调用 ──
 
 export function triggerProductionGate(agentId: string) {
-  return api.post<ProductionGateReport, ProductionGateReport>(
+  return api.post<ProductionGateReport>(
     `/api/agents/${encodeURIComponent(agentId)}/production-gate`
   );
 }
@@ -50,7 +50,7 @@ export function getLatestProductionGate(agentId: string) {
 }
 
 export function getAgentGateResult(agentId: string) {
-  return api.get<GateResult, GateResult>(
+  return api.get<GateResult>(
     `/api/agents/${encodeURIComponent(agentId)}/production-gate/gate-result`
   );
 }

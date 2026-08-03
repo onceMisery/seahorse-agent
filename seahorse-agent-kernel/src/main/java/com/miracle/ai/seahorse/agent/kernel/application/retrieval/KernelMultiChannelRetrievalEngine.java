@@ -34,7 +34,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsage
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 
@@ -204,11 +206,25 @@ public class KernelMultiChannelRetrievalEngine {
                                                           RetrievalFilter filter,
                                                           RetrievalOptions options,
                                                           TraceRunScope traceRunScope) {
+        return retrieveKnowledgeChannelsWithEvidence(subIntents, topK, filter, options, traceRunScope).chunks();
+    }
+
+    RetrievalChannelBatch retrieveKnowledgeChannelsWithEvidence(List<SubQuestionIntent> subIntents,
+                                                                 int topK,
+                                                                 RetrievalFilter filter,
+                                                                 RetrievalOptions options,
+                                                                 TraceRunScope traceRunScope) {
         SearchContext context = contextFactory.build(subIntents, topK, filter, options, traceRunScope);
         List<SearchChannelResult> channelResults = channelExecutor.execute(context);
         if (channelResults.isEmpty()) {
             observationSupport.recordRetrievalEmpty(context, "channel", "no_enabled_channels", 0, 0);
-            return List.of();
+            return RetrievalChannelBatch.empty();
+        }
+        Map<String, String> failureEvidence = failureEvidence(channelResults);
+        long successfulChannels = channelResults.stream().filter(SearchChannelResult::isSuccessful).count();
+        if (successfulChannels == 0 && !failureEvidence.isEmpty()) {
+            throw new IllegalStateException("All retrieval channels failed: "
+                    + String.join(", ", failureEvidence.keySet()));
         }
         List<RetrievedChunk> chunks = postProcessorChain.execute(channelResults, context);
         if (chunks.isEmpty()) {
@@ -219,7 +235,32 @@ public class KernelMultiChannelRetrievalEngine {
                     channelResults.size(),
                     candidateCount);
         }
-        return chunks;
+        return new RetrievalChannelBatch(chunks, failureEvidence);
+    }
+
+    private Map<String, String> failureEvidence(List<SearchChannelResult> results) {
+        Map<String, String> evidence = new LinkedHashMap<>();
+        for (SearchChannelResult result : results) {
+            if (result == null || result.isSuccessful()) {
+                continue;
+            }
+            String channelName = Objects.requireNonNullElse(result.getChannelName(), "unknown");
+            String failureCode = Objects.requireNonNullElse(result.getFailureCode(), "CHANNEL_FAILED");
+            evidence.put("channel:" + channelName, failureCode);
+        }
+        return Map.copyOf(evidence);
+    }
+
+    record RetrievalChannelBatch(List<RetrievedChunk> chunks, Map<String, String> failureEvidence) {
+
+        RetrievalChannelBatch {
+            chunks = List.copyOf(Objects.requireNonNullElse(chunks, List.of()));
+            failureEvidence = Map.copyOf(Objects.requireNonNullElse(failureEvidence, Map.of()));
+        }
+
+        static RetrievalChannelBatch empty() {
+            return new RetrievalChannelBatch(List.of(), Map.of());
+        }
     }
 
 }

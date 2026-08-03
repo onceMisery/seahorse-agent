@@ -50,7 +50,6 @@ import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.dashboard.DashboardInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.MessageFeedbackInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionTaskInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.intent.IntentTreeInboundPort;
@@ -227,7 +226,7 @@ class SeahorseWebApiContractTests {
         when(userPort.create(any())).thenReturn(2L);
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseAuthController(provider(AuthInboundPort.class, authPort)),
+                new SeahorseAuthController(authPort, null),
                 new SeahorseUserController(provider(UserInboundPort.class, userPort))).build();
 
         mvc.perform(post("/auth/login")
@@ -618,12 +617,10 @@ class SeahorseWebApiContractTests {
         when(conversationPort.listMessages(eq("c1"), any())).thenReturn(List.of(conversationMessage("m1")));
 
         MessageFeedbackInboundPort feedbackPort = mock(MessageFeedbackInboundPort.class);
-        FeedbackEvaluationCandidateQueryInboundPort queryInboundPort = mock(FeedbackEvaluationCandidateQueryInboundPort.class);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseDashboardController(provider(DashboardInboundPort.class, dashboardPort)),
                 new SeahorseConversationController(provider(ConversationManagementInboundPort.class, conversationPort)),
-                new SeahorseMessageFeedbackController(provider(MessageFeedbackInboundPort.class, feedbackPort),
-                        provider(FeedbackEvaluationCandidateQueryInboundPort.class, queryInboundPort))).build();
+                new SeahorseMessageFeedbackController(provider(MessageFeedbackInboundPort.class, feedbackPort))).build();
 
         mvc.perform(get("/admin/dashboard/overview").param("window", "24h"))
                 .andExpect(status().isOk())

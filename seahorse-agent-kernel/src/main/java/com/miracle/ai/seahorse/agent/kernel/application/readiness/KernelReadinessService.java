@@ -48,9 +48,19 @@ public class KernelReadinessService implements ReadinessInboundPort {
     }
 
     private List<ReadinessCheck> runAllChecks() {
-        Map<String, ComponentStatus> components = probePort.probeComponents();
-        Map<String, String> adapterTypes = probePort.adapterTypes();
         List<ReadinessCheck> checks = new ArrayList<>();
+        Map<String, ComponentStatus> components;
+        Map<String, String> adapterTypes;
+        try {
+            components = Objects.requireNonNull(probePort.probeComponents(), "probeComponents result");
+            adapterTypes = Objects.requireNonNull(probePort.adapterTypes(), "adapterTypes result");
+        } catch (RuntimeException ex) {
+            checks.add(checkAppBoot());
+            checks.add(ReadinessCheck.failed("readiness.probe", "基础设施探针", Severity.ERROR,
+                    safeFailureMessage(ex), "无法可靠判断核心依赖状态，系统不得进入可用状态",
+                    "检查基础设施探针及其依赖连接", ""));
+            return checks;
+        }
 
         checks.add(checkAppBoot());
         checks.add(checkDatabase(components));
@@ -138,7 +148,7 @@ public class KernelReadinessService implements ReadinessInboundPort {
             return ReadinessCheck.passed("feature.flags", "前后端能力开关一致性", Severity.WARN,
                     "产品模式有效: " + productMode + "，能力开关由后端统一生成");
         }
-        return ReadinessCheck.failed("feature.flags", "前后端能力开关一致性", Severity.WARN,
+        return ReadinessCheck.failed("feature.flags", "前后端能力开关一致性", Severity.ERROR,
                 "未识别的产品模式: " + productMode,
                 "前端可能显示与后端实际能力不一致的入口",
                 "将 seahorse-agent.product-mode 设置为 demo / rag / enterprise 之一",
@@ -165,7 +175,7 @@ public class KernelReadinessService implements ReadinessInboundPort {
     private ReadinessCheck checkEmbeddingModel(Map<String, ComponentStatus> components) {
         Severity severity = isDemo() ? Severity.WARN : Severity.ERROR;
         ComponentStatus embedding = components.get("embedding-model");
-        if (embedding != null && embedding.available()) {
+        if (embedding != null && embedding.available() && !isNoop(embedding.adapterType())) {
             return ReadinessCheck.passed("model.embedding", "Embedding 模型", severity,
                     "Embedding 模型可用: " + embedding.adapterType());
         }
@@ -188,12 +198,12 @@ public class KernelReadinessService implements ReadinessInboundPort {
         Severity severity = isDemo() ? Severity.WARN : Severity.ERROR;
         ComponentStatus vector = components.get("vector-store");
         String type = adapterTypes.getOrDefault("vector-store", "unknown");
-        if (vector != null && vector.available()) {
+        if (vector != null && vector.available() && !isNoop(type)) {
             return ReadinessCheck.passed("vector.store", "向量存储", severity,
                     "向量存储可用: " + type);
         }
         if ("noop".equals(type)) {
-            return ReadinessCheck.failed("vector.store", "向量存储", Severity.WARN,
+            return ReadinessCheck.failed("vector.store", "向量存储", severity,
                     "向量存储使用 NoOp 适配器",
                     "语义检索不可用，将降级为关键词检索",
                     "配置 Milvus 或 PgVector 以启用语义检索",
@@ -208,10 +218,10 @@ public class KernelReadinessService implements ReadinessInboundPort {
 
     private ReadinessCheck checkKeywordSearch(Map<String, ComponentStatus> components,
                                               Map<String, String> adapterTypes) {
-        Severity severity = isDemo() ? Severity.INFO : Severity.WARN;
+        Severity severity = isDemo() ? Severity.INFO : Severity.ERROR;
         ComponentStatus keyword = components.get("keyword-search");
         String type = adapterTypes.getOrDefault("keyword-search", "unknown");
-        if (keyword != null && keyword.available()) {
+        if (keyword != null && keyword.available() && !isNoop(type)) {
             return ReadinessCheck.passed("search.keyword", "关键词搜索", severity,
                     "关键词搜索可用: " + type);
         }
@@ -226,7 +236,7 @@ public class KernelReadinessService implements ReadinessInboundPort {
                                       Map<String, String> adapterTypes) {
         String type = adapterTypes.getOrDefault("cache", "unknown");
         ComponentStatus cache = components.get("cache");
-        if (cache != null && cache.available()) {
+        if (cache != null && cache.available() && !isNoop(type)) {
             return ReadinessCheck.passed("cache", "缓存", Severity.INFO,
                     "缓存可用: " + type);
         }
@@ -277,7 +287,7 @@ public class KernelReadinessService implements ReadinessInboundPort {
                                         Map<String, String> adapterTypes) {
         String type = adapterTypes.getOrDefault("storage", "unknown");
         ComponentStatus storage = components.get("storage");
-        if (storage != null && storage.available()) {
+        if (storage != null && storage.available() && !isNoop(type)) {
             return ReadinessCheck.passed("storage", "对象存储", Severity.INFO,
                     "对象存储可用: " + type);
         }
@@ -302,5 +312,14 @@ public class KernelReadinessService implements ReadinessInboundPort {
 
     private boolean isEnterprise() {
         return "ENTERPRISE".equalsIgnoreCase(productMode);
+    }
+
+    private static boolean isNoop(String adapterType) {
+        return "noop".equalsIgnoreCase(adapterType);
+    }
+
+    private static String safeFailureMessage(Throwable error) {
+        String message = error.getMessage();
+        return message == null || message.isBlank() ? error.getClass().getSimpleName() : message;
     }
 }

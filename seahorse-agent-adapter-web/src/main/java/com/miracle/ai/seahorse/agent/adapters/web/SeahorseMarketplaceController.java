@@ -17,7 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
-import com.miracle.ai.seahorse.agent.kernel.application.agent.marketplace.KernelAgentMarketplaceService;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentMarketplaceInboundPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.marketplace.AgentPublishReview;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.marketplace.AgentRating;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.marketplace.AgentSubscription;
@@ -43,11 +43,11 @@ import java.util.List;
 @RestController
 public class SeahorseMarketplaceController {
 
-    private final ObjectProvider<KernelAgentMarketplaceService> marketplaceServiceProvider;
+    private final ObjectProvider<AgentMarketplaceInboundPort> marketplaceServiceProvider;
     private final ObjectProvider<AgentCatalogQueryPort> catalogQueryPortProvider;
     private final CurrentUserPort currentUserPort;
 
-    public SeahorseMarketplaceController(ObjectProvider<KernelAgentMarketplaceService> marketplaceServiceProvider,
+    public SeahorseMarketplaceController(ObjectProvider<AgentMarketplaceInboundPort> marketplaceServiceProvider,
                                          ObjectProvider<AgentCatalogQueryPort> catalogQueryPortProvider,
                                          CurrentUserPort currentUserPort) {
         this.marketplaceServiceProvider = marketplaceServiceProvider;

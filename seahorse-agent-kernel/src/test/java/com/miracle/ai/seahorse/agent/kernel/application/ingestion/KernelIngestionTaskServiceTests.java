@@ -110,6 +110,51 @@ class KernelIngestionTaskServiceTests {
     }
 
     @Test
+    void shouldTreatRepeatedRollbackAsIdempotent() {
+        FakeTaskRepository taskRepository = new FakeTaskRepository();
+        IngestionTaskRecord original = task("task-1", "rolled_back");
+        original.setMetadata(Map.of("kbId", 123L, "docId", 456L));
+        taskRepository.records.put("task-1", original);
+        CapturingCompensationPort compensationPort = new CapturingCompensationPort();
+        KernelIngestionTaskService service = new KernelIngestionTaskService(
+                new CapturingIngestionEngine(),
+                new FakePipelineRepository(PipelineDefinition.builder().id("pipeline-1").build()),
+                taskRepository,
+                compensationPort);
+
+        IngestionTaskRollbackResult result = service.rollback("task-1", "operator-1");
+
+        assertEquals("rolled_back", result.status());
+        assertTrue(compensationPort.targets.isEmpty());
+        assertTrue(taskRepository.updatedValues.isEmpty());
+    }
+
+    @Test
+    void shouldMarkTaskUnknownWhenCompletionPersistenceFails() {
+        FakeTaskRepository taskRepository = new FakeTaskRepository();
+        taskRepository.completeFailure = new IllegalStateException("node log insert failed");
+        KernelIngestionTaskService service = new KernelIngestionTaskService(
+                new CapturingIngestionEngine(),
+                new FakePipelineRepository(PipelineDefinition.builder()
+                        .id("pipeline-1")
+                        .nodes(List.of(NodeConfig.builder().nodeId("fetch").nodeType("fetch").build()))
+                        .build()),
+                taskRepository);
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> service.execute(
+                new IngestionTaskCreateCommand(
+                        "pipeline-1",
+                        new IngestionDocumentSource("text", "content", "source.txt", Map.of()),
+                        Map.of(),
+                        null,
+                        "operator-1")));
+
+        assertEquals("node log insert failed", failure.getMessage());
+        assertEquals("unknown", taskRepository.updatedValues.get(0).status());
+        assertTrue(taskRepository.updatedValues.get(0).errorMessage().contains("completion persistence failed"));
+    }
+
+    @Test
     void shouldReplayFailedTaskWithOriginalSourceAndRetryEvidence() {
         CapturingIngestionEngine engine = new CapturingIngestionEngine();
         FakePipelineRepository pipelineRepository = new FakePipelineRepository(PipelineDefinition.builder()
@@ -337,6 +382,7 @@ class KernelIngestionTaskServiceTests {
         private final List<IngestionTaskCreateValues> createdValues = new ArrayList<>();
         private final List<IngestionTaskUpdateValues> updatedValues = new ArrayList<>();
         private final List<List<IngestionTaskNodeValues>> replacedNodes = new ArrayList<>();
+        private RuntimeException completeFailure;
 
         @Override
         public String createRunningTask(IngestionTaskCreateValues values) {
@@ -352,6 +398,16 @@ class KernelIngestionTaskServiceTests {
         @Override
         public void replaceNodeLogs(String taskId, List<IngestionTaskNodeValues> nodes) {
             replacedNodes.add(nodes);
+        }
+
+        @Override
+        public void completeTask(String taskId,
+                                 IngestionTaskUpdateValues values,
+                                 List<IngestionTaskNodeValues> nodes) {
+            if (completeFailure != null) {
+                throw completeFailure;
+            }
+            IngestionTaskRepositoryPort.super.completeTask(taskId, values, nodes);
         }
 
         @Override

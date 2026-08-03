@@ -45,22 +45,22 @@ export interface CreateFromTemplatePayload {
 // ── API 调用 ──
 
 export function listAgentTemplates() {
-  return api.get<AgentTemplate[], AgentTemplate[]>("/api/agent-templates");
+  return api.get<AgentTemplate[]>("/api/agent-templates");
 }
 
 export function createAgentFromTemplate(payload: CreateFromTemplatePayload) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     "/api/agents/from-template",
     payload
   );
 }
 
 export function getAgentCatalog() {
-  return api.get<AgentCatalogItem[], AgentCatalogItem[]>("/api/agent-catalog");
+  return api.get<AgentCatalogItem[]>("/api/agent-catalog");
 }
 
 export function validateAgentFromFactory(agentId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/agents/${encodeURIComponent(agentId)}/validate`
   );
 }

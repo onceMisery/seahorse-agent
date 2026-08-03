@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { CodeEditor } from "@/components/ai-elements/renderer/CodeEditor";
 import { InspectorEmptyState } from "@/components/chat/workbench/InspectorEmptyState";
 import { A2UILiteRenderer } from "@/components/a2ui-lite/A2UILiteRenderer";
-import type { A2UILiteAction, A2UILiteSurface } from "@/components/a2ui-lite/a2uiTypes";
+import type { A2UILiteSurface } from "@/components/a2ui-lite/a2uiTypes";
 import { downloadAgentArtifact, updateAgentArtifact } from "@/services/agentArtifactService";
 import { AGENT_ARTIFACT_SCAN_STATUS, type AgentArtifact, type ArtifactBlock } from "@/types";
 
@@ -54,7 +54,7 @@ function mergeArtifacts(artifacts: ArtifactBlock[], serverArtifacts: AgentArtifa
   return items;
 }
 
-export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose: _onClose }: ArtifactInspectorTabProps) {
+export function ArtifactInspectorTab({ artifacts, serverArtifacts = [] }: ArtifactInspectorTabProps) {
   const [liveServerArtifacts, setLiveServerArtifacts] = React.useState<AgentArtifact[]>(serverArtifacts);
   const [selectedId, setSelectedId] = React.useState<string>("");
   const [copied, setCopied] = React.useState(false);
@@ -337,7 +337,7 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
             ) : a2uiSurface ? (
               <A2UILiteRenderer
                 surface={a2uiSurface}
-                onAction={(_action: A2UILiteAction) => undefined}
+                onAction={() => undefined}
               />
             ) : isHtml ? (
               <iframe

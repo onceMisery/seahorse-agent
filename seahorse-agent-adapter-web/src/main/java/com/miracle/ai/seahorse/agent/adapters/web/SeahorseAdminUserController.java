@@ -17,7 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
-import com.miracle.ai.seahorse.agent.kernel.application.admin.KernelAdminTenantService;
+import com.miracle.ai.seahorse.agent.ports.inbound.admin.AdminUserInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.springframework.beans.factory.ObjectProvider;
@@ -42,10 +42,10 @@ import java.util.Map;
 @RequestMapping("/api/admin/users")
 public class SeahorseAdminUserController {
 
-    private final ObjectProvider<KernelAdminTenantService> adminServiceProvider;
+    private final ObjectProvider<AdminUserInboundPort> adminServiceProvider;
     private final CurrentUserPort currentUserPort;
 
-    public SeahorseAdminUserController(ObjectProvider<KernelAdminTenantService> adminServiceProvider,
+    public SeahorseAdminUserController(ObjectProvider<AdminUserInboundPort> adminServiceProvider,
                                        CurrentUserPort currentUserPort) {
         this.adminServiceProvider = adminServiceProvider;
         this.currentUserPort = currentUserPort;
@@ -56,7 +56,7 @@ public class SeahorseAdminUserController {
      */
     @PutMapping("/{userId}/ban")
     public ApiResponse<Object> banUser(@PathVariable Long userId) {
-        KernelAdminTenantService service = requireService();
+        AdminUserInboundPort service = requireService();
         CurrentUser operator = currentUserPort.requireCurrentUser();
         String tenantId = operator.effectiveTenantId();
         service.banUser(tenantId, userId, operator.operator());
@@ -69,7 +69,7 @@ public class SeahorseAdminUserController {
     @PutMapping("/{userId}/reset-password")
     public ApiResponse<Object> resetPassword(@PathVariable Long userId,
                                              @RequestBody(required = false) Map<String, String> body) {
-        KernelAdminTenantService service = requireService();
+        AdminUserInboundPort service = requireService();
         CurrentUser operator = currentUserPort.requireCurrentUser();
         String tenantId = operator.effectiveTenantId();
 
@@ -87,15 +87,15 @@ public class SeahorseAdminUserController {
      */
     @PostMapping("/{userId}/force-logout")
     public ApiResponse<Object> forceLogout(@PathVariable Long userId) {
-        KernelAdminTenantService service = requireService();
+        AdminUserInboundPort service = requireService();
         CurrentUser operator = currentUserPort.requireCurrentUser();
         String tenantId = operator.effectiveTenantId();
         service.forceLogout(tenantId, userId, operator.operator());
         return ApiResponse.ok(Map.of("userId", userId, "status", "LOGGED_OUT"));
     }
 
-    private KernelAdminTenantService requireService() {
-        KernelAdminTenantService service = adminServiceProvider.getIfAvailable();
+    private AdminUserInboundPort requireService() {
+        AdminUserInboundPort service = adminServiceProvider.getIfAvailable();
         if (service == null) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Admin service not available");
         }

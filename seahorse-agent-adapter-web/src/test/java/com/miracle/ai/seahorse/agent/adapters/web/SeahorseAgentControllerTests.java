@@ -76,10 +76,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.credential.SecretMetadata;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionUpdateDraftCommand;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunMessageSnapshot;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshot;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshotInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
@@ -90,11 +89,9 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalDecisionCommand
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalModifyCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AccessDecisionQueryInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackDiffInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackDiffResult;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackRetentionCleanupResult;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackRetentionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ConnectorCredentialBindingCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ConnectorImportResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ConnectorOperationDisableCommand;
@@ -244,9 +241,8 @@ class SeahorseAgentControllerTests {
     @Test
     void shouldExposeAgentRunApi() throws Exception {
         AgentRunInboundPort port = mock(AgentRunInboundPort.class);
-        AgentRunResumeInboundPort resumePort = mock(AgentRunResumeInboundPort.class);
-        AgentCheckpointQueryInboundPort checkpointPort = mock(AgentCheckpointQueryInboundPort.class);
-        AgentRunSnapshotInboundPort snapshotPort = mock(AgentRunSnapshotInboundPort.class);
+        AgentRunQueryInboundPort resumePort = mock(AgentRunQueryInboundPort.class);
+                AgentRunSnapshotInboundPort snapshotPort = mock(AgentRunSnapshotInboundPort.class);
         AgentRunEventBufferPort eventBufferPort = mock(AgentRunEventBufferPort.class);
         AgentRun run = run(AgentRunStatus.RUNNING);
         when(port.startRun(any())).thenReturn(run);
@@ -255,7 +251,7 @@ class SeahorseAgentControllerTests {
         when(port.listSteps("run-1")).thenReturn(List.of(step()));
         when(port.cancel("run-1")).thenReturn(run(AgentRunStatus.CANCELLED));
         when(resumePort.resume("run-1")).thenReturn(run(AgentRunStatus.SUCCEEDED));
-        when(checkpointPort.listByRunId("run-1")).thenReturn(List.of(checkpoint()));
+        when(resumePort.listByRunId("run-1")).thenReturn(List.of(checkpoint()));
         when(snapshotPort.getSnapshot("run-1")).thenReturn(snapshot());
         when(eventBufferPort.getAfter("run-1", 10L)).thenReturn(List.of(
                 StreamEventEnvelope.of(11L, StreamEventType.AGENT_ARTIFACT, "run-1",
@@ -263,14 +259,12 @@ class SeahorseAgentControllerTests {
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseAgentRunController(
-                        provider(AgentRunInboundPort.class, port),
-                        provider(AgentRunResumeInboundPort.class, resumePort),
-                        provider(AgentCheckpointQueryInboundPort.class, checkpointPort),
-                        provider(AgentRunSnapshotInboundPort.class, snapshotPort),
-                        null,
-                        null,
-                        provider(AgentRunEventBufferPort.class, eventBufferPort),
-                        provider(AdvancedFeatureGate.class, AdvancedFeatureGate.allEnabledForTests()))).build();
+                                provider(AgentRunInboundPort.class, port),
+                                provider(AgentRunQueryInboundPort.class, resumePort),
+                                provider(AgentRunSnapshotInboundPort.class, snapshotPort),
+                                null,
+                                provider(AgentRunEventBufferPort.class, eventBufferPort),
+                                provider(AdvancedFeatureGate.class, AdvancedFeatureGate.allEnabledForTests()))).build();
 
         mvc.perform(post("/agents/agent-1/runs")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -334,7 +328,7 @@ class SeahorseAgentControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].checkpointId").value("checkpoint-1"))
                 .andExpect(jsonPath("$.data[0].checkpointType").value("WAITING_APPROVAL"));
-        verify(checkpointPort).listByRunId("run-1");
+        verify(resumePort).listByRunId("run-1");
 
         mvc.perform(get("/api/agent-runs/run-1/snapshot"))
                 .andExpect(status().isOk())
@@ -364,11 +358,8 @@ class SeahorseAgentControllerTests {
                                 null,
                                 null,
                                 null,
-                                null,
-                                null,
                                 provider(AgentRunEventBufferPort.class, eventBufferPort),
-                                provider(AdvancedFeatureGate.class, AdvancedFeatureGate.allEnabledForTests())))
-                .setControllerAdvice(new SeahorseWebExceptionHandler())
+                                provider(AdvancedFeatureGate.class, AdvancedFeatureGate.allEnabledForTests()))).setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
         mvc.perform(get("/agent-runs/run-1/events")
@@ -383,22 +374,18 @@ class SeahorseAgentControllerTests {
     @Test
     void consumerWebModeShouldRejectRunManagementApiVariantsExceptSnapshot() throws Exception {
         AgentRunInboundPort port = mock(AgentRunInboundPort.class);
-        AgentRunResumeInboundPort resumePort = mock(AgentRunResumeInboundPort.class);
-        AgentCheckpointQueryInboundPort checkpointPort = mock(AgentCheckpointQueryInboundPort.class);
-        AgentRunSnapshotInboundPort snapshotPort = mock(AgentRunSnapshotInboundPort.class);
+        AgentRunQueryInboundPort resumePort = mock(AgentRunQueryInboundPort.class);
+                AgentRunSnapshotInboundPort snapshotPort = mock(AgentRunSnapshotInboundPort.class);
         when(snapshotPort.getSnapshot("run-1")).thenReturn(snapshot());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseAgentRunController(
                                 provider(AgentRunInboundPort.class, port),
-                                provider(AgentRunResumeInboundPort.class, resumePort),
-                                provider(AgentCheckpointQueryInboundPort.class, checkpointPort),
+                                provider(AgentRunQueryInboundPort.class, resumePort),
                                 provider(AgentRunSnapshotInboundPort.class, snapshotPort),
                                 null,
                                 null,
-                                null,
-                                provider(AdvancedFeatureGate.class, AdvancedFeatureGate.demoDefaults())))
-                .setControllerAdvice(new SeahorseWebExceptionHandler())
+                                provider(AdvancedFeatureGate.class, AdvancedFeatureGate.demoDefaults()))).setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
         mvc.perform(post("/api/agent-runs/run-1/retry"))
@@ -421,7 +408,7 @@ class SeahorseAgentControllerTests {
                 .andExpect(jsonPath("$.data.run.runId").value("run-1"));
 
         verify(snapshotPort).getSnapshot("run-1");
-        verifyNoInteractions(port, resumePort, checkpointPort);
+        verifyNoInteractions(port, resumePort);
     }
 
     @Test
@@ -434,10 +421,7 @@ class SeahorseAgentControllerTests {
                                 null,
                                 null,
                                 null,
-                                null,
-                                null,
-                                null))
-                .setControllerAdvice(new SeahorseWebExceptionHandler())
+                                provider(AdvancedFeatureGate.class, AdvancedFeatureGate.demoDefaults()))).setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
         mvc.perform(post("/agents/agent-1/runs")
@@ -467,12 +451,7 @@ class SeahorseAgentControllerTests {
                                 null,
                                 null,
                                 null,
-                                null,
-                                null,
-                                provider(AdvancedFeatureGate.class, AdvancedFeatureGate.configured(
-                                        ProductMode.ENTERPRISE,
-                                        Map.of(AdvancedFeature.AGENT_RUN_MANAGEMENT, true)))))
-                .setControllerAdvice(new SeahorseWebExceptionHandler())
+                                provider(AdvancedFeatureGate.class, AdvancedFeatureGate.configured(ProductMode.ENTERPRISE, Map.of(AdvancedFeature.AGENT_RUN_MANAGEMENT, true))))).setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
         mvc.perform(post("/agents/agent-1/runs")
@@ -1102,22 +1081,18 @@ class SeahorseAgentControllerTests {
 
     @Test
     void shouldExposeContextPackQueryApi() throws Exception {
-        ContextPackQueryInboundPort port = mock(ContextPackQueryInboundPort.class);
-        ContextPackRetentionInboundPort retentionPort = mock(ContextPackRetentionInboundPort.class);
-        ContextPackDiffInboundPort diffPort = mock(ContextPackDiffInboundPort.class);
+        ContextPackInboundPort port = mock(ContextPackInboundPort.class);
         when(port.findById("context-pack-1")).thenReturn(Optional.of(contextPack()));
         when(port.listItems("context-pack-1")).thenReturn(List.of(contextItem()));
-        when(retentionPort.cleanupExpiredItems("context-pack-1")).thenReturn(
+        when(port.cleanupExpiredItems("context-pack-1")).thenReturn(
                 new ContextPackRetentionCleanupResult("context-pack-1", NOW, 2));
-        when(diffPort.diff("context-pack-1", "context-pack-2")).thenReturn(
+        when(port.diff("context-pack-1", "context-pack-2")).thenReturn(
                 new ContextPackDiffResult("context-pack-1", "context-pack-2", 1, 0, 1, 2,
                         List.of(), List.of(), List.of()));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseContextPackController(
-                        provider(ContextPackQueryInboundPort.class, port),
-                        provider(ContextPackRetentionInboundPort.class, retentionPort),
-                        provider(ContextPackDiffInboundPort.class, diffPort))).build();
+                        provider(ContextPackInboundPort.class, port))).build();
 
         mvc.perform(get("/api/context-packs/context-pack-1"))
                 .andExpect(status().isOk())
@@ -1147,8 +1122,8 @@ class SeahorseAgentControllerTests {
 
         verify(port).findById("context-pack-1");
         verify(port).listItems("context-pack-1");
-        verify(retentionPort).cleanupExpiredItems("context-pack-1");
-        verify(diffPort).diff("context-pack-1", "context-pack-2");
+        verify(port).cleanupExpiredItems("context-pack-1");
+        verify(port).diff("context-pack-1", "context-pack-2");
     }
 
     @Test

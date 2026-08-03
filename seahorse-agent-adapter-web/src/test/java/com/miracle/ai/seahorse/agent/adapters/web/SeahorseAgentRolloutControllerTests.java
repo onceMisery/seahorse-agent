@@ -24,7 +24,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.rollout.AgentRolloutSta
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.rollout.AgentVersionRollout;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutActionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutCreateCommand;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutCostSummaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutRollbackCommand;
 import org.junit.jupiter.api.Test;
@@ -152,8 +151,7 @@ class SeahorseAgentRolloutControllerTests {
     @Test
     void shouldExposeRolloutCostSummary() throws Exception {
         AgentRolloutInboundPort rolloutPort = mock(AgentRolloutInboundPort.class);
-        AgentRolloutCostSummaryInboundPort costSummaryPort = mock(AgentRolloutCostSummaryInboundPort.class);
-        when(costSummaryPort.getCostSummary("tenant-a", "agent-1", "rollout-1"))
+        when(rolloutPort.getCostSummary("tenant-a", "agent-1", "rollout-1"))
                 .thenReturn(new AgentRolloutCostSummary(
                         "rollout-1",
                         "tenant-a",
@@ -178,8 +176,7 @@ class SeahorseAgentRolloutControllerTests {
                         4L));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseAgentRolloutController(
-                        provider(AgentRolloutInboundPort.class, rolloutPort),
-                        provider(AgentRolloutCostSummaryInboundPort.class, costSummaryPort))).build();
+                        provider(AgentRolloutInboundPort.class, rolloutPort))).build();
 
         mvc.perform(get("/api/agents/agent-1/rollouts/rollout-1/cost-summary")
                         .param("tenantId", "tenant-a"))
@@ -198,7 +195,7 @@ class SeahorseAgentRolloutControllerTests {
                 .andExpect(jsonPath("$.data.pendingApprovalCount").value(4))
                 .andExpect(jsonPath("$.data.runStatusCounts.SUCCEEDED").value(7));
 
-        verify(costSummaryPort).getCostSummary("tenant-a", "agent-1", "rollout-1");
+        verify(rolloutPort).getCostSummary("tenant-a", "agent-1", "rollout-1");
     }
 
     private static AgentVersionRollout rollout(String rolloutId,

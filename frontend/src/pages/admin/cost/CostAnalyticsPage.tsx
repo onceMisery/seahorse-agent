@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -22,14 +22,19 @@ export function CostAnalyticsPage() {
   const [tenantId, setTenantId] = useState(DEFAULT_TENANT_ID);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [appliedFilters, setAppliedFilters] = useState({
+    tenantId: DEFAULT_TENANT_ID,
+    startTime: "",
+    endTime: ""
+  });
 
-  const loadAggregate = async () => {
+  const loadAggregate = useCallback(async () => {
     try {
       setLoading(true);
       const data = await aggregateCostUsage({
-        tenantId: tenantId || undefined,
-        startTime: startTime || undefined,
-        endTime: endTime || undefined,
+        tenantId: appliedFilters.tenantId || undefined,
+        startTime: appliedFilters.startTime || undefined,
+        endTime: appliedFilters.endTime || undefined,
         groupBy
       });
       setAggregate(data);
@@ -39,11 +44,11 @@ export function CostAnalyticsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [appliedFilters, groupBy]);
 
   useEffect(() => {
     if (featureState.enabled) loadAggregate();
-  }, [featureState.enabled, groupBy]);
+  }, [featureState.enabled, loadAggregate]);
 
   if (!featureState.enabled) {
     return <FeatureUnavailableState featureState={featureState} featureName="成本分析" />;
@@ -85,7 +90,11 @@ export function CostAnalyticsPage() {
               <label className="text-sm font-medium">结束时间</label>
               <Input type="datetime-local" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-[200px]" />
             </div>
-            <Button variant="outline" onClick={loadAggregate} disabled={loading}>
+            <Button
+              variant="outline"
+              onClick={() => setAppliedFilters({ tenantId: tenantId.trim(), startTime, endTime })}
+              disabled={loading}
+            >
               <RefreshCw className="w-4 h-4 mr-1" />
               {loading ? "加载中..." : "查询"}
             </Button>

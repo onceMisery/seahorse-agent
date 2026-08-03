@@ -20,11 +20,9 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.context;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackDiffEntry;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackDiffInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackDiffResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackRetentionCleanupResult;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackRetentionInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ContextPackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
@@ -39,8 +37,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-public class KernelContextPackQueryService implements ContextPackQueryInboundPort, ContextPackRetentionInboundPort,
-        ContextPackDiffInboundPort {
+public class KernelContextPackQueryService implements ContextPackInboundPort {
 
     private static final String ADMIN_ROLE = "admin";
     private static final String CONTEXT_PACK_FORBIDDEN_MESSAGE = "Context pack access denied";

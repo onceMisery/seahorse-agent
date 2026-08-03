@@ -109,35 +109,6 @@ export const SkillTrigger = React.forwardRef<SkillTriggerHandle, SkillTriggerPro
     return () => el.removeEventListener("input", handleInput);
   }, [textareaRef, ensureSkillsLoaded]);
 
-  /* ─── 键盘导航 ─── */
-  React.useEffect(() => {
-    if (!inlineTrigger) return;
-    const el = textareaRef.current;
-    if (!el) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!filteredSkills.length) return;
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setActiveIndex((prev) => (prev + 1) % filteredSkills.length);
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setActiveIndex((prev) => (prev - 1 + filteredSkills.length) % filteredSkills.length);
-      } else if (e.key === "Enter" || e.key === "Tab") {
-        if (filteredSkills[activeIndex]) {
-          e.preventDefault();
-          e.stopPropagation();
-          selectSkill(filteredSkills[activeIndex]);
-        }
-      } else if (e.key === "Escape") {
-        setInlineTrigger(null);
-      }
-    };
-
-    el.addEventListener("keydown", handleKeyDown, true);
-    return () => el.removeEventListener("keydown", handleKeyDown, true);
-  }, [inlineTrigger, filteredSkills, activeIndex, textareaRef]);
-
   /* ─── 选择技能 ─── */
   const selectSkill = React.useCallback(
     (skill: AgentSkill) => {
@@ -178,6 +149,35 @@ export const SkillTrigger = React.forwardRef<SkillTriggerHandle, SkillTriggerPro
     },
     [value, onChange, textareaRef, inlineTrigger, onSelectSkill]
   );
+
+  /* ─── 键盘导航 ─── */
+  React.useEffect(() => {
+    if (!inlineTrigger) return;
+    const el = textareaRef.current;
+    if (!el) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!filteredSkills.length) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveIndex((prev) => (prev + 1) % filteredSkills.length);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveIndex((prev) => (prev - 1 + filteredSkills.length) % filteredSkills.length);
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        if (filteredSkills[activeIndex]) {
+          e.preventDefault();
+          e.stopPropagation();
+          selectSkill(filteredSkills[activeIndex]);
+        }
+      } else if (e.key === "Escape") {
+        setInlineTrigger(null);
+      }
+    };
+
+    el.addEventListener("keydown", handleKeyDown, true);
+    return () => el.removeEventListener("keydown", handleKeyDown, true);
+  }, [inlineTrigger, filteredSkills, activeIndex, textareaRef, selectSkill]);
 
   /* ─── 打开技能选择弹窗 ─── */
   const openPicker = React.useCallback(() => {

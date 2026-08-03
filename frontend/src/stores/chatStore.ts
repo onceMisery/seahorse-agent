@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import { toast } from "sonner";
 
 import {
+  type ArtifactBlock,
   type AgentTimelineItem,
   type MemoryConflictPrompt,
   type MemoryConflictPromptOption,
@@ -376,6 +377,19 @@ export const useChatStore = create<ChatState>()(
         });
       };
 
+      const markCancelled = () => {
+        buffer.flushImmediate();
+        set((state) => {
+          const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
+          if (msg) {
+            msg.status = "cancelled";
+            msg.isThinking = false;
+            msg.thinkingDuration = computeThinkingDuration(msg.thinkingStartAt);
+            completeLocalStreamTimeline(msg, "CANCELLED");
+          }
+        });
+      };
+
       const markError = (errorText: string) => {
         buffer.flushImmediate();
         set((state) => {
@@ -426,7 +440,7 @@ export const useChatStore = create<ChatState>()(
         },
         onFinish: () => { markDone(); },
         onDone: () => { markDone(); },
-        onCancel: () => { markDone(); },
+        onCancel: () => { markCancelled(); },
         onStreamEvent: (envelope) => {
           set((state) => {
             const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
@@ -454,7 +468,7 @@ export const useChatStore = create<ChatState>()(
         await stream.start();
       } catch (error) {
         if (get().cancelRequested || isAbortError(error)) {
-          markDone();
+          markCancelled();
         } else {
           console.error("Stream error:", error);
           markError(error instanceof Error ? error.message : "对话失败");
@@ -788,7 +802,11 @@ function mergeArtifactsById(current: Message["artifacts"], incoming: Message["ar
       isComplete: item.isComplete
     });
   }
-  return Array.from(map.values()).map(({ append, ...item }) => item);
+  return Array.from(map.values()).map((artifact) => {
+    const item: ArtifactBlock = { ...artifact };
+    delete item.append;
+    return item;
+  });
 }
 
 async function loadConversationMessages(sessionId: string): Promise<Message[]> {
@@ -891,7 +909,7 @@ function chatModeForTaskTemplate(taskTemplateId?: TaskTemplateId): string | unde
 async function hydrateSelectedSessionAgentRuns(
   sessionId: string,
   messages: Message[],
-  set: Parameters<typeof useChatStore.setState>[0]
+  set: typeof useChatStore.setState
 ): Promise<void> {
   const targets = messages.filter((message) =>
     message.role === "assistant" && Boolean(message.agentRunId)

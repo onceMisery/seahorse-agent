@@ -166,14 +166,14 @@ export function getDataset(kbId: string, datasetId: string) {
 }
 
 export function createDataset(kbId: string, payload: { name?: string; description?: string }) {
-  return api.post<RetrievalEvaluationDataset, RetrievalEvaluationDataset>(
+  return api.post<RetrievalEvaluationDataset>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-evaluation-datasets`,
     payload
   );
 }
 
 export function updateDataset(kbId: string, datasetId: string, payload: { name?: string; description?: string }) {
-  return api.put<RetrievalEvaluationDataset, RetrievalEvaluationDataset>(
+  return api.put<RetrievalEvaluationDataset>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-evaluation-datasets/${encodeURIComponent(datasetId)}`,
     payload
   );
@@ -213,7 +213,7 @@ export async function importDatasetSamples(kbId: string, datasetId: string, file
     throw new Error("文件格式无效：需要包含评测样本数组");
   }
   // 使用批量导入端点（如后端已实现）
-  return api.post<number, number>(
+  return api.post<number>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-evaluation-datasets/${encodeURIComponent(datasetId)}/samples/import`,
     samples
   );
@@ -221,14 +221,14 @@ export async function importDatasetSamples(kbId: string, datasetId: string, file
 
 // 评测与对比
 export function evaluateDataset(kbId: string, datasetId: string, payload: DatasetEvaluatePayload) {
-  return api.post<EvaluationRun, EvaluationRun>(
+  return api.post<EvaluationRun>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-evaluation-datasets/${encodeURIComponent(datasetId)}/evaluate`,
     payload
   );
 }
 
 export function compareStrategies(kbId: string, datasetId: string, payload: DatasetComparePayload) {
-  return api.post<EvaluationComparison, EvaluationComparison>(
+  return api.post<EvaluationComparison>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-evaluation-datasets/${encodeURIComponent(datasetId)}/compare`,
     payload
   );
@@ -247,7 +247,7 @@ export function listEvaluationComparisons(kbId: string, datasetId: string) {
 }
 
 export function getRetrievalComparisonGateResult(kbId: string, datasetId: string, comparisonId: string) {
-  return api.get<GateResult, GateResult>(
+  return api.get<GateResult>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-evaluation-datasets/${encodeURIComponent(datasetId)}/comparisons/${encodeURIComponent(comparisonId)}/gate-result`
   );
 }
@@ -260,14 +260,14 @@ export function listStrategyTemplates(kbId: string) {
 }
 
 export function createStrategyTemplate(kbId: string, payload: Omit<RetrievalStrategyTemplate, "createTime" | "updateTime">) {
-  return api.post<RetrievalStrategyTemplate, RetrievalStrategyTemplate>(
+  return api.post<RetrievalStrategyTemplate>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-strategy-templates`,
     payload
   );
 }
 
 export function updateStrategyTemplate(kbId: string, templateKey: string, payload: Partial<RetrievalStrategyTemplate>) {
-  return api.put<RetrievalStrategyTemplate, RetrievalStrategyTemplate>(
+  return api.put<RetrievalStrategyTemplate>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-strategy-templates/${encodeURIComponent(templateKey)}`,
     payload
   );
@@ -281,7 +281,7 @@ export function deleteStrategyTemplate(kbId: string, templateKey: string) {
 
 // 版本质量对比
 export function compareVersionQuality(kbId: string, baseVersionId: string, candidateVersionId: string) {
-  return api.post<VersionQualityDiff, VersionQualityDiff>(
+  return api.post<VersionQualityDiff>(
     `/knowledge-base/${encodeURIComponent(kbId)}/version-quality/compare`,
     { baseVersionId, candidateVersionId }
   );
@@ -289,14 +289,14 @@ export function compareVersionQuality(kbId: string, baseVersionId: string, candi
 
 // 知识库级别的评测（快捷入口）
 export function evaluateRetrievalQuality(kbId: string, payload: Record<string, unknown>) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-quality/evaluate`,
     payload
   );
 }
 
 export function compareRetrievalQuality(kbId: string, payload: Record<string, unknown>) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-quality/compare`,
     payload
   );
@@ -318,7 +318,7 @@ export function promoteStrategyFromComparison(
     comment?: string;
   }
 ) {
-  return api.post<RetrievalStrategyTemplate, RetrievalStrategyTemplate>(
+  return api.post<RetrievalStrategyTemplate>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-evaluation-datasets/${encodeURIComponent(datasetId)}/comparisons/${encodeURIComponent(comparisonId)}/promote`,
     payload
   );

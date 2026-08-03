@@ -40,7 +40,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
@@ -92,7 +91,7 @@ class KernelAgentRunResumeServiceTests {
                 approval(ApprovalRequestStatus.APPROVED, "{\"argumentKeys\":[\"memoryId\"]}"));
         RecordingToolGateway toolGateway = new RecordingToolGateway(ToolInvocationResult.ok("{\"deleted\":true}"));
         SingleTurnModel model = new SingleTurnModel("Memory deleted");
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 approvals,
@@ -133,7 +132,7 @@ class KernelAgentRunResumeServiceTests {
         MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();
         checkpointRepository.save(waitingCheckpoint());
         RecordingToolGateway toolGateway = new RecordingToolGateway(ToolInvocationResult.ok("should-not-run"));
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 new MemoryApprovalQueryPort(approval(ApprovalRequestStatus.APPROVED, null)),
@@ -159,7 +158,7 @@ class KernelAgentRunResumeServiceTests {
         MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();
         checkpointRepository.save(waitingCheckpoint());
         RecordingToolGateway toolGateway = new RecordingToolGateway(ToolInvocationResult.ok("tool succeeded"));
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 new MemoryApprovalQueryPort(approval(ApprovalRequestStatus.APPROVED, null)),
@@ -185,7 +184,7 @@ class KernelAgentRunResumeServiceTests {
         RecordingToolGateway toolGateway = new RecordingToolGateway(ToolInvocationResult.ok("tool succeeded"));
         CurrentUserPort currentUser = () -> Optional.of(new CurrentUser(
                 1L, "admin", "user", null, "tenant-1"));
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 new MemoryApprovalQueryPort(approvalForUser(ApprovalRequestStatus.APPROVED, null, "1")),
@@ -207,7 +206,7 @@ class KernelAgentRunResumeServiceTests {
         MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();
         checkpointRepository.save(waitingCheckpointForUser("1"));
         RecordingToolGateway toolGateway = new RecordingToolGateway(ToolInvocationResult.ok("must not run"));
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 new MemoryApprovalQueryPort(approvalForUser(ApprovalRequestStatus.APPROVED, null, "2")),
@@ -230,7 +229,7 @@ class KernelAgentRunResumeServiceTests {
         MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();
         checkpointRepository.save(waitingCheckpoint());
         RecordingToolGateway toolGateway = new RecordingToolGateway(ToolInvocationResult.ok("should-not-run"));
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 new MemoryApprovalQueryPort(approval(ApprovalRequestStatus.APPROVED, null)),
@@ -252,7 +251,7 @@ class KernelAgentRunResumeServiceTests {
         runRepository.createRun(waitingRun());
         MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();
         checkpointRepository.save(waitingCheckpoint());
-        AgentRunResumeInboundPort service = resumeService(
+        KernelAgentRunResumeService service = resumeService(
                 runRepository,
                 checkpointRepository,
                 new SlowToolGateway(Duration.ofMillis(80)),
@@ -271,7 +270,7 @@ class KernelAgentRunResumeServiceTests {
         runRepository.loseLeaseOnNextHeartbeat = true;
         MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();
         checkpointRepository.save(waitingCheckpoint());
-        AgentRunResumeInboundPort service = resumeService(
+        KernelAgentRunResumeService service = resumeService(
                 runRepository,
                 checkpointRepository,
                 new SlowToolGateway(Duration.ofMillis(80)),
@@ -293,7 +292,7 @@ class KernelAgentRunResumeServiceTests {
         checkpointRepository.save(waitingCheckpoint());
         RecordingToolGateway toolGateway = new RecordingToolGateway(ToolInvocationResult.ok("tool succeeded"));
         SingleTurnModel model = new SingleTurnModel("must-not-run");
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 new MemoryApprovalQueryPort(approval(ApprovalRequestStatus.APPROVED, null)),
@@ -320,7 +319,7 @@ class KernelAgentRunResumeServiceTests {
         MemoryApprovalQueryPort approvals = new MemoryApprovalQueryPort(
                 approval(ApprovalRequestStatus.MODIFIED, "{\"arguments\":{\"memoryId\":\"mem-2\"}}"));
         RecordingToolGateway toolGateway = new RecordingToolGateway(ToolInvocationResult.ok("{\"deleted\":true}"));
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 approvals,
@@ -344,7 +343,7 @@ class KernelAgentRunResumeServiceTests {
         checkpointRepository.save(waitingCheckpoint());
         MemoryApprovalQueryPort approvals = new MemoryApprovalQueryPort(
                 approval(ApprovalRequestStatus.APPROVED, "{\"argumentKeys\":[\"memoryId\"]}"));
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 approvals,
@@ -386,7 +385,7 @@ class KernelAgentRunResumeServiceTests {
         RecordingToolGateway toolGateway = new RecordingToolGateway(
                 ToolInvocationResult.ok("{\"authorization\":\"Bearer tool-secret-123456\",\"deleted\":true}"));
         SingleTurnModel model = new SingleTurnModel("Memory deleted with session_token=model-secret-value");
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 approvals,
@@ -423,7 +422,7 @@ class KernelAgentRunResumeServiceTests {
         MemoryApprovalQueryPort approvals = new MemoryApprovalQueryPort(
                 approval(ApprovalRequestStatus.MODIFIED, "{\"argumentKeys\":[\"memoryId\"],\"modified\":true}"));
         RecordingToolGateway toolGateway = new RecordingToolGateway(ToolInvocationResult.ok("should-not-run"));
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 approvals,
@@ -450,7 +449,7 @@ class KernelAgentRunResumeServiceTests {
                 "{\"exitReason\":\"WAITING_APPROVAL\"}", valid.messageHistoryJson(), null,
                 valid.pendingToolCallJson(), valid.createdAt()));
         RecordingToolGateway toolGateway = new RecordingToolGateway(ToolInvocationResult.ok("should-not-run"));
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 new MemoryApprovalQueryPort(approval(ApprovalRequestStatus.APPROVED, null)),
@@ -472,7 +471,7 @@ class KernelAgentRunResumeServiceTests {
         runRepository.createRun(waitingRun());
         MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();
         checkpointRepository.save(waitingCheckpoint());
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 new MemoryApprovalQueryPort(approval(ApprovalRequestStatus.APPROVED, null)),
@@ -501,7 +500,7 @@ class KernelAgentRunResumeServiceTests {
         runRepository.createRun(waitingRun());
         MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();
         checkpointRepository.save(waitingCheckpoint());
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 new MemoryApprovalQueryPort(approval(ApprovalRequestStatus.APPROVED, null)),
@@ -531,7 +530,7 @@ class KernelAgentRunResumeServiceTests {
         runRepository.failModelStepWrites = true;
         MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();
         checkpointRepository.save(waitingCheckpoint());
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 new MemoryApprovalQueryPort(approval(ApprovalRequestStatus.APPROVED, null)),
@@ -556,7 +555,7 @@ class KernelAgentRunResumeServiceTests {
         RecordingToolGateway toolGateway = new RecordingToolGateway(ToolInvocationResult.ok("must not run"));
         CurrentUserPort otherUser = () -> Optional.of(new CurrentUser(
                 2L, "user-2", "user", null, "tenant-2"));
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 new MemoryApprovalQueryPort(approval(ApprovalRequestStatus.APPROVED, null)),
@@ -579,7 +578,7 @@ class KernelAgentRunResumeServiceTests {
         RecordingToolGateway toolGateway = new RecordingToolGateway(ToolInvocationResult.ok("must not run"));
         CurrentUserPort collidingUser = () -> Optional.of(new CurrentUser(
                 42L, "attacker", "user", null, "tenant-1"));
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 new MemoryApprovalQueryPort(approvalForUser(ApprovalRequestStatus.APPROVED, null, "42")),
@@ -608,7 +607,7 @@ class KernelAgentRunResumeServiceTests {
                         """,
                 waitingCheckpoint().pendingToolCallJson()));
         SingleTurnModel model = new SingleTurnModel("done");
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 new MemoryApprovalQueryPort(approval(ApprovalRequestStatus.APPROVED, null)),
@@ -635,7 +634,7 @@ class KernelAgentRunResumeServiceTests {
         RecordingTraceTelemetry telemetry = new RecordingTraceTelemetry();
         KernelRagTraceRecorder traceRecorder = new KernelRagTraceRecorder(
                 new NoopTraceRepository(), RagTraceRecorderOptions.always(), telemetry);
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 new MemoryApprovalQueryPort(approval(ApprovalRequestStatus.APPROVED, null)),
@@ -670,7 +669,7 @@ class KernelAgentRunResumeServiceTests {
         checkpointRepository.save(waitingCheckpoint());
         MemoryApprovalQueryPort approvals = new MemoryApprovalQueryPort(approval(ApprovalRequestStatus.REJECTED, null));
         RecordingToolGateway toolGateway = new RecordingToolGateway(ToolInvocationResult.ok("should-not-run"));
-        AgentRunResumeInboundPort service = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService service = new KernelAgentRunResumeService(
                 runRepository,
                 checkpointRepository,
                 approvals,
@@ -697,7 +696,7 @@ class KernelAgentRunResumeServiceTests {
                 null,
                 "rejected with access_token=secret-marker"));
         RecordingToolGateway rejectedToolGateway = new RecordingToolGateway(ToolInvocationResult.ok("should-not-run"));
-        AgentRunResumeInboundPort rejectedService = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService rejectedService = new KernelAgentRunResumeService(
                 rejectedRunRepository,
                 rejectedCheckpointRepository,
                 rejectedApproval,
@@ -714,7 +713,7 @@ class KernelAgentRunResumeServiceTests {
                 null,
                 "expired with Authorization: Bearer secretmarker123"));
         RecordingToolGateway expiredToolGateway = new RecordingToolGateway(ToolInvocationResult.ok("should-not-run"));
-        AgentRunResumeInboundPort expiredService = new KernelAgentRunResumeService(
+        KernelAgentRunResumeService expiredService = new KernelAgentRunResumeService(
                 expiredRunRepository,
                 expiredCheckpointRepository,
                 expiredApproval,
@@ -854,7 +853,7 @@ class KernelAgentRunResumeServiceTests {
         return () -> Optional.of(new CurrentUser(1L, "user-1", "user", null, "tenant-1"));
     }
 
-    private static AgentRunResumeInboundPort resumeService(
+    private static KernelAgentRunResumeService resumeService(
             MemoryAgentRunRepository runRepository,
             MemoryAgentCheckpointRepository checkpointRepository,
             ToolGatewayPort toolGateway,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -69,7 +69,7 @@ export function AuditEventPage() {
 
   const events = pageData?.records || [];
 
-  const loadEvents = async (current = pageNo, kw = keyword) => {
+  const loadEvents = useCallback(async (current = pageNo, kw = keyword) => {
     try {
       setLoading(true);
       const data = await listAuditEvents({
@@ -85,12 +85,12 @@ export function AuditEventPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pageNo, keyword, eventTypeFilter]);
 
   useEffect(() => {
     if (!featureState.enabled) return;
     loadEvents();
-  }, [pageNo, keyword, eventTypeFilter]);
+  }, [featureState.enabled, loadEvents]);
 
   const handleRowClick = async (event: AuditEvent) => {
     try {

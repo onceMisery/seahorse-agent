@@ -59,7 +59,7 @@ export interface RagTraceRunQuery {
 export async function getRagTraceRuns(
   query: RagTraceRunQuery = {}
 ): Promise<PageResult<RagTraceRun>> {
-  return api.get<PageResult<RagTraceRun>, PageResult<RagTraceRun>>("/rag/traces/runs", {
+  return api.get<PageResult<RagTraceRun>>("/rag/traces/runs", {
     params: {
       current: query.current ?? 1,
       size: query.size ?? 10,
@@ -72,9 +72,9 @@ export async function getRagTraceRuns(
 }
 
 export async function getRagTraceDetail(traceId: string): Promise<RagTraceDetail> {
-  return api.get<RagTraceDetail, RagTraceDetail>(`/rag/traces/runs/${traceId}`);
+  return api.get<RagTraceDetail>(`/rag/traces/runs/${traceId}`);
 }
 
 export async function getRagTraceNodes(traceId: string): Promise<RagTraceNode[]> {
-  return api.get<RagTraceNode[], RagTraceNode[]>(`/rag/traces/runs/${traceId}/nodes`);
+  return api.get<RagTraceNode[]>(`/rag/traces/runs/${traceId}/nodes`);
 }

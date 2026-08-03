@@ -281,7 +281,7 @@ function RuntimeGovernancePanel({
     setEgressPolicyDraft(profiles.defaultNetworkPolicy || "DENY_ALL");
     setEgressHostsDraft(allowlistedHostsText);
     setEgressPrivateHostsDraft(privateNetworkAllowedHostsText);
-  }, [profiles?.defaultNetworkPolicy, allowlistedHostsText, privateNetworkAllowedHostsText]);
+  }, [profiles, allowlistedHostsText, privateNetworkAllowedHostsText]);
 
   return (
     <Card>

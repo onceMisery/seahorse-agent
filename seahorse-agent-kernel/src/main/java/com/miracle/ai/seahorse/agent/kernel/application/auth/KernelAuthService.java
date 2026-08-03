@@ -20,8 +20,11 @@ package com.miracle.ai.seahorse.agent.kernel.application.auth;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.auth.RefreshTokenCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.auth.RefreshTokenResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.LoginHistoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.PasswordHasherPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.RefreshTokenRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.RefreshTokenRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.TokenServicePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRecord;
@@ -38,7 +41,7 @@ import java.util.Objects;
 
 public class KernelAuthService implements AuthInboundPort {
 
-    private static final Logger log = LoggerFactory.getLogger(KernelAuthService.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(KernelAuthService.class);
     private static final String DEFAULT_AVATAR_URL = "https://avatars.githubusercontent.com/u/37446017?v=4&size=64";
     private static final String LOGIN_TYPE_PASSWORD = "PASSWORD";
     private static final String STATUS_SUCCESS = "SUCCESS";
@@ -56,19 +59,6 @@ public class KernelAuthService implements AuthInboundPort {
 
     public KernelAuthService(UserRepositoryPort userRepositoryPort,
                              PasswordHasherPort passwordHasherPort,
-                             TokenServicePort tokenServicePort) {
-        this(userRepositoryPort, passwordHasherPort, tokenServicePort, null);
-    }
-
-    public KernelAuthService(UserRepositoryPort userRepositoryPort,
-                             PasswordHasherPort passwordHasherPort,
-                             TokenServicePort tokenServicePort,
-                             LoginHistoryPort loginHistoryPort) {
-        this(userRepositoryPort, passwordHasherPort, tokenServicePort, loginHistoryPort, null, Clock.systemUTC());
-    }
-
-    public KernelAuthService(UserRepositoryPort userRepositoryPort,
-                             PasswordHasherPort passwordHasherPort,
                              TokenServicePort tokenServicePort,
                              LoginHistoryPort loginHistoryPort,
                              RefreshTokenRepositoryPort refreshTokenRepositoryPort,
@@ -77,7 +67,8 @@ public class KernelAuthService implements AuthInboundPort {
         this.passwordHasherPort = Objects.requireNonNull(passwordHasherPort, "passwordHasherPort must not be null");
         this.tokenServicePort = Objects.requireNonNull(tokenServicePort, "tokenServicePort must not be null");
         this.loginHistoryPort = loginHistoryPort;
-        this.refreshTokenRepositoryPort = refreshTokenRepositoryPort;
+        this.refreshTokenRepositoryPort = Objects.requireNonNull(refreshTokenRepositoryPort,
+                "refreshTokenRepositoryPort must not be null");
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
@@ -87,51 +78,97 @@ public class KernelAuthService implements AuthInboundPort {
         String username = trimToNull(safeCommand.username());
         String password = trimToNull(safeCommand.password());
         if (username == null || password == null) {
-            throw new IllegalArgumentException("用户名或密码不能为空");
+            throw new IllegalArgumentException("Username and password must not be blank");
         }
+
         UserRecord user = userRepositoryPort.findByUsername(username)
-                .orElseThrow(() -> {
-                    safeRecordLogin(safeCommand, 0L, "default", LOGIN_TYPE_PASSWORD, STATUS_FAILED, "用户不存在");
-                    return new IllegalArgumentException("用户名或密码错误");
-                });
+                .orElseThrow(() -> invalidCredentials(safeCommand));
         if (!passwordHasherPort.matches(password, user.password())) {
-            safeRecordLogin(safeCommand, user.id() != null ? user.id() : 0L, user.tenantId(),
-                    LOGIN_TYPE_PASSWORD, STATUS_FAILED, "密码错误");
-            throw new IllegalArgumentException("用户名或密码错误");
+            safeRecordLogin(safeCommand, safeUserId(user), user.tenantId(), STATUS_FAILED, "Invalid password");
+            throw new IllegalArgumentException("Invalid username or password");
         }
         if (user.id() == null) {
-            throw new IllegalStateException("用户信息异常");
+            throw new IllegalStateException("Authenticated user is missing an id");
         }
-        String token = tokenServicePort.login(String.valueOf(user.id()), user.tenantId());
-        safeRecordLogin(safeCommand, user.id(), user.tenantId(), LOGIN_TYPE_PASSWORD, STATUS_SUCCESS, null);
-        if (refreshTokenRepositoryPort == null) {
-            return new LoginResult(String.valueOf(user.id()), user.role(), token,
-                    defaultAvatar(user.avatar()), user.tenantId());
+        String tenantId = trimToNull(user.tenantId());
+        if (tenantId == null) {
+            throw new IllegalStateException("Authenticated user is missing tenant context");
         }
+
         Instant expiresAt = clock.instant().plus(REFRESH_TOKEN_TTL);
         String refreshToken = generateRefreshToken();
-        refreshTokenRepositoryPort.save(user.id(), refreshToken, expiresAt);
+        refreshTokenRepositoryPort.save(user.id(), tenantId, refreshToken, expiresAt);
+        String token = tokenServicePort.login(String.valueOf(user.id()), tenantId);
+        safeRecordLogin(safeCommand, user.id(), tenantId, STATUS_SUCCESS, null);
         return new LoginResult(String.valueOf(user.id()), user.role(), token,
-                defaultAvatar(user.avatar()), user.tenantId(), refreshToken, expiresAt);
+                defaultAvatar(user.avatar()), tenantId, refreshToken, expiresAt);
     }
 
     @Override
-    public void logout() {
-        tokenServicePort.logout();
+    public RefreshTokenResult refresh(RefreshTokenCommand command) {
+        RefreshTokenCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
+        String refreshToken = trimToNull(safeCommand.refreshToken());
+        if (refreshToken == null) {
+            throw new IllegalArgumentException("refreshToken must not be blank");
+        }
+
+        Instant now = clock.instant();
+        String nextRefreshToken = generateRefreshToken();
+        Instant nextExpiresAt = now.plus(REFRESH_TOKEN_TTL);
+        RefreshTokenRecord record = refreshTokenRepositoryPort
+                .rotate(refreshToken, nextRefreshToken, nextExpiresAt, now)
+                .orElseThrow(() -> new IllegalArgumentException("Refresh token is invalid or expired"));
+        String tenantId = trimToNull(record.tenantId());
+        if (record.userId() == null || tenantId == null) {
+            throw new IllegalStateException("Refresh token owner is missing identity context");
+        }
+
+        String token = tokenServicePort.login(String.valueOf(record.userId()), tenantId);
+        return new RefreshTokenResult(
+                String.valueOf(record.userId()),
+                record.role(),
+                token,
+                nextRefreshToken,
+                nextExpiresAt,
+                defaultAvatar(record.avatar()),
+                tenantId);
     }
 
-    private void safeRecordLogin(LoginCommand command, long userId, String tenantId, String loginType,
+    @Override
+    public void logout(String refreshToken) {
+        tokenServicePort.logout();
+        String normalizedRefreshToken = trimToNull(refreshToken);
+        if (normalizedRefreshToken != null) {
+            refreshTokenRepositoryPort.revoke(normalizedRefreshToken);
+        }
+    }
+
+    private IllegalArgumentException invalidCredentials(LoginCommand command) {
+        safeRecordLogin(command, 0L, "default", STATUS_FAILED, "User not found");
+        return new IllegalArgumentException("Invalid username or password");
+    }
+
+    private long safeUserId(UserRecord user) {
+        return user.id() != null ? user.id() : 0L;
+    }
+
+    private void safeRecordLogin(LoginCommand command, long userId, String tenantId,
                                  String status, String failureReason) {
         if (loginHistoryPort == null) {
             return;
         }
         try {
-            String ipAddress = command != null ? command.ipAddress() : null;
-            String userAgent = command != null ? command.userAgent() : null;
-            String deviceInfo = command != null ? command.deviceInfo() : null;
-            loginHistoryPort.recordLogin(userId, tenantId, loginType, ipAddress, userAgent, deviceInfo, status, failureReason);
-        } catch (Exception e) {
-            log.warn("Failed to record login history: {}", e.getMessage());
+            loginHistoryPort.recordLogin(
+                    userId,
+                    tenantId,
+                    LOGIN_TYPE_PASSWORD,
+                    command != null ? command.ipAddress() : null,
+                    command != null ? command.userAgent() : null,
+                    command != null ? command.deviceInfo() : null,
+                    status,
+                    failureReason);
+        } catch (RuntimeException ex) {
+            LOGGER.warn("Failed to record login history: {}", ex.getMessage());
         }
     }
 

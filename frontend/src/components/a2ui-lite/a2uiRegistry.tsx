@@ -1,10 +1,4 @@
-import * as React from "react";
 import type { A2UILiteAction, A2UILiteNode } from "@/components/a2ui-lite/a2uiTypes";
-
-interface RendererProps {
-  node: A2UILiteNode;
-  onAction: (action: A2UILiteAction) => void;
-}
 
 function MetricComponent({ node }: { node: A2UILiteNode }) {
   const { label, value, delta } = node.props as {
@@ -199,7 +193,13 @@ function ActionRowComponent({
   );
 }
 
-export function renderNode(node: A2UILiteNode, onAction: (action: A2UILiteAction) => void): React.ReactNode {
+export function A2UILiteNodeRenderer({
+  node,
+  onAction
+}: {
+  node: A2UILiteNode;
+  onAction: (action: A2UILiteAction) => void;
+}) {
   switch (node.type) {
     case "metric":
       return <MetricComponent key={node.id} node={node} />;

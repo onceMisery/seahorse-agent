@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpointType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunQueryInboundPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunWorkerOutcome;
@@ -31,7 +32,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerTickResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
@@ -422,7 +422,7 @@ class KernelAgentRunWorkerServiceTests {
         }
     }
 
-    private static final class RecordingResumePort implements AgentRunResumeInboundPort {
+    private static final class RecordingResumePort implements AgentRunQueryInboundPort {
         private final AgentRun result;
         private final List<String> runIds = new ArrayList<>();
 
@@ -434,6 +434,16 @@ class KernelAgentRunWorkerServiceTests {
         public AgentRun resume(String runId) {
             runIds.add(runId);
             return result;
+        }
+
+        @Override
+        public java.util.List<com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint> listByRunId(String runId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageAggregate getCostSummary(String runId) {
+            throw new UnsupportedOperationException();
         }
     }
 }

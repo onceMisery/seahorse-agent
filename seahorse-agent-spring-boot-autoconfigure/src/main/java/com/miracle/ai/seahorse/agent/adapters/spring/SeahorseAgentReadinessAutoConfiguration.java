@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRe
 import com.miracle.ai.seahorse.agent.ports.inbound.readiness.ReadinessInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.readiness.ReadinessProbePort;
@@ -66,6 +67,7 @@ public class SeahorseAgentReadinessAutoConfiguration {
     public ReadinessProbePort seahorseReadinessProbe(
             ObjectProvider<DataSource> dataSource,
             ObjectProvider<StreamingChatModelPort> chatModel,
+            ObjectProvider<EmbeddingModelPort> embeddingModel,
             ObjectProvider<VectorSearchPort> vectorSearch,
             ObjectProvider<KeywordSearchPort> keywordSearch,
             ObjectProvider<KeyValueCachePort> cache,
@@ -133,7 +135,7 @@ public class SeahorseAgentReadinessAutoConfiguration {
 
                 // Embedding model availability — check if a separate embedding bean exists
                 // In practice, the embedding model is often part of the AI adapter
-                map.put("embedding-model", chatModel.getIfAvailable() != null
+                map.put("embedding-model", embeddingModel.getIfAvailable() != null
                         ? ComponentStatus.available(configuredEmbeddingType)
                         : ComponentStatus.unavailable("Embedding model not available"));
 

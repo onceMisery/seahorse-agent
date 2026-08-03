@@ -2,7 +2,7 @@ import { api } from "@/services/api";
 import type { UserMemoryCenterResponse } from "@/types";
 
 export async function getUserMemoryCenter(limit = 50): Promise<UserMemoryCenterResponse> {
-  return api.get<UserMemoryCenterResponse, UserMemoryCenterResponse>("/api/me/memories", {
+  return api.get<UserMemoryCenterResponse>("/api/me/memories", {
     params: { limit }
   });
 }

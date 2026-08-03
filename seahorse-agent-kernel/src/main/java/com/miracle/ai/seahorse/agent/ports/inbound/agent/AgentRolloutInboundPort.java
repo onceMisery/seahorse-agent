@@ -17,10 +17,17 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.rollout.AgentRolloutCostSummary;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.rollout.AgentVersionRollout;
 
 import java.util.Optional;
 
+/**
+ * Agent 发布（canary/pause/promote/rollback）与成本汇总入站用例端口。
+ *
+ * <p>合并发布操作与发布成本汇总两个 Agent rollout 能力用例，由组合 facade 提供，
+ * 供 Web 适配器通过契约依赖。</p>
+ */
 public interface AgentRolloutInboundPort {
 
     AgentVersionRollout createCanary(AgentRolloutCreateCommand command);
@@ -32,4 +39,6 @@ public interface AgentRolloutInboundPort {
     AgentVersionRollout rollback(AgentRolloutRollbackCommand command);
 
     Optional<AgentVersionRollout> latest(String tenantId, String agentId, String versionId);
+
+    AgentRolloutCostSummary getCostSummary(String tenantId, String agentId, String rolloutId);
 }

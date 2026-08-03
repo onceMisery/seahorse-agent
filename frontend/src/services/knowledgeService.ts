@@ -123,11 +123,11 @@ export interface ChunkStrategyOption {
 }
 
 export const getChunkStrategies = async (): Promise<ChunkStrategyOption[]> => {
-  return api.get<ChunkStrategyOption[], ChunkStrategyOption[]>("/knowledge-base/chunk-strategies");
+  return api.get<ChunkStrategyOption[]>("/knowledge-base/chunk-strategies");
 };
 
 export const getKnowledgeBases = async (current = 1, size = 200, name?: string): Promise<KnowledgeBase[]> => {
-  const page = await api.get<PageResult<KnowledgeBase>, PageResult<KnowledgeBase>>("/knowledge-base", {
+  const page = await api.get<PageResult<KnowledgeBase>>("/knowledge-base", {
     params: { current, size, name: name || undefined }
   });
   return page?.records || [];
@@ -138,17 +138,17 @@ export const getKnowledgeBasesPage = async (
   size = 10,
   name?: string
 ): Promise<PageResult<KnowledgeBase>> => {
-  return api.get<PageResult<KnowledgeBase>, PageResult<KnowledgeBase>>("/knowledge-base", {
+  return api.get<PageResult<KnowledgeBase>>("/knowledge-base", {
     params: { current, size, name: name || undefined }
   });
 };
 
 export const getKnowledgeBase = async (id: string): Promise<KnowledgeBase> => {
-  return api.get<KnowledgeBase, KnowledgeBase>(`/knowledge-base/${id}`);
+  return api.get<KnowledgeBase>(`/knowledge-base/${id}`);
 };
 
 export const createKnowledgeBase = async (data: Partial<KnowledgeBase>): Promise<string> => {
-  return api.post<string, string>("/knowledge-base", data);
+  return api.post<string>("/knowledge-base", data);
 };
 
 export const updateKnowledgeBase = async (id: string, data: KnowledgeBaseUpdatePayload): Promise<void> => {
@@ -168,7 +168,7 @@ export const getDocumentsPage = async (
   kbId: string,
   params: KnowledgeDocumentPageParams = {}
 ): Promise<PageResult<KnowledgeDocument>> => {
-  return api.get<PageResult<KnowledgeDocument>, PageResult<KnowledgeDocument>>(`/knowledge-base/${kbId}/docs`, {
+  return api.get<PageResult<KnowledgeDocument>>(`/knowledge-base/${kbId}/docs`, {
     params: {
       current: params.current ?? 1,
       size: params.size ?? 10,
@@ -182,7 +182,7 @@ export const searchKnowledgeDocuments = async (
   keyword: string,
   limit = 8
 ): Promise<KnowledgeDocumentSearchItem[]> => {
-  return api.get<KnowledgeDocumentSearchItem[], KnowledgeDocumentSearchItem[]>("/knowledge-base/docs/search", {
+  return api.get<KnowledgeDocumentSearchItem[]>("/knowledge-base/docs/search", {
     params: {
       keyword,
       limit
@@ -228,7 +228,7 @@ export const uploadDocument = async (
   if (payload.pipelineId) {
     formData.append("pipelineId", payload.pipelineId);
   }
-  return api.post<KnowledgeDocument, KnowledgeDocument>(`/knowledge-base/${kbId}/docs/upload`, formData, {
+  return api.post<KnowledgeDocument>(`/knowledge-base/${kbId}/docs/upload`, formData, {
     headers: {
       "Content-Type": "multipart/form-data"
     }
@@ -236,7 +236,7 @@ export const uploadDocument = async (
 };
 
 export const getDocument = async (docId: string): Promise<KnowledgeDocument> => {
-  return api.get<KnowledgeDocument, KnowledgeDocument>(`/knowledge-base/docs/${docId}`);
+  return api.get<KnowledgeDocument>(`/knowledge-base/docs/${docId}`);
 };
 
 export const updateDocument = async (docId: string, data: {
@@ -271,7 +271,7 @@ export const getChunksPage = async (
   docId: string,
   params: KnowledgeChunkPageParams = {}
 ): Promise<PageResult<KnowledgeChunk>> => {
-  return api.get<PageResult<KnowledgeChunk>, PageResult<KnowledgeChunk>>(
+  return api.get<PageResult<KnowledgeChunk>>(
     `/knowledge-base/docs/${docId}/chunks`,
     {
       params: {
@@ -295,7 +295,7 @@ export const createChunk = async (
   docId: string,
   payload: { content: string; index?: number | null; chunkId?: string }
 ): Promise<KnowledgeChunk> => {
-  return api.post<KnowledgeChunk, KnowledgeChunk>(`/knowledge-base/docs/${docId}/chunks`, payload);
+  return api.post<KnowledgeChunk>(`/knowledge-base/docs/${docId}/chunks`, payload);
 };
 
 export const updateChunk = async (
@@ -330,25 +330,25 @@ export const batchToggleChunks = async (
 
 // 文档刷新与关键词索引重建
 export const refreshDocument = async (docId: string): Promise<Record<string, unknown>> => {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/knowledge-base/docs/${encodeURIComponent(docId)}/refresh`
   );
 };
 
 export const refreshDueDocuments = async (): Promise<Record<string, unknown>> => {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     "/knowledge-base/docs/refresh-due"
   );
 };
 
 export const rebuildDocumentKeywordIndex = async (docId: string): Promise<Record<string, unknown>> => {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/knowledge-base/docs/${encodeURIComponent(docId)}/keyword-index/rebuild`
   );
 };
 
 export const rebuildKbKeywordIndex = async (kbId: string): Promise<Record<string, unknown>> => {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/knowledge-base/${encodeURIComponent(kbId)}/keyword-index/rebuild`
   );
 };
@@ -359,7 +359,7 @@ export const getChunkLogsPage = async (
   current = 1,
   size = 10
 ): Promise<PageResult<KnowledgeDocumentChunkLog>> => {
-  return api.get<PageResult<KnowledgeDocumentChunkLog>, PageResult<KnowledgeDocumentChunkLog>>(
+  return api.get<PageResult<KnowledgeDocumentChunkLog>>(
     `/knowledge-base/docs/${docId}/chunk-logs`,
     {
       params: {

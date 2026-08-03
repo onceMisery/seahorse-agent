@@ -28,17 +28,17 @@ export interface ProductModeInfo {
 }
 
 export function getReadinessSummary() {
-  return api.get<ReadinessSummary, ReadinessSummary>("/readiness/summary");
+  return api.get<ReadinessSummary>("/readiness/summary");
 }
 
 export function getReadinessChecks() {
-  return api.get<{ mode: string; overall: string; checks: ReadinessCheck[] }, { mode: string; overall: string; checks: ReadinessCheck[] }>("/readiness/checks");
+  return api.get<{ mode: string; overall: string; checks: ReadinessCheck[] }>("/readiness/checks");
 }
 
 export function runReadinessCheck(checkId: string) {
-  return api.post<ReadinessCheck, ReadinessCheck>(`/readiness/checks/${checkId}/run`);
+  return api.post<ReadinessCheck>(`/readiness/checks/${checkId}/run`);
 }
 
 export function getProductModeInfo() {
-  return api.get<ProductModeInfo, ProductModeInfo>("/readiness/product-mode");
+  return api.get<ProductModeInfo>("/readiness/product-mode");
 }

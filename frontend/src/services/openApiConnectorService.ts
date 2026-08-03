@@ -47,7 +47,7 @@ export interface ImportSpecPayload {
 // ── 连接器管理 ──
 
 export function importOpenApiSpec(payload: ImportSpecPayload) {
-  return api.post<OpenApiConnector, OpenApiConnector>("/api/connectors/openapi", {
+  return api.post<OpenApiConnector>("/api/connectors/openapi", {
     name: payload.name,
     specJson: payload.specContent,
     importedBy: "frontend"
@@ -94,7 +94,7 @@ export async function getConnectorOperations(connectorId: string) {
 }
 
 export function bindCredential(connectorId: string, operationId: string, payload: CredentialBindingPayload) {
-  return api.put<Record<string, unknown>, Record<string, unknown>>(
+  return api.put<Record<string, unknown>>(
     `/api/connectors/${encodeURIComponent(connectorId)}/operations/${encodeURIComponent(operationId)}/credential-binding`,
     payload
   );
@@ -107,13 +107,13 @@ export function getCredentialBinding(connectorId: string, operationId: string) {
 }
 
 export function enableOperation(connectorId: string, operationId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/connectors/${encodeURIComponent(connectorId)}/operations/${encodeURIComponent(operationId)}/enable`
   );
 }
 
 export function disableOperation(connectorId: string, operationId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `/api/connectors/${encodeURIComponent(connectorId)}/operations/${encodeURIComponent(operationId)}/disable`
   );
 }

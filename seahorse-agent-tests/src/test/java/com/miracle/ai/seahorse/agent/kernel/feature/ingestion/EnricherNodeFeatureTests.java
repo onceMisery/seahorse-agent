@@ -41,7 +41,7 @@ class EnricherNodeFeatureTests {
             case 0 -> "[\"段落\", \"规则\"]";
             case 1 -> "摘要内容";
             default -> "";
-        }, taskType -> "system:" + taskType);
+        });
         NodeConfig config = NodeConfig.builder()
                 .nodeType("enricher")
                 .settings(OBJECT_MAPPER.valueToTree(Map.of(

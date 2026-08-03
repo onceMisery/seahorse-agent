@@ -17,7 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
-import com.miracle.ai.seahorse.agent.kernel.application.agent.marketplace.KernelAgentMarketplaceService;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentMarketplaceInboundPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.marketplace.AgentPublishReview;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCatalogQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
@@ -45,10 +45,10 @@ class SeahorseMarketplaceControllerTests {
 
     @Test
     void shouldListPendingReviews() throws Exception {
-        KernelAgentMarketplaceService service = mock(KernelAgentMarketplaceService.class);
+        AgentMarketplaceInboundPort service = mock(AgentMarketplaceInboundPort.class);
         when(service.listPendingReviews(1, 20)).thenReturn(List.of(review(1L, "agent-1")));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseMarketplaceController(
-                provider(KernelAgentMarketplaceService.class, service),
+                provider(AgentMarketplaceInboundPort.class, service),
                 provider(AgentCatalogQueryPort.class, null),
                 currentUserPort())).build();
 
@@ -62,10 +62,10 @@ class SeahorseMarketplaceControllerTests {
 
     @Test
     void shouldSubmitForReview() throws Exception {
-        KernelAgentMarketplaceService service = mock(KernelAgentMarketplaceService.class);
+        AgentMarketplaceInboundPort service = mock(AgentMarketplaceInboundPort.class);
         when(service.submitForReview("agent-1", "admin")).thenReturn(99L);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseMarketplaceController(
-                provider(KernelAgentMarketplaceService.class, service),
+                provider(AgentMarketplaceInboundPort.class, service),
                 provider(AgentCatalogQueryPort.class, null),
                 currentUserPort())).build();
 
@@ -79,9 +79,9 @@ class SeahorseMarketplaceControllerTests {
 
     @Test
     void shouldApproveReview() throws Exception {
-        KernelAgentMarketplaceService service = mock(KernelAgentMarketplaceService.class);
+        AgentMarketplaceInboundPort service = mock(AgentMarketplaceInboundPort.class);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseMarketplaceController(
-                provider(KernelAgentMarketplaceService.class, service),
+                provider(AgentMarketplaceInboundPort.class, service),
                 provider(AgentCatalogQueryPort.class, null),
                 currentUserPort())).build();
 

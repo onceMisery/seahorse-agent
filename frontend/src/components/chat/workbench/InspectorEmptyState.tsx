@@ -1,4 +1,3 @@
-import * as React from "react";
 import { FileText } from "lucide-react";
 
 export function InspectorEmptyState() {

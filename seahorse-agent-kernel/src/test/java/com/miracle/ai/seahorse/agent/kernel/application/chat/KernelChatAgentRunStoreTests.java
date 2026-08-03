@@ -235,7 +235,7 @@ class KernelChatAgentRunStoreTests {
     }
 
     @Test
-    void shouldSaveRunContextSnapshotWhenAgentRunStarts() {
+    void shouldPassRunContextMetadataToAgentRunOwner() {
         AgentRun run = new AgentRun(
                 "run-context-1",
                 "legacy-react-agent",
@@ -296,16 +296,9 @@ class KernelChatAgentRunStoreTests {
                 99L), callback);
 
         assertTrue(callback.awaitTerminal());
-        assertEquals(1, snapshotRepository.records.size());
-        RunContextSnapshotRecord snapshot = snapshotRepository.records.get(0);
-        assertEquals("tenant-a", snapshot.getTenantId());
-        assertEquals("run-context-1", snapshot.getRunId());
-        assertEquals(101L, snapshot.getConversationId());
-        assertEquals(99L, snapshot.getRoleCardId());
-        assertEquals("kernel", snapshot.getExecutorEngine());
-        assertTrue(snapshot.getSnapshotJson().contains("\"knowledgeBaseIds\":[\"kb-1\"]"));
-        assertTrue(snapshot.getSnapshotJson().contains("\"executorEngine\":\"kernel\""));
-        assertTrue(snapshot.getTraceContextJson().contains("trace-1"));
+        assertEquals(0, snapshotRepository.records.size());
+        assertTrue(runPort.startCommand.metadataJson().contains("\"roleCardId\":99"),
+                runPort.startCommand.metadataJson());
     }
 
     @Test
@@ -376,30 +369,9 @@ class KernelChatAgentRunStoreTests {
                 "ops-agent-v1"), callback);
 
         assertTrue(callback.awaitTerminal());
-        assertEquals(1, snapshotRepository.records.size());
         assertTrue(runPort.startCommand.metadataJson().contains("\"agentScope\""),
                 runPort.startCommand.metadataJson());
-        RunContextSnapshotRecord snapshot = snapshotRepository.records.get(0);
-        assertEquals("run-agentscope-trace-1", snapshot.getRunId());
-        assertTrue(snapshot.getSnapshotJson().contains("\"agentScope\""), snapshot.getSnapshotJson());
-        assertTrue(snapshot.getSnapshotJson().contains("\"studioUrl\":\"http://studio.local\""),
-                snapshot.getSnapshotJson());
-        assertTrue(snapshot.getSnapshotJson().contains("\"studioRunId\":\"studio-run-1\""),
-                snapshot.getSnapshotJson());
-        assertTrue(snapshot.getSnapshotJson().contains("\"apiKey\":\"[REDACTED]\""), snapshot.getSnapshotJson());
-        assertTrue(snapshot.getSnapshotJson().contains("\"authorization\":\"[REDACTED]\""),
-                snapshot.getSnapshotJson());
-        assertTrue(snapshot.getTraceContextJson().contains("\"traceId\":\"trace-studio-1\""),
-                snapshot.getTraceContextJson());
-        assertTrue(snapshot.getTraceContextJson().contains("\"studioUrl\":\"http://studio.local\""),
-                snapshot.getTraceContextJson());
-        assertTrue(snapshot.getTraceContextJson().contains("\"studioProject\":\"seahorse-prod\""),
-                snapshot.getTraceContextJson());
-        assertTrue(snapshot.getTraceContextJson().contains("\"studioRunId\":\"studio-run-1\""),
-                snapshot.getTraceContextJson());
-        assertTrue(snapshot.getTraceContextJson().contains(
-                "\"studioTraceUrl\":\"http://studio.local/projects/seahorse-prod/runs/studio-run-1\""),
-                snapshot.getTraceContextJson());
+        assertEquals(0, snapshotRepository.records.size());
     }
 
     @Test
@@ -537,27 +509,7 @@ class KernelChatAgentRunStoreTests {
         assertEquals(Map.of("studioTraceEnabled", true), runPort.startCommand.executorConfig());
         assertTrue(runPort.startCommand.metadataJson().contains("\"engine\":\"agentscope\""),
                 runPort.startCommand.metadataJson());
-        assertEquals(1, snapshotRepository.records.size());
-        RunContextSnapshotRecord snapshot = snapshotRepository.records.get(0);
-        assertEquals(77L, snapshot.getRunProfileId());
-        assertEquals(200L, snapshot.getRoleCardId());
-        assertEquals("agentscope", snapshot.getExecutorEngine());
-        assertEquals("{\"studioTraceEnabled\":true}", snapshot.getExecutorConfigJson());
-        assertTrue(snapshot.getSnapshotJson().contains("\"runProfileId\":77"));
-        assertTrue(snapshot.getSnapshotJson().contains("\"executorEngine\":\"agentscope\""));
-        assertTrue(snapshot.getSnapshotJson().contains(
-                "\"runProfile\":{\"id\":77,\"name\":\"AgentScope profile\",\"roleCardId\":200,"
-                        + "\"executorEngine\":\"agentscope\"}"));
-        assertTrue(snapshot.getSnapshotJson().contains("\"executorConfig\":{\"studioTraceEnabled\":true}"));
-        assertTrue(snapshot.getSnapshotJson().contains("\"modelConfig\":{\"temperature\":0.2}"));
-        assertTrue(snapshot.getSnapshotJson().contains("\"profileModelConfig\":{\"temperature\":0.2}"));
-        assertTrue(snapshot.getSnapshotJson().contains("\"memoryScope\":{\"longTerm\":true}"));
-        assertTrue(snapshot.getSnapshotJson().contains(
-                "\"toolIds\":[\"profile-tool-a\",\"filesystem.read_file\",\"seahorse-researcher\"]"));
-        assertTrue(snapshot.getSnapshotJson().contains("\"mcpToolIds\":[\"filesystem.read_file\"]"));
-        assertTrue(snapshot.getSnapshotJson().contains("\"a2aAgentIds\":[\"seahorse-researcher\"]"));
-        assertTrue(snapshot.getSnapshotJson().contains("\"explicitToolAllowlist\":true"));
-        assertTrue(snapshot.getSnapshotJson().contains("\"guardrailConfig\":{\"highRiskToolApproval\":true}"));
+        assertEquals(0, snapshotRepository.records.size());
     }
 
     @Test
@@ -633,8 +585,7 @@ class KernelChatAgentRunStoreTests {
         assertNull(kernelLoop.lastRequest);
         assertNotNull(agentScopeLoop.lastRequest);
         assertEquals("agentscope", agentScopeLoop.lastRequest.executorEngine());
-        assertEquals(1, snapshotRepository.records.size());
-        assertEquals("agentscope", snapshotRepository.records.get(0).getExecutorEngine());
+        assertEquals(0, snapshotRepository.records.size());
     }
 
     @Test
@@ -781,10 +732,8 @@ class KernelChatAgentRunStoreTests {
         assertEquals("agentscope", agentLoop.lastRequest.executorEngine());
         assertEquals(List.of("profile-tool-a", "filesystem.read_file", "seahorse-researcher"),
                 agentLoop.lastRequest.allowedToolIds());
-        assertEquals(1, snapshotRepository.records.size());
-        RunContextSnapshotRecord snapshot = snapshotRepository.records.get(0);
-        assertEquals(77L, snapshot.getRunProfileId());
-        assertTrue(snapshot.getSnapshotJson().contains("\"runProfileId\":77"));
+        assertEquals(0, snapshotRepository.records.size());
+        assertEquals(77L, runPort.startCommand.runProfileId());
     }
 
     @Test

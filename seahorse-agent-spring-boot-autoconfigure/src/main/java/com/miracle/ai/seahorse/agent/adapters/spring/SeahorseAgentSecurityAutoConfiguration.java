@@ -19,7 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.adapters.web.ForbiddenExceptionMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.credential.SecretRotationService;
-import com.miracle.ai.seahorse.agent.kernel.application.sandbox.SandboxPathValidator;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.SandboxPathValidator;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretMetadataQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretStorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretWritePort;

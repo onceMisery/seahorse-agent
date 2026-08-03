@@ -44,7 +44,7 @@ import java.time.Clock;
 import java.util.Objects;
 import java.util.Optional;
 
-public class KernelAgentRolloutService implements AgentRolloutInboundPort {
+public class KernelAgentRolloutService {
 
     private static final String ROLLOUT_ID_PREFIX = "avr_";
 
@@ -73,8 +73,6 @@ public class KernelAgentRolloutService implements AgentRolloutInboundPort {
         this.auditLedger = auditLedger;
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
-
-    @Override
     public AgentVersionRollout createCanary(AgentRolloutCreateCommand command) {
         AgentRolloutCreateCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         int canaryPercent = safeCommand.canaryPercent() == null
@@ -97,8 +95,6 @@ public class KernelAgentRolloutService implements AgentRolloutInboundPort {
         appendAudit(AuditEventType.AGENT_ROLLOUT_STARTED, saved, safeCommand.operator(), null);
         return saved;
     }
-
-    @Override
     public AgentVersionRollout pause(AgentRolloutActionCommand command) {
         AgentVersionRollout rollout = rolloutFor(command.tenantId(), command.agentId(), command.rolloutId());
         if (rollout.status().terminal()) {
@@ -108,8 +104,6 @@ public class KernelAgentRolloutService implements AgentRolloutInboundPort {
         appendAudit(AuditEventType.AGENT_ROLLOUT_PAUSED, paused, command.operator(), command.comment());
         return paused;
     }
-
-    @Override
     public AgentVersionRollout promote(AgentRolloutActionCommand command) {
         AgentVersionRollout rollout = rolloutFor(command.tenantId(), command.agentId(), command.rolloutId());
         Optional<ProductionGateReport> latest = productionGateRepository.latest(rollout.agentId());
@@ -130,8 +124,6 @@ public class KernelAgentRolloutService implements AgentRolloutInboundPort {
         appendAudit(AuditEventType.AGENT_ROLLOUT_PROMOTED, promoted, command.operator(), command.comment());
         return promoted;
     }
-
-    @Override
     public AgentVersionRollout rollback(AgentRolloutRollbackCommand command) {
         AgentVersionRollout rollout = rolloutFor(command.tenantId(), command.agentId(), command.rolloutId());
         try {
@@ -165,8 +157,6 @@ public class KernelAgentRolloutService implements AgentRolloutInboundPort {
             return failed;
         }
     }
-
-    @Override
     public Optional<AgentVersionRollout> latest(String tenantId, String agentId, String versionId) {
         return rolloutRepository.findLatest(tenantId, agentId, versionId);
     }

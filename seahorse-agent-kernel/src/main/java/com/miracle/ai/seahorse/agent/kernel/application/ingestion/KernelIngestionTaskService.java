@@ -69,6 +69,7 @@ public class KernelIngestionTaskService implements IngestionTaskInboundPort {
     private static final String STATUS_ROLLED_BACK = "rolled_back";
     private static final String STATUS_SUCCESS = "success";
     private static final String STATUS_SKIPPED = "skipped";
+    private static final String STATUS_UNKNOWN = "unknown";
     private static final String MESSAGE_OK = "OK";
     private static final String KEY_FILE_NAME = "fileName";
     private static final String KEY_SOURCE = "source";
@@ -196,6 +197,14 @@ public class KernelIngestionTaskService implements IngestionTaskInboundPort {
             throw new IllegalStateException("running ingestion tasks cannot be rolled back: " + safeTaskId);
         }
         IngestionTaskRollbackTarget target = rollbackTarget(record);
+        if (STATUS_ROLLED_BACK.equalsIgnoreCase(record.getStatus())) {
+            return new IngestionTaskRollbackResult(
+                    safeTaskId,
+                    STATUS_ROLLED_BACK,
+                    target.kbId(),
+                    target.docId(),
+                    "ingestion task was already rolled back");
+        }
         String safeOperator = Objects.requireNonNullElse(operator, "");
         compensationPort.rollbackDocument(target, safeOperator);
         Map<String, Object> metadata = new LinkedHashMap<>(Objects.requireNonNullElse(record.getMetadata(), Map.of()));
@@ -244,9 +253,32 @@ public class KernelIngestionTaskService implements IngestionTaskInboundPort {
         IngestionContext result = runPipeline(pipeline, context);
         List<NodeLog> logs = Objects.requireNonNullElse(result.getLogs(), List.of());
         IngestionTaskUpdateValues values = toUpdateValues(result, input.operator());
-        taskRepositoryPort.updateTask(taskId, values);
-        taskRepositoryPort.replaceNodeLogs(taskId, toNodeValues(taskId, input, pipeline, logs));
+        List<IngestionTaskNodeValues> nodes = toNodeValues(taskId, input, pipeline, logs);
+        persistTaskCompletion(taskId, values, nodes);
         return toExecutionResult(taskId, input.pipelineId(), result);
+    }
+
+    private void persistTaskCompletion(String taskId,
+                                       IngestionTaskUpdateValues values,
+                                       List<IngestionTaskNodeValues> nodes) {
+        try {
+            taskRepositoryPort.completeTask(taskId, values, nodes);
+        } catch (RuntimeException ex) {
+            IngestionTaskUpdateValues unknown = new IngestionTaskUpdateValues(
+                    STATUS_UNKNOWN,
+                    values.chunkCount(),
+                    safeFailureText("task completion persistence failed: "
+                            + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getSimpleName())),
+                    values.logs(),
+                    values.metadata(),
+                    values.operator());
+            try {
+                taskRepositoryPort.updateTask(taskId, unknown);
+            } catch (RuntimeException stateFailure) {
+                ex.addSuppressed(stateFailure);
+            }
+            throw ex;
+        }
     }
 
     private IngestionContext runPipeline(PipelineDefinition pipeline, IngestionContext context) {

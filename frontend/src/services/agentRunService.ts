@@ -38,37 +38,37 @@ export {
 const AGENT_RUNS_API_BASE = "/api/agent-runs";
 
 export async function getAgentRunSnapshot(runId: string) {
-  return api.get<AgentRunSnapshot, AgentRunSnapshot>(
+  return api.get<AgentRunSnapshot>(
     `${AGENT_RUNS_API_BASE}/${encodeURIComponent(runId)}/snapshot`
   );
 }
 
 export async function getAgentRunCostSummary(runId: string) {
-  return api.get<AgentRunCostSummary, AgentRunCostSummary>(
+  return api.get<AgentRunCostSummary>(
     `${AGENT_RUNS_API_BASE}/${encodeURIComponent(runId)}/cost-summary`
   );
 }
 
 export async function getAgentRunWorkflow(runId: string) {
-  return api.get<AgentRunWorkflow, AgentRunWorkflow>(
+  return api.get<AgentRunWorkflow>(
     `${AGENT_RUNS_API_BASE}/${encodeURIComponent(runId)}/workflow`
   );
 }
 
 export async function resumeAgentRun(runId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `${AGENT_RUNS_API_BASE}/${encodeURIComponent(runId)}/resume`
   );
 }
 
 export async function retryAgentRun(runId: string) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>(
+  return api.post<Record<string, unknown>>(
     `${AGENT_RUNS_API_BASE}/${encodeURIComponent(runId)}/retry`
   );
 }
 
 export async function listAgentRunEvents(runId: string, afterSeq = 0) {
-  return api.get<StreamEventEnvelope[], StreamEventEnvelope[]>(
+  return api.get<StreamEventEnvelope[]>(
     `${AGENT_RUNS_API_BASE}/${encodeURIComponent(runId)}/events`,
     { params: { afterSeq } }
   );
@@ -90,5 +90,5 @@ export async function listAgentRuns(params: {
     current: number;
     pages: number;
   };
-  return api.get<PageResult, PageResult>("/api/agent-runs", { params });
+  return api.get<PageResult>("/api/agent-runs", { params });
 }
