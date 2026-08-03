@@ -514,7 +514,8 @@ public class KernelChatInboundService implements ChatInboundPort {
                     if (run != null) {
                         traceRecorder.recordRunAttribute(traceRunScope, "seahorse.run.id", run.runId());
                     }
-                    saveRunContextSnapshot(safeCommand, run, traceRunScope, metadataJson);
+                    // Agent chat 的上下文快照由 AgentRun 持久化（one snapshot owner）；
+                    // 不再由 chat service 额外保存独立 context snapshot。
                     if (run != null) {
                         safeCallback.onRunStarted(run.runId());
                     }
@@ -833,33 +834,6 @@ public class KernelChatInboundService implements ChatInboundPort {
                 command.currentUser()));
     }
 
-    private void saveRunContextSnapshot(
-            StreamChatCommand command,
-            AgentRun run,
-            TraceRunScope traceRunScope,
-            String metadataJson) {
-        if (run == null || runContextSnapshotRepository.isEmpty()) {
-            return;
-        }
-        try {
-            RunContextSnapshotRecord record = new RunContextSnapshotRecord();
-            record.setTenantId(run.tenantId());
-            record.setRunId(run.runId());
-            record.setConversationId(parseLong(command.conversationId()));
-            record.setBranchLeafMessageId(command.branchLeafMessageId());
-            record.setRoleCardId(effectiveRoleCardId(command));
-            record.setRunProfileId(effectiveRunProfileId(command));
-            record.setExecutorEngine(effectiveExecutorEngine(command));
-            record.setExecutorConfigJson(effectiveExecutorConfigJson(command));
-            record.setTraceContextJson(traceContextJson(traceRunScope, run, metadataJson));
-            record.setSnapshotJson(runContextSnapshotJson(command, run, record.getExecutorEngine(), metadataJson));
-            runContextSnapshotRepository.get().save(RUN_CONTEXT_SNAPSHOT_REDACTOR.redact(record));
-        } catch (Exception ex) {
-            LOG.warn("Failed to save run context snapshot: runId={}, conversationId={}",
-                    run.runId(), command.conversationId(), ex);
-        }
-    }
-
     private void saveRunContextSnapshot(StreamChatCommand command, TraceRunScope traceRunScope) {
         if (runContextSnapshotRepository.isEmpty()) {
             return;
@@ -1151,6 +1125,10 @@ public class KernelChatInboundService implements ChatInboundPort {
             Map<String, Object> runtime = new LinkedHashMap<>();
             runtime.put("allowedToolIds", agentRunSnapshotToolIds(command, version));
             metadata.put("runtime", runtime);
+            Long roleCardId = effectiveRoleCardId(command);
+            if (roleCardId != null) {
+                metadata.put("roleCardId", roleCardId);
+            }
             appendContributorMetadata(metadata, command);
             return OBJECT_MAPPER.writeValueAsString(metadata);
         } catch (JsonProcessingException ex) {
@@ -1540,32 +1518,25 @@ public class KernelChatInboundService implements ChatInboundPort {
 
             @Override
             public void onComplete() {
-                try {
-                    finishRun(runId, null);
-                    delegate.onComplete();
-                } finally {
-                    finishOnce(null);
+                if (finished.compareAndSet(false, true)) {
+                    try {
+                        finishRun(runId, null);
+                        delegate.onComplete();
+                    } finally {
+                        traceRecorder.finishRun(traceRunScope);
+                    }
                 }
             }
 
             @Override
             public void onError(Throwable error) {
-                try {
-                    finishRun(runId, error);
-                    delegate.onError(error);
-                } finally {
-                    finishOnce(error);
-                }
-            }
-
-            private void finishOnce(Throwable error) {
-                if (!finished.compareAndSet(false, true)) {
-                    return;
-                }
-                if (error == null) {
-                    traceRecorder.finishRun(traceRunScope);
-                } else {
-                    traceRecorder.finishRun(traceRunScope, error);
+                if (finished.compareAndSet(false, true)) {
+                    try {
+                        finishRun(runId, error);
+                        delegate.onError(error);
+                    } finally {
+                        traceRecorder.finishRun(traceRunScope, error);
+                    }
                 }
             }
         };
