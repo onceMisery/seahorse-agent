@@ -945,42 +945,44 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
         SandboxEgressPolicyRepositoryPort egressPolicyRepositoryPort =
                 sandboxEgressPolicyRepositoryPort.getIfAvailable();
         if (egressPolicyRepositoryPort == null) {
-            return new KernelSandboxRuntimeService(
-                    sandboxPolicyPort,
-                    sandboxRuntimePort,
-                    sandboxArtifactPort,
-                    sandboxSessionRepositoryPort,
-                    sandboxExecutionRepositoryPort,
-                    sandboxArtifactQueryPort,
-                    sandboxArtifactScannerPort,
-                    objectStoragePort.getIfAvailable(),
-                    sandboxRuntimeProfilePolicyRepositoryPort,
-                    agentRunRepositoryPort.getIfAvailable(),
-                    currentUserPort.getIfAvailable(),
-                    auditLedgerService.getIfAvailable(),
-                    clockProvider.getIfAvailable(Clock::systemUTC),
-                    sandboxRemoteRuntimePort.getIfAvailable(),
-                    sandboxRuntimeNodeRegistryPort.getIfAvailable(),
-                    sandboxRuntimeCapacityReservationPort.getIfAvailable());
+            return KernelSandboxRuntimeService.builder()
+                    .policyPort(sandboxPolicyPort)
+                    .runtimePort(sandboxRuntimePort)
+                    .artifactPort(sandboxArtifactPort)
+                    .sessionRepositoryPort(sandboxSessionRepositoryPort)
+                    .executionRepositoryPort(sandboxExecutionRepositoryPort)
+                    .artifactQueryPort(sandboxArtifactQueryPort)
+                    .artifactScannerPort(sandboxArtifactScannerPort)
+                    .artifactStoragePort(objectStoragePort.getIfAvailable())
+                    .runtimeProfilePolicyRepositoryPort(sandboxRuntimeProfilePolicyRepositoryPort)
+                    .runRepository(agentRunRepositoryPort.getIfAvailable())
+                    .currentUserPort(currentUserPort.getIfAvailable())
+                    .auditLedger(auditLedgerService.getIfAvailable())
+                    .clock(clockProvider.getIfAvailable(Clock::systemUTC))
+                    .remoteRuntimePort(sandboxRemoteRuntimePort.getIfAvailable())
+                    .runtimeNodeRegistryPort(sandboxRuntimeNodeRegistryPort.getIfAvailable())
+                    .capacityReservationPort(sandboxRuntimeCapacityReservationPort.getIfAvailable())
+                    .build();
         }
-        return new KernelSandboxRuntimeService(
-                sandboxPolicyPort,
-                sandboxRuntimePort,
-                sandboxArtifactPort,
-                sandboxSessionRepositoryPort,
-                sandboxExecutionRepositoryPort,
-                sandboxArtifactQueryPort,
-                sandboxArtifactScannerPort,
-                objectStoragePort.getIfAvailable(),
-                sandboxRuntimeProfilePolicyRepositoryPort,
-                egressPolicyRepositoryPort,
-                sandboxBrowserProfileRepositoryPort,
-                agentRunRepositoryPort.getIfAvailable(),
-                currentUserPort.getIfAvailable(),
-                auditLedgerService.getIfAvailable(),
-                clockProvider.getIfAvailable(Clock::systemUTC),
-                sandboxRemoteRuntimePort.getIfAvailable(),
-                sandboxRuntimeNodeRegistryPort.getIfAvailable(),
-                sandboxRuntimeCapacityReservationPort.getIfAvailable());
+        return KernelSandboxRuntimeService.builder()
+                .policyPort(sandboxPolicyPort)
+                .runtimePort(sandboxRuntimePort)
+                .artifactPort(sandboxArtifactPort)
+                .sessionRepositoryPort(sandboxSessionRepositoryPort)
+                .executionRepositoryPort(sandboxExecutionRepositoryPort)
+                .artifactQueryPort(sandboxArtifactQueryPort)
+                .artifactScannerPort(sandboxArtifactScannerPort)
+                .artifactStoragePort(objectStoragePort.getIfAvailable())
+                .runtimeProfilePolicyRepositoryPort(sandboxRuntimeProfilePolicyRepositoryPort)
+                .egressPolicyRepositoryPort(egressPolicyRepositoryPort)
+                .browserProfileRepositoryPort(sandboxBrowserProfileRepositoryPort)
+                .runRepository(agentRunRepositoryPort.getIfAvailable())
+                .currentUserPort(currentUserPort.getIfAvailable())
+                .auditLedger(auditLedgerService.getIfAvailable())
+                .clock(clockProvider.getIfAvailable(Clock::systemUTC))
+                .remoteRuntimePort(sandboxRemoteRuntimePort.getIfAvailable())
+                .runtimeNodeRegistryPort(sandboxRuntimeNodeRegistryPort.getIfAvailable())
+                .capacityReservationPort(sandboxRuntimeCapacityReservationPort.getIfAvailable())
+                .build();
     }
 }

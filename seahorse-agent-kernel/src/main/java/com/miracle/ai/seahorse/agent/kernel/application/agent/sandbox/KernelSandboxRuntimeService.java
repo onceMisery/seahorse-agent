@@ -104,50 +104,16 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
 
-    private static final ObjectMapper AUDIT_OBJECT_MAPPER = new ObjectMapper();
     private static final String SESSION_ID_PREFIX = "sandbox_";
     private static final String EXECUTION_ID_PREFIX = "sandbox_exec_";
-    private static final String AUDIT_ID_PREFIX = "audit_sandbox_";
-    private static final String AUDIT_ACTOR_ID = "sandbox-runtime";
     private static final String ADMIN_ROLE = "admin";
     private static final String ACCESS_DENIED = "权限不足";
-    private static final String RESOURCE_TYPE_SANDBOX_SESSION = "SANDBOX_SESSION";
-    private static final String RESOURCE_TYPE_SANDBOX_EXECUTION = "SANDBOX_EXECUTION";
-    private static final String SANDBOX_ARTIFACT_BUCKET = "sandbox-artifacts";
-    private static final String ARTIFACT_SCAN_FAILED_SUMMARY = "artifact scanner failed";
-    private static final String ARTIFACT_FILE_UNAVAILABLE_SUMMARY = "artifact file unavailable before storage copy";
-    private static final String ARTIFACT_STORAGE_COPY_FAILED_SUMMARY = "artifact storage copy failed";
-    private static final int MAX_BROWSER_SESSION_STATE_ARTIFACT_BYTES = 128 * 1024;
-    private static final String BROWSER_SESSION_STATE_ARTIFACT_NAME = "browser-session-state.json";
     private static final int DEFAULT_SESSION_LIST_LIMIT = 20;
     private static final int MAX_SESSION_LIST_LIMIT = 100;
     private static final int MAX_RUNTIME_CREATE_ATTEMPTS = 2;
     private static final String CAPACITY_RESERVATION_ID_PREFIX = "sandbox_res_";
     private static final String CREATE_OPERATION_ID_PREFIX = "sandbox_create_";
     private static final Duration CAPACITY_RESERVATION_LEASE_TTL = Duration.ofMinutes(5);
-    private static final String DOWNLOAD_BLOCKED = "Sandbox artifact is not available for download";
-    private static final String UNSAFE_STORAGE_REF_BLOCKED =
-            "Sandbox artifact storage reference is not available through the download endpoint";
-    private static final Map<String, String> FILE_EXTENSIONS = Map.ofEntries(
-            Map.entry("text/html", ".html"),
-            Map.entry("text/markdown", ".md"),
-            Map.entry("text/plain", ".txt"),
-            Map.entry("text/csv", ".csv"),
-            Map.entry("application/gzip", ".tar.gz"),
-            Map.entry("application/json", ".json"),
-            Map.entry("application/pdf", ".pdf"),
-            Map.entry("application/x-gzip", ".tar.gz"),
-            Map.entry("application/x-tar", ".tar"),
-            Map.entry("application/vnd.ms-excel.sheet.macroenabled.12", ".xlsm"),
-            Map.entry("application/vnd.ms-powerpoint.presentation.macroenabled.12", ".pptm"),
-            Map.entry("application/vnd.ms-word.document.macroenabled.12", ".docm"),
-            Map.entry("application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pptx"),
-            Map.entry("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx"),
-            Map.entry("application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx"),
-            Map.entry("image/png", ".png"),
-            Map.entry("image/jpeg", ".jpg"),
-            Map.entry("image/svg+xml", ".svg"),
-            Map.entry("video/webm", ".webm"));
 
     private final SandboxPolicyPort policyPort;
     private final SandboxRuntimePort runtimePort;
@@ -168,341 +134,168 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private final KernelAuditLedgerService auditLedger;
     private final Clock clock;
     private final SandboxPathValidator pathValidator;
+    private final SandboxArtifactSupport artifactSupport;
+    private final SandboxPolicySupport policySupport;
+    private final SandboxAuditSupport auditSupport;
     private final Map<String, SandboxSession> sessions = new ConcurrentHashMap<>();
 
-    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
-                                       SandboxRuntimePort runtimePort,
-                                       SandboxArtifactPort artifactPort,
-                                       Clock clock) {
-        this(policyPort,
-                runtimePort,
-                artifactPort,
-                new InMemorySandboxSessionRepository(),
-                new InMemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                new DefaultSandboxArtifactScannerPort(),
-                null,
-                new InMemorySandboxRuntimeProfilePolicyRepository(),
-                null,
-                clock);
+    /**
+     * 构造器重载已折叠为 Builder：{@code KernelSandboxRuntimeService.builder().policyPort(...).runtimePort(...).build()}。
+     * 仓库类端口均有 InMemory 默认实现，按需覆盖即可；可选端口为 null。
+     */
+    public static Builder builder() {
+        return new Builder();
     }
 
-    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
-                                       SandboxRuntimePort runtimePort,
-                                       SandboxArtifactPort artifactPort,
-                                       SandboxSessionRepositoryPort sessionRepositoryPort,
-                                       SandboxExecutionRepositoryPort executionRepositoryPort,
-                                       SandboxArtifactQueryPort artifactQueryPort,
-                                       Clock clock) {
-        this(policyPort,
-                runtimePort,
-                artifactPort,
-                sessionRepositoryPort,
-                executionRepositoryPort,
-                artifactQueryPort,
-                new DefaultSandboxArtifactScannerPort(),
-                null,
-                new InMemorySandboxRuntimeProfilePolicyRepository(),
-                null,
-                clock);
+    public static final class Builder {
+        private SandboxPolicyPort policyPort;
+        private SandboxRuntimePort runtimePort;
+        private SandboxArtifactPort artifactPort;
+        private SandboxSessionRepositoryPort sessionRepositoryPort = new InMemorySandboxSessionRepository();
+        private SandboxExecutionRepositoryPort executionRepositoryPort = new InMemorySandboxExecutionRepository();
+        private SandboxArtifactQueryPort artifactQueryPort = new EmptySandboxArtifactQueryPort();
+        private SandboxArtifactScannerPort artifactScannerPort = new DefaultSandboxArtifactScannerPort();
+        private ObjectStoragePort artifactStoragePort;
+        private SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort =
+                new InMemorySandboxRuntimeProfilePolicyRepository();
+        private SandboxEgressPolicyRepositoryPort egressPolicyRepositoryPort = new InMemorySandboxEgressPolicyRepository();
+        private SandboxBrowserProfileRepositoryPort browserProfileRepositoryPort =
+                new InMemorySandboxBrowserProfileRepository();
+        private AgentRunRepositoryPort runRepository;
+        private CurrentUserPort currentUserPort;
+        private KernelAuditLedgerService auditLedger;
+        private Clock clock;
+        private SandboxRemoteRuntimePort remoteRuntimePort;
+        private SandboxRuntimeNodeRegistryPort runtimeNodeRegistryPort;
+        private SandboxRuntimeCapacityReservationPort capacityReservationPort;
+
+        public Builder policyPort(SandboxPolicyPort policyPort) {
+            this.policyPort = Objects.requireNonNull(policyPort, "policyPort must not be null");
+            return this;
+        }
+
+        public Builder runtimePort(SandboxRuntimePort runtimePort) {
+            this.runtimePort = Objects.requireNonNull(runtimePort, "runtimePort must not be null");
+            return this;
+        }
+
+        public Builder artifactPort(SandboxArtifactPort artifactPort) {
+            this.artifactPort = Objects.requireNonNull(artifactPort, "artifactPort must not be null");
+            return this;
+        }
+
+        public Builder sessionRepositoryPort(SandboxSessionRepositoryPort sessionRepositoryPort) {
+            this.sessionRepositoryPort = Objects.requireNonNullElseGet(
+                    sessionRepositoryPort,
+                    InMemorySandboxSessionRepository::new);
+            return this;
+        }
+
+        public Builder executionRepositoryPort(SandboxExecutionRepositoryPort executionRepositoryPort) {
+            this.executionRepositoryPort = Objects.requireNonNullElseGet(
+                    executionRepositoryPort,
+                    InMemorySandboxExecutionRepository::new);
+            return this;
+        }
+
+        public Builder artifactQueryPort(SandboxArtifactQueryPort artifactQueryPort) {
+            this.artifactQueryPort = Objects.requireNonNullElseGet(artifactQueryPort, EmptySandboxArtifactQueryPort::new);
+            return this;
+        }
+
+        public Builder artifactScannerPort(SandboxArtifactScannerPort artifactScannerPort) {
+            this.artifactScannerPort = Objects.requireNonNullElseGet(
+                    artifactScannerPort,
+                    DefaultSandboxArtifactScannerPort::new);
+            return this;
+        }
+
+        public Builder artifactStoragePort(ObjectStoragePort artifactStoragePort) {
+            this.artifactStoragePort = artifactStoragePort;
+            return this;
+        }
+
+        public Builder runtimeProfilePolicyRepositoryPort(
+                SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort) {
+            this.runtimeProfilePolicyRepositoryPort = Objects.requireNonNullElseGet(
+                    runtimeProfilePolicyRepositoryPort,
+                    InMemorySandboxRuntimeProfilePolicyRepository::new);
+            return this;
+        }
+
+        public Builder egressPolicyRepositoryPort(SandboxEgressPolicyRepositoryPort egressPolicyRepositoryPort) {
+            this.egressPolicyRepositoryPort = Objects.requireNonNullElseGet(
+                    egressPolicyRepositoryPort,
+                    InMemorySandboxEgressPolicyRepository::new);
+            return this;
+        }
+
+        public Builder browserProfileRepositoryPort(SandboxBrowserProfileRepositoryPort browserProfileRepositoryPort) {
+            this.browserProfileRepositoryPort = Objects.requireNonNullElseGet(
+                    browserProfileRepositoryPort,
+                    InMemorySandboxBrowserProfileRepository::new);
+            return this;
+        }
+
+        public Builder runRepository(AgentRunRepositoryPort runRepository) {
+            this.runRepository = runRepository;
+            return this;
+        }
+
+        public Builder currentUserPort(CurrentUserPort currentUserPort) {
+            this.currentUserPort = currentUserPort;
+            return this;
+        }
+
+        public Builder auditLedger(KernelAuditLedgerService auditLedger) {
+            this.auditLedger = auditLedger;
+            return this;
+        }
+
+        public Builder clock(Clock clock) {
+            this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
+            return this;
+        }
+
+        public Builder remoteRuntimePort(SandboxRemoteRuntimePort remoteRuntimePort) {
+            this.remoteRuntimePort = remoteRuntimePort;
+            return this;
+        }
+
+        public Builder runtimeNodeRegistryPort(SandboxRuntimeNodeRegistryPort runtimeNodeRegistryPort) {
+            this.runtimeNodeRegistryPort = runtimeNodeRegistryPort;
+            return this;
+        }
+
+        public Builder capacityReservationPort(SandboxRuntimeCapacityReservationPort capacityReservationPort) {
+            this.capacityReservationPort = capacityReservationPort;
+            return this;
+        }
+
+        public KernelSandboxRuntimeService build() {
+            return new KernelSandboxRuntimeService(
+                    Objects.requireNonNull(policyPort, "policyPort must not be null"),
+                    Objects.requireNonNull(runtimePort, "runtimePort must not be null"),
+                    Objects.requireNonNull(artifactPort, "artifactPort must not be null"),
+                    sessionRepositoryPort,
+                    executionRepositoryPort,
+                    artifactQueryPort,
+                    artifactScannerPort,
+                    artifactStoragePort,
+                    runtimeProfilePolicyRepositoryPort,
+                    egressPolicyRepositoryPort,
+                    browserProfileRepositoryPort,
+                    runRepository,
+                    currentUserPort,
+                    auditLedger,
+                    clock,
+                    remoteRuntimePort,
+                    runtimeNodeRegistryPort,
+                    capacityReservationPort);
+        }
     }
 
-    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
-                                       SandboxRuntimePort runtimePort,
-                                       SandboxArtifactPort artifactPort,
-                                       SandboxSessionRepositoryPort sessionRepositoryPort,
-                                       SandboxExecutionRepositoryPort executionRepositoryPort,
-                                       SandboxArtifactQueryPort artifactQueryPort,
-                                       KernelAuditLedgerService auditLedger,
-                                       Clock clock) {
-        this(policyPort,
-                runtimePort,
-                artifactPort,
-                sessionRepositoryPort,
-                executionRepositoryPort,
-                artifactQueryPort,
-                new DefaultSandboxArtifactScannerPort(),
-                null,
-                new InMemorySandboxRuntimeProfilePolicyRepository(),
-                auditLedger,
-                clock);
-    }
-
-    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
-                                       SandboxRuntimePort runtimePort,
-                                       SandboxArtifactPort artifactPort,
-                                       SandboxSessionRepositoryPort sessionRepositoryPort,
-                                       SandboxExecutionRepositoryPort executionRepositoryPort,
-                                       SandboxArtifactQueryPort artifactQueryPort,
-                                       SandboxArtifactScannerPort artifactScannerPort,
-                                       KernelAuditLedgerService auditLedger,
-                                       Clock clock) {
-        this(policyPort,
-                runtimePort,
-                artifactPort,
-                sessionRepositoryPort,
-                executionRepositoryPort,
-                artifactQueryPort,
-                artifactScannerPort,
-                null,
-                new InMemorySandboxRuntimeProfilePolicyRepository(),
-                auditLedger,
-                clock);
-    }
-
-    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
-                                       SandboxRuntimePort runtimePort,
-                                       SandboxArtifactPort artifactPort,
-                                       SandboxSessionRepositoryPort sessionRepositoryPort,
-                                       SandboxExecutionRepositoryPort executionRepositoryPort,
-                                       SandboxArtifactQueryPort artifactQueryPort,
-                                       SandboxArtifactScannerPort artifactScannerPort,
-                                       ObjectStoragePort artifactStoragePort,
-                                       KernelAuditLedgerService auditLedger,
-                                       Clock clock) {
-        this(policyPort,
-                runtimePort,
-                artifactPort,
-                sessionRepositoryPort,
-                executionRepositoryPort,
-                artifactQueryPort,
-                artifactScannerPort,
-                artifactStoragePort,
-                new InMemorySandboxRuntimeProfilePolicyRepository(),
-                null,
-                null,
-                auditLedger,
-                clock);
-    }
-
-    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
-                                       SandboxRuntimePort runtimePort,
-                                       SandboxArtifactPort artifactPort,
-                                       SandboxSessionRepositoryPort sessionRepositoryPort,
-                                       SandboxExecutionRepositoryPort executionRepositoryPort,
-                                       SandboxArtifactQueryPort artifactQueryPort,
-                                       SandboxArtifactScannerPort artifactScannerPort,
-                                       ObjectStoragePort artifactStoragePort,
-                                       SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort,
-                                       KernelAuditLedgerService auditLedger,
-                                       Clock clock) {
-        this(policyPort,
-                runtimePort,
-                artifactPort,
-                sessionRepositoryPort,
-                executionRepositoryPort,
-                artifactQueryPort,
-                artifactScannerPort,
-                artifactStoragePort,
-                runtimeProfilePolicyRepositoryPort,
-                null,
-                null,
-                auditLedger,
-                clock);
-    }
-
-    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
-                                       SandboxRuntimePort runtimePort,
-                                       SandboxArtifactPort artifactPort,
-                                       SandboxSessionRepositoryPort sessionRepositoryPort,
-                                       SandboxExecutionRepositoryPort executionRepositoryPort,
-                                       SandboxArtifactQueryPort artifactQueryPort,
-                                       SandboxArtifactScannerPort artifactScannerPort,
-                                       ObjectStoragePort artifactStoragePort,
-                                       SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort,
-                                       AgentRunRepositoryPort runRepository,
-                                       CurrentUserPort currentUserPort,
-                                       KernelAuditLedgerService auditLedger,
-                                       Clock clock) {
-        this(policyPort,
-                runtimePort,
-                artifactPort,
-                sessionRepositoryPort,
-                executionRepositoryPort,
-                artifactQueryPort,
-                artifactScannerPort,
-                artifactStoragePort,
-                runtimeProfilePolicyRepositoryPort,
-                runRepository,
-                currentUserPort,
-                auditLedger,
-                clock,
-                null,
-                null);
-    }
-
-    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
-                                       SandboxRuntimePort runtimePort,
-                                       SandboxArtifactPort artifactPort,
-                                       SandboxSessionRepositoryPort sessionRepositoryPort,
-                                       SandboxExecutionRepositoryPort executionRepositoryPort,
-                                       SandboxArtifactQueryPort artifactQueryPort,
-                                       SandboxArtifactScannerPort artifactScannerPort,
-                                       ObjectStoragePort artifactStoragePort,
-                                       SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort,
-                                       AgentRunRepositoryPort runRepository,
-                                       CurrentUserPort currentUserPort,
-                                       KernelAuditLedgerService auditLedger,
-                                       Clock clock,
-                                       SandboxRemoteRuntimePort remoteRuntimePort,
-                                       SandboxRuntimeNodeRegistryPort runtimeNodeRegistryPort) {
-        this(policyPort,
-                runtimePort,
-                artifactPort,
-                sessionRepositoryPort,
-                executionRepositoryPort,
-                artifactQueryPort,
-                artifactScannerPort,
-                artifactStoragePort,
-                runtimeProfilePolicyRepositoryPort,
-                runRepository,
-                currentUserPort,
-                auditLedger,
-                clock,
-                remoteRuntimePort,
-                runtimeNodeRegistryPort,
-                null);
-    }
-
-    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
-                                       SandboxRuntimePort runtimePort,
-                                       SandboxArtifactPort artifactPort,
-                                       SandboxSessionRepositoryPort sessionRepositoryPort,
-                                       SandboxExecutionRepositoryPort executionRepositoryPort,
-                                       SandboxArtifactQueryPort artifactQueryPort,
-                                       SandboxArtifactScannerPort artifactScannerPort,
-                                       ObjectStoragePort artifactStoragePort,
-                                       SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort,
-                                       AgentRunRepositoryPort runRepository,
-                                       CurrentUserPort currentUserPort,
-                                       KernelAuditLedgerService auditLedger,
-                                       Clock clock,
-                                       SandboxRemoteRuntimePort remoteRuntimePort,
-                                       SandboxRuntimeNodeRegistryPort runtimeNodeRegistryPort,
-                                       SandboxRuntimeCapacityReservationPort capacityReservationPort) {
-        this(policyPort,
-                runtimePort,
-                artifactPort,
-                sessionRepositoryPort,
-                executionRepositoryPort,
-                artifactQueryPort,
-                artifactScannerPort,
-                artifactStoragePort,
-                runtimeProfilePolicyRepositoryPort,
-                new InMemorySandboxEgressPolicyRepository(),
-                new InMemorySandboxBrowserProfileRepository(),
-                runRepository,
-                currentUserPort,
-                auditLedger,
-                clock,
-                remoteRuntimePort,
-                runtimeNodeRegistryPort,
-                capacityReservationPort);
-    }
-
-    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
-                                       SandboxRuntimePort runtimePort,
-                                       SandboxArtifactPort artifactPort,
-                                       SandboxSessionRepositoryPort sessionRepositoryPort,
-                                       SandboxExecutionRepositoryPort executionRepositoryPort,
-                                       SandboxArtifactQueryPort artifactQueryPort,
-                                       SandboxArtifactScannerPort artifactScannerPort,
-                                       ObjectStoragePort artifactStoragePort,
-                                       SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort,
-                                       SandboxEgressPolicyRepositoryPort egressPolicyRepositoryPort,
-                                       AgentRunRepositoryPort runRepository,
-                                       CurrentUserPort currentUserPort,
-                                       KernelAuditLedgerService auditLedger,
-                                       Clock clock) {
-        this(policyPort,
-                runtimePort,
-                artifactPort,
-                sessionRepositoryPort,
-                executionRepositoryPort,
-                artifactQueryPort,
-                artifactScannerPort,
-                artifactStoragePort,
-                runtimeProfilePolicyRepositoryPort,
-                egressPolicyRepositoryPort,
-                new InMemorySandboxBrowserProfileRepository(),
-                runRepository,
-                currentUserPort,
-                auditLedger,
-                clock);
-    }
-
-    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
-                                       SandboxRuntimePort runtimePort,
-                                       SandboxArtifactPort artifactPort,
-                                       SandboxSessionRepositoryPort sessionRepositoryPort,
-                                       SandboxExecutionRepositoryPort executionRepositoryPort,
-                                       SandboxArtifactQueryPort artifactQueryPort,
-                                       SandboxArtifactScannerPort artifactScannerPort,
-                                       ObjectStoragePort artifactStoragePort,
-                                       SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort,
-                                       SandboxEgressPolicyRepositoryPort egressPolicyRepositoryPort,
-                                       SandboxBrowserProfileRepositoryPort browserProfileRepositoryPort,
-                                       AgentRunRepositoryPort runRepository,
-                                       CurrentUserPort currentUserPort,
-                                       KernelAuditLedgerService auditLedger,
-                                       Clock clock) {
-        this(policyPort,
-                runtimePort,
-                artifactPort,
-                sessionRepositoryPort,
-                executionRepositoryPort,
-                artifactQueryPort,
-                artifactScannerPort,
-                artifactStoragePort,
-                runtimeProfilePolicyRepositoryPort,
-                egressPolicyRepositoryPort,
-                browserProfileRepositoryPort,
-                runRepository,
-                currentUserPort,
-                auditLedger,
-                clock,
-                null,
-                null);
-    }
-
-    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
-                                       SandboxRuntimePort runtimePort,
-                                       SandboxArtifactPort artifactPort,
-                                       SandboxSessionRepositoryPort sessionRepositoryPort,
-                                       SandboxExecutionRepositoryPort executionRepositoryPort,
-                                       SandboxArtifactQueryPort artifactQueryPort,
-                                       SandboxArtifactScannerPort artifactScannerPort,
-                                       ObjectStoragePort artifactStoragePort,
-                                       SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort,
-                                       SandboxEgressPolicyRepositoryPort egressPolicyRepositoryPort,
-                                       SandboxBrowserProfileRepositoryPort browserProfileRepositoryPort,
-                                       AgentRunRepositoryPort runRepository,
-                                       CurrentUserPort currentUserPort,
-                                       KernelAuditLedgerService auditLedger,
-                                       Clock clock,
-                                       SandboxRemoteRuntimePort remoteRuntimePort,
-                                       SandboxRuntimeNodeRegistryPort runtimeNodeRegistryPort) {
-        this(policyPort,
-                runtimePort,
-                artifactPort,
-                sessionRepositoryPort,
-                executionRepositoryPort,
-                artifactQueryPort,
-                artifactScannerPort,
-                artifactStoragePort,
-                runtimeProfilePolicyRepositoryPort,
-                egressPolicyRepositoryPort,
-                browserProfileRepositoryPort,
-                runRepository,
-                currentUserPort,
-                auditLedger,
-                clock,
-                remoteRuntimePort,
-                runtimeNodeRegistryPort,
-                null);
-    }
-
-    public KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
+    private KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
                                        SandboxRuntimePort runtimePort,
                                        SandboxArtifactPort artifactPort,
                                        SandboxSessionRepositoryPort sessionRepositoryPort,
@@ -545,12 +338,75 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         this.auditLedger = auditLedger;
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
         this.pathValidator = new SandboxPathValidator();
+        this.artifactSupport = new SandboxArtifactSupport(
+                artifactPort,
+                artifactScannerPort,
+                artifactStoragePort,
+                artifactQueryPort,
+                pathValidator,
+                new SandboxArtifactSupport.SandboxSessionAccess() {
+                    @Override
+                    public SandboxSession findSessionOrThrow(String sessionId) {
+                        return KernelSandboxRuntimeService.this.findSessionOrThrow(sessionId);
+                    }
+
+                    @Override
+                    public SandboxSession requireReadableSession(SandboxSession session) {
+                        return KernelSandboxRuntimeService.this.requireReadableSession(session);
+                    }
+                });
+        this.policySupport = new SandboxPolicySupport(
+                policyPort,
+                runtimeProfilePolicyRepositoryPort,
+                egressPolicyRepositoryPort,
+                clock);
+        this.auditSupport = new SandboxAuditSupport(auditLedger, clock);
+    }
+
+    @Override
+    public List<SandboxRuntimeProfilePolicy> listRuntimeProfilePolicies(String tenantId) {
+        return policySupport.listRuntimeProfilePolicies(tenantId);
+    }
+
+    @Override
+    public SandboxRuntimeProfilePolicy upsertRuntimeProfilePolicy(SandboxRuntimeProfilePolicyUpsertCommand command) {
+        return policySupport.upsertRuntimeProfilePolicy(command);
+    }
+
+    @Override
+    public SandboxEgressPolicy inspectSandboxEgressPolicy(String tenantId) {
+        return policySupport.inspectSandboxEgressPolicy(tenantId);
+    }
+
+    @Override
+    public SandboxEgressPolicy upsertSandboxEgressPolicy(SandboxEgressPolicyUpsertCommand command) {
+        return policySupport.upsertSandboxEgressPolicy(command);
+    }
+
+    @Override
+    public List<SandboxArtifact> listArtifacts(String sessionId) {
+        return artifactSupport.listArtifacts(sessionId);
+    }
+
+    @Override
+    public SandboxArtifactDetailDecision describeArtifact(String artifactId) {
+        return artifactSupport.describeArtifact(artifactId);
+    }
+
+    @Override
+    public SandboxArtifactDownloadDecision downloadArtifact(String artifactId) {
+        return artifactSupport.downloadArtifact(artifactId);
+    }
+
+    @Override
+    public String readBrowserSessionStateArtifact(String artifactId) {
+        return artifactSupport.readBrowserSessionStateArtifact(artifactId);
     }
 
     @Override
     public SandboxSession createSession(SandboxSessionCreateCommand command) {
         SandboxSessionCreateCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
-        SandboxRuntimeProfilePolicy profilePolicy = effectiveRuntimeProfilePolicy(
+        SandboxRuntimeProfilePolicy profilePolicy = policySupport.effectiveRuntimeProfilePolicy(
                 safeCommand.tenantId(),
                 safeCommand.runtimeType());
         Instant now = clock.instant();
@@ -690,9 +546,9 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             }
             releaseCapacityReservation(runtimeAdmission);
             if (pendingFailoverAudit != null && saved.status() == SandboxExecutionStatus.CREATED) {
-                appendRuntimeCreateFailoverAudit(saved, pendingFailoverAudit, runtimeCreateAttempts);
+                auditSupport.appendRuntimeCreateFailoverAudit(saved, pendingFailoverAudit, runtimeCreateAttempts);
             }
-            appendSessionAudit(saved, AuditEventType.SANDBOX_SESSION_CREATED);
+            auditSupport.appendSessionAudit(saved, AuditEventType.SANDBOX_SESSION_CREATED);
             return saved;
         }
         return saveFailedRuntimeSession(
@@ -775,12 +631,12 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         try {
             SandboxExecution savedExecution = executionRepositoryPort.saveExecution(result.execution());
             for (SandboxArtifact artifact : result.artifacts()) {
-                savedArtifacts.add(persistArtifact(artifact));
+                savedArtifacts.add(artifactSupport.persistArtifact(artifact));
             }
             List<SandboxArtifact> visibleArtifacts = savedArtifacts.stream()
                     .filter(SandboxArtifact::promptVisible)
                     .toList();
-            appendExecutionAudit(session,
+            auditSupport.appendExecutionAudit(session,
                     savedExecution,
                     savedArtifacts.size(),
                     visibleArtifacts.size(),
@@ -889,79 +745,6 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         Set<String> activeSessionIds = sessionRepositoryPort.listActiveSessionIds();
         return runtimePort.reapOrphanedContainers(activeSessionIds, dryRun);
     }
-
-    @Override
-    public List<SandboxRuntimeProfilePolicy> listRuntimeProfilePolicies(String tenantId) {
-        String safeTenantId = requireText(tenantId, "tenantId must not be blank");
-        Map<SandboxRuntimeType, SandboxRuntimeProfilePolicy> configured = runtimeProfilePolicyRepositoryPort
-                .listByTenant(safeTenantId)
-                .stream()
-                .collect(java.util.stream.Collectors.toMap(
-                        SandboxRuntimeProfilePolicy::runtimeType,
-                        policy -> policy,
-                        (left, right) -> left.updatedAt().isAfter(right.updatedAt()) ? left : right));
-        Instant now = clock.instant();
-        return List.of(SandboxRuntimeType.CODE_INTERPRETER,
-                        SandboxRuntimeType.FILE_CONVERSION,
-                        SandboxRuntimeType.BROWSER_AUTOMATION,
-                        SandboxRuntimeType.SHELL)
-                .stream()
-                .map(runtimeType -> configured.getOrDefault(
-                        runtimeType,
-                        SandboxRuntimeProfilePolicy.defaultPolicy(safeTenantId, runtimeType, now)))
-                .toList();
-    }
-
-    @Override
-    public SandboxRuntimeProfilePolicy upsertRuntimeProfilePolicy(SandboxRuntimeProfilePolicyUpsertCommand command) {
-        SandboxRuntimeProfilePolicyUpsertCommand safeCommand =
-                Objects.requireNonNull(command, "command must not be null");
-        String profileId = SandboxSession.profileIdOrDefault(safeCommand.profileId(), safeCommand.runtimeType());
-        String supportedProfileId = SandboxSession.profileIdOrDefault(null, safeCommand.runtimeType());
-        if (!supportedProfileId.equals(profileId)) {
-            throw new IllegalArgumentException("profileId must match the supported sandbox runtime profile");
-        }
-        long ttlSeconds = safeCommand.sessionTtlSeconds() == null
-                ? SandboxRuntimeProfilePolicy.DEFAULT_SESSION_TTL_SECONDS
-                : safeCommand.sessionTtlSeconds();
-        Instant now = clock.instant();
-        Optional<SandboxRuntimeProfilePolicy> existing = existingRuntimeProfilePolicy(safeCommand);
-        Instant createdAt = existing.map(SandboxRuntimeProfilePolicy::createdAt).orElse(now);
-        SandboxRuntimeProfilePolicy policy = new SandboxRuntimeProfilePolicy(
-                existing.map(SandboxRuntimeProfilePolicy::policyId).orElse(safeCommand.policyId()),
-                safeCommand.tenantId(),
-                safeCommand.runtimeType(),
-                profileId,
-                safeCommand.status() == null ? SandboxRuntimeProfilePolicyStatus.ACTIVE : safeCommand.status(),
-                ttlSeconds,
-                Boolean.TRUE.equals(safeCommand.networkAllowed()),
-                createdAt,
-                now);
-        return runtimeProfilePolicyRepositoryPort.upsert(policy);
-    }
-
-    @Override
-    public SandboxEgressPolicy inspectSandboxEgressPolicy(String tenantId) {
-        return effectiveSandboxEgressPolicy(tenantId);
-    }
-
-    @Override
-    public SandboxEgressPolicy upsertSandboxEgressPolicy(SandboxEgressPolicyUpsertCommand command) {
-        SandboxEgressPolicyUpsertCommand safeCommand =
-                Objects.requireNonNull(command, "command must not be null");
-        Instant now = clock.instant();
-        Optional<SandboxEgressPolicy> existing = egressPolicyRepositoryPort.findByTenant(safeCommand.tenantId());
-        SandboxEgressPolicy policy = new SandboxEgressPolicy(
-                existing.map(SandboxEgressPolicy::policyId).orElse(safeCommand.policyId()),
-                safeCommand.tenantId(),
-                safeCommand.networkPolicy(),
-                safeCommand.allowlistedHosts(),
-                safeCommand.browserPrivateNetworkAllowedHosts(),
-                existing.map(SandboxEgressPolicy::createdAt).orElse(now),
-                now);
-        return egressPolicyRepositoryPort.upsert(policy);
-    }
-
     @Override
     public List<SandboxBrowserProfile> listSandboxBrowserProfiles(String tenantId, int limit) {
         return browserProfileRepositoryPort.listByTenant(
@@ -981,7 +764,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         if (!expiresAt.isAfter(now)) {
             throw new IllegalArgumentException("expiresAt must be in the future");
         }
-        requireBrowserProfileArtifact(tenantId, artifactId);
+        artifactSupport.requireBrowserProfileArtifact(tenantId, artifactId);
         Optional<SandboxBrowserProfile> existing = browserProfileRepositoryPort
                 .findByTenantAndProfileId(tenantId, profileId);
         return browserProfileRepositoryPort.save(new SandboxBrowserProfile(
@@ -1021,7 +804,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         if (!profile.usableAt(clock.instant())) {
             throw new IllegalStateException("Sandbox browser profile is disabled or expired");
         }
-        return readBrowserSessionStateArtifact(requireBrowserProfileArtifact(
+        return artifactSupport.readBrowserSessionStateArtifact(artifactSupport.requireBrowserProfileArtifact(
                 safeTenantId,
                 profile.sessionStateArtifactId()));
     }
@@ -1032,103 +815,9 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         requireReadableSession(findSessionOrThrow(safeSessionId));
         return executionRepositoryPort.listExecutionsBySession(safeSessionId);
     }
-
-    @Override
-    public List<SandboxArtifact> listArtifacts(String sessionId) {
-        String safeSessionId = requireText(sessionId, "sessionId must not be blank");
-        requireReadableSession(findSessionOrThrow(safeSessionId));
-        return artifactQueryPort.listArtifactsBySession(safeSessionId);
-    }
-
-    @Override
-    public SandboxArtifactDetailDecision describeArtifact(String artifactId) {
-        SandboxArtifact artifact = findArtifactWithSession(artifactId);
-        SandboxArtifactDownloadPolicy policy = downloadPolicy(artifact);
-        return new SandboxArtifactDetailDecision(
-                artifact,
-                artifact.mediaType(),
-                artifactFilename(artifact),
-                policy.downloadable(),
-                policy.blockedReason());
-    }
-
-    @Override
-    public SandboxArtifactDownloadDecision downloadArtifact(String artifactId) {
-        SandboxArtifact artifact = findArtifactWithSession(artifactId);
-        SandboxArtifactDownloadPolicy policy = downloadPolicy(artifact);
-        if (!policy.downloadable()) {
-            throw new IllegalStateException(policy.blockedReason());
-        }
-        return new SandboxArtifactDownloadDecision(
-                artifact,
-                artifact.mediaType(),
-                artifactFilename(artifact),
-                artifact.objectUri());
-    }
-
-    @Override
-    public String readBrowserSessionStateArtifact(String artifactId) {
-        SandboxArtifact artifact = findArtifactWithSession(artifactId);
-        return readBrowserSessionStateArtifact(artifact);
-    }
-
-    private String readBrowserSessionStateArtifact(SandboxArtifact artifact) {
-        requireGovernedBrowserSessionStateArtifact(artifact);
-        try (InputStream input = openArtifactObjectStream(artifact)) {
-            byte[] bytes = input.readNBytes(MAX_BROWSER_SESSION_STATE_ARTIFACT_BYTES + 1);
-            if (bytes.length > MAX_BROWSER_SESSION_STATE_ARTIFACT_BYTES) {
-                throw new IllegalStateException("Sandbox browser session-state artifact exceeds replay budget");
-            }
-            return new String(bytes, StandardCharsets.UTF_8);
-        } catch (IOException ex) {
-            throw new IllegalStateException("Sandbox browser session-state artifact could not be read", ex);
-        }
-    }
-
-    private SandboxArtifact requireBrowserProfileArtifact(String tenantId, String artifactId) {
-        SandboxArtifact artifact = artifactQueryPort.findArtifactById(
-                        requireText(artifactId, "sessionStateArtifactId must not be blank"))
-                .orElseThrow(() -> new IllegalArgumentException("Sandbox browser session-state artifact not found"));
-        SandboxSession session = findSessionOrThrow(artifact.sessionId());
-        if (!tenantId.equals(session.tenantId())) {
-            throw new IllegalArgumentException("Sandbox browser profile artifact belongs to another tenant");
-        }
-        requireGovernedBrowserSessionStateArtifact(artifact);
-        return artifact;
-    }
-
-    private void requireGovernedBrowserSessionStateArtifact(SandboxArtifact artifact) {
-        if (!isBrowserSessionStateArtifact(artifact)) {
-            throw new IllegalArgumentException("Sandbox browser session-state artifact not found");
-        }
-        if (!"application/json".equals(normalizedMediaType(artifact.mediaType()))
-                || artifact.scanStatus() != SandboxArtifactScanStatus.BLOCKED
-                || artifact.sensitivity() != ContextSensitivity.SECRET) {
-            throw new IllegalStateException("Sandbox browser session-state artifact is not governed for replay");
-        }
-    }
-
-    private SandboxArtifact findArtifactWithSession(String artifactId) {
-        SandboxArtifact artifact = artifactQueryPort.findArtifactById(
-                        requireText(artifactId, "artifactId must not be blank"))
-                .orElseThrow(() -> new IllegalArgumentException("Sandbox artifact not found"));
-        requireReadableSession(findSessionOrThrow(artifact.sessionId()));
-        return artifact;
-    }
-
-    private SandboxArtifactDownloadPolicy downloadPolicy(SandboxArtifact artifact) {
-        if (!artifact.downloadable()) {
-            return SandboxArtifactDownloadPolicy.blocked(DOWNLOAD_BLOCKED);
-        }
-        if (isUnsafeDownloadReference(artifact.objectUri())) {
-            return SandboxArtifactDownloadPolicy.blocked(UNSAFE_STORAGE_REF_BLOCKED);
-        }
-        return SandboxArtifactDownloadPolicy.allowed();
-    }
-
     private SandboxExecutionResult failedResult(SandboxSession session, SandboxPolicyReasonCode reasonCode) {
         SandboxExecution execution = executionRepositoryPort.saveExecution(failedExecution(session, reasonCode));
-        appendExecutionAudit(session, execution, 0, 0, reasonCode);
+        auditSupport.appendExecutionAudit(session, execution, 0, 0, reasonCode);
         return SandboxExecutionResult.failed(execution, reasonCode);
     }
 
@@ -1315,41 +1004,9 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         return Optional.of(runtimeNodeRegistryPort.findLiveEndpoint(session.runtimeNodeId())
                 .orElseThrow(() -> new IllegalStateException("Sandbox remote runtime node is unavailable")));
     }
-
-    private SandboxRuntimeProfilePolicy effectiveRuntimeProfilePolicy(String tenantId,
-                                                                      SandboxRuntimeType runtimeType) {
-        return runtimeProfilePolicyRepositoryPort.findByTenantAndRuntimeType(tenantId, runtimeType)
-                .orElseGet(() -> SandboxRuntimeProfilePolicy.defaultPolicy(tenantId, runtimeType, clock.instant()));
-    }
-
-    private SandboxEgressPolicy effectiveSandboxEgressPolicy(String tenantId) {
-        String safeTenantId = requireText(tenantId, "tenantId must not be blank");
-        return egressPolicyRepositoryPort.findByTenant(safeTenantId)
-                .orElseGet(() -> SandboxEgressPolicy.defaultPolicy(
-                        safeTenantId,
-                        policyPort.networkPolicy(safeTenantId),
-                        policyPort.allowlistedHosts(safeTenantId),
-                        policyPort.browserPrivateNetworkAllowedHosts(safeTenantId),
-                        clock.instant()));
-    }
-
-    private Optional<SandboxRuntimeProfilePolicy> existingRuntimeProfilePolicy(
-            SandboxRuntimeProfilePolicyUpsertCommand command) {
-        if (hasText(command.policyId())) {
-            Optional<SandboxRuntimeProfilePolicy> byId =
-                    runtimeProfilePolicyRepositoryPort.findById(command.policyId());
-            if (byId.isPresent()) {
-                return byId;
-            }
-        }
-        return runtimeProfilePolicyRepositoryPort.findByTenantAndRuntimeType(
-                command.tenantId(),
-                command.runtimeType());
-    }
-
     private SandboxSession saveSession(SandboxSession session, AuditEventType auditEventType) {
         SandboxSession saved = persistSession(session);
-        appendSessionAudit(saved, auditEventType);
+        auditSupport.appendSessionAudit(saved, auditEventType);
         return saved;
     }
 
@@ -1423,164 +1080,6 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         Instant now = clock.instant();
         return SandboxExecution.failed(executionId(), session.sessionId(), session.runtimeType(), now, reasonCode);
     }
-
-    private SandboxArtifact scanArtifact(SandboxArtifact artifact) {
-        try {
-            SandboxArtifactScanResult result = Objects.requireNonNull(
-                    artifactScannerPort.scan(new SandboxArtifactScanRequest(artifact)),
-                    "artifact scan result must not be null");
-            return artifact.withScanDecision(
-                    result.scanStatus(),
-                    result.sensitivity(),
-                    result.summary(),
-                    result.redactionSummaryJson());
-        } catch (RuntimeException ex) {
-            return artifact.withScanDecision(
-                    SandboxArtifactScanStatus.BLOCKED,
-                    ContextSensitivity.SECRET,
-                    ARTIFACT_SCAN_FAILED_SUMMARY,
-                    SandboxArtifactRedactionSummary.blocked(
-                            ARTIFACT_SCAN_FAILED_SUMMARY,
-                            false,
-                            List.of("SCAN_ERROR")));
-        }
-    }
-
-    private SandboxArtifact persistArtifact(SandboxArtifact artifact) {
-        SandboxArtifact scanned = scanArtifact(artifact);
-        SandboxArtifact prepared = copyDownloadableFileArtifact(scanned);
-        try {
-            return artifactPort.save(prepared);
-        } catch (RuntimeException ex) {
-            cleanupCopiedArtifact(scanned, prepared);
-            throw ex;
-        }
-    }
-
-    private SandboxArtifact copyDownloadableFileArtifact(SandboxArtifact artifact) {
-        if (artifactStoragePort == null
-                || (!artifact.downloadable() && !isBrowserSessionStateArtifact(artifact))
-                || !isFileUri(artifact.objectUri())) {
-            return artifact;
-        }
-        try {
-            Path path = Path.of(URI.create(artifact.objectUri())).toAbsolutePath().normalize();
-            pathValidator.validate(path.toString());
-            if (!Files.isRegularFile(path)) {
-                return artifact.withScanDecision(
-                        SandboxArtifactScanStatus.BLOCKED,
-                        ContextSensitivity.SECRET,
-                        ARTIFACT_FILE_UNAVAILABLE_SUMMARY,
-                        SandboxArtifactRedactionSummary.blocked(
-                                ARTIFACT_FILE_UNAVAILABLE_SUMMARY,
-                                false,
-                                List.of("CONTENT_UNAVAILABLE")));
-            }
-            long size = Files.size(path);
-            artifactStoragePort.ensureBucket(SANDBOX_ARTIFACT_BUCKET);
-            try (InputStream input = Files.newInputStream(path)) {
-                StoredObject stored = artifactStoragePort.reliableUpload(
-                        SANDBOX_ARTIFACT_BUCKET,
-                        input,
-                        size,
-                        artifactFilename(artifact, path),
-                        artifact.mediaType());
-                return artifact.withObjectUri(stored.url());
-            }
-        } catch (IOException | RuntimeException ex) {
-            return artifact.withScanDecision(
-                    SandboxArtifactScanStatus.BLOCKED,
-                    ContextSensitivity.SECRET,
-                    ARTIFACT_STORAGE_COPY_FAILED_SUMMARY,
-                    SandboxArtifactRedactionSummary.blocked(
-                            ARTIFACT_STORAGE_COPY_FAILED_SUMMARY,
-                            false,
-                            List.of("STORAGE_COPY_FAILED")));
-        }
-    }
-
-    private InputStream openArtifactObjectStream(SandboxArtifact artifact) throws IOException {
-        if (artifactStoragePort != null && !isFileUri(artifact.objectUri())) {
-            return artifactStoragePort.openStream(artifact.objectUri());
-        }
-        if (!isFileUri(artifact.objectUri())) {
-            throw new IllegalStateException("Sandbox browser session-state artifact storage is not available");
-        }
-        Path path = Path.of(URI.create(artifact.objectUri())).toAbsolutePath().normalize();
-        pathValidator.validate(path.toString());
-        return Files.newInputStream(path);
-    }
-
-    private boolean isBrowserSessionStateArtifact(SandboxArtifact artifact) {
-        try {
-            String path = URI.create(artifact.objectUri()).getPath();
-            if (path == null) {
-                return false;
-            }
-            int slashIndex = path.lastIndexOf('/');
-            String name = slashIndex >= 0 ? path.substring(slashIndex + 1) : path;
-            return BROWSER_SESSION_STATE_ARTIFACT_NAME.equals(name)
-                    || name.endsWith("-" + BROWSER_SESSION_STATE_ARTIFACT_NAME);
-        } catch (RuntimeException ex) {
-            return false;
-        }
-    }
-
-    private void cleanupCopiedArtifact(SandboxArtifact scanned, SandboxArtifact prepared) {
-        if (artifactStoragePort == null || Objects.equals(scanned.objectUri(), prepared.objectUri())) {
-            return;
-        }
-        try {
-            artifactStoragePort.deleteByUrl(prepared.objectUri());
-        } catch (RuntimeException ignored) {
-            // Preserve the original persistence failure.
-        }
-    }
-
-    private String artifactFilename(SandboxArtifact artifact, Path path) {
-        Path filename = path.getFileName();
-        if (filename != null && hasText(filename.toString())) {
-            return filename.toString();
-        }
-        return artifact.artifactId() + ".bin";
-    }
-
-    private boolean isFileUri(String objectUri) {
-        try {
-            return "file".equalsIgnoreCase(URI.create(objectUri).getScheme());
-        } catch (RuntimeException ex) {
-            return false;
-        }
-    }
-
-    private boolean isUnsafeDownloadReference(String objectUri) {
-        try {
-            String scheme = URI.create(objectUri).getScheme();
-            if (!hasText(scheme)) {
-                return true;
-            }
-            String normalized = scheme.toLowerCase(Locale.ROOT);
-            return "file".equals(normalized) || "http".equals(normalized) || "https".equals(normalized);
-        } catch (RuntimeException ex) {
-            return true;
-        }
-    }
-
-    private String artifactFilename(SandboxArtifact artifact) {
-        String safeBase = artifact.artifactId().replaceAll("[^A-Za-z0-9._-]", "_");
-        String extension = FILE_EXTENSIONS.getOrDefault(normalizedMediaType(artifact.mediaType()), ".bin");
-        if (safeBase.toLowerCase(Locale.ROOT).endsWith(extension)) {
-            return safeBase;
-        }
-        return safeBase + extension;
-    }
-
-    private String normalizedMediaType(String mediaType) {
-        int separator = mediaType.indexOf(';');
-        String base = separator >= 0 ? mediaType.substring(0, separator) : mediaType;
-        return base.trim().toLowerCase(Locale.ROOT);
-    }
-
     private String sessionId() {
         return SESSION_ID_PREFIX + nextId();
     }
@@ -1592,100 +1091,6 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private String nextId() {
         return SnowflakeIds.nextIdString();
     }
-
-    private void appendSessionAudit(SandboxSession session, AuditEventType auditEventType) {
-        if (auditLedger == null) {
-            return;
-        }
-        Instant now = clock.instant();
-        auditLedger.append(new AuditEvent(
-                auditId(),
-                session.tenantId(),
-                auditEventType,
-                AuditActorType.SYSTEM,
-                AUDIT_ACTOR_ID,
-                session.runId(),
-                null,
-                RESOURCE_TYPE_SANDBOX_SESSION,
-                session.sessionId(),
-                """
-                        {"sessionId":"%s","runtimeType":"%s","profileId":"%s","expiresAt":"%s","status":"%s","reasonCode":"%s"}
-                        """.formatted(session.sessionId(),
-                        session.runtimeType().name(),
-                        session.profileId(),
-                        session.expiresAt(),
-                        session.status().name(),
-                        session.reasonCode().name()),
-                now));
-    }
-
-    private void appendExecutionAudit(SandboxSession session,
-                                      SandboxExecution execution,
-                                      int artifactCount,
-                                      int promptVisibleArtifactCount,
-                                      SandboxPolicyReasonCode reasonCode) {
-        if (auditLedger == null) {
-            return;
-        }
-        Instant now = clock.instant();
-        auditLedger.append(new AuditEvent(
-                auditId(),
-                session.tenantId(),
-                AuditEventType.SANDBOX_EXECUTION_FINISHED,
-                AuditActorType.SYSTEM,
-                AUDIT_ACTOR_ID,
-                session.runId(),
-                null,
-                RESOURCE_TYPE_SANDBOX_EXECUTION,
-                execution.executionId(),
-                """
-                        {"sessionId":"%s","executionId":"%s","runtimeType":"%s","status":"%s","reasonCode":"%s","artifactCount":%d,"promptVisibleArtifactCount":%d}
-                        """.formatted(session.sessionId(),
-                        execution.executionId(),
-                        execution.runtimeType().name(),
-                        execution.status().name(),
-                        reasonCode.name(),
-                        artifactCount,
-                        promptVisibleArtifactCount),
-                now));
-    }
-
-    private void appendRuntimeCreateFailoverAudit(SandboxSession session,
-                                                  RuntimeCreateFailoverAudit failoverAudit,
-                                                  int attemptCount) {
-        if (auditLedger == null) {
-            return;
-        }
-        auditLedger.append(new AuditEvent(
-                auditId(),
-                session.tenantId(),
-                AuditEventType.SANDBOX_RUNTIME_CREATE_FAILED_OVER,
-                AuditActorType.SYSTEM,
-                AUDIT_ACTOR_ID,
-                session.runId(),
-                null,
-                RESOURCE_TYPE_SANDBOX_SESSION,
-                session.sessionId(),
-                auditPayload(Map.of(
-                        "fromNodeId", failoverAudit.fromNodeId(),
-                        "toNodeId", session.runtimeNodeId(),
-                        "recovery", failoverAudit.recovery().name(),
-                        "attemptCount", attemptCount)),
-                clock.instant()));
-    }
-
-    private String auditId() {
-        return AUDIT_ID_PREFIX + nextId();
-    }
-
-    private static String auditPayload(Map<String, ?> payload) {
-        try {
-            return AUDIT_OBJECT_MAPPER.writeValueAsString(payload);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("Failed to serialize sandbox audit payload", ex);
-        }
-    }
-
     private static String requireText(String value, String message) {
         if (!hasText(value)) {
             throw new IllegalArgumentException(message);
@@ -1703,18 +1108,6 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         }
         return Math.min(limit, MAX_SESSION_LIST_LIMIT);
     }
-
-    private record SandboxArtifactDownloadPolicy(boolean downloadable, String blockedReason) {
-
-        private static SandboxArtifactDownloadPolicy allowed() {
-            return new SandboxArtifactDownloadPolicy(true, null);
-        }
-
-        private static SandboxArtifactDownloadPolicy blocked(String reason) {
-            return new SandboxArtifactDownloadPolicy(false, reason);
-        }
-    }
-
     private record RuntimeAdmissionDecision(String runtimeNodeId,
                                             SandboxRuntimeNodeEndpoint remoteEndpoint,
                                             SandboxPolicyReasonCode rejectionReason,
@@ -1741,14 +1134,14 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         }
     }
 
-    private enum RuntimeCreateFailoverRecovery {
+    enum RuntimeCreateFailoverRecovery {
         ABSENT,
         CLOSED
     }
 
-    private record RuntimeCreateFailoverAudit(String fromNodeId, RuntimeCreateFailoverRecovery recovery) {
+    record RuntimeCreateFailoverAudit(String fromNodeId, RuntimeCreateFailoverRecovery recovery) {
 
-        private RuntimeCreateFailoverAudit {
+        RuntimeCreateFailoverAudit {
             fromNodeId = requireText(fromNodeId, "fromNodeId must not be blank");
             recovery = Objects.requireNonNull(recovery, "recovery must not be null");
         }
@@ -1770,226 +1163,6 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                                                             RuntimeCreateFailoverRecovery recovery) {
             return new RuntimeCreateRecovery(cleanupConfirmed, cleanupConfirmed,
                     cleanupConfirmed ? recovery : null);
-        }
-    }
-
-    private static final class InMemorySandboxRuntimeProfilePolicyRepository
-            implements SandboxRuntimeProfilePolicyRepositoryPort {
-
-        private final Map<String, SandboxRuntimeProfilePolicy> store = new ConcurrentHashMap<>();
-
-        @Override
-        public SandboxRuntimeProfilePolicy upsert(SandboxRuntimeProfilePolicy policy) {
-            SandboxRuntimeProfilePolicy safePolicy = Objects.requireNonNull(policy, "policy must not be null");
-            store.put(safePolicy.policyId(), safePolicy);
-            return safePolicy;
-        }
-
-        @Override
-        public Optional<SandboxRuntimeProfilePolicy> findById(String policyId) {
-            if (!hasText(policyId)) {
-                return Optional.empty();
-            }
-            return Optional.ofNullable(store.get(policyId.trim()));
-        }
-
-        @Override
-        public Optional<SandboxRuntimeProfilePolicy> findByTenantAndRuntimeType(String tenantId,
-                                                                                SandboxRuntimeType runtimeType) {
-            if (!hasText(tenantId) || runtimeType == null) {
-                return Optional.empty();
-            }
-            String safeTenantId = tenantId.trim();
-            return store.values().stream()
-                    .filter(policy -> policy.tenantId().equals(safeTenantId))
-                    .filter(policy -> policy.runtimeType() == runtimeType)
-                    .max(Comparator.comparing(SandboxRuntimeProfilePolicy::updatedAt)
-                            .thenComparing(SandboxRuntimeProfilePolicy::policyId));
-        }
-
-        @Override
-        public List<SandboxRuntimeProfilePolicy> listByTenant(String tenantId) {
-            if (!hasText(tenantId)) {
-                return List.of();
-            }
-            String safeTenantId = tenantId.trim();
-            return store.values().stream()
-                    .filter(policy -> policy.tenantId().equals(safeTenantId))
-                    .sorted(Comparator.comparing(SandboxRuntimeProfilePolicy::runtimeType)
-                            .thenComparing(SandboxRuntimeProfilePolicy::updatedAt)
-                            .thenComparing(SandboxRuntimeProfilePolicy::policyId))
-                    .toList();
-        }
-    }
-
-    private static final class InMemorySandboxEgressPolicyRepository
-            implements SandboxEgressPolicyRepositoryPort {
-
-        private final Map<String, SandboxEgressPolicy> store = new ConcurrentHashMap<>();
-
-        @Override
-        public SandboxEgressPolicy upsert(SandboxEgressPolicy policy) {
-            SandboxEgressPolicy safePolicy = Objects.requireNonNull(policy, "policy must not be null");
-            store.put(safePolicy.tenantId(), safePolicy);
-            return safePolicy;
-        }
-
-        @Override
-        public Optional<SandboxEgressPolicy> findByTenant(String tenantId) {
-            if (!hasText(tenantId)) {
-                return Optional.empty();
-            }
-            return Optional.ofNullable(store.get(tenantId.trim()));
-        }
-    }
-
-    private static final class InMemorySandboxSessionRepository implements SandboxSessionRepositoryPort {
-
-        private final Map<String, SandboxSession> store = new ConcurrentHashMap<>();
-
-        @Override
-        public SandboxSession saveSession(SandboxSession session) {
-            SandboxSession safeSession = Objects.requireNonNull(session, "session must not be null");
-            store.put(safeSession.sessionId(), safeSession);
-            return safeSession;
-        }
-
-        @Override
-        public Optional<SandboxSession> findSessionById(String sessionId) {
-            if (!hasText(sessionId)) {
-                return Optional.empty();
-            }
-            return Optional.ofNullable(store.get(sessionId.trim()));
-        }
-
-        @Override
-        public List<SandboxSession> listSessionsByTenant(String tenantId, int limit) {
-            if (!hasText(tenantId)) {
-                return List.of();
-            }
-            String safeTenantId = tenantId.trim();
-            int safeLimit = normalizeSessionListLimit(limit);
-            return store.values().stream()
-                    .filter(session -> session.tenantId().equals(safeTenantId))
-                    .sorted(Comparator.comparing(SandboxSession::updatedAt)
-                            .thenComparing(SandboxSession::createdAt)
-                            .thenComparing(SandboxSession::sessionId)
-                            .reversed())
-                    .limit(safeLimit)
-                    .toList();
-        }
-
-        @Override
-        public List<SandboxSession> listExpiredActiveSessions(String tenantId, Instant now, int limit) {
-            if (!hasText(tenantId) || now == null) {
-                return List.of();
-            }
-            String safeTenantId = tenantId.trim();
-            int safeLimit = normalizeSessionListLimit(limit);
-            return store.values().stream()
-                    .filter(session -> session.tenantId().equals(safeTenantId))
-                    .filter(session -> !session.status().isTerminal())
-                    .filter(session -> !session.expiresAt().isAfter(now))
-                    .sorted(Comparator.comparing(SandboxSession::expiresAt)
-                            .thenComparing(SandboxSession::createdAt)
-                            .thenComparing(SandboxSession::sessionId))
-                    .limit(safeLimit)
-                    .toList();
-        }
-
-        @Override
-        public Set<String> listActiveSessionIds() {
-            return store.values().stream()
-                    .filter(session -> !session.status().isTerminal())
-                    .map(SandboxSession::sessionId)
-                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        }
-    }
-
-    private static final class InMemorySandboxExecutionRepository implements SandboxExecutionRepositoryPort {
-
-        private final Map<String, SandboxExecution> store = new ConcurrentHashMap<>();
-
-        @Override
-        public SandboxExecution saveExecution(SandboxExecution execution) {
-            SandboxExecution safeExecution = Objects.requireNonNull(execution, "execution must not be null");
-            store.put(safeExecution.executionId(), safeExecution);
-            return safeExecution;
-        }
-
-        @Override
-        public Optional<SandboxExecution> findExecutionById(String executionId) {
-            if (!hasText(executionId)) {
-                return Optional.empty();
-            }
-            return Optional.ofNullable(store.get(executionId.trim()));
-        }
-
-        @Override
-        public List<SandboxExecution> listExecutionsBySession(String sessionId) {
-            if (!hasText(sessionId)) {
-                return List.of();
-            }
-            String safeSessionId = sessionId.trim();
-            List<SandboxExecution> records = new ArrayList<>(store.values().stream()
-                    .filter(execution -> execution.sessionId().equals(safeSessionId))
-                    .toList());
-            records.sort(Comparator.comparing(SandboxExecution::createdAt)
-                    .thenComparing(SandboxExecution::executionId));
-            return List.copyOf(records);
-        }
-    }
-
-    private static final class InMemorySandboxBrowserProfileRepository
-            implements SandboxBrowserProfileRepositoryPort {
-
-        private final Map<String, SandboxBrowserProfile> store = new ConcurrentHashMap<>();
-
-        @Override
-        public SandboxBrowserProfile save(SandboxBrowserProfile profile) {
-            SandboxBrowserProfile safeProfile = Objects.requireNonNull(profile, "profile must not be null");
-            store.put(safeProfile.tenantId() + "|" + safeProfile.profileId(), safeProfile);
-            return safeProfile;
-        }
-
-        @Override
-        public Optional<SandboxBrowserProfile> findByTenantAndProfileId(String tenantId, String profileId) {
-            if (!hasText(tenantId) || !hasText(profileId)) {
-                return Optional.empty();
-            }
-            return Optional.ofNullable(store.get(tenantId.trim() + "|" + profileId.trim()));
-        }
-
-        @Override
-        public List<SandboxBrowserProfile> listByTenant(String tenantId, int limit) {
-            if (!hasText(tenantId) || limit <= 0) {
-                return List.of();
-            }
-            String safeTenantId = tenantId.trim();
-            return store.values().stream()
-                    .filter(profile -> profile.tenantId().equals(safeTenantId))
-                    .sorted(Comparator.comparing(SandboxBrowserProfile::updatedAt).reversed()
-                            .thenComparing(SandboxBrowserProfile::profileId))
-                    .limit(limit)
-                    .toList();
-        }
-    }
-
-    private static final class EmptySandboxArtifactQueryPort implements SandboxArtifactQueryPort {
-
-        @Override
-        public Optional<SandboxArtifact> findArtifactById(String artifactId) {
-            return Optional.empty();
-        }
-
-        @Override
-        public List<SandboxArtifact> listArtifactsBySession(String sessionId) {
-            return List.of();
-        }
-
-        @Override
-        public List<SandboxArtifact> listPromptVisibleBySession(String sessionId) {
-            return List.of();
         }
     }
 

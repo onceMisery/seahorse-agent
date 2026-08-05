@@ -56,11 +56,12 @@ class SandboxPythonToolContainerDockerSmokeTest {
                 properties,
                 new ProcessBuilderContainerCommandRunner(),
                 Clock.systemUTC());
-        KernelSandboxRuntimeService sandboxRuntime = new KernelSandboxRuntimeService(
-                new DefaultSandboxPolicyPort(SandboxNetworkPolicy.DENY_ALL, List.of()),
-                runtimeAdapter,
-                artifact -> artifact,
-                Clock.systemUTC());
+        KernelSandboxRuntimeService sandboxRuntime = KernelSandboxRuntimeService.builder()
+                .policyPort(new DefaultSandboxPolicyPort(SandboxNetworkPolicy.DENY_ALL, List.of()))
+                .runtimePort(runtimeAdapter)
+                .artifactPort(artifact -> artifact)
+                .clock(Clock.systemUTC())
+                .build();
         SandboxPythonToolPortAdapter tool = new SandboxPythonToolPortAdapter(
                 sandboxRuntime,
                 new AgentToolJsonSupport(new ObjectMapper()));

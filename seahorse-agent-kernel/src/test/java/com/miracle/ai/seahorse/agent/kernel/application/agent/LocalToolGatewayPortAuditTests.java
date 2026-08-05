@@ -69,11 +69,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldRejectOversizedAuditIdentifierBeforePersistenceOrToolExecution() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("must not run"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
         ToolInvocationRequest oversizedStep = new ToolInvocationRequest(
                 "run-1",
                 "s".repeat(65),
@@ -102,11 +103,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldRecordRequestedDecisionAndCompletedEventsForAllowedTool() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("weather"));
 
@@ -149,11 +151,12 @@ class LocalToolGatewayPortAuditTests {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
                 "[{\"secretName\":\"alpha-secret\"},{\"safeName\":\"beta-value\"}]"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("weather"));
 
@@ -174,11 +177,12 @@ class LocalToolGatewayPortAuditTests {
     @Test
     void shouldPassFullInvocationRequestToRequestAwareTool() {
         RequestAwareCountingToolPort tool = new RequestAwareCountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                ToolInvocationAuditPort.noop(),
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(ToolInvocationAuditPort.noop())
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("sandbox_python"));
 
@@ -196,11 +200,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldSummarizeSuccessfulNullContentWithoutRawValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(null));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("weather"));
 
@@ -215,13 +220,14 @@ class LocalToolGatewayPortAuditTests {
     void shouldRecordDeniedDecisionAndCompletionWithoutExecutingTool() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.deny("deny-1",
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.deny("deny-1",
                         ToolPolicyReasonCodes.TOOL_NOT_BOUND,
-                        "Tool is not bound")),
-                audit,
-                FIXED_CLOCK);
+                        "Tool is not bound")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("memory-write"));
 
@@ -242,14 +248,15 @@ class LocalToolGatewayPortAuditTests {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
         RecordingToolApprovalRequestRepositoryPort approvals = new RecordingToolApprovalRequestRepositoryPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
                         ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED,
-                        "Tool requires approval")),
-                audit,
-                approvals,
-                FIXED_CLOCK);
+                        "Tool requires approval")))
+                .auditPort(audit)
+                .approvalRequestRepository(approvals)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(requestWithRollout("memory-forget", "rollout-1"));
 
@@ -283,14 +290,15 @@ class LocalToolGatewayPortAuditTests {
     void shouldStoreOnlyPreviewLimitedArgumentMetadataForApprovalRequests() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
         RecordingToolApprovalRequestRepositoryPort approvals = new RecordingToolApprovalRequestRepositoryPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
                         ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED,
-                        "Tool requires approval")),
-                ToolInvocationAuditPort.noop(),
-                approvals,
-                FIXED_CLOCK);
+                        "Tool requires approval")))
+                .auditPort(ToolInvocationAuditPort.noop())
+                .approvalRequestRepository(approvals)
+                .clock(FIXED_CLOCK)
+                .build();
 
         gateway.invoke(new ToolInvocationRequest(
                 "run-1",
@@ -329,14 +337,15 @@ class LocalToolGatewayPortAuditTests {
     void shouldFilterUnsafeArgumentKeyNamesFromApprovalPreview() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
         RecordingToolApprovalRequestRepositoryPort approvals = new RecordingToolApprovalRequestRepositoryPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
                         ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED,
-                        "Tool requires approval")),
-                ToolInvocationAuditPort.noop(),
-                approvals,
-                FIXED_CLOCK);
+                        "Tool requires approval")))
+                .auditPort(ToolInvocationAuditPort.noop())
+                .approvalRequestRepository(approvals)
+                .clock(FIXED_CLOCK)
+                .build();
 
         gateway.invoke(new ToolInvocationRequest(
                 "run-1",
@@ -369,14 +378,15 @@ class LocalToolGatewayPortAuditTests {
     void shouldFilterUnsafeToolIdFromApprovalSummary() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
         RecordingToolApprovalRequestRepositoryPort approvals = new RecordingToolApprovalRequestRepositoryPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
                         ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED,
-                        "Tool requires approval")),
-                ToolInvocationAuditPort.noop(),
-                approvals,
-                FIXED_CLOCK);
+                        "Tool requires approval")))
+                .auditPort(ToolInvocationAuditPort.noop())
+                .approvalRequestRepository(approvals)
+                .clock(FIXED_CLOCK)
+                .build();
 
         gateway.invoke(new ToolInvocationRequest(
                 "run-1",
@@ -406,14 +416,15 @@ class LocalToolGatewayPortAuditTests {
     void shouldFilterUnsafeReasonCodeFromApprovalSummary() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
         RecordingToolApprovalRequestRepositoryPort approvals = new RecordingToolApprovalRequestRepositoryPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
                         "TOOL_APPROVAL_REQUIRED\naccess_token=secret-marker",
-                        "Tool requires approval")),
-                ToolInvocationAuditPort.noop(),
-                approvals,
-                FIXED_CLOCK);
+                        "Tool requires approval")))
+                .auditPort(ToolInvocationAuditPort.noop())
+                .approvalRequestRepository(approvals)
+                .clock(FIXED_CLOCK)
+                .build();
 
         gateway.invoke(new ToolInvocationRequest(
                 "run-1",
@@ -443,15 +454,16 @@ class LocalToolGatewayPortAuditTests {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
         RecordingToolApprovalRequestRepositoryPort approvals = new RecordingToolApprovalRequestRepositoryPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
                         ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED,
-                        "Tool requires approval")),
-                audit,
-                approvals,
-                new FixedApprovalQueryPort(approval(ApprovalRequestStatus.APPROVED)),
-                FIXED_CLOCK);
+                        "Tool requires approval")))
+                .auditPort(audit)
+                .approvalRequestRepository(approvals)
+                .approvalQueryPort(new FixedApprovalQueryPort(approval(ApprovalRequestStatus.APPROVED)))
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("memory-forget"));
 
@@ -467,12 +479,13 @@ class LocalToolGatewayPortAuditTests {
     void shouldRedactSensitiveToolOutputBeforeReturningAndAuditing() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("token=sk-live-secret"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                ToolOutputRedactionPort.basicSecretPatterns(),
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .outputRedactionPort(ToolOutputRedactionPort.basicSecretPatterns())
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("weather"));
 
@@ -490,11 +503,12 @@ class LocalToolGatewayPortAuditTests {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
                 "first secret line\nsecond longer secret line\nx"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("weather"));
 
@@ -514,12 +528,13 @@ class LocalToolGatewayPortAuditTests {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
                 "{\"status\":\"GENERATED\",\"b64Json\":\"large-base64-payload\",\"mimeType\":\"image/png\"}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                ToolOutputRedactionPort.basicSecretPatterns(),
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .outputRedactionPort(ToolOutputRedactionPort.basicSecretPatterns())
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("image_generation"));
 
@@ -548,12 +563,13 @@ class LocalToolGatewayPortAuditTests {
                         + "\"items\":[{\"access_token\":\"plain-access-token\","
                         + "\"secretKey\":\"plain-secret-key\",\"label\":\"safe\"}]}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                ToolOutputRedactionPort.basicSecretPatterns(),
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .outputRedactionPort(ToolOutputRedactionPort.basicSecretPatterns())
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("weather"));
 
@@ -587,11 +603,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldRecordFailedCompletionWhenToolThrowsException() {
         ThrowingToolPort tool = new ThrowingToolPort();
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("weather"));
 
@@ -614,11 +631,12 @@ class LocalToolGatewayPortAuditTests {
                 + "Authorization: Bearer abcdefghijklmnop "
                 + "api_key=plain-thrown-tool-secret");
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("weather"));
 
@@ -642,12 +660,13 @@ class LocalToolGatewayPortAuditTests {
                         + "Cookie: plain-secret-token-123 "
                         + "sk-live-secret"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                ToolOutputRedactionPort.basicSecretPatterns(),
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .outputRedactionPort(ToolOutputRedactionPort.basicSecretPatterns())
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("weather"));
 
@@ -674,11 +693,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldSummarizeSandboxBrowserGovernanceMetadataWithoutSessionValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
                 "run-1",
@@ -756,11 +776,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldSummarizeSandboxBrowserInlineHtmlShapeWithoutHtmlValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
         String html = "<main data-secret=\"inline-html-marker\">hello</main>";
 
         ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
@@ -811,11 +832,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldSummarizeSandboxBrowserAuditWithoutPrevalidatedHostOrActionValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.failed("sandbox_browser failed"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
                 "run-1",
@@ -857,11 +879,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldSummarizeSandboxPythonGovernanceMetadataWithoutCodeValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
                 "run-1",
@@ -902,11 +925,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldSummarizeSandboxPythonAuditWithoutPrevalidatedHostValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
                 "run-1",
@@ -940,11 +964,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldSummarizeSandboxFileConvertGovernanceMetadataWithoutContentValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
                 "run-1",
@@ -993,11 +1018,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldSummarizeExtendedSandboxFileConvertFormatsAsSupportedGovernanceMetadata() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
                 "run-1",
@@ -1034,11 +1060,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldSummarizeSandboxFileConvertAuditWithoutPrevalidatedFormatValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.failed("unsupported conversion"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
                 "run-1",
@@ -1083,11 +1110,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldSummarizeRemoteA2aGovernanceMetadataWithoutPromptOrMetadataValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
                 "run-1",
@@ -1138,11 +1166,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldSummarizeOpenApiGovernanceMetadataWithoutParameterHeaderOrBodyValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
                 "run-1",
@@ -1212,11 +1241,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldSummarizeFlatOpenApiArgumentsWithValueShapeWithoutValues() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
                 "run-1",
@@ -1251,11 +1281,12 @@ class LocalToolGatewayPortAuditTests {
     void shouldFilterUnsafeKeyNamesFromCrossProviderAuditSummaries() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(new ToolInvocationRequest(
                 "run-1",
@@ -1299,15 +1330,16 @@ class LocalToolGatewayPortAuditTests {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
                 "{\"artifactType\":\"REPORT\",\"b64Json\":\"raw-image-bytes\"}"));
         RecordingToolArtifactPublicationPort artifacts = new RecordingToolArtifactPublicationPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                ToolInvocationAuditPort.noop(),
-                ToolApprovalRequestRepositoryPort.noop(),
-                ApprovalRequestQueryPort.empty(),
-                ToolOutputRedactionPort.basicSecretPatterns(),
-                artifacts,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(ToolInvocationAuditPort.noop())
+                .approvalRequestRepository(ToolApprovalRequestRepositoryPort.noop())
+                .approvalQueryPort(ApprovalRequestQueryPort.empty())
+                .outputRedactionPort(ToolOutputRedactionPort.basicSecretPatterns())
+                .artifactPublicationPort(artifacts)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("weather"));
 
@@ -1325,30 +1357,32 @@ class LocalToolGatewayPortAuditTests {
     @Test
     void shouldNotPublishArtifactsForDeniedOrFailedToolResults() {
         RecordingToolArtifactPublicationPort deniedArtifacts = new RecordingToolArtifactPublicationPort();
-        LocalToolGatewayPort deniedGateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(new CountingToolPort(ToolInvocationResult.ok("should-not-run"))),
-                new FixedToolPolicyPort(PolicyDecision.deny("deny-1",
+        LocalToolGatewayPort deniedGateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(new CountingToolPort(ToolInvocationResult.ok("should-not-run"))))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.deny("deny-1",
                         ToolPolicyReasonCodes.TOOL_NOT_BOUND,
-                        "Tool is not bound")),
-                ToolInvocationAuditPort.noop(),
-                ToolApprovalRequestRepositoryPort.noop(),
-                ApprovalRequestQueryPort.empty(),
-                ToolOutputRedactionPort.noop(),
-                deniedArtifacts,
-                FIXED_CLOCK);
+                        "Tool is not bound")))
+                .auditPort(ToolInvocationAuditPort.noop())
+                .approvalRequestRepository(ToolApprovalRequestRepositoryPort.noop())
+                .approvalQueryPort(ApprovalRequestQueryPort.empty())
+                .outputRedactionPort(ToolOutputRedactionPort.noop())
+                .artifactPublicationPort(deniedArtifacts)
+                .clock(FIXED_CLOCK)
+                .build();
 
         deniedGateway.invoke(request("memory-write"));
 
         RecordingToolArtifactPublicationPort failedArtifacts = new RecordingToolArtifactPublicationPort();
-        LocalToolGatewayPort failedGateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(new CountingToolPort(ToolInvocationResult.failed("tool failed"))),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                ToolInvocationAuditPort.noop(),
-                ToolApprovalRequestRepositoryPort.noop(),
-                ApprovalRequestQueryPort.empty(),
-                ToolOutputRedactionPort.noop(),
-                failedArtifacts,
-                FIXED_CLOCK);
+        LocalToolGatewayPort failedGateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(new CountingToolPort(ToolInvocationResult.failed("tool failed"))))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(ToolInvocationAuditPort.noop())
+                .approvalRequestRepository(ToolApprovalRequestRepositoryPort.noop())
+                .approvalQueryPort(ApprovalRequestQueryPort.empty())
+                .outputRedactionPort(ToolOutputRedactionPort.noop())
+                .artifactPublicationPort(failedArtifacts)
+                .clock(FIXED_CLOCK)
+                .build();
 
         failedGateway.invoke(request("weather"));
 
@@ -1358,17 +1392,18 @@ class LocalToolGatewayPortAuditTests {
 
     @Test
     void shouldReturnToolResultWhenArtifactPublicationFails() {
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(new CountingToolPort(ToolInvocationResult.ok("{\"artifactType\":\"REPORT\"}"))),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                ToolInvocationAuditPort.noop(),
-                ToolApprovalRequestRepositoryPort.noop(),
-                ApprovalRequestQueryPort.empty(),
-                ToolOutputRedactionPort.noop(),
-                (request, result) -> {
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(new CountingToolPort(ToolInvocationResult.ok("{\"artifactType\":\"REPORT\"}"))))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(ToolInvocationAuditPort.noop())
+                .approvalRequestRepository(ToolApprovalRequestRepositoryPort.noop())
+                .approvalQueryPort(ApprovalRequestQueryPort.empty())
+                .outputRedactionPort(ToolOutputRedactionPort.noop())
+                .artifactPublicationPort((request, result) -> {
                     throw new IllegalStateException("artifact publication failed");
-                },
-                FIXED_CLOCK);
+                })
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("weather"));
 
@@ -1395,17 +1430,18 @@ class LocalToolGatewayPortAuditTests {
                 completions.incrementAndGet();
             }
         };
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                ToolApprovalRequestRepositoryPort.noop(),
-                ApprovalRequestQueryPort.empty(),
-                ToolOutputRedactionPort.noop(),
-                ToolArtifactPublicationPort.noop(),
-                ToolResultSpillPort.noop(),
-                idempotencyPort,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .approvalRequestRepository(ToolApprovalRequestRepositoryPort.noop())
+                .approvalQueryPort(ApprovalRequestQueryPort.empty())
+                .outputRedactionPort(ToolOutputRedactionPort.noop())
+                .artifactPublicationPort(ToolArtifactPublicationPort.noop())
+                .toolResultSpillPort(ToolResultSpillPort.noop())
+                .idempotencyPort(idempotencyPort)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult first = gateway.invoke(request("weather"));
         ToolInvocationResult duplicate = gateway.invoke(request("weather"));
@@ -1437,17 +1473,18 @@ class LocalToolGatewayPortAuditTests {
                 completions.incrementAndGet();
             }
         };
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(new ThrowingToolPort("side effect outcome unknown")),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                ToolInvocationAuditPort.noop(),
-                ToolApprovalRequestRepositoryPort.noop(),
-                ApprovalRequestQueryPort.empty(),
-                ToolOutputRedactionPort.noop(),
-                ToolArtifactPublicationPort.noop(),
-                ToolResultSpillPort.noop(),
-                idempotencyPort,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(new ThrowingToolPort("side effect outcome unknown")))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(ToolInvocationAuditPort.noop())
+                .approvalRequestRepository(ToolApprovalRequestRepositoryPort.noop())
+                .approvalQueryPort(ApprovalRequestQueryPort.empty())
+                .outputRedactionPort(ToolOutputRedactionPort.noop())
+                .artifactPublicationPort(ToolArtifactPublicationPort.noop())
+                .toolResultSpillPort(ToolResultSpillPort.noop())
+                .idempotencyPort(idempotencyPort)
+                .clock(FIXED_CLOCK)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("weather"));
 
@@ -1458,11 +1495,12 @@ class LocalToolGatewayPortAuditTests {
     @Test
     void shouldGenerateAuditRunIdForLegacyRequestWithoutRunId() {
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(new CountingToolPort(ToolInvocationResult.ok("ok"))),
-                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
-                audit,
-                FIXED_CLOCK);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(new CountingToolPort(ToolInvocationResult.ok("ok"))))
+                .toolPolicy(new FixedToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .auditPort(audit)
+                .clock(FIXED_CLOCK)
+                .build();
 
         gateway.invoke(new ToolInvocationRequest(
                 null,

@@ -526,17 +526,18 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                                                    ObjectProvider<ToolArtifactPublicationPort> toolArtifactPublicationPort,
                                                    ObjectProvider<ToolResultSpillPort> toolResultSpillPort,
                                                    ObjectProvider<Clock> clockProvider) {
-        return new LocalToolGatewayPort(
-                toolRegistry,
-                toolPolicyPort.getIfAvailable(ToolPolicyPort::defaults),
-                toolInvocationAuditPort.getIfAvailable(ToolInvocationAuditPort::noop),
-                toolApprovalRequestRepositoryPort.getIfAvailable(ToolApprovalRequestRepositoryPort::noop),
-                approvalRequestQueryPort.getIfAvailable(ApprovalRequestQueryPort::empty),
-                toolOutputRedactionPort.getIfAvailable(ToolOutputRedactionPort::noop),
-                toolArtifactPublicationPort.getIfAvailable(ToolArtifactPublicationPort::noop),
-                toolResultSpillPort.getIfAvailable(ToolResultSpillPort::noop),
-                toolInvocationIdempotencyPort.getIfAvailable(ToolInvocationIdempotencyPort::noop),
-                clockProvider.getIfAvailable(Clock::systemUTC));
+        return LocalToolGatewayPort.builder()
+                .toolRegistry(toolRegistry)
+                .toolPolicy(toolPolicyPort.getIfAvailable(ToolPolicyPort::defaults))
+                .auditPort(toolInvocationAuditPort.getIfAvailable(ToolInvocationAuditPort::noop))
+                .approvalRequestRepository(toolApprovalRequestRepositoryPort.getIfAvailable(ToolApprovalRequestRepositoryPort::noop))
+                .approvalQueryPort(approvalRequestQueryPort.getIfAvailable(ApprovalRequestQueryPort::empty))
+                .outputRedactionPort(toolOutputRedactionPort.getIfAvailable(ToolOutputRedactionPort::noop))
+                .artifactPublicationPort(toolArtifactPublicationPort.getIfAvailable(ToolArtifactPublicationPort::noop))
+                .toolResultSpillPort(toolResultSpillPort.getIfAvailable(ToolResultSpillPort::noop))
+                .idempotencyPort(toolInvocationIdempotencyPort.getIfAvailable(ToolInvocationIdempotencyPort::noop))
+                .clock(clockProvider.getIfAvailable(Clock::systemUTC))
+                .build();
     }
 
     @Bean

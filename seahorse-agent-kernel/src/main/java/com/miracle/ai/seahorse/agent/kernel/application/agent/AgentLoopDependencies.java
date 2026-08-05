@@ -56,7 +56,9 @@ public record AgentLoopDependencies(
         modelPort = Objects.requireNonNull(modelPort, "modelPort must not be null");
         ToolRegistryPort effectiveToolRegistry = Objects.requireNonNullElse(toolRegistry, ToolRegistryPort.empty());
         toolRegistry = effectiveToolRegistry;
-        toolGateway = Objects.requireNonNullElseGet(toolGateway, () -> new LocalToolGatewayPort(effectiveToolRegistry));
+        toolGateway = Objects.requireNonNullElseGet(
+                toolGateway,
+                () -> LocalToolGatewayPort.builder().toolRegistry(effectiveToolRegistry).build());
         options = Objects.requireNonNullElseGet(options, KernelAgentLoopOptions::defaults);
         traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
         contextWeaver = Objects.requireNonNullElseGet(contextWeaver, DefaultContextWeaver::new);
