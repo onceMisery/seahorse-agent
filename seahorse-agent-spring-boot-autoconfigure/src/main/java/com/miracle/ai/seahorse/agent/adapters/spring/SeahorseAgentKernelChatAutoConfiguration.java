@@ -274,25 +274,29 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                                    ObjectProvider<AgentRunMetadataContributor> agentRunMetadataContributors,
                                                    Environment environment,
                                                    AgentKernelProperties kernelProperties) {
-        return new KernelChatInboundService(chatPipeline, streamTaskPort,
-                resolveReActExecutor(agentLoop, environment),
-                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
-                memoryPort.getIfAvailable(ConversationMemoryPort::noop),
-                memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
-                Optional.ofNullable(agentRunPort.getIfAvailable()),
-                Optional.ofNullable(contextPackBuilder.getIfAvailable()),
-                Optional.ofNullable(agentDefinitionRepository.getIfAvailable()),
-                attachmentContextAssembler.getIfAvailable(ConversationAttachmentContextAssembler::noop),
-                Optional.ofNullable(skillRepository.getIfAvailable()),
-                agentLoopOptions.getIfAvailable(KernelAgentLoopOptions::defaults),
-                Optional.ofNullable(taskTemplateQueryPort.getIfAvailable()),
-                kernelProperties.isEnableSmartSkillMatching(),
-                skillSemanticMatcher.getIfAvailable(),
-                Optional.ofNullable(roleCardPort.getIfAvailable()),
-                Optional.ofNullable(costUsageRepository.getIfAvailable()),
-                Optional.ofNullable(runContextSnapshotRepository.getIfAvailable()),
-                Optional.ofNullable(runProfilePort.getIfAvailable()),
-                agentRunMetadataContributors.orderedStream().toList());
+        return KernelChatInboundService.builder()
+                .chatPipeline(chatPipeline)
+                .streamTaskPort(streamTaskPort)
+                .agentLoop(resolveReActExecutor(agentLoop, environment).orElse(null))
+                .traceRecorder(traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop))
+                .memoryPort(memoryPort.getIfAvailable(ConversationMemoryPort::noop))
+                .memoryEnginePort(memoryEnginePort.getIfAvailable(MemoryEnginePort::noop))
+                .agentRunPort(agentRunPort.getIfAvailable())
+                .contextPackBuilder(contextPackBuilder.getIfAvailable())
+                .agentDefinitionRepository(agentDefinitionRepository.getIfAvailable())
+                .attachmentContextAssembler(attachmentContextAssembler.getIfAvailable(
+                        ConversationAttachmentContextAssembler::noop))
+                .skillRepository(skillRepository.getIfAvailable())
+                .agentLoopOptions(agentLoopOptions.getIfAvailable(KernelAgentLoopOptions::defaults))
+                .taskTemplateQueryPort(taskTemplateQueryPort.getIfAvailable())
+                .enableSmartSkillMatching(kernelProperties.isEnableSmartSkillMatching())
+                .skillSemanticMatcher(skillSemanticMatcher.getIfAvailable())
+                .roleCardPort(roleCardPort.getIfAvailable())
+                .costUsageRepository(costUsageRepository.getIfAvailable())
+                .runContextSnapshotRepository(runContextSnapshotRepository.getIfAvailable())
+                .runProfilePort(runProfilePort.getIfAvailable())
+                .agentRunMetadataContributors(agentRunMetadataContributors.orderedStream().toList())
+                .build();
     }
 
     @Bean

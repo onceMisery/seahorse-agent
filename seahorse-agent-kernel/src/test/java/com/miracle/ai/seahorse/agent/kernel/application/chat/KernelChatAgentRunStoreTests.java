@@ -134,14 +134,13 @@ class KernelChatAgentRunStoreTests {
                 KernelAgentLoopOptions.defaults(),
                 new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runService));
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runService)
+                .build();
 
         String question = "What is the weather? {\"password\":\"summary-secret-123456\"}";
         service.streamChat(new StreamChatCommand(
@@ -195,24 +194,18 @@ class KernelChatAgentRunStoreTests {
         definitionRepository.saveVersion(agentVersion("ops-agent", "ops-agent-v1", "{\"modelId\":\"ops-model\"}"));
         UsageEmittingAgentLoop agentLoop = new UsageEmittingAgentLoop(new ChatTokenUsage(12, 5));
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runPort),
-                Optional.empty(),
-                Optional.of(definitionRepository),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty(),
-                KernelAgentLoopOptions.defaults(),
-                Optional.empty(),
-                true,
-                null,
-                Optional.empty(),
-                Optional.of(usageRepository));
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runPort)
+                .agentDefinitionRepository(definitionRepository)
+                .attachmentContextAssembler(ConversationAttachmentContextAssembler.noop())
+                .agentLoopOptions(KernelAgentLoopOptions.defaults())
+                .enableSmartSkillMatching(true)
+                .costUsageRepository(usageRepository)
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Count tokens", "conversation-1", "task-1", "alice", false,
@@ -259,26 +252,18 @@ class KernelChatAgentRunStoreTests {
         UsageEmittingAgentLoop agentLoop = new UsageEmittingAgentLoop(new ChatTokenUsage(0, 0));
         RecordingRunContextSnapshotRepository snapshotRepository = new RecordingRunContextSnapshotRepository();
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runPort),
-                Optional.empty(),
-                Optional.empty(),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty(),
-                KernelAgentLoopOptions.defaults(),
-                Optional.empty(),
-                true,
-                null,
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(snapshotRepository),
-                List.of());
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runPort)
+                .attachmentContextAssembler(ConversationAttachmentContextAssembler.noop())
+                .agentLoopOptions(KernelAgentLoopOptions.defaults())
+                .enableSmartSkillMatching(true)
+                .runContextSnapshotRepository(snapshotRepository)
+                .agentRunMetadataContributors(List.of())
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Use tools",
@@ -337,26 +322,18 @@ class KernelChatAgentRunStoreTests {
                         "project", "seahorse-prod",
                         "runName", "agent-chat"));
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runPort),
-                Optional.empty(),
-                Optional.empty(),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty(),
-                KernelAgentLoopOptions.defaults(),
-                Optional.empty(),
-                true,
-                null,
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(snapshotRepository),
-                List.of(metadataContributor));
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runPort)
+                .attachmentContextAssembler(ConversationAttachmentContextAssembler.noop())
+                .agentLoopOptions(KernelAgentLoopOptions.defaults())
+                .enableSmartSkillMatching(true)
+                .runContextSnapshotRepository(snapshotRepository)
+                .agentRunMetadataContributors(List.of(metadataContributor))
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Use Studio trace",
@@ -378,26 +355,16 @@ class KernelChatAgentRunStoreTests {
     void shouldSaveRunContextSnapshotForRagChat() {
         RecordingRunContextSnapshotRepository snapshotRepository = new RecordingRunContextSnapshotRepository();
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.empty(),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty(),
-                KernelAgentLoopOptions.defaults(),
-                Optional.empty(),
-                true,
-                null,
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(snapshotRepository),
-                List.of());
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .attachmentContextAssembler(ConversationAttachmentContextAssembler.noop())
+                .agentLoopOptions(KernelAgentLoopOptions.defaults())
+                .enableSmartSkillMatching(true)
+                .runContextSnapshotRepository(snapshotRepository)
+                .agentRunMetadataContributors(List.of())
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Explain the current design",
@@ -457,27 +424,19 @@ class KernelChatAgentRunStoreTests {
         RecordingRunContextSnapshotRepository snapshotRepository = new RecordingRunContextSnapshotRepository();
         InMemoryRunProfilePort runProfilePort = new InMemoryRunProfilePort(profileDetails());
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runPort),
-                Optional.empty(),
-                Optional.empty(),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty(),
-                KernelAgentLoopOptions.defaults(),
-                Optional.empty(),
-                true,
-                null,
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(snapshotRepository),
-                Optional.of(runProfilePort),
-                List.of());
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runPort)
+                .attachmentContextAssembler(ConversationAttachmentContextAssembler.noop())
+                .agentLoopOptions(KernelAgentLoopOptions.defaults())
+                .enableSmartSkillMatching(true)
+                .runContextSnapshotRepository(snapshotRepository)
+                .runProfilePort(runProfilePort)
+                .agentRunMetadataContributors(List.of())
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Use profile",
@@ -541,27 +500,19 @@ class KernelChatAgentRunStoreTests {
         RecordingRunContextSnapshotRepository snapshotRepository = new RecordingRunContextSnapshotRepository();
         InMemoryRunProfilePort runProfilePort = new InMemoryRunProfilePort(profileDetails());
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(router),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runPort),
-                Optional.empty(),
-                Optional.empty(),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty(),
-                KernelAgentLoopOptions.defaults(),
-                Optional.empty(),
-                true,
-                null,
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(snapshotRepository),
-                Optional.of(runProfilePort),
-                List.of());
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(router)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runPort)
+                .attachmentContextAssembler(ConversationAttachmentContextAssembler.noop())
+                .agentLoopOptions(KernelAgentLoopOptions.defaults())
+                .enableSmartSkillMatching(true)
+                .runContextSnapshotRepository(snapshotRepository)
+                .runProfilePort(runProfilePort)
+                .agentRunMetadataContributors(List.of())
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Use profile router",
@@ -614,27 +565,18 @@ class KernelChatAgentRunStoreTests {
         ReActExecutorRouter router = new ReActExecutorRouter(List.of(kernelLoop), "kernel");
         InMemoryRunProfilePort runProfilePort = new InMemoryRunProfilePort(profileDetails());
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(router),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runPort),
-                Optional.empty(),
-                Optional.empty(),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty(),
-                KernelAgentLoopOptions.defaults(),
-                Optional.empty(),
-                true,
-                null,
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(runProfilePort),
-                List.of());
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(router)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runPort)
+                .attachmentContextAssembler(ConversationAttachmentContextAssembler.noop())
+                .agentLoopOptions(KernelAgentLoopOptions.defaults())
+                .enableSmartSkillMatching(true)
+                .runProfilePort(runProfilePort)
+                .agentRunMetadataContributors(List.of())
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Use unavailable profile router",
@@ -687,27 +629,19 @@ class KernelChatAgentRunStoreTests {
         InMemoryRunProfilePort runProfilePort = new InMemoryRunProfilePort(profileDetails());
         runProfilePort.applyToConversation("user-1", "101", 77L);
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runPort),
-                Optional.empty(),
-                Optional.empty(),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty(),
-                KernelAgentLoopOptions.defaults(),
-                Optional.empty(),
-                true,
-                null,
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(snapshotRepository),
-                Optional.of(runProfilePort),
-                List.of());
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runPort)
+                .attachmentContextAssembler(ConversationAttachmentContextAssembler.noop())
+                .agentLoopOptions(KernelAgentLoopOptions.defaults())
+                .enableSmartSkillMatching(true)
+                .runContextSnapshotRepository(snapshotRepository)
+                .runProfilePort(runProfilePort)
+                .agentRunMetadataContributors(List.of())
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Use conversation profile",
@@ -772,14 +706,13 @@ class KernelChatAgentRunStoreTests {
                 null);
         RecordingAgentRunInboundPort runPort = new RecordingAgentRunInboundPort(run);
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runPort));
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runPort)
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "What is the weather?", "conversation-1", "task-1", "user-1", false, ChatMode.AGENT), callback);
@@ -816,19 +749,15 @@ class KernelChatAgentRunStoreTests {
                 options,
                 new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runService),
-                Optional.empty(),
-                Optional.empty(),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty(),
-                options);
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runService)
+                .attachmentContextAssembler(ConversationAttachmentContextAssembler.noop())
+                .agentLoopOptions(options)
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Use as many steps as needed", "conversation-1", "task-1", "user-1", false, ChatMode.AGENT),
@@ -864,14 +793,13 @@ class KernelChatAgentRunStoreTests {
                         checkpointRepository,
                         FIXED_CLOCK));
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runService));
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runService)
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Forget memory", "conversation-1", "task-1", "user-1", false, ChatMode.AGENT), callback);
@@ -909,16 +837,14 @@ class KernelChatAgentRunStoreTests {
                 KernelAgentLoopOptions.defaults(),
                 new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runService),
-                Optional.empty(),
-                Optional.of(definitionRepository));
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runService)
+                .agentDefinitionRepository(definitionRepository)
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Run ops", "conversation-1", "task-1", "user-1", false, ChatMode.AGENT, "ops-agent", null),
@@ -975,16 +901,14 @@ class KernelChatAgentRunStoreTests {
                 KernelAgentLoopOptions.defaults(),
                 new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runService),
-                Optional.empty(),
-                Optional.of(definitionRepository));
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runService)
+                .agentDefinitionRepository(definitionRepository)
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Run ops", "conversation-1", "task-1", "user-1", false, ChatMode.AGENT, "ops-agent", null),
@@ -1046,25 +970,18 @@ class KernelChatAgentRunStoreTests {
                         "group", "DEFAULT_GROUP",
                         "revision", "stable"));
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runPort),
-                Optional.empty(),
-                Optional.of(definitionRepository),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty(),
-                KernelAgentLoopOptions.defaults(),
-                Optional.empty(),
-                true,
-                null,
-                Optional.empty(),
-                Optional.empty(),
-                List.of(metadataContributor));
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runPort)
+                .agentDefinitionRepository(definitionRepository)
+                .attachmentContextAssembler(ConversationAttachmentContextAssembler.noop())
+                .agentLoopOptions(KernelAgentLoopOptions.defaults())
+                .enableSmartSkillMatching(true)
+                .agentRunMetadataContributors(List.of(metadataContributor))
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Run ops", "conversation-1", "task-1", "alice", false,
@@ -1122,16 +1039,14 @@ class KernelChatAgentRunStoreTests {
                 KernelAgentLoopOptions.defaults(),
                 new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runService),
-                Optional.empty(),
-                Optional.of(definitionRepository));
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runService)
+                .agentDefinitionRepository(definitionRepository)
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Summarize https://github.com/redis/redis",
@@ -1195,20 +1110,17 @@ class KernelChatAgentRunStoreTests {
                 KernelAgentLoopOptions.defaults(),
                 new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runService),
-                Optional.empty(),
-                Optional.of(definitionRepository),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty(),
-                KernelAgentLoopOptions.defaults(),
-                Optional.of(new KernelTaskTemplateQueryService()));
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runService)
+                .agentDefinitionRepository(definitionRepository)
+                .attachmentContextAssembler(ConversationAttachmentContextAssembler.noop())
+                .agentLoopOptions(KernelAgentLoopOptions.defaults())
+                .taskTemplateQueryPort(new KernelTaskTemplateQueryService())
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Introduce https://github.com/redis/redis",
@@ -1255,16 +1167,14 @@ class KernelChatAgentRunStoreTests {
                 KernelAgentLoopOptions.defaults(),
                 new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
         RecordingCallback callback = new RecordingCallback();
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                null,
-                null,
-                MemoryEnginePort.noop(),
-                Optional.of(runService),
-                Optional.empty(),
-                Optional.of(definitionRepository));
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(newPipeline())
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .agentRunPort(runService)
+                .agentDefinitionRepository(definitionRepository)
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "Run ops", "conversation-1", "task-1", "user-1", false,
@@ -1301,14 +1211,13 @@ class KernelChatAgentRunStoreTests {
                     KernelAgentLoopOptions.defaults(),
                     new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
             RecordingCallback callback = new RecordingCallback();
-            KernelChatInboundService service = new KernelChatInboundService(
-                    newPipeline(),
-                    StreamTaskPort.noop(),
-                    Optional.of(agentLoop),
-                    null,
-                    null,
-                    MemoryEnginePort.noop(),
-                    Optional.of(runService));
+            KernelChatInboundService service = KernelChatInboundService.builder()
+                    .chatPipeline(newPipeline())
+                    .streamTaskPort(StreamTaskPort.noop())
+                    .agentLoop(agentLoop)
+                    .memoryEnginePort(MemoryEnginePort.noop())
+                    .agentRunPort(runService)
+                    .build();
 
             service.streamChat(new StreamChatCommand(
                     "Research public information",

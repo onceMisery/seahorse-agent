@@ -17,6 +17,16 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
+import static com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatJsonSupport.booleanValue;
+import static com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatJsonSupport.doubleValue;
+import static com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatJsonSupport.firstText;
+import static com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatJsonSupport.hasText;
+import static com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatJsonSupport.intValue;
+import static com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatJsonSupport.parseLong;
+import static com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatJsonSupport.putTextIfPresent;
+import static com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatJsonSupport.stringValue;
+import static com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatJsonSupport.text;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -159,283 +169,169 @@ public class KernelChatInboundService implements ChatInboundPort {
     private final Optional<RunProfileInboundPort> runProfilePort;
     private final List<AgentRunMetadataContributor> agentRunMetadataContributors;
     private final boolean enableSmartSkillMatching;
+    private final KernelChatModelConfigSupport modelConfigSupport;
 
-    public KernelChatInboundService(KernelChatPipeline chatPipeline, StreamTaskPort streamTaskPort) {
-        this(chatPipeline, streamTaskPort, KernelRagTraceRecorder.noop());
+    /**
+     * 构造器重载已折叠为 Builder：{@code KernelChatInboundService.builder().chatPipeline(...).streamTaskPort(...).build()}。
+     * 可选依赖均有默认值（noop/defaults 端口），@Nullable 入参由 build() 转为 Optional.empty()。
+     */
+    public static Builder builder() {
+        return new Builder();
     }
 
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    KernelRagTraceRecorder traceRecorder) {
-        this(chatPipeline, streamTaskPort, Optional.empty(), traceRecorder, ConversationMemoryPort.noop(),
-                MemoryEnginePort.noop());
+    public static final class Builder {
+        private KernelChatPipeline chatPipeline;
+        private StreamTaskPort streamTaskPort;
+        private ReActExecutorPort agentLoop;
+        private KernelRagTraceRecorder traceRecorder = KernelRagTraceRecorder.noop();
+        private ConversationMemoryPort memoryPort = ConversationMemoryPort.noop();
+        private MemoryEnginePort memoryEnginePort = MemoryEnginePort.noop();
+        private AgentRunInboundPort agentRunPort;
+        private ContextPackBuilderInboundPort contextPackBuilder;
+        private AgentDefinitionRepositoryPort agentDefinitionRepository;
+        private ConversationAttachmentContextAssembler attachmentContextAssembler =
+                ConversationAttachmentContextAssembler.noop();
+        private AgentSkillRepositoryPort skillRepository;
+        private KernelAgentLoopOptions agentLoopOptions = KernelAgentLoopOptions.defaults();
+        private TaskTemplateQueryInboundPort taskTemplateQueryPort;
+        private boolean enableSmartSkillMatching = true;
+        private SkillSemanticMatcher skillSemanticMatcher;
+        private RoleCardInboundPort roleCardPort;
+        private CostUsageRepositoryPort costUsageRepository;
+        private RunContextSnapshotRepositoryPort runContextSnapshotRepository;
+        private RunProfileInboundPort runProfilePort;
+        private List<AgentRunMetadataContributor> agentRunMetadataContributors = List.of();
+
+        public Builder chatPipeline(KernelChatPipeline chatPipeline) {
+            this.chatPipeline = Objects.requireNonNull(chatPipeline, "chatPipeline must not be null");
+            return this;
+        }
+
+        public Builder streamTaskPort(StreamTaskPort streamTaskPort) {
+            this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
+            return this;
+        }
+
+        public Builder agentLoop(ReActExecutorPort agentLoop) {
+            this.agentLoop = agentLoop;
+            return this;
+        }
+
+        public Builder traceRecorder(KernelRagTraceRecorder traceRecorder) {
+            this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
+            return this;
+        }
+
+        public Builder memoryPort(ConversationMemoryPort memoryPort) {
+            this.memoryPort = Objects.requireNonNullElse(memoryPort, ConversationMemoryPort.noop());
+            return this;
+        }
+
+        public Builder memoryEnginePort(MemoryEnginePort memoryEnginePort) {
+            this.memoryEnginePort = Objects.requireNonNullElse(memoryEnginePort, MemoryEnginePort.noop());
+            return this;
+        }
+
+        public Builder agentRunPort(AgentRunInboundPort agentRunPort) {
+            this.agentRunPort = agentRunPort;
+            return this;
+        }
+
+        public Builder contextPackBuilder(ContextPackBuilderInboundPort contextPackBuilder) {
+            this.contextPackBuilder = contextPackBuilder;
+            return this;
+        }
+
+        public Builder agentDefinitionRepository(AgentDefinitionRepositoryPort agentDefinitionRepository) {
+            this.agentDefinitionRepository = agentDefinitionRepository;
+            return this;
+        }
+
+        public Builder attachmentContextAssembler(ConversationAttachmentContextAssembler attachmentContextAssembler) {
+            this.attachmentContextAssembler = Objects.requireNonNullElseGet(
+                    attachmentContextAssembler,
+                    ConversationAttachmentContextAssembler::noop);
+            return this;
+        }
+
+        public Builder skillRepository(AgentSkillRepositoryPort skillRepository) {
+            this.skillRepository = skillRepository;
+            return this;
+        }
+
+        public Builder agentLoopOptions(KernelAgentLoopOptions agentLoopOptions) {
+            this.agentLoopOptions = Objects.requireNonNullElseGet(agentLoopOptions, KernelAgentLoopOptions::defaults);
+            return this;
+        }
+
+        public Builder taskTemplateQueryPort(TaskTemplateQueryInboundPort taskTemplateQueryPort) {
+            this.taskTemplateQueryPort = taskTemplateQueryPort;
+            return this;
+        }
+
+        public Builder enableSmartSkillMatching(boolean enableSmartSkillMatching) {
+            this.enableSmartSkillMatching = enableSmartSkillMatching;
+            return this;
+        }
+
+        public Builder skillSemanticMatcher(SkillSemanticMatcher skillSemanticMatcher) {
+            this.skillSemanticMatcher = skillSemanticMatcher;
+            return this;
+        }
+
+        public Builder roleCardPort(RoleCardInboundPort roleCardPort) {
+            this.roleCardPort = roleCardPort;
+            return this;
+        }
+
+        public Builder costUsageRepository(CostUsageRepositoryPort costUsageRepository) {
+            this.costUsageRepository = costUsageRepository;
+            return this;
+        }
+
+        public Builder runContextSnapshotRepository(RunContextSnapshotRepositoryPort runContextSnapshotRepository) {
+            this.runContextSnapshotRepository = runContextSnapshotRepository;
+            return this;
+        }
+
+        public Builder runProfilePort(RunProfileInboundPort runProfilePort) {
+            this.runProfilePort = runProfilePort;
+            return this;
+        }
+
+        public Builder agentRunMetadataContributors(List<AgentRunMetadataContributor> agentRunMetadataContributors) {
+            this.agentRunMetadataContributors = agentRunMetadataContributors == null
+                    ? List.of()
+                    : List.copyOf(agentRunMetadataContributors);
+            return this;
+        }
+
+        public KernelChatInboundService build() {
+            return new KernelChatInboundService(
+                    chatPipeline,
+                    streamTaskPort,
+                    Optional.ofNullable(agentLoop),
+                    traceRecorder,
+                    memoryPort,
+                    memoryEnginePort,
+                    Optional.ofNullable(agentRunPort),
+                    Optional.ofNullable(contextPackBuilder),
+                    Optional.ofNullable(agentDefinitionRepository),
+                    attachmentContextAssembler,
+                    Optional.ofNullable(skillRepository),
+                    agentLoopOptions,
+                    Optional.ofNullable(taskTemplateQueryPort),
+                    enableSmartSkillMatching,
+                    skillSemanticMatcher,
+                    Optional.ofNullable(roleCardPort),
+                    Optional.ofNullable(costUsageRepository),
+                    Optional.ofNullable(runContextSnapshotRepository),
+                    Optional.ofNullable(runProfilePort),
+                    agentRunMetadataContributors);
+        }
     }
 
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, ConversationMemoryPort.noop(),
-                MemoryEnginePort.noop());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, MemoryEnginePort.noop());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort, Optional.empty());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, Optional.empty());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, Optional.empty());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository,
-                ConversationAttachmentContextAssembler.noop());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                Optional.empty());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, KernelAgentLoopOptions.defaults());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, Optional.empty());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions,
-                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, taskTemplateQueryPort, true);
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions,
-                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
-                                    boolean enableSmartSkillMatching) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, taskTemplateQueryPort, enableSmartSkillMatching, null);
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions,
-                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
-                                    boolean enableSmartSkillMatching,
-                                    SkillSemanticMatcher skillSemanticMatcher) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, taskTemplateQueryPort, enableSmartSkillMatching,
-                skillSemanticMatcher, Optional.empty());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions,
-                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
-                                    boolean enableSmartSkillMatching,
-                                    SkillSemanticMatcher skillSemanticMatcher,
-                                    Optional<RoleCardInboundPort> roleCardPort) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, taskTemplateQueryPort, enableSmartSkillMatching,
-                skillSemanticMatcher, roleCardPort, Optional.empty());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions,
-                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
-                                    boolean enableSmartSkillMatching,
-                                    SkillSemanticMatcher skillSemanticMatcher,
-                                    Optional<RoleCardInboundPort> roleCardPort,
-                                    Optional<CostUsageRepositoryPort> costUsageRepository) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, taskTemplateQueryPort, enableSmartSkillMatching,
-                skillSemanticMatcher, roleCardPort, costUsageRepository, Optional.empty(), List.of());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions,
-                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
-                                    boolean enableSmartSkillMatching,
-                                    SkillSemanticMatcher skillSemanticMatcher,
-                                    Optional<RoleCardInboundPort> roleCardPort,
-                                    Optional<CostUsageRepositoryPort> costUsageRepository,
-                                    List<AgentRunMetadataContributor> agentRunMetadataContributors) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, taskTemplateQueryPort, enableSmartSkillMatching,
-                skillSemanticMatcher, roleCardPort, costUsageRepository, Optional.empty(),
-                agentRunMetadataContributors);
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions,
-                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
-                                    boolean enableSmartSkillMatching,
-                                    SkillSemanticMatcher skillSemanticMatcher,
-                                    Optional<RoleCardInboundPort> roleCardPort,
-                                    Optional<CostUsageRepositoryPort> costUsageRepository,
-                                    Optional<RunContextSnapshotRepositoryPort> runContextSnapshotRepository,
-                                    List<AgentRunMetadataContributor> agentRunMetadataContributors) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, taskTemplateQueryPort, enableSmartSkillMatching,
-                skillSemanticMatcher, roleCardPort, costUsageRepository, runContextSnapshotRepository,
-                Optional.empty(), agentRunMetadataContributors);
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
+    private KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
                                     Optional<? extends ReActExecutorPort> agentLoop,
                                     KernelRagTraceRecorder traceRecorder,
@@ -465,6 +361,11 @@ public class KernelChatInboundService implements ChatInboundPort {
         this.agentDefinitionRepository = agentDefinitionRepository == null
                 ? Optional.empty()
                 : agentDefinitionRepository;
+        this.modelConfigSupport = new KernelChatModelConfigSupport(
+                OBJECT_MAPPER,
+                runProfilePort == null ? Optional.empty() : runProfilePort,
+                this.agentDefinitionRepository,
+                this.agentLoop);
         this.contextPackAssembler = new ContextPackRuntimeAssembler(contextPackBuilder, attachmentContextAssembler);
         this.skillSetJsonSupport = new SkillSetJsonSupport();
         this.skillRuntimeComposer = new SkillRuntimeComposer();
@@ -503,7 +404,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                         "seahorse.tenant.id", Objects.requireNonNullElse(safeCommand.tenantId(), "default"),
                         "seahorse.agent.id", defaultAgentId(safeCommand).orElse(
                                 AgentRuntimeConstants.LEGACY_REACT_AGENT_ID),
-                        "seahorse.executor.engine", effectiveExecutorEngine(safeCommand))));
+                        "seahorse.executor.engine", modelConfigSupport.effectiveExecutorEngine(safeCommand))));
         StreamCallback errorCallback = safeCallback;
         try {
             if (safeCommand.chatMode() == ChatMode.AGENT) {
@@ -581,20 +482,10 @@ public class KernelChatInboundService implements ChatInboundPort {
         if (command.roleCardId() != null) {
             return command.roleCardId();
         }
-        return runProfile(command)
+        return modelConfigSupport.runProfile(command)
                 .map(RunProfileDetails::getProfile)
                 .map(RunProfileRecord::getRoleCardId)
                 .orElse(null);
-    }
-
-    private Optional<RunProfileDetails> runProfile(StreamChatCommand command) {
-        if (command == null || runProfilePort.isEmpty()) {
-            return Optional.empty();
-        }
-        if (command.runProfileId() != null) {
-            return runProfilePort.get().findById(command.userId(), command.runProfileId());
-        }
-        return runProfilePort.get().findAppliedToConversation(command.userId(), command.conversationId());
     }
 
     private AgentLoopRequest buildAgentLoopRequest(StreamChatCommand command, AgentRun run) {
@@ -605,11 +496,11 @@ public class KernelChatInboundService implements ChatInboundPort {
         String rolloutId = run == null ? null : run.rolloutId();
         if (run == null) {
             agentId = selectedAgentId(command);
-            versionId = selectedVersion(agentId, versionId).map(AgentVersion::versionId).orElse(versionId);
+            versionId = modelConfigSupport.selectedVersion(agentId, versionId).map(AgentVersion::versionId).orElse(versionId);
         }
         String tenantId = run == null ? command.tenantId() : run.tenantId();
-        Optional<AgentVersion> selectedVersion = selectedVersion(agentId, versionId);
-        AgentModelExecutionConfig modelConfig = effectiveModelExecutionConfig(command, agentId, versionId);
+        Optional<AgentVersion> selectedVersion = modelConfigSupport.selectedVersion(agentId, versionId);
+        KernelChatModelConfigSupport.AgentModelExecutionConfig modelConfig = modelConfigSupport.effectiveModelExecutionConfig(command, agentId, versionId);
         ContextPack contextPack = contextPackAssembler.assembleForAgent(
                 command.question(),
                 runId,
@@ -625,7 +516,7 @@ public class KernelChatInboundService implements ChatInboundPort {
         ResolvedRoleCard roleCard = resolveRoleCard(command.userId(), effectiveRoleCardId(command));
         return AgentLoopRequest.builder()
                 .question(command.question())
-                .executorEngine(effectiveExecutorEngine(command))
+                .executorEngine(modelConfigSupport.effectiveExecutorEngine(command))
                 .modelId(modelConfig.modelId())
                 .history(agentHistory(command, roleCard))
                 .allowedToolIds(allowedToolIds(command))
@@ -651,7 +542,7 @@ public class KernelChatInboundService implements ChatInboundPort {
         List<String> parts = new java.util.ArrayList<>();
         selectedVersion
                 .map(AgentVersion::instructions)
-                .filter(this::hasText)
+                .filter(KernelChatJsonSupport::hasText)
                 .map(String::trim)
                 .ifPresent(parts::add);
         if (mergedSkills != null && !mergedSkills.isEmpty()) {
@@ -685,13 +576,13 @@ public class KernelChatInboundService implements ChatInboundPort {
     }
 
     private List<String> allowedToolIds(StreamChatCommand command) {
-        Optional<RunProfileDetails> profile = runProfile(command);
+        Optional<RunProfileDetails> profile = modelConfigSupport.runProfile(command);
         if (profile.isPresent()) {
             return profile.get().getToolBindings().stream()
                     .filter(Objects::nonNull)
                     .filter(binding -> binding.getEnabled() == null || binding.getEnabled() != 0)
                     .map(RunProfileToolBindingRecord::getToolId)
-                    .filter(this::hasText)
+                    .filter(KernelChatJsonSupport::hasText)
                     .distinct()
                     .toList();
         }
@@ -700,7 +591,7 @@ public class KernelChatInboundService implements ChatInboundPort {
         }
         String agentId = selectedAgentId(command);
         String versionId = command.versionId();
-        return selectedVersion(agentId, versionId)
+        return modelConfigSupport.selectedVersion(agentId, versionId)
                 .map(version -> {
                     List<String> toolIds = toolIdsFromToolSetJson(version.toolSetJson());
                     return toolIds.isEmpty() ? LEGACY_DEFAULT_TOOL_IDS : toolIds;
@@ -709,18 +600,18 @@ public class KernelChatInboundService implements ChatInboundPort {
     }
 
     private boolean explicitToolAllowlist(StreamChatCommand command) {
-        return runProfile(command).isPresent();
+        return modelConfigSupport.runProfile(command).isPresent();
     }
 
     private List<String> allowedToolIdsByProvider(StreamChatCommand command, String provider) {
-        return runProfile(command)
+        return modelConfigSupport.runProfile(command)
                 .stream()
                 .flatMap(profile -> profile.getToolBindings().stream())
                 .filter(Objects::nonNull)
                 .filter(binding -> binding.getEnabled() == null || binding.getEnabled() != 0)
                 .filter(binding -> matchesToolProvider(binding.getProvider(), provider))
                 .map(RunProfileToolBindingRecord::getToolId)
-                .filter(this::hasText)
+                .filter(KernelChatJsonSupport::hasText)
                 .distinct()
                 .toList();
     }
@@ -828,9 +719,9 @@ public class KernelChatInboundService implements ChatInboundPort {
                 inputSummary(command.question()),
                 traceRunScope == null ? null : traceRunScope.traceId(),
                 metadataJson,
-                effectiveRunProfileId(command),
-                effectiveExecutorEngine(command),
-                effectiveExecutorConfig(command),
+                modelConfigSupport.effectiveRunProfileId(command),
+                modelConfigSupport.effectiveExecutorEngine(command),
+                modelConfigSupport.effectiveExecutorConfig(command),
                 command.currentUser()));
     }
 
@@ -845,9 +736,9 @@ public class KernelChatInboundService implements ChatInboundPort {
             record.setConversationId(parseLong(command.conversationId()));
             record.setBranchLeafMessageId(command.branchLeafMessageId());
             record.setRoleCardId(effectiveRoleCardId(command));
-            record.setRunProfileId(effectiveRunProfileId(command));
-            record.setExecutorEngine(effectiveExecutorEngine(command));
-            record.setExecutorConfigJson(effectiveExecutorConfigJson(command));
+            record.setRunProfileId(modelConfigSupport.effectiveRunProfileId(command));
+            record.setExecutorEngine(modelConfigSupport.effectiveExecutorEngine(command));
+            record.setExecutorConfigJson(modelConfigSupport.effectiveExecutorConfigJson(command));
             record.setTraceContextJson(traceContextJson(traceRunScope, null, null));
             record.setSnapshotJson(runContextSnapshotJson(command, record.getExecutorEngine()));
             runContextSnapshotRepository.get().save(RUN_CONTEXT_SNAPSHOT_REDACTOR.redact(record));
@@ -868,7 +759,7 @@ public class KernelChatInboundService implements ChatInboundPort {
         snapshot.put("branchLeafMessageId", command.branchLeafMessageId());
         snapshot.put("assistantParentMessageId", command.assistantParentMessageId());
         snapshot.put("roleCardId", effectiveRoleCardId(command));
-        snapshot.put("runProfileId", effectiveRunProfileId(command));
+        snapshot.put("runProfileId", modelConfigSupport.effectiveRunProfileId(command));
         snapshot.put("executorEngine", executorEngine);
         snapshot.put("agentId", run.agentId());
         snapshot.put("versionId", run.versionId());
@@ -879,9 +770,9 @@ public class KernelChatInboundService implements ChatInboundPort {
         snapshot.put("explicitToolAllowlist", explicitToolAllowlist(command));
         snapshot.put("knowledgeBaseIds", command.knowledgeBaseIds());
         snapshot.put("modelConfig",
-                modelConfigSnapshot(effectiveModelExecutionConfig(command, run.agentId(), run.versionId())));
+                modelConfigSupport.modelConfigSnapshot(modelConfigSupport.effectiveModelExecutionConfig(command, run.agentId(), run.versionId())));
         appendAgentScopeSnapshot(snapshot, metadataJson);
-        appendRunProfileSnapshot(snapshot, command);
+        modelConfigSupport.appendRunProfileSnapshot(snapshot, command);
         ResolvedRoleCard roleCard = resolveRoleCard(command.userId(), effectiveRoleCardId(command));
         if (roleCard != null) {
             snapshot.put("roleCard", roleCardSnapshot(roleCard));
@@ -898,7 +789,7 @@ public class KernelChatInboundService implements ChatInboundPort {
         snapshot.put("branchLeafMessageId", command.branchLeafMessageId());
         snapshot.put("assistantParentMessageId", command.assistantParentMessageId());
         snapshot.put("roleCardId", effectiveRoleCardId(command));
-        snapshot.put("runProfileId", effectiveRunProfileId(command));
+        snapshot.put("runProfileId", modelConfigSupport.effectiveRunProfileId(command));
         snapshot.put("executorEngine", executorEngine);
         snapshot.put("toolIds", allowedToolIds(command));
         snapshot.put("mcpToolIds", allowedToolIdsByProvider(command, "MCP"));
@@ -907,114 +798,12 @@ public class KernelChatInboundService implements ChatInboundPort {
         snapshot.put("knowledgeBaseIds", command.knowledgeBaseIds());
         snapshot.put("attachmentIds", command.attachmentIds());
         snapshot.put("selectedSkillNames", command.selectedSkillNames());
-        appendRunProfileSnapshot(snapshot, command);
+        modelConfigSupport.appendRunProfileSnapshot(snapshot, command);
         ResolvedRoleCard roleCard = resolveRoleCard(command.userId(), effectiveRoleCardId(command));
         if (roleCard != null) {
             snapshot.put("roleCard", roleCardSnapshot(roleCard));
         }
         return OBJECT_MAPPER.writeValueAsString(snapshot);
-    }
-
-    private String effectiveExecutorEngine(StreamChatCommand command) {
-        return runProfile(command)
-                .map(RunProfileDetails::getProfile)
-                .map(RunProfileRecord::getExecutorEngine)
-                .filter(this::hasText)
-                .orElseGet(() -> hasText(command.preferredExecutorEngine())
-                        ? command.preferredExecutorEngine()
-                        : command.chatMode() == ChatMode.AGENT
-                                ? agentLoop.map(ReActExecutorPort::engineId).orElse("kernel")
-                                : "kernel");
-    }
-
-    private Long effectiveRunProfileId(StreamChatCommand command) {
-        if (command.runProfileId() != null) {
-            return command.runProfileId();
-        }
-        return runProfile(command)
-                .map(RunProfileDetails::getProfile)
-                .map(RunProfileRecord::getId)
-                .orElse(null);
-    }
-
-    private String effectiveExecutorConfigJson(StreamChatCommand command) {
-        return runProfile(command)
-                .map(RunProfileDetails::getProfile)
-                .map(RunProfileRecord::getExecutorConfigJson)
-                .filter(this::hasText)
-                .orElse(null);
-    }
-
-    private Map<String, Object> effectiveExecutorConfig(StreamChatCommand command) {
-        String json = effectiveExecutorConfigJson(command);
-        if (!hasText(json)) {
-            return Map.of();
-        }
-        try {
-            return OBJECT_MAPPER.readValue(
-                    json,
-                    new com.fasterxml.jackson.core.type.TypeReference<LinkedHashMap<String, Object>>() {
-                    });
-        } catch (JsonProcessingException ex) {
-            LOG.warn("Run profile executorConfig is not valid JSON, ignoring it: conversationId={}, runProfileId={}",
-                    command.conversationId(), effectiveRunProfileId(command), ex);
-            return Map.of();
-        }
-    }
-
-    private void appendRunProfileSnapshot(Map<String, Object> snapshot, StreamChatCommand command) {
-        runProfile(command).ifPresent(details -> {
-            RunProfileRecord profile = details.getProfile();
-            if (profile == null) {
-                return;
-            }
-            Map<String, Object> profileSnapshot = new LinkedHashMap<>();
-            profileSnapshot.put("id", profile.getId());
-            profileSnapshot.put("name", profile.getName());
-            profileSnapshot.put("roleCardId", profile.getRoleCardId());
-            profileSnapshot.put("executorEngine", profile.getExecutorEngine());
-            snapshot.put("runProfile", profileSnapshot);
-            putJsonSnapshot(snapshot, "executorConfig", profile.getExecutorConfigJson());
-            putJsonSnapshot(snapshot, "profileModelConfig", profile.getModelConfigJson());
-            putJsonSnapshot(snapshot, "memoryScope", profile.getMemoryScopeJson());
-            putJsonSnapshot(snapshot, "guardrailConfig", profile.getGuardrailConfigJson());
-        });
-    }
-
-    private void putJsonSnapshot(Map<String, Object> snapshot, String key, String json) {
-        if (!hasText(json)) {
-            return;
-        }
-        try {
-            snapshot.put(key, OBJECT_MAPPER.readTree(json));
-        } catch (JsonProcessingException ex) {
-            snapshot.put(key, json);
-        }
-    }
-
-    private Map<String, Object> modelConfigSnapshot(String agentId, String versionId) {
-        return modelConfigSnapshot(modelExecutionConfig(agentId, versionId));
-    }
-
-    private Map<String, Object> modelConfigSnapshot(AgentModelExecutionConfig modelConfig) {
-        Map<String, Object> snapshot = new LinkedHashMap<>();
-        if (modelConfig.modelId() != null) {
-            snapshot.put("modelId", modelConfig.modelId());
-        }
-        snapshot.put("temperature", modelConfig.samplingOptions().getTemperature());
-        if (modelConfig.samplingOptions().getTopP() != null) {
-            snapshot.put("topP", modelConfig.samplingOptions().getTopP());
-        }
-        if (modelConfig.samplingOptions().getTopK() != null) {
-            snapshot.put("topK", modelConfig.samplingOptions().getTopK());
-        }
-        if (modelConfig.samplingOptions().getMaxTokens() != null) {
-            snapshot.put("maxTokens", modelConfig.samplingOptions().getMaxTokens());
-        }
-        if (modelConfig.samplingOptions().getThinking() != null) {
-            snapshot.put("thinking", modelConfig.samplingOptions().getThinking());
-        }
-        return snapshot;
     }
 
     private Map<String, Object> roleCardSnapshot(ResolvedRoleCard roleCard) {
@@ -1083,37 +872,13 @@ public class KernelChatInboundService implements ChatInboundPort {
         }
     }
 
-    private String stringValue(Object value) {
-        if (value instanceof String text && hasText(text)) {
-            return text.trim();
-        }
-        return null;
-    }
-
-    private void putTextIfPresent(Map<String, Object> target, String key, String value) {
-        if (hasText(value)) {
-            target.put(key, value.trim());
-        }
-    }
-
-    private Long parseLong(String value) {
-        if (!hasText(value)) {
-            return null;
-        }
-        try {
-            return Long.valueOf(value.trim());
-        } catch (NumberFormatException ex) {
-            return null;
-        }
-    }
-
     private String agentRunMetadataJson(StreamChatCommand command) {
         try {
             String agentId = selectedAgentId(command);
             String versionId = command.versionId();
-            Optional<AgentVersion> version = selectedVersion(agentId, versionId);
+            Optional<AgentVersion> version = modelConfigSupport.selectedVersion(agentId, versionId);
             Map<String, Object> metadata = new LinkedHashMap<>();
-            metadata.put("engine", effectiveExecutorEngine(command));
+            metadata.put("engine", modelConfigSupport.effectiveExecutorEngine(command));
             metadata.put("agentVersion", version
                     .map(this::agentVersionSnapshot)
                     .orElseGet(() -> {
@@ -1179,25 +944,6 @@ public class KernelChatInboundService implements ChatInboundPort {
     private boolean hasVersionBoundSkills(AgentVersion version) {
         return version != null && version.skillSetJson() != null
                 && !skillSetJsonSupport.fromJson(version.skillSetJson()).skills().isEmpty();
-    }
-
-    private AgentModelExecutionConfig modelExecutionConfig(String agentId, String versionId) {
-        return selectedVersion(agentId, versionId)
-                .map(this::modelExecutionConfig)
-                .orElseGet(AgentModelExecutionConfig::defaults);
-    }
-
-    private AgentModelExecutionConfig effectiveModelExecutionConfig(
-            StreamChatCommand command,
-            String agentId,
-            String versionId) {
-        AgentModelExecutionConfig base = modelExecutionConfig(agentId, versionId);
-        return runProfile(command)
-                .map(RunProfileDetails::getProfile)
-                .map(RunProfileRecord::getModelConfigJson)
-                .filter(this::hasText)
-                .map(json -> modelExecutionConfig(json, base, "run profile", command.conversationId()))
-                .orElse(base);
     }
 
     /**
@@ -1298,58 +1044,6 @@ public class KernelChatInboundService implements ChatInboundPort {
         return List.of();
     }
 
-    private AgentModelExecutionConfig modelExecutionConfig(AgentVersion version) {
-        if (version == null || version.modelConfigJson() == null || version.modelConfigJson().isBlank()) {
-            return AgentModelExecutionConfig.defaults();
-        }
-        return modelExecutionConfig(
-                version.modelConfigJson(),
-                AgentModelExecutionConfig.defaults(),
-                "agent version",
-                version.agentId() + ":" + version.versionId());
-    }
-
-    private AgentModelExecutionConfig modelExecutionConfig(
-            String modelConfigJson,
-            AgentModelExecutionConfig fallback,
-            String source,
-            String sourceId) {
-        AgentModelExecutionConfig base = fallback == null ? AgentModelExecutionConfig.defaults() : fallback;
-        try {
-            JsonNode root = OBJECT_MAPPER.readTree(modelConfigJson);
-            if (root == null || !root.isObject()) {
-                return base;
-            }
-            ChatSamplingOptions baseSampling = base.samplingOptions();
-            return new AgentModelExecutionConfig(
-                    firstText(root, MODEL_CONFIG_MODEL_ID, MODEL_CONFIG_MODEL, base.modelId()),
-                    ChatSamplingOptions.builder()
-                            .temperature(doubleValue(root, MODEL_CONFIG_TEMPERATURE, baseSampling.getTemperature()))
-                            .topP(doubleValue(root, MODEL_CONFIG_TOP_P, baseSampling.getTopP()))
-                            .topK(intValue(root, MODEL_CONFIG_TOP_K, baseSampling.getTopK()))
-                            .maxTokens(intValue(root, MODEL_CONFIG_MAX_TOKENS, baseSampling.getMaxTokens()))
-                            .thinking(booleanValue(root, MODEL_CONFIG_THINKING, baseSampling.getThinking()))
-                            .build());
-        } catch (JsonProcessingException ex) {
-            LOG.warn("{} model config is not valid JSON, fallback to base config: sourceId={}",
-                    source, sourceId, ex);
-            return base;
-        }
-    }
-
-    private Optional<AgentVersion> selectedVersion(String agentId, String versionId) {
-        if (agentDefinitionRepository.isEmpty() || !hasText(agentId)
-                || AgentRuntimeConstants.LEGACY_REACT_AGENT_ID.equals(agentId)) {
-            return Optional.empty();
-        }
-        AgentDefinitionRepositoryPort repository = agentDefinitionRepository.get();
-        if (hasText(versionId)) {
-            return Optional.of(repository.findVersion(agentId, versionId)
-                    .orElseThrow(() -> new IllegalArgumentException("Agent version does not exist")));
-        }
-        return repository.latestVersion(agentId);
-    }
-
     private String selectedAgentId(StreamChatCommand command) {
         if (hasText(command.agentId())) {
             return command.agentId();
@@ -1360,7 +1054,7 @@ public class KernelChatInboundService implements ChatInboundPort {
     private Optional<String> defaultAgentId(StreamChatCommand command) {
         return taskTemplate(command)
                 .map(TaskTemplate::defaultAgentId)
-                .filter(this::hasText);
+                .filter(KernelChatJsonSupport::hasText);
     }
 
     private Optional<TaskTemplate> taskTemplate(StreamChatCommand command) {
@@ -1381,7 +1075,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                 || agentDefinitionRepository.isEmpty()) {
             return;
         }
-        selectedVersion(agentId, command.versionId());
+        modelConfigSupport.selectedVersion(agentId, command.versionId());
     }
 
     private MemoryContext loadAgentMemoryContext(StreamChatCommand command) {
@@ -1440,52 +1134,6 @@ public class KernelChatInboundService implements ChatInboundPort {
             return value;
         }
         return value.substring(0, 500);
-    }
-
-    private String text(JsonNode root, String fieldName) {
-        JsonNode value = root.get(fieldName);
-        if (value == null || value.isNull() || !value.isTextual()) {
-            return null;
-        }
-        String text = value.asText();
-        return hasText(text) ? text.trim() : null;
-    }
-
-    private String firstText(JsonNode root, String primaryField, String secondaryField, String fallback) {
-        String primary = text(root, primaryField);
-        if (hasText(primary)) {
-            return primary;
-        }
-        String secondary = text(root, secondaryField);
-        return hasText(secondary) ? secondary : fallback;
-    }
-
-    private Double doubleValue(JsonNode root, String fieldName, Double fallback) {
-        JsonNode value = root.get(fieldName);
-        if (value == null || !value.isNumber()) {
-            return fallback;
-        }
-        return value.asDouble();
-    }
-
-    private Integer intValue(JsonNode root, String fieldName, Integer fallback) {
-        JsonNode value = root.get(fieldName);
-        if (value == null || !value.isIntegralNumber()) {
-            return fallback;
-        }
-        return value.asInt();
-    }
-
-    private Boolean booleanValue(JsonNode root, String fieldName, Boolean fallback) {
-        JsonNode value = root.get(fieldName);
-        if (value == null || !value.isBoolean()) {
-            return fallback;
-        }
-        return value.asBoolean();
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
     }
 
     private StreamCallback finishTraceOnTerminal(StreamCallback delegate, TraceRunScope traceRunScope, String runId) {
@@ -1625,19 +1273,4 @@ public class KernelChatInboundService implements ChatInboundPort {
         }
     }
 
-    private record AgentModelExecutionConfig(String modelId, ChatSamplingOptions samplingOptions) {
-
-        private AgentModelExecutionConfig {
-            modelId = modelId == null || modelId.isBlank() ? null : modelId.trim();
-            samplingOptions = Objects.requireNonNullElseGet(samplingOptions, () -> ChatSamplingOptions.builder()
-                    .temperature(DEFAULT_AGENT_TEMPERATURE)
-                    .build());
-        }
-
-        private static AgentModelExecutionConfig defaults() {
-            return new AgentModelExecutionConfig(null, ChatSamplingOptions.builder()
-                    .temperature(DEFAULT_AGENT_TEMPERATURE)
-                    .build());
-        }
-    }
 }
