@@ -111,7 +111,7 @@ final class SandboxAuditSupport {
     }
 
     void appendRuntimeCreateFailoverAudit(SandboxSession session,
-                                          KernelSandboxRuntimeService.RuntimeCreateFailoverAudit failoverAudit,
+                                          SandboxRuntimeAdmissionSupport.RuntimeCreateFailoverAudit failoverAudit,
                                           int attemptCount) {
         if (auditLedger == null) {
             return;
