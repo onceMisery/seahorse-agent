@@ -37,6 +37,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.ToolCallCollector;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -121,17 +122,15 @@ class KernelChatSkillSelectionTests {
                 .attachmentContextAssembler(ConversationAttachmentContextAssembler.noop())
                 .build();  // No skill repository!
 
-        java.lang.reflect.InvocationTargetException error = assertThrows(
-                java.lang.reflect.InvocationTargetException.class,
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
                 () -> buildAgentLoopRequest(service, new StreamChatCommand(
                         "Review my code", "conv-1", "task-1", "user-1", false,
                         ChatMode.AGENT, "my-agent", null, null, List.of(),
                         List.of("code-review"))));
-        Throwable cause = error.getCause();
-        assertTrue(cause instanceof IllegalStateException);
-        assertTrue(cause.getMessage().contains("not configured")
-                        || cause.getMessage().contains("missing"),
-                "error should indicate resolver is not configured, got: " + cause.getMessage());
+        assertTrue(error.getMessage().contains("not configured")
+                        || error.getMessage().contains("missing"),
+                "error should indicate resolver is not configured, got: " + error.getMessage());
     }
 
     // ── Test 3: no selectedSkillNames → normal flow, no error ─
@@ -289,10 +288,13 @@ class KernelChatSkillSelectionTests {
 
     private static AgentLoopRequest buildAgentLoopRequest(KernelChatInboundService service,
                                                           StreamChatCommand command) throws Exception {
-        var method = KernelChatInboundService.class.getDeclaredMethod(
-                "buildAgentLoopRequest", StreamChatCommand.class, AgentRun.class);
-        method.setAccessible(true);
-        return (AgentLoopRequest) method.invoke(service, command, null);
+        return loopSupport(service).buildAgentLoopRequest(command, null);
+    }
+
+    private static KernelChatAgentLoopSupport loopSupport(KernelChatInboundService service) throws Exception {
+        Field field = KernelChatInboundService.class.getDeclaredField("loopSupport");
+        field.setAccessible(true);
+        return (KernelChatAgentLoopSupport) field.get(service);
     }
 
     /** Model that captures requests and returns a simple final answer. */

@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Clock;
 import java.time.Duration;
@@ -332,13 +333,16 @@ class KernelChatPreparationSupportTests {
         assertEquals("memory.conflict.prompt", callback.events.get(0).name());
     }
 
-    @SuppressWarnings("unchecked")
     private static List<ChatMessage> loadAgentHistory(
             KernelChatInboundService service,
             StreamChatCommand command) throws Exception {
-        Method method = KernelChatInboundService.class.getDeclaredMethod("loadAgentHistory", StreamChatCommand.class);
-        method.setAccessible(true);
-        return (List<ChatMessage>) method.invoke(service, command);
+        return loopSupport(service).loadAgentHistory(command);
+    }
+
+    private static KernelChatAgentLoopSupport loopSupport(KernelChatInboundService service) throws Exception {
+        Field field = KernelChatInboundService.class.getDeclaredField("loopSupport");
+        field.setAccessible(true);
+        return (KernelChatAgentLoopSupport) field.get(service);
     }
 
     private static KernelChatPipeline pipeline(ConversationMemoryPort memoryPort) {
