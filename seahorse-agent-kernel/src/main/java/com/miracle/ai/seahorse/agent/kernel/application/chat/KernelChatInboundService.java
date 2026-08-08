@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -352,7 +354,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                 safeCommand.taskId(),
                 safeCommand.userId(),
                 Map.of(
-                        "seahorse.tenant.id", Objects.requireNonNullElse(safeCommand.tenantId(), "default"),
+                        "seahorse.tenant.id", Objects.requireNonNullElse(safeCommand.tenantId(), TenantConstants.DEFAULT_TENANT_ID),
                         "seahorse.agent.id", toolSupport.defaultAgentId(safeCommand).orElse(
                                 AgentRuntimeConstants.LEGACY_REACT_AGENT_ID),
                         "seahorse.executor.engine", modelConfigSupport.effectiveExecutorEngine(safeCommand))));

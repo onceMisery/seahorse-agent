@@ -18,16 +18,13 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.adapters.cache.local.LocalCacheAdapter;
-import com.miracle.ai.seahorse.agent.adapters.cache.local.LocalSemaphoreAdapter;
 import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisCacheAdapter;
 import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisMemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisMemoryAggregationSchedulerPort;
-import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisSemaphoreAdapter;
 import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisStreamTaskPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedSemaphorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationSchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
@@ -73,14 +70,6 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         return new LocalCacheAdapter();
     }
 
-    @Bean
-    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
-            havingValue = "local")
-    @ConditionalOnMissingBean(DistributedSemaphorePort.class)
-    public LocalSemaphoreAdapter seahorseLocalSemaphoreAdapter() {
-        return new LocalSemaphoreAdapter();
-    }
-
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnClass(name = {
             "org.redisson.api.RedissonClient",
@@ -107,14 +96,6 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         @ConditionalOnMissingBean(RedisCacheAdapter.class)
         public RedisCacheAdapter seahorseRedisCacheAdapter(RedissonClient redissonClient) {
             return new RedisCacheAdapter(redissonClient);
-        }
-
-        @Bean
-        @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
-                havingValue = "redis")
-        @ConditionalOnMissingBean(DistributedSemaphorePort.class)
-        public RedisSemaphoreAdapter seahorseRedisSemaphoreAdapter(RedissonClient redissonClient) {
-            return new RedisSemaphoreAdapter(redissonClient);
         }
 
         @Bean

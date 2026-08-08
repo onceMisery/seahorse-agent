@@ -59,6 +59,7 @@ import java.util.Set;
 public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePort {
 
     private static final Logger LOG = LoggerFactory.getLogger(DefaultMemoryRetrievalPipeline.class);
+    private static final String TENANT_PLACEHOLDER = "default";
 
     private final ShortTermMemoryPort shortTermPort;
     private final LongTermMemoryPort longTermPort;
@@ -106,7 +107,7 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
         }
 
         String userId = request.userId();
-        var routePlan = memoryRouterPort.route(new MemoryRouteRequest(userId, "default", request.currentQuestion()));
+        var routePlan = memoryRouterPort.route(new MemoryRouteRequest(userId, TENANT_PLACEHOLDER, request.currentQuestion()));
         boolean loadCorrection = routePlan.isActive(MemoryTrack.CORRECTION);
         boolean loadProfile = routePlan.isActive(MemoryTrack.PROFILE);
         boolean loadEpisodic = routePlan.isActive(MemoryTrack.EPISODIC);
@@ -205,7 +206,7 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
 
     private List<MemoryItem> loadCorrections(String userId) {
         try {
-            return correctionLedgerPort.listActive(userId, "default", options.semanticLimit()).stream()
+            return correctionLedgerPort.listActive(userId, TENANT_PLACEHOLDER, options.semanticLimit()).stream()
                     .map(this::toCorrectionItem)
                     .toList();
         } catch (RuntimeException ex) {
@@ -216,7 +217,7 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
 
     private List<MemoryItem> loadProfileFacts(String userId) {
         try {
-            return profileMemoryPort.listActive(userId, "default", options.semanticLimit()).stream()
+            return profileMemoryPort.listActive(userId, TENANT_PLACEHOLDER, options.semanticLimit()).stream()
                     .map(this::toProfileItem)
                     .toList();
         } catch (RuntimeException ex) {
@@ -273,7 +274,7 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
             return Collections.emptyList();
         }
         try {
-            return businessDocumentRetrieverPort.retrieve("default", question, limit, knowledgeBaseIds);
+            return businessDocumentRetrieverPort.retrieve(TENANT_PLACEHOLDER, question, limit, knowledgeBaseIds);
         } catch (RuntimeException ex) {
             LOG.warn("加载业务文档记忆候选失败: userId={}", userId, ex);
             return Collections.emptyList();
@@ -393,7 +394,7 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
                 continue;
             }
             try {
-                profileMemoryPort.recordRead(item.getUserId(), "default", slot, referencedAt);
+                profileMemoryPort.recordRead(item.getUserId(), TENANT_PLACEHOLDER, slot, referencedAt);
             } catch (RuntimeException ex) {
                 LOG.debug("记录Profile读取反馈失败: userId={}, slot={}", item.getUserId(), slot, ex);
             }

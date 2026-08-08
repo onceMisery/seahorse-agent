@@ -48,7 +48,6 @@ public class IntentDirectedSearchFeature implements SearchChannelFeature {
 
     public static final String NAME = "IntentDirectedSearch";
     private static final Logger LOG = LoggerFactory.getLogger(IntentDirectedSearchFeature.class);
-    private static final String LOG_MSG_INTENT_FAILED = "意图定向检索失败，意图ID={}，集合={}";
     private static final double DEFAULT_MIN_INTENT_SCORE = 0.4D;
     private static final int DEFAULT_TOP_K = 5;
     private static final int DEFAULT_TOP_K_MULTIPLIER = 2;
@@ -107,48 +106,46 @@ public class IntentDirectedSearchFeature implements SearchChannelFeature {
         long start = System.currentTimeMillis();
         List<IntentScore> kbIntents = extractKbIntents(context);
         if (kbIntents.isEmpty()) {
-            return result(List.of(), start, 0);
+            return result(List.of(), start, 0, true);
         }
-        List<RetrievedChunk> chunks = retrieveByIntents(context, kbIntents);
-        return result(chunks, start, kbIntents.size());
+        List<CompletableFuture<List<RetrievedChunk>>> futures = kbIntents.stream()
+                .map(intent -> CompletableFuture.supplyAsync(() -> searchIntent(context, intent), retrievalExecutor))
+                .toList();
+        List<RetrievedChunk> chunks = new ArrayList<>();
+        boolean successful = true;
+        for (CompletableFuture<List<RetrievedChunk>> future : futures) {
+            try {
+                chunks.addAll(Objects.requireNonNullElse(future.join(), List.of()));
+            } catch (Exception ex) {
+                successful = false;
+                LOG.error("意图定向检索子任务失败", ex);
+            }
+        }
+        return result(chunks, start, kbIntents.size(), successful);
     }
 
-    private SearchChannelResult result(List<RetrievedChunk> chunks, long start, int intentCount) {
+    private SearchChannelResult result(List<RetrievedChunk> chunks, long start, int intentCount, boolean successful) {
         return SearchChannelResult.builder()
                 .channelType(channelType())
                 .channelName(name())
                 .chunks(chunks)
                 .latencyMs(System.currentTimeMillis() - start)
                 .metadata(Map.of("intentCount", intentCount))
+                .successful(successful)
+                .failureCode(successful ? null : "CHANNEL_PARTIAL")
                 .build();
-    }
-
-    private List<RetrievedChunk> retrieveByIntents(SearchContext context, List<IntentScore> kbIntents) {
-        List<CompletableFuture<List<RetrievedChunk>>> futures = kbIntents.stream()
-                .map(intent -> CompletableFuture.supplyAsync(() -> searchIntent(context, intent), retrievalExecutor))
-                .toList();
-        List<RetrievedChunk> chunks = new ArrayList<>();
-        for (CompletableFuture<List<RetrievedChunk>> future : futures) {
-            chunks.addAll(Objects.requireNonNullElse(future.join(), List.of()));
-        }
-        return chunks;
     }
 
     private List<RetrievedChunk> searchIntent(SearchContext context, IntentScore intentScore) {
         IntentNode node = intentScore.getNode();
-        try {
-            VectorSearchRequest request = new VectorSearchRequest(
-                    node.getCollectionName(),
-                    resolveQuestion(context),
-                    queryVector(context),
-                    resolveTopK(context, node),
-                    Map.of("intentId", Objects.requireNonNullElse(node.getId(), "")),
-                    context == null ? null : context.getCompiledFilter());
-            return Objects.requireNonNullElse(vectorSearchPort.search(request), List.of());
-        } catch (Exception ex) {
-            LOG.error(LOG_MSG_INTENT_FAILED, node.getId(), node.getCollectionName(), ex);
-            return List.of();
-        }
+        VectorSearchRequest request = new VectorSearchRequest(
+                node.getCollectionName(),
+                resolveQuestion(context),
+                queryVector(context),
+                resolveTopK(context, node),
+                Map.of("intentId", Objects.requireNonNullElse(node.getId(), "")),
+                context == null ? null : context.getCompiledFilter());
+        return Objects.requireNonNullElse(vectorSearchPort.search(request), List.of());
     }
 
     private List<IntentScore> extractKbIntents(SearchContext context) {

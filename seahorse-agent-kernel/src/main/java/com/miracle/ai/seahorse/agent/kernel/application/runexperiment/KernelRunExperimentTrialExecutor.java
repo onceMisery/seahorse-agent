@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.runexperiment;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -107,7 +109,7 @@ public class KernelRunExperimentTrialExecutor implements RunExperimentTrialExecu
                 .explicitToolAllowlist(true)
                 .samplingOptions(ChatSamplingOptions.builder().build())
                 .runId(runId)
-                .tenantId(blankToDefault(profile.getTenantId(), "default"))
+                .tenantId(blankToDefault(profile.getTenantId(), TenantConstants.DEFAULT_TENANT_ID))
                 .userId(userId)
                 .build());
         Long outputMessageId = appendAssistant(conversationId, userId, prompt.parentMessageId(), result.finalAnswer(), runId);
@@ -226,7 +228,7 @@ public class KernelRunExperimentTrialExecutor implements RunExperimentTrialExecu
             List<RunProfileToolBindingRecord> enabledTools,
             List<String> allowedToolIds) {
         RunContextSnapshotRecord snapshot = new RunContextSnapshotRecord();
-        snapshot.setTenantId(blankToDefault(profile.getTenantId(), "default"));
+        snapshot.setTenantId(blankToDefault(profile.getTenantId(), TenantConstants.DEFAULT_TENANT_ID));
         snapshot.setRunId(runId);
         snapshot.setConversationId(request.getConversationId());
         snapshot.setBranchLeafMessageId(request.getBaseLeafMessageId());

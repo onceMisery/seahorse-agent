@@ -19,7 +19,6 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
-import com.miracle.ai.seahorse.agent.kernel.domain.chat.MemoryPromptFormatter;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
@@ -566,10 +565,9 @@ class DefaultMemoryEnginePortTests {
         Assertions.assertEquals("老师", profilePort.updates.get(0).valueText());
         Assertions.assertEquals(1, context.getCorrectionMemories().size());
         Assertions.assertTrue(context.getProfileMemories().isEmpty());
-        String promptMemory = MemoryPromptFormatter.format(context);
-        Assertions.assertTrue(promptMemory.contains("用户纠错本："));
-        Assertions.assertTrue(promptMemory.contains("老师"));
-        Assertions.assertFalse(promptMemory.contains("- 我是一名学生"));
+        MemoryItem correctionMemory = context.getCorrectionMemories().get(0);
+        Assertions.assertTrue(correctionMemory.getContent().contains("老师"));
+        Assertions.assertFalse(correctionMemory.getContent().contains("我是一名学生"));
     }
 
     @Test

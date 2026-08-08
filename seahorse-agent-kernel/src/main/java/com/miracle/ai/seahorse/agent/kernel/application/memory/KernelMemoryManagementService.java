@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditActorType;
@@ -343,7 +345,7 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
         metadata.put("conflictId", conflict.id());
         metadata.put("conflictResolutionAction", ACTION_MERGE);
         metadata.put("sourceMemoryIds", List.of(conflict.memoryId1(), conflict.memoryId2()));
-        metadata.put("tenantId", firstText(command.tenantId(), string(metadata.get("tenantId")), "default"));
+        metadata.put("tenantId", firstText(command.tenantId(), string(metadata.get("tenantId")), TenantConstants.DEFAULT_TENANT_ID));
         if (hasText(string(metadata.get("semanticKey")))) {
             metadata.put("semanticKey", string(metadata.get("semanticKey")) + ":merged:" + conflict.id());
         }
@@ -550,7 +552,7 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
     }
 
     private String defaultTenant(String tenantId) {
-        return hasText(tenantId) ? tenantId.trim() : "default";
+        return hasText(tenantId) ? tenantId.trim() : TenantConstants.DEFAULT_TENANT_ID;
     }
 
     private List<MemoryTraceEvent> userTenantTraceEvents(List<MemoryTraceEvent> traceEvents,

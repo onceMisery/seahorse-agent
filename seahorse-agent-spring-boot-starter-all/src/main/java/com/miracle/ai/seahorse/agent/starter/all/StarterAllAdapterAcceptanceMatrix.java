@@ -151,10 +151,9 @@ public final class StarterAllAdapterAcceptanceMatrix {
                             "spring.data.redis.port=6379"),
                     List.of("Redis"),
                     "Redis health contributor reports reachable Redis and cache beans are present",
-                    "write/read a key and acquire/release a distributed semaphore",
+                    "write and read a cache key",
                     List.of(
-                            "com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort",
-                            "com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedSemaphorePort")),
+                            "com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort")),
             entry(
                     "storage-s3",
                     "seahorse-agent-adapter-storage-s3",

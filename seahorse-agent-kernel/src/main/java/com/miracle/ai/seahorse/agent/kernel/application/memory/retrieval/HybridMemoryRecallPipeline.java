@@ -81,7 +81,6 @@ import java.util.concurrent.TimeoutException;
 public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
 
     private static final Logger LOG = LoggerFactory.getLogger(HybridMemoryRecallPipeline.class);
-    private static final String DEFAULT_TENANT_ID = "default";
     private static final String HASH_ALGORITHM_SHA_256 = "SHA-256";
     private static final String TRACE_COMPONENT_MEMORY_RECALL = "memory-recall";
     private static final String TRACE_EVENT_CHANNEL = "channel";
@@ -403,15 +402,16 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
             return new LoadOutcome(emptyContext(request), Map.of());
         }
         String userId = request.userId();
-        var routePlan = memoryRouterPort.route(new MemoryRouteRequest(userId, DEFAULT_TENANT_ID,
+        String tenantId = request.tenantId();
+        var routePlan = memoryRouterPort.route(new MemoryRouteRequest(userId, tenantId,
                 request.currentQuestion()));
         boolean loadCorrection = routePlan.isActive(MemoryTrack.CORRECTION);
         boolean loadProfile = routePlan.isActive(MemoryTrack.PROFILE);
         boolean loadEpisodic = routePlan.isActive(MemoryTrack.EPISODIC);
         boolean loadBusinessDocument = routePlan.isActive(MemoryTrack.BUSINESS_DOCUMENT);
 
-        List<MemoryItem> corrections = loadCorrection ? loadCorrections(userId) : Collections.emptyList();
-        List<MemoryItem> profile = loadProfile ? loadProfileFacts(userId) : Collections.emptyList();
+        List<MemoryItem> corrections = loadCorrection ? loadCorrections(userId, tenantId) : Collections.emptyList();
+        List<MemoryItem> profile = loadProfile ? loadProfileFacts(userId, tenantId) : Collections.emptyList();
         Set<String> correctionProfileSlots = correctionProfileSlots(corrections);
         if (!correctionProfileSlots.isEmpty()) {
             profile = removeActiveProfileSlotMemories(profile, correctionProfileSlots);
@@ -423,16 +423,16 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         Map<String, List<String>> channelAttribution = Map.of();
         if (loadEpisodic || (!channels.isEmpty() && !isBlank(request.currentQuestion()))) {
             RecallOutcome recalled = recallUserMemoriesWithAttribution(
-                    userId, request.currentQuestion(), routePlan.activeTracks());
+                    userId, tenantId, request.currentQuestion(), routePlan.activeTracks());
             shortTerm = filterByLayer(recalled.items(), MemoryLayer.SHORT_TERM);
             longTerm = filterByLayer(recalled.items(), MemoryLayer.LONG_TERM);
             semantic = filterByLayer(recalled.items(), MemoryLayer.SEMANTIC);
             channelAttribution = recalled.channelAttribution();
         }
-        List<MemoryItem> businessDocuments = loadBusinessDocument
-                ? loadBusinessDocuments(userId, request.currentQuestion(), fusionPolicy.finalTopK(),
-                request.knowledgeBaseIds())
-                : Collections.emptyList();
+        List<MemoryItem>             businessDocuments = loadBusinessDocument
+                    ? loadBusinessDocuments(userId, tenantId, request.currentQuestion(), fusionPolicy.finalTopK(),
+                    request.knowledgeBaseIds())
+                    : Collections.emptyList();
 
         Set<String> activeProfileSlots = activeProfileSlots(profile);
         Set<String> suppressedProfileSlots = new LinkedHashSet<>();
@@ -450,7 +450,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         businessDocuments = deduplicateById(businessDocuments);
 
         Instant referencedAt = Instant.now();
-        recordProfileReadFeedback(profile, referencedAt);
+        recordProfileReadFeedback(profile, referencedAt, tenantId);
         recordLayerReadFeedback(shortTerm, longTerm, semantic, referencedAt);
 
         MemoryContext context = MemoryContext.builder()
@@ -480,20 +480,21 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 .toList();
     }
 
-    private List<MemoryItem> recallUserMemories(String userId, String query, Set<MemoryTrack> activeTracks) {
-        return recallUserMemoriesWithAttribution(userId, query, activeTracks).items();
+    private List<MemoryItem> recallUserMemories(String userId, String tenantId, String query, Set<MemoryTrack> activeTracks) {
+        return recallUserMemoriesWithAttribution(userId, tenantId, query, activeTracks).items();
     }
 
     private RecallOutcome recallUserMemoriesWithAttribution(String userId,
+                                                            String tenantId,
                                                             String query,
                                                             Set<MemoryTrack> activeTracks) {
         if (isBlank(query) || channels.isEmpty()) {
             return new RecallOutcome(List.of(), Map.of());
         }
-        AliasResolvedQuery resolvedQuery = resolveRecallAlias(userId, query);
+        AliasResolvedQuery resolvedQuery = resolveRecallAlias(userId, tenantId, query);
         MemoryRecallRequest recallRequest = new MemoryRecallRequest(
                 userId,
-                DEFAULT_TENANT_ID,
+                tenantId,
                 resolvedQuery.query(),
                 activeTracks,
                 channelTopK,
@@ -502,11 +503,11 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         List<ChannelRecallTask> tasks = channels.stream()
                 .map(channel -> recallTask(channel, recallRequest))
                 .toList();
-        List<List<MemoryRecallCandidate>> channelResults = collectChannelResults(tasks, userId, traceContext);
+        List<List<MemoryRecallCandidate>> channelResults = collectChannelResults(tasks, userId, tenantId, traceContext);
         List<MemoryRecallCandidate> fused = fusionPort.fuse(channelResults, fusionPolicy, Instant.now());
-        recordRecallFusion(userId, channelResults, fused, fusionPolicy.finalTopK(), traceContext);
+        recordRecallFusion(userId, tenantId, channelResults, fused, fusionPolicy.finalTopK(), traceContext);
         List<MemoryRecallCandidate> reranked = rerankFusedCandidates(recallRequest, fused);
-        recordRecallRerank(userId, fused, reranked, traceContext);
+        recordRecallRerank(userId, tenantId, fused, reranked, traceContext);
         List<MemoryItem> items = reranked.stream()
                 .map(this::toMemoryItem)
                 .flatMap(Optional::stream)
@@ -548,7 +549,8 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                     .filter(Objects::nonNull)
                     .toList();
         } catch (RuntimeException ex) {
-            LOG.debug("memory recall reranker failed: userId={}, query={}", request.userId(), request.query(), ex);
+            LOG.warn("memory recall reranker failed, falling back to fused order: userId={}, query={}",
+                    request.userId(), request.query(), ex);
             return rerankInputs;
         }
     }
@@ -579,9 +581,9 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 metadata);
     }
 
-    private AliasResolvedQuery resolveRecallAlias(String userId, String query) {
+    private AliasResolvedQuery resolveRecallAlias(String userId, String tenantId, String query) {
         try {
-            Optional<MemoryAliasResolution> resolved = memoryAliasPort.resolveAlias(userId, DEFAULT_TENANT_ID, query);
+            Optional<MemoryAliasResolution> resolved = memoryAliasPort.resolveAlias(userId, tenantId, query);
             if (resolved.isEmpty()) {
                 return new AliasResolvedQuery(query, Map.of());
             }
@@ -630,6 +632,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
 
     private List<List<MemoryRecallCandidate>> collectChannelResults(List<ChannelRecallTask> tasks,
                                                                     String userId,
+                                                                    String tenantId,
                                                                     RecallTraceContext traceContext) {
         List<List<MemoryRecallCandidate>> channelResults = new ArrayList<>();
         for (ChannelRecallTask task : tasks) {
@@ -638,27 +641,27 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                         .get(fusionPolicy.channelTimeoutMillis(), TimeUnit.MILLISECONDS);
                 List<MemoryRecallCandidate> safeResult = result == null ? List.of() : result;
                 channelResults.add(safeResult);
-                recordRecallChannel(task.channel(), userId, safeResult,
+                recordRecallChannel(task.channel(), userId, tenantId, safeResult,
                         elapsedMillis(task.startedAt()), MemoryTraceEvent.STATUS_SUCCESS, "", traceContext);
             } catch (TimeoutException ex) {
                 task.future().cancel(true);
                 channelResults.add(List.of());
                 LOG.warn("memory recall channel timed out: channel={}, userId={}, timeoutMs={}",
                         task.channel().channelName(), userId, fusionPolicy.channelTimeoutMillis());
-                recordRecallChannel(task.channel(), userId, List.of(),
+                recordRecallChannel(task.channel(), userId, tenantId, List.of(),
                         elapsedMillis(task.startedAt()), MemoryTraceEvent.STATUS_FAILED, "timeout", traceContext);
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
                 task.future().cancel(true);
                 channelResults.add(List.of());
-                recordRecallChannel(task.channel(), userId, List.of(),
+                recordRecallChannel(task.channel(), userId, tenantId, List.of(),
                         elapsedMillis(task.startedAt()), MemoryTraceEvent.STATUS_FAILED, "interrupted", traceContext);
             } catch (ExecutionException ex) {
                 Throwable cause = ex.getCause() == null ? ex : ex.getCause();
                 LOG.warn("memory recall channel failed: channel={}, userId={}", task.channel().channelName(), userId,
                         cause);
                 channelResults.add(List.of());
-                recordRecallChannel(task.channel(), userId, List.of(),
+                recordRecallChannel(task.channel(), userId, tenantId, List.of(),
                         elapsedMillis(task.startedAt()), MemoryTraceEvent.STATUS_FAILED,
                         Objects.requireNonNullElse(cause.getMessage(), cause.getClass().getName()), traceContext);
             }
@@ -668,6 +671,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
 
     private void recordRecallChannel(MemoryRecallChannelPort channel,
                                      String userId,
+                                     String tenantId,
                                      List<MemoryRecallCandidate> candidates,
                                      long latencyMs,
                                      String status,
@@ -682,7 +686,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         details.put(TRACE_KEY_ERROR, Objects.requireNonNullElse(error, ""));
         traceRecorder.record(new MemoryTraceEvent(
                 "",
-                DEFAULT_TENANT_ID,
+                tenantId,
                 userId,
                 "",
                 "",
@@ -721,6 +725,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     }
 
     private void recordRecallFusion(String userId,
+                                    String tenantId,
                                     List<List<MemoryRecallCandidate>> channelResults,
                                     List<MemoryRecallCandidate> fusedCandidates,
                                     int finalTopK,
@@ -734,7 +739,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         details.put(TRACE_KEY_FUSION_EXPLANATIONS, fusionExplanations(fusedCandidates));
         traceRecorder.record(new MemoryTraceEvent(
                 "",
-                DEFAULT_TENANT_ID,
+                tenantId,
                 userId,
                 "",
                 "",
@@ -749,6 +754,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     }
 
     private void recordRecallRerank(String userId,
+                                    String tenantId,
                                     List<MemoryRecallCandidate> inputCandidates,
                                     List<MemoryRecallCandidate> outputCandidates,
                                     RecallTraceContext traceContext) {
@@ -759,7 +765,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         details.put(TRACE_KEY_OUTPUT_CANDIDATE_IDS, candidateIds(outputCandidates));
         traceRecorder.record(new MemoryTraceEvent(
                 "",
-                DEFAULT_TENANT_ID,
+                tenantId,
                 userId,
                 "",
                 "",
@@ -1008,9 +1014,9 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 .build();
     }
 
-    private List<MemoryItem> loadCorrections(String userId) {
+    private List<MemoryItem> loadCorrections(String userId, String tenantId) {
         try {
-            return correctionLedgerPort.listActive(userId, DEFAULT_TENANT_ID, fusionPolicy.finalTopK()).stream()
+            return correctionLedgerPort.listActive(userId, tenantId, fusionPolicy.finalTopK()).stream()
                     .map(this::toCorrectionItem)
                     .toList();
         } catch (RuntimeException ex) {
@@ -1019,9 +1025,9 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         }
     }
 
-    private List<MemoryItem> loadProfileFacts(String userId) {
+    private List<MemoryItem> loadProfileFacts(String userId, String tenantId) {
         try {
-            return profileMemoryPort.listActive(userId, DEFAULT_TENANT_ID, fusionPolicy.finalTopK()).stream()
+            return profileMemoryPort.listActive(userId, tenantId, fusionPolicy.finalTopK()).stream()
                     .map(this::toProfileItem)
                     .toList();
         } catch (RuntimeException ex) {
@@ -1073,6 +1079,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     }
 
     private List<MemoryItem> loadBusinessDocuments(String userId,
+                                                   String tenantId,
                                                    String query,
                                                    int limit,
                                                    List<String> knowledgeBaseIds) {
@@ -1080,7 +1087,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
             return Collections.emptyList();
         }
         try {
-            return businessDocumentRetrieverPort.retrieve(DEFAULT_TENANT_ID, query, limit, knowledgeBaseIds);
+            return businessDocumentRetrieverPort.retrieve(tenantId, query, limit, knowledgeBaseIds);
         } catch (RuntimeException ex) {
             LOG.warn("load business document memories failed: userId={}", userId, ex);
             return Collections.emptyList();
@@ -1220,7 +1227,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         return Double.compare(score(candidate), score(current));
     }
 
-    private void recordProfileReadFeedback(List<MemoryItem> profile, Instant referencedAt) {
+    private void recordProfileReadFeedback(List<MemoryItem> profile, Instant referencedAt, String tenantId) {
         if (profile == null || profile.isEmpty()) {
             return;
         }
@@ -1230,7 +1237,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 continue;
             }
             try {
-                profileMemoryPort.recordRead(item.getUserId(), DEFAULT_TENANT_ID, slot, referencedAt);
+                profileMemoryPort.recordRead(item.getUserId(), tenantId, slot, referencedAt);
             } catch (RuntimeException ex) {
                 LOG.debug("record profile read feedback failed: userId={}, slot={}", item.getUserId(), slot, ex);
             }

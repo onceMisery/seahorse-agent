@@ -93,12 +93,12 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
         try {
             reranked = invokeRerank(options, context, modelCandidates);
         } catch (RerankTimeoutException ex) {
-            LOG.debug("Rerank post processor timed out, fallback to original chunks", ex);
+            LOG.warn("Rerank post processor timed out, fallback to original chunks", ex);
             recordRerankEvent(context, "timeout", candidates.size(), chunks.size(), elapsedMs(started),
                     timeoutMs(options), ex.getClass().getSimpleName());
             return chunks;
         } catch (RuntimeException ex) {
-            LOG.debug("Rerank post processor failed, fallback to original chunks", ex);
+            LOG.warn("Rerank post processor failed, fallback to original chunks", ex);
             recordRerankEvent(context, "fallback", candidates.size(), chunks.size(), elapsedMs(started),
                     timeoutMs(options), ex.getClass().getSimpleName());
             return chunks;

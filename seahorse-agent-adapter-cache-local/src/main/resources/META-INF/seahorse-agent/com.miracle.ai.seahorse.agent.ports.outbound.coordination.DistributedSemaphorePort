@@ -1,3 +1,0 @@
-default=local
-local=com.miracle.ai.seahorse.agent.adapters.cache.local.LocalSemaphoreAdapter
-local.order=0

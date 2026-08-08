@@ -175,6 +175,7 @@ final class KernelChatAgentLoopSupport {
                     .userId(command.userId())
                     .currentQuestion(command.question())
                     .knowledgeBaseIds(command.knowledgeBaseIds())
+                    .tenantId(command.tenantId())
                     .build());
             if (loaded == null) {
                 return fallback;

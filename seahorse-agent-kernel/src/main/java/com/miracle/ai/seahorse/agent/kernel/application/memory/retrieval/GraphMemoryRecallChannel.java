@@ -58,6 +58,6 @@ public class GraphMemoryRecallChannel implements MemoryRecallChannelPort {
         if (request == null || request.query().isBlank()) {
             return List.of();
         }
-        return graphPort.recallNeighborhood(request, maxHops);
+        return MemoryRecallAliasRanker.rank(graphPort.recallNeighborhood(request, maxHops), request);
     }
 }

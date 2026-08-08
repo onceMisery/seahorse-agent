@@ -22,7 +22,6 @@ import cn.dev33.satoken.dao.SaTokenDaoDefaultImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelAdapter;
 import com.miracle.ai.seahorse.agent.adapters.cache.local.LocalCacheAdapter;
-import com.miracle.ai.seahorse.agent.adapters.cache.local.LocalSemaphoreAdapter;
 import com.miracle.ai.seahorse.agent.adapters.local.ClasspathPromptTemplateAdapter;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalIntentGuidanceAdapter;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalIntentResolutionAdapter;
@@ -88,7 +87,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentResolutionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryRewritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedSemaphorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.dashboard.DashboardRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackRepositoryPort;
@@ -186,7 +184,6 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(LocalCacheAdapter.class);
-                    assertThat(context).hasSingleBean(LocalSemaphoreAdapter.class);
                     assertThat(context).hasSingleBean(LocalObjectStorageAdapter.class);
                     assertThat(context).hasSingleBean(TikaDocumentParserAdapter.class);
                     assertThat(context).hasSingleBean(LocalQueryRewriteAdapter.class);
@@ -201,7 +198,6 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(NoopObservationAdapter.class);
                     assertThat(context).hasSingleBean(SpringCronSchedulerPort.class);
                     assertThat(context).hasSingleBean(KeyValueCachePort.class);
-                    assertThat(context).hasSingleBean(DistributedSemaphorePort.class);
                     assertThat(context).hasSingleBean(ObjectStoragePort.class);
                     assertThat(context.getBean(DocumentFetcherPort.class))
                             .isInstanceOf(CompositeDocumentFetcherPort.class);

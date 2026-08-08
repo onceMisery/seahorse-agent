@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationReport;
@@ -145,6 +146,7 @@ public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInbo
                 .conversationId(goldenCase.conversationId())
                 .userId(goldenCase.userId())
                 .currentQuestion(goldenCase.query())
+                .tenantId(TenantContext.get())
                 .build());
         MemoryContext context = attribution.context();
         List<String> retrievedIds = rankedMemoryIds(context, topK);
