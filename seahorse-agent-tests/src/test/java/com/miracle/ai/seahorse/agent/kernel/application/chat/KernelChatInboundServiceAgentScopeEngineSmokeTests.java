@@ -56,8 +56,13 @@ class KernelChatInboundServiceAgentScopeEngineSmokeTests {
                 Runnable::run);
         RecordingStreamCallback callback = new RecordingStreamCallback();
         when(memoryEnginePort.loadMemory(any(MemoryLoadRequest.class))).thenReturn(MemoryContext.builder().build());
-        KernelChatInboundService service = KernelChatInboundService.builder(pipeline, taskPort)
-                .agentLoop(Optional.of(executor)).memoryEnginePort(memoryEnginePort).build();
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(pipeline)
+                .streamTaskPort(taskPort)
+                .agentLoop(executor)
+                .traceRecorder(KernelRagTraceRecorder.noop())
+                .memoryEnginePort(memoryEnginePort)
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "hello agentscope", "conv-1", "task-1", "user-1", false, ChatMode.AGENT), callback);

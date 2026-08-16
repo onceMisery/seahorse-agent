@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.kernel.domain.memory;
 
 import lombok.Builder;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.util.List;
 import java.util.Objects;
 
@@ -28,12 +30,14 @@ import java.util.Objects;
 @Builder
 public record MemoryLoadRequest(
         String conversationId,
+        String tenantId,
         String userId,
         String currentQuestion,
         List<String> knowledgeBaseIds) {
 
     public MemoryLoadRequest {
         knowledgeBaseIds = normalizeIds(knowledgeBaseIds);
+        tenantId = TenantConstants.resolve(tenantId);
     }
 
     private static List<String> normalizeIds(List<String> values) {

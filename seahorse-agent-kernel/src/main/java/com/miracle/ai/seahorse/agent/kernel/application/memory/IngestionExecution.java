@@ -15,34 +15,13 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.ports.outbound.coordination;
+package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
-import com.miracle.ai.seahorse.agent.kernel.plugin.AgentSPI;
-
-import java.time.Duration;
-import java.util.Optional;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
 
 /**
- * 分布式信号量端口。
+ * 一次摄入执行的结果承载（从 {@link DefaultMemoryEnginePort} 提取为包级类型）。
+ * 主类编排与 {@code execute*Support} 协作者之间传递的结果记录。
  */
-@AgentSPI(defaultName = "noop")
-public interface DistributedSemaphorePort {
-
-    /**
-     * 尝试获取信号量许可。
-     *
-     * @param resource 资源标识
-     * @param owner    持有者
-     * @param permits  许可数
-     * @param ttl      许可有效期
-     * @return 获取成功时返回许可
-     */
-    Optional<SemaphorePermit> tryAcquire(String resource, String owner, int permits, Duration ttl);
-
-    /**
-     * 释放信号量许可。
-     *
-     * @param permit 许可
-     */
-    void release(SemaphorePermit permit);
+record IngestionExecution(MemoryIngestionResult result, MemoryClassificationResult classification) {
 }

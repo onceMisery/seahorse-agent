@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.auth;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginResult;
@@ -144,7 +146,7 @@ public class KernelAuthService implements AuthInboundPort {
     }
 
     private IllegalArgumentException invalidCredentials(LoginCommand command) {
-        safeRecordLogin(command, 0L, "default", STATUS_FAILED, "User not found");
+        safeRecordLogin(command, 0L, TenantConstants.DEFAULT_TENANT_ID, STATUS_FAILED, "User not found");
         return new IllegalArgumentException("Invalid username or password");
     }
 

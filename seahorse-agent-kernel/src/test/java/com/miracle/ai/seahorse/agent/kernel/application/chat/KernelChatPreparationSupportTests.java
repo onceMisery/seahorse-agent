@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Clock;
 import java.time.Duration;
@@ -271,8 +272,13 @@ class KernelChatPreparationSupportTests {
     @Test
     void shouldLoadAgentBranchPathWithoutAppendingUserMessageWhenRegeneratingAssistant() throws Exception {
         RecordingMemoryPort memoryPort = new RecordingMemoryPort();
-        KernelChatInboundService service = KernelChatInboundService.builder(pipeline(memoryPort),
-                StreamTaskPort.noop()).memoryPort(memoryPort).build();
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(pipeline(memoryPort))
+                .streamTaskPort(StreamTaskPort.noop())
+                .traceRecorder(KernelRagTraceRecorder.noop())
+                .memoryPort(memoryPort)
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .build();
 
         List<ChatMessage> history = loadAgentHistory(service, new StreamChatCommand(
                 "hello", "conversation-1", "task-1", "user-1", false,
@@ -327,13 +333,16 @@ class KernelChatPreparationSupportTests {
         assertEquals("memory.conflict.prompt", callback.events.get(0).name());
     }
 
-    @SuppressWarnings("unchecked")
     private static List<ChatMessage> loadAgentHistory(
             KernelChatInboundService service,
             StreamChatCommand command) throws Exception {
-        Method method = KernelChatInboundService.class.getDeclaredMethod("loadAgentHistory", StreamChatCommand.class);
-        method.setAccessible(true);
-        return (List<ChatMessage>) method.invoke(service, command);
+        return loopSupport(service).loadAgentHistory(command);
+    }
+
+    private static KernelChatAgentLoopSupport loopSupport(KernelChatInboundService service) throws Exception {
+        Field field = KernelChatInboundService.class.getDeclaredField("loopSupport");
+        field.setAccessible(true);
+        return (KernelChatAgentLoopSupport) field.get(service);
     }
 
     private static KernelChatPipeline pipeline(ConversationMemoryPort memoryPort) {

@@ -77,125 +77,16 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     private final Clock clock;
     private final ToolArgumentAuditSummary auditSummary;
 
-    public LocalToolGatewayPort(ToolRegistryPort toolRegistry) {
-        this(toolRegistry, ToolPolicyPort.defaults());
-    }
-
-    public LocalToolGatewayPort(ToolRegistryPort toolRegistry, ToolPolicyPort toolPolicy) {
-        this(toolRegistry, toolPolicy, ToolInvocationAuditPort.noop());
-    }
-
-    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
-                                ToolPolicyPort toolPolicy,
-                                ToolInvocationAuditPort auditPort) {
-        this(toolRegistry, toolPolicy, auditPort, Clock.systemUTC());
-    }
-
-    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
-                                ToolPolicyPort toolPolicy,
-                                ToolInvocationAuditPort auditPort,
-                                Clock clock) {
-        this(toolRegistry, toolPolicy, auditPort, ToolApprovalRequestRepositoryPort.noop(), clock);
-    }
-
-    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
-                                ToolPolicyPort toolPolicy,
-                                ToolInvocationAuditPort auditPort,
-                                ToolOutputRedactionPort outputRedactionPort,
-                                Clock clock) {
-        this(toolRegistry,
-                toolPolicy,
-                auditPort,
-                ToolApprovalRequestRepositoryPort.noop(),
-                ApprovalRequestQueryPort.empty(),
-                outputRedactionPort,
-                ToolArtifactPublicationPort.noop(),
-                clock);
-    }
-
-    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
-                                ToolPolicyPort toolPolicy,
-                                ToolInvocationAuditPort auditPort,
-                                ToolApprovalRequestRepositoryPort approvalRequestRepository,
-                                Clock clock) {
-        this(toolRegistry, toolPolicy, auditPort, approvalRequestRepository, ApprovalRequestQueryPort.empty(), clock);
-    }
-
-    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
-                                ToolPolicyPort toolPolicy,
-                                ToolInvocationAuditPort auditPort,
-                                ToolApprovalRequestRepositoryPort approvalRequestRepository,
-                                ApprovalRequestQueryPort approvalQueryPort,
-                                Clock clock) {
-        this(toolRegistry,
-                toolPolicy,
-                auditPort,
-                approvalRequestRepository,
-                approvalQueryPort,
-                ToolOutputRedactionPort.noop(),
-                ToolArtifactPublicationPort.noop(),
-                clock);
-    }
-
-    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
-                                ToolPolicyPort toolPolicy,
-                                ToolInvocationAuditPort auditPort,
-                                ToolApprovalRequestRepositoryPort approvalRequestRepository,
-                                ApprovalRequestQueryPort approvalQueryPort,
-                                ToolOutputRedactionPort outputRedactionPort,
-                                Clock clock) {
-        this(toolRegistry,
-                toolPolicy,
-                auditPort,
-                approvalRequestRepository,
-                approvalQueryPort,
-                outputRedactionPort,
-                ToolArtifactPublicationPort.noop(),
-                clock);
-    }
-
-    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
-                                ToolPolicyPort toolPolicy,
-                                ToolInvocationAuditPort auditPort,
-                                ToolApprovalRequestRepositoryPort approvalRequestRepository,
-                                ApprovalRequestQueryPort approvalQueryPort,
-                                ToolOutputRedactionPort outputRedactionPort,
-                                ToolArtifactPublicationPort artifactPublicationPort,
-                                Clock clock) {
-        this(toolRegistry,
-                toolPolicy,
-                auditPort,
-                approvalRequestRepository,
-                approvalQueryPort,
-                outputRedactionPort,
-                artifactPublicationPort,
-                ToolResultSpillPort.noop(),
-                clock);
-    }
-
-    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
-                                ToolPolicyPort toolPolicy,
-                                ToolInvocationAuditPort auditPort,
-                                ToolApprovalRequestRepositoryPort approvalRequestRepository,
-                                ApprovalRequestQueryPort approvalQueryPort,
-                                ToolOutputRedactionPort outputRedactionPort,
-                                ToolArtifactPublicationPort artifactPublicationPort,
-                                ToolResultSpillPort toolResultSpillPort,
-                                Clock clock) {
-        this(toolRegistry, toolPolicy, auditPort, approvalRequestRepository, approvalQueryPort, outputRedactionPort,
-                artifactPublicationPort, toolResultSpillPort, ToolInvocationIdempotencyPort.noop(), clock);
-    }
-
-    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
-                                ToolPolicyPort toolPolicy,
-                                ToolInvocationAuditPort auditPort,
-                                ToolApprovalRequestRepositoryPort approvalRequestRepository,
-                                ApprovalRequestQueryPort approvalQueryPort,
-                                ToolOutputRedactionPort outputRedactionPort,
-                                ToolArtifactPublicationPort artifactPublicationPort,
-                                ToolResultSpillPort toolResultSpillPort,
-                                ToolInvocationIdempotencyPort idempotencyPort,
-                                Clock clock) {
+    private LocalToolGatewayPort(ToolRegistryPort toolRegistry,
+                                 ToolPolicyPort toolPolicy,
+                                 ToolInvocationAuditPort auditPort,
+                                 ToolApprovalRequestRepositoryPort approvalRequestRepository,
+                                 ApprovalRequestQueryPort approvalQueryPort,
+                                 ToolOutputRedactionPort outputRedactionPort,
+                                 ToolArtifactPublicationPort artifactPublicationPort,
+                                 ToolResultSpillPort toolResultSpillPort,
+                                 ToolInvocationIdempotencyPort idempotencyPort,
+                                 Clock clock) {
         this.toolRegistry = Objects.requireNonNullElse(toolRegistry, ToolRegistryPort.empty());
         this.toolPolicy = Objects.requireNonNullElseGet(toolPolicy, ToolPolicyPort::defaults);
         this.auditPort = Objects.requireNonNullElseGet(auditPort, ToolInvocationAuditPort::noop);
@@ -215,6 +106,95 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                 ToolInvocationIdempotencyPort::noop);
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
         this.auditSummary = new ToolArgumentAuditSummary();
+    }
+
+    /**
+     * 构造器重载已折叠为 Builder：{{@code LocalToolGatewayPort.builder().toolRegistry(...)...build()}}。
+     * 可选依赖均有默认实现（noop/empty/defaults），按需覆盖即可。
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static final class Builder {
+        private ToolRegistryPort toolRegistry;
+        private ToolPolicyPort toolPolicy = ToolPolicyPort.defaults();
+        private ToolInvocationAuditPort auditPort = ToolInvocationAuditPort.noop();
+        private ToolApprovalRequestRepositoryPort approvalRequestRepository = ToolApprovalRequestRepositoryPort.noop();
+        private ApprovalRequestQueryPort approvalQueryPort = ApprovalRequestQueryPort.empty();
+        private ToolOutputRedactionPort outputRedactionPort = ToolOutputRedactionPort.noop();
+        private ToolArtifactPublicationPort artifactPublicationPort = ToolArtifactPublicationPort.noop();
+        private ToolResultSpillPort toolResultSpillPort = ToolResultSpillPort.noop();
+        private ToolInvocationIdempotencyPort idempotencyPort = ToolInvocationIdempotencyPort.noop();
+        private Clock clock;
+
+        public Builder toolRegistry(ToolRegistryPort toolRegistry) {
+            this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry must not be null");
+            return this;
+        }
+
+        public Builder toolPolicy(ToolPolicyPort toolPolicy) {
+            this.toolPolicy = Objects.requireNonNullElseGet(toolPolicy, ToolPolicyPort::defaults);
+            return this;
+        }
+
+        public Builder auditPort(ToolInvocationAuditPort auditPort) {
+            this.auditPort = Objects.requireNonNullElseGet(auditPort, ToolInvocationAuditPort::noop);
+            return this;
+        }
+
+        public Builder approvalRequestRepository(ToolApprovalRequestRepositoryPort approvalRequestRepository) {
+            this.approvalRequestRepository = Objects.requireNonNullElseGet(
+                    approvalRequestRepository,
+                    ToolApprovalRequestRepositoryPort::noop);
+            return this;
+        }
+
+        public Builder approvalQueryPort(ApprovalRequestQueryPort approvalQueryPort) {
+            this.approvalQueryPort = Objects.requireNonNullElseGet(approvalQueryPort, ApprovalRequestQueryPort::empty);
+            return this;
+        }
+
+        public Builder outputRedactionPort(ToolOutputRedactionPort outputRedactionPort) {
+            this.outputRedactionPort = Objects.requireNonNullElseGet(outputRedactionPort, ToolOutputRedactionPort::noop);
+            return this;
+        }
+
+        public Builder artifactPublicationPort(ToolArtifactPublicationPort artifactPublicationPort) {
+            this.artifactPublicationPort = Objects.requireNonNullElseGet(
+                    artifactPublicationPort,
+                    ToolArtifactPublicationPort::noop);
+            return this;
+        }
+
+        public Builder toolResultSpillPort(ToolResultSpillPort toolResultSpillPort) {
+            this.toolResultSpillPort = Objects.requireNonNullElseGet(toolResultSpillPort, ToolResultSpillPort::noop);
+            return this;
+        }
+
+        public Builder idempotencyPort(ToolInvocationIdempotencyPort idempotencyPort) {
+            this.idempotencyPort = Objects.requireNonNullElseGet(idempotencyPort, ToolInvocationIdempotencyPort::noop);
+            return this;
+        }
+
+        public Builder clock(Clock clock) {
+            this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
+            return this;
+        }
+
+        public LocalToolGatewayPort build() {
+            return new LocalToolGatewayPort(
+                    Objects.requireNonNull(toolRegistry, "toolRegistry must not be null"),
+                    toolPolicy,
+                    auditPort,
+                    approvalRequestRepository,
+                    approvalQueryPort,
+                    outputRedactionPort,
+                    artifactPublicationPort,
+                    toolResultSpillPort,
+                    idempotencyPort,
+                    clock);
+        }
     }
 
     @Override

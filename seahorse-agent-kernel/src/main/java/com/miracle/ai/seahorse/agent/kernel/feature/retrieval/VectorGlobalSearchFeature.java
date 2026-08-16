@@ -114,11 +114,14 @@ public class VectorGlobalSearchFeature implements SearchChannelFeature {
                 .toList();
         List<Float> queryVector = collections.isEmpty() ? List.of() : queryVector(context);
         RetrievalResult retrieval = retrieveAll(context, collections, queryVector);
+        boolean partialCollectionFailure = retrieval.failedCollectionCount() > 0;
         return SearchChannelResult.builder()
                 .channelType(channelType())
                 .channelName(name())
                 .chunks(retrieval.chunks())
                 .latencyMs(System.currentTimeMillis() - start)
+                .successful(!partialCollectionFailure)
+                .failureCode(partialCollectionFailure ? "PARTIAL_COLLECTION_FAILURE" : null)
                 .metadata(Map.of(
                         "embeddingModel", embeddingModel,
                         "searchableCollectionCount", searchableCollections.size(),
@@ -138,8 +141,8 @@ public class VectorGlobalSearchFeature implements SearchChannelFeature {
                 chunks.addAll(searchCollection(context, collectionName, queryVector));
             } catch (RuntimeException ex) {
                 failedCollectionCount++;
-                LOG.warn("Vector global search skipped collection after failure: collection={}, error={}",
-                        collectionName, ex.toString());
+                LOG.error("Vector global search skipped collection after failure: collection={}",
+                        collectionName, ex);
             }
         }
         return new RetrievalResult(chunks, failedCollectionCount);

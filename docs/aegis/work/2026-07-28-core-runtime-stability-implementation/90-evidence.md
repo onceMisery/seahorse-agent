@@ -215,6 +215,11 @@ termination are still required before closure.
 | SRE Port retirement | repository-wide `SreHealthReportProviderPort` search, SRE/gate tests, registry auto-configuration test | PASS; duplicate provider boundary deleted, one `SreHealthInboundPort` owner remains, and 7 gate/SRE plus 3 registry tests pass |
 | Current Port complexity baseline | `PortArchitectureTest` after clean Kernel install; `complexity-baseline.txt`; `docs/architecture/port-inventory.md` | PASS; 361 public interfaces (93 inbound, 267 outbound, 1 common), 3/3 architecture tests, no Port-growth violation |
 
+| Latest origin/main synchronization | `git fetch origin --prune`; staged diff review against `origin/main` at `22b99f0c` | PASS; upstream Chat, sandbox, memory, container-sandbox, and tenant-isolation splits are present with no unresolved conflict markers |
+| Post-sync core regression | Maven reactor focused set covering Kernel, Web, JDBC repository, Chat cross-module, Spring auto-configuration, and `PortArchitectureTest` | PASS; 280 tests, 0 failures, 0 errors, 2 environment-skipped JDBC tests |
+| Post-sync Port inventory | `PortArchitectureTest`; compiled source scan; `complexity-baseline.txt`; `docs/architecture/port-inventory.md` | PASS; 360 public interfaces (93 inbound, 266 outbound, 1 common), 791 Port-package Java files |
+| Post-sync complexity budget | `bash scripts/complexity-report.sh` | PASS; Ports 360, Port Java files 791, large classes 16, AutoConfig 67, cross-domain pairs 40 |
+
 ## Evidence Gaps
 
 - full CI execution of the blocking frontend job on Linux;

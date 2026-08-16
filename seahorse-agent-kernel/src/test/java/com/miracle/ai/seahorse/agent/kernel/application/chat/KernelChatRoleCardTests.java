@@ -63,8 +63,17 @@ class KernelChatRoleCardTests {
     void shouldResolveRequestedRoleCardIntoRagPromptContext() {
         RecordingRagPromptPort ragPromptPort = new RecordingRagPromptPort();
         RecordingRoleCardPort roleCardPort = new RecordingRoleCardPort();
-        KernelChatInboundService service = KernelChatInboundService.builder(pipeline(ragPromptPort),
-                StreamTaskPort.noop()).roleCardPort(Optional.of(roleCardPort)).build();
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(pipeline(ragPromptPort))
+                .streamTaskPort(StreamTaskPort.noop())
+                .traceRecorder(KernelRagTraceRecorder.noop())
+                .memoryPort(ConversationMemoryPort.noop())
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .attachmentContextAssembler(ConversationAttachmentContextAssembler.noop())
+                .agentLoopOptions(KernelAgentLoopOptions.defaults())
+                .enableSmartSkillMatching(true)
+                .roleCardPort(roleCardPort)
+                .build();
         RecordingCallback callback = new RecordingCallback();
 
         service.streamChat(new StreamChatCommand(
@@ -95,10 +104,17 @@ class KernelChatRoleCardTests {
     void shouldInjectDefaultRoleCardAsUserMessageForAgentMode() {
         RecordingAgentLoop agentLoop = new RecordingAgentLoop();
         RecordingRoleCardPort roleCardPort = new RecordingRoleCardPort();
-        KernelChatInboundService service = KernelChatInboundService.builder(
-                pipeline(new RecordingRagPromptPort()), StreamTaskPort.noop())
-                .agentLoop(Optional.of(agentLoop))
-                .roleCardPort(Optional.of(roleCardPort))
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(pipeline(new RecordingRagPromptPort()))
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .traceRecorder(KernelRagTraceRecorder.noop())
+                .memoryPort(ConversationMemoryPort.noop())
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .attachmentContextAssembler(ConversationAttachmentContextAssembler.noop())
+                .agentLoopOptions(KernelAgentLoopOptions.defaults())
+                .enableSmartSkillMatching(true)
+                .roleCardPort(roleCardPort)
                 .build();
 
         service.streamChat(new StreamChatCommand(
@@ -128,10 +144,17 @@ class KernelChatRoleCardTests {
         RecordingAgentLoop agentLoop = new RecordingAgentLoop();
         RecordingRoleCardPort roleCardPort = new RecordingRoleCardPort(
                 new ResolvedRoleCard("99", "Operator", "Use terse operational language.", true));
-        KernelChatInboundService service = KernelChatInboundService.builder(
-                pipeline(new RecordingRagPromptPort()), StreamTaskPort.noop())
-                .agentLoop(Optional.of(agentLoop))
-                .roleCardPort(Optional.of(roleCardPort))
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(pipeline(new RecordingRagPromptPort()))
+                .streamTaskPort(StreamTaskPort.noop())
+                .agentLoop(agentLoop)
+                .traceRecorder(KernelRagTraceRecorder.noop())
+                .memoryPort(ConversationMemoryPort.noop())
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .attachmentContextAssembler(ConversationAttachmentContextAssembler.noop())
+                .agentLoopOptions(KernelAgentLoopOptions.defaults())
+                .enableSmartSkillMatching(true)
+                .roleCardPort(roleCardPort)
                 .build();
 
         service.streamChat(new StreamChatCommand(

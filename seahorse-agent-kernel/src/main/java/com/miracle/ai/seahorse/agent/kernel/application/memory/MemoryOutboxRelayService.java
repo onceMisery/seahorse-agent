@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskHandler;
@@ -108,7 +110,7 @@ public class MemoryOutboxRelayService {
     private void recordBatch(MemoryOutboxPort.MemoryOutboxTask batchTask, int processedCount, int requestedLimit) {
         traceRecorder.record(new MemoryTraceEvent(
                 "",
-                batchTask == null ? "default" : batchTask.tenantId(),
+                batchTask == null ? TenantConstants.DEFAULT_TENANT_ID : batchTask.tenantId(),
                 batchTask == null ? "" : batchTask.userId(),
                 "",
                 "",

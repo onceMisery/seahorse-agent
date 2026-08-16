@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifact;
@@ -103,7 +105,7 @@ public class ToolResultReadToolPortAdapter implements DescribedToolPort, ToolInv
 
     private boolean canRead(AgentArtifact artifact, ToolInvocationRequest request) {
         return Objects.equals(artifact.runId(), request.runId())
-                && Objects.equals(artifact.tenantId(), defaultText(request.tenantId(), "default"))
+                && Objects.equals(artifact.tenantId(), defaultText(request.tenantId(), TenantConstants.DEFAULT_TENANT_ID))
                 && Objects.equals(artifact.userId(), defaultText(request.userId(), "system"))
                 && artifact.downloadable()
                 && artifact.artifactType() == AgentArtifactType.FILE

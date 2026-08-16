@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
@@ -260,7 +262,7 @@ public class DefaultContextWeaver implements ContextWeaverPort {
         details.put("longTermCount", longTermCount);
         traceRecorder.record(new MemoryTraceEvent(
                 "",
-                "default",
+                TenantConstants.DEFAULT_TENANT_ID,
                 Objects.requireNonNullElse(context.getUserId(), ""),
                 Objects.requireNonNullElse(context.getConversationId(), ""),
                 Objects.requireNonNullElse(context.getConversationId(), ""),

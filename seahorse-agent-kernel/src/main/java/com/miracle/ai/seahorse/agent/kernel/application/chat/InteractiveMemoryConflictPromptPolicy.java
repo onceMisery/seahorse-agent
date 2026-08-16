@@ -97,8 +97,9 @@ public final class InteractiveMemoryConflictPromptPolicy {
         if (isBlank(userId) || isBlank(conflictId)) {
             return;
         }
+        String key = key(userId, conflictId);
         Instant now = clock.instant();
-        states.compute(key(userId, conflictId), (ignored, existing) -> {
+        states.compute(key, (ignored, existing) -> {
             if (existing == null) {
                 return new PromptState(1, now);
             }

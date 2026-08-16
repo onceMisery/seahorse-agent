@@ -15,29 +15,14 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.ports.outbound.coordination;
-
-import java.time.Instant;
+package com.miracle.ai.seahorse.agent.adapters.sandbox.container;
 
 /**
- * 分布式信号量许可。
- *
- * @param resource 资源标识
- * @param owner    持有者
- * @param permits  许可数
- * @param expireAt 过期时间
+ * 沙箱会话容量汇总（从 {@link ContainerSandboxRuntimeAdapter} 提取为包级类型）。
+ * 由主类在 {@code capacitySummary} 中构造并汇入健康检查。
  */
-public record SemaphorePermit(String resource, String owner, int permits, Instant expireAt) {
-
-    public SemaphorePermit {
-        if (resource == null || resource.isBlank()) {
-            throw new IllegalArgumentException("resource must not be blank");
-        }
-        if (owner == null || owner.isBlank()) {
-            throw new IllegalArgumentException("owner must not be blank");
-        }
-        if (permits <= 0) {
-            throw new IllegalArgumentException("permits must be positive");
-        }
-    }
+record CapacitySummary(int limit,
+                       int remaining,
+                       boolean available,
+                       String status) {
 }

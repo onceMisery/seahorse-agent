@@ -146,7 +146,9 @@ public final class MemoryProfileValueNormalizer {
             return OccupationCorrection.normalizeOccupationValue(
                     stripProfilePrefix(stripOccupationTrailingStatement(occupationSegment(value))));
         }
-        return "";
+        // 未枚举的 slot 没有专用前缀剥离规则：保留去空白后的原始内容，
+        // 而非返回空串（空串会在 resolveValues 中被整体丢弃，导致画像字段丢失）。
+        return value;
     }
 
     private static String stripPrefix(String content, String regex) {

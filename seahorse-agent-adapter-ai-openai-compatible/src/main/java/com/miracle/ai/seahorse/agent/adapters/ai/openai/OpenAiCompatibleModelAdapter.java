@@ -49,6 +49,9 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -74,6 +77,8 @@ import java.util.concurrent.ForkJoinPool;
 public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingChatModelPort,
         EmbeddingModelPort, RerankModelPort, ModelProviderPort, TokenCounterPort, ModelHealthPort,
         ImageGenerationPort {
+
+    private static final Logger log = LoggerFactory.getLogger(OpenAiCompatibleModelAdapter.class);
 
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final String HEADER_AUTHORIZATION = "Authorization";
@@ -172,7 +177,11 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
         payload.put("model", resolveEmbeddingModel(modelId));
         payload.put("input", Objects.requireNonNullElse(text, ""));
         JsonNode response = executeJson("/embeddings", payload);
-        return embeddingValues(response.at("/data/0/embedding"));
+        JsonNode data = response.at("/data");
+        if (!data.isArray() || data.isEmpty()) {
+            throw new IllegalStateException("embedding response missing data array: " + response);
+        }
+        return embeddingValues(data.get(0).path("embedding"));
     }
 
     @Override
@@ -582,6 +591,7 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
             List<com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk> chunks,
             JsonNode results) {
         if (!results.isArray()) {
+            log.warn("Rerank response malformed (results is not an array), falling back to original order");
             return List.copyOf(chunks);
         }
         List<com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk> reranked = new ArrayList<>();
@@ -598,7 +608,11 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
                             item.path("score").asDouble(source.getScore() == null ? 0.0D : source.getScore())))
                     .build());
         }
-        return reranked.isEmpty() ? List.copyOf(chunks) : reranked;
+        if (reranked.isEmpty()) {
+            log.warn("Rerank produced no usable scores, falling back to original order");
+            return List.copyOf(chunks);
+        }
+        return reranked;
     }
 
     private String responseBody(Response response) throws IOException {

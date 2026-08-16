@@ -61,8 +61,13 @@ class KernelChatInboundTraceTests {
         RecordingTraceRepository traceRepository = new RecordingTraceRepository();
         KernelRagTraceRecorder traceRecorder = new KernelRagTraceRecorder(traceRepository);
         DeferredStreamingModel model = new DeferredStreamingModel();
-        KernelChatInboundService service = KernelChatInboundService.builder(pipeline(model, traceRecorder),
-                StreamTaskPort.noop()).traceRecorder(traceRecorder).build();
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(pipeline(model, traceRecorder))
+                .streamTaskPort(StreamTaskPort.noop())
+                .traceRecorder(traceRecorder)
+                .memoryPort(ConversationMemoryPort.noop())
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .build();
         RecordingCallback callback = new RecordingCallback();
 
         service.streamChat(new StreamChatCommand(
@@ -84,9 +89,13 @@ class KernelChatInboundTraceTests {
         RecordingTraceRepository traceRepository = new RecordingTraceRepository();
         KernelRagTraceRecorder traceRecorder = new KernelRagTraceRecorder(traceRepository);
         DeferredStreamingModel model = new DeferredStreamingModel();
-        KernelChatInboundService service = KernelChatInboundService
-                .builder(pipeline(model, traceRecorder), StreamTaskPort.noop())
-                .traceRecorder(traceRecorder).build();
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(pipeline(model, traceRecorder))
+                .streamTaskPort(StreamTaskPort.noop())
+                .traceRecorder(traceRecorder)
+                .memoryPort(ConversationMemoryPort.noop())
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .build();
         RecordingCallback callback = new RecordingCallback();
 
         service.streamChat(new StreamChatCommand(
@@ -105,8 +114,13 @@ class KernelChatInboundTraceTests {
         RecordingTraceRepository traceRepository = new RecordingTraceRepository();
         KernelRagTraceRecorder traceRecorder = new KernelRagTraceRecorder(traceRepository);
         DeferredStreamingModel model = new DeferredStreamingModel();
-        KernelChatInboundService service = KernelChatInboundService.builder(pipeline(model, traceRecorder),
-                StreamTaskPort.noop()).traceRecorder(traceRecorder).build();
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(pipeline(model, traceRecorder))
+                .streamTaskPort(StreamTaskPort.noop())
+                .traceRecorder(traceRecorder)
+                .memoryPort(ConversationMemoryPort.noop())
+                .memoryEnginePort(MemoryEnginePort.noop())
+                .build();
         RecordingCallback callback = new RecordingCallback();
         RuntimeException error = new RuntimeException("stream broke");
 

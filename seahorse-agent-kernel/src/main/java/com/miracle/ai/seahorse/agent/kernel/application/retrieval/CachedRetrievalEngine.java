@@ -36,7 +36,8 @@ import java.util.function.BiFunction;
  *
  * <p>Uses a {@link ConcurrentHashMap} with time-based expiry to avoid redundant
  * retrieval calls for identical queries. The cache key is a SHA-256 hash of the
- * query text combined with retrieval options.
+ * tenant scope, query text and retrieval options, so entries are isolated per tenant
+ * and identical queries from different tenants never collide.
  *
  * <p>This is a decorator: supply the actual retrieval logic as a {@link BiFunction}
  * and wrap it with this engine to gain transparent caching.
@@ -45,6 +46,9 @@ public class CachedRetrievalEngine<T> {
 
     private static final Logger log = LoggerFactory.getLogger(CachedRetrievalEngine.class);
     private static final Duration DEFAULT_TTL = Duration.ofMinutes(10);
+
+    /** Well-known options key carrying the tenant scope used to isolate cache entries. */
+    private static final String OPTION_TENANT_ID = "tenantId";
 
     private final BiFunction<String, Map<String, Object>, List<T>> delegate;
     private final ConcurrentHashMap<String, CacheEntry<List<T>>> cache;
@@ -76,7 +80,8 @@ public class CachedRetrievalEngine<T> {
      * Retrieve results for the given query, serving from cache when possible.
      *
      * @param query   the retrieval query
-     * @param options additional retrieval options (may be empty)
+     * @param options additional retrieval options (may be empty); a {@code tenantId} entry,
+     *                if present, scopes the cache key to avoid cross-tenant leakage
      * @return the list of retrieval results
      */
     public List<T> retrieve(String query, Map<String, Object> options) {
@@ -108,10 +113,19 @@ public class CachedRetrievalEngine<T> {
         return cache.size();
     }
 
-    private String computeCacheKey(String query, Map<String, Object> options) {
-        String raw = Objects.requireNonNullElse(query, "") + "|"
+    private static String computeCacheKey(String query, Map<String, Object> options) {
+        String tenantId = options == null ? "" : Objects.toString(options.get(OPTION_TENANT_ID), "");
+        String raw = tenantId + "|"
+                + Objects.requireNonNullElse(query, "") + "|"
                 + (options != null ? options.toString() : "");
         return sha256Hex(raw);
+    }
+
+    private void evictStaleEntries() {
+        if (cache.size() < 256) {
+            return;
+        }
+        cache.entrySet().removeIf(e -> e.getValue().isExpired());
     }
 
     private static String sha256Hex(String input) {
@@ -127,13 +141,6 @@ public class CachedRetrievalEngine<T> {
             // SHA-256 is guaranteed to be available in every JDK
             throw new IllegalStateException("SHA-256 not available", ex);
         }
-    }
-
-    private void evictStaleEntries() {
-        if (cache.size() < 256) {
-            return;
-        }
-        cache.entrySet().removeIf(e -> e.getValue().isExpired());
     }
 
     private record CacheEntry<V>(V value, Instant expiresAt) {

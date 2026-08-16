@@ -275,6 +275,24 @@ persists one); they are recorded and unrelated to the Port reduction work.
   JDBC AgentRun repository 11 (2 environment-skipped), and architecture 3;
   all executed tests had zero failures/errors.
 
+## Current Slice Update (2026-08-16, origin/main sync)
+
+- The branch was synchronized with `origin/main` at `22b99f0c`, including the
+  upstream Chat, sandbox, memory, container-sandbox, and tenant-isolation
+  collaborator splits. The staged upstream changes have no unresolved conflict
+  markers and compile in the current reactor.
+- The post-sync core regression set passed 280 tests across Kernel, Web,
+  repository JDBC, cross-module Chat, Spring auto-configuration, and the
+  architecture test. There were zero failures and zero errors; two JDBC tests
+  were environment-skipped as expected.
+- The authoritative current Port inventory is 360 (93 inbound, 266 outbound,
+  1 common), with 791 Java files under `ports`. The decrease from 361 is from
+  the upstream retirement of the unused `DistributedSemaphorePort` boundary;
+  the complexity baseline and Port inventory are synchronized to this scan.
+- `bash scripts/complexity-report.sh` passes after the sync: Ports 360,
+  informational Port files 791, large classes over 800 lines 16,
+  AutoConfiguration imports 67, and cross-domain whitelist entries 40.
+
 ## Blocked On
 
 Full Docker credentials/capacity remain an evidence risk for Slice 1 closure.

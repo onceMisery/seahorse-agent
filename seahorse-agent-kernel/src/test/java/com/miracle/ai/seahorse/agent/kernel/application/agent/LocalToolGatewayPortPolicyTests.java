@@ -43,9 +43,10 @@ class LocalToolGatewayPortPolicyTests {
     @Test
     void shouldExecuteToolOnlyAfterAllowDecision() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("ok"));
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new RecordingToolPolicyPort(PolicyDecision.allow("allow-1")));
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new RecordingToolPolicyPort(PolicyDecision.allow("allow-1")))
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("weather", List.of("weather")));
 
@@ -58,7 +59,10 @@ class LocalToolGatewayPortPolicyTests {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
         RecordingToolPolicyPort policy = new RecordingToolPolicyPort(
                 PolicyDecision.deny("deny-1", "TOOL_NOT_BOUND", "Tool is not bound"));
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(new SingleToolRegistry(tool), policy);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(policy)
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("delete-memory", List.of("weather")));
 
@@ -81,11 +85,12 @@ class LocalToolGatewayPortPolicyTests {
     @Test
     void shouldRequireApprovalWithoutExecutingTool() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                new SingleToolRegistry(tool),
-                new RecordingToolPolicyPort(
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(new RecordingToolPolicyPort(
                         PolicyDecision.approvalRequired("approval-1", "TOOL_APPROVAL_REQUIRED",
-                                "Approval required")));
+                                "Approval required")))
+                .build();
 
         ToolInvocationResult result = gateway.invoke(request("send-email", List.of("send-email")));
 
@@ -98,7 +103,10 @@ class LocalToolGatewayPortPolicyTests {
     void shouldUseProviderOwnedResourceReferencesBeforePolicyDecision() {
         TrustedResourceToolPort tool = new TrustedResourceToolPort();
         RecordingToolPolicyPort policy = new RecordingToolPolicyPort(PolicyDecision.allow("allow-1"));
-        LocalToolGatewayPort gateway = new LocalToolGatewayPort(new SingleToolRegistry(tool), policy);
+        LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                .toolRegistry(new SingleToolRegistry(tool))
+                .toolPolicy(policy)
+                .build();
 
         ToolInvocationRequest original = request("weather", List.of("weather"))
                 .withResourceRefs(Map.of("callerSupplied", "untrusted-resource"));

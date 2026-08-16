@@ -1,5 +1,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkill;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillRevision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillStatus;
@@ -57,7 +59,7 @@ public class ChatSelectedSkillResolver {
                     "Too many skills selected: " + selectedSkillNames.size()
                             + " (maximum " + maxSelectedPerTurn + ")");
         }
-        String safeTenantId = tenantId == null || tenantId.isBlank() ? "default" : tenantId;
+        String safeTenantId = tenantId == null || tenantId.isBlank() ? TenantConstants.DEFAULT_TENANT_ID : tenantId;
 
         List<SkillRuntimeBlock> blocks = new ArrayList<>();
         for (String name : selectedSkillNames) {

@@ -85,7 +85,10 @@ class KernelChatInboundServiceTests {
         when(streamingModel.streamChat(any(), any())).thenReturn(() -> {
         });
 
-        KernelChatInboundService service = KernelChatInboundService.builder(pipeline, taskPort).build();
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(pipeline)
+                .streamTaskPort(taskPort)
+                .build();
 
         service.streamChat(new StreamChatCommand("hello", "conv-1", "task-1", "user-1", false), callback);
 
@@ -136,7 +139,10 @@ class KernelChatInboundServiceTests {
         when(streamingModel.streamChat(any(), any())).thenReturn(() -> {
         });
 
-        KernelChatInboundService service = KernelChatInboundService.builder(pipeline, taskPort).build();
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(pipeline)
+                .streamTaskPort(taskPort)
+                .build();
         service.streamChat(new StreamChatCommand("what is my job", "conv-1", "task-1", "user-1", false), callback);
 
         ArgumentCaptor<com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest> requestCaptor =
@@ -201,7 +207,10 @@ class KernelChatInboundServiceTests {
         when(intentPort.mergeIntentGroup(any())).thenReturn(new IntentGroup(List.of(), List.of()));
         when(guidancePort.detectAmbiguity(any(), any())).thenReturn(GuidanceDecision.none());
 
-        KernelChatInboundService service = KernelChatInboundService.builder(pipeline, taskPort).build();
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(pipeline)
+                .streamTaskPort(taskPort)
+                .build();
 
         service.streamChat(new StreamChatCommand("hello", "conv-1", "task-1", "user-1", false), callback);
 
@@ -213,7 +222,10 @@ class KernelChatInboundServiceTests {
     void shouldDelegateStopToStreamTaskPort() {
         KernelChatPipeline pipeline = mock(KernelChatPipeline.class);
         StreamTaskPort taskPort = mock(StreamTaskPort.class);
-        KernelChatInboundService service = KernelChatInboundService.builder(pipeline, taskPort).build();
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(pipeline)
+                .streamTaskPort(taskPort)
+                .build();
 
         service.stopTask("task-1");
 
@@ -232,8 +244,13 @@ class KernelChatInboundServiceTests {
 
         when(memoryPort.loadAndAppend(any(), any(), any(), any())).thenReturn(history);
         when(agentLoop.streamExecute(any(), any(), any(TraceRunScope.class))).thenReturn(handle);
-        KernelChatInboundService service = KernelChatInboundService.builder(pipeline, taskPort)
-                .agentLoop(Optional.of(agentLoop)).memoryPort(memoryPort).build();
+        KernelChatInboundService service = KernelChatInboundService.builder()
+                .chatPipeline(pipeline)
+                .streamTaskPort(taskPort)
+                .agentLoop(agentLoop)
+                .traceRecorder(KernelRagTraceRecorder.noop())
+                .memoryPort(memoryPort)
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "hello", "conv-1", "task-1", "user-1", false, ChatMode.AGENT), callback);

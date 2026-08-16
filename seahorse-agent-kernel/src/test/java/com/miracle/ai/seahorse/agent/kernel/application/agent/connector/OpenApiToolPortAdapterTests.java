@@ -103,11 +103,12 @@ class OpenApiToolPortAdapterTests {
                     64 * 1024);
             ToolRegistryPort registry = new OpenApiAwareToolRegistryPort(ToolRegistryPort.empty(), adapter);
             RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
-            LocalToolGatewayPort gateway = new LocalToolGatewayPort(
-                    registry,
-                    new CatalogBackedToolPolicyPort(catalog, AgentToolBindingRepositoryPort.empty()),
-                    audit,
-                    CLOCK);
+            LocalToolGatewayPort gateway = LocalToolGatewayPort.builder()
+                    .toolRegistry(registry)
+                    .toolPolicy(new CatalogBackedToolPolicyPort(catalog, AgentToolBindingRepositoryPort.empty()))
+                    .auditPort(audit)
+                    .clock(CLOCK)
+                    .build();
 
             ToolInvocationResult result = gateway.invoke(request(operation.toolId(), Map.of("status", "active")));
 

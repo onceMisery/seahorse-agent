@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
@@ -106,7 +108,7 @@ public class KernelAgentExternalInvocationInboundService implements AgentExterna
 
     private String defaultExternalUserId(AgentExternalInvocationCommand command) {
         return "external-agent:%s:%s".formatted(
-                firstText(command.tenantId(), "default"),
+                firstText(command.tenantId(), TenantConstants.DEFAULT_TENANT_ID),
                 firstText(command.agentName(), "agent"));
     }
 

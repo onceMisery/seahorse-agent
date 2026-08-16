@@ -115,11 +115,12 @@ class KernelSandboxRuntimeServiceTests {
     @Test
     void shouldDenySessionBeforeCallingRuntimeWhenPolicyRejectsRequest() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.deny(SandboxPolicyReasonCode.NETWORK_DENIED_BY_DEFAULT),
-                runtime,
-                new MemoryArtifactPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.deny(SandboxPolicyReasonCode.NETWORK_DENIED_BY_DEFAULT))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .clock(CLOCK)
+                .build();
 
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
@@ -167,14 +168,15 @@ class KernelSandboxRuntimeServiceTests {
                 List.of(),
                 List.of(),
                 List.of());
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .clock(CLOCK)
+                .build();
 
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
@@ -224,14 +226,15 @@ class KernelSandboxRuntimeServiceTests {
                 List.of(),
                 List.of(),
                 List.of());
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .clock(CLOCK)
+                .build();
 
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
@@ -257,14 +260,15 @@ class KernelSandboxRuntimeServiceTests {
                 SandboxRuntimeType.CODE_INTERPRETER,
                 NOW));
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .clock(CLOCK)
+                .build();
 
         List<SandboxRuntimeNodeHealth> nodes = service.inspectRuntimeNodes();
 
@@ -283,11 +287,12 @@ class KernelSandboxRuntimeServiceTests {
     @Test
     void shouldCreateSessionWhenRequiredRuntimeNodeMatchesAvailableNode() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .clock(CLOCK)
+                .build();
 
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
@@ -309,14 +314,15 @@ class KernelSandboxRuntimeServiceTests {
     void shouldRejectSessionWhenRequiredRuntimeNodeDoesNotMatchAvailableNode() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
         MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .clock(CLOCK)
+                .build();
 
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
@@ -986,24 +992,25 @@ class KernelSandboxRuntimeServiceTests {
                 new FailingAuditEventRepository(),
                 new AuditRedactionPolicy(),
                 AuditWriteFailurePolicy.FAIL_CLOSED);
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                new DefaultSandboxArtifactScannerPort(),
-                null,
-                new MemorySandboxRuntimeProfilePolicyRepository(),
-                null,
-                null,
-                auditLedger,
-                CLOCK,
-                remoteRuntime,
-                new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(
-                        SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true)),
-                reservations);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
+                .artifactStoragePort(null)
+                .runtimeProfilePolicyRepositoryPort(new MemorySandboxRuntimeProfilePolicyRepository())
+                .runRepository(null)
+                .currentUserPort(null)
+                .auditLedger(auditLedger)
+                .clock(CLOCK)
+                .remoteRuntimePort(remoteRuntime)
+                .runtimeNodeRegistryPort(new FixedSandboxRuntimeNodeRegistry(remoteEndpoint(
+                        SandboxRuntimeNodeHealth.ADMISSION_AVAILABLE, true)))
+                .capacityReservationPort(reservations)
+                .build();
 
         assertThrows(IllegalStateException.class, () -> service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
@@ -1124,11 +1131,12 @@ class KernelSandboxRuntimeServiceTests {
     void shouldNotRejectWorkspaceDiskUnavailableWhenNoThresholdIsConfigured() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
         runtime.healthResponse = SandboxRuntimeHealth.unsupported(NOW, 0);
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .clock(CLOCK)
+                .build();
 
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
@@ -1144,11 +1152,12 @@ class KernelSandboxRuntimeServiceTests {
     @Test
     void shouldApplyRuntimeProfileAndTtlWhenCreatingSession() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .clock(CLOCK)
+                .build();
 
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
@@ -1166,11 +1175,12 @@ class KernelSandboxRuntimeServiceTests {
     @Test
     void shouldApplyRuntimeProfilePolicyTtlWhenCreatingSession() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .clock(CLOCK)
+                .build();
         SandboxRuntimeProfilePolicy policy = service.upsertRuntimeProfilePolicy(
                 new SandboxRuntimeProfilePolicyUpsertCommand(
                         null,
@@ -1197,11 +1207,12 @@ class KernelSandboxRuntimeServiceTests {
     @Test
     void shouldDenySessionBeforeCallingRuntimeWhenRuntimeProfilePolicyIsDisabled() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .clock(CLOCK)
+                .build();
         service.upsertRuntimeProfilePolicy(new SandboxRuntimeProfilePolicyUpsertCommand(
                 null,
                 "tenant-1",
@@ -1226,11 +1237,12 @@ class KernelSandboxRuntimeServiceTests {
 
     @Test
     void shouldRejectRuntimeProfilePolicyThatEnablesNetworkForNonBrowserRuntime() {
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .clock(CLOCK)
+                .build();
 
         assertThrows(IllegalArgumentException.class, () -> service.upsertRuntimeProfilePolicy(
                 new SandboxRuntimeProfilePolicyUpsertCommand(
@@ -1246,11 +1258,12 @@ class KernelSandboxRuntimeServiceTests {
     @Test
     void shouldRejectBrowserNetworkRequestWhenRuntimeProfileDisallowsNetwork() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .clock(CLOCK)
+                .build();
 
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
@@ -1267,11 +1280,12 @@ class KernelSandboxRuntimeServiceTests {
     @Test
     void shouldAllowBrowserNetworkRequestWhenRuntimeProfileAllowsNetwork() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .clock(CLOCK)
+                .build();
         service.upsertRuntimeProfilePolicy(new SandboxRuntimeProfilePolicyUpsertCommand(
                 null,
                 "tenant-1",
@@ -1297,13 +1311,14 @@ class KernelSandboxRuntimeServiceTests {
     @Test
     void shouldFailClosedWhenExecutingDeniedSession() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> request.networkRequested()
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> request.networkRequested()
                         ? SandboxPolicyDecision.deny(SandboxPolicyReasonCode.NETWORK_DENIED_BY_DEFAULT)
-                        : SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                CLOCK);
+                        : SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .clock(CLOCK)
+                .build();
         SandboxSession deniedSession = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
                 "run-1",
@@ -1324,11 +1339,12 @@ class KernelSandboxRuntimeServiceTests {
 
     @Test
     void shouldFailClosedWhenDefaultRuntimeIsUnsupported() {
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                SandboxRuntimePort.unsupported(),
-                new MemoryArtifactPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(SandboxRuntimePort.unsupported())
+                .artifactPort(new MemoryArtifactPort())
+                .clock(CLOCK)
+                .build();
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
                 "run-1",
@@ -1350,11 +1366,12 @@ class KernelSandboxRuntimeServiceTests {
     @Test
     void shouldScanAndSaveAllArtifactsButReturnOnlyPromptVisibleArtifacts() {
         MemoryArtifactPort artifactPort = new MemoryArtifactPort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                artifactPort,
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(artifactPort)
+                .clock(CLOCK)
+                .build();
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
                 "run-1",
@@ -1383,16 +1400,17 @@ class KernelSandboxRuntimeServiceTests {
     @Test
     void shouldFailClosedWhenArtifactScannerFails() {
         MemoryArtifactPort artifactPort = new MemoryArtifactPort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                artifactPort,
-                new MemorySandboxSessionRepository(),
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                KernelSandboxRuntimeServiceTests::throwScannerFailure,
-                null,
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(artifactPort)
+                .sessionRepositoryPort(new MemorySandboxSessionRepository())
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactScannerPort(KernelSandboxRuntimeServiceTests::throwScannerFailure)
+                .auditLedger(null)
+                .clock(CLOCK)
+                .build();
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
                 "run-1",
@@ -1423,17 +1441,18 @@ class KernelSandboxRuntimeServiceTests {
         Files.writeString(output, "artifact marker", StandardCharsets.UTF_8);
         MemoryArtifactPort artifactPort = new MemoryArtifactPort();
         RecordingObjectStoragePort objectStorage = new RecordingObjectStoragePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(List.of(fileArtifact("artifact-file", output))),
-                artifactPort,
-                new MemorySandboxSessionRepository(),
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                new DefaultSandboxArtifactScannerPort(),
-                objectStorage,
-                null,
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort(List.of(fileArtifact("artifact-file", output))))
+                .artifactPort(artifactPort)
+                .sessionRepositoryPort(new MemorySandboxSessionRepository())
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
+                .artifactStoragePort(objectStorage)
+                .auditLedger(null)
+                .clock(CLOCK)
+                .build();
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
                 "run-1",
@@ -1463,17 +1482,18 @@ class KernelSandboxRuntimeServiceTests {
         Files.write(output, new byte[]{0x1A, 0x45, (byte) 0xDF, (byte) 0xA3});
         MemoryArtifactPort artifactPort = new MemoryArtifactPort();
         RecordingObjectStoragePort objectStorage = new RecordingObjectStoragePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(List.of(fileArtifact("artifact-video", output, "video/webm"))),
-                artifactPort,
-                new MemorySandboxSessionRepository(),
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                new DefaultSandboxArtifactScannerPort(),
-                objectStorage,
-                null,
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort(List.of(fileArtifact("artifact-video", output, "video/webm"))))
+                .artifactPort(artifactPort)
+                .sessionRepositoryPort(new MemorySandboxSessionRepository())
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
+                .artifactStoragePort(objectStorage)
+                .auditLedger(null)
+                .clock(CLOCK)
+                .build();
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
                 "run-1",
@@ -1508,20 +1528,21 @@ class KernelSandboxRuntimeServiceTests {
         Files.writeString(output, sessionState, StandardCharsets.UTF_8);
         MemoryArtifactPort artifactPort = new MemoryArtifactPort();
         RecordingObjectStoragePort objectStorage = new RecordingObjectStoragePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(List.of(fileArtifact(
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort(List.of(fileArtifact(
                         "artifact-session-state",
                         output,
-                        "application/json"))),
-                artifactPort,
-                new MemorySandboxSessionRepository(),
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                new DefaultSandboxArtifactScannerPort(),
-                objectStorage,
-                null,
-                CLOCK);
+                        "application/json"))))
+                .artifactPort(artifactPort)
+                .sessionRepositoryPort(new MemorySandboxSessionRepository())
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
+                .artifactStoragePort(objectStorage)
+                .auditLedger(null)
+                .clock(CLOCK)
+                .build();
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
                 "run-1",
@@ -1571,17 +1592,18 @@ class KernelSandboxRuntimeServiceTests {
                 ContextSensitivity.SECRET,
                 "sensitive artifact metadata",
                 CLOCK.instant());
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(List.of()),
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new MemorySandboxArtifactQueryPort(artifact),
-                new DefaultSandboxArtifactScannerPort(),
-                objectStorage,
-                null,
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort(List.of()))
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new MemorySandboxArtifactQueryPort(artifact))
+                .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
+                .artifactStoragePort(objectStorage)
+                .auditLedger(null)
+                .clock(CLOCK)
+                .build();
 
         String replayState = service.readBrowserSessionStateArtifact(artifact.artifactId());
 
@@ -1595,17 +1617,18 @@ class KernelSandboxRuntimeServiceTests {
         MemoryArtifactPort artifactPort = new MemoryArtifactPort();
         RecordingObjectStoragePort objectStorage = new RecordingObjectStoragePort();
         objectStorage.failUpload = true;
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(List.of(fileArtifact("artifact-file", output))),
-                artifactPort,
-                new MemorySandboxSessionRepository(),
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                new DefaultSandboxArtifactScannerPort(),
-                objectStorage,
-                null,
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort(List.of(fileArtifact("artifact-file", output))))
+                .artifactPort(artifactPort)
+                .sessionRepositoryPort(new MemorySandboxSessionRepository())
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
+                .artifactStoragePort(objectStorage)
+                .auditLedger(null)
+                .clock(CLOCK)
+                .build();
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
                 "run-1",
@@ -1633,17 +1656,18 @@ class KernelSandboxRuntimeServiceTests {
         Files.writeString(output, "api_key = 'sk-seahorse-secret-1234567890'", StandardCharsets.UTF_8);
         MemoryArtifactPort artifactPort = new MemoryArtifactPort();
         RecordingObjectStoragePort objectStorage = new RecordingObjectStoragePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(List.of(fileArtifact("artifact-secret-file", output))),
-                artifactPort,
-                new MemorySandboxSessionRepository(),
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                new DefaultSandboxArtifactScannerPort(),
-                objectStorage,
-                null,
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort(List.of(fileArtifact("artifact-secret-file", output))))
+                .artifactPort(artifactPort)
+                .sessionRepositoryPort(new MemorySandboxSessionRepository())
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
+                .artifactStoragePort(objectStorage)
+                .auditLedger(null)
+                .clock(CLOCK)
+                .build();
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
                 "run-1",
@@ -1693,14 +1717,15 @@ class KernelSandboxRuntimeServiceTests {
                 ContextSensitivity.SECRET,
                 "sensitive artifact metadata",
                 NOW);
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(List.of()),
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new MemorySandboxArtifactQueryPort(artifact),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort(List.of()))
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new MemorySandboxArtifactQueryPort(artifact))
+                .clock(CLOCK)
+                .build();
 
         String replayState = service.readBrowserSessionStateArtifact(artifact.artifactId());
 
@@ -1710,14 +1735,15 @@ class KernelSandboxRuntimeServiceTests {
     @Test
     void shouldListPersistedExecutionsForSession() {
         MemorySandboxExecutionRepository executionRepository = new MemorySandboxExecutionRepository();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                new MemorySandboxSessionRepository(),
-                executionRepository,
-                new EmptySandboxArtifactQueryPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(new MemorySandboxSessionRepository())
+                .executionRepositoryPort(executionRepository)
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .clock(CLOCK)
+                .build();
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
                 "run-1",
@@ -1859,14 +1885,15 @@ class KernelSandboxRuntimeServiceTests {
                 "run-new",
                 SandboxRuntimeType.FILE_CONVERSION,
                 NOW.plusSeconds(30)));
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .clock(CLOCK)
+                .build();
 
         List<SandboxSession> sessions = service.listSessions("tenant-1", 1);
 
@@ -1923,14 +1950,15 @@ class KernelSandboxRuntimeServiceTests {
                 NOW.minusSeconds(3600),
                 NOW.minusSeconds(3600)));
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .clock(CLOCK)
+                .build();
 
         SandboxSessionSweepResult result = service.sweepExpiredSessions("tenant-1", 20);
 
@@ -1978,14 +2006,15 @@ class KernelSandboxRuntimeServiceTests {
                 NOW.minusSeconds(3600),
                 NOW.minusSeconds(30)));
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .clock(CLOCK)
+                .build();
 
         SandboxRuntimeCleanupResult result = service.sweepOrphanedRuntimeResources();
 
@@ -2020,14 +2049,15 @@ class KernelSandboxRuntimeServiceTests {
                 NOW.minusSeconds(3600),
                 NOW.minusSeconds(30)));
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .clock(CLOCK)
+                .build();
 
         SandboxRuntimeHealth health = service.inspectRuntimeHealth();
 
@@ -2041,11 +2071,12 @@ class KernelSandboxRuntimeServiceTests {
 
     @Test
     void shouldExposeDefaultArtifactScannerPolicy() {
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .clock(CLOCK)
+                .build();
 
         SandboxArtifactScannerPolicy policy = service.inspectArtifactScannerPolicy();
 
@@ -2084,14 +2115,15 @@ class KernelSandboxRuntimeServiceTests {
                 NOW.minusSeconds(3600),
                 NOW.minusSeconds(30)));
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .clock(CLOCK)
+                .build();
 
         SandboxRuntimeContainerReapResult result = service.reapOrphanedRuntimeContainers(false);
 
@@ -2114,14 +2146,15 @@ class KernelSandboxRuntimeServiceTests {
         MemorySandboxArtifactQueryPort artifactQueryPort = new MemorySandboxArtifactQueryPort(storedArtifact(
                 "artifact-clean",
                 "local://sandbox-artifacts/artifact-clean"));
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                artifactQueryPort,
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(artifactQueryPort)
+                .clock(CLOCK)
+                .build();
 
         SandboxArtifactDownloadDecision decision = service.downloadArtifact("artifact-clean");
 
@@ -2140,16 +2173,17 @@ class KernelSandboxRuntimeServiceTests {
                 "run-1",
                 SandboxRuntimeType.CODE_INTERPRETER,
                 NOW));
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new MemorySandboxArtifactQueryPort(storedArtifact(
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new MemorySandboxArtifactQueryPort(storedArtifact(
                         "artifact-clean",
-                        "local://sandbox-artifacts/artifact-clean")),
-                CLOCK);
+                        "local://sandbox-artifacts/artifact-clean")))
+                .clock(CLOCK)
+                .build();
 
         SandboxArtifactDetailDecision decision = service.describeArtifact("artifact-clean");
 
@@ -2169,17 +2203,18 @@ class KernelSandboxRuntimeServiceTests {
                 "run-1",
                 SandboxRuntimeType.BROWSER_AUTOMATION,
                 NOW));
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new MemorySandboxArtifactQueryPort(storedArtifact(
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new MemorySandboxArtifactQueryPort(storedArtifact(
                         "artifact-video",
                         "local://sandbox-artifacts/browser-video.webm",
-                        "video/webm")),
-                CLOCK);
+                        "video/webm")))
+                .clock(CLOCK)
+                .build();
 
         SandboxArtifactDetailDecision decision = service.describeArtifact("artifact-video");
 
@@ -2200,17 +2235,18 @@ class KernelSandboxRuntimeServiceTests {
                 "run-1",
                 SandboxRuntimeType.CODE_INTERPRETER,
                 NOW));
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new MemorySandboxArtifactQueryPort(storedArtifact(
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new MemorySandboxArtifactQueryPort(storedArtifact(
                         "artifact-tar",
                         "local://sandbox-artifacts/safe-bundle.tar",
-                        "application/x-tar")),
-                CLOCK);
+                        "application/x-tar")))
+                .clock(CLOCK)
+                .build();
 
         SandboxArtifactDetailDecision decision = service.describeArtifact("artifact-tar");
 
@@ -2231,17 +2267,18 @@ class KernelSandboxRuntimeServiceTests {
                 "run-1",
                 SandboxRuntimeType.CODE_INTERPRETER,
                 NOW));
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new MemorySandboxArtifactQueryPort(storedArtifact(
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new MemorySandboxArtifactQueryPort(storedArtifact(
                         "artifact-targz",
                         "local://sandbox-artifacts/safe-bundle.tar.gz",
-                        "application/gzip")),
-                CLOCK);
+                        "application/gzip")))
+                .clock(CLOCK)
+                .build();
 
         SandboxArtifactDetailDecision decision = service.describeArtifact("artifact-targz");
 
@@ -2262,17 +2299,18 @@ class KernelSandboxRuntimeServiceTests {
                 "run-1",
                 SandboxRuntimeType.CODE_INTERPRETER,
                 NOW));
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new MemorySandboxArtifactQueryPort(storedArtifact(
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new MemorySandboxArtifactQueryPort(storedArtifact(
                         "artifact-secret",
                         "local://sandbox-artifacts/artifact-secret")
-                        .withScanDecision(SandboxArtifactScanStatus.CLEAN, ContextSensitivity.SECRET)),
-                CLOCK);
+                        .withScanDecision(SandboxArtifactScanStatus.CLEAN, ContextSensitivity.SECRET)))
+                .clock(CLOCK)
+                .build();
 
         SandboxArtifactDetailDecision decision = service.describeArtifact("artifact-secret");
 
@@ -2291,15 +2329,16 @@ class KernelSandboxRuntimeServiceTests {
                 "run-1",
                 SandboxRuntimeType.CODE_INTERPRETER,
                 NOW));
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new MemorySandboxArtifactQueryPort(fileArtifact("artifact-file", output)
-                        .withScanDecision(SandboxArtifactScanStatus.CLEAN, ContextSensitivity.INTERNAL)),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new MemorySandboxArtifactQueryPort(fileArtifact("artifact-file", output)
+                        .withScanDecision(SandboxArtifactScanStatus.CLEAN, ContextSensitivity.INTERNAL)))
+                .clock(CLOCK)
+                .build();
 
         SandboxArtifactDetailDecision decision = service.describeArtifact("artifact-file");
 
@@ -2317,17 +2356,18 @@ class KernelSandboxRuntimeServiceTests {
                 "run-1",
                 SandboxRuntimeType.CODE_INTERPRETER,
                 NOW));
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new MemorySandboxArtifactQueryPort(storedArtifact(
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new MemorySandboxArtifactQueryPort(storedArtifact(
                         "artifact-secret",
                         "local://sandbox-artifacts/artifact-secret")
-                        .withScanDecision(SandboxArtifactScanStatus.CLEAN, ContextSensitivity.SECRET)),
-                CLOCK);
+                        .withScanDecision(SandboxArtifactScanStatus.CLEAN, ContextSensitivity.SECRET)))
+                .clock(CLOCK)
+                .build();
 
         assertThrows(IllegalStateException.class, () -> service.downloadArtifact("artifact-secret"));
     }
@@ -2343,31 +2383,33 @@ class KernelSandboxRuntimeServiceTests {
                 "run-1",
                 SandboxRuntimeType.CODE_INTERPRETER,
                 NOW));
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new MemorySandboxArtifactQueryPort(fileArtifact("artifact-file", output)
-                        .withScanDecision(SandboxArtifactScanStatus.CLEAN, ContextSensitivity.INTERNAL)),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new MemorySandboxArtifactQueryPort(fileArtifact("artifact-file", output)
+                        .withScanDecision(SandboxArtifactScanStatus.CLEAN, ContextSensitivity.INTERNAL)))
+                .clock(CLOCK)
+                .build();
 
         assertThrows(IllegalStateException.class, () -> service.downloadArtifact("artifact-file"));
     }
 
     @Test
     void shouldRejectSandboxArtifactDownloadDecisionWhenSessionIsMissing() {
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                new MemorySandboxSessionRepository(),
-                new MemorySandboxExecutionRepository(),
-                new MemorySandboxArtifactQueryPort(storedArtifact(
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(new MemorySandboxSessionRepository())
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new MemorySandboxArtifactQueryPort(storedArtifact(
                         "artifact-clean",
-                        "local://sandbox-artifacts/artifact-clean")),
-                CLOCK);
+                        "local://sandbox-artifacts/artifact-clean")))
+                .clock(CLOCK)
+                .build();
 
         assertThrows(IllegalArgumentException.class, () -> service.downloadArtifact("artifact-clean"));
     }
@@ -2376,14 +2418,15 @@ class KernelSandboxRuntimeServiceTests {
     void shouldDelegateCloseToRuntimeAndPersistClosedSession() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
         MemorySandboxSessionRepository sessionRepository = new MemorySandboxSessionRepository();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                runtime,
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .clock(CLOCK)
+                .build();
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
                 "run-1",
@@ -2402,11 +2445,12 @@ class KernelSandboxRuntimeServiceTests {
     @Test
     void shouldNotDelegateCloseForTerminalSession() {
         RecordingSandboxRuntimePort runtime = new RecordingSandboxRuntimePort();
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.deny(SandboxPolicyReasonCode.NETWORK_DENIED_BY_DEFAULT),
-                runtime,
-                new MemoryArtifactPort(),
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.deny(SandboxPolicyReasonCode.NETWORK_DENIED_BY_DEFAULT))
+                .runtimePort(runtime)
+                .artifactPort(new MemoryArtifactPort())
+                .clock(CLOCK)
+                .build();
         SandboxSession failedSession = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
                 "run-1",
@@ -2427,15 +2471,16 @@ class KernelSandboxRuntimeServiceTests {
                 auditRepository,
                 new AuditRedactionPolicy(),
                 AuditWriteFailurePolicy.FAIL_CLOSED);
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                new MemorySandboxSessionRepository(),
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                auditLedger,
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(new MemorySandboxSessionRepository())
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .auditLedger(auditLedger)
+                .clock(CLOCK)
+                .build();
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
                 "run-1",
@@ -2466,15 +2511,16 @@ class KernelSandboxRuntimeServiceTests {
                 auditRepository,
                 new AuditRedactionPolicy(),
                 AuditWriteFailurePolicy.FAIL_CLOSED);
-        KernelSandboxRuntimeService service = new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                new MemorySandboxSessionRepository(),
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                auditLedger,
-                CLOCK);
+        KernelSandboxRuntimeService service = KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(new MemorySandboxSessionRepository())
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .auditLedger(auditLedger)
+                .clock(CLOCK)
+                .build();
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
                 "tenant-1",
                 "run-1",
@@ -2532,23 +2578,24 @@ class KernelSandboxRuntimeServiceTests {
             SandboxSessionRepositoryPort sessionRepository,
             SandboxRuntimeCapacityReservationPort capacityReservationPort,
             KernelAuditLedgerService auditLedger) {
-        return new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                localRuntime,
-                new MemoryArtifactPort(),
-                sessionRepository,
-                new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
-                new DefaultSandboxArtifactScannerPort(),
-                null,
-                new MemorySandboxRuntimeProfilePolicyRepository(),
-                null,
-                null,
-                auditLedger,
-                CLOCK,
-                remoteRuntime,
-                nodeRegistry,
-                capacityReservationPort);
+        return KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(localRuntime)
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(new MemorySandboxExecutionRepository())
+                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
+                .artifactStoragePort(null)
+                .runtimeProfilePolicyRepositoryPort(new MemorySandboxRuntimeProfilePolicyRepository())
+                .runRepository(null)
+                .currentUserPort(null)
+                .auditLedger(auditLedger)
+                .clock(CLOCK)
+                .remoteRuntimePort(remoteRuntime)
+                .runtimeNodeRegistryPort(nodeRegistry)
+                .capacityReservationPort(capacityReservationPort)
+                .build();
     }
 
     private static SandboxRuntimeNodeEndpoint remoteEndpoint(String admissionStatus, boolean admissionAvailable) {
@@ -3073,20 +3120,21 @@ class KernelSandboxRuntimeServiceTests {
                                                               SandboxArtifactQueryPort artifactQueryPort,
                                                               CurrentUserPort currentUserPort,
                                                               AgentRun... runs) {
-        return new KernelSandboxRuntimeService(
-                request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST),
-                new RecordingSandboxRuntimePort(),
-                new MemoryArtifactPort(),
-                sessionRepository,
-                executionRepository,
-                artifactQueryPort,
-                new DefaultSandboxArtifactScannerPort(),
-                null,
-                new MemorySandboxRuntimeProfilePolicyRepository(),
-                new MemoryAgentRunRepository(runs),
-                currentUserPort,
-                null,
-                CLOCK);
+        return KernelSandboxRuntimeService.builder()
+                .policyPort(request -> SandboxPolicyDecision.allow(SandboxPolicyReasonCode.VALID_REQUEST))
+                .runtimePort(new RecordingSandboxRuntimePort())
+                .artifactPort(new MemoryArtifactPort())
+                .sessionRepositoryPort(sessionRepository)
+                .executionRepositoryPort(executionRepository)
+                .artifactQueryPort(artifactQueryPort)
+                .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
+                .artifactStoragePort(null)
+                .runtimeProfilePolicyRepositoryPort(new MemorySandboxRuntimeProfilePolicyRepository())
+                .runRepository(new MemoryAgentRunRepository(runs))
+                .currentUserPort(currentUserPort)
+                .auditLedger(null)
+                .clock(CLOCK)
+                .build();
     }
 
     private static CurrentUserPort currentUser(String userId, String role) {

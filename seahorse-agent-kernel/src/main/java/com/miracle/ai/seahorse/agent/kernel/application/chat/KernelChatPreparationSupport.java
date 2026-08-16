@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.InteractiveMemoryConflictPrompt;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
@@ -101,6 +102,7 @@ final class KernelChatPreparationSupport {
                 .userId(context.getUserId())
                 .currentQuestion(context.getQuestion())
                 .knowledgeBaseIds(context.getKnowledgeBaseIds())
+                .tenantId(TenantContext.get())
                 .build();
         try {
             MemoryContext memoryContext = preparationPorts.memoryEnginePort().loadMemory(request);
@@ -166,10 +168,16 @@ final class KernelChatPreparationSupport {
     }
 
     void rewriteQuery(StreamChatContext context) {
-        String input = resolveRewriteInput(context);
-        RewriteResult rewriteResult = preparationPorts.queryRewritePort()
-                .rewriteWithSplit(input, safeHistory(context));
-        context.setRewriteResult(rewriteResult);
+        try {
+            String input = resolveRewriteInput(context);
+            RewriteResult rewriteResult = preparationPorts.queryRewritePort()
+                    .rewriteWithSplit(input, safeHistory(context));
+            context.setRewriteResult(rewriteResult);
+        } catch (Exception ex) {
+            LOG.warn("查询改写失败，降级使用原始问题: questionLength={}, errorType={}",
+                    context.getOriginalQuestion().length(), ex.getClass().getSimpleName());
+            context.setRewriteResult(new RewriteResult(context.getOriginalQuestion(), List.of()));
+        }
     }
 
     void resolveIntents(StreamChatContext context) {

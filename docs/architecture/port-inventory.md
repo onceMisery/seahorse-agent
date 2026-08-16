@@ -9,18 +9,24 @@ Authority: `PortArchitectureTest` and compiled source under
 | Direction | Public interfaces | Meaning |
 | --- | ---: | --- |
 | Inbound | 93 | Capability entry points called by delivery adapters or other capabilities |
-| Outbound | 267 | Independently replaceable external/runtime boundaries |
+| Outbound | 266 | Independently replaceable external/runtime boundaries |
 | Common | 1 | Shared boundary outside the directional packages |
-| Total | 361 | Reviewed ceiling; must only decrease |
+| Total | 360 | Reviewed ceiling; must only decrease |
 
 The inventory is measured by the public-interface ArchUnit scan, not by source
 file count. The duplicate `SreHealthReportProviderPort` boundary was retired
 in favor of `SreHealthInboundPort`; both previously exposed the same
 `SreHealthReport current()` operation and shared one implementation.
 
-The 794 Java files under `ports` are informational package-hygiene data, not
+The 791 Java files under `ports` are informational package-hygiene data, not
 the Port count. Records, enums, commands, responses, and other value objects do
 not become architectural Ports merely because they are stored in that package.
+
+The current source tree is synchronized with `origin/main` at `22b99f0c`. That
+upstream split retired the unused `DistributedSemaphorePort` boundary and moved
+coordination value types out of the kernel Port package. The compiled-source
+scan therefore moved the inventory from the previous 361 (93/267/1) to 360
+(93/266/1); the historical reductions below remain unchanged.
 
 Slice 1 removed `AuthRefreshInboundPort` and its separate service owner.
 Refresh now belongs to the existing `AuthInboundPort` authentication use case,

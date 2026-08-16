@@ -369,7 +369,7 @@ class KernelAgentLoopToolGatewayTests {
         KernelAgentLoop loop = kernelLoop(
                 model,
                 registry,
-                new LocalToolGatewayPort(registry),
+                LocalToolGatewayPort.builder().toolRegistry(registry).build(),
                 KernelAgentLoopOptions.defaults());
 
         AgentLoopResult result = loop.execute(AgentLoopRequest.builder()

@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRe
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLayer;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
@@ -69,6 +70,7 @@ public class MemoryReadToolPortAdapter implements DescribedToolPort {
                     .userId(userId)
                     .conversationId(jsonSupport.string(arguments, "_seahorseConversationId"))
                     .currentQuestion(query)
+                    .tenantId(TenantContext.get())
                     .build()).stream().limit(limit).toList();
             return ToolInvocationResult.ok(jsonSupport.write(Map.of(
                     "query", query,
