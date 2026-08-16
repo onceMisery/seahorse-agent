@@ -271,13 +271,8 @@ class KernelChatPreparationSupportTests {
     @Test
     void shouldLoadAgentBranchPathWithoutAppendingUserMessageWhenRegeneratingAssistant() throws Exception {
         RecordingMemoryPort memoryPort = new RecordingMemoryPort();
-        KernelChatInboundService service = new KernelChatInboundService(
-                pipeline(memoryPort),
-                StreamTaskPort.noop(),
-                Optional.empty(),
-                KernelRagTraceRecorder.noop(),
-                memoryPort,
-                MemoryEnginePort.noop());
+        KernelChatInboundService service = KernelChatInboundService.builder(pipeline(memoryPort),
+                StreamTaskPort.noop()).memoryPort(memoryPort).build();
 
         List<ChatMessage> history = loadAgentHistory(service, new StreamChatCommand(
                 "hello", "conversation-1", "task-1", "user-1", false,

@@ -1,6 +1,6 @@
 # Public Port Inventory and Retirement Rules
 
-Updated: 2026-08-03  
+Updated: 2026-08-16
 Authority: `PortArchitectureTest` and compiled source under
 `com.miracle.ai.seahorse.agent.ports`
 
@@ -8,12 +8,17 @@ Authority: `PortArchitectureTest` and compiled source under
 
 | Direction | Public interfaces | Meaning |
 | --- | ---: | --- |
-| Inbound | 98 | Capability entry points called by delivery adapters or other capabilities |
-| Outbound | 268 | Independently replaceable external/runtime boundaries |
+| Inbound | 93 | Capability entry points called by delivery adapters or other capabilities |
+| Outbound | 267 | Independently replaceable external/runtime boundaries |
 | Common | 1 | Shared boundary outside the directional packages |
-| Total | 367 | Reviewed ceiling; must only decrease |
+| Total | 361 | Reviewed ceiling; must only decrease |
 
-The 797 Java files under `ports` are informational package-hygiene data, not
+The inventory is measured by the public-interface ArchUnit scan, not by source
+file count. The duplicate `SreHealthReportProviderPort` boundary was retired
+in favor of `SreHealthInboundPort`; both previously exposed the same
+`SreHealthReport current()` operation and shared one implementation.
+
+The 794 Java files under `ports` are informational package-hygiene data, not
 the Port count. Records, enums, commands, responses, and other value objects do
 not become architectural Ports merely because they are stored in that package.
 

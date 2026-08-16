@@ -109,7 +109,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.QuotaPolicyRepositoryP
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessEvidencePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAccessPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAclRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthReportProviderPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
@@ -208,7 +207,6 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(TaskTemplateQueryInboundPort.class);
                     assertThat(context).hasSingleBean(CostUsageInboundPort.class);
                     assertThat(context).hasSingleBean(SreHealthInboundPort.class);
-                    assertThat(context).hasSingleBean(SreHealthReportProviderPort.class);
                     assertThat(context).hasSingleBean(AgentRolloutInboundPort.class);
                                         assertThat(context).hasSingleBean(EnterprisePilotReadinessInboundPort.class);
                     assertThat(context).hasSingleBean(ReadinessEvidencePort.class);
@@ -257,7 +255,7 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(field(context.getBean(KernelProductionGateService.class), "quotaPolicyRepository"))
                             .isSameAs(context.getBean(QuotaPolicyRepositoryPort.class));
                     assertThat(field(context.getBean(KernelProductionGateService.class), "sreHealthReportProvider"))
-                            .isSameAs(context.getBean(SreHealthReportProviderPort.class));
+                            .isSameAs(context.getBean(SreHealthInboundPort.class));
                     assertThat(field(context.getBean(KernelProductionGateService.class), "publishCheckRepository"))
                             .isSameAs(context.getBean(AgentPublishCheckRepositoryPort.class));
                     assertThat(field(context.getBean(KernelAgentHandoffService.class), "handoffRepository"))

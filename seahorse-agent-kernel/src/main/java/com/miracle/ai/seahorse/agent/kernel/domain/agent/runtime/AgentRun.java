@@ -173,7 +173,7 @@ public record AgentRun(String runId,
      * 取消运行保持幂等，重复取消不会产生新的状态漂移。
      */
     public AgentRun cancel(Instant finishedAt) {
-        if (status == AgentRunStatus.CANCELLED) {
+        if (status.isFinished()) {
             return this;
         }
         return withStatus(AgentRunStatus.CANCELLED, null, null, finishedAt);

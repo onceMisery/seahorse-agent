@@ -150,7 +150,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimeNodeRegi
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxRuntimePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthContributorPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthReportProviderPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditQueryPort;
@@ -683,7 +682,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             AgentDefinitionRepositoryPort agentDefinitionRepositoryPort,
             ObjectProvider<AgentEvalSummaryRepositoryPort> agentEvalSummaryRepositoryPort,
             ObjectProvider<QuotaPolicyRepositoryPort> quotaPolicyRepositoryPort,
-            ObjectProvider<SreHealthReportProviderPort> sreHealthReportProviderPort,
+            ObjectProvider<SreHealthInboundPort> sreHealthInboundPort,
             ObjectProvider<AgentPublishCheckRepositoryPort> agentPublishCheckRepositoryPort,
             ObjectProvider<GateResultRepositoryPort> gateResultRepositoryPort,
             ObjectProvider<Clock> clockProvider) {
@@ -692,7 +691,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 agentDefinitionRepositoryPort,
                 agentEvalSummaryRepositoryPort.getIfAvailable(),
                 quotaPolicyRepositoryPort.getIfAvailable(),
-                sreHealthReportProviderPort.getIfAvailable(),
+                sreHealthInboundPort.getIfAvailable(),
                 agentPublishCheckRepositoryPort.getIfAvailable(),
                 gateResultRepositoryPort.getIfAvailable(),
                 clockProvider.getIfAvailable(Clock::systemUTC));

@@ -255,6 +255,26 @@ persists one); they are recorded and unrelated to the Port reduction work.
   Ports 374, Port Java files 806, large classes 17, AutoConfiguration 67, and
   cross-domain pairs 40; all remain within the governance ceiling.
 
+## Current Slice Update (2026-08-16)
+
+- `KernelChatInboundService` now has one private construction path plus a
+  typed Builder. The constructor overload family was removed, Spring
+  auto-configuration uses the Builder, and 43 test call sites were migrated;
+  the production class is 139 net lines smaller.
+- AgentRun terminal transitions now use the existing repository CAS contract.
+  A lost claim returns the persisted winner, and finished runs cannot be
+  overwritten by a late cancellation. No new Port or schema was introduced.
+- The duplicate `SreHealthReportProviderPort` was retired in favor of the
+  existing `SreHealthInboundPort`; the gate, service, Spring wiring, and core
+  tests now share one typed health boundary.
+- Current public Port inventory is 361 (93 inbound, 267 outbound, 1 common),
+  verified by `PortArchitectureTest`; the complexity baseline and inventory
+  were synchronized to this compiled-source count.
+- Focused core regressions passed: Kernel Chat 38, cross-module Chat 13,
+  AgentRun service 27, production-gate/SRE 7, registry auto-configuration 3,
+  JDBC AgentRun repository 11 (2 environment-skipped), and architecture 3;
+  all executed tests had zero failures/errors.
+
 ## Blocked On
 
 Full Docker credentials/capacity remain an evidence risk for Slice 1 closure.

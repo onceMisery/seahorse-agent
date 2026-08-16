@@ -1,8 +1,8 @@
 # Complexity baseline after core runtime stability hardening.
 # Ratchet policy: values may only decrease.
-port_interfaces=362
+port_interfaces=361
 port_inbound=93
-port_outbound=268
+port_outbound=267
 port_common=1
 port_java_files_info=794
 large_classes_gt_800=17

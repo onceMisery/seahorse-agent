@@ -70,9 +70,8 @@ class KernelChatInboundServiceAgentModeTests {
                         .content("用户是学生")
                         .build()))
                 .build());
-        KernelChatInboundService service = new KernelChatInboundService(
-                pipeline, taskPort, Optional.of(agentLoop), KernelRagTraceRecorder.noop(),
-                null, memoryEnginePort);
+        KernelChatInboundService service = KernelChatInboundService.builder(pipeline, taskPort)
+                .agentLoop(Optional.of(agentLoop)).memoryEnginePort(memoryEnginePort).build();
 
         service.streamChat(new StreamChatCommand(
                 "hello", "conv-1", "task-1", "user-1", false, ChatMode.AGENT), callback);
@@ -121,9 +120,9 @@ class KernelChatInboundServiceAgentModeTests {
         StreamCancellationHandle handle = mock(StreamCancellationHandle.class);
         when(agentLoop.streamExecute(any(), any(), any(TraceRunScope.class))).thenReturn(handle);
         when(memoryEnginePort.loadMemory(any(MemoryLoadRequest.class))).thenReturn(memoryContext());
-        KernelChatInboundService service = new KernelChatInboundService(
-                pipeline, taskPort, Optional.of(agentLoop), KernelRagTraceRecorder.noop(),
-                null, memoryEnginePort, Optional.empty(), Optional.of(builder));
+        KernelChatInboundService service = KernelChatInboundService.builder(pipeline, taskPort)
+                .agentLoop(Optional.of(agentLoop)).memoryEnginePort(memoryEnginePort)
+                .contextPackBuilder(Optional.of(builder)).build();
 
         service.streamChat(new StreamChatCommand(
                 "hello", "conv-1", "task-1", "user-1", false, ChatMode.AGENT), callback);
@@ -152,11 +151,12 @@ class KernelChatInboundServiceAgentModeTests {
         StreamCancellationHandle handle = mock(StreamCancellationHandle.class);
         when(agentLoop.streamExecute(any(), any(), any(TraceRunScope.class))).thenReturn(handle);
         when(memoryEnginePort.loadMemory(any(MemoryLoadRequest.class))).thenReturn(memoryContext());
-        KernelChatInboundService service = new KernelChatInboundService(
-                pipeline, taskPort, Optional.of(agentLoop), KernelRagTraceRecorder.noop(),
-                null, memoryEnginePort, Optional.empty(), Optional.of(request -> {
+        KernelChatInboundService service = KernelChatInboundService.builder(pipeline, taskPort)
+                .agentLoop(Optional.of(agentLoop)).memoryEnginePort(memoryEnginePort)
+                .contextPackBuilder(Optional.of(request -> {
                     throw new IllegalStateException("context builder unavailable");
-                }));
+                }))
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "hello", "conv-1", "task-1", "user-1", false, ChatMode.AGENT), callback);
@@ -177,8 +177,7 @@ class KernelChatInboundServiceAgentModeTests {
         KernelChatPipeline pipeline = mock(KernelChatPipeline.class);
         StreamTaskPort taskPort = mock(StreamTaskPort.class);
         StreamCallback callback = mock(StreamCallback.class);
-        KernelChatInboundService service = new KernelChatInboundService(
-                pipeline, taskPort, Optional.empty(), KernelRagTraceRecorder.noop());
+        KernelChatInboundService service = KernelChatInboundService.builder(pipeline, taskPort).build();
 
         service.streamChat(new StreamChatCommand(
                 "hello", "conv-1", "task-1", "user-1", false, ChatMode.AGENT), callback);

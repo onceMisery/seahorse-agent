@@ -23,14 +23,13 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthStatus;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SreHealthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthContributorPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthReportProviderPort;
 
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-public class KernelSreHealthQueryService implements SreHealthInboundPort, SreHealthReportProviderPort {
+public class KernelSreHealthQueryService implements SreHealthInboundPort {
 
     private static final String REPORT_ID_PREFIX = "sre_";
     private static final String EXCEPTION_MESSAGE = "Contributor health check failed";

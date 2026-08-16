@@ -80,14 +80,10 @@ class KernelChatSkillSelectionTests {
         defRepo.create(agentDef("my-agent", "v1"));
         defRepo.saveVersion(agentVer("my-agent", "v1", "{\"modelId\":\"test-model\"}", "{}"));
 
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(), StreamTaskPort.noop(),
-                Optional.empty(), KernelRagTraceRecorder.noop(),
-                null, MemoryEnginePort.noop(),
-                Optional.empty(), Optional.empty(),
-                Optional.of(defRepo),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.of(skillRepo));
+        KernelChatInboundService service = KernelChatInboundService.builder(newPipeline(), StreamTaskPort.noop())
+                .agentDefinitionRepository(Optional.of(defRepo))
+                .skillRepository(Optional.of(skillRepo))
+                .build();
 
         AgentLoopRequest request = buildAgentLoopRequest(service, new StreamChatCommand(
                 "Review my code", "conv-1", "task-1", "user-1", false,
@@ -111,14 +107,9 @@ class KernelChatSkillSelectionTests {
         defRepo.saveVersion(agentVer("my-agent", "v1", "{\"modelId\":\"test-model\"}", "{}"));
 
         // Construct service WITHOUT skill repository (last param = Optional.empty())
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(), StreamTaskPort.noop(),
-                Optional.empty(), KernelRagTraceRecorder.noop(),
-                null, MemoryEnginePort.noop(),
-                Optional.empty(), Optional.empty(),
-                Optional.of(defRepo),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty());  // No skill repository!
+        KernelChatInboundService service = KernelChatInboundService.builder(newPipeline(), StreamTaskPort.noop())
+                .agentDefinitionRepository(Optional.of(defRepo))
+                .build();  // No skill repository!
 
         java.lang.reflect.InvocationTargetException error = assertThrows(
                 java.lang.reflect.InvocationTargetException.class,
@@ -141,14 +132,9 @@ class KernelChatSkillSelectionTests {
         defRepo.create(agentDef("my-agent", "v1"));
         defRepo.saveVersion(agentVer("my-agent", "v1", "{\"modelId\":\"test-model\"}", "{}"));
 
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(), StreamTaskPort.noop(),
-                Optional.empty(), KernelRagTraceRecorder.noop(),
-                null, MemoryEnginePort.noop(),
-                Optional.empty(), Optional.empty(),
-                Optional.of(defRepo),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty());  // No skill repository
+        KernelChatInboundService service = KernelChatInboundService.builder(newPipeline(), StreamTaskPort.noop())
+                .agentDefinitionRepository(Optional.of(defRepo))
+                .build();  // No skill repository
 
         // Send chat WITHOUT selectedSkillNames → should work fine
         AgentLoopRequest request = buildAgentLoopRequest(service, new StreamChatCommand(
@@ -192,14 +178,10 @@ class KernelChatSkillSelectionTests {
                 }
                 """));
 
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(), StreamTaskPort.noop(),
-                Optional.empty(), KernelRagTraceRecorder.noop(),
-                null, MemoryEnginePort.noop(),
-                Optional.empty(), Optional.empty(),
-                Optional.of(defRepo),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.of(skillRepo));
+        KernelChatInboundService service = KernelChatInboundService.builder(newPipeline(), StreamTaskPort.noop())
+                .agentDefinitionRepository(Optional.of(defRepo))
+                .skillRepository(Optional.of(skillRepo))
+                .build();
 
         AgentLoopRequest request = buildAgentLoopRequest(service, new StreamChatCommand(
                 "Research", "conv-1", "task-1", "user-1", false,
@@ -230,14 +212,10 @@ class KernelChatSkillSelectionTests {
         defRepo.create(agentDef("my-agent", "v1"));
         defRepo.saveVersion(agentVer("my-agent", "v1", "{\"modelId\":\"test-model\"}", "{}"));
 
-        KernelChatInboundService service = new KernelChatInboundService(
-                newPipeline(), StreamTaskPort.noop(),
-                Optional.empty(), KernelRagTraceRecorder.noop(),
-                null, MemoryEnginePort.noop(),
-                Optional.empty(), Optional.empty(),
-                Optional.of(defRepo),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.of(skillRepo));
+        KernelChatInboundService service = KernelChatInboundService.builder(newPipeline(), StreamTaskPort.noop())
+                .agentDefinitionRepository(Optional.of(defRepo))
+                .skillRepository(Optional.of(skillRepo))
+                .build();
 
         StreamChatCommand command = new StreamChatCommand(
                 "Analyze the data trends and create a chart",

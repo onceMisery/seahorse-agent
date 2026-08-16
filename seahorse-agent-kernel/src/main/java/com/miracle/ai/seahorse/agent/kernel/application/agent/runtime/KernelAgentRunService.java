@@ -458,8 +458,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
         AgentRun current = loadReadableRun(runId, currentUser);
         AgentRun cancelled = current.cancel(clock.instant());
-        runRepository.updateRun(cancelled);
-        return cancelled;
+        return persistStatusTransition(current, cancelled);
     }
 
     @Override
@@ -467,8 +466,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
         AgentRun current = loadReadableRun(runId, currentUser);
         AgentRun retrying = current.retry();
-        runRepository.updateRun(retrying);
-        return retrying;
+        return persistStatusTransition(current, retrying);
     }
 
     @Override
@@ -478,8 +476,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
             return current;
         }
         AgentRun succeeded = current.withStatus(AgentRunStatus.SUCCEEDED, null, null, clock.instant());
-        runRepository.updateRun(succeeded);
-        return succeeded;
+        return persistStatusTransition(current, succeeded);
     }
 
     @Override
@@ -493,8 +490,22 @@ public class KernelAgentRunService implements AgentRunInboundPort {
                 defaultText(errorCode, AgentRuntimeConstants.DEFAULT_AGENT_RUN_FAILURE_CODE),
                 safeText(errorMessage),
                 clock.instant());
-        runRepository.updateRun(failed);
-        return failed;
+        return persistStatusTransition(current, failed);
+    }
+
+    /**
+     * Terminal transitions must be storage-level compare-and-set operations. A
+     * failed claim means another worker already persisted the authoritative
+     * state, so callers observe that state instead of overwriting it.
+     */
+    private AgentRun persistStatusTransition(AgentRun current, AgentRun next) {
+        if (current == next || current.status() == next.status()) {
+            return current;
+        }
+        if (runRepository.updateRunIfStatus(next, current.status())) {
+            return next;
+        }
+        return loadRun(current.runId());
     }
 
     private AgentDefinition loadDefinition(String agentId) {

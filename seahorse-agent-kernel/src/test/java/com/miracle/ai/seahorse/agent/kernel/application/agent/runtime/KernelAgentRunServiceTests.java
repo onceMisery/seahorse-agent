@@ -494,6 +494,38 @@ class KernelAgentRunServiceTests {
     }
 
     @Test
+    void shouldNotOverwriteFinishedRunWhenCancellationArrivesLate() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        AgentRun succeeded = run("run-1", "user-1", AgentRunStatus.SUCCEEDED);
+        runRepository.createRun(succeeded);
+        KernelAgentRunService service = new KernelAgentRunService(
+                new MemoryAgentDefinitionRepository(), runRepository, currentUser(), FIXED_CLOCK);
+
+        AgentRun observed = service.cancel("run-1");
+
+        assertEquals(AgentRunStatus.SUCCEEDED, observed.status());
+        assertEquals(succeeded.finishedAt(), observed.finishedAt());
+        assertEquals(AgentRunStatus.SUCCEEDED, runRepository.runs.get("run-1").status());
+    }
+
+    @Test
+    void shouldReturnPersistedWinnerWhenTerminalCasIsLost() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        AgentRun running = run("run-1", "user-1", AgentRunStatus.RUNNING);
+        AgentRun winner = running.withStatus(
+                AgentRunStatus.SUCCEEDED, null, null, FIXED_CLOCK.instant());
+        runRepository.createRun(running);
+        runRepository.rejectNextCasWith(winner);
+        KernelAgentRunService service = new KernelAgentRunService(
+                new MemoryAgentDefinitionRepository(), runRepository, currentUser(), FIXED_CLOCK);
+
+        AgentRun observed = service.cancel("run-1");
+
+        assertEquals(AgentRunStatus.SUCCEEDED, observed.status());
+        assertEquals(AgentRunStatus.SUCCEEDED, runRepository.runs.get("run-1").status());
+    }
+
+    @Test
     void shouldDenyUnrelatedUserRunDetailAccess() {
         MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
         runRepository.createRun(run("run-1", "user-1", AgentRunStatus.RUNNING));
@@ -802,6 +834,11 @@ class KernelAgentRunServiceTests {
         private final Map<String, AgentRun> runs = new LinkedHashMap<>();
         private final List<AgentStep> steps = new ArrayList<>();
         private AgentRunQuery lastQuery;
+        private AgentRun nextCasWinner;
+
+        void rejectNextCasWith(AgentRun winner) {
+            this.nextCasWinner = winner;
+        }
 
         @Override
         public void createRun(AgentRun run) {
@@ -811,6 +848,16 @@ class KernelAgentRunServiceTests {
         @Override
         public void updateRun(AgentRun run) {
             runs.put(run.runId(), run);
+        }
+
+        @Override
+        public boolean updateRunIfStatus(AgentRun run, AgentRunStatus expectedStatus) {
+            if (nextCasWinner != null) {
+                runs.put(nextCasWinner.runId(), nextCasWinner);
+                nextCasWinner = null;
+                return false;
+            }
+            return AgentRunRepositoryPort.super.updateRunIfStatus(run, expectedStatus);
         }
 
         @Override

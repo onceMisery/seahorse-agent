@@ -63,23 +63,8 @@ class KernelChatRoleCardTests {
     void shouldResolveRequestedRoleCardIntoRagPromptContext() {
         RecordingRagPromptPort ragPromptPort = new RecordingRagPromptPort();
         RecordingRoleCardPort roleCardPort = new RecordingRoleCardPort();
-        KernelChatInboundService service = new KernelChatInboundService(
-                pipeline(ragPromptPort),
-                StreamTaskPort.noop(),
-                Optional.empty(),
-                KernelRagTraceRecorder.noop(),
-                ConversationMemoryPort.noop(),
-                MemoryEnginePort.noop(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty(),
-                KernelAgentLoopOptions.defaults(),
-                Optional.empty(),
-                true,
-                null,
-                Optional.of(roleCardPort));
+        KernelChatInboundService service = KernelChatInboundService.builder(pipeline(ragPromptPort),
+                StreamTaskPort.noop()).roleCardPort(Optional.of(roleCardPort)).build();
         RecordingCallback callback = new RecordingCallback();
 
         service.streamChat(new StreamChatCommand(
@@ -110,23 +95,11 @@ class KernelChatRoleCardTests {
     void shouldInjectDefaultRoleCardAsUserMessageForAgentMode() {
         RecordingAgentLoop agentLoop = new RecordingAgentLoop();
         RecordingRoleCardPort roleCardPort = new RecordingRoleCardPort();
-        KernelChatInboundService service = new KernelChatInboundService(
-                pipeline(new RecordingRagPromptPort()),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                KernelRagTraceRecorder.noop(),
-                ConversationMemoryPort.noop(),
-                MemoryEnginePort.noop(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty(),
-                KernelAgentLoopOptions.defaults(),
-                Optional.empty(),
-                true,
-                null,
-                Optional.of(roleCardPort));
+        KernelChatInboundService service = KernelChatInboundService.builder(
+                pipeline(new RecordingRagPromptPort()), StreamTaskPort.noop())
+                .agentLoop(Optional.of(agentLoop))
+                .roleCardPort(Optional.of(roleCardPort))
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "hello",
@@ -155,23 +128,11 @@ class KernelChatRoleCardTests {
         RecordingAgentLoop agentLoop = new RecordingAgentLoop();
         RecordingRoleCardPort roleCardPort = new RecordingRoleCardPort(
                 new ResolvedRoleCard("99", "Operator", "Use terse operational language.", true));
-        KernelChatInboundService service = new KernelChatInboundService(
-                pipeline(new RecordingRagPromptPort()),
-                StreamTaskPort.noop(),
-                Optional.of(agentLoop),
-                KernelRagTraceRecorder.noop(),
-                ConversationMemoryPort.noop(),
-                MemoryEnginePort.noop(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                ConversationAttachmentContextAssembler.noop(),
-                Optional.empty(),
-                KernelAgentLoopOptions.defaults(),
-                Optional.empty(),
-                true,
-                null,
-                Optional.of(roleCardPort));
+        KernelChatInboundService service = KernelChatInboundService.builder(
+                pipeline(new RecordingRagPromptPort()), StreamTaskPort.noop())
+                .agentLoop(Optional.of(agentLoop))
+                .roleCardPort(Optional.of(roleCardPort))
+                .build();
 
         service.streamChat(new StreamChatCommand(
                 "hello",

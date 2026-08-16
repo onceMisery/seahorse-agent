@@ -39,12 +39,12 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthStatus;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SreHealthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentEvalSummaryQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentEvalSummaryRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentPublishCheckRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ProductionGateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.QuotaPolicyRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthReportProviderPort;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -152,7 +152,7 @@ class KernelProductionGateServiceTests {
     void shouldUseQuotaAndSreEvidenceWhenConfigured() {
         MemoryQuotaPolicyRepository quotaRepository = new MemoryQuotaPolicyRepository();
         quotaRepository.upsert(quotaPolicy("quota-1", QuotaScope.AGENT, "agent-1"));
-        SreHealthReportProviderPort greenSre = () -> new SreHealthReport(
+        SreHealthInboundPort greenSre = () -> new SreHealthReport(
                 "sre-1",
                 SreHealthStatus.GREEN,
                 List.of(new SreHealthItem("database", SreHealthStatus.GREEN, "ok", "db:primary")),

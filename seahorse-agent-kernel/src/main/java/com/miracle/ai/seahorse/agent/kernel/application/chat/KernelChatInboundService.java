@@ -160,282 +160,7 @@ public class KernelChatInboundService implements ChatInboundPort {
     private final List<AgentRunMetadataContributor> agentRunMetadataContributors;
     private final boolean enableSmartSkillMatching;
 
-    public KernelChatInboundService(KernelChatPipeline chatPipeline, StreamTaskPort streamTaskPort) {
-        this(chatPipeline, streamTaskPort, KernelRagTraceRecorder.noop());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    KernelRagTraceRecorder traceRecorder) {
-        this(chatPipeline, streamTaskPort, Optional.empty(), traceRecorder, ConversationMemoryPort.noop(),
-                MemoryEnginePort.noop());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, ConversationMemoryPort.noop(),
-                MemoryEnginePort.noop());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, MemoryEnginePort.noop());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort, Optional.empty());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, Optional.empty());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, Optional.empty());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository,
-                ConversationAttachmentContextAssembler.noop());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                Optional.empty());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, KernelAgentLoopOptions.defaults());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, Optional.empty());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions,
-                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, taskTemplateQueryPort, true);
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions,
-                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
-                                    boolean enableSmartSkillMatching) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, taskTemplateQueryPort, enableSmartSkillMatching, null);
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions,
-                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
-                                    boolean enableSmartSkillMatching,
-                                    SkillSemanticMatcher skillSemanticMatcher) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, taskTemplateQueryPort, enableSmartSkillMatching,
-                skillSemanticMatcher, Optional.empty());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions,
-                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
-                                    boolean enableSmartSkillMatching,
-                                    SkillSemanticMatcher skillSemanticMatcher,
-                                    Optional<RoleCardInboundPort> roleCardPort) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, taskTemplateQueryPort, enableSmartSkillMatching,
-                skillSemanticMatcher, roleCardPort, Optional.empty());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions,
-                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
-                                    boolean enableSmartSkillMatching,
-                                    SkillSemanticMatcher skillSemanticMatcher,
-                                    Optional<RoleCardInboundPort> roleCardPort,
-                                    Optional<CostUsageRepositoryPort> costUsageRepository) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, taskTemplateQueryPort, enableSmartSkillMatching,
-                skillSemanticMatcher, roleCardPort, costUsageRepository, Optional.empty(), List.of());
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions,
-                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
-                                    boolean enableSmartSkillMatching,
-                                    SkillSemanticMatcher skillSemanticMatcher,
-                                    Optional<RoleCardInboundPort> roleCardPort,
-                                    Optional<CostUsageRepositoryPort> costUsageRepository,
-                                    List<AgentRunMetadataContributor> agentRunMetadataContributors) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, taskTemplateQueryPort, enableSmartSkillMatching,
-                skillSemanticMatcher, roleCardPort, costUsageRepository, Optional.empty(),
-                agentRunMetadataContributors);
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
-                                    StreamTaskPort streamTaskPort,
-                                    Optional<? extends ReActExecutorPort> agentLoop,
-                                    KernelRagTraceRecorder traceRecorder,
-                                    ConversationMemoryPort memoryPort,
-                                    MemoryEnginePort memoryEnginePort,
-                                    Optional<AgentRunInboundPort> agentRunPort,
-                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
-                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
-                                    Optional<AgentSkillRepositoryPort> skillRepository,
-                                    KernelAgentLoopOptions agentLoopOptions,
-                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort,
-                                    boolean enableSmartSkillMatching,
-                                    SkillSemanticMatcher skillSemanticMatcher,
-                                    Optional<RoleCardInboundPort> roleCardPort,
-                                    Optional<CostUsageRepositoryPort> costUsageRepository,
-                                    Optional<RunContextSnapshotRepositoryPort> runContextSnapshotRepository,
-                                    List<AgentRunMetadataContributor> agentRunMetadataContributors) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
-                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
-                skillRepository, agentLoopOptions, taskTemplateQueryPort, enableSmartSkillMatching,
-                skillSemanticMatcher, roleCardPort, costUsageRepository, runContextSnapshotRepository,
-                Optional.empty(), agentRunMetadataContributors);
-    }
-
-    public KernelChatInboundService(KernelChatPipeline chatPipeline,
+    private KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
                                     Optional<? extends ReActExecutorPort> agentLoop,
                                     KernelRagTraceRecorder traceRecorder,
@@ -487,6 +212,142 @@ public class KernelChatInboundService implements ChatInboundPort {
                 ? List.of()
                 : List.copyOf(agentRunMetadataContributors);
         this.enableSmartSkillMatching = enableSmartSkillMatching;
+    }
+
+    public static Builder builder(KernelChatPipeline chatPipeline, StreamTaskPort streamTaskPort) {
+        return new Builder(chatPipeline, streamTaskPort);
+    }
+
+    public static final class Builder {
+        private final KernelChatPipeline chatPipeline;
+        private final StreamTaskPort streamTaskPort;
+        private Optional<? extends ReActExecutorPort> agentLoop = Optional.empty();
+        private KernelRagTraceRecorder traceRecorder = KernelRagTraceRecorder.noop();
+        private ConversationMemoryPort memoryPort = ConversationMemoryPort.noop();
+        private MemoryEnginePort memoryEnginePort = MemoryEnginePort.noop();
+        private Optional<AgentRunInboundPort> agentRunPort = Optional.empty();
+        private Optional<ContextPackBuilderInboundPort> contextPackBuilder = Optional.empty();
+        private Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository = Optional.empty();
+        private ConversationAttachmentContextAssembler attachmentContextAssembler =
+                ConversationAttachmentContextAssembler.noop();
+        private Optional<AgentSkillRepositoryPort> skillRepository = Optional.empty();
+        private KernelAgentLoopOptions agentLoopOptions = KernelAgentLoopOptions.defaults();
+        private Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort = Optional.empty();
+        private boolean enableSmartSkillMatching = true;
+        private SkillSemanticMatcher skillSemanticMatcher;
+        private Optional<RoleCardInboundPort> roleCardPort = Optional.empty();
+        private Optional<CostUsageRepositoryPort> costUsageRepository = Optional.empty();
+        private Optional<RunContextSnapshotRepositoryPort> runContextSnapshotRepository = Optional.empty();
+        private Optional<RunProfileInboundPort> runProfilePort = Optional.empty();
+        private List<AgentRunMetadataContributor> agentRunMetadataContributors = List.of();
+
+        private Builder(KernelChatPipeline chatPipeline, StreamTaskPort streamTaskPort) {
+            this.chatPipeline = Objects.requireNonNull(chatPipeline, "chatPipeline must not be null");
+            this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
+        }
+
+        public Builder agentLoop(Optional<? extends ReActExecutorPort> agentLoop) {
+            this.agentLoop = agentLoop;
+            return this;
+        }
+
+        public Builder traceRecorder(KernelRagTraceRecorder traceRecorder) {
+            this.traceRecorder = traceRecorder;
+            return this;
+        }
+
+        public Builder memoryPort(ConversationMemoryPort memoryPort) {
+            this.memoryPort = memoryPort;
+            return this;
+        }
+
+        public Builder memoryEnginePort(MemoryEnginePort memoryEnginePort) {
+            this.memoryEnginePort = memoryEnginePort;
+            return this;
+        }
+
+        public Builder agentRunPort(Optional<AgentRunInboundPort> agentRunPort) {
+            this.agentRunPort = agentRunPort;
+            return this;
+        }
+
+        public Builder contextPackBuilder(Optional<ContextPackBuilderInboundPort> contextPackBuilder) {
+            this.contextPackBuilder = contextPackBuilder;
+            return this;
+        }
+
+        public Builder agentDefinitionRepository(
+                Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository) {
+            this.agentDefinitionRepository = agentDefinitionRepository;
+            return this;
+        }
+
+        public Builder attachmentContextAssembler(
+                ConversationAttachmentContextAssembler attachmentContextAssembler) {
+            this.attachmentContextAssembler = attachmentContextAssembler;
+            return this;
+        }
+
+        public Builder skillRepository(Optional<AgentSkillRepositoryPort> skillRepository) {
+            this.skillRepository = skillRepository;
+            return this;
+        }
+
+        public Builder agentLoopOptions(KernelAgentLoopOptions agentLoopOptions) {
+            this.agentLoopOptions = agentLoopOptions;
+            return this;
+        }
+
+        public Builder taskTemplateQueryPort(Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort) {
+            this.taskTemplateQueryPort = taskTemplateQueryPort;
+            return this;
+        }
+
+        public Builder enableSmartSkillMatching(boolean enableSmartSkillMatching) {
+            this.enableSmartSkillMatching = enableSmartSkillMatching;
+            return this;
+        }
+
+        public Builder skillSemanticMatcher(SkillSemanticMatcher skillSemanticMatcher) {
+            this.skillSemanticMatcher = skillSemanticMatcher;
+            return this;
+        }
+
+        public Builder roleCardPort(Optional<RoleCardInboundPort> roleCardPort) {
+            this.roleCardPort = roleCardPort;
+            return this;
+        }
+
+        public Builder costUsageRepository(Optional<CostUsageRepositoryPort> costUsageRepository) {
+            this.costUsageRepository = costUsageRepository;
+            return this;
+        }
+
+        public Builder runContextSnapshotRepository(
+                Optional<RunContextSnapshotRepositoryPort> runContextSnapshotRepository) {
+            this.runContextSnapshotRepository = runContextSnapshotRepository;
+            return this;
+        }
+
+        public Builder runProfilePort(Optional<RunProfileInboundPort> runProfilePort) {
+            this.runProfilePort = runProfilePort;
+            return this;
+        }
+
+        public Builder agentRunMetadataContributors(
+                List<AgentRunMetadataContributor> agentRunMetadataContributors) {
+            this.agentRunMetadataContributors = agentRunMetadataContributors;
+            return this;
+        }
+
+        public KernelChatInboundService build() {
+            return new KernelChatInboundService(chatPipeline, streamTaskPort, agentLoop, traceRecorder,
+                    memoryPort, memoryEnginePort, agentRunPort, contextPackBuilder,
+                    agentDefinitionRepository, attachmentContextAssembler, skillRepository,
+                    agentLoopOptions, taskTemplateQueryPort, enableSmartSkillMatching,
+                    skillSemanticMatcher, roleCardPort, costUsageRepository,
+                    runContextSnapshotRepository, runProfilePort, agentRunMetadataContributors);
+        }
     }
 
     @Override

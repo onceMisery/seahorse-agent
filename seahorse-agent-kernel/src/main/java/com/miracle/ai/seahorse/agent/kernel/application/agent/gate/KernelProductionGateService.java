@@ -36,13 +36,13 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthStatus;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ProductionGateInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.SreHealthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResults;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentEvalSummaryRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentPublishCheckRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ProductionGateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.QuotaPolicyRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthReportProviderPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.gate.GateResultRepositoryPort;
 
 import java.time.Clock;
@@ -63,7 +63,7 @@ public class KernelProductionGateService implements ProductionGateInboundPort {
     private final AgentDefinitionRepositoryPort agentRepository;
     private final AgentEvalSummaryRepositoryPort evalSummaryRepository;
     private final QuotaPolicyRepositoryPort quotaPolicyRepository;
-    private final SreHealthReportProviderPort sreHealthReportProvider;
+    private final SreHealthInboundPort sreHealthReportProvider;
     private final AgentPublishCheckRepositoryPort publishCheckRepository;
     private final GateResultRepositoryPort gateResultRepository;
     private final Clock clock;
@@ -89,7 +89,7 @@ public class KernelProductionGateService implements ProductionGateInboundPort {
                                        AgentDefinitionRepositoryPort agentRepository,
                                        AgentEvalSummaryRepositoryPort evalSummaryRepository,
                                        QuotaPolicyRepositoryPort quotaPolicyRepository,
-                                       SreHealthReportProviderPort sreHealthReportProvider,
+                                       SreHealthInboundPort sreHealthReportProvider,
                                        Clock clock) {
         this(repository, agentRepository, evalSummaryRepository, quotaPolicyRepository, sreHealthReportProvider,
                 null, clock);
@@ -99,7 +99,7 @@ public class KernelProductionGateService implements ProductionGateInboundPort {
                                        AgentDefinitionRepositoryPort agentRepository,
                                        AgentEvalSummaryRepositoryPort evalSummaryRepository,
                                        QuotaPolicyRepositoryPort quotaPolicyRepository,
-                                       SreHealthReportProviderPort sreHealthReportProvider,
+                                       SreHealthInboundPort sreHealthReportProvider,
                                        AgentPublishCheckRepositoryPort publishCheckRepository,
                                        Clock clock) {
         this(repository, agentRepository, evalSummaryRepository, quotaPolicyRepository, sreHealthReportProvider,
@@ -110,7 +110,7 @@ public class KernelProductionGateService implements ProductionGateInboundPort {
                                        AgentDefinitionRepositoryPort agentRepository,
                                        AgentEvalSummaryRepositoryPort evalSummaryRepository,
                                        QuotaPolicyRepositoryPort quotaPolicyRepository,
-                                       SreHealthReportProviderPort sreHealthReportProvider,
+                                       SreHealthInboundPort sreHealthReportProvider,
                                        AgentPublishCheckRepositoryPort publishCheckRepository,
                                        GateResultRepositoryPort gateResultRepository,
                                        Clock clock) {

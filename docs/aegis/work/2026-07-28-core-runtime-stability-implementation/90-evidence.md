@@ -210,6 +210,11 @@ termination are still required before closure.
 | Chat merge rolled back | source inspection | A chat+research port merge was attempted but rolled back: `ChatInboundPort` + `ResearchInboundPort` span different subdomains (`chat` vs `agent.research`), so combining them violates the design §5 one-way dependency rule; the rollback left `KernelChatInboundService`/`KernelResearchInboundService`/`SeahorseChatController`/auto-configurations at their HEAD state and Port count back at 362 |
 | Historical Slice 3 chat failures | `KernelChatAgentRunStoreTests` (5), `KernelChatInboundTraceTests` (2) | 7 failures are pre-existing and unrelated to this slice: the working tree's `KernelChatAgentRunStoreTests` was edited (in a prior session) to assert `snapshotRepository.records.size() == 0` after renaming a test, but the current `KernelChatInboundService` (unchanged from HEAD) still persists a snapshot, so the assertions fail; `KernelChatInboundService` has no diff from HEAD, confirming the failures predate the Port reduction work |
 
+| Current Chat construction simplification | `KernelChatInboundService` diff, Builder call-site search, focused Chat regression | PASS; 20-plus constructor overloads collapsed to one private construction path and a typed Builder; 43 old test call sites were migrated, no old public constructor call remains, and the production class is 139 net lines smaller |
+| AgentRun terminal CAS | `KernelAgentRunServiceTests` and `JdbcAgentRunRepositoryAdapterTests` | PASS; 27 service tests and 11 JDBC tests (2 environment-skipped) cover finished-run immutability, CAS-loss winner observation, and existing storage CAS behavior |
+| SRE Port retirement | repository-wide `SreHealthReportProviderPort` search, SRE/gate tests, registry auto-configuration test | PASS; duplicate provider boundary deleted, one `SreHealthInboundPort` owner remains, and 7 gate/SRE plus 3 registry tests pass |
+| Current Port complexity baseline | `PortArchitectureTest` after clean Kernel install; `complexity-baseline.txt`; `docs/architecture/port-inventory.md` | PASS; 361 public interfaces (93 inbound, 267 outbound, 1 common), 3/3 architecture tests, no Port-growth violation |
+
 ## Evidence Gaps
 
 - full CI execution of the blocking frontend job on Linux;

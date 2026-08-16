@@ -55,8 +55,9 @@ class KernelChatInboundServiceTraceTests {
             context.getCallback().onComplete();
             return null;
         }).when(pipeline).execute(any());
-        KernelChatInboundService service = new KernelChatInboundService(
-                pipeline, taskPort, new KernelRagTraceRecorder(repository));
+        KernelChatInboundService service = KernelChatInboundService.builder(pipeline, taskPort)
+                .traceRecorder(new KernelRagTraceRecorder(repository))
+                .build();
 
         StreamCallback callback = mock(StreamCallback.class);
         service.streamChat(command(), callback);
@@ -76,8 +77,9 @@ class KernelChatInboundServiceTraceTests {
         StreamCallback callback = mock(StreamCallback.class);
         IllegalStateException error = new IllegalStateException("model\ndown");
         doThrow(error).when(pipeline).execute(any());
-        KernelChatInboundService service = new KernelChatInboundService(
-                pipeline, taskPort, new KernelRagTraceRecorder(repository));
+        KernelChatInboundService service = KernelChatInboundService.builder(pipeline, taskPort)
+                .traceRecorder(new KernelRagTraceRecorder(repository))
+                .build();
 
         service.streamChat(command(), callback);
 
