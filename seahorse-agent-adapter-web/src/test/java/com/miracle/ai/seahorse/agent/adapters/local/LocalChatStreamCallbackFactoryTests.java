@@ -162,6 +162,24 @@ class LocalChatStreamCallbackFactoryTests {
     }
 
     @Test
+    void shouldReleaseLocalTaskAfterCancellationWithoutEmittingSuccessOrError() {
+        LocalStreamTaskPort taskPort = new LocalStreamTaskPort();
+        RecordingSseEmitter emitter = new RecordingSseEmitter();
+        LocalChatStreamCallbackFactory factory = new LocalChatStreamCallbackFactory(
+                taskPort,
+                ConversationMemoryPort.noop(),
+                AgentRunEventBufferPort.noop());
+        StreamCallback callback = factory.create(emitter, "conversation-1", "task-1", "user-1");
+
+        taskPort.cancel("task-1");
+        callback.onComplete();
+        callback.onError(new IllegalStateException("late failure"));
+
+        assertThat(taskPort.isCancelled("task-1")).isFalse();
+        assertThat(emitter.events).noneMatch(event -> event.contains("FINISH") || event.contains("error"));
+    }
+
+    @Test
     void shouldFlushEarlyCustomEventsBeforeFirstContent() {
         LocalChatStreamCallbackFactory factory = new LocalChatStreamCallbackFactory(
                 new LocalStreamTaskPort(),

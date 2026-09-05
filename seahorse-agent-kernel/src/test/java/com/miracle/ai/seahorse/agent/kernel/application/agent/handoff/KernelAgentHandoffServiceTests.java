@@ -335,6 +335,11 @@ class KernelAgentHandoffServiceTests {
         }
 
         @Override
+        public AgentRun cancelExecution(String runId) {
+            return cancel(runId);
+        }
+
+        @Override
         public AgentRun retry(String runId) {
             throw new UnsupportedOperationException();
         }

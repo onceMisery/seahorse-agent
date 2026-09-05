@@ -462,6 +462,16 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     }
 
     @Override
+    public AgentRun cancelExecution(String runId) {
+        AgentRun current = loadRun(runId);
+        if (!current.status().isWorkerRunnable()) {
+            return current;
+        }
+        AgentRun cancelled = current.cancel(clock.instant());
+        return persistStatusTransition(current, cancelled);
+    }
+
+    @Override
     public AgentRun retry(String runId) {
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
         AgentRun current = loadReadableRun(runId, currentUser);

@@ -648,6 +648,11 @@ class TaskOrchestrationServiceTests {
         }
 
         @Override
+        public AgentRun cancelExecution(String runId) {
+            return run(AgentRunStatus.CANCELLED);
+        }
+
+        @Override
         public AgentRun retry(String runId) {
             return run(AgentRunStatus.RETRYING);
         }

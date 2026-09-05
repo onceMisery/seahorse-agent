@@ -115,7 +115,6 @@ public class RedisStreamTaskPort implements StreamTaskPort, AutoCloseable {
             return;
         }
         localTasks.remove(taskId);
-        cancelledBucket(taskId).delete();
     }
 
     @Override

@@ -211,6 +211,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
         @Override
         public void onComplete() {
             if (streamTaskPort.isCancelled(taskId)) {
+                streamTaskPort.unregister(taskId);
                 return;
             }
             markResponseStarted();
@@ -227,6 +228,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
         @Override
         public void onError(Throwable error) {
             if (streamTaskPort.isCancelled(taskId)) {
+                streamTaskPort.unregister(taskId);
                 return;
             }
             markResponseStarted();

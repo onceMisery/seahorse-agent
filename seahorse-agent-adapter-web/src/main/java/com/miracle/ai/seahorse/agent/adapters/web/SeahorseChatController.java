@@ -75,7 +75,6 @@ public class SeahorseChatController {
     private final ObjectProvider<ResearchInboundPort> researchInboundPortProvider;
     private final ObjectProvider<ResearchSseBridge> researchSseBridgeProvider;
     private final ChatStreamCallbackFactoryPort callbackFactory;
-    private final StreamTaskPort streamTaskPort;
     private final RateLimiterPort rateLimiterPort;
     private final AgentRunEventBufferPort eventBufferPort;
     private final AdvancedFeatureGate advancedFeatureGate;
@@ -87,7 +86,7 @@ public class SeahorseChatController {
                                   ChatStreamCallbackFactoryPort callbackFactory,
                                   StreamTaskPort streamTaskPort,
                                   long sseTimeoutMs) {
-        this(chatInboundPortProvider, callbackFactory, streamTaskPort, sseTimeoutMs,
+        this(chatInboundPortProvider, callbackFactory, null, sseTimeoutMs,
                 AdvancedFeatureGate.demoDefaults());
     }
 
@@ -96,7 +95,7 @@ public class SeahorseChatController {
                                   StreamTaskPort streamTaskPort,
                                   long sseTimeoutMs,
                                   AdvancedFeatureGate advancedFeatureGate) {
-        this(chatInboundPortProvider, callbackFactory, streamTaskPort, null,
+        this(chatInboundPortProvider, callbackFactory, null,
                 null, null,
                 RateLimiterPort.noop(), AgentRunEventBufferPort.noop(),
                 advancedFeatureGate, sseTimeoutMs, 60, Duration.ofMinutes(1));
@@ -109,7 +108,6 @@ public class SeahorseChatController {
                                   ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider) {
         this(chatInboundPortProvider,
                 callbackFactory,
-                streamTaskPort,
                 snapshotPortProvider,
                 null,
                 null,
@@ -124,7 +122,6 @@ public class SeahorseChatController {
     @Autowired
     public SeahorseChatController(ObjectProvider<ChatInboundPort> chatInboundPortProvider,
                                   ChatStreamCallbackFactoryPort callbackFactory,
-                                  StreamTaskPort streamTaskPort,
                                   ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider,
                                   ObjectProvider<ResearchInboundPort> researchInboundPortProvider,
                                   ObjectProvider<ResearchSseBridge> researchSseBridgeProvider,
@@ -138,7 +135,6 @@ public class SeahorseChatController {
                                   long chatRateLimitWindowMs) {
         this(chatInboundPortProvider,
                 callbackFactory,
-                streamTaskPort,
                 snapshotPortProvider,
                 researchInboundPortProvider,
                 researchSseBridgeProvider,
@@ -152,7 +148,6 @@ public class SeahorseChatController {
 
     private SeahorseChatController(ObjectProvider<ChatInboundPort> chatInboundPortProvider,
                                    ChatStreamCallbackFactoryPort callbackFactory,
-                                   StreamTaskPort streamTaskPort,
                                    ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider,
                                    ObjectProvider<ResearchInboundPort> researchInboundPortProvider,
                                    ObjectProvider<ResearchSseBridge> researchSseBridgeProvider,
@@ -167,7 +162,6 @@ public class SeahorseChatController {
         this.researchInboundPortProvider = researchInboundPortProvider;
         this.researchSseBridgeProvider = researchSseBridgeProvider;
         this.callbackFactory = Objects.requireNonNull(callbackFactory, "callbackFactory must not be null");
-        this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.rateLimiterPort = Objects.requireNonNullElse(rateLimiterPort, RateLimiterPort.noop());
         this.eventBufferPort = Objects.requireNonNullElse(eventBufferPort, AgentRunEventBufferPort.noop());
         this.advancedFeatureGate = Objects.requireNonNullElseGet(
@@ -196,6 +190,7 @@ public class SeahorseChatController {
                            @RequestParam(required = false) String branchLeafMessageId,
                            @RequestParam(required = false) String assistantParentMessageId,
                            @RequestParam(required = false) Long runProfileId,
+                           @RequestParam(required = false) String taskId,
                            @RequestParam(required = false) String resumeRunId,
                            @RequestParam(required = false) Long lastEventSeq) {
         String actualConversationId = resolveId(conversationId);
@@ -212,23 +207,23 @@ public class SeahorseChatController {
             emitSseError(errorEmitter, new IllegalArgumentException("question parameter is required and must not be blank"));
             return errorEmitter;
         }
-        String taskId = nextShortId();
+        String actualTaskId = resolveId(taskId);
         SseEmitter emitter = new SseEmitter(sseTimeoutMs);
         if (isDeepResearchTemplate(taskTemplateId)) {
-            return dispatchResearch(emitter, question, actualConversationId, actualUserId, taskId, taskTemplateId);
+            return dispatchResearch(emitter, question, actualConversationId, actualUserId, actualTaskId, taskTemplateId);
         }
         Long parsedBranchLeafMessageId = parseLongOrNull(branchLeafMessageId);
         Long parsedAssistantParentMessageId = parseLongOrNull(assistantParentMessageId);
         StreamCallback callback = callbackFactory.create(
                 emitter,
                 actualConversationId,
-                taskId,
+                actualTaskId,
                 actualUserId,
                 parsedAssistantParentMessageId);
         StreamChatCommand command = new StreamChatCommand(
                 question,
                 actualConversationId,
-                taskId,
+                actualTaskId,
                 actualUserId,
                 Boolean.TRUE.equals(deepThinking),
                 resolvedChatMode,
@@ -360,10 +355,10 @@ public class SeahorseChatController {
     @PostMapping("/rag/v3/stop")
     public Map<String, Object> stop(@RequestParam String taskId) {
         ChatInboundPort chatInboundPort = chatInboundPortProvider.getIfAvailable();
-        if (chatInboundPort != null) {
-            chatInboundPort.stopTask(taskId);
+        if (chatInboundPort == null) {
+            throw new IllegalStateException("ChatInboundPort is not configured");
         }
-        streamTaskPort.unregister(taskId);
+        chatInboundPort.stopTask(taskId);
         return Map.of("code", "0");
     }
 

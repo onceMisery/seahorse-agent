@@ -24,7 +24,7 @@ import {
   switchMessageBranch as switchMessageBranchRequest
 } from "@/services/sessionService";
 import { getAgentRunCostSummary, getAgentRunSnapshot, listAgentRunEvents } from "@/services/agentRunService";
-import { submitFeedback } from "@/services/chatService";
+import { stopTask, submitFeedback } from "@/services/chatService";
 import { buildQuery } from "@/utils/helpers";
 import { createStreamResponse, type StreamHandlers } from "@/hooks/useStreamResponse";
 import { storage } from "@/utils/storage";
@@ -285,6 +285,7 @@ export const useChatStore = create<ChatState>()(
       const selectedTaskTemplateId = get().selectedTaskTemplateId;
       const attachmentIdsFiltered = Array.from(new Set(attachmentIds)).filter(Boolean);
       const inputFocusKey = Date.now();
+      const clientTaskId = nanoid();
 
       const userMessage: Message = {
         id: nanoid(),
@@ -318,7 +319,7 @@ export const useChatStore = create<ChatState>()(
         s.streamingMessageId = assistantId;
         s.thinkingStartAt = null;
         s.inputFocusKey = inputFocusKey;
-        s.streamTaskId = null;
+        s.streamTaskId = clientTaskId;
         s.cancelRequested = false;
       });
 
@@ -345,7 +346,8 @@ export const useChatStore = create<ChatState>()(
         assistantParentMessageId,
         taskTemplateId: selectedTaskTemplateId || undefined,
         attachmentIds: attachmentIdsFiltered,
-        selectedSkillNames
+        selectedSkillNames,
+        taskId: clientTaskId
       });
       const url = `${API_BASE_URL}/rag/v3/chat${query}`;
       const token = storage.getToken();
@@ -485,7 +487,14 @@ export const useChatStore = create<ChatState>()(
     },
 
     cancelGeneration: () => {
+      const state = get();
+      if (state.cancelRequested) return;
       set((s) => { s.cancelRequested = true; });
+      if (state.streamTaskId) {
+        void stopTask(state.streamTaskId).catch((error) => {
+          console.error("Failed to cancel chat task:", error);
+        });
+      }
       const abort = get().streamAbort;
       if (abort) {
         abort();

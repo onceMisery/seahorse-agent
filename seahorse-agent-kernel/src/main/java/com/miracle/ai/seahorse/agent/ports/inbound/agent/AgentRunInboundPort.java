@@ -60,6 +60,13 @@ public interface AgentRunInboundPort {
     AgentRun cancel(String runId);
 
     /**
+     * Records cancellation observed by the execution engine without requiring
+     * a request-scoped user context. The transition remains repository-CAS
+     * guarded and is immutable once another terminal state wins.
+     */
+    AgentRun cancelExecution(String runId);
+
+    /**
      * 将失败运行标记为等待重试；重复重试保持幂等。
      */
     AgentRun retry(String runId);

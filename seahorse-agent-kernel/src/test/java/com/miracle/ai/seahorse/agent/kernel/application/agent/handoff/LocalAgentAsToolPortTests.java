@@ -238,6 +238,11 @@ class LocalAgentAsToolPortTests {
         }
 
         @Override
+        public AgentRun cancelExecution(String runId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public AgentRun retry(String runId) {
             throw new UnsupportedOperationException();
         }

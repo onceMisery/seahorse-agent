@@ -17,7 +17,9 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopDependencies;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopCancelledException;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegistry;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
@@ -113,6 +115,52 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class KernelChatAgentRunStoreTests {
 
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-05-23T00:00:00Z"), ZoneOffset.UTC);
+
+    private static AgentRun run(String runId, AgentRunStatus status) {
+        return new AgentRun(
+                runId,
+                "ops-agent",
+                "ops-agent-v1",
+                "rollout-1",
+                "tenant-a",
+                "alice",
+                "conversation-1",
+                AgentRunTriggerType.CHAT,
+                "cancel test",
+                status,
+                "trace-1",
+                0L,
+                0L,
+                BigDecimal.ZERO,
+                null,
+                null,
+                FIXED_CLOCK.instant(),
+                null);
+    }
+
+    @Test
+    void shouldRecordAgentLoopCancellationAsCancelledInsteadOfFailed() {
+        AgentRun run = run("run-cancelled-1", AgentRunStatus.RUNNING);
+        RecordingAgentRunInboundPort runPort = new RecordingAgentRunInboundPort(run);
+        KernelChatModelConfigSupport modelConfigSupport = new KernelChatModelConfigSupport(
+                new ObjectMapper(), Optional.empty(), Optional.empty(), Optional.empty());
+        KernelChatToolSupport toolSupport = new KernelChatToolSupport(
+                modelConfigSupport, Optional.empty(), Optional.empty(),
+                null, null, null, null, false);
+        KernelChatAgentRunSupport support = new KernelChatAgentRunSupport(
+                Optional.of(runPort),
+                Optional.empty(),
+                List.of(),
+                Optional.empty(),
+                Optional.empty(),
+                modelConfigSupport,
+                toolSupport);
+
+        support.finishRun(run.runId(), new AgentLoopCancelledException("cancelled"));
+
+        assertEquals(run.runId(), runPort.cancelledRunId);
+        assertNull(runPort.failedRunId);
+    }
 
     @Test
     void shouldCreateAgentRunAndRecordModelAndToolStepsForAgentMode() {
@@ -1508,6 +1556,7 @@ class KernelChatAgentRunStoreTests {
     private static final class RecordingAgentRunInboundPort implements AgentRunInboundPort {
         private final AgentRun startedRun;
         private AgentRunStartCommand startCommand;
+        private String cancelledRunId;
         private String failedRunId;
         private String failureMessage;
 
@@ -1533,6 +1582,12 @@ class KernelChatAgentRunStoreTests {
 
         @Override
         public AgentRun cancel(String runId) {
+            return startedRun;
+        }
+
+        @Override
+        public AgentRun cancelExecution(String runId) {
+            this.cancelledRunId = runId;
             return startedRun;
         }
 

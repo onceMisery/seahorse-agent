@@ -28,6 +28,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.runcontext.RunContextSnapshotRedactor;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopCancelledException;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageRecord;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageSource;
@@ -356,6 +357,10 @@ final class KernelChatAgentRunSupport {
         }
         if (error == null) {
             agentRunPort.get().succeed(runId);
+            return;
+        }
+        if (error instanceof AgentLoopCancelledException) {
+            agentRunPort.get().cancelExecution(runId);
             return;
         }
         agentRunPort.get().fail(runId, AgentRuntimeConstants.DEFAULT_AGENT_RUN_FAILURE_CODE,

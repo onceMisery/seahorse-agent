@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useChatStore } from "@/stores/chatStore";
 import { getAgentRunCostSummary, getAgentRunSnapshot, listAgentRunEvents } from "@/services/agentRunService";
-import { createStreamResponse } from "@/hooks/useStreamResponse";
+import { createStreamResponse, type StreamHandlers } from "@/hooks/useStreamResponse";
 import { forkMessage, listMessages, listMessageTree, switchMessageBranch } from "@/services/sessionService";
 import type { ConversationMessageVO } from "@/services/sessionService";
 import { AGENT_STREAM_EVENTS, type AgentRunSnapshot, type Message, type StreamEventEnvelope } from "@/types";
@@ -41,6 +41,7 @@ vi.mock("@/services/sessionService", () => ({
 }));
 
 vi.mock("@/services/chatService", () => ({
+  stopTask: vi.fn().mockResolvedValue(undefined),
   submitFeedback: vi.fn()
 }));
 
@@ -372,6 +373,43 @@ describe("chatStore snapshot hydration", () => {
 
     expect(streamRequests).toHaveLength(1);
     expect(streamRequests[0].headers?.Authorization).toBe("Bearer stream-token");
+  });
+
+  it("creates the task identity before opening the stream and cancels it once on the server", async () => {
+    const { stopTask } = await import("@/services/chatService");
+    let resolveStart: () => void = () => undefined;
+    let streamHandlers: StreamHandlers | undefined;
+    const cancel = vi.fn();
+    vi.mocked(createStreamResponse).mockImplementationOnce(({ url, headers }, handlers) => {
+      streamStarts.push(url);
+      streamRequests.push({ url, headers });
+      streamHandlers = handlers;
+      return {
+        cancel,
+        start: vi.fn(() => new Promise<void>((resolve) => {
+          resolveStart = resolve;
+        }))
+      };
+    });
+    useChatStore.setState({ currentSessionId: "conversation-1" });
+
+    const sending = useChatStore.getState().sendMessage("Stop me");
+    await Promise.resolve();
+    const taskId = useChatStore.getState().streamTaskId;
+    expect(taskId).toBeTruthy();
+    expect(new URL(streamStarts[0], "http://localhost").searchParams.get("taskId")).toBe(taskId);
+
+    useChatStore.getState().cancelGeneration();
+    useChatStore.getState().cancelGeneration();
+    streamHandlers?.onCancel?.({});
+    resolveStart();
+    await sending;
+
+    expect(stopTask).toHaveBeenCalledTimes(1);
+    expect(stopTask).toHaveBeenCalledWith(taskId);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(useChatStore.getState().messages.find((message) => message.role === "assistant")?.status)
+      .toBe("cancelled");
   });
 
   it("attaches memory conflict prompts from custom stream events to the assistant message", async () => {

@@ -23,7 +23,6 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.ResearchInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimitDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -88,11 +87,9 @@ class SeahorseChatControllerRateLimitTests {
 
     private static MockMvc mvc(RateLimiterPort rateLimiter) {
         ChatInboundPort chatPort = mock(ChatInboundPort.class);
-        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
         SeahorseChatController controller = new SeahorseChatController(
                 provider(ChatInboundPort.class, chatPort),
                 (emitter, conversationId, taskId) -> new NoopStreamCallback(),
-                streamTaskPort,
                 provider(AgentRunSnapshotInboundPort.class, null),
                 provider(ResearchInboundPort.class, null),
                 provider(ResearchSseBridge.class, null),

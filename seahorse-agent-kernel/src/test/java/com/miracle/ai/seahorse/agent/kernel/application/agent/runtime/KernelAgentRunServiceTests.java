@@ -509,6 +509,26 @@ class KernelAgentRunServiceTests {
     }
 
     @Test
+    void executionCancellationShouldNotRequireRequestUserOrAllowLateSuccess() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("run-1", "user-1", AgentRunStatus.RUNNING));
+        KernelAgentRunService service = new KernelAgentRunService(
+                new MemoryAgentDefinitionRepository(),
+                runRepository,
+                () -> {
+                    throw new AssertionError("execution cancellation must not read request user context");
+                },
+                FIXED_CLOCK);
+
+        AgentRun cancelled = service.cancelExecution("run-1");
+        AgentRun afterLateSuccess = service.succeed("run-1");
+
+        assertEquals(AgentRunStatus.CANCELLED, cancelled.status());
+        assertEquals(AgentRunStatus.CANCELLED, afterLateSuccess.status());
+        assertEquals(AgentRunStatus.CANCELLED, runRepository.runs.get("run-1").status());
+    }
+
+    @Test
     void shouldReturnPersistedWinnerWhenTerminalCasIsLost() {
         MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
         AgentRun running = run("run-1", "user-1", AgentRunStatus.RUNNING);

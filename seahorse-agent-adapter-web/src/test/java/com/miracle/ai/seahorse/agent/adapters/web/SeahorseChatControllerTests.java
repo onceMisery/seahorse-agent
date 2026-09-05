@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -69,6 +70,7 @@ class SeahorseChatControllerTests {
                         .param("question", "Research this")
                         .param("conversationId", "conversation-1")
                         .param("userId", "user-1")
+                        .param("taskId", "client-task-1")
                         .param("taskTemplateId", "quick-answer"))
                 .andExpect(status().isOk())
                 .andExpect(request().asyncStarted());
@@ -77,6 +79,38 @@ class SeahorseChatControllerTests {
         verify(chatPort).streamChat(captor.capture(), org.mockito.ArgumentMatchers.any());
         assertThat(captor.getValue().taskTemplateId()).isEqualTo("quick-answer");
         assertThat(captor.getValue().chatMode()).isEqualTo(ChatMode.RAG);
+        assertThat(captor.getValue().taskId()).isEqualTo("client-task-1");
+    }
+
+    @Test
+    void stopShouldOnlyDelegateToChatUseCase() {
+        ChatInboundPort chatPort = mock(ChatInboundPort.class);
+        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
+        SeahorseChatController controller = new SeahorseChatController(
+                provider(ChatInboundPort.class, chatPort),
+                (emitter, conversationId, taskId) -> new NoopStreamCallback(),
+                streamTaskPort,
+                1_000L);
+
+        assertThat(controller.stop("task-1")).containsEntry("code", "0");
+
+        verify(chatPort).stopTask("task-1");
+        verifyNoInteractions(streamTaskPort);
+    }
+
+    @Test
+    void stopShouldFailWhenChatUseCaseIsUnavailable() {
+        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
+        SeahorseChatController controller = new SeahorseChatController(
+                provider(ChatInboundPort.class, null),
+                (emitter, conversationId, taskId) -> new NoopStreamCallback(),
+                streamTaskPort,
+                1_000L);
+
+        assertThatThrownBy(() -> controller.stop("task-1"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("ChatInboundPort is not configured");
+        verifyNoInteractions(streamTaskPort);
     }
 
     @Test
