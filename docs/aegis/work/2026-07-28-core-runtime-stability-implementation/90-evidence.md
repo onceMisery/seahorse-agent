@@ -1,6 +1,6 @@
 # Core Runtime Stability Implementation Evidence
 
-Updated: 2026-08-01  
+Updated: 2026-09-06  
 State: draft
 
 ## Source Evidence
@@ -219,6 +219,11 @@ termination are still required before closure.
 | Post-sync core regression | Maven reactor focused set covering Kernel, Web, JDBC repository, Chat cross-module, Spring auto-configuration, and `PortArchitectureTest` | PASS; 280 tests, 0 failures, 0 errors, 2 environment-skipped JDBC tests |
 | Post-sync Port inventory | `PortArchitectureTest`; compiled source scan; `complexity-baseline.txt`; `docs/architecture/port-inventory.md` | PASS; 360 public interfaces (93 inbound, 266 outbound, 1 common), 791 Port-package Java files |
 | Post-sync complexity budget | `bash scripts/complexity-report.sh` | PASS; Ports 360, Port Java files 791, large classes 16, AutoConfig 67, cross-domain pairs 40 |
+| Cancellation semantics closure (commit `dace726c`) | focused reactor `-Dtest=KernelAgentRunServiceTests,KernelChatAgentRunStoreTests,KernelAgentHandoffServiceTests,LocalAgentAsToolPortTests,TaskOrchestrationServiceTests,LocalChatStreamCallbackFactoryTests,SeahorseChatControllerTests,SeahorseChatControllerReplayTests,SeahorseChatControllerRateLimitTests,PortArchitectureTest` | PASS; kernel 69 + web 32 + architecture 3, 0 failures/errors; covers engine-observed `cancelExecution` CAS transition, `AgentLoopCancelledException` -> `CANCELLED`, stop-endpoint fail-closed delegation, client pre-generated task id, and idempotent cancelled-callback cleanup |
+| Frontend cancellation contract | `npx vitest run src/stores/chatStore.test.ts`; `npx tsc --noEmit -p tsconfig.app.json`; `npm run lint` | PASS; 23/23 chatStore tests (new server-side cancel test included), typecheck and lint clean |
+| Same-aggregate merge: run queue -> lease | focused reactor `-Dtest=KernelAgentRunWorkerServiceTests,KernelAgentRunLeaseServiceTests,JdbcAgentRunLeaseRepositoryAdapterTests,SeahorseAgentRegistryAutoConfigurationTests,SeahorseAgentChatRunStoreAutoConfigurationTests,PortArchitectureTest`; deleted `AgentRunQueueRepositoryPort`, `JdbcAgentRunQueueRepositoryAdapter`, `JdbcAgentRunQueueRepositoryAdapterTests` | PASS; both fragments operate on `agent_run_lease`; merged port holds 5 cohesive operations; the two findRunnable H2 regressions moved into the lease adapter test (5/5); auto-configuration contexts assemble with the single lease binding |
+| Same-aggregate merge: memory review candidate -> management | focused reactor `-Dtest=SeahorseAgentNoopPortGuardTests,DefaultMemoryEnginePortTests,KernelMemoryReviewServiceTests,KernelMemoryObservabilityServiceTests,KernelMemoryConflictResolutionServiceTests,SeahorseAgentKernelAutoConfigurationTests,PortArchitectureTest`; deleted `MemoryReviewCandidatePort` | PASS; one-aggregate read/write fragments over one JDBC adapter; `noop()` is the single `NoopFallback`-marked fallback so Class A guard semantics are unchanged; guard, memory engine, review, and observability suites pass |
+| Port baseline ratchet after merges | `bash scripts/complexity-report.sh --update-baseline`; `PortArchitectureTest`; spotless on kernel/autoconfigure/jdbc/tests | PASS; Ports 358 (93/264/1), Port Java files 789, large classes 16, AutoConfig 67, cross-domain 40; formatting clean; `controller_kernel_service_edges=0` manually re-appended after template rewrite |
 
 ## Evidence Gaps
 
@@ -235,8 +240,9 @@ termination are still required before closure.
   not regressions from this slice.
 - Conversation/SSE/cancellation and dual-instance recovery evidence for later
   slices.
-- Port reduction from 375 to no more than 300; current governance freezes
-  growth but does not satisfy the final reduction target.
+- Port reduction from 358 to no more than 300; the two 2026-09-06 same-aggregate
+  merges started the dedicated reduction slice, and the remaining gap requires
+  further aggregate-level repository consolidation with consumer evidence.
 - The standalone architecture-test module needs reactor/local publication of
   its three unpublished adapter SNAPSHOT dependencies before a fresh isolated
   `PortArchitectureTest` result can be recorded; the reactor result is already

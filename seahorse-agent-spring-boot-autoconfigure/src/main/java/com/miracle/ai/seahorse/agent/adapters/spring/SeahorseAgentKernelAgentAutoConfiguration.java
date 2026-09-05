@@ -87,7 +87,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPo
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
@@ -612,7 +612,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean({
-            AgentRunQueueRepositoryPort.class,
+            AgentRunLeaseRepositoryPort.class,
             AgentRunRepositoryPort.class,
             AgentCheckpointRepositoryPort.class,
             ApprovalRequestQueryPort.class,
@@ -621,7 +621,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     })
     @ConditionalOnMissingBean(AgentRunWorkerInboundPort.class)
     public KernelAgentRunWorkerService seahorseAgentRunWorkerInboundPort(
-            AgentRunQueueRepositoryPort agentRunQueueRepositoryPort,
+            AgentRunLeaseRepositoryPort agentRunLeaseRepositoryPort,
             AgentRunRepositoryPort agentRunRepositoryPort,
             AgentCheckpointRepositoryPort agentCheckpointRepositoryPort,
             ApprovalRequestQueryPort approvalRequestQueryPort,
@@ -629,7 +629,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             AgentRunQueryInboundPort agentRunResumeInboundPort,
             ObjectProvider<Clock> clockProvider) {
         return new KernelAgentRunWorkerService(
-                agentRunQueueRepositoryPort,
+                agentRunLeaseRepositoryPort,
                 agentRunRepositoryPort,
                 agentCheckpointRepositoryPort,
                 approvalRequestQueryPort,

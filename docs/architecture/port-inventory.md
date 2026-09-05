@@ -1,6 +1,6 @@
 # Public Port Inventory and Retirement Rules
 
-Updated: 2026-08-16
+Updated: 2026-09-06
 Authority: `PortArchitectureTest` and compiled source under
 `com.miracle.ai.seahorse.agent.ports`
 
@@ -9,16 +9,16 @@ Authority: `PortArchitectureTest` and compiled source under
 | Direction | Public interfaces | Meaning |
 | --- | ---: | --- |
 | Inbound | 93 | Capability entry points called by delivery adapters or other capabilities |
-| Outbound | 266 | Independently replaceable external/runtime boundaries |
+| Outbound | 264 | Independently replaceable external/runtime boundaries |
 | Common | 1 | Shared boundary outside the directional packages |
-| Total | 360 | Reviewed ceiling; must only decrease |
+| Total | 358 | Reviewed ceiling; must only decrease |
 
 The inventory is measured by the public-interface ArchUnit scan, not by source
 file count. The duplicate `SreHealthReportProviderPort` boundary was retired
 in favor of `SreHealthInboundPort`; both previously exposed the same
 `SreHealthReport current()` operation and shared one implementation.
 
-The 791 Java files under `ports` are informational package-hygiene data, not
+The 789 Java files under `ports` are informational package-hygiene data, not
 the Port count. Records, enums, commands, responses, and other value objects do
 not become architectural Ports merely because they are stored in that package.
 
@@ -90,6 +90,30 @@ the artifact capability to one cohesive inbound port. Port interfaces fell from
 `KernelAgentRunQueryFacade` combining checkpoint query, cost summary, and resume
 services. Port interfaces fell from 364 to 362 and `port_java_files_info` from
 796 to 794.
+
+2026-09-06 aggregate-level repository consolidation (design §6.2 repository
+fragment rule), both merges verified by the same-table evidence below:
+
+- `AgentRunQueueRepositoryPort` was merged into `AgentRunLeaseRepositoryPort`.
+  Both fragments operate on the `agent_run_lease` claim aggregate: the queue
+  adapter's runnable-run query joins `sa_agent_run` with `sa_agent_run_lease`,
+  and the lease adapter owns the claim rows. The merged port holds five
+  cohesive operations (acquire/heartbeat/release/findByRunId/findRunnable),
+  one JDBC adapter (`JdbcAgentRunLeaseRepositoryAdapter`), and the worker
+  service consumes it together with the lease inbound port. The queue port,
+  its JDBC adapter, and its test class were deleted; the two findRunnable
+  H2 regression tests moved into `JdbcAgentRunLeaseRepositoryAdapterTests`.
+- `MemoryReviewCandidatePort` was merged into
+  `MemoryReviewManagementRepositoryPort`. The one-operation write fragment
+  (`save`) and the review management read/decision operations belong to the
+  same `memory_review_candidate` aggregate and the same single JDBC adapter.
+  The merged port now exposes `noop()` as the single `NoopFallback`-marked
+  fallback, so the Class A NoOp guard watches the same binding the memory
+  engine and review services consume; the Class A fail-fast semantics are
+  unchanged.
+
+Port interfaces fell from 360 to 358 (outbound 266 to 264) and
+`port_java_files_info` from 791 to 789.
 
 ## Retention Test
 

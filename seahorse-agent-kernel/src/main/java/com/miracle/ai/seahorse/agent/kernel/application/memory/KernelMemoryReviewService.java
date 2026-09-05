@@ -133,7 +133,7 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                                      MemoryAliasPort aliasPort,
                                      ObservationPort observationPort) {
         this.reviewRepositoryPort = Objects.requireNonNullElseGet(reviewRepositoryPort,
-                MemoryReviewManagementRepositoryPort::empty);
+                MemoryReviewManagementRepositoryPort::noop);
         this.ingestionWorkflowPort = Objects.requireNonNull(ingestionWorkflowPort,
                 "ingestionWorkflowPort must not be null");
         this.feedbackRepositoryPort = Objects.requireNonNullElseGet(feedbackRepositoryPort,

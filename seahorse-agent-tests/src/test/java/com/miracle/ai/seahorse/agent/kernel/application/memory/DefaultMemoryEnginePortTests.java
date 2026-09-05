@@ -50,12 +50,16 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementMemor
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
@@ -1034,7 +1038,7 @@ class DefaultMemoryEnginePortTests {
     void shouldStageMediumConfidenceRefinedAddWhenReviewEnabled() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryReviewManagementRepositoryPort reviewCandidatePort = new RecordingMemoryReviewManagementRepositoryPort();
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
                 "medium_confidence",
                 List.of(new RefinedMemoryOperation(
@@ -1088,7 +1092,7 @@ class DefaultMemoryEnginePortTests {
     void shouldDelegateRefinedAddReviewGateToProvidedPolicyPort() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryReviewManagementRepositoryPort reviewCandidatePort = new RecordingMemoryReviewManagementRepositoryPort();
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
                 "tenant_policy_review",
                 List.of(new RefinedMemoryOperation(
@@ -1137,7 +1141,7 @@ class DefaultMemoryEnginePortTests {
     void shouldRejectRefinedAddWithUnsupportedTargetLayerWithoutShortTermFallback() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryReviewManagementRepositoryPort reviewCandidatePort = new RecordingMemoryReviewManagementRepositoryPort();
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
                 "invalid_target_layer",
                 List.of(new RefinedMemoryOperation(
@@ -1180,7 +1184,7 @@ class DefaultMemoryEnginePortTests {
     void shouldDropVeryLowConfidenceRefinedAddBeforeDurableWrite() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryReviewManagementRepositoryPort reviewCandidatePort = new RecordingMemoryReviewManagementRepositoryPort();
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
                 "very_low_confidence",
                 List.of(new RefinedMemoryOperation(
@@ -1227,7 +1231,7 @@ class DefaultMemoryEnginePortTests {
     void shouldStageRiskyRefinedAddEvenWhenActionIsAdd() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryReviewManagementRepositoryPort reviewCandidatePort = new RecordingMemoryReviewManagementRepositoryPort();
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
                 "risky_add",
                 List.of(new RefinedMemoryOperation(
@@ -1327,7 +1331,7 @@ class DefaultMemoryEnginePortTests {
     void shouldCircuitBreakOversizedRefinerBatchToReviewWithoutWritingMemory() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryReviewManagementRepositoryPort reviewCandidatePort = new RecordingMemoryReviewManagementRepositoryPort();
         List<RefinedMemoryOperation> operations = new ArrayList<>();
         for (int i = 0; i < 9; i++) {
             operations.add(RefinedMemoryOperation.add(
@@ -1378,7 +1382,7 @@ class DefaultMemoryEnginePortTests {
     void shouldCircuitBreakHighDeleteRatioRefinerBatchToReviewWithoutStagingDeletes() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryReviewManagementRepositoryPort reviewCandidatePort = new RecordingMemoryReviewManagementRepositoryPort();
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
                 "delete_heavy_batch",
                 List.of(
@@ -1550,7 +1554,7 @@ class DefaultMemoryEnginePortTests {
                 MemoryPolicyConfigPort.defaults(),
                 (MemoryRetrievalPipelinePort) null,
                 refinerPort,
-                MemoryReviewCandidatePort.noop(),
+                MemoryReviewManagementRepositoryPort.noop(),
                 MemoryAliasPort.noop(),
                 MemoryReviewPolicyPort.defaults(),
                 feedbackRepository);
@@ -1663,7 +1667,7 @@ class DefaultMemoryEnginePortTests {
                 MemoryPolicyConfigPort.defaults(),
                 (MemoryRetrievalPipelinePort) null,
                 refinerPort,
-                MemoryReviewCandidatePort.noop(),
+                MemoryReviewManagementRepositoryPort.noop(),
                 MemoryAliasPort.noop(),
                 MemoryReviewPolicyPort.defaults(),
                 feedbackRepository);
@@ -1799,7 +1803,7 @@ class DefaultMemoryEnginePortTests {
     void shouldStageRefinedDeleteForReviewWithoutDeletingOrWritingMemory() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryReviewManagementRepositoryPort reviewCandidatePort = new RecordingMemoryReviewManagementRepositoryPort();
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
                 "delete_requested",
                 List.of(new RefinedMemoryOperation(
@@ -1852,7 +1856,7 @@ class DefaultMemoryEnginePortTests {
     void shouldRejectRefinedDeleteWithoutTargetBeforeReviewStaging() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryReviewManagementRepositoryPort reviewCandidatePort = new RecordingMemoryReviewManagementRepositoryPort();
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
                 "delete_target_missing",
                 List.of(new RefinedMemoryOperation(
@@ -1895,7 +1899,7 @@ class DefaultMemoryEnginePortTests {
     void shouldRejectRefinedUpdateWithoutTargetBeforeReviewStaging() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryReviewManagementRepositoryPort reviewCandidatePort = new RecordingMemoryReviewManagementRepositoryPort();
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
                 "update_target_missing",
                 List.of(new RefinedMemoryOperation(
@@ -1938,7 +1942,7 @@ class DefaultMemoryEnginePortTests {
     void shouldStageRefinedUpdateForReviewWithoutUpdatingDurableMemory() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryReviewManagementRepositoryPort reviewCandidatePort = new RecordingMemoryReviewManagementRepositoryPort();
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
                 "update_requested",
                 List.of(new RefinedMemoryOperation(
@@ -1988,7 +1992,7 @@ class DefaultMemoryEnginePortTests {
     void shouldKeepRefinedReviewAsPendingReviewWithoutActiveMemoryWrite() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryReviewManagementRepositoryPort reviewCandidatePort = new RecordingMemoryReviewManagementRepositoryPort();
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
                 "needs_review",
                 List.of(new RefinedMemoryOperation(
@@ -2674,7 +2678,7 @@ class DefaultMemoryEnginePortTests {
 
     private DefaultMemoryEnginePort engineWithRefinerAndReview(ShortTermMemoryPort shortTermPort,
                                                                MemoryRefinerPort refinerPort,
-                                                               MemoryReviewCandidatePort reviewCandidatePort,
+                                                               MemoryReviewManagementRepositoryPort reviewCandidatePort,
                                                                MemoryOperationLogPort operationLogPort) {
         return engineWithRefinerAndReview(
                 shortTermPort,
@@ -2686,7 +2690,7 @@ class DefaultMemoryEnginePortTests {
 
     private DefaultMemoryEnginePort engineWithRefinerAndReview(ShortTermMemoryPort shortTermPort,
                                                                MemoryRefinerPort refinerPort,
-                                                               MemoryReviewCandidatePort reviewCandidatePort,
+                                                               MemoryReviewManagementRepositoryPort reviewCandidatePort,
                                                                MemoryOperationLogPort operationLogPort,
                                                                MemoryReviewPolicyPort reviewPolicyPort) {
         return DefaultMemoryEnginePort.builder(
@@ -3021,13 +3025,28 @@ class DefaultMemoryEnginePortTests {
         }
     }
 
-    private static class RecordingMemoryReviewCandidatePort implements MemoryReviewCandidatePort {
+    private static class RecordingMemoryReviewManagementRepositoryPort implements MemoryReviewManagementRepositoryPort {
 
         private final List<MemoryReviewCandidate> candidates = new ArrayList<>();
 
         @Override
         public void save(MemoryReviewCandidate candidate) {
             candidates.add(candidate);
+        }
+
+        @Override
+        public MemoryReviewPage pageReviewCandidates(MemoryReviewQuery query) {
+            return MemoryReviewPage.empty(query.current(), query.size());
+        }
+
+        @Override
+        public Optional<MemoryReviewRecord> findReviewItem(String candidateId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public MemoryReviewRecord applyReviewDecision(MemoryReviewDecision decision) {
+            throw new IllegalArgumentException("memory review candidate not found: " + decision.candidateId());
         }
     }
 

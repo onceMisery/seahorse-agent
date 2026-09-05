@@ -115,7 +115,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordSearchPo
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
@@ -334,7 +334,7 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MemoryConflictLogRepositoryPort.class);
                     assertThat(context).hasSingleBean(MemoryKeywordSearchPort.class);
                     assertThat(context).hasSingleBean(MemoryKeywordIndexPort.class);
-                    assertThat(context).hasSingleBean(MemoryReviewCandidatePort.class);
+                    assertThat(context).hasSingleBean(MemoryReviewManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(MemoryReviewManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(MemoryReviewFeedbackRepositoryPort.class);
                     assertThat(context).hasSingleBean(MemoryTraceRecorder.class);

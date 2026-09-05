@@ -59,7 +59,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunR
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
@@ -217,7 +217,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
-    @ConditionalOnMissingBean(MemoryReviewCandidatePort.class)
+    @ConditionalOnMissingBean(MemoryReviewManagementRepositoryPort.class)
     public JdbcMemoryReviewCandidateRepositoryAdapter seahorseJdbcMemoryReviewCandidateRepositoryAdapter(
             DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
         return new JdbcMemoryReviewCandidateRepositoryAdapter(dataSource, objectMapper(objectMapperProvider));

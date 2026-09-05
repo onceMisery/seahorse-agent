@@ -154,7 +154,7 @@ class KernelMemoryConflictResolutionServiceTests {
                 CorrectionLedgerPort.noop(),
                 MemoryOperationLogPort.noop(),
                 MemoryOutboxPort.noop(),
-                MemoryReviewManagementRepositoryPort.empty(),
+                MemoryReviewManagementRepositoryPort.noop(),
                 MemoryPolicyConfigPort.defaults(),
                 traceRecorder,
                 auditLedger));

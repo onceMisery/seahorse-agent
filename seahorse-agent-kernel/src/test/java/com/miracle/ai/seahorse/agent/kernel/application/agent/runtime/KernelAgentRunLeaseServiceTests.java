@@ -231,5 +231,10 @@ class KernelAgentRunLeaseServiceTests {
         public Optional<AgentRunLease> findByRunId(String runId) {
             return Optional.ofNullable(leases.get(runId));
         }
+
+        @Override
+        public List<AgentRun> findRunnable(String tenantId, int limit, Instant now) {
+            return List.of();
+        }
     }
 }

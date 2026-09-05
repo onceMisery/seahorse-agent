@@ -1,11 +1,11 @@
-# Complexity baseline after core runtime stability hardening.
+# Complexity baseline captured from the current reviewed source tree.
 # Ratchet policy: values may only decrease.
-port_interfaces=360
+port_interfaces=358
 port_inbound=93
-port_outbound=266
+port_outbound=264
 port_common=1
-port_java_files_info=791
-large_classes_gt_800=17
+port_java_files_info=789
+large_classes_gt_800=16
 autoconfig_registrations=67
 cross_domain_whitelist_size=40
 controller_kernel_service_edges=0

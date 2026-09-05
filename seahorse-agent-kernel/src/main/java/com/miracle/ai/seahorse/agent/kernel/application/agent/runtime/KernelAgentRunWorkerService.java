@@ -34,7 +34,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerInboundPo
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerTickRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerTickResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
 
@@ -46,7 +46,7 @@ import java.util.Optional;
 
 public class KernelAgentRunWorkerService implements AgentRunWorkerInboundPort {
 
-    private final AgentRunQueueRepositoryPort queueRepository;
+    private final AgentRunLeaseRepositoryPort leaseRepository;
     private final AgentRunRepositoryPort runRepository;
     private final AgentCheckpointRepositoryPort checkpointRepository;
     private final ApprovalRequestQueryPort approvalQueryPort;
@@ -54,14 +54,14 @@ public class KernelAgentRunWorkerService implements AgentRunWorkerInboundPort {
     private final AgentRunQueryInboundPort resumePort;
     private final Clock clock;
 
-    public KernelAgentRunWorkerService(AgentRunQueueRepositoryPort queueRepository,
+    public KernelAgentRunWorkerService(AgentRunLeaseRepositoryPort leaseRepository,
                                        AgentRunRepositoryPort runRepository,
                                        AgentCheckpointRepositoryPort checkpointRepository,
                                        ApprovalRequestQueryPort approvalQueryPort,
                                        AgentRunLeaseInboundPort leasePort,
                                        AgentRunQueryInboundPort resumePort,
                                        Clock clock) {
-        this.queueRepository = Objects.requireNonNull(queueRepository, "queueRepository must not be null");
+        this.leaseRepository = Objects.requireNonNull(leaseRepository, "leaseRepository must not be null");
         this.runRepository = Objects.requireNonNull(runRepository, "runRepository must not be null");
         this.checkpointRepository = Objects.requireNonNull(
                 checkpointRepository,
@@ -76,7 +76,7 @@ public class KernelAgentRunWorkerService implements AgentRunWorkerInboundPort {
     public AgentRunWorkerTickResult tick(AgentRunWorkerCommand command) {
         AgentRunWorkerCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         int limit = AgentRunWorkerLimits.safeMaxRuns(safeCommand.maxRuns());
-        List<AgentRun> candidates = queueRepository.findRunnable(safeCommand.tenantId(), limit, safeCommand.now());
+        List<AgentRun> candidates = leaseRepository.findRunnable(safeCommand.tenantId(), limit, safeCommand.now());
         if (candidates == null || candidates.isEmpty()) {
             return new AgentRunWorkerTickResult(
                     0L,

@@ -26,7 +26,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordSearchPo
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
@@ -189,7 +189,7 @@ public class SeahorseAgentNoopPortGuard implements SmartInitializingSingleton {
     /**
      * Slice 2a-c 默认分类表。当前覆盖：
      * <ul>
-     *     <li>Class A：{@link MemoryOutboxPort}（异步派发）、{@link MemoryReviewCandidatePort}（人工 review）、
+     *     <li>Class A：{@link MemoryOutboxPort}（异步派发）、{@link MemoryReviewManagementRepositoryPort}（人工 review）、
      *         {@link MemoryOperationLogPort}（操作日志）、
      *         {@link ToolInvocationAuditPort}（工具调用审计）。</li>
      *     <li>Class B：{@link OutputValidationRecordPort}（可选治理审计持久化）、{@link MemoryVectorPort}（向量索引）、
@@ -204,7 +204,7 @@ public class SeahorseAgentNoopPortGuard implements SmartInitializingSingleton {
         // remains active without it, so a missing binding must not prevent core startup.
         map.put(OutputValidationRecordPort.class, RiskClass.CLASS_B_WARN);
         map.put(MemoryOutboxPort.class, RiskClass.CLASS_A_FAIL_FAST);
-        map.put(MemoryReviewCandidatePort.class, RiskClass.CLASS_A_FAIL_FAST);
+        map.put(MemoryReviewManagementRepositoryPort.class, RiskClass.CLASS_A_FAIL_FAST);
         map.put(MemoryOperationLogPort.class, RiskClass.CLASS_A_FAIL_FAST);
         map.put(ToolInvocationAuditPort.class, RiskClass.CLASS_A_FAIL_FAST);
         map.put(OutboxEventRepositoryPort.class, RiskClass.CLASS_A_FAIL_FAST);

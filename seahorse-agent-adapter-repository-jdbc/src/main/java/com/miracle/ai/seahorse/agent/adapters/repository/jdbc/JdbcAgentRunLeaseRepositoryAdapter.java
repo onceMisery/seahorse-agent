@@ -17,7 +17,10 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunLease;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -27,12 +30,18 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
 public class JdbcAgentRunLeaseRepositoryAdapter implements AgentRunLeaseRepositoryPort {
 
     private static final String LEASE_COLUMNS = "run_id, worker_id, lease_until, heartbeat_at";
+    private static final String RUN_COLUMNS = """
+            r.run_id, r.agent_id, r.version_id, r.rollout_id, r.tenant_id, r.user_id, r.conversation_id, r.trigger_type,
+            r.input_summary, r.status, r.trace_id, r.token_input, r.token_output, r.cost_total, r.error_code,
+            r.error_message, r.started_at, r.finished_at
+            """;
     private static final String SQL_INSERT = """
             INSERT INTO sa_agent_run_lease (run_id, worker_id, lease_until, heartbeat_at)
             VALUES (?, ?, ?, ?)
@@ -60,6 +69,16 @@ public class JdbcAgentRunLeaseRepositoryAdapter implements AgentRunLeaseReposito
             FROM sa_agent_run_lease
             WHERE run_id = ?
             """.formatted(LEASE_COLUMNS);
+    private static final String SQL_FIND_RUNNABLE = """
+            SELECT %s
+            FROM sa_agent_run r
+            LEFT JOIN sa_agent_run_lease l ON l.run_id = r.run_id
+            WHERE r.tenant_id = ?
+              AND r.status IN (?, ?, ?)
+              AND (l.run_id IS NULL OR l.lease_until <= ?)
+            ORDER BY r.started_at ASC, r.run_id ASC
+            LIMIT ?
+            """.formatted(RUN_COLUMNS);
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -114,12 +133,50 @@ public class JdbcAgentRunLeaseRepositoryAdapter implements AgentRunLeaseReposito
         return jdbcTemplate.query(SQL_FIND_BY_RUN_ID, this::mapLease, runId.trim()).stream().findFirst();
     }
 
+    @Override
+    public List<AgentRun> findRunnable(String tenantId, int limit, Instant now) {
+        if (!hasText(tenantId) || limit <= 0) {
+            return List.of();
+        }
+        Instant safeNow = Objects.requireNonNullElseGet(now, Instant::now);
+        return jdbcTemplate.query(SQL_FIND_RUNNABLE,
+                this::mapRun,
+                tenantId.trim(),
+                AgentRunStatus.CREATED.name(),
+                AgentRunStatus.RUNNING.name(),
+                AgentRunStatus.RETRYING.name(),
+                toTimestamp(safeNow),
+                limit);
+    }
+
     private AgentRunLease mapLease(ResultSet resultSet, int rowNum) throws SQLException {
         return new AgentRunLease(
                 resultSet.getString("run_id"),
                 resultSet.getString("worker_id"),
                 toInstant(resultSet.getTimestamp("lease_until")),
                 toInstant(resultSet.getTimestamp("heartbeat_at")));
+    }
+
+    private AgentRun mapRun(ResultSet resultSet, int rowNum) throws SQLException {
+        return new AgentRun(
+                resultSet.getString("run_id"),
+                resultSet.getString("agent_id"),
+                resultSet.getString("version_id"),
+                resultSet.getString("rollout_id"),
+                resultSet.getString("tenant_id"),
+                resultSet.getString("user_id"),
+                resultSet.getString("conversation_id"),
+                AgentRunTriggerType.valueOf(resultSet.getString("trigger_type")),
+                resultSet.getString("input_summary"),
+                AgentRunStatus.valueOf(resultSet.getString("status")),
+                resultSet.getString("trace_id"),
+                resultSet.getLong("token_input"),
+                resultSet.getLong("token_output"),
+                resultSet.getBigDecimal("cost_total"),
+                resultSet.getString("error_code"),
+                resultSet.getString("error_message"),
+                toInstant(resultSet.getTimestamp("started_at")),
+                toInstant(resultSet.getTimestamp("finished_at")));
     }
 
     private Timestamp toTimestamp(Instant instant) {

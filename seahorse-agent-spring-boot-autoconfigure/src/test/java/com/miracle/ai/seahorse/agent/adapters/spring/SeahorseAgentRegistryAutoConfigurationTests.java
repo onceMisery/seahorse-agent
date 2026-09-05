@@ -88,7 +88,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCatalogQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentHandoffRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentPublishCheckRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRolloutRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentTemplateRepositoryPort;
@@ -149,7 +148,6 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(AgentRunRepositoryPort.class);
                     assertThat(context).hasSingleBean(AgentCheckpointRepositoryPort.class);
                     assertThat(context).hasSingleBean(AgentRunLeaseRepositoryPort.class);
-                    assertThat(context).hasSingleBean(AgentRunQueueRepositoryPort.class);
                     assertThat(context).hasSingleBean(ToolCatalogRepositoryPort.class);
                     assertThat(context).hasSingleBean(AgentToolBindingRepositoryPort.class);
                     assertThat(context).hasSingleBean(ToolInvocationAuditPort.class);

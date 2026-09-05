@@ -27,7 +27,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -53,12 +53,12 @@ final class MemoryReviewStagingSupport {
     private static final String METADATA_REVIEW_REQUESTED_ACTION = "reviewRequestedAction";
     private static final String METADATA_TARGET_MEMORY_ID = "targetMemoryId";
 
-    private final MemoryReviewCandidatePort memoryReviewCandidatePort;
+    private final MemoryReviewManagementRepositoryPort memoryReviewCandidatePort;
     private final MemoryPolicyConfigPort memoryPolicyConfigPort;
     private final MemoryLayerStoreRegistry stores;
     private final MemoryIndexStoreSupport indexStoreSupport;
 
-    MemoryReviewStagingSupport(MemoryReviewCandidatePort memoryReviewCandidatePort,
+    MemoryReviewStagingSupport(MemoryReviewManagementRepositoryPort memoryReviewCandidatePort,
                                MemoryPolicyConfigPort memoryPolicyConfigPort,
                                MemoryLayerStoreRegistry stores,
                                MemoryIndexStoreSupport indexStoreSupport) {

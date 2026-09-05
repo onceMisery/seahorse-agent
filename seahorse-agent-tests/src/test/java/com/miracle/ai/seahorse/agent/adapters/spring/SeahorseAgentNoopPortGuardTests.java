@@ -24,7 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputValidationRecord
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -116,7 +116,7 @@ class SeahorseAgentNoopPortGuardTests {
             assertThat(portClasses).contains(
                     OutputValidationRecordPort.class,
                     com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort.class,
-                    com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort.class,
+                    com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort.class,
                     com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort.class,
                     com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort.class,
                     OutboxEventRepositoryPort.class);
@@ -298,8 +298,8 @@ class SeahorseAgentNoopPortGuardTests {
         }
 
         @Bean
-        MemoryReviewCandidatePort memoryReviewCandidatePort() {
-            return mock(MemoryReviewCandidatePort.class);
+        MemoryReviewManagementRepositoryPort memoryReviewCandidatePort() {
+            return mock(MemoryReviewManagementRepositoryPort.class);
         }
 
         @Bean
@@ -327,8 +327,8 @@ class SeahorseAgentNoopPortGuardTests {
         }
 
         @Bean
-        MemoryReviewCandidatePort memoryReviewCandidatePort() {
-            return mock(MemoryReviewCandidatePort.class);
+        MemoryReviewManagementRepositoryPort memoryReviewCandidatePort() {
+            return mock(MemoryReviewManagementRepositoryPort.class);
         }
 
         @Bean

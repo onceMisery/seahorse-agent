@@ -113,7 +113,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallFusionPor
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallRerankerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
@@ -232,7 +232,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryPolicyConfigPort> memoryPolicyConfigPort,
             ObjectProvider<MemoryRetrievalPipelinePort> memoryRetrievalPipelinePort,
             ObjectProvider<MemoryRefinerPort> memoryRefinerPort,
-            ObjectProvider<MemoryReviewCandidatePort> memoryReviewCandidatePort,
+            ObjectProvider<MemoryReviewManagementRepositoryPort> memoryReviewCandidatePort,
             ObjectProvider<MemoryAliasPort> memoryAliasPort,
             ObjectProvider<MemoryReviewPolicyPort> memoryReviewPolicyPort,
             ObjectProvider<MemoryReviewFeedbackRepositoryPort> memoryReviewFeedbackRepositoryPort,
@@ -284,7 +284,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 .memoryPolicyConfigPort(memoryPolicyConfigPort.getIfAvailable(MemoryPolicyConfigPort::defaults))
                 .memoryRetrievalPipelinePort(memoryRetrievalPipelinePort.getIfAvailable())
                 .memoryRefinerPort(configuredRefinerPort == null ? MemoryRefinerPort.noop() : configuredRefinerPort)
-                .memoryReviewCandidatePort(memoryReviewCandidatePort.getIfAvailable(MemoryReviewCandidatePort::noop))
+                .memoryReviewCandidatePort(memoryReviewCandidatePort.getIfAvailable(MemoryReviewManagementRepositoryPort::noop))
                 .memoryAliasPort(memoryAliasPort.getIfAvailable(MemoryAliasPort::noop))
                 .memoryReviewPolicyPort(memoryReviewPolicyPort.getIfAvailable(MemoryReviewPolicyPort::defaults))
                 .memoryReviewFeedbackRepositoryPort(
@@ -351,7 +351,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 correctionLedgerPort.getIfAvailable(CorrectionLedgerPort::noop),
                 operationLogPort.getIfAvailable(MemoryOperationLogPort::noop),
                 outboxPort.getIfAvailable(MemoryOutboxPort::noop),
-                reviewRepositoryPort.getIfAvailable(MemoryReviewManagementRepositoryPort::empty),
+                reviewRepositoryPort.getIfAvailable(MemoryReviewManagementRepositoryPort::noop),
                 policyConfigPort.getIfAvailable(MemoryPolicyConfigPort::defaults),
                 traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
                 auditLedgerService.getIfAvailable());
@@ -375,7 +375,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryAliasPort> memoryAliasPort,
             ObjectProvider<ObservationPort> observationPort) {
         return new KernelMemoryReviewService(
-                reviewRepositoryPort.getIfAvailable(MemoryReviewManagementRepositoryPort::empty),
+                reviewRepositoryPort.getIfAvailable(MemoryReviewManagementRepositoryPort::noop),
                 ingestionWorkflowPort.getIfAvailable(SeahorseAgentKernelMemoryAutoConfiguration::noopMemoryIngestionWorkflowPort),
                 reviewFeedbackRepositoryPort.getIfAvailable(MemoryReviewFeedbackRepositoryPort::empty),
                 traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),

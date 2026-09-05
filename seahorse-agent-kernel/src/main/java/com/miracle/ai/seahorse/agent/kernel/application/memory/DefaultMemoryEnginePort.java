@@ -42,7 +42,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
@@ -96,7 +96,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryCaptureCandidateExtractor captureCandidateExtractor;
     private final MemoryValueAssessor memoryValueAssessor;
     private final MemoryRefinerPort memoryRefinerPort;
-    private final MemoryReviewCandidatePort memoryReviewCandidatePort;
+    private final MemoryReviewManagementRepositoryPort memoryReviewCandidatePort;
     private final MemoryAliasPort memoryAliasPort;
     private final MemoryReviewPolicyPort memoryReviewPolicyPort;
     private final MemoryReviewFeedbackRepositoryPort memoryReviewFeedbackRepositoryPort;
@@ -245,7 +245,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                                   MemoryPolicyConfigPort memoryPolicyConfigPort,
                                                   MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
                                                   MemoryRefinerPort memoryRefinerPort,
-                                                  MemoryReviewCandidatePort memoryReviewCandidatePort,
+                                                  MemoryReviewManagementRepositoryPort memoryReviewCandidatePort,
                                                   MemoryAliasPort memoryAliasPort,
                                                   MemoryReviewPolicyPort memoryReviewPolicyPort) {
         return builder(shortTermPort, longTermPort, semanticPort, objectMapper)
@@ -283,7 +283,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                                   MemoryPolicyConfigPort memoryPolicyConfigPort,
                                                   MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
                                                   MemoryRefinerPort memoryRefinerPort,
-                                                  MemoryReviewCandidatePort memoryReviewCandidatePort,
+                                                  MemoryReviewManagementRepositoryPort memoryReviewCandidatePort,
                                                   MemoryAliasPort memoryAliasPort,
                                                   MemoryReviewPolicyPort memoryReviewPolicyPort,
                                                   MemoryReviewFeedbackRepositoryPort memoryReviewFeedbackRepositoryPort) {
@@ -478,7 +478,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
                 correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort, memoryOutboxPort,
                 businessDocumentRetrieverPort, memoryLifecyclePort, memoryPolicyConfigPort,
-                memoryRetrievalPipelinePort, memoryRefinerPort, MemoryReviewCandidatePort.noop());
+                memoryRetrievalPipelinePort, memoryRefinerPort, MemoryReviewManagementRepositoryPort.noop());
     }
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
@@ -497,7 +497,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryPolicyConfigPort memoryPolicyConfigPort,
                                    MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
                                    MemoryRefinerPort memoryRefinerPort,
-                                   MemoryReviewCandidatePort memoryReviewCandidatePort) {
+                                   MemoryReviewManagementRepositoryPort memoryReviewCandidatePort) {
         this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
                 correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort, memoryOutboxPort,
                 businessDocumentRetrieverPort, memoryLifecyclePort, memoryPolicyConfigPort,
@@ -520,7 +520,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryPolicyConfigPort memoryPolicyConfigPort,
                                    MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
                                    MemoryRefinerPort memoryRefinerPort,
-                                   MemoryReviewCandidatePort memoryReviewCandidatePort,
+                                   MemoryReviewManagementRepositoryPort memoryReviewCandidatePort,
                                    MemoryAliasPort memoryAliasPort) {
         this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
                 correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort, memoryOutboxPort,
@@ -545,7 +545,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryPolicyConfigPort memoryPolicyConfigPort,
                                    MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
                                    MemoryRefinerPort memoryRefinerPort,
-                                   MemoryReviewCandidatePort memoryReviewCandidatePort,
+                                   MemoryReviewManagementRepositoryPort memoryReviewCandidatePort,
                                    MemoryAliasPort memoryAliasPort,
                                    MemoryReviewPolicyPort memoryReviewPolicyPort) {
         this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
@@ -571,7 +571,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryPolicyConfigPort memoryPolicyConfigPort,
                                    MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
                                    MemoryRefinerPort memoryRefinerPort,
-                                   MemoryReviewCandidatePort memoryReviewCandidatePort,
+                                   MemoryReviewManagementRepositoryPort memoryReviewCandidatePort,
                                    MemoryAliasPort memoryAliasPort,
                                    MemoryReviewPolicyPort memoryReviewPolicyPort,
                                    MemoryReviewFeedbackRepositoryPort memoryReviewFeedbackRepositoryPort) {
@@ -598,7 +598,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryPolicyConfigPort memoryPolicyConfigPort,
                                    MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
                                    MemoryRefinerPort memoryRefinerPort,
-                                   MemoryReviewCandidatePort memoryReviewCandidatePort,
+                                   MemoryReviewManagementRepositoryPort memoryReviewCandidatePort,
                                    MemoryAliasPort memoryAliasPort,
                                    MemoryReviewPolicyPort memoryReviewPolicyPort,
                                    MemoryReviewFeedbackRepositoryPort memoryReviewFeedbackRepositoryPort,
@@ -635,7 +635,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         this.memoryValueAssessor = new MemoryValueAssessor(this.memoryPolicyConfigPort);
         this.memoryRefinerPort = Objects.requireNonNullElseGet(memoryRefinerPort, MemoryRefinerPort::noop);
         this.memoryReviewCandidatePort = Objects.requireNonNullElseGet(memoryReviewCandidatePort,
-                MemoryReviewCandidatePort::noop);
+                MemoryReviewManagementRepositoryPort::noop);
         this.memoryAliasPort = Objects.requireNonNullElseGet(memoryAliasPort, MemoryAliasPort::noop);
         this.memoryReviewPolicyPort = Objects.requireNonNullElseGet(memoryReviewPolicyPort,
                 MemoryReviewPolicyPort::defaults);
@@ -734,7 +734,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         private MemoryPolicyConfigPort memoryPolicyConfigPort = MemoryPolicyConfigPort.defaults();
         private MemoryRetrievalPipelinePort memoryRetrievalPipelinePort;
         private MemoryRefinerPort memoryRefinerPort = MemoryRefinerPort.noop();
-        private MemoryReviewCandidatePort memoryReviewCandidatePort = MemoryReviewCandidatePort.noop();
+        private MemoryReviewManagementRepositoryPort memoryReviewCandidatePort = MemoryReviewManagementRepositoryPort.noop();
         private MemoryAliasPort memoryAliasPort = MemoryAliasPort.noop();
         private MemoryReviewPolicyPort memoryReviewPolicyPort = MemoryReviewPolicyPort.defaults();
         private MemoryReviewFeedbackRepositoryPort memoryReviewFeedbackRepositoryPort =
@@ -816,9 +816,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return this;
         }
 
-        public Builder memoryReviewCandidatePort(MemoryReviewCandidatePort memoryReviewCandidatePort) {
+        public Builder memoryReviewCandidatePort(MemoryReviewManagementRepositoryPort memoryReviewCandidatePort) {
             this.memoryReviewCandidatePort = Objects.requireNonNullElseGet(memoryReviewCandidatePort,
-                    MemoryReviewCandidatePort::noop);
+                    MemoryReviewManagementRepositoryPort::noop);
             return this;
         }
 

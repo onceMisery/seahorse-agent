@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpointType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunLease;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunQueryInboundPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
@@ -35,7 +36,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPor
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerTickResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQuery;
@@ -318,7 +319,7 @@ class KernelAgentRunWorkerServiceTests {
         }
     }
 
-    private static final class MemoryRunQueueRepository implements AgentRunQueueRepositoryPort {
+    private static final class MemoryRunQueueRepository implements AgentRunLeaseRepositoryPort {
         private final List<AgentRun> candidates;
         private String lastTenantId;
         private int lastLimit;
@@ -334,6 +335,26 @@ class KernelAgentRunWorkerServiceTests {
             lastLimit = limit;
             lastNow = now;
             return candidates.stream().limit(limit).toList();
+        }
+
+        @Override
+        public boolean acquire(String runId, String workerId, Instant leaseUntil, Instant now) {
+            return true;
+        }
+
+        @Override
+        public boolean heartbeat(String runId, String workerId, Instant leaseUntil, Instant now) {
+            return true;
+        }
+
+        @Override
+        public boolean release(String runId, String workerId) {
+            return true;
+        }
+
+        @Override
+        public Optional<AgentRunLease> findByRunId(String runId) {
+            return Optional.empty();
         }
     }
 

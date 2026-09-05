@@ -181,7 +181,7 @@ class KernelMemoryObservabilityServiceTests {
                 new RecordingConflictLogRepository(),
                 new RecordingMemoryOutboxPort(),
                 new RecordingQualitySnapshotRepository(),
-                MemoryReviewManagementRepositoryPort.empty(),
+                MemoryReviewManagementRepositoryPort.noop(),
                 new RecordingPolicyConfigPort(MemoryPolicyConfig.defaults()),
                 traceRecorder);
 
@@ -204,7 +204,7 @@ class KernelMemoryObservabilityServiceTests {
                 new RecordingConflictLogRepository(),
                 new RecordingMemoryOutboxPort(),
                 new RecordingQualitySnapshotRepository(),
-                MemoryReviewManagementRepositoryPort.empty(),
+                MemoryReviewManagementRepositoryPort.noop(),
                 policyConfigPort);
 
         MemoryPolicyConfig updated = service.updatePolicyConfig(MemoryPolicyConfig.defaults()
@@ -338,7 +338,7 @@ class KernelMemoryObservabilityServiceTests {
                 new RecordingConflictLogRepository(),
                 new RecordingMemoryOutboxPort(),
                 new RecordingQualitySnapshotRepository(),
-                MemoryReviewManagementRepositoryPort.empty(),
+                MemoryReviewManagementRepositoryPort.noop(),
                 new RecordingPolicyConfigPort(MemoryPolicyConfig.defaults()));
 
         var report = service.memoryReadiness("user-1", "default");
@@ -391,7 +391,7 @@ class KernelMemoryObservabilityServiceTests {
                 new RecordingConflictLogRepository(),
                 new RecordingMemoryOutboxPort(),
                 new RecordingQualitySnapshotRepository(),
-                MemoryReviewManagementRepositoryPort.empty(),
+                MemoryReviewManagementRepositoryPort.noop(),
                 new RecordingPolicyConfigPort(MemoryPolicyConfig.defaults()),
                 traceRecorder);
 

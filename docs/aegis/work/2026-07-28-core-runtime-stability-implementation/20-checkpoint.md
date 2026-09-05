@@ -1,7 +1,7 @@
 # Core Runtime Stability Implementation Checkpoint
 
-Updated: 2026-08-03  
-State: slice-2-closed-slice-3-core-hardening-verified-slice-4-unknown-and-gateway-split
+Updated: 2026-09-06  
+State: slice-3-cancellation-closed-slice-5-ports-358
 
 ## TodoCheckpointDraft
 
@@ -16,7 +16,7 @@ State: slice-2-closed-slice-3-core-hardening-verified-slice-4-unknown-and-gatewa
 - [ ] Complete Slice 3 conversation, context, and SSE (core hardening verified; Full Docker reconnect evidence open).
 - [ ] Complete Slice 4 governed tools and sandbox (UNKNOWN state, gateway split, path-escape guard wired; sandbox hotspot decomposition and Full Docker evidence open).
 - [ ] Complete Slice 5 dual-instance recovery and fault injection.
-- [ ] Prove Port count is no more than 300 and complete complexity retirement (Port fell 377 -> 365; 365 -> 300 aggregate consolidation deferred).
+- [ ] Prove Port count is no more than 300 and complete complexity retirement (Port fell 377 -> 358: duplicate boundaries, inbound use-case merges, and two same-aggregate repository consolidations; remaining gap needs further aggregate-level consolidation).
 - [x] Backfill ADR (ADR-001..004) and sync Port inventory; final requirement-by-requirement audit recorded.
 
 ## Active Slice
@@ -285,13 +285,45 @@ persists one); they are recorded and unrelated to the Port reduction work.
   repository JDBC, cross-module Chat, Spring auto-configuration, and the
   architecture test. There were zero failures and zero errors; two JDBC tests
   were environment-skipped as expected.
-- The authoritative current Port inventory is 360 (93 inbound, 266 outbound,
+- The authoritative current Port inventory was 360 (93 inbound, 266 outbound,
   1 common), with 791 Java files under `ports`. The decrease from 361 is from
   the upstream retirement of the unused `DistributedSemaphorePort` boundary;
-  the complexity baseline and Port inventory are synchronized to this scan.
-- `bash scripts/complexity-report.sh` passes after the sync: Ports 360,
+  the complexity baseline and Port inventory were synchronized to that scan.
+- `bash scripts/complexity-report.sh` passed after the sync: Ports 360,
   informational Port files 791, large classes over 800 lines 16,
   AutoConfiguration imports 67, and cross-domain whitelist entries 40.
+
+## Current Slice Update (2026-09-06)
+
+- Slice 3 cancellation semantics are closed at the contract level. The chat
+  client now generates the task identity before opening the stream and passes
+  `taskId` to `/rag/v3/chat`, so `/rag/v3/stop` works from the first SSE event.
+  The stop endpoint fails closed without `ChatInboundPort` and delegates solely
+  to the chat use case; the controller no longer holds `StreamTaskPort`. The
+  engine-observed cancellation is recorded through the new
+  `AgentRunInboundPort.cancelExecution` (repository-CAS guarded, no
+  request-scoped user context), `AgentLoopCancelledException` settles runs as
+  `CANCELLED` instead of `FAILED`, cancelled stream callbacks unregister the
+  local task and stay idempotent, and Redis unregister keeps the cancelled
+  marker so late callbacks cannot emit a second terminal outcome.
+- Aggregate-level repository consolidation started (the deferred 360->300
+  work). Two same-aggregate merges landed: `AgentRunQueueRepositoryPort` into
+  `AgentRunLeaseRepositoryPort` (both operate on the `agent_run_lease` claim
+  aggregate; merged port has five cohesive operations and one JDBC adapter),
+  and `MemoryReviewCandidatePort` into `MemoryReviewManagementRepositoryPort`
+  (one-aggregate read/write fragments over the same JDBC adapter; the merged
+  port keeps a single `NoopFallback`-marked `noop()` so the Class A NoOp guard
+  watches the same binding). Public Port interfaces fell from 360 to 358
+  (93 inbound, 264 outbound, 1 common), `port_java_files_info` 791 to 789.
+- Focused gates passed: kernel worker/lease/memory 53, JDBC lease adapter 5
+  (two moved findRunnable regressions included), registry/chat-run-store
+  auto-configuration 29, NoOp guard + memory engine/review/observability +
+  kernel auto-configuration suites, and `PortArchitectureTest` 3 after the
+  baseline ratchet update; spotless passes on all touched modules.
+- The `--update-baseline` report mode rewrites the baseline from its template
+  and dropped the manually maintained `controller_kernel_service_edges=0`
+  field; it was restored manually (reporting field only; R5 asserts the edge
+  count via ArchUnit directly). Future baseline updates should re-append it.
 
 ## Blocked On
 

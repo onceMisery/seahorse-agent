@@ -17,11 +17,17 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunLease;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
+/**
+ * agent_run_lease 认领聚合的仓储所有者：租约获取/心跳/释放、按运行查询租约，
+ * 以及可被 worker 认领的运行列表（与租约处于同一认领事务域）。
+ */
 public interface AgentRunLeaseRepositoryPort {
 
     boolean acquire(String runId, String workerId, Instant leaseUntil, Instant now);
@@ -31,6 +37,8 @@ public interface AgentRunLeaseRepositoryPort {
     boolean release(String runId, String workerId);
 
     Optional<AgentRunLease> findByRunId(String runId);
+
+    List<AgentRun> findRunnable(String tenantId, int limit, Instant now);
 
     static AgentRunLeaseRepositoryPort empty() {
         return new AgentRunLeaseRepositoryPort() {
@@ -52,6 +60,11 @@ public interface AgentRunLeaseRepositoryPort {
             @Override
             public Optional<AgentRunLease> findByRunId(String runId) {
                 return Optional.empty();
+            }
+
+            @Override
+            public List<AgentRun> findRunnable(String tenantId, int limit, Instant now) {
+                return List.of();
             }
         };
     }

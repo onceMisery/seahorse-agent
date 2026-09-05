@@ -53,6 +53,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaUsage;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpointType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunLease;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunQueryInboundPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
@@ -86,7 +87,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionReposit
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentHandoffRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
@@ -1148,11 +1149,36 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         }
 
         @Bean
-        AgentRunQueueRepositoryPort agentRunQueueRepositoryPort(InMemoryAgentRunRepository runRepository) {
-            return (tenantId, limit, now) -> runRepository.runs.values().stream()
-                    .filter(run -> tenantId.equals(run.tenantId()))
-                    .limit(limit)
-                    .toList();
+        AgentRunLeaseRepositoryPort agentRunLeaseRepositoryPort(InMemoryAgentRunRepository runRepository) {
+            return new AgentRunLeaseRepositoryPort() {
+                @Override
+                public List<AgentRun> findRunnable(String tenantId, int limit, Instant now) {
+                    return runRepository.runs.values().stream()
+                            .filter(run -> tenantId.equals(run.tenantId()))
+                            .limit(limit)
+                            .toList();
+                }
+
+                @Override
+                public boolean acquire(String runId, String workerId, Instant leaseUntil, Instant now) {
+                    return true;
+                }
+
+                @Override
+                public boolean heartbeat(String runId, String workerId, Instant leaseUntil, Instant now) {
+                    return true;
+                }
+
+                @Override
+                public boolean release(String runId, String workerId) {
+                    return true;
+                }
+
+                @Override
+                public Optional<AgentRunLease> findByRunId(String runId) {
+                    return Optional.empty();
+                }
+            };
         }
 
         @Bean

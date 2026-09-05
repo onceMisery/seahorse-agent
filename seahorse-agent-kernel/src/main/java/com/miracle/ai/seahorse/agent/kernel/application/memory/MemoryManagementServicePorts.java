@@ -67,7 +67,7 @@ public record MemoryManagementServicePorts(
                 CorrectionLedgerPort.noop(),
                 MemoryOperationLogPort.noop(),
                 MemoryOutboxPort.noop(),
-                MemoryReviewManagementRepositoryPort.empty(),
+                MemoryReviewManagementRepositoryPort.noop(),
                 MemoryPolicyConfigPort.defaults(),
                 MemoryTraceRecorder.noop(),
                 null);
@@ -94,7 +94,7 @@ public record MemoryManagementServicePorts(
                 correctionLedgerPort,
                 operationLogPort,
                 outboxPort,
-                MemoryReviewManagementRepositoryPort.empty(),
+                MemoryReviewManagementRepositoryPort.noop(),
                 MemoryPolicyConfigPort.defaults(),
                 traceRecorder,
                 null);

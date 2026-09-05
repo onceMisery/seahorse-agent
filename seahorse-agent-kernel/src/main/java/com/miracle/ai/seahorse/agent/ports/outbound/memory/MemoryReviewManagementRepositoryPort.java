@@ -17,10 +17,17 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
+
 import java.util.List;
 import java.util.Optional;
 
-public interface MemoryReviewManagementRepositoryPort extends MemoryReviewCandidatePort {
+/**
+ * 人工 review 候选聚合的仓储所有者：记忆引擎写入候选，review 管理分页/查询/裁决。
+ */
+public interface MemoryReviewManagementRepositoryPort {
+
+    void save(MemoryReviewCandidate candidate);
 
     MemoryReviewPage pageReviewCandidates(MemoryReviewQuery query);
 
@@ -28,27 +35,36 @@ public interface MemoryReviewManagementRepositoryPort extends MemoryReviewCandid
 
     MemoryReviewRecord applyReviewDecision(MemoryReviewDecision decision);
 
-    static MemoryReviewManagementRepositoryPort empty() {
-        return new MemoryReviewManagementRepositoryPort() {
-            @Override
-            public void save(MemoryReviewCandidate candidate) {
-            }
+    static MemoryReviewManagementRepositoryPort noop() {
+        return NoopMemoryReviewManagement.INSTANCE;
+    }
 
-            @Override
-            public MemoryReviewPage pageReviewCandidates(MemoryReviewQuery query) {
-                return MemoryReviewPage.empty(query.current(), query.size());
-            }
+    final class NoopMemoryReviewManagement implements MemoryReviewManagementRepositoryPort, NoopFallback {
 
-            @Override
-            public Optional<MemoryReviewRecord> findReviewItem(String candidateId) {
-                return Optional.empty();
-            }
+        private static final NoopMemoryReviewManagement INSTANCE = new NoopMemoryReviewManagement();
 
-            @Override
-            public MemoryReviewRecord applyReviewDecision(MemoryReviewDecision decision) {
-                throw new IllegalArgumentException("memory review candidate not found: " + decision.candidateId());
-            }
-        };
+        private NoopMemoryReviewManagement() {
+        }
+
+        @Override
+        public void save(MemoryReviewCandidate candidate) {
+            // intentionally empty: production adapters override to persist review candidates.
+        }
+
+        @Override
+        public MemoryReviewPage pageReviewCandidates(MemoryReviewQuery query) {
+            return MemoryReviewPage.empty(query.current(), query.size());
+        }
+
+        @Override
+        public Optional<MemoryReviewRecord> findReviewItem(String candidateId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public MemoryReviewRecord applyReviewDecision(MemoryReviewDecision decision) {
+            throw new IllegalArgumentException("memory review candidate not found: " + decision.candidateId());
+        }
     }
 
     default List<MemoryReviewRecord> listPending(String tenantId, String userId, int limit) {

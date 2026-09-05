@@ -29,7 +29,6 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentHandoffRe
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRolloutRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunEventBufferAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunLeaseRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunQueueRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentSkillRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentToolBindingRepositoryAdapter;
@@ -66,7 +65,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRolloutRepository
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DurableTaskQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentSkillRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentTemplateRepositoryPort;
@@ -170,14 +168,6 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
     @ConditionalOnMissingBean(AgentRunLeaseRepositoryPort.class)
     public JdbcAgentRunLeaseRepositoryAdapter seahorseJdbcAgentRunLeaseRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentRunLeaseRepositoryAdapter(dataSource);
-    }
-
-    @Bean
-    @ConditionalOnBean(DataSource.class)
-    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(AgentRunQueueRepositoryPort.class)
-    public JdbcAgentRunQueueRepositoryAdapter seahorseJdbcAgentRunQueueRepositoryAdapter(DataSource dataSource) {
-        return new JdbcAgentRunQueueRepositoryAdapter(dataSource);
     }
 
     @Bean
