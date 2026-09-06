@@ -23,7 +23,7 @@ import static com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatJs
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillSetJsonSupport;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillSetJsonSupport;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualizationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;

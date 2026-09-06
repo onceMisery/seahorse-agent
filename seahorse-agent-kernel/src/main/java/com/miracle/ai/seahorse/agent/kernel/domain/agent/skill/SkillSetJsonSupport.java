@@ -1,4 +1,4 @@
-package com.miracle.ai.seahorse.agent.kernel.application.agent.skill;
+package com.miracle.ai.seahorse.agent.kernel.domain.agent.skill;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

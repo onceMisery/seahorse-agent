@@ -20,7 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.miracle.ai.seahorse.agent.kernel.application.runcontext.RunContextSnapshotRedactor;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.RunContextSnapshotRedactor;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;

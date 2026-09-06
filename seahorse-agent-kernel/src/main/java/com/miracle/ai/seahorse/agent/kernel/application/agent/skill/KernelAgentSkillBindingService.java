@@ -13,6 +13,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import java.time.Clock;
 import java.util.List;
 import java.util.Objects;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillSetJsonSupport;
 
 public class KernelAgentSkillBindingService implements AgentSkillBindingInboundPort {
 

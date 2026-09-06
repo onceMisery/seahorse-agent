@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.runcontext.RunContextSnapsho
 
 import java.util.Objects;
 import java.util.Optional;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.RunContextSnapshotRedactor;
 
 /**
  * Kernel query service for persisted run context snapshots.

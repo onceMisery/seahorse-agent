@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.application.runcontext;
+package com.miracle.ai.seahorse.agent.kernel.domain.agent.output;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

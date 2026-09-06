@@ -44,11 +44,8 @@ trace -> agent | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRa
 # 2026-09-06 同步：chat 协作类拆分（a059ab1a / e8b7ef9f 上游同步）把原单体的跨子域边
 # 暴露为协作类粒度；以下为当前实际持有、经本文件记录的边。
 chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatAgentLoopSupport | com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions | chat collaborator split
-chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatAgentLoopSupport | com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillRuntimeComposer | chat collaborator split
 chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService$Builder | com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions | chat collaborator split
 chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService$Builder | com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort | chat collaborator split
 chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatModelConfigSupport | com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort | chat collaborator split
-chat -> agent.skill | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatToolSupport | com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillSetJsonSupport | chat collaborator split
-chat -> runcontext | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatAgentRunSupport | com.miracle.ai.seahorse.agent.kernel.application.runcontext.RunContextSnapshotRedactor | chat collaborator split
 chat -> trace | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService$1 | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | chat collaborator split (anonymous class renumbered)
 chat -> trace | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService$Builder | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | chat collaborator split

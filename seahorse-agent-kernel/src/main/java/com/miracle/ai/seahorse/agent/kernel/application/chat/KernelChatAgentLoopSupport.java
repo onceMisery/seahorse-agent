@@ -20,7 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.chat;
 import static com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatJsonSupport.hasText;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillRuntimeComposer;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeComposer;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
