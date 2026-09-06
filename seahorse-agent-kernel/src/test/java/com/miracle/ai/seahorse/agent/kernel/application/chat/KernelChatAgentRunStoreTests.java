@@ -19,7 +19,6 @@ package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopDependencies;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopCancelledException;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegistry;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
@@ -111,6 +110,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentLoopCancelledException;
 
 class KernelChatAgentRunStoreTests {
 

@@ -28,7 +28,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.runcontext.RunContextSnapshotRedactor;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopCancelledException;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageRecord;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageSource;
@@ -61,6 +60,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentLoopCancelledException;
 
 /**
  * Agent Run 生命周期协作者（从 {@link KernelChatInboundService} 提取）。

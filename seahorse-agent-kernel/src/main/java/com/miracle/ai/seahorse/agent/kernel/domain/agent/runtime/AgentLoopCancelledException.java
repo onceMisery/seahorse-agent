@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.application.agent;
+package com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime;
 
 /**
  * Agent loop cancellation signal.

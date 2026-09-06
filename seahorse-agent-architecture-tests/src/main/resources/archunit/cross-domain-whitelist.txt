@@ -19,9 +19,7 @@ chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChat
 chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService | com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort | Phase 0 baseline
 chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService | com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillRuntimeComposer | Phase 0 baseline
 chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService | com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillSetJsonSupport | Phase 0 baseline
-chat -> runcontext | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService | com.miracle.ai.seahorse.agent.kernel.application.runcontext.RunContextSnapshotRedactor | Phase 0 baseline
 chat -> trace | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
-chat -> trace | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService$3 | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
 chat -> trace | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatPipeline | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
 chat -> memory | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatPreparationSupport | com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy | Phase 0 baseline
 chat -> memory | com.miracle.ai.seahorse.agent.kernel.application.chat.MemoryTurnCaptureStage | com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy | Phase 0 baseline
@@ -42,3 +40,15 @@ retrieval -> trace | com.miracle.ai.seahorse.agent.kernel.application.retrieval.
 runexperiment -> agent | com.miracle.ai.seahorse.agent.kernel.application.runexperiment.KernelRunExperimentTrialExecutor | com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort | Phase 0 baseline
 runexperiment -> runcontext | com.miracle.ai.seahorse.agent.kernel.application.runexperiment.KernelRunExperimentTrialExecutor | com.miracle.ai.seahorse.agent.kernel.application.runcontext.RunContextSnapshotRedactor | Phase 0 baseline
 trace -> agent | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | com.miracle.ai.seahorse.agent.kernel.application.agent.ModelFailureSanitizer | Phase 0 baseline
+
+# 2026-09-06 同步：chat 协作类拆分（a059ab1a / e8b7ef9f 上游同步）把原单体的跨子域边
+# 暴露为协作类粒度；以下为当前实际持有、经本文件记录的边。
+chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatAgentLoopSupport | com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions | chat collaborator split
+chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatAgentLoopSupport | com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillRuntimeComposer | chat collaborator split
+chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService$Builder | com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions | chat collaborator split
+chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService$Builder | com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort | chat collaborator split
+chat -> agent | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatModelConfigSupport | com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort | chat collaborator split
+chat -> agent.skill | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatToolSupport | com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillSetJsonSupport | chat collaborator split
+chat -> runcontext | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatAgentRunSupport | com.miracle.ai.seahorse.agent.kernel.application.runcontext.RunContextSnapshotRedactor | chat collaborator split
+chat -> trace | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService$1 | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | chat collaborator split (anonymous class renumbered)
+chat -> trace | com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService$Builder | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | chat collaborator split

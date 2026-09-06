@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentLoopCancelledException;
 
 import java.util.Collections;
 import java.util.Set;

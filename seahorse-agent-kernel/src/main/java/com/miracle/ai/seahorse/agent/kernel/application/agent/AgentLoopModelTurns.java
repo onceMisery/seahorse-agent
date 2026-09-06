@@ -38,6 +38,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelRequestFingerprin
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelContextWindowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.TokenCounterPort;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentLoopException;
 
 import java.time.Duration;
 import java.util.ArrayList;

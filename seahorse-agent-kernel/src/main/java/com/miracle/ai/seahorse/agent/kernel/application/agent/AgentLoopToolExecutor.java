@@ -37,6 +37,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResultSpillPort;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentLoopCancelledException;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentLoopException;
 
 import java.util.ArrayList;
 import java.util.HashSet;

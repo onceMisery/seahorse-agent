@@ -23,6 +23,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatTokenUsage;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentLoopCancelledException;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentLoopException;
 
 final class TurnBuffer implements StreamCallback {
 

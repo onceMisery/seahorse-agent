@@ -8,6 +8,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
 import java.util.Objects;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentLoopException;
 
 final class ModelContextEnvelopeException extends AgentLoopException {
 

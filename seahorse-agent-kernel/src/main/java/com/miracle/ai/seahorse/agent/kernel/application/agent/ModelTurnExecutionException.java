@@ -7,6 +7,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentLoopException;
+
 final class ModelTurnExecutionException extends AgentLoopException {
 
     private final ModelContextEnvelopeEvidence evidence;
