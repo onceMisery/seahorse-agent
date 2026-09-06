@@ -97,4 +97,63 @@ describe("createStreamResponse resume handling", () => {
     expect(onError).not.toHaveBeenCalled();
     expect(onDone).not.toHaveBeenCalled();
   });
+
+  it("fails the stream with a timeout error when the watchdog fires on a stalled stream", async () => {
+    const encoder = new TextEncoder();
+    const stalled = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode([
+            "event:stream_event",
+            "data:{\"eventId\":\"evt-1\",\"eventSeq\":1,\"eventType\":\"agent.step.started\",\"runId\":\"run-1\",\"timestamp\":\"2026-06-08T00:00:01Z\",\"typedPayload\":{}}",
+            ""
+          ].join("\n")));
+          // 故意不 close：模拟服务端停摆
+        }
+      }),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(stalled));
+
+    const onError = vi.fn();
+    const onDone = vi.fn();
+
+    await expect(
+      createStreamResponse(
+        { url: "/rag/v3/chat", retryCount: 0, timeoutMs: 30 },
+        { onError, onDone }
+      ).start()
+    ).rejects.toThrow("Stream timeout");
+
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it("retries once with backoff after a network failure and completes the second attempt", async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error("network down"))
+      .mockResolvedValueOnce(sseResponse([
+        "event:done",
+        "data:[DONE]",
+        ""
+      ].join("\n")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createStreamResponse(
+      { url: "/rag/v3/chat", retryCount: 1, retryDelayMs: 0 },
+      {}
+    ).start();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces the backend error contract message when the stream request fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ code: "DEPENDENCY_UNAVAILABLE", message: "Vector search is unavailable", retryable: true }),
+      { status: 502, headers: { "content-type": "application/json" } }
+    )));
+
+    await expect(
+      createStreamResponse({ url: "/rag/v3/chat", retryCount: 0 }, {}).start()
+    ).rejects.toThrow("Vector search is unavailable");
+  });
 });

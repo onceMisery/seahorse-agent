@@ -104,11 +104,9 @@ export function mapApiError(error: unknown, fallback = "请求失败"): MappedAp
  */
 export function isAuthExpiredError(error: unknown): boolean {
   const mapped = mapApiError(error, "");
-  if (error instanceof ApiRequestError) {
+  const hasKnownCode = mapped.code !== "UNKNOWN";
+  if (hasKnownCode) {
     return AUTH_EXPIRED_CODES.has(mapped.code);
-  }
-  if (mapped.code !== "UNKNOWN" && AUTH_EXPIRED_CODES.has(mapped.code)) {
-    return true;
   }
   const normalized = mapped.message.toLowerCase();
   return AUTH_EXPIRED_MESSAGE_FRAGMENTS.some((fragment) => normalized.includes(fragment));
