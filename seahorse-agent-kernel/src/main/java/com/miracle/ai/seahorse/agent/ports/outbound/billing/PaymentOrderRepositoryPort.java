@@ -61,4 +61,14 @@ public interface PaymentOrderRepositoryPort {
      * @return paginated list of payment orders
      */
     List<PaymentOrder> findByTenantId(String tenantId, int page, int size);
+
+    /**
+     * 支付渠道回调是否已处理过（回调日志幂等检查）。
+     */
+    boolean callbackAlreadyProcessed(String channel, String channelTradeNo);
+
+    /**
+     * 记录一次渠道回调（支付订单聚合的幂等凭证，与订单状态变更同一事务边界）。
+     */
+    void recordCallback(String channel, String channelTradeNo, String orderNo);
 }

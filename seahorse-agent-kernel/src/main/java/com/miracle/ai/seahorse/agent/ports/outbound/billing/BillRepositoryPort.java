@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.billing;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.Bill;
+import com.miracle.ai.seahorse.agent.kernel.domain.billing.BillLineItem;
 
 import java.util.List;
 import java.util.Optional;
@@ -59,4 +60,14 @@ public interface BillRepositoryPort {
      * @return {@code true} if a bill already exists
      */
     boolean existsForPeriod(String tenantId, String billPeriod);
+
+    /**
+     * 保存账单行项（账单聚合的子实体，随账单同一事务边界持久化）。
+     */
+    BillLineItem save(BillLineItem item);
+
+    /**
+     * 查询账单的全部行项。
+     */
+    List<BillLineItem> findByBillId(Long billId);
 }

@@ -17,9 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcBillLineItemRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcBillRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcPaymentCallbackLogRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcPaymentOrderRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSubscriptionPlanRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSubscriptionRepositoryAdapter;
@@ -35,9 +33,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.billing.BillingInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.billing.PaymentSubscriptionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.billing.BillLineItemRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.BillRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.billing.PaymentCallbackLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.PaymentGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.PaymentOrderRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.SubscriptionPlanRepositoryPort;
@@ -99,23 +95,9 @@ public class SeahorseAgentBillingAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    @ConditionalOnMissingBean(BillLineItemRepositoryPort.class)
-    public JdbcBillLineItemRepositoryAdapter seahorseJdbcBillLineItemRepositoryAdapter(DataSource dataSource) {
-        return new JdbcBillLineItemRepositoryAdapter(dataSource);
-    }
-
-    @Bean
-    @ConditionalOnBean(DataSource.class)
     @ConditionalOnMissingBean(PaymentOrderRepositoryPort.class)
     public JdbcPaymentOrderRepositoryAdapter seahorseJdbcPaymentOrderRepositoryAdapter(DataSource dataSource) {
         return new JdbcPaymentOrderRepositoryAdapter(dataSource);
-    }
-
-    @Bean
-    @ConditionalOnBean(DataSource.class)
-    @ConditionalOnMissingBean(PaymentCallbackLogRepositoryPort.class)
-    public JdbcPaymentCallbackLogRepositoryAdapter seahorseJdbcPaymentCallbackLogRepositoryAdapter(DataSource dataSource) {
-        return new JdbcPaymentCallbackLogRepositoryAdapter(dataSource);
     }
 
     @Bean
@@ -161,7 +143,6 @@ public class SeahorseAgentBillingAutoConfiguration {
             PaymentOrderRepositoryPort.class,
             SubscriptionPlanRepositoryPort.class,
             PaymentGatewayPort.class,
-            PaymentCallbackLogRepositoryPort.class,
             TransactionRunnerPort.class
     })
     @ConditionalOnMissingBean(PaymentSubscriptionInboundPort.class)
@@ -169,11 +150,10 @@ public class SeahorseAgentBillingAutoConfiguration {
             PaymentOrderRepositoryPort orderRepository,
             SubscriptionPlanRepositoryPort planRepository,
             PaymentGatewayPort paymentGateway,
-            PaymentCallbackLogRepositoryPort callbackLogRepository,
             TransactionRunnerPort transactionRunner,
             ObjectProvider<RevenueService> revenueServiceProvider) {
         return new KernelPaymentService(orderRepository, planRepository,
-                paymentGateway, callbackLogRepository, transactionRunner,
+                paymentGateway, transactionRunner,
                 revenueServiceProvider.getIfAvailable());
     }
 
@@ -193,17 +173,15 @@ public class SeahorseAgentBillingAutoConfiguration {
     @Bean
     @ConditionalOnBean({
             BillRepositoryPort.class,
-            BillLineItemRepositoryPort.class,
             SubscriptionRepositoryPort.class,
             SubscriptionPlanRepositoryPort.class
     })
     @ConditionalOnMissingBean(BillingInboundPort.class)
     public KernelBillingService seahorseBillingService(
             BillRepositoryPort billRepository,
-            BillLineItemRepositoryPort lineItemRepository,
             SubscriptionRepositoryPort subscriptionRepository,
             SubscriptionPlanRepositoryPort planRepository) {
-        return new KernelBillingService(billRepository, lineItemRepository,
+        return new KernelBillingService(billRepository,
                 subscriptionRepository, planRepository);
     }
 

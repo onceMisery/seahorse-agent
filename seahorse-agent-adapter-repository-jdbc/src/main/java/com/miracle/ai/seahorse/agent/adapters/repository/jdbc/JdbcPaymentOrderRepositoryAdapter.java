@@ -188,4 +188,39 @@ public class JdbcPaymentOrderRepositoryAdapter implements PaymentOrderRepository
             );
         }
     }
+    // ===== 渠道回调日志（支付订单聚合的幂等凭证，原 JdbcPaymentCallbackLogRepositoryAdapter 并入） =====
+
+    private static final String SQL_EXISTS_CALLBACK = """
+            SELECT COUNT(*) FROM sa_payment_callback_log
+            WHERE channel = ? AND channel_trade_no = ?
+            """;
+
+    private static final String SQL_INSERT_CALLBACK = """
+            INSERT INTO sa_payment_callback_log (channel, channel_trade_no, order_no)
+            VALUES (?, ?, ?)
+            """;
+
+    @Override
+    public boolean callbackAlreadyProcessed(String channel, String channelTradeNo) {
+        try {
+            Long count = jdbcTemplate.queryForObject(SQL_EXISTS_CALLBACK, Long.class, channel, channelTradeNo);
+            return count != null && count > 0;
+        } catch (Exception e) {
+            log.warn("Failed to check callback log for channel={}, tradeNo={}: {}",
+                    channel, channelTradeNo, e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public void recordCallback(String channel, String channelTradeNo, String orderNo) {
+        try {
+            jdbcTemplate.update(SQL_INSERT_CALLBACK, channel, channelTradeNo, orderNo);
+        } catch (Exception e) {
+            log.error("Failed to save callback log for channel={}, tradeNo={}, orderNo={}: {}",
+                    channel, channelTradeNo, orderNo, e.getMessage(), e);
+            throw e;
+        }
+    }
+
 }

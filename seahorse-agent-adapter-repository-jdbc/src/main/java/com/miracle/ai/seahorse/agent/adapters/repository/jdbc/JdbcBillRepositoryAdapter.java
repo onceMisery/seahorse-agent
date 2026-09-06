@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.Bill;
+import com.miracle.ai.seahorse.agent.kernel.domain.billing.BillLineItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.BillRepositoryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -172,4 +173,66 @@ public class JdbcBillRepositoryAdapter implements BillRepositoryPort {
             );
         }
     }
+    // ===== 账单行项（Bill 聚合的子实体，原 JdbcBillLineItemRepositoryAdapter 并入） =====
+
+    private static final String SQL_INSERT_LINE_ITEM = """
+            INSERT INTO sa_bill_line_item
+                (bill_id, item_type, description, amount, quantity)
+            VALUES (?, ?, ?, ?, ?)
+            """;
+
+    private static final String SQL_FIND_LINE_ITEMS_BY_BILL_ID = """
+            SELECT id, bill_id, item_type, description, amount, quantity
+            FROM sa_bill_line_item
+            WHERE bill_id = ?
+            ORDER BY id
+            """;
+
+    @Override
+    public BillLineItem save(BillLineItem item) {
+        try {
+            KeyHolder keyHolder = new GeneratedKeyHolder();
+            jdbcTemplate.update(connection -> {
+                PreparedStatement ps = connection.prepareStatement(SQL_INSERT_LINE_ITEM,
+                        Statement.RETURN_GENERATED_KEYS);
+                ps.setLong(1, item.billId());
+                ps.setString(2, item.itemType());
+                ps.setString(3, item.description());
+                ps.setBigDecimal(4, item.amount());
+                ps.setLong(5, item.quantity());
+                return ps;
+            }, keyHolder);
+            Long generatedId = keyHolder.getKey() != null ? keyHolder.getKey().longValue() : null;
+            return new BillLineItem(generatedId, item.billId(), item.itemType(),
+                    item.description(), item.amount(), item.quantity());
+        } catch (Exception e) {
+            log.error("Failed to save bill line item for billId={}: {}",
+                    item.billId(), e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @Override
+    public List<BillLineItem> findByBillId(Long billId) {
+        try {
+            return jdbcTemplate.query(SQL_FIND_LINE_ITEMS_BY_BILL_ID, new BillLineItemRowMapper(), billId);
+        } catch (Exception e) {
+            log.warn("Failed to query line items for billId={}: {}", billId, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    private static class BillLineItemRowMapper implements RowMapper<BillLineItem> {
+        @Override
+        public BillLineItem mapRow(ResultSet rs, int rowNum) throws SQLException {
+            return new BillLineItem(
+                    rs.getLong("id"),
+                    rs.getLong("bill_id"),
+                    rs.getString("item_type"),
+                    rs.getString("description"),
+                    rs.getBigDecimal("amount"),
+                    rs.getLong("quantity"));
+        }
+    }
+
 }

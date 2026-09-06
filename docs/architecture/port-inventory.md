@@ -1,6 +1,6 @@
 # Public Port Inventory and Retirement Rules
 
-Updated: 2026-09-06
+Updated: 2026-09-06 (billing aggregate consolidation)
 Authority: `PortArchitectureTest` and compiled source under
 `com.miracle.ai.seahorse.agent.ports`
 
@@ -9,18 +9,40 @@ Authority: `PortArchitectureTest` and compiled source under
 | Direction | Public interfaces | Meaning |
 | --- | ---: | --- |
 | Inbound | 93 | Capability entry points called by delivery adapters or other capabilities |
-| Outbound | 264 | Independently replaceable external/runtime boundaries |
+| Outbound | 262 | Independently replaceable external/runtime boundaries |
 | Common | 1 | Shared boundary outside the directional packages |
-| Total | 358 | Reviewed ceiling; must only decrease |
+| Total | 356 | Reviewed ceiling; must only decrease |
 
 The inventory is measured by the public-interface ArchUnit scan, not by source
 file count. The duplicate `SreHealthReportProviderPort` boundary was retired
 in favor of `SreHealthInboundPort`; both previously exposed the same
 `SreHealthReport current()` operation and shared one implementation.
 
-The 789 Java files under `ports` are informational package-hygiene data, not
+The 787 Java files under `ports` are informational package-hygiene data, not
 the Port count. Records, enums, commands, responses, and other value objects do
 not become architectural Ports merely because they are stored in that package.
+
+2026-09-06 billing aggregate consolidation (design §6.2 repository fragment
+rule), both merges verified by same-aggregate evidence below:
+
+- `BillLineItemRepositoryPort` was merged into `BillRepositoryPort`. Line
+  items are child entities of the bill aggregate (`sa_bill_line_item`
+  references `sa_bill`), the merged port holds six cohesive operations,
+  `KernelBillingService` is the single consuming service, and the JDBC and
+  MyBatis-Plus adapters each absorbed their fragment implementations (the
+  MyBatis-Plus bill bean now requires both mappers). The fragment port and
+  its two adapter classes were deleted.
+- `PaymentCallbackLogRepositoryPort` was merged into
+  `PaymentOrderRepositoryPort`. Callback-log rows are the payment-order
+  aggregate's idempotency evidence (`sa_payment_callback_log` is keyed by
+  channel + trade_no and written inside the order-state transaction), the
+  merged port holds six operations with honest names
+  (`callbackAlreadyProcessed`/`recordCallback` replacing the overloaded
+  `exists`/`save`), and `KernelPaymentService` is the single consuming
+  service. The fragment port and its two adapter classes were deleted.
+
+Port interfaces fell from 358 to 356 (outbound 264 to 262) and
+`port_java_files_info` from 789 to 787.
 
 The current source tree is synchronized with `origin/main` at `22b99f0c`. That
 upstream split retired the unused `DistributedSemaphorePort` boundary and moved

@@ -21,7 +21,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.billing.PlanCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.PaymentOrder;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.SubscriptionPlan;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.marketplace.RevenueService;
-import com.miracle.ai.seahorse.agent.ports.outbound.billing.PaymentCallbackLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.PaymentGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.PaymentOrderRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.SubscriptionPlanRepositoryPort;
@@ -52,7 +51,6 @@ public class KernelPaymentService {
     private final PaymentOrderRepositoryPort orderRepository;
     private final SubscriptionPlanRepositoryPort planRepository;
     private final PaymentGatewayPort paymentGateway;
-    private final PaymentCallbackLogRepositoryPort callbackLogRepository;
     private final TransactionRunnerPort transactionRunner;
     private final RevenueService revenueService;
 
@@ -62,20 +60,17 @@ public class KernelPaymentService {
      * @param orderRepository       payment order persistence port
      * @param planRepository        subscription plan persistence port
      * @param paymentGateway        payment gateway integration port
-     * @param callbackLogRepository callback log persistence port for idempotency
      * @param transactionRunner     transaction boundary port
      * @param revenueService        optional revenue service for marketplace payments (nullable)
      */
     public KernelPaymentService(PaymentOrderRepositoryPort orderRepository,
                                 SubscriptionPlanRepositoryPort planRepository,
                                 PaymentGatewayPort paymentGateway,
-                                PaymentCallbackLogRepositoryPort callbackLogRepository,
                                 TransactionRunnerPort transactionRunner,
                                 RevenueService revenueService) {
         this.orderRepository = Objects.requireNonNull(orderRepository, "orderRepository must not be null");
         this.planRepository = Objects.requireNonNull(planRepository, "planRepository must not be null");
         this.paymentGateway = Objects.requireNonNull(paymentGateway, "paymentGateway must not be null");
-        this.callbackLogRepository = Objects.requireNonNull(callbackLogRepository, "callbackLogRepository must not be null");
         this.transactionRunner = Objects.requireNonNull(transactionRunner, "transactionRunner must not be null");
         this.revenueService = revenueService; // nullable — revenue tracking disabled when null
     }
@@ -86,9 +81,8 @@ public class KernelPaymentService {
     public KernelPaymentService(PaymentOrderRepositoryPort orderRepository,
                                 SubscriptionPlanRepositoryPort planRepository,
                                 PaymentGatewayPort paymentGateway,
-                                PaymentCallbackLogRepositoryPort callbackLogRepository,
                                 TransactionRunnerPort transactionRunner) {
-        this(orderRepository, planRepository, paymentGateway, callbackLogRepository,
+        this(orderRepository, planRepository, paymentGateway,
                 transactionRunner, null);
     }
     public PaymentOrder createOrder(String tenantId, PlanCode planCode, String channel) {
@@ -141,7 +135,7 @@ public class KernelPaymentService {
         }
 
         // Idempotency check 1: check callback log
-        if (callbackLogRepository.exists(channel, channelTradeNo)) {
+        if (orderRepository.callbackAlreadyProcessed(channel, channelTradeNo)) {
             return orderRepository.findByOrderNo(orderNo).orElse(null);
         }
 
@@ -170,7 +164,7 @@ public class KernelPaymentService {
             order = orderRepository.save(order);
 
             // Record callback log for idempotency
-            callbackLogRepository.save(channel, channelTradeNo, orderNo);
+            orderRepository.recordCallback(channel, channelTradeNo, orderNo);
 
             // Record marketplace revenue if revenue service is configured
             if (PaymentOrder.STATUS_PAID.equals(order.status())) {

@@ -1,16 +1,13 @@
 # Complexity baseline captured from the current reviewed source tree.
 # Ratchet policy: values may only decrease.
-port_interfaces=358
+port_interfaces=356
 port_inbound=93
-port_outbound=264
+port_outbound=262
 port_common=1
-port_java_files_info=789
+port_java_files_info=787
 large_classes_gt_800=15
 autoconfig_large_classes_gt_800=3
 autoconfig_registrations=67
-# cross_domain_whitelist_size 40 -> 47（2026-09-06）：上游 chat 协作类拆分把单体的跨子域边
-# 暴露为类对粒度（10 新 / 2 陈旧），AgentLoopCancelledException 已下沉 domain 真实减 1；
-# 后续切片目标是把 chat -> agent.skill / runcontext 的边溶解到中立包。
 cross_domain_whitelist_size=47
 
 controller_kernel_service_edges=0

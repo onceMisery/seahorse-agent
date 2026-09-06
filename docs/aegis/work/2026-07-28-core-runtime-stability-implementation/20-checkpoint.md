@@ -1,7 +1,7 @@
 # Core Runtime Stability Implementation Checkpoint
 
 Updated: 2026-09-06  
-State: slice-3-cancellation-closed-slice-5-ports-358-hardening-and-arch-gate-restored
+State: ports-356-billing-consolidation-pipeline-split-reviewed
 
 ## TodoCheckpointDraft
 
@@ -413,6 +413,42 @@ Issue-fix batch closing the remaining findings from the 2026-09-06 audit
   packages) is recorded.
 - Gates: architecture 16/16, kernel reactor green, web module 305/305,
   frontend 217/217 + build, complexity report PASS.
+
+## Current Slice Update (2026-09-06, port consolidation and pipeline review)
+
+- **HybridMemoryRecallPipeline formal review (858 lines)**: the stage-level
+  split is complete and reviewed — `MemoryRecallObservationSupport`
+  (263 lines) owns the channel/fusion/rerank trace and best-effort
+  observation metrics with only traceRecorder/observationPort/fusionPolicy
+  as dependencies; `MemoryCandidateItemSupport` (353 lines) owns the
+  store lookup, candidate→MemoryItem materialization, slot attribution and
+  dedup (pure reads/functions); the pipeline itself (858 lines) keeps
+  orchestration, alias resolution and lifecycle read-feedback writes and
+  is no longer counted among the >800-line large classes. Both
+  collaborators were carved along business stages with regression suites
+  green (memory 89/89, kernel 926/926 at each step).
+- **Billing aggregate consolidation (358 -> 356 ports)**: two same-aggregate
+  merges following the established precedents. `BillLineItemRepositoryPort`
+  merged into `BillRepositoryPort` (line items are child entities of the
+  bill aggregate; merged port = 6 operations; single consumer
+  `KernelBillingService`; JDBC and MyBatis-Plus adapters each absorbed
+  their fragment implementations). `PaymentCallbackLogRepositoryPort`
+  merged into `PaymentOrderRepositoryPort` (callback rows are the order
+  aggregate's idempotency evidence; merged port = 6 operations with honest
+  names `callbackAlreadyProcessed`/`recordCallback` replacing the
+  overloaded `exists`/`save`; single consumer `KernelPaymentService`).
+  Four fragment adapter classes and two fragment ports deleted.
+- Candidate families reviewed and REJECTED with reasons (no count-gaming):
+  `AgentRunRepository`/`AgentRunLease` keep separate claim vs CAS
+  consistency semantics (§6.3); `Subscription`/`SubscriptionPlan` are
+  directory vs user-state aggregates; `AgentDefinition` cannot absorb
+  `AgentVersionActivation` (9-op legacy budget);
+  `AuditEvent`/`AuditLog` are distinct domains (agent audit trail vs admin
+  operation log).
+- Gates: kernel/JDBC/autoconfigure/web reactors green after each merge;
+  `PortArchitectureTest` green after the ratchet update
+  (356 = 93 inbound / 262 outbound / 1 common; port files 787);
+  complexity report PASS.
 
 ## Blocked On
 

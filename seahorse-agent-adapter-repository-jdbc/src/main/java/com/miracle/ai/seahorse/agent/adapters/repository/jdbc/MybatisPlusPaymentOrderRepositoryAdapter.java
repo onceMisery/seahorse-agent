@@ -20,6 +20,8 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.entity.PaymentOrderDO;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.entity.PaymentCallbackLogDO;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.mapper.PaymentCallbackLogMapper;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.mapper.PaymentOrderMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.PaymentOrder;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.PlanCode;
@@ -55,12 +57,13 @@ public class MybatisPlusPaymentOrderRepositoryAdapter implements PaymentOrderRep
             """;
 
     private final PaymentOrderMapper paymentOrderMapper;
+    private final PaymentCallbackLogMapper paymentCallbackLogMapper;
     private final JdbcTemplate jdbcTemplate;
 
     public MybatisPlusPaymentOrderRepositoryAdapter(PaymentOrderMapper paymentOrderMapper,
-                                                     JdbcTemplate jdbcTemplate) {
-        this.paymentOrderMapper = Objects.requireNonNull(paymentOrderMapper, "paymentOrderMapper must not be null");
+                                                     JdbcTemplate jdbcTemplate, PaymentCallbackLogMapper paymentCallbackLogMapper) {this.paymentOrderMapper = Objects.requireNonNull(paymentOrderMapper, "paymentOrderMapper must not be null");
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");
+        this.paymentCallbackLogMapper = Objects.requireNonNull(paymentCallbackLogMapper, "paymentCallbackLogMapper must not be null");
     }
 
     @Override
@@ -173,4 +176,41 @@ public class MybatisPlusPaymentOrderRepositoryAdapter implements PaymentOrderRep
         entity.setPaidAt(order.paidAt() != null ? Timestamp.from(order.paidAt()) : null);
         return entity;
     }
+    // ===== 渠道回调日志（原 MybatisPlusPaymentCallbackLogRepositoryAdapter 并入） =====
+
+    @Override
+    public boolean callbackAlreadyProcessed(String channel, String channelTradeNo) {
+        Objects.requireNonNull(channel, "channel must not be null");
+        Objects.requireNonNull(channelTradeNo, "channelTradeNo must not be null");
+        try {
+            LambdaQueryWrapper<PaymentCallbackLogDO> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(PaymentCallbackLogDO::getChannel, channel)
+                    .eq(PaymentCallbackLogDO::getChannelTradeNo, channelTradeNo);
+            Long count = paymentCallbackLogMapper.selectCount(wrapper);
+            return count != null && count > 0;
+        } catch (Exception e) {
+            log.warn("Failed to check callback log for channel={}, tradeNo={}: {}",
+                    channel, channelTradeNo, e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public void recordCallback(String channel, String channelTradeNo, String orderNo) {
+        Objects.requireNonNull(channel, "channel must not be null");
+        Objects.requireNonNull(channelTradeNo, "channelTradeNo must not be null");
+        Objects.requireNonNull(orderNo, "orderNo must not be null");
+        try {
+            PaymentCallbackLogDO entity = new PaymentCallbackLogDO();
+            entity.setChannel(channel);
+            entity.setChannelTradeNo(channelTradeNo);
+            entity.setOrderNo(orderNo);
+            paymentCallbackLogMapper.insert(entity);
+        } catch (Exception e) {
+            log.error("Failed to save callback log for channel={}, tradeNo={}, orderNo={}: {}",
+                    channel, channelTradeNo, orderNo, e.getMessage(), e);
+            throw e;
+        }
+    }
+
 }

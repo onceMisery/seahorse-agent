@@ -22,7 +22,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.billing.BillLineItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.Subscription;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.SubscriptionPlan;
 import com.miracle.ai.seahorse.agent.ports.inbound.billing.BillingInboundPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.billing.BillLineItemRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.BillRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.SubscriptionPlanRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.SubscriptionRepositoryPort;
@@ -46,16 +45,13 @@ public class KernelBillingService implements BillingInboundPort {
     private static final int BILL_DUE_DAYS = 15;
 
     private final BillRepositoryPort billRepository;
-    private final BillLineItemRepositoryPort lineItemRepository;
     private final SubscriptionRepositoryPort subscriptionRepository;
     private final SubscriptionPlanRepositoryPort planRepository;
 
     public KernelBillingService(BillRepositoryPort billRepository,
-                                BillLineItemRepositoryPort lineItemRepository,
                                 SubscriptionRepositoryPort subscriptionRepository,
                                 SubscriptionPlanRepositoryPort planRepository) {
         this.billRepository = Objects.requireNonNull(billRepository, "billRepository must not be null");
-        this.lineItemRepository = Objects.requireNonNull(lineItemRepository, "lineItemRepository must not be null");
         this.subscriptionRepository = Objects.requireNonNull(subscriptionRepository, "subscriptionRepository must not be null");
         this.planRepository = Objects.requireNonNull(planRepository, "planRepository must not be null");
     }
@@ -81,7 +77,7 @@ public class KernelBillingService implements BillingInboundPort {
         if (billId == null) {
             return List.of();
         }
-        return lineItemRepository.findByBillId(billId);
+        return billRepository.findByBillId(billId);
     }
 
     @Override
@@ -127,7 +123,7 @@ public class KernelBillingService implements BillingInboundPort {
                     plan.monthlyPrice(),
                     1L
             );
-            lineItemRepository.save(feeItem);
+            billRepository.save(feeItem);
 
             generated++;
         }

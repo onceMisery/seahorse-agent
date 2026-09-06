@@ -80,34 +80,20 @@ public class SeahorseAgentMybatisPlusAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(BillMapper.class)
+    @ConditionalOnBean({BillMapper.class, BillLineItemMapper.class})
     @ConditionalOnMissingBean(BillRepositoryPort.class)
-    public MybatisPlusBillRepositoryAdapter mybatisPlusBillRepositoryAdapter(BillMapper mapper) {
-        return new MybatisPlusBillRepositoryAdapter(mapper);
+    public MybatisPlusBillRepositoryAdapter mybatisPlusBillRepositoryAdapter(BillMapper mapper,
+            BillLineItemMapper billLineItemMapper) {
+        return new MybatisPlusBillRepositoryAdapter(mapper, billLineItemMapper);
     }
 
     @Bean
-    @ConditionalOnBean(BillLineItemMapper.class)
-    @ConditionalOnMissingBean(BillLineItemRepositoryPort.class)
-    public MybatisPlusBillLineItemRepositoryAdapter mybatisPlusBillLineItemRepositoryAdapter(
-            BillLineItemMapper mapper) {
-        return new MybatisPlusBillLineItemRepositoryAdapter(mapper);
-    }
-
-    @Bean
-    @ConditionalOnBean(PaymentOrderMapper.class)
+    @ConditionalOnBean({PaymentOrderMapper.class, PaymentCallbackLogMapper.class})
     @ConditionalOnMissingBean(PaymentOrderRepositoryPort.class)
     public MybatisPlusPaymentOrderRepositoryAdapter mybatisPlusPaymentOrderRepositoryAdapter(
-            PaymentOrderMapper mapper, DataSource dataSource) {
-        return new MybatisPlusPaymentOrderRepositoryAdapter(mapper, new JdbcTemplate(dataSource));
-    }
-
-    @Bean
-    @ConditionalOnBean(PaymentCallbackLogMapper.class)
-    @ConditionalOnMissingBean(PaymentCallbackLogRepositoryPort.class)
-    public MybatisPlusPaymentCallbackLogRepositoryAdapter mybatisPlusPaymentCallbackLogRepositoryAdapter(
-            PaymentCallbackLogMapper mapper) {
-        return new MybatisPlusPaymentCallbackLogRepositoryAdapter(mapper);
+            PaymentOrderMapper mapper, PaymentCallbackLogMapper paymentCallbackLogMapper, DataSource dataSource) {
+        return new MybatisPlusPaymentOrderRepositoryAdapter(mapper, new JdbcTemplate(dataSource),
+                paymentCallbackLogMapper);
     }
 
     @Bean
