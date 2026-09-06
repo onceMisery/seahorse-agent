@@ -3,6 +3,7 @@ import type { AxiosInstance, AxiosRequestConfig } from "axios";
 import { toast } from "sonner";
 
 import { handleUnauthorizedSession } from "@/utils/authSession";
+import { ApiRequestError, isAuthExpiredError, mapApiError } from "@/utils/error";
 import { storage } from "@/utils/storage";
 
 declare module "axios" {
@@ -153,18 +154,11 @@ transport.interceptors.response.use(
     if (payload && typeof payload === "object" && "code" in payload) {
       if (payload.code !== "0") {
         const message = payload.message || "请求失败";
-        const normalized = typeof message === "string" ? message.toLowerCase() : "";
-        const isAuthExpired =
-          normalized.includes("未登录") ||
-          normalized.includes("notlogin") ||
-          normalized.includes("not login") ||
-          normalized.includes("token") ||
-          normalized.includes("invalid") ||
-          normalized.includes("expired");
-        if (isAuthExpired) {
+        const businessError = new ApiRequestError(message, typeof payload.code === "string" ? payload.code : null);
+        if (isAuthExpiredError(businessError)) {
           handleUnauthorizedSession(message);
         }
-        return Promise.reject(new Error(message));
+        return Promise.reject(businessError);
       }
       return payload.data;
     }
@@ -190,13 +184,14 @@ transport.interceptors.response.use(
     if (error?.config?.suppressErrorToast) {
       return Promise.reject(error);
     }
-    const responseData = error?.response?.data;
-    if (responseData && typeof responseData === "object" && "message" in responseData && responseData.message) {
-      toast.error(responseData.message);
+    // 错误契约统一从 mapApiError 提取；后端给出 traceId 时一并展示便于排障
+    const mapped = mapApiError(error, "网络错误");
+    if (mapped.code !== "UNKNOWN") {
+      toast.error(mapped.traceId ? `${mapped.message}（追踪ID ${mapped.traceId}）` : mapped.message);
     } else if (error?.code === "ERR_NETWORK") {
       toast.error("网络错误，请检查网络连接");
     } else {
-      toast.error(error?.message || "网络错误");
+      toast.error(mapped.message);
     }
     return Promise.reject(error);
   }

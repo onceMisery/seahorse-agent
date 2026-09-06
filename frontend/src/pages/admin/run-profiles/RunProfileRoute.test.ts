@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const srcRoot = resolve(__dirname, "../../..");
 
 function readSource(path: string) {
-  return readFileSync(resolve(srcRoot, path), "utf8");
+  return readFileSync(resolve(srcRoot, path), "utf8").replace(/\r\n/g, "\n");
 }
 
 describe("Run Profile admin route", () => {
@@ -14,8 +14,12 @@ describe("Run Profile admin route", () => {
     const routerSource = readSource("router.tsx");
     const adminLayoutSource = readSource("pages/admin/AdminLayout.tsx");
 
-    expect(routerSource).toContain('import { RunProfilePage } from "@/pages/admin/run-profiles/RunProfilePage";');
-    expect(routerSource).toContain('import { RunExperimentPage } from "@/pages/admin/run-profiles/RunExperimentPage";');
+    expect(routerSource).toContain(
+      'const RunProfilePage = lazy(() =>\n  import("@/pages/admin/run-profiles/RunProfilePage").then((m) => ({ default: m.RunProfilePage }))\n);'
+    );
+    expect(routerSource).toContain(
+      'const RunExperimentPage = lazy(() =>\n  import("@/pages/admin/run-profiles/RunExperimentPage").then((m) => ({ default: m.RunExperimentPage }))\n);'
+    );
     expect(routerSource).toContain(
       'path: "run-profiles", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "运行方案", <RunProfilePage />)'
     );

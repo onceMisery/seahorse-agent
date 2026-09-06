@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Navigate, createBrowserRouter } from "react-router-dom";
 
 import {
@@ -12,69 +13,211 @@ import { ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
 import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
 import { ChatPage } from "@/pages/ChatPage";
-import { MemoryCenterPage } from "@/pages/MemoryCenterPage";
-import { WorkspaceHomePage } from "@/pages/workspace/WorkspaceHomePage";
-import { TaskListPage } from "@/pages/workspace/TaskListPage";
-import { TaskRunPage } from "@/pages/workspace/TaskRunPage";
-import { GithubMermaidExamplePage } from "@/pages/workspace/GithubMermaidExamplePage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
-import { AdminLayout } from "@/pages/admin/AdminLayout";
-import { DashboardPage } from "@/pages/admin/dashboard/DashboardPage";
-import { KnowledgeListPage } from "@/pages/admin/knowledge/KnowledgeListPage";
-import { KnowledgeDocumentsPage } from "@/pages/admin/knowledge/KnowledgeDocumentsPage";
-import { KnowledgeChunksPage } from "@/pages/admin/knowledge/KnowledgeChunksPage";
-import { IntentTreePage } from "@/pages/admin/intent-tree/IntentTreePage";
-import { IntentListPage } from "@/pages/admin/intent-tree/IntentListPage";
-import { IntentEditPage } from "@/pages/admin/intent-tree/IntentEditPage";
-import { IngestionPage } from "@/pages/admin/ingestion/IngestionPage";
-import { MetadataGovernancePage } from "@/pages/admin/metadata-governance/MetadataGovernancePage";
-import { RagTracePage } from "@/pages/admin/traces/RagTracePage";
-import { RagTraceDetailPage } from "@/pages/admin/traces/RagTraceDetailPage";
-import { SystemSettingsPage } from "@/pages/admin/settings/SystemSettingsPage";
-import { ModelConfigPage } from "@/pages/admin/settings/ModelConfigPage";
-import { ContextPackPage } from "@/pages/admin/settings/ContextPackPage";
-import { TaskTemplatePage } from "@/pages/admin/settings/TaskTemplatePage";
-import ReadinessPage from "@/pages/admin/ReadinessPage";
-import { SampleQuestionPage } from "@/pages/admin/sample-questions/SampleQuestionPage";
-import { QueryTermMappingPage } from "@/pages/admin/query-term-mapping/QueryTermMappingPage";
-import { UserListPage } from "@/pages/admin/users/UserListPage";
-import { AgentConsolePage } from "@/pages/admin/agent-console/AgentConsolePage";
-import { AgentInspectorPage } from "@/pages/admin/agent-inspector/AgentInspectorPage";
-import { AgentListPage } from "@/pages/admin/agents/AgentListPage";
-import { AgentCreatePage } from "@/pages/admin/agents/AgentCreatePage";
-import { AgentDetailPage } from "@/pages/admin/agents/AgentDetailPage";
-import { AgentEditorPage } from "@/pages/admin/agents/AgentEditorPage";
-import { AgentRolloutPage } from "@/pages/admin/agents/AgentRolloutPage";
-import { AgentEvalPage } from "@/pages/admin/agents/AgentEvalPage";
-import { SkillManagementPage } from "@/pages/admin/skills/SkillManagementPage";
-import { ToolCatalogPage } from "@/pages/admin/tools/ToolCatalogPage";
-import { ToolDetailPage } from "@/pages/admin/tools/ToolDetailPage";
-import { ToolInvocationAuditPage } from "@/pages/admin/tools/ToolInvocationAuditPage";
-import { ApprovalCenterPage } from "@/pages/admin/approvals/ApprovalCenterPage";
-import { RagEvaluationPage } from "@/pages/admin/rag-evaluation/RagEvaluationPage";
-import { RetrievalDatasetDetailPage } from "@/pages/admin/rag-evaluation/RetrievalDatasetDetailPage";
-import { RetrievalStrategyTemplatePage } from "@/pages/admin/rag-evaluation/RetrievalStrategyTemplatePage";
-import { VersionQualityComparePage } from "@/pages/admin/rag-evaluation/VersionQualityComparePage";
-import { ResourceAclPage } from "@/pages/admin/security/ResourceAclPage";
-import { AccessDecisionPage } from "@/pages/admin/security/AccessDecisionPage";
-import { QuotaPolicyPage } from "@/pages/admin/security/QuotaPolicyPage";
-import { OpenApiConnectorPage } from "@/pages/admin/integrations/OpenApiConnectorPage";
-import { OpenApiConnectorDetailPage } from "@/pages/admin/integrations/OpenApiConnectorDetailPage";
-import { SecretPage } from "@/pages/admin/integrations/SecretPage";
-import { MemoryGovernancePage } from "@/pages/admin/memory-governance/MemoryGovernancePage";
-import { PluginManagementPage } from "@/pages/admin/plugins/PluginManagementPage";
-import { AuditEventPage } from "@/pages/admin/audit/AuditEventPage";
-import { CostAnalyticsPage } from "@/pages/admin/cost/CostAnalyticsPage";
-import { SandboxPage } from "@/pages/admin/sandbox/SandboxPage";
-import { AgentRunListPage } from "@/pages/admin/agent-runs/AgentRunListPage";
-import { RunProfilePage } from "@/pages/admin/run-profiles/RunProfilePage";
-import { RunExperimentPage } from "@/pages/admin/run-profiles/RunExperimentPage";
-import { RoleCardPage } from "@/pages/admin/role-cards/RoleCardPage";
-import { BillingPage } from "@/pages/admin/billing/BillingPage";
-import { MarketplacePage } from "@/pages/MarketplacePage";
-import { TenantListPage } from "@/pages/admin/tenants/TenantListPage";
-import { AuditLogPage } from "@/pages/admin/audit/AuditLogPage";
-import { MarketplaceReviewPage } from "@/pages/admin/marketplace/MarketplaceReviewPage";
+
+// 核心首屏页面（登录/注册/聊天/守卫/404）保持 eager；其余页面按路由懒加载，
+// 让管理台与重依赖页面退出主包（配合 vite manualChunks 拆分 vendor）。
+const MemoryCenterPage = lazy(() =>
+  import("@/pages/MemoryCenterPage").then((m) => ({ default: m.MemoryCenterPage }))
+);
+const WorkspaceHomePage = lazy(() =>
+  import("@/pages/workspace/WorkspaceHomePage").then((m) => ({ default: m.WorkspaceHomePage }))
+);
+const TaskListPage = lazy(() =>
+  import("@/pages/workspace/TaskListPage").then((m) => ({ default: m.TaskListPage }))
+);
+const TaskRunPage = lazy(() =>
+  import("@/pages/workspace/TaskRunPage").then((m) => ({ default: m.TaskRunPage }))
+);
+const GithubMermaidExamplePage = lazy(() =>
+  import("@/pages/workspace/GithubMermaidExamplePage").then((m) => ({ default: m.GithubMermaidExamplePage }))
+);
+const AdminLayout = lazy(() =>
+  import("@/pages/admin/AdminLayout").then((m) => ({ default: m.AdminLayout }))
+);
+const DashboardPage = lazy(() =>
+  import("@/pages/admin/dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage }))
+);
+const KnowledgeListPage = lazy(() =>
+  import("@/pages/admin/knowledge/KnowledgeListPage").then((m) => ({ default: m.KnowledgeListPage }))
+);
+const KnowledgeDocumentsPage = lazy(() =>
+  import("@/pages/admin/knowledge/KnowledgeDocumentsPage").then((m) => ({ default: m.KnowledgeDocumentsPage }))
+);
+const KnowledgeChunksPage = lazy(() =>
+  import("@/pages/admin/knowledge/KnowledgeChunksPage").then((m) => ({ default: m.KnowledgeChunksPage }))
+);
+const IntentTreePage = lazy(() =>
+  import("@/pages/admin/intent-tree/IntentTreePage").then((m) => ({ default: m.IntentTreePage }))
+);
+const IntentListPage = lazy(() =>
+  import("@/pages/admin/intent-tree/IntentListPage").then((m) => ({ default: m.IntentListPage }))
+);
+const IntentEditPage = lazy(() =>
+  import("@/pages/admin/intent-tree/IntentEditPage").then((m) => ({ default: m.IntentEditPage }))
+);
+const IngestionPage = lazy(() =>
+  import("@/pages/admin/ingestion/IngestionPage").then((m) => ({ default: m.IngestionPage }))
+);
+const MetadataGovernancePage = lazy(() =>
+  import("@/pages/admin/metadata-governance/MetadataGovernancePage").then((m) => ({
+    default: m.MetadataGovernancePage
+  }))
+);
+const RagTracePage = lazy(() =>
+  import("@/pages/admin/traces/RagTracePage").then((m) => ({ default: m.RagTracePage }))
+);
+const RagTraceDetailPage = lazy(() =>
+  import("@/pages/admin/traces/RagTraceDetailPage").then((m) => ({ default: m.RagTraceDetailPage }))
+);
+const SystemSettingsPage = lazy(() =>
+  import("@/pages/admin/settings/SystemSettingsPage").then((m) => ({ default: m.SystemSettingsPage }))
+);
+const ModelConfigPage = lazy(() =>
+  import("@/pages/admin/settings/ModelConfigPage").then((m) => ({ default: m.ModelConfigPage }))
+);
+const ContextPackPage = lazy(() =>
+  import("@/pages/admin/settings/ContextPackPage").then((m) => ({ default: m.ContextPackPage }))
+);
+const TaskTemplatePage = lazy(() =>
+  import("@/pages/admin/settings/TaskTemplatePage").then((m) => ({ default: m.TaskTemplatePage }))
+);
+const ReadinessPage = lazy(() => import("@/pages/admin/ReadinessPage"));
+const SampleQuestionPage = lazy(() =>
+  import("@/pages/admin/sample-questions/SampleQuestionPage").then((m) => ({ default: m.SampleQuestionPage }))
+);
+const QueryTermMappingPage = lazy(() =>
+  import("@/pages/admin/query-term-mapping/QueryTermMappingPage").then((m) => ({
+    default: m.QueryTermMappingPage
+  }))
+);
+const UserListPage = lazy(() =>
+  import("@/pages/admin/users/UserListPage").then((m) => ({ default: m.UserListPage }))
+);
+const AgentConsolePage = lazy(() =>
+  import("@/pages/admin/agent-console/AgentConsolePage").then((m) => ({ default: m.AgentConsolePage }))
+);
+const AgentInspectorPage = lazy(() =>
+  import("@/pages/admin/agent-inspector/AgentInspectorPage").then((m) => ({ default: m.AgentInspectorPage }))
+);
+const AgentListPage = lazy(() =>
+  import("@/pages/admin/agents/AgentListPage").then((m) => ({ default: m.AgentListPage }))
+);
+const AgentCreatePage = lazy(() =>
+  import("@/pages/admin/agents/AgentCreatePage").then((m) => ({ default: m.AgentCreatePage }))
+);
+const AgentDetailPage = lazy(() =>
+  import("@/pages/admin/agents/AgentDetailPage").then((m) => ({ default: m.AgentDetailPage }))
+);
+const AgentEditorPage = lazy(() =>
+  import("@/pages/admin/agents/AgentEditorPage").then((m) => ({ default: m.AgentEditorPage }))
+);
+const AgentRolloutPage = lazy(() =>
+  import("@/pages/admin/agents/AgentRolloutPage").then((m) => ({ default: m.AgentRolloutPage }))
+);
+const AgentEvalPage = lazy(() =>
+  import("@/pages/admin/agents/AgentEvalPage").then((m) => ({ default: m.AgentEvalPage }))
+);
+const SkillManagementPage = lazy(() =>
+  import("@/pages/admin/skills/SkillManagementPage").then((m) => ({ default: m.SkillManagementPage }))
+);
+const ToolCatalogPage = lazy(() =>
+  import("@/pages/admin/tools/ToolCatalogPage").then((m) => ({ default: m.ToolCatalogPage }))
+);
+const ToolDetailPage = lazy(() =>
+  import("@/pages/admin/tools/ToolDetailPage").then((m) => ({ default: m.ToolDetailPage }))
+);
+const ToolInvocationAuditPage = lazy(() =>
+  import("@/pages/admin/tools/ToolInvocationAuditPage").then((m) => ({ default: m.ToolInvocationAuditPage }))
+);
+const ApprovalCenterPage = lazy(() =>
+  import("@/pages/admin/approvals/ApprovalCenterPage").then((m) => ({ default: m.ApprovalCenterPage }))
+);
+const RagEvaluationPage = lazy(() =>
+  import("@/pages/admin/rag-evaluation/RagEvaluationPage").then((m) => ({ default: m.RagEvaluationPage }))
+);
+const RetrievalDatasetDetailPage = lazy(() =>
+  import("@/pages/admin/rag-evaluation/RetrievalDatasetDetailPage").then((m) => ({
+    default: m.RetrievalDatasetDetailPage
+  }))
+);
+const RetrievalStrategyTemplatePage = lazy(() =>
+  import("@/pages/admin/rag-evaluation/RetrievalStrategyTemplatePage").then((m) => ({
+    default: m.RetrievalStrategyTemplatePage
+  }))
+);
+const VersionQualityComparePage = lazy(() =>
+  import("@/pages/admin/rag-evaluation/VersionQualityComparePage").then((m) => ({
+    default: m.VersionQualityComparePage
+  }))
+);
+const ResourceAclPage = lazy(() =>
+  import("@/pages/admin/security/ResourceAclPage").then((m) => ({ default: m.ResourceAclPage }))
+);
+const AccessDecisionPage = lazy(() =>
+  import("@/pages/admin/security/AccessDecisionPage").then((m) => ({ default: m.AccessDecisionPage }))
+);
+const QuotaPolicyPage = lazy(() =>
+  import("@/pages/admin/security/QuotaPolicyPage").then((m) => ({ default: m.QuotaPolicyPage }))
+);
+const OpenApiConnectorPage = lazy(() =>
+  import("@/pages/admin/integrations/OpenApiConnectorPage").then((m) => ({ default: m.OpenApiConnectorPage }))
+);
+const OpenApiConnectorDetailPage = lazy(() =>
+  import("@/pages/admin/integrations/OpenApiConnectorDetailPage").then((m) => ({
+    default: m.OpenApiConnectorDetailPage
+  }))
+);
+const SecretPage = lazy(() =>
+  import("@/pages/admin/integrations/SecretPage").then((m) => ({ default: m.SecretPage }))
+);
+const MemoryGovernancePage = lazy(() =>
+  import("@/pages/admin/memory-governance/MemoryGovernancePage").then((m) => ({
+    default: m.MemoryGovernancePage
+  }))
+);
+const PluginManagementPage = lazy(() =>
+  import("@/pages/admin/plugins/PluginManagementPage").then((m) => ({ default: m.PluginManagementPage }))
+);
+const AuditEventPage = lazy(() =>
+  import("@/pages/admin/audit/AuditEventPage").then((m) => ({ default: m.AuditEventPage }))
+);
+const CostAnalyticsPage = lazy(() =>
+  import("@/pages/admin/cost/CostAnalyticsPage").then((m) => ({ default: m.CostAnalyticsPage }))
+);
+const SandboxPage = lazy(() =>
+  import("@/pages/admin/sandbox/SandboxPage").then((m) => ({ default: m.SandboxPage }))
+);
+const AgentRunListPage = lazy(() =>
+  import("@/pages/admin/agent-runs/AgentRunListPage").then((m) => ({ default: m.AgentRunListPage }))
+);
+const RunProfilePage = lazy(() =>
+  import("@/pages/admin/run-profiles/RunProfilePage").then((m) => ({ default: m.RunProfilePage }))
+);
+const RunExperimentPage = lazy(() =>
+  import("@/pages/admin/run-profiles/RunExperimentPage").then((m) => ({ default: m.RunExperimentPage }))
+);
+const RoleCardPage = lazy(() =>
+  import("@/pages/admin/role-cards/RoleCardPage").then((m) => ({ default: m.RoleCardPage }))
+);
+const BillingPage = lazy(() =>
+  import("@/pages/admin/billing/BillingPage").then((m) => ({ default: m.BillingPage }))
+);
+const MarketplacePage = lazy(() =>
+  import("@/pages/MarketplacePage").then((m) => ({ default: m.MarketplacePage }))
+);
+const TenantListPage = lazy(() =>
+  import("@/pages/admin/tenants/TenantListPage").then((m) => ({ default: m.TenantListPage }))
+);
+const AuditLogPage = lazy(() =>
+  import("@/pages/admin/audit/AuditLogPage").then((m) => ({ default: m.AuditLogPage }))
+);
+const MarketplaceReviewPage = lazy(() =>
+  import("@/pages/admin/marketplace/MarketplaceReviewPage").then((m) => ({
+    default: m.MarketplaceReviewPage
+  }))
+);
+
 function withFeature(feature: string, featureName: string, element: JSX.Element) {
   return (
     <FeatureGuard feature={feature} featureName={featureName}>
@@ -123,9 +266,23 @@ const advancedAdminRoutes = [
   { path: "sandbox", element: withFeature(ADVANCED_ADMIN_FEATURES.SANDBOX, "沙箱", <SandboxPage />) }
 ];
 
+function withSuspense(element: JSX.Element) {
+  return (
+    <Suspense
+      fallback={
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
+          加载中…
+        </div>
+      }
+    >
+      {element}
+    </Suspense>
+  );
+}
+
 export const router = createBrowserRouter([
   {
-    element: <GlobalLayout />,
+    element: withSuspense(<GlobalLayout />),
     children: [
       { path: "/", element: <HomeRedirect /> },
       {

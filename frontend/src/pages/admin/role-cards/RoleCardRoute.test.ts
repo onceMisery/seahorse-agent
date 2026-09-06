@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const srcRoot = resolve(__dirname, "../../..");
 
 function readSource(path: string) {
-  return readFileSync(resolve(srcRoot, path), "utf8");
+  return readFileSync(resolve(srcRoot, path), "utf8").replace(/\r\n/g, "\n");
 }
 
 describe("Role Card admin route", () => {
@@ -14,7 +14,9 @@ describe("Role Card admin route", () => {
     const routerSource = readSource("router.tsx");
     const adminLayoutSource = readSource("pages/admin/AdminLayout.tsx");
 
-    expect(routerSource).toContain('import { RoleCardPage } from "@/pages/admin/role-cards/RoleCardPage";');
+    expect(routerSource).toContain(
+      'const RoleCardPage = lazy(() =>\n  import("@/pages/admin/role-cards/RoleCardPage").then((m) => ({ default: m.RoleCardPage }))\n);'
+    );
     expect(routerSource).toContain(
       'path: "role-cards", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "角色卡", <RoleCardPage />)'
     );
