@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Check, Code, Copy, RefreshCw } from "lucide-react";
-import mermaid from "mermaid";
+import type MermaidAPI from "mermaid";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,13 @@ interface MermaidDiagramProps {
   code: string;
 }
 
-let mermaidInitialized = false;
+let mermaidAPI: typeof MermaidAPI | null = null;
 
-function ensureMermaidInitialized() {
-  if (mermaidInitialized) return;
-  mermaid.initialize({
+async function loadMermaid(): Promise<typeof MermaidAPI> {
+  if (mermaidAPI) return mermaidAPI;
+  const mod = await import("mermaid");
+  mermaidAPI = mod.default;
+  mermaidAPI.initialize({
     startOnLoad: false,
     securityLevel: "strict",
     theme: "neutral",
@@ -21,7 +23,7 @@ function ensureMermaidInitialized() {
       htmlLabels: false
     }
   });
-  mermaidInitialized = true;
+  return mermaidAPI;
 }
 
 export function MermaidDiagram({ code }: MermaidDiagramProps) {
@@ -37,7 +39,7 @@ export function MermaidDiagram({ code }: MermaidDiagramProps) {
   React.useEffect(() => {
     let cancelled = false;
     const render = async () => {
-      ensureMermaidInitialized();
+      const mermaid = await loadMermaid();
       setError("");
       try {
         const result = await mermaid.render(`mermaid-${diagramId}`, code);

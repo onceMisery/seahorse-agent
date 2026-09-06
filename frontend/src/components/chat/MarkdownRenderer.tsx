@@ -10,7 +10,12 @@ import "katex/dist/katex.min.css";
 
 import { CodeBlock } from "@/components/ai-elements/renderer/CodeBlock";
 import { CitationBadge } from "@/components/chat/CitationBadge";
-import { MermaidDiagram } from "@/components/chat/MermaidDiagram";
+
+// mermaid 全家桶(~300kB)只在消息真正包含 mermaid 代码块时才需要;
+// 懒加载把它从 markdown 渲染主路径剥离。
+const MermaidDiagram = React.lazy(
+  () => import("@/components/chat/MermaidDiagram").then((m) => ({ default: m.MermaidDiagram }))
+);
 import { normalizeAssistantMarkdown } from "@/components/chat/markdownUtils";
 import { cn } from "@/lib/utils";
 import type { AgentSource } from "@/types";
@@ -168,7 +173,11 @@ export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
           const hasNewlines = value.includes('\n');
 
           if (language === "mermaid" && hasNewlines) {
-            return <MermaidDiagram code={value} />;
+            return (
+              <React.Suspense fallback={<pre className="my-3 text-xs" style={{ color: "var(--theme-text-muted)" }}>{value}</pre>}>
+                <MermaidDiagram code={value} />
+              </React.Suspense>
+            );
           }
 
           if (!hasLanguage && !hasNewlines) {

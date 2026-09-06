@@ -3,8 +3,13 @@ import { Check, Copy, Edit, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { CodeEditor } from "@/components/ai-elements/renderer/CodeEditor";
 import type { CodeEditorLanguage } from "@/components/ai-elements/types";
+
+// CodeEditor 静态引入 codemirror 全家桶；懒加载让 markdown 代码块的主路径
+// 只在真正进入编辑态时才拉取编辑器 bundle。
+const CodeEditor = React.lazy(
+  () => import("@/components/ai-elements/renderer/CodeEditor").then((m) => ({ default: m.CodeEditor }))
+);
 
 interface CodeBlockProps {
   code: string;
@@ -76,15 +81,26 @@ export function CodeBlock({ code, language, editable = false, onChange }: CodeBl
           </Button>
         </div>
       </div>
-      <CodeEditor
-        value={draft}
-        onChange={applyChange}
-        language={language}
-        readonly={!isEditing}
-        minHeight="96px"
-        maxHeight="520px"
-        className="rounded-none border-0"
-      />
+      <React.Suspense
+        fallback={
+          <pre
+            className="overflow-auto px-3 py-2 font-mono text-xs"
+            style={{ minHeight: "96px", maxHeight: "520px", color: "var(--theme-text-secondary)" }}
+          >
+            {draft}
+          </pre>
+        }
+      >
+        <CodeEditor
+          value={draft}
+          onChange={applyChange}
+          language={language}
+          readonly={!isEditing}
+          minHeight="96px"
+          maxHeight="520px"
+          className="rounded-none border-0"
+        />
+      </React.Suspense>
     </div>
   );
 }
