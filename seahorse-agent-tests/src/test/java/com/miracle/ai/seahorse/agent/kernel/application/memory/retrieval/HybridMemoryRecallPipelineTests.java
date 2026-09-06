@@ -106,20 +106,21 @@ class HybridMemoryRecallPipelineTests {
         RecordingMemoryStore semantic = new RecordingMemoryStore();
         RecordingBusinessDocumentRetrieverPort businessDocumentRetrieverPort =
                 new RecordingBusinessDocumentRetrieverPort();
-        HybridMemoryRecallPipeline pipeline = new HybridMemoryRecallPipeline(
-                shortTerm,
-                longTerm,
-                semantic,
-                new ObjectMapper(),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                businessDocumentRetrieverPort,
-                new RecordingLifecyclePort(List.of(shortTerm, longTerm, semantic)),
-                List.of(),
-                new RrfMemoryFusion(),
-                MemoryFusionPolicy.defaults(),
-                10);
+        HybridMemoryRecallPipeline pipeline = HybridMemoryRecallPipeline.builder(
+                        shortTerm,
+                        longTerm,
+                        semantic,
+                        new ObjectMapper(),
+                        ProfileMemoryPort.noop(),
+                        CorrectionLedgerPort.noop(),
+                        new DefaultMemoryRouter(),
+                        businessDocumentRetrieverPort,
+                        new RecordingLifecyclePort(List.of(shortTerm, longTerm, semantic)))
+                .channels(List.of())
+                .fusionPort(new RrfMemoryFusion())
+                .fusionPolicy(MemoryFusionPolicy.defaults())
+                .channelTopK(10)
+                .build();
 
         pipeline.load(MemoryLoadRequest.builder()
                 .conversationId("conv-1")
@@ -677,25 +678,26 @@ class HybridMemoryRecallPipelineTests {
                                                 MemoryAliasPort aliasPort,
                                                 MemoryRecallRerankerPort recallRerankerPort,
                                                 ObservationPort observationPort) {
-        return new HybridMemoryRecallPipeline(
-                shortTerm,
-                longTerm,
-                semantic,
-                new ObjectMapper(),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                MemoryBusinessDocumentRetrieverPort.noop(),
-                new RecordingLifecyclePort(List.of(shortTerm, longTerm, semantic)),
-                channels,
-                new RrfMemoryFusion(),
-                fusionPolicy,
-                10,
-                traceRecorder,
-                null,
-                aliasPort,
-                recallRerankerPort,
-                observationPort);
+        return HybridMemoryRecallPipeline.builder(
+                        shortTerm,
+                        longTerm,
+                        semantic,
+                        new ObjectMapper(),
+                        ProfileMemoryPort.noop(),
+                        CorrectionLedgerPort.noop(),
+                        new DefaultMemoryRouter(),
+                        MemoryBusinessDocumentRetrieverPort.noop(),
+                        new RecordingLifecyclePort(List.of(shortTerm, longTerm, semantic)))
+                .channels(channels)
+                .fusionPort(new RrfMemoryFusion())
+                .fusionPolicy(fusionPolicy)
+                .channelTopK(10)
+                .traceRecorder(traceRecorder)
+                .recallExecutor(null)
+                .memoryAliasPort(aliasPort)
+                .recallRerankerPort(recallRerankerPort)
+                .observationPort(observationPort)
+                .build();
     }
 
     private MemoryRecallChannelPort channel(String name, List<MemoryRecallCandidate> candidates) {

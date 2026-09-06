@@ -278,25 +278,26 @@ public class SeahorseAgentMemoryRecallAutoConfiguration {
             @Qualifier("ragRetrievalThreadPoolExecutor") ObjectProvider<Executor> recallExecutor,
             MemoryProperties memoryProperties) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
-        return new HybridMemoryRecallPipeline(
-                shortTermMemoryPort,
-                longTermMemoryPort,
-                semanticMemoryPort,
-                objectMapper,
-                profileMemoryPort.getIfAvailable(ProfileMemoryPort::noop),
-                correctionLedgerPort.getIfAvailable(CorrectionLedgerPort::noop),
-                memoryRouterPort.getIfAvailable(DefaultMemoryRouter::new),
-                businessDocumentRetrieverPort.getIfAvailable(MemoryBusinessDocumentRetrieverPort::noop),
-                memoryLifecyclePort.getIfAvailable(MemoryLifecyclePort::noop),
-                recallChannels,
-                recallFusionPort,
-                fusionPolicy,
-                memoryProperties.getRecall().getChannelTopK(),
-                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
-                recallExecutor.getIfAvailable(),
-                memoryAliasPort.getIfAvailable(MemoryAliasPort::noop),
-                recallRerankerPort,
-                observationPort.getIfAvailable(ObservationPort::noop));
+        return HybridMemoryRecallPipeline.builder(
+                        shortTermMemoryPort,
+                        longTermMemoryPort,
+                        semanticMemoryPort,
+                        objectMapper,
+                        profileMemoryPort.getIfAvailable(ProfileMemoryPort::noop),
+                        correctionLedgerPort.getIfAvailable(CorrectionLedgerPort::noop),
+                        memoryRouterPort.getIfAvailable(DefaultMemoryRouter::new),
+                        businessDocumentRetrieverPort.getIfAvailable(MemoryBusinessDocumentRetrieverPort::noop),
+                        memoryLifecyclePort.getIfAvailable(MemoryLifecyclePort::noop))
+                .channels(recallChannels)
+                .fusionPort(recallFusionPort)
+                .fusionPolicy(fusionPolicy)
+                .channelTopK(memoryProperties.getRecall().getChannelTopK())
+                .traceRecorder(traceRecorder.getIfAvailable(MemoryTraceRecorder::noop))
+                .recallExecutor(recallExecutor.getIfAvailable())
+                .memoryAliasPort(memoryAliasPort.getIfAvailable(MemoryAliasPort::noop))
+                .recallRerankerPort(recallRerankerPort)
+                .observationPort(observationPort.getIfAvailable(ObservationPort::noop))
+                .build();
     }
 
     @Bean

@@ -179,20 +179,16 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     private record LoadOutcome(MemoryContext context, Map<String, List<String>> channelAttribution) {
     }
 
-    public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
-                                      LongTermMemoryPort longTermPort,
-                                      SemanticMemoryPort semanticPort,
-                                      ObjectMapper objectMapper,
-                                      ProfileMemoryPort profileMemoryPort,
-                                      CorrectionLedgerPort correctionLedgerPort,
-                                      MemoryRouterPort memoryRouterPort,
-                                      MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
-                                      MemoryLifecyclePort memoryLifecyclePort,
-                                      List<MemoryRecallChannelPort> channels,
-                                      MemoryRecallFusionPort fusionPort,
-                                      MemoryFusionPolicy fusionPolicy,
-                                      int channelTopK) {
-        this(shortTermPort,
+    public static Builder builder(ShortTermMemoryPort shortTermPort,
+                                  LongTermMemoryPort longTermPort,
+                                  SemanticMemoryPort semanticPort,
+                                  ObjectMapper objectMapper,
+                                  ProfileMemoryPort profileMemoryPort,
+                                  CorrectionLedgerPort correctionLedgerPort,
+                                  MemoryRouterPort memoryRouterPort,
+                                  MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                  MemoryLifecyclePort memoryLifecyclePort) {
+        return new Builder(shortTermPort,
                 longTermPort,
                 semanticPort,
                 objectMapper,
@@ -200,154 +196,10 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 correctionLedgerPort,
                 memoryRouterPort,
                 businessDocumentRetrieverPort,
-                memoryLifecyclePort,
-                channels,
-                fusionPort,
-                fusionPolicy,
-                channelTopK,
-                MemoryTraceRecorder.noop(),
-                ForkJoinPool.commonPool(),
-                MemoryAliasPort.noop());
+                memoryLifecyclePort);
     }
 
-    public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
-                                      LongTermMemoryPort longTermPort,
-                                      SemanticMemoryPort semanticPort,
-                                      ObjectMapper objectMapper,
-                                      ProfileMemoryPort profileMemoryPort,
-                                      CorrectionLedgerPort correctionLedgerPort,
-                                      MemoryRouterPort memoryRouterPort,
-                                      MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
-                                      MemoryLifecyclePort memoryLifecyclePort,
-                                      List<MemoryRecallChannelPort> channels,
-                                      MemoryRecallFusionPort fusionPort,
-                                      MemoryFusionPolicy fusionPolicy,
-                                      int channelTopK,
-                                      MemoryTraceRecorder traceRecorder) {
-        this(shortTermPort,
-                longTermPort,
-                semanticPort,
-                objectMapper,
-                profileMemoryPort,
-                correctionLedgerPort,
-                memoryRouterPort,
-                businessDocumentRetrieverPort,
-                memoryLifecyclePort,
-                channels,
-                fusionPort,
-                fusionPolicy,
-                channelTopK,
-                traceRecorder,
-                ForkJoinPool.commonPool(),
-                MemoryAliasPort.noop());
-    }
-
-    public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
-                                      LongTermMemoryPort longTermPort,
-                                      SemanticMemoryPort semanticPort,
-                                      ObjectMapper objectMapper,
-                                      ProfileMemoryPort profileMemoryPort,
-                                      CorrectionLedgerPort correctionLedgerPort,
-                                      MemoryRouterPort memoryRouterPort,
-                                      MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
-                                      MemoryLifecyclePort memoryLifecyclePort,
-                                      List<MemoryRecallChannelPort> channels,
-                                      MemoryRecallFusionPort fusionPort,
-                                      MemoryFusionPolicy fusionPolicy,
-                                      int channelTopK,
-                                      MemoryTraceRecorder traceRecorder,
-                                      Executor recallExecutor) {
-        this(shortTermPort,
-                longTermPort,
-                semanticPort,
-                objectMapper,
-                profileMemoryPort,
-                correctionLedgerPort,
-                memoryRouterPort,
-                businessDocumentRetrieverPort,
-                memoryLifecyclePort,
-                channels,
-                fusionPort,
-                fusionPolicy,
-                channelTopK,
-                traceRecorder,
-                recallExecutor,
-                MemoryAliasPort.noop());
-    }
-
-    public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
-                                      LongTermMemoryPort longTermPort,
-                                      SemanticMemoryPort semanticPort,
-                                      ObjectMapper objectMapper,
-                                      ProfileMemoryPort profileMemoryPort,
-                                      CorrectionLedgerPort correctionLedgerPort,
-                                      MemoryRouterPort memoryRouterPort,
-                                      MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
-                                      MemoryLifecyclePort memoryLifecyclePort,
-                                      List<MemoryRecallChannelPort> channels,
-                                      MemoryRecallFusionPort fusionPort,
-                                      MemoryFusionPolicy fusionPolicy,
-                                      int channelTopK,
-                                      MemoryTraceRecorder traceRecorder,
-                                      Executor recallExecutor,
-                                      MemoryAliasPort memoryAliasPort) {
-        this(shortTermPort,
-                longTermPort,
-                semanticPort,
-                objectMapper,
-                profileMemoryPort,
-                correctionLedgerPort,
-                memoryRouterPort,
-                businessDocumentRetrieverPort,
-                memoryLifecyclePort,
-                channels,
-                fusionPort,
-                fusionPolicy,
-                channelTopK,
-                traceRecorder,
-                recallExecutor,
-                memoryAliasPort,
-                MemoryRecallRerankerPort.noop());
-    }
-
-    public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
-                                      LongTermMemoryPort longTermPort,
-                                      SemanticMemoryPort semanticPort,
-                                      ObjectMapper objectMapper,
-                                      ProfileMemoryPort profileMemoryPort,
-                                      CorrectionLedgerPort correctionLedgerPort,
-                                      MemoryRouterPort memoryRouterPort,
-                                      MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
-                                      MemoryLifecyclePort memoryLifecyclePort,
-                                      List<MemoryRecallChannelPort> channels,
-                                      MemoryRecallFusionPort fusionPort,
-                                      MemoryFusionPolicy fusionPolicy,
-                                      int channelTopK,
-                                      MemoryTraceRecorder traceRecorder,
-                                      Executor recallExecutor,
-                                      MemoryAliasPort memoryAliasPort,
-                                      MemoryRecallRerankerPort recallRerankerPort) {
-        this(shortTermPort,
-                longTermPort,
-                semanticPort,
-                objectMapper,
-                profileMemoryPort,
-                correctionLedgerPort,
-                memoryRouterPort,
-                businessDocumentRetrieverPort,
-                memoryLifecyclePort,
-                channels,
-                fusionPort,
-                fusionPolicy,
-                channelTopK,
-                traceRecorder,
-                recallExecutor,
-                memoryAliasPort,
-                recallRerankerPort,
-                ObservationPort.noop());
-    }
-
-    public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
+    private HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
                                       LongTermMemoryPort longTermPort,
                                       SemanticMemoryPort semanticPort,
                                       ObjectMapper objectMapper,
@@ -385,6 +237,120 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         this.memoryAliasPort = Objects.requireNonNullElseGet(memoryAliasPort, MemoryAliasPort::noop);
         this.observationPort = Objects.requireNonNullElseGet(observationPort, ObservationPort::noop);
     }
+
+    /**
+     * 召回流水线 Builder：默认值与原望远镜构造器完全一致（fusion 默认策略档、
+     * 通道 top-K 默认值、noop 追踪/别名/重排/观测、公共池执行器）。
+     */
+    public static final class Builder {
+
+        private final ShortTermMemoryPort shortTermPort;
+        private final LongTermMemoryPort longTermPort;
+        private final SemanticMemoryPort semanticPort;
+        private final ObjectMapper objectMapper;
+        private final ProfileMemoryPort profileMemoryPort;
+        private final CorrectionLedgerPort correctionLedgerPort;
+        private final MemoryRouterPort memoryRouterPort;
+        private final MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort;
+        private final MemoryLifecyclePort memoryLifecyclePort;
+        private List<MemoryRecallChannelPort> channels;
+        private MemoryRecallFusionPort fusionPort;
+        private MemoryFusionPolicy fusionPolicy;
+        private int channelTopK;
+        private MemoryTraceRecorder traceRecorder;
+        private Executor recallExecutor;
+        private MemoryAliasPort memoryAliasPort;
+        private MemoryRecallRerankerPort recallRerankerPort;
+        private ObservationPort observationPort;
+
+        private Builder(ShortTermMemoryPort shortTermPort,
+                        LongTermMemoryPort longTermPort,
+                        SemanticMemoryPort semanticPort,
+                        ObjectMapper objectMapper,
+                        ProfileMemoryPort profileMemoryPort,
+                        CorrectionLedgerPort correctionLedgerPort,
+                        MemoryRouterPort memoryRouterPort,
+                        MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                        MemoryLifecyclePort memoryLifecyclePort) {
+            this.shortTermPort = shortTermPort;
+            this.longTermPort = longTermPort;
+            this.semanticPort = semanticPort;
+            this.objectMapper = objectMapper;
+            this.profileMemoryPort = profileMemoryPort;
+            this.correctionLedgerPort = correctionLedgerPort;
+            this.memoryRouterPort = memoryRouterPort;
+            this.businessDocumentRetrieverPort = businessDocumentRetrieverPort;
+            this.memoryLifecyclePort = memoryLifecyclePort;
+        }
+
+        public Builder channels(List<MemoryRecallChannelPort> channels) {
+            this.channels = channels;
+            return this;
+        }
+
+        public Builder fusionPort(MemoryRecallFusionPort fusionPort) {
+            this.fusionPort = fusionPort;
+            return this;
+        }
+
+        public Builder fusionPolicy(MemoryFusionPolicy fusionPolicy) {
+            this.fusionPolicy = fusionPolicy;
+            return this;
+        }
+
+        public Builder channelTopK(int channelTopK) {
+            this.channelTopK = channelTopK;
+            return this;
+        }
+
+        public Builder traceRecorder(MemoryTraceRecorder traceRecorder) {
+            this.traceRecorder = traceRecorder;
+            return this;
+        }
+
+        public Builder recallExecutor(Executor recallExecutor) {
+            this.recallExecutor = recallExecutor;
+            return this;
+        }
+
+        public Builder memoryAliasPort(MemoryAliasPort memoryAliasPort) {
+            this.memoryAliasPort = memoryAliasPort;
+            return this;
+        }
+
+        public Builder recallRerankerPort(MemoryRecallRerankerPort recallRerankerPort) {
+            this.recallRerankerPort = recallRerankerPort;
+            return this;
+        }
+
+        public Builder observationPort(ObservationPort observationPort) {
+            this.observationPort = observationPort;
+            return this;
+        }
+
+        public HybridMemoryRecallPipeline build() {
+            return new HybridMemoryRecallPipeline(
+                    shortTermPort,
+                    longTermPort,
+                    semanticPort,
+                    objectMapper,
+                    profileMemoryPort,
+                    correctionLedgerPort,
+                    memoryRouterPort,
+                    businessDocumentRetrieverPort,
+                    memoryLifecyclePort,
+                    channels,
+                    fusionPort,
+                    fusionPolicy,
+                    channelTopK,
+                    traceRecorder,
+                    recallExecutor,
+                    memoryAliasPort,
+                    recallRerankerPort,
+                    observationPort);
+        }
+    }
+
 
     @Override
     public MemoryContext load(MemoryLoadRequest request) {
