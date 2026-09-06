@@ -24,6 +24,7 @@ import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,6 +34,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -44,10 +47,13 @@ public class SeahorseWebGovernanceConfiguration implements WebMvcConfigurer, Fil
     private static final Set<String> WRITE_METHODS = Set.of("POST", "PUT", "PATCH", "DELETE");
 
     private final boolean demoModeEnabled;
+    private final ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider;
 
     public SeahorseWebGovernanceConfiguration(
-            @Value("${seahorse-agent.web.demo-mode.enabled:false}") boolean demoModeEnabled) {
+            @Value("${seahorse-agent.web.demo-mode.enabled:false}") boolean demoModeEnabled,
+            ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this.demoModeEnabled = demoModeEnabled;
+        this.advancedFeatureGateProvider = advancedFeatureGateProvider;
     }
 
     @Bean
@@ -90,41 +96,56 @@ public class SeahorseWebGovernanceConfiguration implements WebMvcConfigurer, Fil
             @Value("${seahorse-agent.advanced.rag-evaluation-enabled:false}") boolean ragEvaluationEnabled,
             @Value("${seahorse-agent.advanced.metadata-governance-enabled:false}") boolean metadataGovernanceEnabled,
             @Value("${seahorse-agent.advanced.audit-log-enabled:false}") boolean auditLogEnabled,
-            @Value("${seahorse-agent.advanced.cost-analytics-enabled:false}") boolean costAnalyticsEnabled) {
-        return AdvancedFeatureGate.configured(
-                ProductMode.fromProperty(productMode),
-                sandboxEnabled,
-                connectorManagementEnabled,
-                mcpToolEnabled,
-                secretManagementEnabled,
-                agentHandoffEnabled,
-                remoteAgentEnabled,
-                localAgentEnabled,
-                intentTreeManagementEnabled,
-                ingestionTaskManagementEnabled,
-                ingestionPipelineManagementEnabled,
-                toolCatalogManagementEnabled,
-                skillManagementEnabled,
-                agentDefinitionManagementEnabled,
-                agentFactoryManagementEnabled,
-                agentToolBindingManagementEnabled,
-                agentRunManagementEnabled,
-                agentEvaluationEnabled,
-                productionGateEnabled,
-                enterprisePilotReadinessEnabled,
-                agentRolloutManagementEnabled,
-                quotaManagementEnabled,
-                resourceAclManagementEnabled,
-                memoryGovernanceEnabled,
-                ragEvaluationEnabled,
-                metadataGovernanceEnabled,
-                auditLogEnabled,
-                costAnalyticsEnabled);
+            @Value("${seahorse-agent.advanced.cost-analytics-enabled:false}") boolean costAnalyticsEnabled,
+            @Value("${seahorse-agent.advanced.marketplace-enabled:false}") boolean marketplaceEnabled,
+            @Value("${seahorse-agent.advanced.billing-enabled:false}") boolean billingEnabled,
+            @Value("${seahorse-agent.advanced.run-experiment-enabled:false}") boolean runExperimentEnabled,
+            @Value("${seahorse-agent.advanced.admin-enabled:false}") boolean adminEnabled,
+            @Value("${seahorse-agent.advanced.notification-enabled:false}") boolean notificationEnabled,
+            @Value("${seahorse-agent.advanced.plugin-enabled:false}") boolean pluginEnabled) {
+        Map<AdvancedFeature, Boolean> features = new EnumMap<>(AdvancedFeature.class);
+        features.put(AdvancedFeature.SANDBOX, sandboxEnabled);
+        features.put(AdvancedFeature.CONNECTOR_MANAGEMENT, connectorManagementEnabled);
+        features.put(AdvancedFeature.MCP_TOOL, mcpToolEnabled);
+        features.put(AdvancedFeature.SECRET_MANAGEMENT, secretManagementEnabled);
+        features.put(AdvancedFeature.AGENT_HANDOFF, agentHandoffEnabled);
+        features.put(AdvancedFeature.REMOTE_AGENT, remoteAgentEnabled);
+        features.put(AdvancedFeature.LOCAL_AGENT, localAgentEnabled);
+        features.put(AdvancedFeature.INTENT_TREE_MANAGEMENT, intentTreeManagementEnabled);
+        features.put(AdvancedFeature.INGESTION_TASK_MANAGEMENT, ingestionTaskManagementEnabled);
+        features.put(AdvancedFeature.INGESTION_PIPELINE_MANAGEMENT, ingestionPipelineManagementEnabled);
+        features.put(AdvancedFeature.TOOL_CATALOG_MANAGEMENT, toolCatalogManagementEnabled);
+        features.put(AdvancedFeature.SKILL_MANAGEMENT, skillManagementEnabled);
+        features.put(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT, agentDefinitionManagementEnabled);
+        features.put(AdvancedFeature.AGENT_FACTORY_MANAGEMENT, agentFactoryManagementEnabled);
+        features.put(AdvancedFeature.AGENT_TOOL_BINDING_MANAGEMENT, agentToolBindingManagementEnabled);
+        features.put(AdvancedFeature.AGENT_RUN_MANAGEMENT, agentRunManagementEnabled);
+        features.put(AdvancedFeature.AGENT_EVALUATION, agentEvaluationEnabled);
+        features.put(AdvancedFeature.PRODUCTION_GATE, productionGateEnabled);
+        features.put(AdvancedFeature.ENTERPRISE_PILOT_READINESS, enterprisePilotReadinessEnabled);
+        features.put(AdvancedFeature.AGENT_ROLLOUT_MANAGEMENT, agentRolloutManagementEnabled);
+        features.put(AdvancedFeature.QUOTA_MANAGEMENT, quotaManagementEnabled);
+        features.put(AdvancedFeature.RESOURCE_ACL_MANAGEMENT, resourceAclManagementEnabled);
+        features.put(AdvancedFeature.MEMORY_GOVERNANCE, memoryGovernanceEnabled);
+        features.put(AdvancedFeature.RAG_EVALUATION, ragEvaluationEnabled);
+        features.put(AdvancedFeature.METADATA_GOVERNANCE, metadataGovernanceEnabled);
+        features.put(AdvancedFeature.AUDIT_LOG, auditLogEnabled);
+        features.put(AdvancedFeature.COST_ANALYTICS, costAnalyticsEnabled);
+        features.put(AdvancedFeature.MARKETPLACE, marketplaceEnabled);
+        features.put(AdvancedFeature.BILLING, billingEnabled);
+        features.put(AdvancedFeature.RUN_EXPERIMENT, runExperimentEnabled);
+        features.put(AdvancedFeature.ADMIN, adminEnabled);
+        features.put(AdvancedFeature.NOTIFICATION, notificationEnabled);
+        features.put(AdvancedFeature.PLUGIN, pluginEnabled);
+        return AdvancedFeatureGate.configured(ProductMode.fromProperty(productMode), features);
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(demoModeInterceptor()).addPathPatterns("/**");
+        AdvancedFeatureGate gate = advancedFeatureGateProvider
+                .getIfAvailable(AdvancedFeatureGate::demoDefaults);
+        registry.addInterceptor(new FeatureQuarantineInterceptor(gate)).addPathPatterns("/**");
     }
 
     @Override

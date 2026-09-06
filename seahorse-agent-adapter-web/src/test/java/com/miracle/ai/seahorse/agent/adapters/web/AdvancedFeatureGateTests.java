@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 import org.junit.jupiter.api.Test;
 
 import java.util.EnumMap;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -60,6 +61,21 @@ class AdvancedFeatureGateTests {
     }
 
     @Test
+    void quarantinedNonCoreFeaturesShouldDefaultToDisabled() {
+        AdvancedFeatureGate gate = AdvancedFeatureGate.demoDefaults();
+
+        for (AdvancedFeature feature : new AdvancedFeature[] {
+                AdvancedFeature.MARKETPLACE,
+                AdvancedFeature.BILLING,
+                AdvancedFeature.RUN_EXPERIMENT,
+                AdvancedFeature.ADMIN,
+                AdvancedFeature.NOTIFICATION,
+                AdvancedFeature.PLUGIN}) {
+            assertThat(gate.isEnabled(feature)).as(feature.name()).isFalse();
+        }
+    }
+
+    @Test
     void allEnabledGateShouldKeepLegacyControllerTestsFocusedOnApiMapping() {
         AdvancedFeatureGate gate = AdvancedFeatureGate.allEnabledForTests();
 
@@ -71,79 +87,48 @@ class AdvancedFeatureGateTests {
 
     @Test
     void governanceConfigurationShouldMapMcpToolFlag() {
-        SeahorseWebGovernanceConfiguration configuration = new SeahorseWebGovernanceConfiguration(false);
+        SeahorseWebGovernanceConfiguration configuration =
+                new SeahorseWebGovernanceConfiguration(false, null);
 
-        AdvancedFeatureGate gate = configuration.seahorseAdvancedFeatureGate(
-                "enterprise",
-                false,
-                false,
-                true,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false);
+        boolean[] flags = allFlags(33, false);
+        flags[2] = true;
+        AdvancedFeatureGate gate = gateFromFlags(configuration, "enterprise", flags);
 
         assertThat(gate.isEnabled(AdvancedFeature.MCP_TOOL)).isTrue();
         assertThat(gate.isEnabled(AdvancedFeature.SANDBOX)).isFalse();
+        assertThat(gate.isEnabled(AdvancedFeature.MARKETPLACE)).isFalse();
+        assertThat(gate.isEnabled(AdvancedFeature.ADMIN)).isFalse();
     }
 
     @Test
     void governanceConfigurationShouldMapEveryAdvancedFeatureFlag() {
-        SeahorseWebGovernanceConfiguration configuration = new SeahorseWebGovernanceConfiguration(false);
+        SeahorseWebGovernanceConfiguration configuration =
+                new SeahorseWebGovernanceConfiguration(false, null);
 
-        AdvancedFeatureGate gate = configuration.seahorseAdvancedFeatureGate(
-                "enterprise",
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true,
-                true);
+        AdvancedFeatureGate gate = gateFromFlags(configuration, "enterprise", allFlags(33, true));
 
         for (AdvancedFeature feature : AdvancedFeature.values()) {
             assertThat(gate.isEnabled(feature)).as(feature.name()).isTrue();
         }
+    }
+
+    private static AdvancedFeatureGate gateFromFlags(SeahorseWebGovernanceConfiguration configuration,
+                                                     String productMode,
+                                                     boolean... flags) {
+        return configuration.seahorseAdvancedFeatureGate(
+                productMode,
+                flags[0], flags[1], flags[2], flags[3], flags[4], flags[5],
+                flags[6], flags[7], flags[8], flags[9], flags[10], flags[11],
+                flags[12], flags[13], flags[14], flags[15], flags[16], flags[17],
+                flags[18], flags[19], flags[20], flags[21], flags[22], flags[23],
+                flags[24], flags[25], flags[26], flags[27], flags[28], flags[29],
+                flags[30], flags[31], flags[32]);
+    }
+
+    private static boolean[] allFlags(int count, boolean enabled) {
+        boolean[] flags = new boolean[count];
+        java.util.Arrays.fill(flags, enabled);
+        return flags;
     }
 
     private static boolean isDemoCoreFeature(AdvancedFeature feature) {
