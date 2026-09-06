@@ -153,6 +153,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import io.milvus.v2.client.MilvusClientV2;
 import okhttp3.OkHttpClient;
 import okhttp3.Protocol;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -165,6 +166,12 @@ import java.nio.file.Path;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
+/**
+ * 上下文启动会连接真实 Milvus（seahorseMilvusClient 无 mock 兜底），
+ * 属于依赖真实基础设施的集成测试（设计 §8.1 分类），本地与 CI 的
+ * 单元门禁按组排除，L1/L2 阶段在真实环境执行。
+ */
+@Tag("integration")
 class SeahorseAgentNativeAdapterAutoConfigurationTests {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()

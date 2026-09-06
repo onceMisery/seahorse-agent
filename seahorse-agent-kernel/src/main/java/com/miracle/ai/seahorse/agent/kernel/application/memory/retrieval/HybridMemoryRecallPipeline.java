@@ -108,6 +108,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     private final MemoryAliasPort memoryAliasPort;
     private final ObservationPort observationPort;
     private final MemoryRecallObservationSupport observationSupport;
+    private final MemoryCandidateItemSupport itemSupport;
 
 
     private record ChannelRecallTask(
@@ -195,6 +196,9 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         this.observationPort = Objects.requireNonNullElseGet(observationPort, ObservationPort::noop);
         this.observationSupport = new MemoryRecallObservationSupport(
                 this.traceRecorder, this.observationPort, this.fusionPolicy);
+        this.itemSupport = new MemoryCandidateItemSupport(
+                this.shortTermPort, this.longTermPort, this.semanticPort,
+                this.objectMapper);
     }
 
     /**
@@ -323,7 +327,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     }
 
     private LoadOutcome loadInternal(MemoryLoadRequest request) {
-        if (request == null || isBlank(request.userId())) {
+        if (request == null || itemSupport.isBlank(request.userId())) {
             return new LoadOutcome(emptyContext(request), Map.of());
         }
         String userId = request.userId();
@@ -337,21 +341,21 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
 
         List<MemoryItem> corrections = loadCorrection ? loadCorrections(userId, tenantId) : Collections.emptyList();
         List<MemoryItem> profile = loadProfile ? loadProfileFacts(userId, tenantId) : Collections.emptyList();
-        Set<String> correctionProfileSlots = correctionProfileSlots(corrections);
+        Set<String> correctionProfileSlots = itemSupport.correctionProfileSlots(corrections);
         if (!correctionProfileSlots.isEmpty()) {
-            profile = removeActiveProfileSlotMemories(profile, correctionProfileSlots);
+            profile = itemSupport.removeActiveProfileSlotMemories(profile, correctionProfileSlots);
         }
 
         List<MemoryItem> shortTerm = Collections.emptyList();
         List<MemoryItem> longTerm = Collections.emptyList();
         List<MemoryItem> semantic = Collections.emptyList();
         Map<String, List<String>> channelAttribution = Map.of();
-        if (loadEpisodic || (!channels.isEmpty() && !isBlank(request.currentQuestion()))) {
+        if (loadEpisodic || (!channels.isEmpty() && !itemSupport.isBlank(request.currentQuestion()))) {
             RecallOutcome recalled = recallUserMemoriesWithAttribution(
                     userId, tenantId, request.currentQuestion(), routePlan.activeTracks());
-            shortTerm = filterByLayer(recalled.items(), MemoryLayer.SHORT_TERM);
-            longTerm = filterByLayer(recalled.items(), MemoryLayer.LONG_TERM);
-            semantic = filterByLayer(recalled.items(), MemoryLayer.SEMANTIC);
+            shortTerm = itemSupport.filterByLayer(recalled.items(), MemoryLayer.SHORT_TERM);
+            longTerm = itemSupport.filterByLayer(recalled.items(), MemoryLayer.LONG_TERM);
+            semantic = itemSupport.filterByLayer(recalled.items(), MemoryLayer.SEMANTIC);
             channelAttribution = recalled.channelAttribution();
         }
         List<MemoryItem>             businessDocuments = loadBusinessDocument
@@ -359,20 +363,20 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                     request.knowledgeBaseIds())
                     : Collections.emptyList();
 
-        Set<String> activeProfileSlots = activeProfileSlots(profile);
+        Set<String> activeProfileSlots = itemSupport.activeProfileSlots(profile);
         Set<String> suppressedProfileSlots = new LinkedHashSet<>();
         suppressedProfileSlots.addAll(activeProfileSlots);
         suppressedProfileSlots.addAll(correctionProfileSlots);
         if (!suppressedProfileSlots.isEmpty()) {
-            shortTerm = removeActiveProfileSlotMemories(shortTerm, suppressedProfileSlots);
-            longTerm = removeActiveProfileSlotMemories(longTerm, suppressedProfileSlots);
-            semantic = removeActiveProfileSlotMemories(semantic, suppressedProfileSlots);
+            shortTerm = itemSupport.removeActiveProfileSlotMemories(shortTerm, suppressedProfileSlots);
+            longTerm = itemSupport.removeActiveProfileSlotMemories(longTerm, suppressedProfileSlots);
+            semantic = itemSupport.removeActiveProfileSlotMemories(semantic, suppressedProfileSlots);
         }
 
-        shortTerm = deduplicateById(shortTerm);
-        longTerm = deduplicateProfileSlots(deduplicateById(longTerm));
-        semantic = deduplicateProfileSlots(deduplicateById(semantic));
-        businessDocuments = deduplicateById(businessDocuments);
+        shortTerm = itemSupport.deduplicateById(shortTerm);
+        longTerm = itemSupport.deduplicateProfileSlots(itemSupport.deduplicateById(longTerm));
+        semantic = itemSupport.deduplicateProfileSlots(itemSupport.deduplicateById(semantic));
+        businessDocuments = itemSupport.deduplicateById(businessDocuments);
 
         Instant referencedAt = Instant.now();
         recordProfileReadFeedback(profile, referencedAt, tenantId);
@@ -413,7 +417,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                                                             String tenantId,
                                                             String query,
                                                             Set<MemoryTrack> activeTracks) {
-        if (isBlank(query) || channels.isEmpty()) {
+        if (itemSupport.isBlank(query) || channels.isEmpty()) {
             return new RecallOutcome(List.of(), Map.of());
         }
         AliasResolvedQuery resolvedQuery = resolveRecallAlias(userId, tenantId, query);
@@ -434,7 +438,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         List<MemoryRecallCandidate> reranked = rerankFusedCandidates(recallRequest, fused);
         observationSupport.recordRecallRerank(userId, tenantId, fused, reranked, traceContext);
         List<MemoryItem> items = reranked.stream()
-                .map(this::toMemoryItem)
+                .map(itemSupport::toMemoryItem)
                 .flatMap(Optional::stream)
                 .toList();
         return new RecallOutcome(items, buildChannelAttribution(channelResults));
@@ -484,8 +488,8 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         if (candidate == null || !candidate.content().isBlank()) {
             return candidate;
         }
-        Optional<MemoryRecord> record = findMemoryById(candidate.memoryId(), candidate.layer());
-        if (record.isEmpty() || !generationMatches(candidate, record.get())) {
+        Optional<MemoryRecord> record = itemSupport.findMemoryById(candidate.memoryId(), candidate.layer());
+        if (record.isEmpty() || !itemSupport.generationMatches(candidate, record.get())) {
             return candidate;
         }
         MemoryRecord memoryRecord = record.get();
@@ -498,8 +502,8 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 candidate.rawScore(),
                 candidate.userId(),
                 candidate.tenantId(),
-                isBlank(candidate.layer()) ? memoryRecord.layer() : candidate.layer(),
-                isBlank(candidate.type()) ? memoryRecord.type() : candidate.type(),
+                itemSupport.isBlank(candidate.layer()) ? memoryRecord.layer() : candidate.layer(),
+                itemSupport.isBlank(candidate.type()) ? memoryRecord.type() : candidate.type(),
                 memoryRecord.content(),
                 candidate.generationId(),
                 candidate.status(),
@@ -692,97 +696,11 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         return Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
     }
 
-    private Optional<MemoryItem> toMemoryItem(MemoryRecallCandidate candidate) {
-        Optional<MemoryRecord> record = findMemoryById(candidate.memoryId(), candidate.layer());
-        if (record.isEmpty() && !candidate.content().isBlank()) {
-            MemoryLayer layer = parseLayer(candidate.layer()).orElse(MemoryLayer.SEMANTIC);
-            return Optional.of(MemoryItem.builder()
-                    .id(candidate.memoryId())
-                    .userId(candidate.userId())
-                    .layer(layer)
-                    .type(candidate.type())
-                    .content(candidate.content())
-                    .metadataJson(serializeMetadata(candidate.metadata()))
-                    .importanceScore(number(candidate.metadata().get("importanceScore")))
-                    .confidenceLevel(number(candidate.metadata().get("confidenceLevel")))
-                    .relevanceScore(candidate.rawScore())
-                    .build());
-        }
-        return record
-                .filter(memoryRecord -> generationMatches(candidate, memoryRecord))
-                .map(memoryRecord -> toMemoryItem(memoryRecord, candidate.rawScore()));
-    }
 
-    private boolean generationMatches(MemoryRecallCandidate candidate, MemoryRecord record) {
-        if (candidate.generationId().isBlank()) {
-            return true;
-        }
-        String activeGenerationId = stringField(record.metadata(), "generationId");
-        return activeGenerationId.isBlank() || candidate.generationId().equals(activeGenerationId);
-    }
 
-    private Optional<MemoryRecord> findMemoryById(String memoryId, String candidateLayer) {
-        Optional<MemoryLayer> layer = parseLayer(candidateLayer);
-        if (layer.isPresent()) {
-            return switch (layer.get()) {
-                case SHORT_TERM -> safeFindById(shortTermPort, memoryId);
-                case LONG_TERM -> safeFindById(longTermPort, memoryId);
-                case SEMANTIC -> safeFindById(semanticPort, memoryId);
-                case WORKING -> Optional.empty();
-            };
-        }
-        Optional<MemoryRecord> shortTerm = safeFindById(shortTermPort, memoryId);
-        if (shortTerm.isPresent()) {
-            return shortTerm;
-        }
-        Optional<MemoryRecord> longTerm = safeFindById(longTermPort, memoryId);
-        if (longTerm.isPresent()) {
-            return longTerm;
-        }
-        return safeFindById(semanticPort, memoryId);
-    }
 
-    private Optional<MemoryRecord> safeFindById(MemoryStorePort port, String memoryId) {
-        if (isBlank(memoryId)) {
-            return Optional.empty();
-        }
-        try {
-            return port.findById(memoryId);
-        } catch (RuntimeException ex) {
-            LOG.debug("memory find by id failed: memoryId={}", memoryId, ex);
-            return Optional.empty();
-        }
-    }
 
-    private Optional<MemoryLayer> parseLayer(String layer) {
-        if (isBlank(layer)) {
-            return Optional.empty();
-        }
-        try {
-            return Optional.of(MemoryLayer.valueOf(layer.trim().toUpperCase(Locale.ROOT)));
-        } catch (IllegalArgumentException ex) {
-            return Optional.empty();
-        }
-    }
 
-    private MemoryItem toMemoryItem(MemoryRecord record, double relevanceScore) {
-        MemoryLayer layer = parseLayer(record.layer()).orElse(MemoryLayer.SEMANTIC);
-        return MemoryItem.builder()
-                .id(record.id())
-                .userId(stringField(record.metadata(), "userId"))
-                .conversationId(stringField(record.metadata(), "conversationId"))
-                .layer(layer)
-                .type(record.type())
-                .content(record.content())
-                .metadataJson(serializeMetadata(record.metadata()))
-                .importanceScore(numberField(record.metadata(), "importanceScore", 0D))
-                .confidenceLevel(numberField(record.metadata(), "confidenceLevel", 0D))
-                .relevanceScore(relevanceScore)
-                .createTime(record.updatedAt() != null
-                        ? record.updatedAt().atZone(ZoneId.systemDefault()).toLocalDateTime()
-                        : null)
-                .build();
-    }
 
     private List<MemoryItem> loadCorrections(String userId, String tenantId) {
         try {
@@ -813,7 +731,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 .layer(MemoryLayer.SEMANTIC)
                 .type("CORRECTION")
                 .content(rule.ruleText())
-                .metadataJson(serializeMetadata(Map.of(
+                .metadataJson(itemSupport.serializeMetadata(Map.of(
                         "userId", rule.userId(),
                         "tenantId", rule.tenantId(),
                         "targetKind", rule.targetKind(),
@@ -835,7 +753,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 .layer(MemoryLayer.SEMANTIC)
                 .type("PROFILE")
                 .content(fact.valueText())
-                .metadataJson(serializeMetadata(Map.of(
+                .metadataJson(itemSupport.serializeMetadata(Map.of(
                         "userId", fact.userId(),
                         "tenantId", fact.tenantId(),
                         "profileSlot", fact.slotKey(),
@@ -853,7 +771,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                                                    String query,
                                                    int limit,
                                                    List<String> knowledgeBaseIds) {
-        if (isBlank(query)) {
+        if (itemSupport.isBlank(query)) {
             return Collections.emptyList();
         }
         try {
@@ -864,145 +782,21 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         }
     }
 
-    private List<MemoryItem> filterByLayer(List<MemoryItem> items, MemoryLayer layer) {
-        if (items == null || items.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return items.stream()
-                .filter(item -> item != null && item.getLayer() == layer)
-                .toList();
-    }
 
-    private Set<String> correctionProfileSlots(List<MemoryItem> corrections) {
-        if (corrections == null || corrections.isEmpty()) {
-            return Set.of();
-        }
-        Set<String> slots = new LinkedHashSet<>();
-        for (MemoryItem correction : corrections) {
-            String slot = correctionTargetSlot(correction);
-            if (!slot.isBlank()) {
-                slots.add(slot);
-            }
-        }
-        return slots;
-    }
 
-    private String correctionTargetSlot(MemoryItem correction) {
-        String metadata = correction == null ? "" : Objects.requireNonNullElse(correction.getMetadataJson(), "");
-        String targetKind = metadataValue(metadata, "targetKind");
-        String targetKey = metadataValue(metadata, "targetKey");
-        if ("PROFILE_SLOT".equalsIgnoreCase(targetKind) && !targetKey.isBlank()) {
-            return targetKey;
-        }
-        return "";
-    }
 
-    private Set<String> activeProfileSlots(List<MemoryItem> profile) {
-        if (profile == null || profile.isEmpty()) {
-            return Set.of();
-        }
-        Set<String> slots = new LinkedHashSet<>();
-        for (MemoryItem item : profile) {
-            String slot = semanticSlot(item);
-            if (!slot.isBlank()) {
-                slots.add(slot);
-            }
-        }
-        return slots;
-    }
 
-    private List<MemoryItem> removeActiveProfileSlotMemories(List<MemoryItem> items, Set<String> activeSlots) {
-        if (items == null || items.isEmpty() || activeSlots == null || activeSlots.isEmpty()) {
-            return items == null ? Collections.emptyList() : items;
-        }
-        return items.stream()
-                .filter(item -> !activeSlots.contains(semanticSlot(item)))
-                .toList();
-    }
 
-    private String semanticSlot(MemoryItem item) {
-        if (item == null) {
-            return "";
-        }
-        String metadata = Objects.requireNonNullElse(item.getMetadataJson(), "");
-        String profileSlot = metadataValue(metadata, "profileSlot");
-        if (!profileSlot.isBlank()) {
-            return profileSlot;
-        }
-        String semanticKey = metadataValue(metadata, "semanticKey");
-        if ("profile:occupation".equals(semanticKey)) {
-            return "identity.occupation";
-        }
-        return semanticKey.startsWith("identity.") || semanticKey.startsWith("skills.")
-                || semanticKey.startsWith("preferences.")
-                ? semanticKey
-                : "";
-    }
 
-    private List<MemoryItem> deduplicateById(List<MemoryItem> items) {
-        if (items == null || items.size() <= 1) {
-            return items == null ? Collections.emptyList() : items;
-        }
-        Set<String> seen = new LinkedHashSet<>();
-        List<MemoryItem> result = new ArrayList<>();
-        for (MemoryItem item : items) {
-            if (item != null && !isBlank(item.getId()) && seen.add(item.getId())) {
-                result.add(item);
-            }
-        }
-        return result;
-    }
 
-    private List<MemoryItem> deduplicateProfileSlots(List<MemoryItem> items) {
-        if (items == null || items.size() <= 1) {
-            return items == null ? Collections.emptyList() : items;
-        }
-        Map<String, MemoryItem> slotWinners = new LinkedHashMap<>();
-        List<String> itemSlots = new ArrayList<>();
-        for (MemoryItem item : items) {
-            String slot = semanticSlot(item);
-            itemSlots.add(slot);
-            if (slot.isBlank()) {
-                continue;
-            }
-            MemoryItem current = slotWinners.get(slot);
-            if (current == null || prefer(item, current) > 0) {
-                slotWinners.put(slot, item);
-            }
-        }
-        Set<String> emittedSlots = new LinkedHashSet<>();
-        List<MemoryItem> result = new ArrayList<>();
-        for (int index = 0; index < items.size(); index++) {
-            MemoryItem item = items.get(index);
-            String slot = itemSlots.get(index);
-            if (slot.isBlank()) {
-                result.add(item);
-            } else if (emittedSlots.add(slot)) {
-                result.add(slotWinners.get(slot));
-            }
-        }
-        return result;
-    }
 
-    private int prefer(MemoryItem candidate, MemoryItem current) {
-        int byRelevance = Double.compare(number(candidate.getRelevanceScore()), number(current.getRelevanceScore()));
-        if (byRelevance != 0) {
-            return byRelevance;
-        }
-        int byTime = Comparator.nullsFirst(java.time.LocalDateTime::compareTo)
-                .compare(candidate.getCreateTime(), current.getCreateTime());
-        if (byTime != 0) {
-            return byTime;
-        }
-        return Double.compare(score(candidate), score(current));
-    }
 
     private void recordProfileReadFeedback(List<MemoryItem> profile, Instant referencedAt, String tenantId) {
         if (profile == null || profile.isEmpty()) {
             return;
         }
         for (MemoryItem item : profile) {
-            String slot = semanticSlot(item);
+            String slot = itemSupport.semanticSlot(item);
             if (slot.isBlank()) {
                 continue;
             }
@@ -1028,7 +822,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
             return;
         }
         for (MemoryItem item : items) {
-            if (item == null || isBlank(item.getId())) {
+            if (item == null || itemSupport.isBlank(item.getId())) {
                 continue;
             }
             try {
@@ -1039,59 +833,11 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         }
     }
 
-    private String serializeMetadata(Map<String, Object> metadata) {
-        if (metadata == null || metadata.isEmpty()) {
-            return "{}";
-        }
-        try {
-            return objectMapper.writeValueAsString(metadata);
-        } catch (JsonProcessingException ex) {
-            LOG.debug("serialize memory metadata failed", ex);
-            return "{}";
-        }
-    }
 
-    private String metadataValue(String metadata, String key) {
-        if (metadata == null || metadata.isBlank() || key == null || key.isBlank()) {
-            return "";
-        }
-        String compactPrefix = "\"" + key + "\":\"";
-        int compactStart = metadata.indexOf(compactPrefix);
-        if (compactStart >= 0) {
-            int valueStart = compactStart + compactPrefix.length();
-            int valueEnd = metadata.indexOf('"', valueStart);
-            return valueEnd > valueStart ? metadata.substring(valueStart, valueEnd) : "";
-        }
-        String spacedPrefix = "\"" + key + "\": \"";
-        int spacedStart = metadata.indexOf(spacedPrefix);
-        if (spacedStart >= 0) {
-            int valueStart = spacedStart + spacedPrefix.length();
-            int valueEnd = metadata.indexOf('"', valueStart);
-            return valueEnd > valueStart ? metadata.substring(valueStart, valueEnd) : "";
-        }
-        return "";
-    }
 
-    private String stringField(Map<String, Object> metadata, String key) {
-        Object value = metadata.get(key);
-        return value == null ? "" : value.toString();
-    }
 
-    private double numberField(Map<String, Object> metadata, String key, double fallback) {
-        Object value = metadata.get(key);
-        if (value instanceof Number number) {
-            return number.doubleValue();
-        }
-        return fallback;
-    }
 
-    private double number(Object value) {
-        return value instanceof Number number ? number.doubleValue() : 0D;
-    }
 
-    private double score(MemoryItem item) {
-        return number(item.getImportanceScore()) + number(item.getConfidenceLevel());
-    }
 
     private MemoryContext emptyContext(MemoryLoadRequest request) {
         return MemoryContext.builder()
@@ -1109,7 +855,4 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 .build();
     }
 
-    private boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
 }
