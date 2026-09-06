@@ -1,7 +1,7 @@
 # Core Runtime Stability Implementation Checkpoint
 
 Updated: 2026-09-06  
-State: slice-3-cancellation-closed-slice-5-ports-358-hardening-batch-landed
+State: slice-3-cancellation-closed-slice-5-ports-358-hardening-and-arch-gate-restored
 
 ## TodoCheckpointDraft
 
@@ -364,6 +364,55 @@ Analysis-driven hardening batch (five commits) closing the top gaps from the
   session-expiry matching; api toasts surface the backend traceId.
 - Gates: kernel full 926/926, web full 305/305, frontend 208/208 + tsc +
   eslint + build; complexity ratchet now records large classes 15.
+
+## Current Slice Update (2026-09-06, issue-fix batch)
+
+Issue-fix batch closing the remaining findings from the 2026-09-06 audit
+(six commits a12950d5..ede52cb8):
+
+- `a12950d5` metrics honesty: `complexity-report.sh --update-baseline`
+  preserves unmanaged baseline keys (controller_kernel_service_edges was
+  dropped by every template rewrite); the autoconfigure module gets its
+  own ratcheted `autoconfig_large_classes_gt_800=3` counter instead of
+  hiding behind the scan exclusion; `ToolArgumentAuditSummary` (687 lines,
+  400-line-rule violation) split by business stage into
+  `SandboxToolArgumentSummaries` (400+332, audit tests 37/37); the
+  32_768 default context-window budget and safe-profile decision moved
+  into `ModelContextWindowPort`. Attempting to extract the agent
+  autoconfiguration bean groups was reverted — @ConditionalOnBean
+  registration-order semantics break across configuration-class
+  boundaries; the dedicated assembly counter documents the three large
+  wiring classes instead.
+- `9868804a` `HybridMemoryRecallPipeline` (1345 lines, 18-parameter god
+  constructor) collapsed to a single Builder path with all three call
+  sites migrated (defaults identical); the class is 1311 lines and its
+  stage-level split (trace/metric block threads instance state) remains
+  the largest open hotspot.
+- `5ecdcd16` silent-failure repair: the two quota checks in
+  `KernelAgentRunService` fail-opened silently on dependency errors
+  (contradicting design §9 and the slice-2 claim); they now fail closed
+  with WARN logs; the three JSON-degradation catches and all six
+  `AiModelConfigController` endpoints (which swallowed NotLoginException
+  into HTTP-200 envelopes) now surface failures — auth rethrows to the
+  401 handler, others log WARN with redacted messages. Remaining
+  unlogged broad catches across ~10 more web/adapter files are recorded
+  as follow-up (deliberate best-effort paths need per-file triage).
+- `d3cd776a` frontend: `useStreamResponse` watchdog/retry/error-contract
+  regressions plus `utils/error.test.ts` (the transport had 2 tests for
+  337 lines); auth-expiry narrowing pinned by tests; CHANGELOG.md
+  established.
+- `ede52cb8` architecture gate restored: the origin/main sync had moved
+  the chat monolith's cross-subdomain edges onto collaborator classes,
+  breaking R2/R3 in both directions (10 unapproved, 2 stale) — main
+  itself could not pass its own gate. `AgentLoopCancelledException`/
+  `AgentLoopException` moved to domain.agent.runtime (cancellation is a
+  domain concept; one edge dissolved), the whitelist replaced the stale
+  entries with the 9 current edges (exact-match contract; count 40 -> 47
+  disclosed in-file and in the ratchet), and the edge-dissolution
+  follow-up (chat -> agent.skill / runcontext via neutral support
+  packages) is recorded.
+- Gates: architecture 16/16, kernel reactor green, web module 305/305,
+  frontend 217/217 + build, complexity report PASS.
 
 ## Blocked On
 
