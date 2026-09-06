@@ -28,6 +28,12 @@ import java.util.Objects;
 @FunctionalInterface
 public interface ModelContextWindowPort {
 
+    /**
+     * 未显式配置模型上下文窗口时的默认 token 预算。默认值决策归端口所有，
+     * 装配层只负责把环境值绑定进来。
+     */
+    int DEFAULT_CONTEXT_WINDOW_TOKENS = 32_768;
+
     ModelContextWindow resolve(String modelId);
 
     default String resolveModelId(String modelId) {
@@ -68,6 +74,22 @@ public interface ModelContextWindowPort {
     static ModelContextWindowPort strictConfigured(
             Map<String, Integer> modelWindows, String sourcePrefix, String defaultModelId) {
         return strictConfigured(modelWindows, sourcePrefix, defaultModelId, null);
+    }
+
+    /**
+     * strict 装配入口：默认 token 预算归端口所有；安全档位仅在被显式开启时生效。
+     */
+    static ModelContextWindowPort strictConfigured(
+            Map<String, Integer> modelWindows,
+            String sourcePrefix,
+            String defaultModelId,
+            boolean defaultModelSafeProfileEnabled,
+            int defaultContextWindowTokens) {
+        return strictConfigured(
+                modelWindows,
+                sourcePrefix,
+                defaultModelId,
+                defaultModelSafeProfileEnabled ? defaultContextWindowTokens : null);
     }
 
     static ModelContextWindowPort strictConfigured(

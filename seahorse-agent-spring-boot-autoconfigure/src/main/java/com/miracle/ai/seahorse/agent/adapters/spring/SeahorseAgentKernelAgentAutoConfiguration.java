@@ -311,7 +311,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 .orElse(Map.of()));
         int defaultWindow = environment.getProperty(
                 PROP_CONTEXT_ENVELOPE_PREFIX + ".default-context-window-tokens",
-                Integer.class, 32_768);
+                Integer.class, ModelContextWindowPort.DEFAULT_CONTEXT_WINDOW_TOKENS);
         boolean safeDefaultProfileEnabled = environment.getProperty(
                 PROP_CONTEXT_ENVELOPE_PREFIX + ".default-model-safe-profile-enabled",
                 Boolean.class, false);
@@ -323,7 +323,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 modelWindows,
                 "spring-context-envelope",
                 configuredChatModel,
-                safeDefaultProfileEnabled ? defaultWindow : null);
+                safeDefaultProfileEnabled,
+                defaultWindow);
     }
 
     @Bean

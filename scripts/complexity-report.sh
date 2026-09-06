@@ -33,6 +33,13 @@ CURRENT_LARGE=$(find "$ROOT_DIR" \
   -exec wc -l {} \; 2>/dev/null \
   | awk '$1 > 800 { count++ } END { print count + 0 }')
 
+# 装配层大类单独计数：autoconfigure 是线性 bean 装配而非算法热点，
+# 但必须可见并有独立棘轮，不允许藏在这个排除项里失控。
+CURRENT_AUTOCONFIG_LARGE=$(find "$ROOT_DIR/seahorse-agent-spring-boot-autoconfigure" \
+  -type f -path "*/src/main/java/*.java" \
+  -exec wc -l {} \; 2>/dev/null \
+  | awk '$1 > 800 { count++ } END { print count + 0 }')
+
 AUTOCONFIG_FILE="${ROOT_DIR}/seahorse-agent-spring-boot-autoconfigure/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports"
 CURRENT_AUTOCONFIG=$(awk '{ sub(/\r$/, "") } !/^[[:space:]]*#/ && NF { count++ } END { print count + 0 }' "$AUTOCONFIG_FILE")
 
@@ -40,7 +47,9 @@ WHITELIST_FILE="${ROOT_DIR}/seahorse-agent-architecture-tests/src/main/resources
 CURRENT_CROSS=$(awk '{ sub(/\r$/, "") } !/^[[:space:]]*#/ && NF { count++ } END { print count + 0 }' "$WHITELIST_FILE")
 
 if [[ "${1:-}" == "--update-baseline" ]]; then
-  cat > "$BASELINE_FILE" <<EOF
+  MANAGED_KEYS="port_interfaces port_inbound port_outbound port_common port_java_files_info large_classes_gt_800 autoconfig_large_classes_gt_800 autoconfig_registrations cross_domain_whitelist_size"
+  TMP_BASELINE="$(mktemp)"
+  cat > "$TMP_BASELINE" <<EOF
 # Complexity baseline captured from the current reviewed source tree.
 # Ratchet policy: values may only decrease.
 port_interfaces=$CURRENT_PORTS
@@ -49,9 +58,26 @@ port_outbound=$CURRENT_PORT_OUTBOUND
 port_common=$CURRENT_PORT_COMMON
 port_java_files_info=$CURRENT_PORT_FILES
 large_classes_gt_800=$CURRENT_LARGE
+autoconfig_large_classes_gt_800=$CURRENT_AUTOCONFIG_LARGE
 autoconfig_registrations=$CURRENT_AUTOCONFIG
 cross_domain_whitelist_size=$CURRENT_CROSS
+
 EOF
+  # Preserve pre-existing baseline keys this script does not manage (for
+  # example controller_kernel_service_edges) instead of dropping them.
+  while IFS= read -r line; do
+    case "$line" in '#'*) continue ;; esac
+    key="${line%%=*}"
+    [[ -z "$key" ]] && continue
+    skip=0
+    for managed in $MANAGED_KEYS; do
+      if [[ "$key" == "$managed" ]]; then skip=1; break; fi
+    done
+    if (( skip == 0 )) && ! grep -q "^${key}=" "$TMP_BASELINE"; then
+      printf '%s\n' "$line" >> "$TMP_BASELINE"
+    fi
+  done < "$BASELINE_FILE"
+  mv "$TMP_BASELINE" "$BASELINE_FILE"
   echo "Baseline updated: $BASELINE_FILE"
   exit 0
 fi
@@ -70,6 +96,7 @@ read_metric() {
 BASELINE_PORTS=$(read_metric port_interfaces)
 BASELINE_PORT_FILES=$(read_metric port_java_files_info)
 BASELINE_LARGE=$(read_metric large_classes_gt_800)
+BASELINE_AUTOCONFIG_LARGE=$(read_metric autoconfig_large_classes_gt_800)
 BASELINE_AUTOCONFIG=$(read_metric autoconfig_registrations)
 BASELINE_CROSS=$(read_metric cross_domain_whitelist_size)
 
@@ -89,6 +116,7 @@ check_metric() {
 check_metric ports "$CURRENT_PORTS" "$BASELINE_PORTS"
 check_metric port_java_files_info "$CURRENT_PORT_FILES" "$BASELINE_PORT_FILES"
 check_metric large_classes_gt_800 "$CURRENT_LARGE" "$BASELINE_LARGE"
+check_metric autoconfig_large_classes_gt_800 "$CURRENT_AUTOCONFIG_LARGE" "$BASELINE_AUTOCONFIG_LARGE"
 check_metric autoconfig_registrations "$CURRENT_AUTOCONFIG" "$BASELINE_AUTOCONFIG"
 check_metric cross_domain_whitelist_size "$CURRENT_CROSS" "$BASELINE_CROSS"
 
@@ -104,6 +132,7 @@ cat > "$REPORT_FILE" <<EOF
 | Public Port interfaces (ArchUnit is authoritative) | $BASELINE_PORTS | $CURRENT_PORTS | $((CURRENT_PORTS - BASELINE_PORTS)) | $(status "$CURRENT_PORTS" "$BASELINE_PORTS") |
 | Java files under ports (informational) | $BASELINE_PORT_FILES | $CURRENT_PORT_FILES | $((CURRENT_PORT_FILES - BASELINE_PORT_FILES)) | $(status "$CURRENT_PORT_FILES" "$BASELINE_PORT_FILES") |
 | Large classes >800 | $BASELINE_LARGE | $CURRENT_LARGE | $((CURRENT_LARGE - BASELINE_LARGE)) | $(status "$CURRENT_LARGE" "$BASELINE_LARGE") |
+| AutoConfig large classes >800 | $BASELINE_AUTOCONFIG_LARGE | $CURRENT_AUTOCONFIG_LARGE | $((CURRENT_AUTOCONFIG_LARGE - BASELINE_AUTOCONFIG_LARGE)) | $(status "$CURRENT_AUTOCONFIG_LARGE" "$BASELINE_AUTOCONFIG_LARGE") |
 | AutoConfig imports | $BASELINE_AUTOCONFIG | $CURRENT_AUTOCONFIG | $((CURRENT_AUTOCONFIG - BASELINE_AUTOCONFIG)) | $(status "$CURRENT_AUTOCONFIG" "$BASELINE_AUTOCONFIG") |
 | Cross-domain class pairs | $BASELINE_CROSS | $CURRENT_CROSS | $((CURRENT_CROSS - BASELINE_CROSS)) | $(status "$CURRENT_CROSS" "$BASELINE_CROSS") |
 EOF
