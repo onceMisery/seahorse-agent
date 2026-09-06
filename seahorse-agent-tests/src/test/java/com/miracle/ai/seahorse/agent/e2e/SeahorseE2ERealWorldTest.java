@@ -37,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 场景：演示 Seahorse Agent 完整工作原理
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@Tag("e2e")
 public class SeahorseE2ERealWorldTest {
 
     private static final String BASE_URL = "http://localhost:9090";

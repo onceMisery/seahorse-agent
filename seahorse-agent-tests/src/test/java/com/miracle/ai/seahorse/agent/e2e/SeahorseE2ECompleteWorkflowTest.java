@@ -41,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
 @ActiveProfiles("test")
+@Tag("e2e")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class SeahorseE2ECompleteWorkflowTest {
 

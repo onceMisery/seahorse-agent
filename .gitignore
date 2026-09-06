@@ -52,3 +52,6 @@ dist/
 # Qoder IDE workspace
 .qoder/
 .playwright-cli
+
+# Build/test logs
+*.log

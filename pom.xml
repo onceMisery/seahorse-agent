@@ -335,7 +335,8 @@
                 <version>${maven-surefire-plugin.version}</version>
                 <configuration>
                     <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
-                    <excludedGroups>integration</excludedGroups>
+                    <!-- integration: 依赖真实基础设施的集成测试；e2e: 直连 localhost:9090 的 Full Docker 端到端测试 -->
+                    <excludedGroups>integration,e2e</excludedGroups>
                 </configuration>
             </plugin>
 

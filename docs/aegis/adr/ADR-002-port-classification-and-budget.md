@@ -42,6 +42,11 @@ The public Port budget is a baseline of 377 actual Port interfaces, a
 core-stabilization target of no more than 300 repository-wide, and a directional
 target of at least a 20% reduction concentrated in touched core capabilities.
 
+> 2026-09-06 注记：377 是本 ADR 决策时的历史快照。生效的权威计数是
+> `complexity-baseline.txt` 的 `port_interfaces`（当前 358，棘轮只降不升）与
+> `docs/architecture/port-inventory.md` 的同值记录；`PortArchitectureTest`
+> 以基线文件相等断言执行本 ADR 的预算纪律。
+
 Anti-gaming checks forbid God interfaces, `Map<String, Object>` carriers,
 test-only retention, adapter-type leakage into the kernel, and reduction claims
 without consumer/implementation/dependency-edge evidence.

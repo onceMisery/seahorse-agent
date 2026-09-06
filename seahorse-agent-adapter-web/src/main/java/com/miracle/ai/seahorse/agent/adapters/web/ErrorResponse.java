@@ -18,16 +18,22 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import org.slf4j.MDC;
 
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * 核心错误契约（设计 §9）：code 是稳定机器契约，message 已脱敏，retryable 由服务端语义决定。
+ * traceId 在 tracing 启用时由 MDC 提供（micrometer 桥写入），未启用时省略；requestId 保留给旧客户端。
+ */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ErrorResponse(
         String code,
         String message,
         Boolean retryable,
+        String traceId,
         Instant timestamp,
         String path,
         String requestId,
@@ -63,6 +69,7 @@ public record ErrorResponse(
                 code,
                 message,
                 retryable,
+                MDC.get("traceId"),
                 Instant.now(),
                 path,
                 requestId == null || requestId.isBlank() ? nextRequestId() : requestId,

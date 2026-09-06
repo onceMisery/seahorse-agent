@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 
 import java.util.Map;
 
@@ -50,8 +51,22 @@ class ErrorResponseContractTests {
         assertThat(nonRetryable.get("retryable").asBoolean()).isFalse();
 
         JsonNode retryable = objectMapper.valueToTree(
-                ErrorResponse.of("DEPENDENCY_UNAVAILABLE", "vector down", true, "/api/x", "req-1", "t-1", Map.of()));
+                ErrorResponse.of("DB_TIMEOUT", "vector down", true, "/api/x", "req-1", "t-1", Map.of()));
         assertThat(retryable.get("retryable").asBoolean()).isTrue();
-        assertThat(retryable.get("code").asText()).isEqualTo("DEPENDENCY_UNAVAILABLE");
+        assertThat(retryable.get("code").asText()).isEqualTo("DB_TIMEOUT");
+    }
+
+    @Test
+    void errorResponseCarriesTraceIdFromMdcWhenTracingIsEnabled() throws Exception {
+        MDC.put("traceId", "trace-123");
+        try {
+            JsonNode json = objectMapper.valueToTree(ErrorResponse.of("INTERNAL_ERROR", "boom"));
+            assertThat(json.get("traceId").asText()).isEqualTo("trace-123");
+        } finally {
+            MDC.remove("traceId");
+        }
+
+        JsonNode withoutTracing = objectMapper.valueToTree(ErrorResponse.of("INTERNAL_ERROR", "boom"));
+        assertThat(withoutTracing.has("traceId")).isFalse();
     }
 }

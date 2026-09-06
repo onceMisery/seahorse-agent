@@ -69,14 +69,12 @@ jobs:
 
       - name: Build, unit, and architecture tests
         # 说明：
-        # - 根 pom 的 surefire 已排除 @Tag("integration")
-        # - seahorse-agent-tests 里的 e2e 包（SeahorseE2E*）是 @SpringBootTest
-        #   直连 localhost:9090 的真实环境测试，未打 integration 标签，
-        #   在无 full-Docker 环境的 runner 上必挂，这里显式排除。
-        #   后续建议给它们补上 @Tag("integration")，然后删掉本处 -Dtest 参数。
+        # - 根 pom 的 surefire 按 JUnit 标签排除测试分类：
+        #   @Tag("integration") 依赖真实基础设施，@Tag("e2e") 直连 localhost:9090
+        #   的 Full Docker 端到端测试（SeahorseE2E*），在无 full-Docker 环境的
+        #   runner 上必挂。单元/契约/架构测试全部阻塞本 job。
         run: >
           ./mvnw -B -ntp verify
-          -Dtest='!SeahorseE2E*'
           -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Complexity budget check

@@ -1,0 +1,26 @@
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # 每天凌晨跑一次全量历史扫描，捕获事后才公开的泄露
+    - cron: "0 18 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    name: Detect committed secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
