@@ -47,12 +47,17 @@ import com.miracle.ai.seahorse.agent.ports.outbound.runprofile.RunProfileRecord;
 
 import java.time.Clock;
 import java.util.LinkedHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
 public class KernelAgentRunService implements AgentRunInboundPort {
+
+    private static final Logger LOG = LoggerFactory.getLogger(KernelAgentRunService.class);
 
     private static final String ADMIN_ROLE = "admin";
     private static final String ACCESS_DENIED = "\u6743\u9650\u4e0d\u8db3";
@@ -143,15 +148,19 @@ public class KernelAgentRunService implements AgentRunInboundPort {
                 quotaEnforcementService.checkTokenQuota(safeCommand.tenantId());
             } catch (com.miracle.ai.seahorse.agent.kernel.domain.billing.QuotaExceededException ex) {
                 throw ex;
-            } catch (Exception ignored) {
-                // Fail-open: quota system unavailable
+            } catch (Exception quotaFailure) {
+                // 设计 §9：配额属必需检查，依赖故障必须 fail-closed 而不是静默放行。
+                LOG.warn("Quota enforcement unavailable, failing closed for tenant {}", safeCommand.tenantId());
+                throw new IllegalStateException("Quota enforcement is unavailable", quotaFailure);
             }
             try {
                 quotaEnforcementService.checkConcurrencyQuota(safeCommand.tenantId());
             } catch (com.miracle.ai.seahorse.agent.kernel.domain.billing.QuotaExceededException ex) {
                 throw ex;
-            } catch (Exception ignored) {
-                // Fail-open: quota system unavailable
+            } catch (Exception quotaFailure) {
+                // 设计 §9：配额属必需检查，依赖故障必须 fail-closed 而不是静默放行。
+                LOG.warn("Quota enforcement unavailable, failing closed for tenant {}", safeCommand.tenantId());
+                throw new IllegalStateException("Quota enforcement is unavailable", quotaFailure);
             }
         }
 
@@ -258,7 +267,9 @@ public class KernelAgentRunService implements AgentRunInboundPort {
         }
         try {
             return objectMapper.readValue(normalized, MAP_TYPE);
-        } catch (Exception ignored) {
+        } catch (Exception parseFailure) {
+            LOG.warn("Agent run metadataJson is not a JSON object (length={}); preserving it under legacyMetadataJson",
+                    normalized.length());
             Map<String, Object> metadata = new LinkedHashMap<>();
             metadata.put("legacyMetadataJson", normalized);
             return metadata;
@@ -272,7 +283,9 @@ public class KernelAgentRunService implements AgentRunInboundPort {
         }
         try {
             return objectMapper.readValue(normalized, MAP_TYPE);
-        } catch (Exception ignored) {
+        } catch (Exception parseFailure) {
+            LOG.warn("Failed to parse agent run JSON payload (length={}); continuing with empty map",
+                    normalized.length());
             return Map.of();
         }
     }
@@ -648,7 +661,8 @@ public class KernelAgentRunService implements AgentRunInboundPort {
         try {
             Object parsed = objectMapper.readValue(text, Object.class);
             return writeJson(safeJsonValue(null, parsed));
-        } catch (Exception ignored) {
+        } catch (Exception sanitizeFailure) {
+            LOG.warn("Agent run JSON sanitization failed (length={}); falling back to redacted text", text.length());
             return safeText(text);
         }
     }

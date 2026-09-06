@@ -17,12 +17,15 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import cn.dev33.satoken.exception.NotLoginException;
 import cn.dev33.satoken.stp.StpUtil;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.model.AiModelConfig;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.inbound.gate.GateResults;
 import com.miracle.ai.seahorse.agent.ports.outbound.config.AiModelConfigRepositoryPort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -39,6 +42,8 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/admin/ai-config")
 public class AiModelConfigController {
+
+    private static final Logger LOG = LoggerFactory.getLogger(AiModelConfigController.class);
 
     private static final String KEY_CODE = "code";
     private static final String KEY_DATA = "data";
@@ -69,6 +74,8 @@ public class AiModelConfigController {
                     .map(this::toResponseMap)
                     .collect(Collectors.toList());
             return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, data);
+        } catch (NotLoginException authFailure) {
+            throw authFailure;
         } catch (Exception e) {
             return failure("Failed to list configs", e);
         }
@@ -82,6 +89,8 @@ public class AiModelConfigController {
             return configRepository.findByKey(normalizeTenantId(tenantId), key)
                     .map(config -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, toResponseMap(config)))
                     .orElse(Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Config not found"));
+        } catch (NotLoginException authFailure) {
+            throw authFailure;
         } catch (Exception e) {
             return failure("Failed to get config", e);
         }
@@ -96,6 +105,8 @@ public class AiModelConfigController {
                     .map(config -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
                             gateResultRecorder.record(GateResults.fromAiModelConfig(config), config.getTenantId())))
                     .orElse(Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "Config not found"));
+        } catch (NotLoginException authFailure) {
+            throw authFailure;
         } catch (Exception e) {
             return failure("Failed to get config gate result", e);
         }
@@ -116,6 +127,8 @@ public class AiModelConfigController {
             configRepository.update(normalizeTenantId(request.get("tenantId")), key, value, userId);
 
             return Map.of(KEY_CODE, SUCCESS_CODE, KEY_MESSAGE, "Config updated successfully");
+        } catch (NotLoginException authFailure) {
+            throw authFailure;
         } catch (Exception e) {
             return failure("Failed to update config", e);
         }
@@ -143,6 +156,8 @@ public class AiModelConfigController {
             configRepository.save(config);
 
             return Map.of(KEY_CODE, SUCCESS_CODE, KEY_MESSAGE, "Config created successfully", KEY_DATA, toResponseMap(config));
+        } catch (NotLoginException authFailure) {
+            throw authFailure;
         } catch (Exception e) {
             return failure("Failed to create config", e);
         }
@@ -155,6 +170,8 @@ public class AiModelConfigController {
             StpUtil.checkLogin();
             configRepository.delete(normalizeTenantId(tenantId), key);
             return Map.of(KEY_CODE, SUCCESS_CODE, KEY_MESSAGE, "Config deleted successfully");
+        } catch (NotLoginException authFailure) {
+            throw authFailure;
         } catch (Exception e) {
             return failure("Failed to delete config", e);
         }
@@ -162,6 +179,7 @@ public class AiModelConfigController {
 
     private Map<String, Object> failure(String prefix, Exception error) {
         String message = Objects.requireNonNullElse(error.getMessage(), error.getClass().getSimpleName());
+        LOG.warn("{}: {}", prefix, CredentialTextRedactor.redact(message), error);
         return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, prefix + ": " + CredentialTextRedactor.redact(message));
     }
 
