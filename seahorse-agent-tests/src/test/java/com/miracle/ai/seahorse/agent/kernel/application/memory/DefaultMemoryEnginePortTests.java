@@ -376,10 +376,11 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                profilePort,
-                CorrectionLedgerPort.noop());
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(profilePort)
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .build();
 
         var result = engine.ingest(new MemoryIngestionCommand("op-aggregated-profile", "default", "memory-aggregation",
                 MemoryWriteRequest.builder()
@@ -429,10 +430,11 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                profilePort,
-                CorrectionLedgerPort.noop());
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(profilePort)
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .build();
 
         engine.writeMemory(MemoryWriteRequest.builder()
                 .userId(USER_ID)
@@ -470,10 +472,11 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                profilePort,
-                CorrectionLedgerPort.noop());
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(profilePort)
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .build();
 
         engine.writeMemory(MemoryWriteRequest.builder()
                 .userId(USER_ID)
@@ -511,10 +514,11 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                profilePort,
-                CorrectionLedgerPort.noop());
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(profilePort)
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .build();
 
         engine.writeMemory(MemoryWriteRequest.builder()
                 .userId(USER_ID)
@@ -542,10 +546,11 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 semanticPort,
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                profilePort,
-                correctionPort);
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(profilePort)
+                .correctionLedgerPort(correctionPort)
+                .build();
 
         engine.writeMemory(MemoryWriteRequest.builder()
                 .userId(USER_ID)
@@ -594,10 +599,11 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                profilePort,
-                CorrectionLedgerPort.noop());
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(profilePort)
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .build();
 
         MemoryContext context = engine.loadMemory(MemoryLoadRequest.builder()
                 .userId(USER_ID)
@@ -744,12 +750,13 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                profilePort,
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                operationLogPort);
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(profilePort)
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(operationLogPort)
+                .build();
         MemoryWriteRequest writeRequest = MemoryWriteRequest.builder()
                 .userId(USER_ID)
                 .conversationId("conv-idempotent")
@@ -780,12 +787,13 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                profilePort,
-                correctionPort,
-                new DefaultMemoryRouter(),
-                operationLogPort);
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(profilePort)
+                .correctionLedgerPort(correctionPort)
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(operationLogPort)
+                .build();
 
         var result = engine.ingest(new MemoryIngestionCommand("op-sensitive", "default", "test",
                 MemoryWriteRequest.builder()
@@ -813,12 +821,13 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                operationLogPort);
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(operationLogPort)
+                .build();
 
         var result = engine.ingest(new MemoryIngestionCommand("op-low-value", "default", "chat-completed",
                 MemoryWriteRequest.builder()
@@ -844,12 +853,13 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                operationLogPort);
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(operationLogPort)
+                .build();
 
         var result = engine.ingest(new MemoryIngestionCommand("op-preference", "default", "agent-memory-write",
                 MemoryWriteRequest.builder()
@@ -883,12 +893,13 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                operationLogPort);
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(operationLogPort)
+                .build();
 
         Assertions.assertThrows(IllegalStateException.class, () -> engine.ingest(new MemoryIngestionCommand(
                 "op-failed-secret",
@@ -1491,19 +1502,20 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 longTermPort,
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                new MemoryEngineOptions(5, 3, 10, true, true, true),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                MemoryOperationLogPort.noop(),
-                MemoryVectorPort.noop(),
-                MemoryOutboxPort.noop(),
-                MemoryBusinessDocumentRetrieverPort.noop(),
-                MemoryLifecyclePort.noop(),
-                MemoryPolicyConfigPort.defaults(),
-                (MemoryRetrievalPipelinePort) null,
-                refinerPort);
+                OBJECT_MAPPER)
+                .options(new MemoryEngineOptions(5, 3, 10, true, true, true))
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(MemoryOperationLogPort.noop())
+                .memoryVectorPort(MemoryVectorPort.noop())
+                .memoryOutboxPort(MemoryOutboxPort.noop())
+                .businessDocumentRetrieverPort(MemoryBusinessDocumentRetrieverPort.noop())
+                .memoryLifecyclePort(MemoryLifecyclePort.noop())
+                .memoryPolicyConfigPort(MemoryPolicyConfigPort.defaults())
+                .memoryRetrievalPipelinePort((MemoryRetrievalPipelinePort) null)
+                .memoryRefinerPort(refinerPort)
+                .build();
 
         engine.ingest(new MemoryIngestionCommand("op-refiner-read-mask", "default", "chat-completed",
                 MemoryWriteRequest.builder()
@@ -1541,23 +1553,24 @@ class DefaultMemoryEnginePortTests {
                 new StubShortTermMemoryPort(List.of()),
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                new MemoryEngineOptions(5, 3, 10, true, true, true),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                MemoryOperationLogPort.noop(),
-                MemoryVectorPort.noop(),
-                MemoryOutboxPort.noop(),
-                MemoryBusinessDocumentRetrieverPort.noop(),
-                MemoryLifecyclePort.noop(),
-                MemoryPolicyConfigPort.defaults(),
-                (MemoryRetrievalPipelinePort) null,
-                refinerPort,
-                MemoryReviewManagementRepositoryPort.noop(),
-                MemoryAliasPort.noop(),
-                MemoryReviewPolicyPort.defaults(),
-                feedbackRepository);
+                OBJECT_MAPPER)
+                .options(new MemoryEngineOptions(5, 3, 10, true, true, true))
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(MemoryOperationLogPort.noop())
+                .memoryVectorPort(MemoryVectorPort.noop())
+                .memoryOutboxPort(MemoryOutboxPort.noop())
+                .businessDocumentRetrieverPort(MemoryBusinessDocumentRetrieverPort.noop())
+                .memoryLifecyclePort(MemoryLifecyclePort.noop())
+                .memoryPolicyConfigPort(MemoryPolicyConfigPort.defaults())
+                .memoryRetrievalPipelinePort((MemoryRetrievalPipelinePort) null)
+                .memoryRefinerPort(refinerPort)
+                .memoryReviewCandidatePort(MemoryReviewManagementRepositoryPort.noop())
+                .memoryAliasPort(MemoryAliasPort.noop())
+                .memoryReviewPolicyPort(MemoryReviewPolicyPort.defaults())
+                .memoryReviewFeedbackRepositoryPort(feedbackRepository)
+                .build();
 
         engine.ingest(new MemoryIngestionCommand("op-refiner-feedback", "default", "memory-aggregation-flush",
                 MemoryWriteRequest.builder()
@@ -1654,23 +1667,24 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 longTermPort,
                 semanticPort,
-                OBJECT_MAPPER,
-                options,
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                MemoryOperationLogPort.noop(),
-                MemoryVectorPort.noop(),
-                MemoryOutboxPort.noop(),
-                MemoryBusinessDocumentRetrieverPort.noop(),
-                MemoryLifecyclePort.noop(),
-                MemoryPolicyConfigPort.defaults(),
-                (MemoryRetrievalPipelinePort) null,
-                refinerPort,
-                MemoryReviewManagementRepositoryPort.noop(),
-                MemoryAliasPort.noop(),
-                MemoryReviewPolicyPort.defaults(),
-                feedbackRepository);
+                OBJECT_MAPPER)
+                .options(options)
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(MemoryOperationLogPort.noop())
+                .memoryVectorPort(MemoryVectorPort.noop())
+                .memoryOutboxPort(MemoryOutboxPort.noop())
+                .businessDocumentRetrieverPort(MemoryBusinessDocumentRetrieverPort.noop())
+                .memoryLifecyclePort(MemoryLifecyclePort.noop())
+                .memoryPolicyConfigPort(MemoryPolicyConfigPort.defaults())
+                .memoryRetrievalPipelinePort((MemoryRetrievalPipelinePort) null)
+                .memoryRefinerPort(refinerPort)
+                .memoryReviewCandidatePort(MemoryReviewManagementRepositoryPort.noop())
+                .memoryAliasPort(MemoryAliasPort.noop())
+                .memoryReviewPolicyPort(MemoryReviewPolicyPort.defaults())
+                .memoryReviewFeedbackRepositoryPort(feedbackRepository)
+                .build();
 
         engine.ingest(new MemoryIngestionCommand("op-refiner-policy", "default", "memory-aggregation-flush",
                 MemoryWriteRequest.builder()
@@ -2050,12 +2064,13 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                profileMemoryPort,
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                operationLogPort);
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(profileMemoryPort)
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(operationLogPort)
+                .build();
 
         var result = engine.ingest(MemoryIngestionCommand.reviewApply(
                 "op-review-apply",
@@ -2108,12 +2123,13 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 semanticPort,
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                operationLogPort);
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(operationLogPort)
+                .build();
 
         var result = engine.ingest(MemoryIngestionCommand.reviewApply(
                 "op-review-semantic",
@@ -2159,12 +2175,13 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                operationLogPort);
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(operationLogPort)
+                .build();
 
         var result = engine.ingest(MemoryIngestionCommand.reviewApply(
                 "op-review-working-layer",
@@ -2211,15 +2228,16 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                new MemoryEngineOptions(5, 3, 10, true, false, true, true, true),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                operationLogPort,
-                new ThrowingMemoryVectorPort(),
-                outboxPort,
-                MemoryBusinessDocumentRetrieverPort.noop());
+                OBJECT_MAPPER)
+                .options(new MemoryEngineOptions(5, 3, 10, true, false, true, true, true))
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(operationLogPort)
+                .memoryVectorPort(new ThrowingMemoryVectorPort())
+                .memoryOutboxPort(outboxPort)
+                .businessDocumentRetrieverPort(MemoryBusinessDocumentRetrieverPort.noop())
+                .build();
 
         var result = engine.ingest(MemoryIngestionCommand.reviewApply(
                 "op-review-delete",
@@ -2275,15 +2293,16 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                operationLogPort,
-                MemoryVectorPort.noop(),
-                outboxPort,
-                MemoryBusinessDocumentRetrieverPort.noop());
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(operationLogPort)
+                .memoryVectorPort(MemoryVectorPort.noop())
+                .memoryOutboxPort(outboxPort)
+                .businessDocumentRetrieverPort(MemoryBusinessDocumentRetrieverPort.noop())
+                .build();
 
         var result = engine.ingest(MemoryIngestionCommand.reviewApply(
                 "op-review-delete-working-layer",
@@ -2324,15 +2343,16 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                operationLogPort,
-                MemoryVectorPort.noop(),
-                outboxPort,
-                MemoryBusinessDocumentRetrieverPort.noop());
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(operationLogPort)
+                .memoryVectorPort(MemoryVectorPort.noop())
+                .memoryOutboxPort(outboxPort)
+                .businessDocumentRetrieverPort(MemoryBusinessDocumentRetrieverPort.noop())
+                .build();
 
         var result = engine.ingest(MemoryIngestionCommand.reviewApply(
                 "op-review-delete-missing",
@@ -2372,15 +2392,16 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                MemoryOperationLogPort.noop(),
-                new ThrowingMemoryVectorPort(),
-                outboxPort,
-                MemoryBusinessDocumentRetrieverPort.noop());
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(MemoryOperationLogPort.noop())
+                .memoryVectorPort(new ThrowingMemoryVectorPort())
+                .memoryOutboxPort(outboxPort)
+                .businessDocumentRetrieverPort(MemoryBusinessDocumentRetrieverPort.noop())
+                .build();
 
         var result = engine.ingest(new MemoryIngestionCommand("op-vector-fail", "default", "chat-completed",
                 MemoryWriteRequest.builder()
@@ -2405,15 +2426,16 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                new MemoryEngineOptions(5, 3, 10, true, false, true, true, true),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                MemoryOperationLogPort.noop(),
-                new RecordingMemoryVectorPort(List.of()),
-                outboxPort,
-                MemoryBusinessDocumentRetrieverPort.noop());
+                OBJECT_MAPPER)
+                .options(new MemoryEngineOptions(5, 3, 10, true, false, true, true, true))
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(MemoryOperationLogPort.noop())
+                .memoryVectorPort(new RecordingMemoryVectorPort(List.of()))
+                .memoryOutboxPort(outboxPort)
+                .businessDocumentRetrieverPort(MemoryBusinessDocumentRetrieverPort.noop())
+                .build();
 
         var result = engine.ingest(new MemoryIngestionCommand("op-derived-index", "default", "chat-completed",
                 MemoryWriteRequest.builder()
@@ -2455,15 +2477,16 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                profilePort,
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                MemoryOperationLogPort.noop(),
-                vectorPort,
-                MemoryOutboxPort.noop(),
-                MemoryBusinessDocumentRetrieverPort.noop());
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(profilePort)
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(MemoryOperationLogPort.noop())
+                .memoryVectorPort(vectorPort)
+                .memoryOutboxPort(MemoryOutboxPort.noop())
+                .businessDocumentRetrieverPort(MemoryBusinessDocumentRetrieverPort.noop())
+                .build();
 
         MemoryContext context = engine.loadMemory(MemoryLoadRequest.builder()
                 .userId(USER_ID)
@@ -2491,15 +2514,16 @@ class DefaultMemoryEnginePortTests {
                 new StubShortTermMemoryPort(List.of()),
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                MemoryOperationLogPort.noop(),
-                MemoryVectorPort.noop(),
-                MemoryOutboxPort.noop(),
-                businessPort);
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(MemoryOperationLogPort.noop())
+                .memoryVectorPort(MemoryVectorPort.noop())
+                .memoryOutboxPort(MemoryOutboxPort.noop())
+                .businessDocumentRetrieverPort(businessPort)
+                .build();
 
         MemoryContext context = engine.loadMemory(MemoryLoadRequest.builder()
                 .userId(USER_ID)
@@ -2522,12 +2546,13 @@ class DefaultMemoryEnginePortTests {
                 new StubShortTermMemoryPort(List.of()),
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                profilePort,
-                correctionPort,
-                new DefaultMemoryRouter(),
-                operationLogPort);
+                OBJECT_MAPPER)
+                .options(MemoryEngineOptions.defaults())
+                .profileMemoryPort(profilePort)
+                .correctionLedgerPort(correctionPort)
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(operationLogPort)
+                .build();
 
         var result = engine.ingest(new MemoryIngestionCommand("op-correction", "default", "chat-completed",
                 MemoryWriteRequest.builder()
@@ -2556,8 +2581,9 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                new MemoryEngineOptions(5, 3, 10, false));
+                OBJECT_MAPPER)
+                .options(new MemoryEngineOptions(5, 3, 10, false))
+                .build();
 
         engine.writeMemory(MemoryWriteRequest.builder()
                 .userId(USER_ID)
@@ -2661,19 +2687,20 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                new MemoryEngineOptions(5, 3, 10, true, enabled, failOpen),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                operationLogPort,
-                MemoryVectorPort.noop(),
-                MemoryOutboxPort.noop(),
-                MemoryBusinessDocumentRetrieverPort.noop(),
-                MemoryLifecyclePort.noop(),
-                MemoryPolicyConfigPort.defaults(),
-                (MemoryRetrievalPipelinePort) null,
-                refinerPort);
+                OBJECT_MAPPER)
+                .options(new MemoryEngineOptions(5, 3, 10, true, enabled, failOpen))
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(operationLogPort)
+                .memoryVectorPort(MemoryVectorPort.noop())
+                .memoryOutboxPort(MemoryOutboxPort.noop())
+                .businessDocumentRetrieverPort(MemoryBusinessDocumentRetrieverPort.noop())
+                .memoryLifecyclePort(MemoryLifecyclePort.noop())
+                .memoryPolicyConfigPort(MemoryPolicyConfigPort.defaults())
+                .memoryRetrievalPipelinePort((MemoryRetrievalPipelinePort) null)
+                .memoryRefinerPort(refinerPort)
+                .build();
     }
 
     private DefaultMemoryEnginePort engineWithRefinerAndReview(ShortTermMemoryPort shortTermPort,
@@ -2697,22 +2724,23 @@ class DefaultMemoryEnginePortTests {
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                new MemoryEngineOptions(5, 3, 10, true, true, true),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                operationLogPort,
-                MemoryVectorPort.noop(),
-                MemoryOutboxPort.noop(),
-                MemoryBusinessDocumentRetrieverPort.noop(),
-                MemoryLifecyclePort.noop(),
-                new InMemoryMemoryPolicyConfigPort(MemoryPolicyConfig.defaults().withReviewEnabled(true)),
-                (MemoryRetrievalPipelinePort) null,
-                refinerPort,
-                reviewCandidatePort,
-                MemoryAliasPort.noop(),
-                reviewPolicyPort);
+                OBJECT_MAPPER)
+                .options(new MemoryEngineOptions(5, 3, 10, true, true, true))
+                .profileMemoryPort(ProfileMemoryPort.noop())
+                .correctionLedgerPort(CorrectionLedgerPort.noop())
+                .memoryRouterPort(new DefaultMemoryRouter())
+                .memoryOperationLogPort(operationLogPort)
+                .memoryVectorPort(MemoryVectorPort.noop())
+                .memoryOutboxPort(MemoryOutboxPort.noop())
+                .businessDocumentRetrieverPort(MemoryBusinessDocumentRetrieverPort.noop())
+                .memoryLifecyclePort(MemoryLifecyclePort.noop())
+                .memoryPolicyConfigPort(new InMemoryMemoryPolicyConfigPort(MemoryPolicyConfig.defaults().withReviewEnabled(true)))
+                .memoryRetrievalPipelinePort((MemoryRetrievalPipelinePort) null)
+                .memoryRefinerPort(refinerPort)
+                .memoryReviewCandidatePort(reviewCandidatePort)
+                .memoryAliasPort(MemoryAliasPort.noop())
+                .memoryReviewPolicyPort(reviewPolicyPort)
+                .build();
     }
 
     private String memoryContextBlock(int turnCount) {
