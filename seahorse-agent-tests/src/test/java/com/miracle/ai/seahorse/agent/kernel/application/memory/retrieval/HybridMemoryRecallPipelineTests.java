@@ -541,23 +541,23 @@ class HybridMemoryRecallPipelineTests {
                 .build());
 
         assertThat(observationPort.events)
-                .filteredOn(event -> HybridMemoryRecallPipeline.OBSERVATION_CHANNEL_EVENT.equals(event.name()))
+                .filteredOn(event -> MemoryRecallObservationSupport.OBSERVATION_CHANNEL_EVENT.equals(event.name()))
                 .as("each recall channel should emit exactly one observation event")
                 .hasSize(3);
         assertThat(observationPort.events)
-                .filteredOn(event -> HybridMemoryRecallPipeline.OBSERVATION_CHANNEL_EVENT.equals(event.name()))
+                .filteredOn(event -> MemoryRecallObservationSupport.OBSERVATION_CHANNEL_EVENT.equals(event.name()))
                 .anySatisfy(event -> assertThat(event.attributes())
-                        .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_CHANNEL, "vector")
-                        .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_OUTCOME,
-                                HybridMemoryRecallPipeline.OBSERVATION_OUTCOME_ERROR))
+                        .containsEntry(MemoryRecallObservationSupport.OBSERVATION_ATTR_CHANNEL, "vector")
+                        .containsEntry(MemoryRecallObservationSupport.OBSERVATION_ATTR_OUTCOME,
+                                MemoryRecallObservationSupport.OBSERVATION_OUTCOME_ERROR))
                 .anySatisfy(event -> assertThat(event.attributes())
-                        .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_CHANNEL, "slow-vector")
-                        .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_OUTCOME,
-                                HybridMemoryRecallPipeline.OBSERVATION_OUTCOME_TIMEOUT))
+                        .containsEntry(MemoryRecallObservationSupport.OBSERVATION_ATTR_CHANNEL, "slow-vector")
+                        .containsEntry(MemoryRecallObservationSupport.OBSERVATION_ATTR_OUTCOME,
+                                MemoryRecallObservationSupport.OBSERVATION_OUTCOME_TIMEOUT))
                 .anySatisfy(event -> assertThat(event.attributes())
-                        .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_CHANNEL, "keyword")
-                        .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_OUTCOME,
-                                HybridMemoryRecallPipeline.OBSERVATION_OUTCOME_SUCCESS));
+                        .containsEntry(MemoryRecallObservationSupport.OBSERVATION_ATTR_CHANNEL, "keyword")
+                        .containsEntry(MemoryRecallObservationSupport.OBSERVATION_ATTR_OUTCOME,
+                                MemoryRecallObservationSupport.OBSERVATION_OUTCOME_SUCCESS));
         assertThat(observationPort.events)
                 .allSatisfy(event -> assertThat(event.amount()).isEqualTo(ObservationEvent.DEFAULT_AMOUNT));
     }
@@ -592,21 +592,21 @@ class HybridMemoryRecallPipelineTests {
                 .build());
 
         assertThat(observationPort.events)
-                .filteredOn(event -> HybridMemoryRecallPipeline.OBSERVATION_FUSION_EVENT.equals(event.name()))
+                .filteredOn(event -> MemoryRecallObservationSupport.OBSERVATION_FUSION_EVENT.equals(event.name()))
                 .singleElement()
                 .satisfies(event -> {
                     assertThat(event.attributes())
-                            .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_OUTCOME,
-                                    HybridMemoryRecallPipeline.OBSERVATION_OUTCOME_SUCCESS);
+                            .containsEntry(MemoryRecallObservationSupport.OBSERVATION_ATTR_OUTCOME,
+                                    MemoryRecallObservationSupport.OBSERVATION_OUTCOME_SUCCESS);
                     assertThat(event.amount()).isEqualTo(ObservationEvent.DEFAULT_AMOUNT);
                 });
         assertThat(observationPort.events)
-                .filteredOn(event -> HybridMemoryRecallPipeline.OBSERVATION_RERANK_EVENT.equals(event.name()))
+                .filteredOn(event -> MemoryRecallObservationSupport.OBSERVATION_RERANK_EVENT.equals(event.name()))
                 .singleElement()
                 .satisfies(event -> {
                     assertThat(event.attributes())
-                            .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_OUTCOME,
-                                    HybridMemoryRecallPipeline.OBSERVATION_OUTCOME_SUCCESS);
+                            .containsEntry(MemoryRecallObservationSupport.OBSERVATION_ATTR_OUTCOME,
+                                    MemoryRecallObservationSupport.OBSERVATION_OUTCOME_SUCCESS);
                     assertThat(event.amount()).isEqualTo(ObservationEvent.DEFAULT_AMOUNT);
                 });
     }

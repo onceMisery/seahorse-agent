@@ -82,48 +82,12 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
 
     private static final Logger LOG = LoggerFactory.getLogger(HybridMemoryRecallPipeline.class);
     private static final String HASH_ALGORITHM_SHA_256 = "SHA-256";
-    private static final String TRACE_COMPONENT_MEMORY_RECALL = "memory-recall";
-    private static final String TRACE_EVENT_CHANNEL = "channel";
-    private static final String TRACE_EVENT_FUSION = "fusion";
-    private static final String TRACE_EVENT_RERANK = "rerank";
-    private static final String TRACE_SUBJECT_RECALL_CHANNEL = "recall_channel";
-    private static final String TRACE_SUBJECT_RECALL_FUSION = "recall_fusion";
-    private static final String TRACE_SUBJECT_RECALL_RERANK = "recall_rerank";
-    private static final String TRACE_KEY_ACTIVE_TRACKS = "activeTracks";
-    private static final String TRACE_KEY_ALIAS_CANONICAL_ENTITY_ID = "aliasCanonicalEntityId";
-    private static final String TRACE_KEY_ALIAS_CONFIDENCE_LEVEL = "aliasConfidenceLevel";
-    private static final String TRACE_KEY_ALIAS_ENTITY_TYPE = "aliasEntityType";
-    private static final String TRACE_KEY_ALIAS_MATCHED = "aliasMatched";
-    private static final String TRACE_KEY_CANDIDATE_IDS = "candidateIds";
-    private static final String TRACE_KEY_CHANNEL = "channel";
-    private static final String TRACE_KEY_CHANNEL_COUNT = "channelCount";
-    private static final String TRACE_KEY_CANDIDATE_COUNT = "candidateCount";
-    private static final String TRACE_KEY_ERROR = "error";
-    private static final String TRACE_KEY_FINAL_TOP_K = "finalTopK";
-    private static final String TRACE_KEY_FUSED_CANDIDATE_IDS = "fusedCandidateIds";
-    private static final String TRACE_KEY_FUSED_COUNT = "fusedCount";
-    private static final String TRACE_KEY_FUSION_EXPLANATIONS = "fusionExplanations";
-    private static final String TRACE_KEY_INPUT_CANDIDATE_IDS = "inputCandidateIds";
-    private static final String TRACE_KEY_INPUT_COUNT = "inputCount";
-    private static final String TRACE_KEY_LATENCY_MS = "latencyMs";
-    private static final String TRACE_KEY_ORIGINAL_QUERY_HASH = "originalQueryHash";
-    private static final String TRACE_KEY_OUTPUT_CANDIDATE_IDS = "outputCandidateIds";
-    private static final String TRACE_KEY_OUTPUT_COUNT = "outputCount";
-    private static final String TRACE_KEY_QUERY_CHANGED_BY_ALIAS = "queryChangedByAlias";
-    private static final String TRACE_KEY_REQUEST_TOP_K = "requestTopK";
-    private static final String TRACE_KEY_RESOLVED_QUERY_HASH = "resolvedQueryHash";
-    private static final String TRACE_KEY_TIMEOUT_MS = "timeoutMs";
     private static final String FILTER_MEMORY_ALIAS_TEXT = "memoryAliasText";
     private static final String FILTER_MEMORY_ALIAS_NORMALIZED = "memoryAliasNormalized";
     private static final String FILTER_MEMORY_ALIAS_CANONICAL_ENTITY_ID = "memoryAliasCanonicalEntityId";
     private static final String FILTER_MEMORY_ALIAS_CANONICAL_NAME = "memoryAliasCanonicalName";
     private static final String FILTER_MEMORY_ALIAS_ENTITY_TYPE = "memoryAliasEntityType";
     private static final String FILTER_MEMORY_ALIAS_CONFIDENCE_LEVEL = "memoryAliasConfidenceLevel";
-    private static final String FUSION_METADATA_CHANNEL_CONTRIBUTIONS = "channelContributions";
-    private static final String FUSION_METADATA_CHANNEL_RANKS = "channelRanks";
-    private static final String FUSION_METADATA_CHANNEL_SCORES = "channelScores";
-    private static final String FUSION_METADATA_STRATEGY = "fusionStrategy";
-    private static final String FUSION_METADATA_SOURCE_CHANNELS = "sourceChannels";
 
     private final ShortTermMemoryPort shortTermPort;
     private final LongTermMemoryPort longTermPort;
@@ -143,15 +107,8 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     private final Executor recallExecutor;
     private final MemoryAliasPort memoryAliasPort;
     private final ObservationPort observationPort;
+    private final MemoryRecallObservationSupport observationSupport;
 
-    static final String OBSERVATION_CHANNEL_EVENT = "memory-recall-channel";
-    static final String OBSERVATION_FUSION_EVENT = "memory-recall-fusion";
-    static final String OBSERVATION_RERANK_EVENT = "memory-recall-rerank";
-    static final String OBSERVATION_ATTR_CHANNEL = "channel";
-    static final String OBSERVATION_ATTR_OUTCOME = "outcome";
-    static final String OBSERVATION_OUTCOME_SUCCESS = "success";
-    static final String OBSERVATION_OUTCOME_TIMEOUT = "timeout";
-    static final String OBSERVATION_OUTCOME_ERROR = "error";
 
     private record ChannelRecallTask(
             MemoryRecallChannelPort channel,
@@ -163,7 +120,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     private record AliasResolvedQuery(String query, Map<String, Object> filters) {
     }
 
-    private record RecallTraceContext(
+    record RecallTraceContext(
             String originalQueryHash,
             String resolvedQueryHash,
             boolean queryChangedByAlias,
@@ -236,6 +193,8 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         this.recallExecutor = Objects.requireNonNullElseGet(recallExecutor, ForkJoinPool::commonPool);
         this.memoryAliasPort = Objects.requireNonNullElseGet(memoryAliasPort, MemoryAliasPort::noop);
         this.observationPort = Objects.requireNonNullElseGet(observationPort, ObservationPort::noop);
+        this.observationSupport = new MemoryRecallObservationSupport(
+                this.traceRecorder, this.observationPort, this.fusionPolicy);
     }
 
     /**
@@ -471,9 +430,9 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 .toList();
         List<List<MemoryRecallCandidate>> channelResults = collectChannelResults(tasks, userId, tenantId, traceContext);
         List<MemoryRecallCandidate> fused = fusionPort.fuse(channelResults, fusionPolicy, Instant.now());
-        recordRecallFusion(userId, tenantId, channelResults, fused, fusionPolicy.finalTopK(), traceContext);
+        observationSupport.recordRecallFusion(userId, tenantId, channelResults, fused, fusionPolicy.finalTopK(), traceContext);
         List<MemoryRecallCandidate> reranked = rerankFusedCandidates(recallRequest, fused);
-        recordRecallRerank(userId, tenantId, fused, reranked, traceContext);
+        observationSupport.recordRecallRerank(userId, tenantId, fused, reranked, traceContext);
         List<MemoryItem> items = reranked.stream()
                 .map(this::toMemoryItem)
                 .flatMap(Optional::stream)
@@ -607,27 +566,27 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                         .get(fusionPolicy.channelTimeoutMillis(), TimeUnit.MILLISECONDS);
                 List<MemoryRecallCandidate> safeResult = result == null ? List.of() : result;
                 channelResults.add(safeResult);
-                recordRecallChannel(task.channel(), userId, tenantId, safeResult,
+                observationSupport.recordRecallChannel(task.channel(), userId, tenantId, safeResult,
                         elapsedMillis(task.startedAt()), MemoryTraceEvent.STATUS_SUCCESS, "", traceContext);
             } catch (TimeoutException ex) {
                 task.future().cancel(true);
                 channelResults.add(List.of());
                 LOG.warn("memory recall channel timed out: channel={}, userId={}, timeoutMs={}",
                         task.channel().channelName(), userId, fusionPolicy.channelTimeoutMillis());
-                recordRecallChannel(task.channel(), userId, tenantId, List.of(),
+                observationSupport.recordRecallChannel(task.channel(), userId, tenantId, List.of(),
                         elapsedMillis(task.startedAt()), MemoryTraceEvent.STATUS_FAILED, "timeout", traceContext);
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
                 task.future().cancel(true);
                 channelResults.add(List.of());
-                recordRecallChannel(task.channel(), userId, tenantId, List.of(),
+                observationSupport.recordRecallChannel(task.channel(), userId, tenantId, List.of(),
                         elapsedMillis(task.startedAt()), MemoryTraceEvent.STATUS_FAILED, "interrupted", traceContext);
             } catch (ExecutionException ex) {
                 Throwable cause = ex.getCause() == null ? ex : ex.getCause();
                 LOG.warn("memory recall channel failed: channel={}, userId={}", task.channel().channelName(), userId,
                         cause);
                 channelResults.add(List.of());
-                recordRecallChannel(task.channel(), userId, tenantId, List.of(),
+                observationSupport.recordRecallChannel(task.channel(), userId, tenantId, List.of(),
                         elapsedMillis(task.startedAt()), MemoryTraceEvent.STATUS_FAILED,
                         Objects.requireNonNullElse(cause.getMessage(), cause.getClass().getName()), traceContext);
             }
@@ -635,127 +594,11 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         return channelResults;
     }
 
-    private void recordRecallChannel(MemoryRecallChannelPort channel,
-                                     String userId,
-                                     String tenantId,
-                                     List<MemoryRecallCandidate> candidates,
-                                     long latencyMs,
-                                     String status,
-                                     String error,
-                                     RecallTraceContext traceContext) {
-        Map<String, Object> details = traceDetails(traceContext);
-        details.put(TRACE_KEY_CHANNEL, channel.channelName());
-        details.put(TRACE_KEY_CANDIDATE_COUNT, safeCandidates(candidates).size());
-        details.put(TRACE_KEY_CANDIDATE_IDS, candidateIds(candidates));
-        details.put(TRACE_KEY_LATENCY_MS, latencyMs);
-        details.put(TRACE_KEY_TIMEOUT_MS, fusionPolicy.channelTimeoutMillis());
-        details.put(TRACE_KEY_ERROR, Objects.requireNonNullElse(error, ""));
-        traceRecorder.record(new MemoryTraceEvent(
-                "",
-                tenantId,
-                userId,
-                "",
-                "",
-                TRACE_COMPONENT_MEMORY_RECALL,
-                TRACE_EVENT_CHANNEL,
-                status,
-                channel.channelName(),
-                TRACE_SUBJECT_RECALL_CHANNEL,
-                details,
-                Instant.now()));
-        emitChannelMetric(channel, status, error);
-    }
 
-    private void emitChannelMetric(MemoryRecallChannelPort channel, String status, String error) {
-        try {
-            observationPort.recordEvent(new ObservationEvent(
-                    OBSERVATION_CHANNEL_EVENT,
-                    Instant.now(),
-                    ObservationEvent.DEFAULT_AMOUNT,
-                    Map.of(
-                            OBSERVATION_ATTR_CHANNEL, Objects.requireNonNullElse(channel.channelName(), ""),
-                            OBSERVATION_ATTR_OUTCOME, channelOutcome(status, error))));
-        } catch (RuntimeException ignored) {
-            // Observation emission is best-effort and must not change recall execution semantics.
-        }
-    }
 
-    private static String channelOutcome(String status, String error) {
-        if (MemoryTraceEvent.STATUS_SUCCESS.equals(status)) {
-            return OBSERVATION_OUTCOME_SUCCESS;
-        }
-        if ("timeout".equals(error)) {
-            return OBSERVATION_OUTCOME_TIMEOUT;
-        }
-        return OBSERVATION_OUTCOME_ERROR;
-    }
 
-    private void recordRecallFusion(String userId,
-                                    String tenantId,
-                                    List<List<MemoryRecallCandidate>> channelResults,
-                                    List<MemoryRecallCandidate> fusedCandidates,
-                                    int finalTopK,
-                                    RecallTraceContext traceContext) {
-        Map<String, Object> details = traceDetails(traceContext);
-        details.put(TRACE_KEY_CHANNEL_COUNT, safeChannelResults(channelResults).size());
-        details.put(TRACE_KEY_FUSED_COUNT, safeCandidates(fusedCandidates).size());
-        details.put(TRACE_KEY_FINAL_TOP_K, finalTopK);
-        details.put(TRACE_KEY_INPUT_CANDIDATE_IDS, candidateIdsFromChannelResults(channelResults));
-        details.put(TRACE_KEY_FUSED_CANDIDATE_IDS, candidateIds(fusedCandidates));
-        details.put(TRACE_KEY_FUSION_EXPLANATIONS, fusionExplanations(fusedCandidates));
-        traceRecorder.record(new MemoryTraceEvent(
-                "",
-                tenantId,
-                userId,
-                "",
-                "",
-                TRACE_COMPONENT_MEMORY_RECALL,
-                TRACE_EVENT_FUSION,
-                MemoryTraceEvent.STATUS_SUCCESS,
-                "",
-                TRACE_SUBJECT_RECALL_FUSION,
-                details,
-                Instant.now()));
-        emitStageMetric(OBSERVATION_FUSION_EVENT, OBSERVATION_OUTCOME_SUCCESS);
-    }
 
-    private void recordRecallRerank(String userId,
-                                    String tenantId,
-                                    List<MemoryRecallCandidate> inputCandidates,
-                                    List<MemoryRecallCandidate> outputCandidates,
-                                    RecallTraceContext traceContext) {
-        Map<String, Object> details = traceDetails(traceContext);
-        details.put(TRACE_KEY_INPUT_COUNT, safeCandidates(inputCandidates).size());
-        details.put(TRACE_KEY_OUTPUT_COUNT, safeCandidates(outputCandidates).size());
-        details.put(TRACE_KEY_INPUT_CANDIDATE_IDS, candidateIds(inputCandidates));
-        details.put(TRACE_KEY_OUTPUT_CANDIDATE_IDS, candidateIds(outputCandidates));
-        traceRecorder.record(new MemoryTraceEvent(
-                "",
-                tenantId,
-                userId,
-                "",
-                "",
-                TRACE_COMPONENT_MEMORY_RECALL,
-                TRACE_EVENT_RERANK,
-                MemoryTraceEvent.STATUS_SUCCESS,
-                "",
-                TRACE_SUBJECT_RECALL_RERANK,
-                details,
-                Instant.now()));
-        emitStageMetric(OBSERVATION_RERANK_EVENT, OBSERVATION_OUTCOME_SUCCESS);
-    }
 
-    private void emitStageMetric(String eventName, String outcome) {
-        try {
-            observationPort.recordEvent(new ObservationEvent(
-                    eventName,
-                    Instant.now(),
-                    ObservationEvent.DEFAULT_AMOUNT,
-                    Map.of(OBSERVATION_ATTR_OUTCOME, outcome)));
-        } catch (RuntimeException ignored) {
-            // Observation emission is best-effort and must not change recall execution semantics.
-        }
-    }
 
     private RecallTraceContext traceContext(String originalQuery, MemoryRecallRequest request) {
         String safeOriginalQuery = Objects.requireNonNullElse(originalQuery, "");
@@ -770,20 +613,6 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 aliasDetails);
     }
 
-    private Map<String, Object> traceDetails(RecallTraceContext traceContext) {
-        Map<String, Object> details = new LinkedHashMap<>();
-        if (traceContext == null) {
-            return details;
-        }
-        details.put(TRACE_KEY_ORIGINAL_QUERY_HASH, traceContext.originalQueryHash());
-        details.put(TRACE_KEY_RESOLVED_QUERY_HASH, traceContext.resolvedQueryHash());
-        details.put(TRACE_KEY_QUERY_CHANGED_BY_ALIAS, traceContext.queryChangedByAlias());
-        details.put(TRACE_KEY_ACTIVE_TRACKS, traceContext.activeTracks());
-        details.put(TRACE_KEY_REQUEST_TOP_K, traceContext.requestTopK());
-        details.put(TRACE_KEY_ALIAS_MATCHED, !traceContext.aliasDetails().isEmpty());
-        details.putAll(traceContext.aliasDetails());
-        return details;
-    }
 
     private List<String> activeTrackNames(Set<MemoryTrack> activeTracks) {
         if (activeTracks == null || activeTracks.isEmpty()) {
@@ -801,48 +630,23 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
             return Map.of();
         }
         Map<String, Object> details = new LinkedHashMap<>();
-        putIfPresent(details, TRACE_KEY_ALIAS_CANONICAL_ENTITY_ID,
+        putIfPresent(details, MemoryRecallObservationSupport.TRACE_KEY_ALIAS_CANONICAL_ENTITY_ID,
                 filters.get(FILTER_MEMORY_ALIAS_CANONICAL_ENTITY_ID));
-        putIfPresent(details, TRACE_KEY_ALIAS_ENTITY_TYPE, filters.get(FILTER_MEMORY_ALIAS_ENTITY_TYPE));
-        putIfPresent(details, TRACE_KEY_ALIAS_CONFIDENCE_LEVEL, filters.get(FILTER_MEMORY_ALIAS_CONFIDENCE_LEVEL));
+        putIfPresent(details, MemoryRecallObservationSupport.TRACE_KEY_ALIAS_ENTITY_TYPE, filters.get(FILTER_MEMORY_ALIAS_ENTITY_TYPE));
+        putIfPresent(details, MemoryRecallObservationSupport.TRACE_KEY_ALIAS_CONFIDENCE_LEVEL, filters.get(FILTER_MEMORY_ALIAS_CONFIDENCE_LEVEL));
         return details;
     }
 
-    private List<Map<String, Object>> fusionExplanations(List<MemoryRecallCandidate> candidates) {
-        if (candidates == null || candidates.isEmpty()) {
-            return List.of();
-        }
-        List<Map<String, Object>> explanations = new ArrayList<>();
-        for (MemoryRecallCandidate candidate : candidates) {
-            if (candidate == null || candidate.memoryId().isBlank()) {
-                continue;
-            }
-            explanations.add(fusionExplanation(candidate));
-        }
-        return explanations;
-    }
 
-    private Map<String, Object> fusionExplanation(MemoryRecallCandidate candidate) {
-        Map<String, Object> metadata = candidate.metadata();
-        Map<String, Object> explanation = new LinkedHashMap<>();
-        explanation.put("memoryId", candidate.memoryId());
-        putIfPresent(explanation, FUSION_METADATA_STRATEGY, metadata.get(FUSION_METADATA_STRATEGY));
-        putIfPresent(explanation, FUSION_METADATA_SOURCE_CHANNELS, metadata.get(FUSION_METADATA_SOURCE_CHANNELS));
-        putIfPresent(explanation, FUSION_METADATA_CHANNEL_RANKS, metadata.get(FUSION_METADATA_CHANNEL_RANKS));
-        putIfPresent(explanation, FUSION_METADATA_CHANNEL_SCORES, metadata.get(FUSION_METADATA_CHANNEL_SCORES));
-        putIfPresent(explanation, FUSION_METADATA_CHANNEL_CONTRIBUTIONS,
-                metadata.get(FUSION_METADATA_CHANNEL_CONTRIBUTIONS));
-        return explanation;
-    }
 
-    private void putIfPresent(Map<String, Object> target, String key, Object value) {
+    static void putIfPresent(Map<String, Object> target, String key, Object value) {
         if (value == null || Objects.toString(value, "").isBlank()) {
             return;
         }
         target.put(key, value);
     }
 
-    private List<String> candidateIds(List<MemoryRecallCandidate> candidates) {
+    static List<String> candidateIds(List<MemoryRecallCandidate> candidates) {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
@@ -855,7 +659,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         return new ArrayList<>(ids);
     }
 
-    private List<String> candidateIdsFromChannelResults(List<List<MemoryRecallCandidate>> channelResults) {
+    static List<String> candidateIdsFromChannelResults(List<List<MemoryRecallCandidate>> channelResults) {
         if (channelResults == null || channelResults.isEmpty()) {
             return List.of();
         }
@@ -866,11 +670,11 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         return new ArrayList<>(ids);
     }
 
-    private List<MemoryRecallCandidate> safeCandidates(List<MemoryRecallCandidate> candidates) {
+    static List<MemoryRecallCandidate> safeCandidates(List<MemoryRecallCandidate> candidates) {
         return candidates == null ? List.of() : candidates;
     }
 
-    private List<List<MemoryRecallCandidate>> safeChannelResults(List<List<MemoryRecallCandidate>> channelResults) {
+    static List<List<MemoryRecallCandidate>> safeChannelResults(List<List<MemoryRecallCandidate>> channelResults) {
         return channelResults == null ? List.of() : channelResults;
     }
 
