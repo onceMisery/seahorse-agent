@@ -1,7 +1,7 @@
 # Core Runtime Stability Implementation Checkpoint
 
 Updated: 2026-09-06  
-State: ports-356-billing-consolidation-pipeline-split-reviewed
+State: ports-356-pipeline-761-catch-triage-complete
 
 ## TodoCheckpointDraft
 
@@ -449,6 +449,32 @@ Issue-fix batch closing the remaining findings from the 2026-09-06 audit
   `PortArchitectureTest` green after the ratchet update
   (356 = 93 inbound / 262 outbound / 1 common; port files 787);
   complexity report PASS.
+
+## Current Slice Update (2026-09-06, pipeline budget closure and port-candidate triage)
+
+- **HybridMemoryRecallPipeline under the 800-line budget (426bd840)**: the
+  third collaborator `MemoryDirectLayerLoader` (142 lines) owns the
+  correction-ledger, profile-fact and business-document direct-layer loads
+  plus their MemoryItem materialization (deps: three direct-layer ports +
+  fusion policy + MemoryCandidateItemSupport). The pipeline is now 761
+  lines (from the original 1345) with four stage collaborators:
+  observation (263), candidate-item mapping (353), direct-layer loading
+  (142). Memory suites 91/91, full kernel reactor 926/926.
+- **LocalChatStreamCallbackFactory facade-task catch**: verified already
+  carrying a debug log (previous triage round); no further change needed.
+- **Port candidates triaged and REJECTED with reasons (§6.5)**: merging
+  `ConnectorCredentialBindingRepositoryPort` (7 ops) into
+  `ConnectorRepositoryPort` (9 ops, legacy-frozen) would produce a 16-op
+  God port, and credential bindings carry distinct security semantics
+  from the connector catalog; `RunProfileTool` is a value object, not a
+  Port, and `RunProfileRepositoryPort` (11 ops) itself exceeds the
+  operation budget; `AccessDecisionQueryInboundPort` (read-only decision
+  log) vs `ResourceAclManagementInboundPort` (rule management) is a
+  legitimate query/management CQRS split under §6.3. A full same-table
+  scan of all JDBC adapters found no remaining repository fragments.
+  The remaining 356 -> 300 reduction therefore requires per-capability
+  design review, not mechanical merges.
+- Gates: kernel reactor 926/926, memory suites 91/91.
 
 ## Blocked On
 
