@@ -20,6 +20,8 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 import com.miracle.ai.seahorse.agent.kernel.domain.audit.AuditLog;
 import com.miracle.ai.seahorse.agent.ports.inbound.admin.AuditLogInboundPort;
 import org.springframework.beans.factory.ObjectProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -34,6 +36,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/admin/audit-logs")
 public class SeahorseAuditLogController {
+
+    private static final Logger LOG = LoggerFactory.getLogger(SeahorseAuditLogController.class);
 
     private final ObjectProvider<AuditLogInboundPort> auditLogServiceProvider;
 
@@ -69,6 +73,7 @@ public class SeahorseAuditLogController {
         try {
             return Instant.parse(value);
         } catch (Exception e) {
+            LOG.debug("Audit log time filter is not an ISO instant: {}", e.toString());
             return null;
         }
     }

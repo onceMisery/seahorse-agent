@@ -124,6 +124,7 @@ public class SaTokenLoginListener implements SaTokenListener {
             ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
             return attrs != null ? attrs.getRequest() : null;
         } catch (Exception e) {
+            log.debug("Failed to read login history value: {}", e.toString());
             return null;
         }
     }
@@ -144,6 +145,7 @@ public class SaTokenLoginListener implements SaTokenListener {
         try {
             return Long.parseLong(loginId.toString());
         } catch (NumberFormatException e) {
+            log.debug("Login history numeric field is not a number: {}", e.toString());
             return 0L;
         }
     }

@@ -25,8 +25,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
 
 import java.util.Objects;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SaTokenCurrentUserAdapter implements CurrentUserPort {
+
+    private static final Logger LOG = LoggerFactory.getLogger(SaTokenCurrentUserAdapter.class);
 
     private static final String DEFAULT_AVATAR_URL = "https://avatars.githubusercontent.com/u/37446017?v=4";
 
@@ -56,8 +60,9 @@ public class SaTokenCurrentUserAdapter implements CurrentUserPort {
             if (tenantId instanceof String str && !str.isBlank()) {
                 return str;
             }
-        } catch (Exception ignored) {
+        } catch (Exception sessionFailure) {
             // Session access may fail for expired sessions
+            LOG.debug("Sa-Token session lookup failed; treating as anonymous: {}", sessionFailure.toString());
         }
         return null;
     }

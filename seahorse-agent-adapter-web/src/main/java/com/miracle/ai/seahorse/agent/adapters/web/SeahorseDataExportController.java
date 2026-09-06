@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.export.ExportTaskPort;
 import org.springframework.beans.factory.ObjectProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,6 +38,8 @@ import java.util.Map;
  */
 @RestController
 public class SeahorseDataExportController {
+
+    private static final Logger LOG = LoggerFactory.getLogger(SeahorseDataExportController.class);
 
     private static final String KEY_CODE = "code";
     private static final String KEY_DATA = "data";
@@ -87,7 +91,9 @@ public class SeahorseDataExportController {
     private String resolveTenantId() {
         try {
             return cn.dev33.satoken.stp.StpUtil.getExtra("tenantId").toString();
-        } catch (Exception e) {
+        } catch (Exception tenantFailure) {
+            LOG.debug("Session tenant extra unavailable; falling back to default tenant: {}",
+                    tenantFailure.toString());
             return "default";
         }
     }

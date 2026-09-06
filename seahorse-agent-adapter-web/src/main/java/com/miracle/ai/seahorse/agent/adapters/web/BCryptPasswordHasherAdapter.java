@@ -24,6 +24,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * {@link PasswordHasherPort} adapter that uses a bcrypt-strength password hashing strategy.
@@ -37,6 +39,8 @@ import java.util.Base64;
  * {@code $2b$}, or {@code $2y$} prefix) for backward compatibility during migration.
  */
 public class BCryptPasswordHasherAdapter implements PasswordHasherPort {
+
+    private static final Logger LOG = LoggerFactory.getLogger(BCryptPasswordHasherAdapter.class);
 
     /**
      * bcrypt-compatible prefix so downstream systems recognise hashed passwords.
@@ -97,6 +101,7 @@ public class BCryptPasswordHasherAdapter implements PasswordHasherPort {
             byte[] actualHash = computeHashWithIterations(salt, rawPassword, iterations);
             return MessageDigest.isEqual(expectedHash, actualHash);
         } catch (Exception e) {
+            LOG.debug("BCrypt verification failed to run; treating as no-match: {}", e.toString());
             return false;
         }
     }

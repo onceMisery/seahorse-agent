@@ -74,177 +74,190 @@ function resumeUrl(originalUrl: string, runId: string, lastEventSeq?: number | n
   return `${path}?${search.toString()}`;
 }
 
-async function readSseStream(response: Response, handlers: StreamHandlers, signal?: AbortSignal, timeoutMs?: number) {
-  if (!response.body) {
-    throw new Error("Stream response body is empty");
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder("utf-8");
-  let buffer = "";
-  let eventName = "message";
-  let dataLines: string[] = [];
-  let pendingDuplicate: { eventName: string; payloadKey: string } | null = null;
-  let terminalEventReceived = false;
-  let lastStreamEventSeq: number | null = null;
-
-  // 看门狗：每次收到数据重置定时器，超时则报错
-  const watchdogMs = timeoutMs ?? 30000;
-  let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
-  let watchdogFired = false;
-
-  const resetWatchdog = () => {
-    if (watchdogFired) return;
-    if (watchdogTimer !== null) clearTimeout(watchdogTimer);
-    watchdogTimer = setTimeout(() => {
-      watchdogFired = true;
-      reader.cancel();
-    }, watchdogMs);
-  };
-
-  const clearWatchdog = () => {
-    if (watchdogTimer !== null) {
-      clearTimeout(watchdogTimer);
-      watchdogTimer = null;
+/**
+ * 低层 SSE 帧读取原语：按空行分帧，把每帧的 event 名称与合并后的 data 文本
+ * 交给回调。chat 流的 envelope 解析与任务事件的 JSON 解析共用同一条分帧路径。
+ * 看门狗超时抛错；调用方通过 signal 中止时以 endedBy:"abort" 返回。
+ */
+export async function readSseFrames(
+    response: Response,
+    onFrame: (eventName: string, data: string) => void,
+    options: { signal?: AbortSignal; timeoutMs?: number } = {}
+): Promise<{ endedBy: "stream-end" | "abort" }> {
+    if (!response.body) {
+        throw new Error("Stream response body is empty");
     }
-  };
 
-  resetWatchdog();
+    const { signal, timeoutMs } = options;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    let eventName = "message";
+    let dataLines: string[] = [];
 
-  const dispatchTypedEvent = (name: string, payload: unknown) => {
-    if (isTerminalEvent(name)) {
-      if (terminalEventReceived) {
-        return;
-      }
-      terminalEventReceived = true;
-    }
-    safeInvoke(handlers.onEvent, name, payload);
+    // 看门狗：每次收到数据重置定时器，超时则取消读取并抛错
+    const watchdogMs = timeoutMs ?? 30000;
+    let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+    let watchdogFired = false;
 
-    switch (name) {
-      case "meta":
-        safeInvoke(handlers.onMeta, payload as StreamMetaPayload);
-        break;
-      case "message": {
-        const messagePayload = payload as MessageDeltaPayload;
-        if (messagePayload?.type === "think") {
-          safeInvoke(handlers.onThinking, messagePayload);
-        } else {
-          safeInvoke(handlers.onMessage, messagePayload);
+    const resetWatchdog = () => {
+        if (watchdogFired) return;
+        if (watchdogTimer !== null) clearTimeout(watchdogTimer);
+        watchdogTimer = setTimeout(() => {
+            watchdogFired = true;
+            reader.cancel();
+        }, watchdogMs);
+    };
+
+    const clearWatchdog = () => {
+        if (watchdogTimer !== null) {
+            clearTimeout(watchdogTimer);
+            watchdogTimer = null;
         }
-        break;
-      }
-      case "finish":
-        safeInvoke(handlers.onFinish, payload as CompletionPayload);
-        break;
-      case "done":
-        safeInvoke(handlers.onDone);
-        break;
-      case "cancel":
-        safeInvoke(handlers.onCancel, payload as CompletionPayload);
-        break;
-      case "reject":
-        safeInvoke(handlers.onReject, payload as MessageDeltaPayload);
-        break;
-      case "title":
-        safeInvoke(handlers.onTitle, payload as { title: string });
-        break;
-      case "error":
-        safeInvoke(handlers.onError, new Error(String((payload as { error?: string })?.error || payload)));
-        break;
-      default:
-        break;
-    }
-  };
+    };
 
-  const dispatchEvent = () => {
-    if (dataLines.length === 0) {
-      eventName = "message";
-      return;
-    }
-    const raw = dataLines.join("\n");
-    const payload = parseData(raw);
+    const dispatchFrame = () => {
+        const raw = dataLines.join("\n");
+        const name = eventName;
+        eventName = "message";
+        dataLines = [];
+        onFrame(name, raw);
+    };
 
-    if (eventName === "stream_event") {
-      const envelope = payload as StreamEventEnvelope;
-      if (envelope && typeof envelope === "object" && "eventSeq" in envelope) {
-        const eventSeq = Number(envelope.eventSeq);
-        if (Number.isFinite(eventSeq)
-          && lastStreamEventSeq !== null
-          && eventSeq <= lastStreamEventSeq) {
-          pendingDuplicate = null;
-          eventName = "message";
-          dataLines = [];
-          return;
-        }
-        if (Number.isFinite(eventSeq)) {
-          lastStreamEventSeq = eventSeq;
-        }
-        safeInvoke(handlers.onStreamEvent, envelope);
-        pendingDuplicate = {
-          eventName: envelope.eventType,
-          payloadKey: payloadKey(envelope.typedPayload)
-        };
-        dispatchTypedEvent(envelope.eventType, envelope.typedPayload);
-      }
-      eventName = "message";
-      dataLines = [];
-      return;
-    }
-
-    const currentPayloadKey = payloadKey(payload);
-    if (pendingDuplicate?.eventName === eventName && pendingDuplicate.payloadKey === currentPayloadKey) {
-      pendingDuplicate = null;
-      eventName = "message";
-      dataLines = [];
-      return;
-    }
-    pendingDuplicate = null;
-    dispatchTypedEvent(eventName, payload);
-
-    eventName = "message";
-    dataLines = [];
-  };
-
-  for (;;) {
-    if (signal?.aborted) {
-      clearWatchdog();
-      reader.cancel();
-      break;
-    }
-    const { value, done } = await reader.read();
-    if (done) {
-      dispatchEvent();
-      clearWatchdog();
-      if (watchdogFired) {
-        throw new Error("Stream timeout: 服务器未在规定时间内响应");
-      }
-      if (!terminalEventReceived && !signal?.aborted) {
-        throw new Error("Stream connection closed before completion");
-      }
-      break;
-    }
     resetWatchdog();
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      if (!line) {
-        dispatchEvent();
-        continue;
-      }
-      if (line.startsWith(":")) {
-        continue;
-      }
-      if (line.startsWith("event:")) {
-        eventName = line.slice(6).trim();
-        continue;
-      }
-      if (line.startsWith("data:")) {
-        dataLines.push(line.slice(5).trim());
-      }
+
+    for (;;) {
+        if (signal?.aborted) {
+            clearWatchdog();
+            reader.cancel();
+            return { endedBy: "abort" };
+        }
+        const { value, done } = await reader.read();
+        if (done) {
+            dispatchFrame();
+            clearWatchdog();
+            if (watchdogFired) {
+                throw new Error("Stream timeout: 服务器未在规定时间内响应");
+            }
+            return { endedBy: "stream-end" };
+        }
+        resetWatchdog();
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+            if (!line) {
+                dispatchFrame();
+                continue;
+            }
+            if (line.startsWith(":")) {
+                continue;
+            }
+            if (line.startsWith("event:")) {
+                eventName = line.slice(6).trim();
+                continue;
+            }
+            if (line.startsWith("data:")) {
+                dataLines.push(line.slice(5).trim());
+            }
+        }
     }
-  }
 }
+
+async function readSseStream(response: Response, handlers: StreamHandlers, signal?: AbortSignal, timeoutMs?: number) {
+    let terminalEventReceived = false;
+    let lastStreamEventSeq: number | null = null;
+    let pendingDuplicate: { eventName: string; payloadKey: string } | null = null;
+
+    const dispatchTypedEvent = (name: string, payload: unknown) => {
+        if (isTerminalEvent(name)) {
+            if (terminalEventReceived) {
+                return;
+            }
+            terminalEventReceived = true;
+        }
+        safeInvoke(handlers.onEvent, name, payload);
+
+        switch (name) {
+            case "meta":
+                safeInvoke(handlers.onMeta, payload as StreamMetaPayload);
+                break;
+            case "message": {
+                const messagePayload = payload as MessageDeltaPayload;
+                if (messagePayload?.type === "think") {
+                    safeInvoke(handlers.onThinking, messagePayload);
+                } else {
+                    safeInvoke(handlers.onMessage, messagePayload);
+                }
+                break;
+            }
+            case "finish":
+                safeInvoke(handlers.onFinish, payload as CompletionPayload);
+                break;
+            case "done":
+                safeInvoke(handlers.onDone);
+                break;
+            case "cancel":
+                safeInvoke(handlers.onCancel, payload as CompletionPayload);
+                break;
+            case "reject":
+                safeInvoke(handlers.onReject, payload as MessageDeltaPayload);
+                break;
+            case "title":
+                safeInvoke(handlers.onTitle, payload as { title: string });
+                break;
+            case "error":
+                safeInvoke(handlers.onError, new Error(String((payload as { error?: string })?.error || payload)));
+                break;
+            default:
+                break;
+        }
+    };
+
+    const handleFrame = (eventName: string, raw: string) => {
+        if (!raw) {
+            return;
+        }
+        const payload = parseData(raw);
+
+        if (eventName === "stream_event") {
+            const envelope = payload as StreamEventEnvelope;
+            if (envelope && typeof envelope === "object" && "eventSeq" in envelope) {
+                const eventSeq = Number(envelope.eventSeq);
+                if (Number.isFinite(eventSeq)
+                    && lastStreamEventSeq !== null
+                    && eventSeq <= lastStreamEventSeq) {
+                    pendingDuplicate = null;
+                    return;
+                }
+                if (Number.isFinite(eventSeq)) {
+                    lastStreamEventSeq = eventSeq;
+                }
+                safeInvoke(handlers.onStreamEvent, envelope);
+                pendingDuplicate = {
+                    eventName: envelope.eventType,
+                    payloadKey: payloadKey(envelope.typedPayload)
+                };
+                dispatchTypedEvent(envelope.eventType, envelope.typedPayload);
+            }
+            return;
+        }
+
+        const currentPayloadKey = payloadKey(payload);
+        if (pendingDuplicate?.eventName === eventName && pendingDuplicate.payloadKey === currentPayloadKey) {
+            pendingDuplicate = null;
+            return;
+        }
+        pendingDuplicate = null;
+        dispatchTypedEvent(eventName, payload);
+    };
+
+    const result = await readSseFrames(response, handleFrame, { signal, timeoutMs });
+    if (result.endedBy === "stream-end" && !terminalEventReceived && !signal?.aborted) {
+        throw new Error("Stream connection closed before completion");
+    }
+}
+
 
 async function buildHttpError(response: Response): Promise<HttpError> {
   let message = `SSE request failed (${response.status})`;

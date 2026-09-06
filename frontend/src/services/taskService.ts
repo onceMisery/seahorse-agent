@@ -1,3 +1,4 @@
+import { readSseFrames } from "@/hooks/useStreamResponse";
 import { api } from "@/services/api";
 import { storage } from "@/utils/storage";
 import type { CreateTaskRequest, Task, TaskArtifact, TaskEvent } from "@/types/task";
@@ -40,8 +41,9 @@ export interface TaskEventSubscription {
 /**
  * 订阅任务事件流（SSE）。
  * <p>
- * 用 fetch + ReadableStream 实现（EventSource 不支持自定义 Authorization 头）。
- * 自动解析 SSE 分帧，按 seq 去重，遇到 task.completed/task.failed 自动结束。
+ * 分帧复用 useStreamResponse 的共享读取原语（含看门狗与 CRLF 分帧），
+ * EventSource 不支持自定义 Authorization 头所以仍用 fetch。
+ * 按 seq 无重复，遇到 task.completed/task.failed 自动结束。
  */
 export function subscribeTaskEvents(
   taskId: string,
@@ -53,6 +55,7 @@ export function subscribeTaskEvents(
 ): TaskEventSubscription {
   const controller = new AbortController();
   let closed = false;
+  let settled = false;
 
   const close = () => {
     closed = true;
@@ -71,40 +74,25 @@ export function subscribeTaskEvents(
         handlers.onError?.(new Error(`SSE connect failed: ${response.status}`));
         return;
       }
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let buffer = "";
-
-      while (!closed) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        // SSE 帧以空行分隔
-        let idx: number;
-        while ((idx = buffer.indexOf("\n\n")) >= 0) {
-          const frame = buffer.slice(0, idx);
-          buffer = buffer.slice(idx + 2);
-          const dataLines = frame
-            .split("\n")
-            .filter((l) => l.startsWith("data:"))
-            .map((l) => l.slice(5).trim());
-          if (dataLines.length === 0) continue;
-          const dataStr = dataLines.join("\n");
+      await readSseFrames(
+        response,
+        (_eventName, dataStr) => {
+          if (!dataStr || settled) return;
           try {
             const event = JSON.parse(dataStr) as TaskEvent;
             handlers.onEvent(event);
             if (event.type === "task.completed" || event.type === "task.failed") {
+              settled = true;
               close();
               handlers.onDone?.();
-              return;
             }
           } catch {
             // ignore non-JSON keepalive frames
           }
-        }
-      }
-      handlers.onDone?.();
+        },
+        { signal: controller.signal }
+      );
+      if (!closed && !settled) handlers.onDone?.();
     } catch (err) {
       if (!closed) handlers.onError?.(err);
     }

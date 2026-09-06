@@ -23,6 +23,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.IpGeolocationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.LoginHistoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.LoginHistoryPort.LoginHistoryEntry;
 import org.springframework.beans.factory.ObjectProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,6 +38,8 @@ import java.util.Map;
  */
 @RestController
 public class SeahorseLoginHistoryController {
+
+    private static final Logger LOG = LoggerFactory.getLogger(SeahorseLoginHistoryController.class);
 
     private static final String KEY_CODE = "code";
     private static final String KEY_DATA = "data";
@@ -133,7 +137,7 @@ public class SeahorseLoginHistoryController {
                     map.put("geoIsp", geoInfo.isp());
                 }
             } catch (Exception e) {
-                // Graceful degradation
+                LOG.debug("Login history enrichment degraded: {}", e.toString());
             }
         }
 
