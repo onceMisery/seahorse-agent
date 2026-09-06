@@ -109,6 +109,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     private final ObservationPort observationPort;
     private final MemoryRecallObservationSupport observationSupport;
     private final MemoryCandidateItemSupport itemSupport;
+    private final MemoryDirectLayerLoader directLayerLoader;
 
 
     private record ChannelRecallTask(
@@ -199,6 +200,9 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         this.itemSupport = new MemoryCandidateItemSupport(
                 this.shortTermPort, this.longTermPort, this.semanticPort,
                 this.objectMapper);
+        this.directLayerLoader = new MemoryDirectLayerLoader(
+                this.correctionLedgerPort, this.profileMemoryPort,
+                this.businessDocumentRetrieverPort, this.fusionPolicy, this.itemSupport);
     }
 
     /**
@@ -339,8 +343,12 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         boolean loadEpisodic = routePlan.isActive(MemoryTrack.EPISODIC);
         boolean loadBusinessDocument = routePlan.isActive(MemoryTrack.BUSINESS_DOCUMENT);
 
-        List<MemoryItem> corrections = loadCorrection ? loadCorrections(userId, tenantId) : Collections.emptyList();
-        List<MemoryItem> profile = loadProfile ? loadProfileFacts(userId, tenantId) : Collections.emptyList();
+        List<MemoryItem> corrections = loadCorrection
+                ? directLayerLoader.loadCorrections(userId, tenantId)
+                : Collections.emptyList();
+        List<MemoryItem> profile = loadProfile
+                ? directLayerLoader.loadProfileFacts(userId, tenantId)
+                : Collections.emptyList();
         Set<String> correctionProfileSlots = itemSupport.correctionProfileSlots(corrections);
         if (!correctionProfileSlots.isEmpty()) {
             profile = itemSupport.removeActiveProfileSlotMemories(profile, correctionProfileSlots);
@@ -358,10 +366,10 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
             semantic = itemSupport.filterByLayer(recalled.items(), MemoryLayer.SEMANTIC);
             channelAttribution = recalled.channelAttribution();
         }
-        List<MemoryItem>             businessDocuments = loadBusinessDocument
-                    ? loadBusinessDocuments(userId, tenantId, request.currentQuestion(), fusionPolicy.finalTopK(),
-                    request.knowledgeBaseIds())
-                    : Collections.emptyList();
+        List<MemoryItem> businessDocuments = loadBusinessDocument
+                ? directLayerLoader.loadBusinessDocuments(userId, tenantId, request.currentQuestion(),
+                        fusionPolicy.finalTopK(), request.knowledgeBaseIds())
+                : Collections.emptyList();
 
         Set<String> activeProfileSlots = itemSupport.activeProfileSlots(profile);
         Set<String> suppressedProfileSlots = new LinkedHashSet<>();
@@ -599,11 +607,6 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     }
 
 
-
-
-
-
-
     private RecallTraceContext traceContext(String originalQuery, MemoryRecallRequest request) {
         String safeOriginalQuery = Objects.requireNonNullElse(originalQuery, "");
         String safeResolvedQuery = request == null ? "" : request.query();
@@ -640,7 +643,6 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         putIfPresent(details, MemoryRecallObservationSupport.TRACE_KEY_ALIAS_CONFIDENCE_LEVEL, filters.get(FILTER_MEMORY_ALIAS_CONFIDENCE_LEVEL));
         return details;
     }
-
 
 
     static void putIfPresent(Map<String, Object> target, String key, Object value) {
@@ -697,100 +699,6 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     }
 
 
-
-
-
-
-
-    private List<MemoryItem> loadCorrections(String userId, String tenantId) {
-        try {
-            return correctionLedgerPort.listActive(userId, tenantId, fusionPolicy.finalTopK()).stream()
-                    .map(this::toCorrectionItem)
-                    .toList();
-        } catch (RuntimeException ex) {
-            LOG.warn("load correction ledger failed: userId={}", userId, ex);
-            return Collections.emptyList();
-        }
-    }
-
-    private List<MemoryItem> loadProfileFacts(String userId, String tenantId) {
-        try {
-            return profileMemoryPort.listActive(userId, tenantId, fusionPolicy.finalTopK()).stream()
-                    .map(this::toProfileItem)
-                    .toList();
-        } catch (RuntimeException ex) {
-            LOG.warn("load profile facts failed: userId={}", userId, ex);
-            return Collections.emptyList();
-        }
-    }
-
-    private MemoryItem toCorrectionItem(CorrectionRule rule) {
-        return MemoryItem.builder()
-                .id(rule.id())
-                .userId(rule.userId())
-                .layer(MemoryLayer.SEMANTIC)
-                .type("CORRECTION")
-                .content(rule.ruleText())
-                .metadataJson(itemSupport.serializeMetadata(Map.of(
-                        "userId", rule.userId(),
-                        "tenantId", rule.tenantId(),
-                        "targetKind", rule.targetKind(),
-                        "targetKey", rule.targetKey(),
-                        "incorrectValue", rule.incorrectValue(),
-                        "correctValue", rule.correctValue(),
-                        "priority", rule.priority(),
-                        "generationId", rule.generationId())))
-                .importanceScore(1D)
-                .confidenceLevel(1D)
-                .createTime(rule.updatedAt().atZone(ZoneId.systemDefault()).toLocalDateTime())
-                .build();
-    }
-
-    private MemoryItem toProfileItem(ProfileFact fact) {
-        return MemoryItem.builder()
-                .id(fact.id())
-                .userId(fact.userId())
-                .layer(MemoryLayer.SEMANTIC)
-                .type("PROFILE")
-                .content(fact.valueText())
-                .metadataJson(itemSupport.serializeMetadata(Map.of(
-                        "userId", fact.userId(),
-                        "tenantId", fact.tenantId(),
-                        "profileSlot", fact.slotKey(),
-                        "sourceType", fact.sourceType(),
-                        "generationId", fact.generationId(),
-                        "status", fact.status())))
-                .importanceScore(1D)
-                .confidenceLevel(fact.confidenceLevel())
-                .createTime(fact.updatedAt().atZone(ZoneId.systemDefault()).toLocalDateTime())
-                .build();
-    }
-
-    private List<MemoryItem> loadBusinessDocuments(String userId,
-                                                   String tenantId,
-                                                   String query,
-                                                   int limit,
-                                                   List<String> knowledgeBaseIds) {
-        if (itemSupport.isBlank(query)) {
-            return Collections.emptyList();
-        }
-        try {
-            return businessDocumentRetrieverPort.retrieve(tenantId, query, limit, knowledgeBaseIds);
-        } catch (RuntimeException ex) {
-            LOG.warn("load business document memories failed: userId={}", userId, ex);
-            return Collections.emptyList();
-        }
-    }
-
-
-
-
-
-
-
-
-
-
     private void recordProfileReadFeedback(List<MemoryItem> profile, Instant referencedAt, String tenantId) {
         if (profile == null || profile.isEmpty()) {
             return;
@@ -832,11 +740,6 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
             }
         }
     }
-
-
-
-
-
 
 
     private MemoryContext emptyContext(MemoryLoadRequest request) {
