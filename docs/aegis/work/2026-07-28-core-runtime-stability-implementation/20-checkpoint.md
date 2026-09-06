@@ -1,7 +1,7 @@
 # Core Runtime Stability Implementation Checkpoint
 
 Updated: 2026-09-06  
-State: slice-3-cancellation-closed-slice-5-ports-358
+State: slice-3-cancellation-closed-slice-5-ports-358-hardening-batch-landed
 
 ## TodoCheckpointDraft
 
@@ -324,6 +324,46 @@ persists one); they are recorded and unrelated to the Port reduction work.
   and dropped the manually maintained `controller_kernel_service_edges=0`
   field; it was restored manually (reporting field only; R5 asserts the edge
   count via ArchUnit directly). Future baseline updates should re-append it.
+
+## Current Slice Update (2026-09-06, hardening batch)
+
+Analysis-driven hardening batch (five commits) closing the top gaps from the
+2026-09-06 design-consistency audit:
+
+- `8e56bfb8` honest gates: `ErrorResponse` gains the design §9 `traceId`
+  (MDC-provided when tracing is on; `requestId` kept for existing clients);
+  the contract test asserts the production-emitted `DB_TIMEOUT` retryable
+  code instead of a synthetic `DEPENDENCY_UNAVAILABLE`; `SeahorseE2E*`
+  classified with `@Tag("e2e")`, excluded by group in the root pom, and the
+  CI name-based `-Dtest` hack removed; dependabot + gitleaks workflows added;
+  committed Playwright logs untracked; aegis index rewritten (24 dead links)
+  and ADR-002's 377 baseline annotated as a superseded snapshot.
+- `f61108fe` UNKNOWN reconciliation: the only previously missing §9
+  mechanism — `ToolInvocationReconciliationService` scans UNKNOWN audit
+  records after a 30-minute grace under a distributed lock, propagates the
+  terminal outcome of the idempotency-key sibling invocation, and resolves
+  evidence-less records as FAILED; runs every 5 minutes behind
+  `seahorse-agent.kernel.tool-reconciliation-enabled` (default on).
+- `a471f5fc` memory engine Builder collapse: the 16 telescoping constructors
+  (up to 21 parameters) and 7 positional static factories are deleted;
+  `Builder.build()` is the single construction path and the canonical
+  constructor is private; 28 test call sites migrated; the class shrank
+  1050 -> 599 lines and large classes >800 fell 16 -> 15.
+- `79260d6b` quarantine interceptor: `FeatureQuarantineInterceptor` maps the
+  previously ungated non-core prefixes (marketplace, billing, experiments,
+  admin users/tenants, audit, notifications, plugins) to
+  `AdvancedFeatureGate.requireEnabled`, reusing the stable 403 contract;
+  six new feature flags, bootstrap explicitly enables the four domains the
+  admin console uses today, and marketplace/billing/experiments/plugins stay
+  quarantined by default; `AdvancedFeatureGate` dropped its three positional
+  factories (249 -> 109 lines).
+- `eed50fe7` frontend: route-level lazy loading plus vendor manualChunks cut
+  the initial bundle 3,725 kB -> 2,712 kB (-27%); `utils/error.ts` is now the
+  single contract-aware error interpreter (`mapApiError`, `ApiRequestError`,
+  `isAuthExpiredError`), replacing over-broad Chinese-substring
+  session-expiry matching; api toasts surface the backend traceId.
+- Gates: kernel full 926/926, web full 305/305, frontend 208/208 + tsc +
+  eslint + build; complexity ratchet now records large classes 15.
 
 ## Blocked On
 
