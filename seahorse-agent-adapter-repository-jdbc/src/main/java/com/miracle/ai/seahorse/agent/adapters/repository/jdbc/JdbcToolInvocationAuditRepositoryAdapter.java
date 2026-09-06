@@ -37,6 +37,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 工具调用审计 JDBC 仓储适配器，负责持久化 Tool Gateway 的请求、策略裁决和完成状态。
@@ -78,6 +79,23 @@ public class JdbcToolInvocationAuditRepositoryAdapter implements ToolInvocationA
               AND version_id = ?
               AND tool_id = ?
             """;
+    private static final String SQL_FIND_UNRESOLVED_UNKNOWN = """
+            SELECT %s
+            FROM sa_tool_invocation
+            WHERE status = 'UNKNOWN'
+              AND finished_at <= ?
+            ORDER BY finished_at ASC, invocation_id ASC
+            LIMIT ?
+            """.formatted(AUDIT_COLUMNS);
+    private static final String SQL_FIND_LATEST_TERMINAL_BY_KEY = """
+            SELECT %s
+            FROM sa_tool_invocation
+            WHERE tenant_id = ?
+              AND idempotency_key = ?
+              AND status IN ('SUCCEEDED', 'FAILED')
+            ORDER BY finished_at DESC, invocation_id DESC
+            LIMIT 1
+            """.formatted(AUDIT_COLUMNS);
     private final JdbcTemplate jdbcTemplate;
 
     public JdbcToolInvocationAuditRepositoryAdapter(DataSource dataSource) {
@@ -162,6 +180,28 @@ public class JdbcToolInvocationAuditRepositoryAdapter implements ToolInvocationA
                 parameters.toArray());
         long pages = (total + safeQuery.size() - 1L) / safeQuery.size();
         return new ToolInvocationAuditPage(records, total, safeQuery.size(), safeQuery.current(), pages);
+    }
+
+    @Override
+    public List<ToolInvocationAuditEntry> findUnresolvedUnknown(Instant finishedBefore, int limit) {
+        if (finishedBefore == null || limit <= 0) {
+            return List.of();
+        }
+        return jdbcTemplate.query(SQL_FIND_UNRESOLVED_UNKNOWN,
+                this::mapAuditEntry,
+                toTimestamp(finishedBefore),
+                limit);
+    }
+
+    @Override
+    public Optional<ToolInvocationAuditEntry> findLatestTerminalByIdempotencyKey(String tenantId, String idempotencyKey) {
+        if (!hasText(tenantId) || !hasText(idempotencyKey)) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query(SQL_FIND_LATEST_TERMINAL_BY_KEY,
+                this::mapAuditEntry,
+                tenantId.trim(),
+                idempotencyKey.trim()).stream().findFirst();
     }
 
     private Timestamp toTimestamp(Instant instant) {

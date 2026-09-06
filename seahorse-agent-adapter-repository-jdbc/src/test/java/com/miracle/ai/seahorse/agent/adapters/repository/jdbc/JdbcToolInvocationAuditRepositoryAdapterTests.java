@@ -30,7 +30,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -110,13 +112,84 @@ class JdbcToolInvocationAuditRepositoryAdapterTests {
     }
 
     @Test
+    void shouldFindUnresolvedUnknownFinishedBeforeCutoff() {
+        DriverManagerDataSource dataSource = dataSource("tool-invocation-reconcile-scan");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createToolInvocationSchema(jdbcTemplate);
+        JdbcToolInvocationAuditRepositoryAdapter adapter = new JdbcToolInvocationAuditRepositoryAdapter(dataSource);
+        Instant now = Instant.parse("2026-05-23T12:00:00Z");
+        Instant cutoff = now.minusSeconds(1800);
+
+        insertWithStatus(adapter, "inv-old-unknown", "tenant-1", "key-old",
+                ToolInvocationStatus.UNKNOWN, now.minusSeconds(7200));
+        insertWithStatus(adapter, "inv-recent-unknown", "tenant-1", "key-recent",
+                ToolInvocationStatus.UNKNOWN, now.minusSeconds(60));
+        insertWithStatus(adapter, "inv-terminal", "tenant-1", "key-old",
+                ToolInvocationStatus.SUCCEEDED, now.minusSeconds(7300));
+
+        List<ToolInvocationAuditEntry> unresolved = adapter.findUnresolvedUnknown(cutoff, 50);
+
+        assertThat(unresolved).extracting(ToolInvocationAuditEntry::invocationId)
+                .containsExactly("inv-old-unknown");
+    }
+
+    @Test
+    void shouldFindLatestTerminalSiblingByIdempotencyKeyWithinTenant() {
+        DriverManagerDataSource dataSource = dataSource("tool-invocation-reconcile-sibling");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createToolInvocationSchema(jdbcTemplate);
+        JdbcToolInvocationAuditRepositoryAdapter adapter = new JdbcToolInvocationAuditRepositoryAdapter(dataSource);
+        Instant now = Instant.parse("2026-05-23T12:00:00Z");
+
+        insertWithStatus(adapter, "inv-a1", "tenant-1", "key-1", ToolInvocationStatus.SUCCEEDED, now.minusSeconds(600));
+        insertWithStatus(adapter, "inv-a2", "tenant-1", "key-1", ToolInvocationStatus.FAILED, now.minusSeconds(300));
+        insertWithStatus(adapter, "inv-b1", "tenant-2", "key-1", ToolInvocationStatus.SUCCEEDED, now.minusSeconds(100));
+
+        Optional<ToolInvocationAuditEntry> sibling =
+                adapter.findLatestTerminalByIdempotencyKey("tenant-1", ToolInvocationIdentity.digest("tenant-1", "key-1"));
+        Optional<ToolInvocationAuditEntry> missing =
+                adapter.findLatestTerminalByIdempotencyKey("tenant-1", ToolInvocationIdentity.digest("tenant-1", "key-missing"));
+
+        assertThat(sibling).isPresent();
+        assertThat(sibling.orElseThrow().invocationId()).isEqualTo("inv-a2");
+        assertThat(sibling.orElseThrow().status()).isEqualTo(ToolInvocationStatus.FAILED);
+        assertThat(missing).isEmpty();
+    }
+
+    private static void insertWithStatus(JdbcToolInvocationAuditRepositoryAdapter adapter,
+                                         String invocationId,
+                                         String tenantId,
+                                         String idempotencyKey,
+                                         ToolInvocationStatus status,
+                                         Instant finishedAt) {
+        adapter.recordRequested(new ToolInvocationAuditRecord(
+                invocationId,
+                "run-1",
+                "step-" + invocationId,
+                "agent-1",
+                "version-1",
+                tenantId,
+                "user-1",
+                "weather",
+                idempotencyKey,
+                ToolInvocationStatus.REQUESTED,
+                "keys=[], size=0",
+                finishedAt.minusSeconds(10)));
+        adapter.recordCompleted(new ToolInvocationAuditCompletion(
+                invocationId,
+                status,
+                status == ToolInvocationStatus.SUCCEEDED ? "ok" : null,
+                status == ToolInvocationStatus.FAILED ? "boom" : null,
+                finishedAt));
+    }
+
+    @Test
     void shouldPageToolInvocationAuditEntriesByFilters() {
         DriverManagerDataSource dataSource = dataSource("tool-invocation-query");
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         createToolInvocationSchema(jdbcTemplate);
         JdbcToolInvocationAuditRepositoryAdapter adapter = new JdbcToolInvocationAuditRepositoryAdapter(dataSource);
         Instant startedAt = Instant.parse("2026-05-23T00:00:00Z");
-
         adapter.recordRequested(record("invocation-1", "run-1", "agent-1", "version-1", "weather", startedAt));
         adapter.recordDecision(new ToolInvocationAuditDecision(
                 "invocation-1",

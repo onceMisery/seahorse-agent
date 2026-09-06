@@ -18,10 +18,13 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcCompensationLogAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolInvocationReconciliationService;
 import com.miracle.ai.seahorse.agent.kernel.application.consistency.CompensationLogPort;
 import com.miracle.ai.seahorse.agent.kernel.application.consistency.CompensationRetryService;
 import com.miracle.ai.seahorse.agent.kernel.application.consistency.ConcurrencyControlService;
 import com.miracle.ai.seahorse.agent.kernel.application.consistency.IdempotencyService;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
 import org.springframework.beans.factory.ObjectProvider;
@@ -34,6 +37,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 import javax.sql.DataSource;
+import java.time.Clock;
 import java.util.Collections;
 import java.util.Map;
 import java.util.function.Function;
@@ -89,5 +93,30 @@ public class SeahorseAgentConsistencyAutoConfiguration {
     @ConditionalOnMissingBean(CompensationRetryJob.class)
     public CompensationRetryJob compensationRetryJob(CompensationRetryService compensationRetryService) {
         return new CompensationRetryJob(compensationRetryService);
+    }
+
+    @Bean
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "tool-reconciliation-enabled",
+            havingValue = "true", matchIfMissing = true)
+    @ConditionalOnBean({ToolInvocationAuditPort.class, ToolInvocationAuditQueryPort.class})
+    @ConditionalOnMissingBean(ToolInvocationReconciliationService.class)
+    public ToolInvocationReconciliationService toolInvocationReconciliationService(
+            ToolInvocationAuditQueryPort auditQueryPort,
+            ToolInvocationAuditPort auditPort,
+            ObjectProvider<DistributedLockPort> lockPort,
+            ObjectProvider<Clock> clockProvider) {
+        return new ToolInvocationReconciliationService(
+                auditQueryPort,
+                auditPort,
+                lockPort.getIfAvailable(DistributedLockPort::noop),
+                clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnBean(ToolInvocationReconciliationService.class)
+    @ConditionalOnMissingBean(ToolInvocationReconciliationJob.class)
+    public ToolInvocationReconciliationJob toolInvocationReconciliationJob(
+            ToolInvocationReconciliationService reconciliationService) {
+        return new ToolInvocationReconciliationJob(reconciliationService);
     }
 }

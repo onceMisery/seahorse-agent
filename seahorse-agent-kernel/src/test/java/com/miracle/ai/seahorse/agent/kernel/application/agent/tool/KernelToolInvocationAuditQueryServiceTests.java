@@ -168,5 +168,16 @@ class KernelToolInvocationAuditQueryServiceTests {
             lastQuery = query;
             return new ToolInvocationAuditPage(List.of(entry), 1L, query.size(), query.current(), 1L);
         }
+
+        @Override
+        public List<ToolInvocationAuditEntry> findUnresolvedUnknown(Instant finishedBefore, int limit) {
+            return List.of();
+        }
+
+        @Override
+        public Optional<ToolInvocationAuditEntry> findLatestTerminalByIdempotencyKey(
+                String tenantId, String idempotencyKey) {
+            return Optional.empty();
+        }
     }
 }
