@@ -60,8 +60,6 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.GraphMe
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.HybridMemoryRecallPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.KeywordMemoryRecallChannel;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.LayeredScoredMemoryVectorPort;
-import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.MemoryRecallEvaluationService;
-import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.MemoryRecallGoldenHarnessService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.ModelMemoryRecallReranker;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.RrfMemoryFusion;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.VectorMemoryRecallChannel;
@@ -71,7 +69,6 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryAggregationInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.UserMemoryPrivacyInboundPort;
