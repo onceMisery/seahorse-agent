@@ -25,7 +25,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDetailDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
@@ -90,14 +89,14 @@ final class SandboxArtifactSupport {
     private final SandboxArtifactPort artifactPort;
     private final SandboxArtifactScannerPort artifactScannerPort;
     private final ObjectStoragePort artifactStoragePort;
-    private final SandboxArtifactQueryPort artifactQueryPort;
+    private final SandboxArtifactPort artifactQueryPort;
     private final SandboxPathValidator pathValidator;
     private final SandboxSessionAccess sessionAccess;
 
     SandboxArtifactSupport(SandboxArtifactPort artifactPort,
+                           SandboxArtifactPort artifactQueryPort,
                            SandboxArtifactScannerPort artifactScannerPort,
                            ObjectStoragePort artifactStoragePort,
-                           SandboxArtifactQueryPort artifactQueryPort,
                            SandboxPathValidator pathValidator,
                            SandboxSessionAccess sessionAccess) {
         this.artifactPort = Objects.requireNonNull(artifactPort, "artifactPort must not be null");

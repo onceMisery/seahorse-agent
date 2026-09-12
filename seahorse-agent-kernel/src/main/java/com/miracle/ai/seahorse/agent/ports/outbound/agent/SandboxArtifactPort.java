@@ -19,7 +19,42 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
 
+import java.util.List;
+import java.util.Optional;
 public interface SandboxArtifactPort {
 
     SandboxArtifact save(SandboxArtifact artifact);
+
+    Optional<SandboxArtifact> findArtifactById(String artifactId);
+
+    List<SandboxArtifact> listArtifactsBySession(String sessionId);
+
+    List<SandboxArtifact> listPromptVisibleBySession(String sessionId);
+
+    /**
+     * 查询侧空实现：save 不可用（写侧端口由装配显式提供），查询返回空。
+     */
+    static SandboxArtifactPort emptyQueries() {
+        return new SandboxArtifactPort() {
+            @Override
+            public SandboxArtifact save(SandboxArtifact artifact) {
+                throw new UnsupportedOperationException("sandbox artifact persistence is not configured");
+            }
+
+            @Override
+            public Optional<SandboxArtifact> findArtifactById(String artifactId) {
+                return Optional.empty();
+            }
+
+            @Override
+            public List<SandboxArtifact> listArtifactsBySession(String sessionId) {
+                return List.of();
+            }
+
+            @Override
+            public List<SandboxArtifact> listPromptVisibleBySession(String sessionId) {
+                return List.of();
+            }
+        };
+    }
 }

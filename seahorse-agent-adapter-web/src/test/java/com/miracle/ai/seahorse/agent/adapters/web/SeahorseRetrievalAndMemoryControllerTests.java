@@ -39,7 +39,6 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenHarnessInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryTraceQuery;
@@ -363,10 +362,10 @@ class SeahorseRetrievalAndMemoryControllerTests {
 
     @Test
     void shouldListGoldenProfiles() throws Exception {
-        MemoryRecallGoldenHarnessInboundPort port = mock(MemoryRecallGoldenHarnessInboundPort.class);
+        MemoryRecallEvaluationInboundPort port = mock(MemoryRecallEvaluationInboundPort.class);
         when(port.listProfiles()).thenReturn(List.of());
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseMemoryRecallGoldenHarnessController(provider(MemoryRecallGoldenHarnessInboundPort.class, port))).build();
+                new SeahorseMemoryRecallGoldenHarnessController(provider(MemoryRecallEvaluationInboundPort.class, port))).build();
 
         mvc.perform(get("/memories/recall-quality/golden/profiles"))
                 .andExpect(status().isOk());

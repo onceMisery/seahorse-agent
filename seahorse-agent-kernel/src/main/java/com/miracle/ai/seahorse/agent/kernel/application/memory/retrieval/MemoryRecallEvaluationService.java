@@ -22,7 +22,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
 import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationCommand;
-import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenCase;
@@ -42,7 +41,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInboundPort {
+public class MemoryRecallEvaluationService {
 
     private static final int DEFAULT_TOP_K = 10;
     static final String OBSERVATION_EVALUATE_EVENT = "memory-recall-evaluate";
@@ -64,7 +63,6 @@ public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInbo
         this.observationPort = Objects.requireNonNullElseGet(observationPort, ObservationPort::noop);
     }
 
-    @Override
     public MemoryRecallEvaluationReport evaluate(MemoryRecallEvaluationCommand command) {
         MemoryRecallEvaluationCommand safeCommand = command == null
                 ? new MemoryRecallEvaluationCommand(DEFAULT_TOP_K, List.of())

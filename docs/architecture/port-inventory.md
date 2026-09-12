@@ -8,17 +8,17 @@ Authority: `PortArchitectureTest` and compiled source under
 
 | Direction | Public interfaces | Meaning |
 | --- | ---: | --- |
-| Inbound | 93 | Capability entry points called by delivery adapters or other capabilities |
-| Outbound | 262 | Independently replaceable external/runtime boundaries |
+| Inbound | 92 | Capability entry points called by delivery adapters or other capabilities |
+| Outbound | 261 | Independently replaceable external/runtime boundaries |
 | Common | 1 | Shared boundary outside the directional packages |
-| Total | 356 | Reviewed ceiling; must only decrease |
+| Total | 354 | Reviewed ceiling; must only decrease |
 
 The inventory is measured by the public-interface ArchUnit scan, not by source
 file count. The duplicate `SreHealthReportProviderPort` boundary was retired
 in favor of `SreHealthInboundPort`; both previously exposed the same
 `SreHealthReport current()` operation and shared one implementation.
 
-The 787 Java files under `ports` are informational package-hygiene data, not
+The 785 Java files under `ports` are informational package-hygiene data, not
 the Port count. Records, enums, commands, responses, and other value objects do
 not become architectural Ports merely because they are stored in that package.
 
@@ -189,3 +189,22 @@ bash scripts/complexity-report.sh
 `PortArchitectureTest` is authoritative because it inventories compiled public
 interfaces. The shell report is a CI/reporting ratchet and must preserve the
 same directional baseline fields when `--update-baseline` is used.
+
+2026-09-06 second consolidation wave:
+
+- `MemoryRecallGoldenHarnessInboundPort` was merged into
+  `MemoryRecallEvaluationInboundPort` (both are the memory-recall
+  evaluation capability; the harness adds profile lookup on top of the
+  same report type). The merged port holds three cohesive operations
+  (evaluate/runProfile/listProfiles); the harness service is the single
+  port bean delegating scoring to the internal evaluation service.
+- `SandboxArtifactQueryPort` was merged into `SandboxArtifactPort`
+  (write and query views of the same `sa_sandbox_artifact` aggregate,
+  one JDBC adapter, the same kernel consumers). The merged port holds
+  four operations; `emptyQueries()` preserves the optional query-side
+  default; the internal Empty fake class was deleted.
+- Cross-subdomain edge dissolution removed four more stale whitelist
+  rows (whitelist 44 -> 40, back at the Phase 0 count).
+
+Port interfaces fell from 356 to 354 (inbound 93 to 92, outbound 262 to
+261) and `port_java_files_info` from 787 to 785.

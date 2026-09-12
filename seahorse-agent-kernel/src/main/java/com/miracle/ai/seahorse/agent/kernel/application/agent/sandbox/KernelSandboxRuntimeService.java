@@ -57,7 +57,6 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPo
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeProfilePolicyUpsertCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionSweepResult;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
@@ -122,11 +121,11 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private final SandboxRuntimeNodeRegistryPort runtimeNodeRegistryPort;
     private final SandboxRuntimeCapacityReservationPort capacityReservationPort;
     private final SandboxArtifactPort artifactPort;
+    private final SandboxArtifactPort artifactQueryPort;
     private final SandboxArtifactScannerPort artifactScannerPort;
     private final ObjectStoragePort artifactStoragePort;
     private final SandboxSessionRepositoryPort sessionRepositoryPort;
     private final SandboxExecutionRepositoryPort executionRepositoryPort;
-    private final SandboxArtifactQueryPort artifactQueryPort;
     private final SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort;
     private final SandboxEgressPolicyRepositoryPort egressPolicyRepositoryPort;
     private final SandboxBrowserProfileRepositoryPort browserProfileRepositoryPort;
@@ -153,10 +152,10 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         private SandboxPolicyPort policyPort;
         private SandboxRuntimePort runtimePort;
         private SandboxArtifactPort artifactPort;
+        private SandboxArtifactPort artifactQueryPortOverride;
         private SandboxSessionRepositoryPort sessionRepositoryPort = new InMemorySandboxSessionRepository();
         private SandboxExecutionRepositoryPort executionRepositoryPort = new InMemorySandboxExecutionRepository();
-        private SandboxArtifactQueryPort artifactQueryPort = new EmptySandboxArtifactQueryPort();
-        private SandboxArtifactScannerPort artifactScannerPort = new DefaultSandboxArtifactScannerPort();
+            private SandboxArtifactScannerPort artifactScannerPort = new DefaultSandboxArtifactScannerPort();
         private ObjectStoragePort artifactStoragePort;
         private SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort =
                 new InMemorySandboxRuntimeProfilePolicyRepository();
@@ -200,8 +199,10 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
             return this;
         }
 
-        public Builder artifactQueryPort(SandboxArtifactQueryPort artifactQueryPort) {
-            this.artifactQueryPort = Objects.requireNonNullElseGet(artifactQueryPort, EmptySandboxArtifactQueryPort::new);
+        public Builder artifactQueryPort(SandboxArtifactPort artifactQueryPort) {
+            if (artifactQueryPort != null) {
+                this.artifactQueryPortOverride = artifactQueryPort;
+            }
             return this;
         }
 
@@ -279,10 +280,10 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                     Objects.requireNonNull(policyPort, "policyPort must not be null"),
                     Objects.requireNonNull(runtimePort, "runtimePort must not be null"),
                     Objects.requireNonNull(artifactPort, "artifactPort must not be null"),
+                    Objects.requireNonNullElse(this.artifactQueryPortOverride, this.artifactPort),
                     sessionRepositoryPort,
                     executionRepositoryPort,
-                    artifactQueryPort,
-                    artifactScannerPort,
+                        artifactScannerPort,
                     artifactStoragePort,
                     runtimeProfilePolicyRepositoryPort,
                     egressPolicyRepositoryPort,
@@ -300,9 +301,9 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     private KernelSandboxRuntimeService(SandboxPolicyPort policyPort,
                                        SandboxRuntimePort runtimePort,
                                        SandboxArtifactPort artifactPort,
+                                       SandboxArtifactPort artifactQueryPort,
                                        SandboxSessionRepositoryPort sessionRepositoryPort,
                                        SandboxExecutionRepositoryPort executionRepositoryPort,
-                                       SandboxArtifactQueryPort artifactQueryPort,
                                        SandboxArtifactScannerPort artifactScannerPort,
                                        ObjectStoragePort artifactStoragePort,
                                        SandboxRuntimeProfilePolicyRepositoryPort runtimeProfilePolicyRepositoryPort,
@@ -321,6 +322,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         this.runtimeNodeRegistryPort = runtimeNodeRegistryPort;
         this.capacityReservationPort = capacityReservationPort;
         this.artifactPort = Objects.requireNonNull(artifactPort, "artifactPort must not be null");
+        this.artifactQueryPort = Objects.requireNonNull(artifactQueryPort, "artifactQueryPort must not be null");
         this.artifactScannerPort = Objects.requireNonNull(artifactScannerPort,
                 "artifactScannerPort must not be null");
         this.artifactStoragePort = artifactStoragePort;
@@ -328,7 +330,6 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
                 "sessionRepositoryPort must not be null");
         this.executionRepositoryPort = Objects.requireNonNull(executionRepositoryPort,
                 "executionRepositoryPort must not be null");
-        this.artifactQueryPort = Objects.requireNonNull(artifactQueryPort, "artifactQueryPort must not be null");
         this.runtimeProfilePolicyRepositoryPort = Objects.requireNonNull(runtimeProfilePolicyRepositoryPort,
                 "runtimeProfilePolicyRepositoryPort must not be null");
         this.egressPolicyRepositoryPort = Objects.requireNonNull(egressPolicyRepositoryPort,
@@ -342,9 +343,9 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
         this.pathValidator = new SandboxPathValidator();
         this.artifactSupport = new SandboxArtifactSupport(
                 artifactPort,
+                artifactQueryPort,
                 artifactScannerPort,
                 artifactStoragePort,
-                artifactQueryPort,
                 pathValidator,
                 new SandboxArtifactSupport.SandboxSessionAccess() {
                     @Override

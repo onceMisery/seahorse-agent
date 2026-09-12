@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 
 class MemoryRecallGoldenHarnessServiceTests {
 
@@ -167,12 +168,13 @@ class MemoryRecallGoldenHarnessServiceTests {
         }
     }
 
-    private static final class RecordingEvaluationPort implements MemoryRecallEvaluationInboundPort {
+    private static final class RecordingEvaluationPort extends MemoryRecallEvaluationService {
 
         private final MemoryRecallEvaluationReport stub;
         private final List<MemoryRecallEvaluationCommand> captured = new ArrayList<>();
 
         RecordingEvaluationPort(MemoryRecallEvaluationReport stub) {
+            super(request -> MemoryContext.builder().build());
             this.stub = stub;
         }
 

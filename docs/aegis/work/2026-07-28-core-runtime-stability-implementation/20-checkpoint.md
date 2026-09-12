@@ -1,7 +1,7 @@
 # Core Runtime Stability Implementation Checkpoint
 
 Updated: 2026-09-06  
-State: ports-356-pipeline-761-catch-triage-complete
+State: ports-354-cross-domain-40-pipeline-761
 
 ## TodoCheckpointDraft
 
@@ -475,6 +475,30 @@ Issue-fix batch closing the remaining findings from the 2026-09-06 audit
   The remaining 356 -> 300 reduction therefore requires per-capability
   design review, not mechanical merges.
 - Gates: kernel reactor 926/926, memory suites 91/91.
+
+## Current Slice Update (2026-09-06, third consolidation wave)
+
+- `MemoryRecallGoldenHarnessInboundPort` merged into
+  `MemoryRecallEvaluationInboundPort` (one capability, one report type,
+  three operations); the harness service is the single port bean and
+  delegates scoring to the internal evaluation service. One port and the
+  duplicated harness/evaluation bean split collapsed into one.
+- `SandboxArtifactQueryPort` merged into `SandboxArtifactPort` (write and
+  query views of the same sa_sandbox_artifact aggregate, one JDBC
+  adapter); merged port holds four operations; `emptyQueries()` keeps the
+  query-side default; the internal Empty fake class was deleted.
+- Edge dissolution follow-through: moving the three pure helpers to
+  domain made four more whitelist rows stale; they were removed and the
+  cross-domain count returned to the Phase 0 value of 40 (from 44).
+- Mermaid lazy-chunk boundary documented: mermaid v11 already emits
+  per-diagram-type chunks via its internal dynamic imports (flowDiagram,
+  sequenceDiagram, ganttDiagram... are separate files in dist); the
+  2.5MB mermaid chunk is the library core base, which cannot be split
+  further at application level. It stays off the critical path (loaded
+  only when a message contains a mermaid block).
+- Gates: kernel 926/926, web/architecture/JDBC/autoconfigure/tests
+  reactors green, complexity PASS at Ports 354 (92/261/1), files 785,
+  cross-domain 40, large classes 14.
 
 ## Blocked On
 

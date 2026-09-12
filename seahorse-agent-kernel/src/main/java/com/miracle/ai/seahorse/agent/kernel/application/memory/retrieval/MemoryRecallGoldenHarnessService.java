@@ -20,7 +20,6 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationReport;
-import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenHarnessInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallGoldenCaseProfile;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallGoldenCaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
@@ -43,7 +42,7 @@ import java.util.Optional;
  * outcomes — success / missing-profile / empty — so dashboards can alert when CI runs a
  * profile that has gone stale or vanished.
  */
-public class MemoryRecallGoldenHarnessService implements MemoryRecallGoldenHarnessInboundPort {
+public class MemoryRecallGoldenHarnessService implements MemoryRecallEvaluationInboundPort {
 
     static final String OBSERVATION_RUN_EVENT = "memory-recall-harness-run";
     static final String OBSERVATION_ATTR_OUTCOME = "outcome";
@@ -53,20 +52,25 @@ public class MemoryRecallGoldenHarnessService implements MemoryRecallGoldenHarne
     static final String OBSERVATION_OUTCOME_EMPTY = "empty";
 
     private final MemoryRecallGoldenCaseRepositoryPort repositoryPort;
-    private final MemoryRecallEvaluationInboundPort evaluationPort;
+    private final MemoryRecallEvaluationService evaluationService;
     private final ObservationPort observationPort;
 
     public MemoryRecallGoldenHarnessService(MemoryRecallGoldenCaseRepositoryPort repositoryPort,
-                                            MemoryRecallEvaluationInboundPort evaluationPort) {
-        this(repositoryPort, evaluationPort, ObservationPort.noop());
+                                            MemoryRecallEvaluationService evaluationService) {
+        this(repositoryPort, evaluationService, ObservationPort.noop());
     }
 
     public MemoryRecallGoldenHarnessService(MemoryRecallGoldenCaseRepositoryPort repositoryPort,
-                                            MemoryRecallEvaluationInboundPort evaluationPort,
+                                            MemoryRecallEvaluationService evaluationService,
                                             ObservationPort observationPort) {
         this.repositoryPort = Objects.requireNonNull(repositoryPort, "repositoryPort must not be null");
-        this.evaluationPort = Objects.requireNonNull(evaluationPort, "evaluationPort must not be null");
+        this.evaluationService = Objects.requireNonNull(evaluationService, "evaluationService must not be null");
         this.observationPort = Objects.requireNonNullElseGet(observationPort, ObservationPort::noop);
+    }
+
+    @Override
+    public MemoryRecallEvaluationReport evaluate(MemoryRecallEvaluationCommand command) {
+        return evaluationService.evaluate(command);
     }
 
     @Override
@@ -82,7 +86,7 @@ public class MemoryRecallGoldenHarnessService implements MemoryRecallGoldenHarne
             emitHarnessMetric(resolved.name(), OBSERVATION_OUTCOME_EMPTY);
             return emptyReport();
         }
-        MemoryRecallEvaluationReport report = evaluationPort.evaluate(
+        MemoryRecallEvaluationReport report = evaluationService.evaluate(
                 new MemoryRecallEvaluationCommand(resolved.topK(), resolved.cases()));
         emitHarnessMetric(resolved.name(), OBSERVATION_OUTCOME_SUCCESS);
         return report;

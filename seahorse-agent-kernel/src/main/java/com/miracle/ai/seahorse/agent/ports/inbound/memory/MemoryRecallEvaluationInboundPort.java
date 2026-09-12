@@ -20,4 +20,14 @@ package com.miracle.ai.seahorse.agent.ports.inbound.memory;
 public interface MemoryRecallEvaluationInboundPort {
 
     MemoryRecallEvaluationReport evaluate(MemoryRecallEvaluationCommand command);
+
+    /**
+     * 运行一份金标准画像(通常由源码仓维护)的召回基准。
+     */
+    MemoryRecallEvaluationReport runProfile(String profileName);
+
+    /**
+     * 列出可用的金标准画像名。
+     */
+    java.util.List<String> listProfiles();
 }

@@ -58,7 +58,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenHarnessInboundPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -303,11 +302,16 @@ public class SeahorseAgentMemoryRecallAutoConfiguration {
     @Bean
     @ConditionalOnBean(MemoryRetrievalPipelinePort.class)
     @ConditionalOnMissingBean(MemoryRecallEvaluationInboundPort.class)
-    public MemoryRecallEvaluationService seahorseMemoryRecallEvaluationInboundPort(
+    public MemoryRecallGoldenHarnessService seahorseMemoryRecallEvaluationInboundPort(
             MemoryRetrievalPipelinePort retrievalPipelinePort,
+            ObjectProvider<MemoryRecallGoldenCaseRepositoryPort> repositoryPort,
             ObjectProvider<ObservationPort> observationPort) {
-        return new MemoryRecallEvaluationService(
+        MemoryRecallEvaluationService evaluationService = new MemoryRecallEvaluationService(
                 retrievalPipelinePort,
+                observationPort.getIfAvailable(ObservationPort::noop));
+        return new MemoryRecallGoldenHarnessService(
+                repositoryPort.getIfAvailable(MemoryRecallGoldenCaseRepositoryPort::empty),
+                evaluationService,
                 observationPort.getIfAvailable(ObservationPort::noop));
     }
 
@@ -321,16 +325,4 @@ public class SeahorseAgentMemoryRecallAutoConfiguration {
                 ClasspathMemoryRecallGoldenCaseRepository.DEFAULT_ROOT);
     }
 
-    @Bean
-    @ConditionalOnBean(MemoryRetrievalPipelinePort.class)
-    @ConditionalOnMissingBean(MemoryRecallGoldenHarnessInboundPort.class)
-    public MemoryRecallGoldenHarnessService seahorseMemoryRecallGoldenHarnessService(
-            MemoryRecallEvaluationInboundPort evaluationPort,
-            ObjectProvider<MemoryRecallGoldenCaseRepositoryPort> repositoryPort,
-            ObjectProvider<ObservationPort> observationPort) {
-        return new MemoryRecallGoldenHarnessService(
-                repositoryPort.getIfAvailable(MemoryRecallGoldenCaseRepositoryPort::empty),
-                evaluationPort,
-                observationPort.getIfAvailable(ObservationPort::noop));
-    }
 }

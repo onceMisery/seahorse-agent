@@ -17,7 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
-import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenHarnessInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,17 +27,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class SeahorseMemoryRecallGoldenHarnessController {
 
-    private final ObjectProvider<MemoryRecallGoldenHarnessInboundPort> harnessPortProvider;
+    private final ObjectProvider<MemoryRecallEvaluationInboundPort> harnessPortProvider;
 
     public SeahorseMemoryRecallGoldenHarnessController(
-            ObjectProvider<MemoryRecallGoldenHarnessInboundPort> harnessPortProvider) {
+            ObjectProvider<MemoryRecallEvaluationInboundPort> harnessPortProvider) {
         this.harnessPortProvider = harnessPortProvider;
     }
 
     @GetMapping("/memories/recall-quality/golden/profiles")
     public ApiResponse<Object> listProfiles() {
         return ApiResponses.requireServiceOrError(harnessPortProvider,
-                MemoryRecallGoldenHarnessInboundPort::listProfiles);
+                MemoryRecallEvaluationInboundPort::listProfiles);
     }
 
     @PostMapping("/memories/recall-quality/golden/profiles/{profileName}/run")

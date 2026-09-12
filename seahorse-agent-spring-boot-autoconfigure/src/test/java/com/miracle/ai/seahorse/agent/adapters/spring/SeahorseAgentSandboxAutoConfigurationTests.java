@@ -25,7 +25,6 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.Repository
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxNetworkPolicy;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxEgressPolicyRepositoryPort;
@@ -66,7 +65,7 @@ class SeahorseAgentSandboxAutoConfigurationTests {
                     assertThat(context).hasSingleBean(SandboxSessionRepositoryPort.class);
                     assertThat(context).hasSingleBean(SandboxExecutionRepositoryPort.class);
                     assertThat(context).hasSingleBean(SandboxArtifactPort.class);
-                    assertThat(context).hasSingleBean(SandboxArtifactQueryPort.class);
+                    assertThat(context).hasSingleBean(SandboxArtifactPort.class);
                     assertThat(context).hasSingleBean(SandboxRuntimeProfilePolicyRepositoryPort.class);
                     assertThat(context).hasSingleBean(SandboxArtifactScannerPort.class);
                     assertThat(context.getBean(SandboxArtifactScannerPort.class))

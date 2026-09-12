@@ -137,7 +137,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ReadinessEvidencePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAccessPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAclRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxBrowserProfileRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScannerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxEgressPolicyRepositoryPort;
@@ -916,7 +915,6 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             SandboxArtifactPort.class,
             SandboxSessionRepositoryPort.class,
             SandboxExecutionRepositoryPort.class,
-            SandboxArtifactQueryPort.class,
             SandboxArtifactScannerPort.class,
             SandboxRuntimeProfilePolicyRepositoryPort.class,
             SandboxBrowserProfileRepositoryPort.class
@@ -928,7 +926,6 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             SandboxArtifactPort sandboxArtifactPort,
             SandboxSessionRepositoryPort sandboxSessionRepositoryPort,
             SandboxExecutionRepositoryPort sandboxExecutionRepositoryPort,
-            SandboxArtifactQueryPort sandboxArtifactQueryPort,
             SandboxArtifactScannerPort sandboxArtifactScannerPort,
             SandboxRuntimeProfilePolicyRepositoryPort sandboxRuntimeProfilePolicyRepositoryPort,
             SandboxBrowserProfileRepositoryPort sandboxBrowserProfileRepositoryPort,
@@ -950,7 +947,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                     .artifactPort(sandboxArtifactPort)
                     .sessionRepositoryPort(sandboxSessionRepositoryPort)
                     .executionRepositoryPort(sandboxExecutionRepositoryPort)
-                    .artifactQueryPort(sandboxArtifactQueryPort)
+                    .artifactQueryPort(sandboxArtifactPort)
                     .artifactScannerPort(sandboxArtifactScannerPort)
                     .artifactStoragePort(objectStoragePort.getIfAvailable())
                     .runtimeProfilePolicyRepositoryPort(sandboxRuntimeProfilePolicyRepositoryPort)
@@ -969,7 +966,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 .artifactPort(sandboxArtifactPort)
                 .sessionRepositoryPort(sandboxSessionRepositoryPort)
                 .executionRepositoryPort(sandboxExecutionRepositoryPort)
-                .artifactQueryPort(sandboxArtifactQueryPort)
+                .artifactQueryPort(sandboxArtifactPort)
                 .artifactScannerPort(sandboxArtifactScannerPort)
                 .artifactStoragePort(objectStoragePort.getIfAvailable())
                 .runtimeProfilePolicyRepositoryPort(sandboxRuntimeProfilePolicyRepositoryPort)

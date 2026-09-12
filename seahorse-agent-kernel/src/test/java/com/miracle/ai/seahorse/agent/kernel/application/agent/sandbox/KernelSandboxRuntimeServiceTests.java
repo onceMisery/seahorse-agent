@@ -58,7 +58,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactScanResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
@@ -174,7 +173,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(new MemoryArtifactPort())
                 .sessionRepositoryPort(sessionRepository)
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .clock(CLOCK)
                 .build();
 
@@ -232,7 +231,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(new MemoryArtifactPort())
                 .sessionRepositoryPort(sessionRepository)
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .clock(CLOCK)
                 .build();
 
@@ -266,7 +265,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(new MemoryArtifactPort())
                 .sessionRepositoryPort(sessionRepository)
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .clock(CLOCK)
                 .build();
 
@@ -320,7 +319,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(new MemoryArtifactPort())
                 .sessionRepositoryPort(sessionRepository)
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .clock(CLOCK)
                 .build();
 
@@ -998,7 +997,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(new MemoryArtifactPort())
                 .sessionRepositoryPort(sessionRepository)
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
                 .artifactStoragePort(null)
                 .runtimeProfilePolicyRepositoryPort(new MemorySandboxRuntimeProfilePolicyRepository())
@@ -1406,7 +1405,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(artifactPort)
                 .sessionRepositoryPort(new MemorySandboxSessionRepository())
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .artifactScannerPort(KernelSandboxRuntimeServiceTests::throwScannerFailure)
                 .auditLedger(null)
                 .clock(CLOCK)
@@ -1447,7 +1446,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(artifactPort)
                 .sessionRepositoryPort(new MemorySandboxSessionRepository())
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
                 .artifactStoragePort(objectStorage)
                 .auditLedger(null)
@@ -1488,7 +1487,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(artifactPort)
                 .sessionRepositoryPort(new MemorySandboxSessionRepository())
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
                 .artifactStoragePort(objectStorage)
                 .auditLedger(null)
@@ -1537,7 +1536,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(artifactPort)
                 .sessionRepositoryPort(new MemorySandboxSessionRepository())
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
                 .artifactStoragePort(objectStorage)
                 .auditLedger(null)
@@ -1623,7 +1622,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(artifactPort)
                 .sessionRepositoryPort(new MemorySandboxSessionRepository())
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
                 .artifactStoragePort(objectStorage)
                 .auditLedger(null)
@@ -1662,7 +1661,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(artifactPort)
                 .sessionRepositoryPort(new MemorySandboxSessionRepository())
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
                 .artifactStoragePort(objectStorage)
                 .auditLedger(null)
@@ -1741,7 +1740,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(new MemoryArtifactPort())
                 .sessionRepositoryPort(new MemorySandboxSessionRepository())
                 .executionRepositoryPort(executionRepository)
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .clock(CLOCK)
                 .build();
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
@@ -1777,7 +1776,7 @@ class KernelSandboxRuntimeServiceTests {
         KernelSandboxRuntimeService service = guardedService(
                 sessionRepository,
                 executionRepository,
-                new EmptySandboxArtifactQueryPort(),
+                SandboxArtifactPort.emptyQueries(),
                 currentUser("other-user", "user"),
                 run("run-1", "user-1"));
 
@@ -1805,7 +1804,7 @@ class KernelSandboxRuntimeServiceTests {
         KernelSandboxRuntimeService service = guardedService(
                 sessionRepository,
                 executionRepository,
-                new EmptySandboxArtifactQueryPort(),
+                SandboxArtifactPort.emptyQueries(),
                 currentUser(42L, "owner", "user"),
                 run("run-1", "42"));
 
@@ -1832,7 +1831,7 @@ class KernelSandboxRuntimeServiceTests {
         KernelSandboxRuntimeService service = guardedService(
                 sessionRepository,
                 new MemorySandboxExecutionRepository(),
-                new EmptySandboxArtifactQueryPort(),
+                SandboxArtifactPort.emptyQueries(),
                 currentUser("user-1", "user"),
                 run("run-owner", "user-1"),
                 run("run-other", "other-user"));
@@ -1891,7 +1890,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(new MemoryArtifactPort())
                 .sessionRepositoryPort(sessionRepository)
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .clock(CLOCK)
                 .build();
 
@@ -1956,7 +1955,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(new MemoryArtifactPort())
                 .sessionRepositoryPort(sessionRepository)
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .clock(CLOCK)
                 .build();
 
@@ -2012,7 +2011,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(new MemoryArtifactPort())
                 .sessionRepositoryPort(sessionRepository)
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .clock(CLOCK)
                 .build();
 
@@ -2055,7 +2054,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(new MemoryArtifactPort())
                 .sessionRepositoryPort(sessionRepository)
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .clock(CLOCK)
                 .build();
 
@@ -2121,7 +2120,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(new MemoryArtifactPort())
                 .sessionRepositoryPort(sessionRepository)
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .clock(CLOCK)
                 .build();
 
@@ -2424,7 +2423,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(new MemoryArtifactPort())
                 .sessionRepositoryPort(sessionRepository)
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .clock(CLOCK)
                 .build();
         SandboxSession session = service.createSession(new SandboxSessionCreateCommand(
@@ -2477,7 +2476,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(new MemoryArtifactPort())
                 .sessionRepositoryPort(new MemorySandboxSessionRepository())
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .auditLedger(auditLedger)
                 .clock(CLOCK)
                 .build();
@@ -2517,7 +2516,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(new MemoryArtifactPort())
                 .sessionRepositoryPort(new MemorySandboxSessionRepository())
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .auditLedger(auditLedger)
                 .clock(CLOCK)
                 .build();
@@ -2584,7 +2583,7 @@ class KernelSandboxRuntimeServiceTests {
                 .artifactPort(new MemoryArtifactPort())
                 .sessionRepositoryPort(sessionRepository)
                 .executionRepositoryPort(new MemorySandboxExecutionRepository())
-                .artifactQueryPort(new EmptySandboxArtifactQueryPort())
+                .artifactQueryPort(SandboxArtifactPort.emptyQueries())
                 .artifactScannerPort(new DefaultSandboxArtifactScannerPort())
                 .artifactStoragePort(null)
                 .runtimeProfilePolicyRepositoryPort(new MemorySandboxRuntimeProfilePolicyRepository())
@@ -3042,6 +3041,21 @@ class KernelSandboxRuntimeServiceTests {
             saved.add(artifact);
             return artifact;
         }
+
+        @Override
+        public Optional<SandboxArtifact> findArtifactById(String artifactId) {
+            return saved.stream().filter(a -> a.artifactId().equals(artifactId)).findFirst();
+        }
+
+        @Override
+        public List<SandboxArtifact> listArtifactsBySession(String sessionId) {
+            return saved.stream().filter(a -> sessionId.equals(a.sessionId())).toList();
+        }
+
+        @Override
+        public List<SandboxArtifact> listPromptVisibleBySession(String sessionId) {
+            return listArtifactsBySession(sessionId);
+        }
     }
 
     private static final class RecordingObjectStoragePort implements ObjectStoragePort {
@@ -3117,7 +3131,7 @@ class KernelSandboxRuntimeServiceTests {
 
     private static KernelSandboxRuntimeService guardedService(MemorySandboxSessionRepository sessionRepository,
                                                               MemorySandboxExecutionRepository executionRepository,
-                                                              SandboxArtifactQueryPort artifactQueryPort,
+                                                              SandboxArtifactPort artifactQueryPort,
                                                               CurrentUserPort currentUserPort,
                                                               AgentRun... runs) {
         return KernelSandboxRuntimeService.builder()
@@ -3356,7 +3370,7 @@ class KernelSandboxRuntimeServiceTests {
         }
     }
 
-    private static final class MemorySandboxArtifactQueryPort implements SandboxArtifactQueryPort {
+    private static final class MemorySandboxArtifactQueryPort implements SandboxArtifactPort {
 
         private final Map<String, SandboxArtifact> artifacts = new ConcurrentHashMap<>();
 
@@ -3364,6 +3378,12 @@ class KernelSandboxRuntimeServiceTests {
             for (SandboxArtifact artifact : artifacts) {
                 this.artifacts.put(artifact.artifactId(), artifact);
             }
+        }
+
+        @Override
+        public SandboxArtifact save(SandboxArtifact artifact) {
+            artifacts.put(artifact.artifactId(), artifact);
+            return artifact;
         }
 
         @Override
@@ -3388,7 +3408,12 @@ class KernelSandboxRuntimeServiceTests {
         }
     }
 
-    private static final class EmptySandboxArtifactQueryPort implements SandboxArtifactQueryPort {
+    private static final class EmptySandboxArtifactQueryPort implements SandboxArtifactPort {
+
+        @Override
+        public SandboxArtifact save(SandboxArtifact artifact) {
+            throw new UnsupportedOperationException("sandbox artifact persistence is not configured");
+        }
 
         @Override
         public Optional<SandboxArtifact> findArtifactById(String artifactId) {

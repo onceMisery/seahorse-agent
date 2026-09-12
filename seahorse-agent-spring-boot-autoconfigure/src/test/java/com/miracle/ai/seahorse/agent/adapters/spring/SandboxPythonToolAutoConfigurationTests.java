@@ -34,7 +34,6 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPo
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionSweepResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxBrowserProfileRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
@@ -148,28 +147,7 @@ class SandboxPythonToolAutoConfigurationTests {
 
         @Bean
         SandboxArtifactPort sandboxArtifactPort() {
-            return artifact -> artifact;
-        }
-
-        @Bean
-        SandboxArtifactQueryPort sandboxArtifactQueryPort() {
-            return new SandboxArtifactQueryPort() {
-
-                @Override
-                public Optional<SandboxArtifact> findArtifactById(String artifactId) {
-                    return Optional.empty();
-                }
-
-                @Override
-                public List<SandboxArtifact> listArtifactsBySession(String sessionId) {
-                    return List.of();
-                }
-
-                @Override
-                public List<SandboxArtifact> listPromptVisibleBySession(String sessionId) {
-                    return List.of();
-                }
-            };
+            return SandboxArtifactPort.emptyQueries();
         }
 
         @Bean

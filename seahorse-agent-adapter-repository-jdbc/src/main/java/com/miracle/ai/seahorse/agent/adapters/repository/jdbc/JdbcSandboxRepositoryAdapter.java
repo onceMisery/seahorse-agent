@@ -32,7 +32,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeP
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxSession;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxBrowserProfileRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxEgressPolicyRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxExecutionRepositoryPort;
@@ -55,7 +54,6 @@ import java.util.stream.Collectors;
 public class JdbcSandboxRepositoryAdapter implements SandboxSessionRepositoryPort,
         SandboxExecutionRepositoryPort,
         SandboxArtifactPort,
-        SandboxArtifactQueryPort,
         SandboxBrowserProfileRepositoryPort,
         SandboxRuntimeProfilePolicyRepositoryPort,
         SandboxEgressPolicyRepositoryPort {
