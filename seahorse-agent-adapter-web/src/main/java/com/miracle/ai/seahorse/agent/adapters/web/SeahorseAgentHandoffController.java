@@ -21,36 +21,51 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffFailureCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffStatus;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentHandoffInboundPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.AgentHandoffCreateCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 public class SeahorseAgentHandoffController {
 
+    private static final CurrentUserPort DENY_ALL_CURRENT_USER = () -> Optional.empty();
+
     private final ObjectProvider<AgentHandoffInboundPort> handoffPortProvider;
     private final AdvancedFeatureGate advancedFeatureGate;
+    private final CurrentUserPort currentUserPort;
 
     @Autowired
     public SeahorseAgentHandoffController(ObjectProvider<AgentHandoffInboundPort> handoffPortProvider,
-                                          ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+                                          ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider,
+                                          ObjectProvider<CurrentUserPort> currentUserPortProvider) {
         this(handoffPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults));
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::demoDefaults),
+                currentUserPortProvider);
     }
 
     public SeahorseAgentHandoffController(ObjectProvider<AgentHandoffInboundPort> handoffPortProvider,
-                                          AdvancedFeatureGate advancedFeatureGate) {
+                                          AdvancedFeatureGate advancedFeatureGate,
+                                          ObjectProvider<CurrentUserPort> currentUserPortProvider) {
         this.handoffPortProvider = handoffPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
                 ? AdvancedFeatureGate.demoDefaults()
                 : advancedFeatureGate;
+        // 受控创建要求 ADMIN；缺失认证上下文时一律拒绝（设计 §5.3：默认仅 admin/workflow engine 可用）
+        this.currentUserPort = currentUserPortProvider == null
+                ? DENY_ALL_CURRENT_USER
+                : currentUserPortProvider.getIfAvailable(() -> DENY_ALL_CURRENT_USER);
     }
 
     @GetMapping("/api/agent-runs/{runId}/handoffs")
@@ -68,10 +83,42 @@ public class SeahorseAgentHandoffController {
         return ApiResponses.requireService(handoffPortProvider, port -> AgentHandoffResponse.from(port.findById(handoffId)));
     }
 
+    @PostMapping("/api/agent-handoffs")
+    public ApiResponse<Object> create(@RequestBody AgentHandoffCreateRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_HANDOFF);
+        currentUserPort.requireRole("ADMIN");
+        return ApiResponses.requireService(handoffPortProvider,
+                port -> AgentHandoffResponse.from(port.createLocalHandoff(request.toCommand())));
+    }
+
     @PostMapping("/api/agent-handoffs/{handoffId}/cancel")
     public ApiResponse<Object> cancel(@PathVariable String handoffId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_HANDOFF);
         return ApiResponses.requireService(handoffPortProvider, port -> AgentHandoffResponse.from(port.cancel(handoffId)));
+    }
+
+    /**
+     * 受控创建请求（设计 §5.3：默认仅 admin/workflow engine 可用）。
+     */
+    public record AgentHandoffCreateRequest(String tenantId,
+                                            String parentRunId,
+                                            String sourceAgentId,
+                                            String targetAgentId,
+                                            String targetVersionId,
+                                            String handoffReason,
+                                            String contextPackId,
+                                            String inputSummary,
+                                            String contextSummaryJson,
+                                            Integer depth,
+                                            List<String> ancestorAgentIds,
+                                            String traceId) {
+
+        private AgentHandoffCreateCommand toCommand() {
+            return new AgentHandoffCreateCommand(tenantId, parentRunId, sourceAgentId, targetAgentId,
+                    targetVersionId, handoffReason, contextPackId, inputSummary, contextSummaryJson,
+                    depth == null ? 1 : depth, ancestorAgentIds == null ? List.of() : ancestorAgentIds,
+                    traceId);
+        }
     }
 
     public record AgentHandoffResponse(String handoffId,

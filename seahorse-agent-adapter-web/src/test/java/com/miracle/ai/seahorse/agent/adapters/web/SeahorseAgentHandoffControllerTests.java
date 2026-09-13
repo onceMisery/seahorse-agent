@@ -51,10 +51,20 @@ class SeahorseAgentHandoffControllerTests {
         when(port.listByParentRunId("tenant-a", "parent-run-1")).thenReturn(List.of(running));
         when(port.findById("handoff-1")).thenReturn(running);
         when(port.cancel("handoff-1")).thenReturn(cancelled);
+        com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort adminPort =
+                new com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort() {
+                    @Override
+                    public java.util.Optional<com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser> currentUser() {
+                        return java.util.Optional.of(new com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser(
+                                1L, "admin", "ADMIN", null, "tenant-a"));
+                    }
+                };
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseAgentHandoffController(
                         provider(AgentHandoffInboundPort.class, port),
-                        AdvancedFeatureGate.allEnabledForTests())).build();
+                        AdvancedFeatureGate.allEnabledForTests(),
+                        provider(com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort.class, adminPort)))
+                .build();
 
         mvc.perform(get("/api/agent-runs/parent-run-1/handoffs").param("tenantId", "tenant-a"))
                 .andExpect(status().isOk())
@@ -84,10 +94,29 @@ class SeahorseAgentHandoffControllerTests {
                 .andExpect(jsonPath("$.data.status").value("CANCELLED"));
         verify(port).cancel("handoff-1");
 
+        // 受控创建：仅 ADMIN 可用；缺失认证上下文时默认拒绝（设计 §5.3）
+        when(port.createLocalHandoff(org.mockito.ArgumentMatchers.any())).thenReturn(running);
         mvc.perform(post("/api/agent-handoffs")
                         .contentType("application/json")
                         .content("{}"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk());
+        ArgumentCaptor<com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.AgentHandoffCreateCommand> commandCaptor =
+                ArgumentCaptor.forClass(com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.AgentHandoffCreateCommand.class);
+        verify(port).createLocalHandoff(commandCaptor.capture());
+        assertThat(commandCaptor.getValue().depth()).isEqualTo(1);
+
+        // 无认证端口 → 默认拒绝
+        MockMvc denyAll = MockMvcBuilders.standaloneSetup(
+                new SeahorseAgentHandoffController(
+                        provider(AgentHandoffInboundPort.class, port),
+                        AdvancedFeatureGate.allEnabledForTests(),
+                        provider(com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort.class, null)))
+                .setControllerAdvice(new SeahorseWebExceptionHandler())
+                .build();
+        denyAll.perform(post("/api/agent-handoffs")
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isConflict());
     }
 
     private static AgentHandoff handoff(AgentHandoffStatus status) {

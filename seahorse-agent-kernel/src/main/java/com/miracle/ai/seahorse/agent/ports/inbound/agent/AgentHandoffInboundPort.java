@@ -17,11 +17,18 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.AgentHandoffCreateCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff;
 
 import java.util.List;
 
 public interface AgentHandoffInboundPort {
+
+    /**
+     * 受控创建本地 handoff（设计 §5.3 P0）：供工作流引擎 / 团队编排 / Agent-as-Tool 调用，
+     * Web 层直接暴露时必须叠加 ADMIN 角色校验。
+     */
+    AgentHandoff createLocalHandoff(AgentHandoffCreateCommand command);
 
     AgentHandoff findById(String handoffId);
 

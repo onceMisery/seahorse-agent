@@ -80,7 +80,8 @@ class AdvancedFeatureControllerGateTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseAgentHandoffController(
                                 provider(AgentHandoffInboundPort.class, port),
-                                AdvancedFeatureGate.demoDefaults()))
+                                AdvancedFeatureGate.demoDefaults(),
+                                provider(com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort.class, null)))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
