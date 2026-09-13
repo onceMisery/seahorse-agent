@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { XCircle } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ChevronDown, ChevronRight, ExternalLink, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -31,6 +32,119 @@ function statusBadge(status?: string) {
     <span className={`rounded px-1.5 py-0.5 font-mono text-xs ${colors[status] ?? "bg-slate-100 text-slate-600"}`}>
       {status}
     </span>
+  );
+}
+
+interface HandoffTreeProps {
+  handoffs: AgentHandoff[];
+  depth: number;
+  onCancel: (handoff: AgentHandoff) => void;
+}
+
+/**
+ * Handoff 树（Multi-Agent A2A 设计 §9.1）：parent run → child run 逐层下钻。
+ * 每个节点可懒加载其 child run 名下的 handoff，形成完整的委托树。
+ */
+function HandoffTree({ handoffs, depth, onCancel }: HandoffTreeProps) {
+  return (
+    <ul className={depth > 0 ? "ml-4 border-l border-slate-200 pl-3" : ""}>
+      {handoffs.map((handoff) => (
+        <HandoffTreeNode key={handoff.handoffId ?? `${handoff.parentRunId}-${handoff.childRunId}`}
+          handoff={handoff} depth={depth} onCancel={onCancel} />
+      ))}
+    </ul>
+  );
+}
+
+function HandoffTreeNode({ handoff, depth, onCancel }: { handoff: AgentHandoff; depth: number; onCancel: (handoff: AgentHandoff) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const [children, setChildren] = useState<AgentHandoff[] | null>(null);
+  const [childrenLoading, setChildrenLoading] = useState(false);
+  const childRunId = handoff.childRunId;
+  const expandable = !!childRunId;
+
+  const toggleChildren = () => {
+    if (!expandable) return;
+    if (expanded) {
+      setExpanded(false);
+      return;
+    }
+    if (children === null) {
+      setChildrenLoading(true);
+      getAgentRunHandoffs(childRunId as string)
+        .then((data) => {
+          setChildren(Array.isArray(data) ? data : []);
+          setExpanded(true);
+        })
+        .catch((error) => toast.error(getErrorMessage(error, "Failed to load child handoffs")))
+        .finally(() => setChildrenLoading(false));
+      return;
+    }
+    setExpanded(true);
+  };
+
+  return (
+    <li className="py-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded px-1 py-1 hover:bg-slate-50">
+        {expandable ? (
+          <button
+            type="button"
+            onClick={toggleChildren}
+            className="flex items-center text-slate-400 hover:text-slate-600"
+            aria-label={expanded ? "Collapse child handoffs" : "Expand child handoffs"}
+          >
+            {childrenLoading ? (
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border border-slate-300 border-t-transparent" />
+            ) : expanded ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" />
+            )}
+          </button>
+        ) : (
+          <span className="h-3.5 w-3.5" />
+        )}
+        <span className="font-mono text-xs text-slate-400">{handoff.handoffId?.slice(0, 8)}</span>
+        <span className="font-mono text-xs text-slate-600">
+          {handoff.sourceAgentId?.slice(0, 12)} → {handoff.targetAgentId?.slice(0, 12)}
+        </span>
+        {statusBadge(handoff.status)}
+        {handoff.failureCode ? (
+          <span className="rounded bg-red-50 px-1.5 py-0.5 font-mono text-xs text-red-600">
+            {handoff.failureCode}
+          </span>
+        ) : null}
+        <span className="text-xs text-slate-500">{handoff.handoffReason ?? "-"}</span>
+        <span className="ml-auto flex items-center gap-1">
+          {expandable ? (
+            <Link
+              to={`/admin/agent-inspector/${encodeURIComponent(childRunId as string)}`}
+              className="flex items-center text-xs text-sky-600 hover:text-sky-700"
+            >
+              <ExternalLink className="mr-1 h-3 w-3" />
+              Child run
+            </Link>
+          ) : null}
+          {handoff.status === "CREATED" || handoff.status === "RUNNING" ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onCancel(handoff)}
+              className="text-red-600 hover:text-red-700"
+            >
+              <XCircle className="mr-1 h-3 w-3" />
+              Cancel
+            </Button>
+          ) : null}
+        </span>
+      </div>
+      {expanded && children !== null && children.length > 0 ? (
+        <HandoffTree handoffs={children} depth={depth + 1} onCancel={onCancel} />
+      ) : null}
+      {expanded && children !== null && children.length === 0 ? (
+        <div className="ml-4 border-l border-slate-200 pl-3 text-xs text-slate-400">No child handoffs</div>
+      ) : null}
+    </li>
   );
 }
 
@@ -90,52 +204,7 @@ export function AgentHandoffsView({ runId }: { runId: string }) {
   return (
     <>
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 text-xs text-slate-500">
-              <th className="pb-2 pr-3 font-medium">ID</th>
-              <th className="pb-2 pr-3 font-medium">Source Agent</th>
-              <th className="pb-2 pr-3 font-medium">Target Agent</th>
-              <th className="pb-2 pr-3 font-medium">Context Pack</th>
-              <th className="pb-2 pr-3 font-medium">Status</th>
-              <th className="pb-2 pr-3 font-medium">Reason</th>
-              <th className="pb-2 pr-3 font-medium">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {handoffs.map((handoff) => (
-              <tr key={handoff.handoffId} className="border-b border-slate-100">
-                <td className="py-2 pr-3 font-mono text-xs text-slate-400">
-                  {handoff.handoffId?.slice(0, 8)}
-                </td>
-                <td className="py-2 pr-3 font-mono text-xs text-slate-600">
-                  {handoff.sourceAgentId?.slice(0, 12)}
-                </td>
-                <td className="py-2 pr-3 font-mono text-xs text-slate-600">
-                  {handoff.targetAgentId?.slice(0, 12)}
-                </td>
-                <td className="py-2 pr-3 font-mono text-xs text-slate-600">
-                  {handoff.contextPackId ? handoff.contextPackId.slice(0, 18) : "-"}
-                </td>
-                <td className="py-2 pr-3">{statusBadge(handoff.status)}</td>
-                <td className="py-2 pr-3 text-xs text-slate-600">{handoff.handoffReason ?? "-"}</td>
-                <td className="py-2 pr-3">
-                  {handoff.status === "CREATED" || handoff.status === "RUNNING" ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setCancelTarget(handoff)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <XCircle className="mr-1 h-3 w-3" />
-                      Cancel
-                    </Button>
-                  ) : null}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <HandoffTree handoffs={handoffs} depth={0} onCancel={setCancelTarget} />
       </div>
 
       <Dialog open={!!cancelTarget} onOpenChange={() => setCancelTarget(null)}>
