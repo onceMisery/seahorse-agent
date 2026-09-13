@@ -15,10 +15,16 @@
   （端口 351 → 353，特性驱动新增，见 port-inventory §6.3 记录）与 JDBC
   适配器（`sa_agent_team`/`sa_agent_team_run`，V61 迁移）；`KernelAgentTeamService`
   实现 Supervisor 规划-分派-汇总（子任务全部经由 handoff 分派，child run 与
-  handoff 完成态收敛，带审计）与 Workflow DAG 拓扑执行（P1 失败策略为
-  fail-fast）；REST API `POST/GET /api/agent-teams`、
+  handoff 完成态收敛，带审计）与 Workflow DAG 拓扑执行；REST API
+  `POST/GET /api/agent-teams`、
   `POST /api/agent-teams/{teamId}/runs`、`GET /api/agent-team-runs/{runId}`
-  （沿用 AGENT_HANDOFF feature gate）；handoff 完成态回写（设计 §5.2 P0 项）：
+  （沿用 AGENT_HANDOFF feature gate）；前端 Teams tab（`/admin/agent-teams`，
+  团队列表/定义详情/受控运行/节点状态视图）与 Agent Inspector handoff 树
+  （parent→child 委托链逐层下钻、failureCode 徽标、child run 深链，
+  设计 §9.1/§9.2）；WORKFLOW_DAG 失败策略（设计 §6.3）：FAIL_FAST /
+  SKIP（继续其余分支，ON_FAILURE 补偿边生效，部分失败运行收敛 FAILED
+  且保留成功输出）/ RETRY（每节点重试 maxRetries 次后等同 FAIL_FAST，
+  每次尝试独立 handoff 审计）；handoff 完成态回写（设计 §5.2 P0 项）：
   `AgentHandoffCompletionService` 按 childRunId 幂等收敛 handoff 到
   SUCCEEDED/FAILED/CANCELLED 并写完成审计，`KernelAgentRunService` 在
   succeed/fail/cancel/cancelExecution 终态转移处自动触发，
