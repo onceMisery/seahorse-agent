@@ -1673,6 +1673,11 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
                     .filter(handoff -> parentRunId.equals(handoff.parentRunId()))
                     .toList();
         }
+
+        @Override
+        public Optional<AgentHandoff> findByChildRunId(String childRunId) {
+            return Optional.empty();
+        }
     }
 
     private static final class SingleToolCatalogRepository implements ToolCatalogRepositoryPort {

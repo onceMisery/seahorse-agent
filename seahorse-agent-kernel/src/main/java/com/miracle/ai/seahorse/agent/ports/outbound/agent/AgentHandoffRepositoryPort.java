@@ -31,4 +31,6 @@ public interface AgentHandoffRepositoryPort {
     Optional<AgentHandoff> findById(String handoffId);
 
     List<AgentHandoff> listByParentRunId(String tenantId, String parentRunId);
+
+    Optional<AgentHandoff> findByChildRunId(String childRunId);
 }

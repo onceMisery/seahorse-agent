@@ -268,6 +268,13 @@ class KernelAgentHandoffServiceTests {
             return handoff;
         }
 
+@Override
+        public Optional<AgentHandoff> findByChildRunId(String childRunId) {
+            return handoffs.values().stream()
+                    .filter(handoff -> childRunId.equals(handoff.childRunId()))
+                    .findFirst();
+        }
+
         @Override
         public Optional<AgentHandoff> findById(String handoffId) {
             return Optional.ofNullable(handoffs.get(handoffId));

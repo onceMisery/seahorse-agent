@@ -22,12 +22,14 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.RunContextSnapshotRedactor;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.AgentHandoffCompletionService;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialJsonFieldClassifier;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffFailureCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeConstants;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
@@ -76,6 +78,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     private final QuotaEnforcementService quotaEnforcementService;
     private final RunContextSnapshotRepositoryPort runContextSnapshotRepository;
     private final Optional<RunProfileInboundPort> runProfilePort;
+    private final Optional<AgentHandoffCompletionService> handoffCompletionService;
     private final ObjectMapper objectMapper;
 
     public KernelAgentRunService(AgentDefinitionRepositoryPort definitionRepository,
@@ -121,6 +124,18 @@ public class KernelAgentRunService implements AgentRunInboundPort {
                                  QuotaEnforcementService quotaEnforcementService,
                                  RunContextSnapshotRepositoryPort runContextSnapshotRepository,
                                  RunProfileInboundPort runProfilePort) {
+        this(definitionRepository, runRepository, currentUserPort, clock, quotaEnforcementService,
+                runContextSnapshotRepository, runProfilePort, null);
+    }
+
+    public KernelAgentRunService(AgentDefinitionRepositoryPort definitionRepository,
+                                 AgentRunRepositoryPort runRepository,
+                                 CurrentUserPort currentUserPort,
+                                 Clock clock,
+                                 QuotaEnforcementService quotaEnforcementService,
+                                 RunContextSnapshotRepositoryPort runContextSnapshotRepository,
+                                 RunProfileInboundPort runProfilePort,
+                                 AgentHandoffCompletionService handoffCompletionService) {
         this.definitionRepository = Objects.requireNonNull(definitionRepository, "definitionRepository must not be null");
         this.runRepository = Objects.requireNonNull(runRepository, "runRepository must not be null");
         this.currentUserPort = Objects.requireNonNull(currentUserPort, "currentUserPort must not be null");
@@ -130,7 +145,27 @@ public class KernelAgentRunService implements AgentRunInboundPort {
                 runContextSnapshotRepository,
                 RunContextSnapshotRepositoryPort::noop);
         this.runProfilePort = Optional.ofNullable(runProfilePort);
+        this.handoffCompletionService = Optional.ofNullable(handoffCompletionService);
         this.objectMapper = new ObjectMapper();
+    }
+
+    /**
+     * run 到达终态后把关联 handoff（childRunId 匹配）收敛到对应完成态；
+     * 未装配回写服务或无关联 handoff 时为 no-op。
+     */
+    private void writebackHandoffCompletion(AgentRun terminalRun) {
+        if (handoffCompletionService.isEmpty()) {
+            return;
+        }
+        AgentRunStatus status = terminalRun.status();
+        if (status == AgentRunStatus.SUCCEEDED) {
+            handoffCompletionService.get().completeForChildRun(terminalRun.runId(), true, null);
+        } else if (status == AgentRunStatus.FAILED) {
+            handoffCompletionService.get().completeForChildRun(terminalRun.runId(), false,
+                    AgentHandoffFailureCode.CHILD_RUN_FAILED);
+        } else if (status == AgentRunStatus.CANCELLED) {
+            handoffCompletionService.get().cancelForChildRun(terminalRun.runId());
+        }
     }
 
     @Override
@@ -471,7 +506,9 @@ public class KernelAgentRunService implements AgentRunInboundPort {
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
         AgentRun current = loadReadableRun(runId, currentUser);
         AgentRun cancelled = current.cancel(clock.instant());
-        return persistStatusTransition(current, cancelled);
+        AgentRun persisted = persistStatusTransition(current, cancelled);
+        writebackHandoffCompletion(persisted);
+        return persisted;
     }
 
     @Override
@@ -481,7 +518,9 @@ public class KernelAgentRunService implements AgentRunInboundPort {
             return current;
         }
         AgentRun cancelled = current.cancel(clock.instant());
-        return persistStatusTransition(current, cancelled);
+        AgentRun persisted = persistStatusTransition(current, cancelled);
+        writebackHandoffCompletion(persisted);
+        return persisted;
     }
 
     @Override
@@ -499,7 +538,9 @@ public class KernelAgentRunService implements AgentRunInboundPort {
             return current;
         }
         AgentRun succeeded = current.withStatus(AgentRunStatus.SUCCEEDED, null, null, clock.instant());
-        return persistStatusTransition(current, succeeded);
+        AgentRun persisted = persistStatusTransition(current, succeeded);
+        writebackHandoffCompletion(persisted);
+        return persisted;
     }
 
     @Override
@@ -513,7 +554,9 @@ public class KernelAgentRunService implements AgentRunInboundPort {
                 defaultText(errorCode, AgentRuntimeConstants.DEFAULT_AGENT_RUN_FAILURE_CODE),
                 safeText(errorMessage),
                 clock.instant());
-        return persistStatusTransition(current, failed);
+        AgentRun persisted = persistStatusTransition(current, failed);
+        writebackHandoffCompletion(persisted);
+        return persisted;
     }
 
     /**

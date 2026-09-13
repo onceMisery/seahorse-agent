@@ -51,6 +51,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.gate.KernelProduct
 import com.miracle.ai.seahorse.agent.kernel.application.gate.KernelGateResultService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.DefaultMeshPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.KernelAgentHandoffService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.AgentHandoffCompletionService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.quota.KernelQuotaDecisionService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.quota.KernelQuotaSummaryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.readiness.KernelEnterprisePilotReadinessService;
@@ -210,7 +211,8 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             ObjectProvider<Clock> clockProvider,
             ObjectProvider<com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService> quotaEnforcementProvider,
             ObjectProvider<RunContextSnapshotRepositoryPort> runContextSnapshotRepositoryProvider,
-            ObjectProvider<RunProfileInboundPort> runProfilePortProvider) {
+            ObjectProvider<RunProfileInboundPort> runProfilePortProvider,
+            ObjectProvider<AgentHandoffCompletionService> handoffCompletionServiceProvider) {
         return new KernelAgentRunService(
                 agentDefinitionRepositoryPort,
                 agentRunRepositoryPort,
@@ -218,7 +220,8 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 clockProvider.getIfAvailable(Clock::systemUTC),
                 quotaEnforcementProvider.getIfAvailable(),
                 runContextSnapshotRepositoryProvider.getIfAvailable(RunContextSnapshotRepositoryPort::noop),
-                runProfilePortProvider.getIfAvailable());
+                runProfilePortProvider.getIfAvailable(),
+                handoffCompletionServiceProvider.getIfAvailable());
     }
 
     @Bean
@@ -549,6 +552,19 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     @ConditionalOnMissingBean(MeshPolicyPort.class)
     public DefaultMeshPolicyPort seahorseMeshPolicyPort() {
         return new DefaultMeshPolicyPort();
+    }
+
+    @Bean
+    @ConditionalOnBean(AgentHandoffRepositoryPort.class)
+    @ConditionalOnMissingBean(AgentHandoffCompletionService.class)
+    public AgentHandoffCompletionService seahorseAgentHandoffCompletionService(
+            AgentHandoffRepositoryPort agentHandoffRepositoryPort,
+            ObjectProvider<KernelAuditLedgerService> auditLedgerService,
+            ObjectProvider<Clock> clockProvider) {
+        return new AgentHandoffCompletionService(
+                agentHandoffRepositoryPort,
+                auditLedgerService.getIfAvailable(),
+                clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
     @Bean

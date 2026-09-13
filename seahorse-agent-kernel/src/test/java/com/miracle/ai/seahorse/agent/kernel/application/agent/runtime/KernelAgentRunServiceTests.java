@@ -968,4 +968,156 @@ class KernelAgentRunServiceTests {
         public void delete(String userId, Long id) {
         }
     }
+
+    @Test
+    void shouldCompleteHandoffWhenChildRunSucceeds() {
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.save(agent("data-analyst", AgentStatus.PUBLISHED, "version-1"));
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        MemoryAgentHandoffRepository handoffRepository = new MemoryAgentHandoffRepository();
+        com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.AgentHandoffCompletionService completion =
+                new com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.AgentHandoffCompletionService(
+                        handoffRepository, null, FIXED_CLOCK);
+        KernelAgentRunService service = new KernelAgentRunService(
+                definitionRepository, runRepository, currentUser(), FIXED_CLOCK,
+                null, null, null, completion);
+
+        AgentRun run = service.startRun(new AgentRunStartCommand(
+                "data-analyst",
+                null,
+                AgentDefinition.DEFAULT_TENANT_ID,
+                "conversation-1",
+                AgentRunTriggerType.A2A,
+                "child task",
+                "trace-1"));
+        handoffRepository.save(runningHandoff("handoff-1", run.runId()));
+
+        service.succeed(run.runId());
+
+        assertEquals(AgentRunStatus.SUCCEEDED, runRepository.runs.get(run.runId()).status());
+        assertEquals(
+                com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffStatus.SUCCEEDED,
+                handoffRepository.findById("handoff-1").orElseThrow().status());
+    }
+
+    @Test
+    void shouldFailHandoffWhenChildRunFails() {
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.save(agent("data-analyst", AgentStatus.PUBLISHED, "version-1"));
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        MemoryAgentHandoffRepository handoffRepository = new MemoryAgentHandoffRepository();
+        com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.AgentHandoffCompletionService completion =
+                new com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.AgentHandoffCompletionService(
+                        handoffRepository, null, FIXED_CLOCK);
+        KernelAgentRunService service = new KernelAgentRunService(
+                definitionRepository, runRepository, currentUser(), FIXED_CLOCK,
+                null, null, null, completion);
+
+        AgentRun run = service.startRun(new AgentRunStartCommand(
+                "data-analyst",
+                null,
+                AgentDefinition.DEFAULT_TENANT_ID,
+                "conversation-1",
+                AgentRunTriggerType.A2A,
+                "child task",
+                "trace-1"));
+        handoffRepository.save(runningHandoff("handoff-1", run.runId()));
+
+        service.fail(run.runId(), "MODEL_TIMEOUT", "模型超时");
+
+        assertEquals(
+                com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffStatus.FAILED,
+                handoffRepository.findById("handoff-1").orElseThrow().status());
+        assertEquals(
+                com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffFailureCode.CHILD_RUN_FAILED,
+                handoffRepository.findById("handoff-1").orElseThrow().failureCode());
+    }
+
+    @Test
+    void shouldNotTouchHandoffWhenNoCompletionServiceWired() {
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.save(agent("data-analyst", AgentStatus.PUBLISHED, "version-1"));
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        MemoryAgentHandoffRepository handoffRepository = new MemoryAgentHandoffRepository();
+        KernelAgentRunService service = new KernelAgentRunService(
+                definitionRepository, runRepository, currentUser(), FIXED_CLOCK,
+                null, null, null, null);
+
+        AgentRun run = service.startRun(new AgentRunStartCommand(
+                "data-analyst",
+                null,
+                AgentDefinition.DEFAULT_TENANT_ID,
+                "conversation-1",
+                AgentRunTriggerType.A2A,
+                "child task",
+                "trace-1"));
+        handoffRepository.save(runningHandoff("handoff-1", run.runId()));
+
+        service.succeed(run.runId());
+
+        assertEquals(
+                com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffStatus.RUNNING,
+                handoffRepository.findById("handoff-1").orElseThrow().status());
+    }
+
+    private com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff runningHandoff(
+            String handoffId, String childRunId) {
+        Instant now = Instant.parse("2026-05-23T00:00:00Z");
+        return new com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff(
+                handoffId,
+                AgentDefinition.DEFAULT_TENANT_ID,
+                "run-parent",
+                childRunId,
+                "agent-source",
+                "agent-target",
+                com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffStatus.RUNNING,
+                null,
+                "TEAM_DISPATCH",
+                null,
+                "{}",
+                null,
+                now,
+                now,
+                null);
+    }
+
+    static final class MemoryAgentHandoffRepository
+            implements com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentHandoffRepositoryPort {
+
+        static final Map<String, com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff> handoffs =
+                new java.util.LinkedHashMap<>();
+
+        @Override
+        public com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff save(
+                com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff handoff) {
+            handoffs.put(handoff.handoffId(), handoff);
+            return handoff;
+        }
+
+        @Override
+        public com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff update(
+                com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff handoff) {
+            handoffs.put(handoff.handoffId(), handoff);
+            return handoff;
+        }
+
+        @Override
+        public Optional<com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff> findById(String handoffId) {
+            return Optional.ofNullable(handoffs.get(handoffId));
+        }
+
+        @Override
+        public List<com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff> listByParentRunId(
+                String tenantId, String parentRunId) {
+            return List.copyOf(handoffs.values());
+        }
+
+        @Override
+        public Optional<com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff> findByChildRunId(
+                String childRunId) {
+            return handoffs.values().stream()
+                    .filter(handoff -> childRunId.equals(handoff.childRunId()))
+                    .findFirst();
+        }
+    }
 }

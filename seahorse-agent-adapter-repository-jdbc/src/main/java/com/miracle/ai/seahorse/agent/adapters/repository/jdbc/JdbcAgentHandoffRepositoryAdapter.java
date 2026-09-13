@@ -77,6 +77,13 @@ public class JdbcAgentHandoffRepositoryAdapter implements AgentHandoffRepository
             ORDER BY created_at ASC, handoff_id ASC
             """.formatted(HANDOFF_COLUMNS);
 
+    private static final String SQL_FIND_BY_CHILD_RUN = """
+            SELECT %s
+            FROM sa_agent_handoff
+            WHERE child_run_id = ?
+            ORDER BY created_at ASC, handoff_id ASC
+            """.formatted(HANDOFF_COLUMNS);
+
     private final JdbcTemplate jdbcTemplate;
 
     public JdbcAgentHandoffRepositoryAdapter(DataSource dataSource) {
@@ -138,6 +145,15 @@ public class JdbcAgentHandoffRepositoryAdapter implements AgentHandoffRepository
             return List.of();
         }
         return jdbcTemplate.query(SQL_LIST_BY_PARENT, this::mapHandoff, tenantId.trim(), parentRunId.trim());
+    }
+
+    @Override
+    public Optional<AgentHandoff> findByChildRunId(String childRunId) {
+        if (!hasText(childRunId)) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query(SQL_FIND_BY_CHILD_RUN, this::mapHandoff, childRunId.trim()).stream()
+                .findFirst();
     }
 
     private void insert(AgentHandoff handoff) {

@@ -18,8 +18,11 @@
   handoff 完成态收敛，带审计）与 Workflow DAG 拓扑执行（P1 失败策略为
   fail-fast）；REST API `POST/GET /api/agent-teams`、
   `POST /api/agent-teams/{teamId}/runs`、`GET /api/agent-team-runs/{runId}`
-  （沿用 AGENT_HANDOFF feature gate）；`KernelAgentHandoffService` 补充
-  child run 终态完成回写（设计 §5.2 P0 项的首个服务内实现）。
+  （沿用 AGENT_HANDOFF feature gate）；handoff 完成态回写（设计 §5.2 P0 项）：
+  `AgentHandoffCompletionService` 按 childRunId 幂等收敛 handoff 到
+  SUCCEEDED/FAILED/CANCELLED 并写完成审计，`KernelAgentRunService` 在
+  succeed/fail/cancel/cancelExecution 终态转移处自动触发，
+  `AgentHandoffRepositoryPort` 新增 `findByChildRunId`（4 → 5 操作）。
 - 错误契约（设计 §9）补齐 `traceId` 字段（tracing 启用时由 MDC 提供），
   `retryable` 语义、`UNAUTHORIZED`/`AUTH_SESSION_INVALID`/`DB_TIMEOUT` 等稳定 code。
 - UNKNOWN 工具调用对账机制：`ToolInvocationReconciliationService` 按 30 分钟宽限期
