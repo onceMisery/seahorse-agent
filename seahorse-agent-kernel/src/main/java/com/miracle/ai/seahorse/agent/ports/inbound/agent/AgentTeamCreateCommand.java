@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamEdge;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamFailurePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamMember;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamMode;
 
@@ -33,6 +34,8 @@ import java.util.List;
  * @param supervisorMemberId  SUPERVISOR 模式的规划成员（WORKFLOW_DAG 可为空）
  * @param members             成员列表
  * @param edges               WORKFLOW_DAG 模式的执行边（SUPERVISOR 模式为空）
+ * @param failurePolicy       WORKFLOW_DAG 失败策略（空为 FAIL_FAST；SUPERVISOR 忽略）
+ * @param maxRetries          RETRY 策略下的每节点最大重试次数
  */
 public record AgentTeamCreateCommand(String tenantId,
                                      String name,
@@ -40,5 +43,17 @@ public record AgentTeamCreateCommand(String tenantId,
                                      String ownerTeam,
                                      String supervisorMemberId,
                                      List<AgentTeamMember> members,
-                                     List<AgentTeamEdge> edges) {
+                                     List<AgentTeamEdge> edges,
+                                     AgentTeamFailurePolicy failurePolicy,
+                                     Integer maxRetries) {
+
+    public AgentTeamCreateCommand(String tenantId,
+                                  String name,
+                                  AgentTeamMode mode,
+                                  String ownerTeam,
+                                  String supervisorMemberId,
+                                  List<AgentTeamMember> members,
+                                  List<AgentTeamEdge> edges) {
+        this(tenantId, name, mode, ownerTeam, supervisorMemberId, members, edges, null, null);
+    }
 }

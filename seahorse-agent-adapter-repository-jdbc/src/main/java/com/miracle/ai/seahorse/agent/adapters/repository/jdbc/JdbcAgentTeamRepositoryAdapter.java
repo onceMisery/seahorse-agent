@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamEdge;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamEdgeCondition;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamFailurePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamMember;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamNodeRun;
@@ -228,7 +229,13 @@ public class JdbcAgentTeamRepositoryAdapter implements AgentTeamRepositoryPort {
                 edges,
                 "ACTIVE".equals(resultSet.getString("status")),
                 toInstant(resultSet.getTimestamp("created_at")),
-                toInstant(resultSet.getTimestamp("updated_at")));
+                toInstant(resultSet.getTimestamp("updated_at")),
+                json.hasNonNull("failurePolicy")
+                        ? AgentTeamFailurePolicy.valueOf(json.path("failurePolicy").asText("FAIL_FAST"))
+                        : null,
+                json.hasNonNull("maxRetries") && json.path("maxRetries").isNumber()
+                        ? json.path("maxRetries").asInt()
+                        : null);
     }
 
     private AgentTeamRun mapRun(ResultSet resultSet, int rowNum) throws SQLException {
@@ -292,7 +299,11 @@ public class JdbcAgentTeamRepositoryAdapter implements AgentTeamRepositoryPort {
                     .append("\"}");
         }
         edges.append(']');
-        return "{\"members\":" + members + ",\"edges\":" + edges + "}";
+        String failurePolicy = ",\"failurePolicy\":\"" + definition.failurePolicy().name() + "\"";
+        String maxRetries = definition.maxRetries() > 0
+                ? ",\"maxRetries\":" + definition.maxRetries()
+                : "";
+        return "{\"members\":" + members + ",\"edges\":" + edges + failurePolicy + maxRetries + "}";
     }
 
     private String nodeRunsJson(List<AgentTeamNodeRun> nodeRuns) {

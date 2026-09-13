@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTrigger
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamEdge;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamEdgeCondition;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamFailurePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamMember;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamNodeStatus;
@@ -210,6 +211,88 @@ class KernelAgentTeamServiceTests {
                 .orElseThrow();
         assertEquals("agent-b", edgeHandoff.targetAgentId());
         assertTrue(run.summary().contains("输出-"));
+    }
+
+    @Test
+    void shouldApplySkipPolicyAndFireOnFailureEdges() {
+        // a 失败：ON_SUCCESS 后继 b 被跳过，ON_FAILURE 后继 c 执行补偿路径
+        RecordingChat chat = new RecordingChat(responses -> switch (responses.size()) {
+            case 1 -> throw new IllegalStateException("a 节点失败");
+            default -> "补偿输出-" + responses.size();
+        });
+        InMemoryTeamRepository repository = new InMemoryTeamRepository();
+        InMemoryHandoffRepository handoffRepository = new InMemoryHandoffRepository();
+        FakeAgentRunPort runPort = new FakeAgentRunPort();
+        KernelAgentTeamService service = newService(repository, handoffRepository, runPort, chat);
+
+        AgentTeamDefinition definition = service.createTeam(new AgentTeamCreateCommand(
+                "tenant-1", "skip-team", AgentTeamMode.WORKFLOW_DAG, "org", null,
+                List.of(member("a", "agent-a"), member("b", "agent-b"), member("c", "agent-c")),
+                List.of(new AgentTeamEdge("a", "b", AgentTeamEdgeCondition.ON_SUCCESS),
+                        new AgentTeamEdge("a", "c", AgentTeamEdgeCondition.ON_FAILURE)),
+                AgentTeamFailurePolicy.SKIP, null));
+        AgentTeamRun run = service.startTeamRun(definition.teamId(),
+                new AgentTeamRunStartCommand("目标", "user-1", null));
+
+        assertEquals(AgentTeamRunStatus.FAILED, run.status());
+        Map<String, AgentTeamNodeStatus> statuses = new LinkedHashMap<>();
+        run.nodeRuns().forEach(node -> statuses.put(node.memberId(), node.status()));
+        assertEquals(AgentTeamNodeStatus.FAILED, statuses.get("a"));
+        assertEquals(AgentTeamNodeStatus.SKIPPED, statuses.get("b"));
+        assertEquals(AgentTeamNodeStatus.SUCCEEDED, statuses.get("c"));
+        // SKIP 策略容忍部分失败：成功节点的输出保留在 summary
+        assertTrue(run.summary().contains("补偿输出"));
+    }
+
+    @Test
+    void shouldRetryFailedNodeUnderRetryPolicy() {
+        // a 第一次失败、重试成功；b 在 a 成功后执行
+        RecordingChat chat = new RecordingChat(responses -> switch (responses.size()) {
+            case 1 -> throw new IllegalStateException("暂时失败");
+            case 2 -> "a 重试成功";
+            default -> "b 输出";
+        });
+        InMemoryTeamRepository repository = new InMemoryTeamRepository();
+        InMemoryHandoffRepository handoffRepository = new InMemoryHandoffRepository();
+        FakeAgentRunPort runPort = new FakeAgentRunPort();
+        KernelAgentTeamService service = newService(repository, handoffRepository, runPort, chat);
+
+        AgentTeamDefinition definition = service.createTeam(new AgentTeamCreateCommand(
+                "tenant-1", "retry-team", AgentTeamMode.WORKFLOW_DAG, "org", null,
+                List.of(member("a", "agent-a"), member("b", "agent-b")),
+                List.of(new AgentTeamEdge("a", "b", AgentTeamEdgeCondition.ALWAYS)),
+                AgentTeamFailurePolicy.RETRY, 2));
+        AgentTeamRun run = service.startTeamRun(definition.teamId(),
+                new AgentTeamRunStartCommand("目标", "user-1", null));
+
+        assertEquals(AgentTeamRunStatus.SUCCEEDED, run.status());
+        assertEquals(AgentTeamNodeStatus.SUCCEEDED, run.nodeRuns().get(0).status());
+        assertEquals("a 重试成功", run.nodeRuns().get(0).outputSummary());
+        // 每次尝试都留下 handoff 审计（a 两次 + b 一次 = 3）
+        assertEquals(3, handoffRepository.handoffs.size());
+    }
+
+    @Test
+    void shouldNotRetryWhenRetriesExhaustedUnderRetryPolicy() {
+        RecordingChat chat = new RecordingChat(responses -> {
+            throw new IllegalStateException("持续失败");
+        });
+        InMemoryHandoffRepository handoffRepository = new InMemoryHandoffRepository();
+        KernelAgentTeamService service = newService(new InMemoryTeamRepository(),
+                handoffRepository, new FakeAgentRunPort(), chat);
+
+        AgentTeamDefinition definition = service.createTeam(new AgentTeamCreateCommand(
+                "tenant-1", "retry-team", AgentTeamMode.WORKFLOW_DAG, "org", null,
+                List.of(member("a", "agent-a"), member("b", "agent-b")),
+                List.of(),
+                AgentTeamFailurePolicy.RETRY, 2));
+        AgentTeamRun run = service.startTeamRun(definition.teamId(),
+                new AgentTeamRunStartCommand("目标", "user-1", null));
+
+        assertEquals(AgentTeamRunStatus.FAILED, run.status());
+        assertEquals("MEMBER_RUN_FAILED", run.errorCode());
+        // 首次 + 2 次重试 = 3 个 handoff 审计
+        assertEquals(3, handoffRepository.handoffs.size());
     }
 
     private static long countByTrigger(FakeAgentRunPort runPort, AgentRunTriggerType triggerType) {

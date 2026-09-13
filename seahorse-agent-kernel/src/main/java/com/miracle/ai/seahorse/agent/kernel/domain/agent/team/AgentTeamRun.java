@@ -119,9 +119,17 @@ public final class AgentTeamRun {
     }
 
     public AgentTeamRun fail(String errorCode, String errorMessage, Instant now) {
+        return fail(errorCode, errorMessage, null, now);
+    }
+
+    /**
+     * 失败并可携带部分输出摘要（SKIP 策略下其余成功分支的输出仍有价值）。
+     */
+    public AgentTeamRun fail(String errorCode, String errorMessage, String summary, Instant now) {
         requireRunning();
         return new AgentTeamRun(teamRunId, teamId, tenantId, userId, mode, objective,
-                AgentTeamRunStatus.FAILED, parentRunId, summary, errorCode, errorMessage,
+                AgentTeamRunStatus.FAILED, parentRunId,
+                summary == null ? this.summary : summary, errorCode, errorMessage,
                 nodeRuns, startedAt, now);
     }
 

@@ -28,6 +28,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamEdge;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamEdgeCondition;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamFailurePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamMember;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamNodeRun;
@@ -112,7 +114,9 @@ public class KernelAgentTeamService implements AgentTeamInboundPort {
                 safeCommand.edges(),
                 true,
                 now,
-                now);
+                now,
+                safeCommand.failurePolicy(),
+                safeCommand.maxRetries());
         return teamRepository.saveDefinition(definition);
     }
 
@@ -229,9 +233,9 @@ public class KernelAgentTeamService implements AgentTeamInboundPort {
     private AgentTeamRun executeWorkflowDag(AgentTeamRun teamRun,
                                             AgentTeamDefinition definition,
                                             AgentTeamRunStartCommand command) {
-        // P1 执行策略为 fail-fast：拓扑序保证节点执行时其全部前驱已成功，
-        // 因此 ALWAYS/ON_SUCCESS 条件恒满足；条件评估与 skip/retry 策略随后续阶段引入。
-        List<String> order = topologicalOrder(definition);
+        // 失败策略（设计 §6.3）：FAIL_FAST 首次失败即终止；SKIP 继续其余分支并让
+        // ON_FAILURE 条件边生效；RETRY 每节点重试 maxRetries 次后等同 FAIL_FAST。
+        // wait-human 需要审批集成，随后续阶段引入。
         Map<String, AgentTeamNodeRun> nodeByMember = new LinkedHashMap<>();
         for (AgentTeamMember member : definition.members()) {
             nodeByMember.put(member.memberId(), AgentTeamNodeRun.pending(
@@ -239,19 +243,24 @@ public class KernelAgentTeamService implements AgentTeamInboundPort {
         }
         teamRun = teamRepository.updateTeamRun(teamRun.withNodeRuns(List.copyOf(nodeByMember.values())));
 
-        for (String memberId : order) {
-            AgentTeamNodeRun nodeRun = nodeByMember.get(memberId);
+        while (true) {
+            String nextMemberId = nextReadyMember(definition, nodeByMember);
+            if (nextMemberId == null) {
+                break;
+            }
+            AgentTeamNodeRun nodeRun = nodeByMember.get(nextMemberId);
             teamRun = teamRepository.updateTeamRun(
                     teamRun.withNodeRuns(List.copyOf(nodeByMember.values()))
                             .withNodeRun(nodeRun.running(clock.instant())));
-            nodeRun = teamRun.nodeRunIndex().get(memberId);
-            AgentTeamMember member = definition.member(memberId);
-            DispatchOutcome outcome = dispatchAndExecute(teamRun, definition, command,
-                    predecessorAgentId(definition, memberId), member,
-                    instructionFor(nodeRun), nodeRun);
-            nodeByMember.put(memberId, outcome.nodeRun());
+            nodeRun = teamRun.nodeRunIndex().get(nextMemberId);
+            AgentTeamMember member = definition.member(nextMemberId);
+            DispatchOutcome outcome = dispatchWithRetries(teamRun, definition, command,
+                    predecessorAgentId(definition, nextMemberId), member,
+                    instructionFor(nodeRun), nodeRun, definition.maxRetries());
+            nodeByMember.put(nextMemberId, outcome.nodeRun());
             teamRun = teamRun.withNodeRuns(List.copyOf(nodeByMember.values()));
-            if (outcome.errorCode() != null) {
+            if (outcome.errorCode() != null
+                    && definition.failurePolicy() != AgentTeamFailurePolicy.SKIP) {
                 List<AgentTeamNodeRun> skipped = skipUnfinished(nodeByMember, definition, clock.instant());
                 AgentTeamRun failed = teamRun.withNodeRuns(skipped)
                         .fail(outcome.errorCode(), outcome.errorMessage(), clock.instant());
@@ -260,7 +269,9 @@ public class KernelAgentTeamService implements AgentTeamInboundPort {
             teamRun = teamRepository.updateTeamRun(teamRun);
         }
 
-        String summary = nodeByMember.values().stream()
+        List<AgentTeamNodeRun> finalNodes = skipUnfinished(nodeByMember, definition, clock.instant());
+        teamRun = teamRun.withNodeRuns(finalNodes);
+        String summary = finalNodes.stream()
                 .filter(node -> node.status() == AgentTeamNodeStatus.SUCCEEDED)
                 .map(node -> node.memberId() + ": " + node.outputSummary())
                 .reduce((left, right) -> left + "\n" + right)
@@ -268,8 +279,72 @@ public class KernelAgentTeamService implements AgentTeamInboundPort {
         if (summary.isBlank()) {
             return persistFailure(teamRun, "TEAM_EXECUTION_ERROR", "DAG 没有成功节点");
         }
+        boolean anyFailed = finalNodes.stream()
+                .anyMatch(node -> node.status() == AgentTeamNodeStatus.FAILED);
+        if (anyFailed) {
+            // SKIP 策略容忍部分失败：其余分支已执行完毕，运行收敛为 FAILED 但保留成功输出
+            return teamRepository.updateTeamRun(teamRun.fail("TEAM_PARTIAL_FAILURE",
+                    "部分节点失败，其余分支已按策略执行完毕",
+                    truncate(summary, MAX_OUTPUT_SUMMARY_LENGTH), clock.instant()));
+        }
         return teamRepository.updateTeamRun(
                 teamRun.succeed(truncate(summary, MAX_OUTPUT_SUMMARY_LENGTH), clock.instant()));
+    }
+
+    /**
+     * 从未执行节点中找出下一个就绪节点：无入边（根节点）或全部入边的
+     * 源节点已终态且边条件满足；找不到返回 null。
+     */
+    private String nextReadyMember(AgentTeamDefinition definition,
+                                   Map<String, AgentTeamNodeRun> nodeByMember) {
+        for (AgentTeamMember member : definition.members()) {
+            AgentTeamNodeRun nodeRun = nodeByMember.get(member.memberId());
+            if (nodeRun.status() != AgentTeamNodeStatus.PENDING) {
+                continue;
+            }
+            boolean ready = definition.edges().stream()
+                    .filter(edge -> edge.targetMemberId().equals(member.memberId()))
+                    .allMatch(edge -> {
+                        AgentTeamNodeRun source = nodeByMember.get(edge.sourceMemberId());
+                        if (source == null || !source.status().isTerminal()) {
+                            return false;
+                        }
+                        return switch (edge.condition()) {
+                            case ALWAYS -> true;
+                            case ON_SUCCESS -> source.status() == AgentTeamNodeStatus.SUCCEEDED;
+                            case ON_FAILURE -> source.status() == AgentTeamNodeStatus.FAILED;
+                        };
+                    });
+            if (ready) {
+                return member.memberId();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 按失败策略执行分派：RETRY 策略在失败后重试至多 maxRetries 次
+     * （每次重试创建新的 handoff 以保留完整审计链），其余策略单次执行。
+     */
+    private DispatchOutcome dispatchWithRetries(AgentTeamRun teamRun,
+                                                AgentTeamDefinition definition,
+                                                AgentTeamRunStartCommand command,
+                                                String sourceAgentId,
+                                                AgentTeamMember member,
+                                                String instruction,
+                                                AgentTeamNodeRun nodeRun,
+                                                int maxRetries) {
+        DispatchOutcome outcome = dispatchAndExecute(teamRun, definition, command,
+                sourceAgentId, member, instruction, nodeRun);
+        int attempts = 0;
+        while (outcome.errorCode() != null
+                && definition.failurePolicy() == AgentTeamFailurePolicy.RETRY
+                && attempts < maxRetries) {
+            attempts++;
+            outcome = dispatchAndExecute(teamRun, definition, command,
+                    sourceAgentId, member, instruction, nodeRun);
+        }
+        return outcome;
     }
 
     private DispatchOutcome dispatchAndExecute(AgentTeamRun teamRun,
@@ -456,14 +531,28 @@ public class KernelAgentTeamService implements AgentTeamInboundPort {
         return order;
     }
 
+    /**
+     * 分派来源：有前驱边时用前驱成员的 agentId；根节点（无前驱）选择第一个
+     * 与目标不同的成员，避免自委派被网格策略拒绝；单一 agent 的退化团队
+     * 只能回落到目标自身，由网格策略按 CYCLE_DETECTED 拒绝。
+     */
     private String predecessorAgentId(AgentTeamDefinition definition, String memberId) {
-        return definition.edges().stream()
+        String predecessor = definition.edges().stream()
                 .filter(edge -> edge.targetMemberId().equals(memberId))
                 .map(AgentTeamEdge::sourceMemberId)
                 .map(definition::member)
                 .map(AgentTeamMember::agentId)
                 .findFirst()
-                .orElseGet(definition::defaultSourceAgentId);
+                .orElse(null);
+        if (predecessor != null) {
+            return predecessor;
+        }
+        String targetAgentId = definition.member(memberId).agentId();
+        return definition.members().stream()
+                .map(AgentTeamMember::agentId)
+                .filter(agentId -> !agentId.equals(targetAgentId))
+                .findFirst()
+                .orElse(targetAgentId);
     }
 
     private String instructionFor(AgentTeamNodeRun nodeRun) {

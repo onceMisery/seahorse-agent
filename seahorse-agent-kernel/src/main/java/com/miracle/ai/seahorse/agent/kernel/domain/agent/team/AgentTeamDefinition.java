@@ -48,6 +48,8 @@ public final class AgentTeamDefinition {
     private final boolean active;
     private final Instant createdAt;
     private final Instant updatedAt;
+    private final AgentTeamFailurePolicy failurePolicy;
+    private final Integer maxRetries;
 
     public AgentTeamDefinition(String teamId,
                                String tenantId,
@@ -60,6 +62,23 @@ public final class AgentTeamDefinition {
                                boolean active,
                                Instant createdAt,
                                Instant updatedAt) {
+        this(teamId, tenantId, name, mode, ownerTeam, supervisorMemberId, members, edges, active,
+                createdAt, updatedAt, null, null);
+    }
+
+    public AgentTeamDefinition(String teamId,
+                               String tenantId,
+                               String name,
+                               AgentTeamMode mode,
+                               String ownerTeam,
+                               String supervisorMemberId,
+                               List<AgentTeamMember> members,
+                               List<AgentTeamEdge> edges,
+                               boolean active,
+                               Instant createdAt,
+                               Instant updatedAt,
+                               AgentTeamFailurePolicy failurePolicy,
+                               Integer maxRetries) {
         this.teamId = AgentTeamMember.requireText(teamId, "teamId 不能为空");
         this.tenantId = AgentTeamMember.requireText(tenantId, "tenantId 不能为空");
         this.name = AgentTeamMember.requireText(name, "team name 不能为空");
@@ -71,6 +90,13 @@ public final class AgentTeamDefinition {
         this.active = active;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt 不能为空");
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt 不能为空");
+        this.failurePolicy = failurePolicy == null
+                ? AgentTeamFailurePolicy.FAIL_FAST
+                : failurePolicy;
+        if (maxRetries != null && maxRetries < 0) {
+            throw new IllegalArgumentException("maxRetries 不能为负数");
+        }
+        this.maxRetries = maxRetries == null ? 0 : maxRetries;
         validate();
     }
 
@@ -172,7 +198,7 @@ public final class AgentTeamDefinition {
 
     public AgentTeamDefinition disable(Instant now) {
         return new AgentTeamDefinition(teamId, tenantId, name, mode, ownerTeam, supervisorMemberId,
-                members, edges, false, createdAt, now);
+                members, edges, false, createdAt, now, failurePolicy, maxRetries);
     }
 
     public String teamId() {
@@ -209,6 +235,14 @@ public final class AgentTeamDefinition {
 
     public boolean isActive() {
         return active;
+    }
+
+    public AgentTeamFailurePolicy failurePolicy() {
+        return failurePolicy;
+    }
+
+    public int maxRetries() {
+        return maxRetries;
     }
 
     public Instant createdAt() {
